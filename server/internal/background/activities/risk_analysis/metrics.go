@@ -12,15 +12,17 @@ import (
 )
 
 const (
-	meterRiskScanEvents     = "risk.scan.events"
-	meterRiskScanDuration   = "risk.scan.duration"
-	meterRiskRuleConfidence = "risk.rule.confidence"
+	meterRiskScanEvents          = "risk.scan.events"
+	meterRiskScanDuration        = "risk.scan.duration"
+	meterRiskRuleConfidence      = "risk.rule.confidence"
+	meterRiskPresidioScanSkipped = "risk.presidio.scan_skipped"
 )
 
 type riskMetrics struct {
-	scanEvents     metric.Int64Counter
-	scanDuration   metric.Float64Histogram
-	ruleConfidence metric.Float64Histogram
+	scanEvents          metric.Int64Counter
+	scanDuration        metric.Float64Histogram
+	ruleConfidence      metric.Float64Histogram
+	presidioScanSkipped metric.Int64Counter
 }
 
 func newRiskMetrics(meterProvider metric.MeterProvider, logger *slog.Logger) *riskMetrics {
@@ -56,10 +58,20 @@ func newRiskMetrics(meterProvider metric.MeterProvider, logger *slog.Logger) *ri
 		logger.ErrorContext(ctx, "create metric", attr.SlogMetricName(meterRiskRuleConfidence), attr.SlogError(err))
 	}
 
+	presidioScanSkipped, err := meter.Int64Counter(
+		meterRiskPresidioScanSkipped,
+		metric.WithDescription("Number of batches where Presidio scanning was skipped due to errors"),
+		metric.WithUnit("{batch}"),
+	)
+	if err != nil {
+		logger.ErrorContext(ctx, "create metric", attr.SlogMetricName(meterRiskPresidioScanSkipped), attr.SlogError(err))
+	}
+
 	return &riskMetrics{
-		scanEvents:     scanEvents,
-		scanDuration:   scanDuration,
-		ruleConfidence: ruleConfidence,
+		scanEvents:          scanEvents,
+		scanDuration:        scanDuration,
+		ruleConfidence:      ruleConfidence,
+		presidioScanSkipped: presidioScanSkipped,
 	}
 }
 

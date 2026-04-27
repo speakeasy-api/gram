@@ -39,6 +39,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/background"
+	risk_analysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	chatsessionssvc "github.com/speakeasy-api/gram/server/internal/chatsessions"
@@ -356,6 +357,11 @@ func newStartCommand() *cli.Command {
 			Usage:    "WorkOS API key for user identity lookups",
 			EnvVars:  []string{"WORKOS_API_KEY"},
 			Required: false,
+		},
+		&cli.StringFlag{
+			Name:    "presidio-analyzer-url",
+			Usage:   "Base URL of the Presidio Analyzer service (e.g. http://presidio-analyzer:3000). Empty disables PII scanning.",
+			EnvVars: []string{"PRESIDIO_ANALYZER_URL"},
 		},
 	}
 
@@ -819,6 +825,11 @@ func newStartCommand() *cli.Command {
 					close(workerInterruptCh)
 				})
 				group.Go(func() {
+					var piiScanner risk_analysis.PIIScanner = &risk_analysis.StubPIIScanner{}
+					if presidioURL := c.String("presidio-analyzer-url"); presidioURL != "" {
+						piiScanner = risk_analysis.NewPresidioClient(presidioURL, guardianPolicy.PooledClient(), tracerProvider, meterProvider, logger)
+					}
+
 					temporalWorker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, &background.WorkerOptions{
 						GuardianPolicy:      guardianPolicy,
 						DB:                  db,
@@ -841,6 +852,7 @@ func newStartCommand() *cli.Command {
 						TelemetryLogger:     telemLogger,
 						TriggersApp:         triggerApp,
 						CacheAdapter:        cache.NewRedisCacheAdapter(redisClient),
+						PIIScanner:          piiScanner,
 					})
 					if err := temporalWorker.Run(workerInterruptCh); err != nil {
 						logger.ErrorContext(ctx, "temporal worker failed", attr.SlogError(err))
@@ -853,7 +865,7 @@ func newStartCommand() *cli.Command {
 
 				logger.InfoContext(ctx, "shutting down server")
 
-				graceCtx, graceCancel := context.WithTimeout(ctx, 10*time.Second)
+				graceCtx, graceCancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 				defer graceCancel()
 
 				if err := srv.Shutdown(graceCtx); err != nil {

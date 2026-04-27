@@ -8,9 +8,6 @@ import { DotTable } from "@/components/ui/dot-table";
 import { ViewToggle } from "@/components/ui/view-toggle";
 import { useViewMode } from "@/components/ui/use-view-mode";
 import { useSdkClient } from "@/contexts/Sdk";
-import { useTelemetry } from "@/contexts/Telemetry";
-import { useIsProjectEmpty } from "@/pages/onboarding/upload-openapi-utils";
-import { InitialChoiceStep } from "@/pages/onboarding/Wizard";
 import { useRoutes } from "@/routes";
 import { Button } from "@speakeasy-api/moonshine";
 import { Plus } from "lucide-react";
@@ -53,13 +50,8 @@ export function MCPOverview() {
   const routes = useRoutes();
   const navigate = useNavigate();
   const client = useSdkClient();
-  const { isEmpty: isProjectEmpty, isLoading: isProjectLoading } =
-    useIsProjectEmpty();
-  const telemetry = useTelemetry();
-  const isFunctionsEnabled =
-    telemetry.isFeatureEnabled("gram-functions") ?? false;
 
-  const isLoading = toolsets.isLoading || isProjectLoading;
+  const isLoading = toolsets.isLoading;
 
   const [viewMode, setViewMode] = useViewMode();
   const [newMcpDialogOpen, setNewMcpDialogOpen] = useState(false);
@@ -134,26 +126,7 @@ export function MCPOverview() {
   if (!isLoading && toolsets.length === 0) {
     return (
       <>
-        {isProjectEmpty ? (
-          <>
-            <InitialChoiceStep
-              routes={routes}
-              isFunctionsEnabled={isFunctionsEnabled}
-            />
-            <Page.Section>
-              <Page.Section.Title>
-                Or start with a blank MCP server
-              </Page.Section.Title>
-              <Page.Section.Description>
-                Create an empty MCP server and add built-in tools like MCP Logs
-                to it. You can connect a data source later.
-              </Page.Section.Description>
-              <Page.Section.CTA>{newMcpServerButton}</Page.Section.CTA>
-            </Page.Section>
-          </>
-        ) : (
-          <MCPEmptyState nonEmptyProjectCTA={newMcpServerButton} />
-        )}
+        <MCPEmptyState cta={newMcpServerButton} />
         {builtInSection}
         {newMcpServerDialog}
       </>

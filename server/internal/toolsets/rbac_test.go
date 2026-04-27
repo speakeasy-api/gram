@@ -37,7 +37,7 @@ func TestToolsets_RBAC_List_FiltersToGrantedToolsets(t *testing.T) {
 	ctx, ti := newTestToolsetsService(t)
 	toolset := createMinimalPrivateToolset(t, ctx, ti, "rbac-filter-test")
 
-	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeMCPRead, Resource: toolset.ID})
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeMCPRead, Selector: authz.NewSelector(authz.ScopeMCPRead, toolset.ID)})
 
 	result, err := ti.service.ListToolsets(ctx, &gen.ListToolsetsPayload{
 		SessionToken:     nil,
@@ -55,7 +55,7 @@ func TestToolsets_RBAC_List_ReturnsEmptyWithWrongResourceGrant(t *testing.T) {
 	ctx, ti := newTestToolsetsService(t)
 	_ = createMinimalPrivateToolset(t, ctx, ti, "rbac-excluded-test")
 
-	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeMCPRead, Resource: uuid.NewString()})
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeMCPRead, Selector: authz.NewSelector(authz.ScopeMCPRead, uuid.NewString())})
 
 	result, err := ti.service.ListToolsets(ctx, &gen.ListToolsetsPayload{
 		SessionToken:     nil,
@@ -96,7 +96,7 @@ func TestToolsets_RBAC_Create_DeniedWithReadOnlyGrant(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeMCPRead, Resource: authCtx.ProjectID.String()})
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeMCPRead, Selector: authz.NewSelector(authz.ScopeMCPRead, authCtx.ProjectID.String())})
 
 	_, err := ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
 		SessionToken:           nil,
@@ -122,7 +122,7 @@ func TestToolsets_RBAC_Create_AllowedWithProjectWriteGrant(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeMCPWrite, Resource: authCtx.ProjectID.String()})
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeMCPWrite, Selector: authz.NewSelector(authz.ScopeMCPWrite, authCtx.ProjectID.String())})
 
 	_, err := ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
 		SessionToken:           nil,
@@ -147,7 +147,7 @@ func TestToolsets_RBAC_CloneToolset_DeniedWithProjectWriteButNoSourceRead(t *tes
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeMCPWrite, Resource: authCtx.ProjectID.String()})
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeMCPWrite, Selector: authz.NewSelector(authz.ScopeMCPWrite, authCtx.ProjectID.String())})
 
 	_, err := ti.service.CloneToolset(ctx, &gen.CloneToolsetPayload{
 		SessionToken:     nil,
@@ -195,7 +195,7 @@ func TestToolsets_RBAC_WriteOps_DeniedWithReadOnlyGrant(t *testing.T) {
 	ctx, ti := newTestToolsetsService(t)
 	toolset := createMinimalPrivateToolset(t, ctx, ti, "rbac-write-readonly-test")
 
-	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeMCPRead, Resource: toolset.ID})
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeMCPRead, Selector: authz.NewSelector(authz.ScopeMCPRead, toolset.ID)})
 
 	_, err := ti.service.UpdateToolset(ctx, &gen.UpdateToolsetPayload{
 		SessionToken:           nil,
@@ -224,7 +224,7 @@ func TestToolsets_RBAC_WriteOps_AllowedWithToolsetWriteGrant(t *testing.T) {
 	ctx, ti := newTestToolsetsService(t)
 	toolset := createMinimalPrivateToolset(t, ctx, ti, "rbac-write-allowed-test")
 
-	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeMCPWrite, Resource: toolset.ID})
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeMCPWrite, Selector: authz.NewSelector(authz.ScopeMCPWrite, toolset.ID)})
 
 	name := "updated-name"
 	_, err := ti.service.UpdateToolset(ctx, &gen.UpdateToolsetPayload{
@@ -275,7 +275,7 @@ func TestToolsets_RBAC_UpdateOAuthProxyServer_DeniedWithReadOnlyGrant(t *testing
 	ctx, ti := newTestToolsetsService(t)
 	toolset := createMinimalPrivateToolset(t, ctx, ti, "rbac-update-oauth-proxy-readonly-test")
 
-	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeMCPRead, Resource: toolset.ID})
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeMCPRead, Selector: authz.NewSelector(authz.ScopeMCPRead, toolset.ID)})
 
 	audience := "https://api.example.com"
 	_, err := ti.service.UpdateOAuthProxyServer(ctx, &gen.UpdateOAuthProxyServerPayload{

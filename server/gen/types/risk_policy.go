@@ -17,6 +17,8 @@ type RiskPolicy struct {
 	Name string
 	// Detection sources enabled for this policy.
 	Sources []string
+	// Presidio entity types to scan for. When empty, scans all entities.
+	PresidioEntities []string
 	// Whether the policy is active.
 	Enabled bool
 	// Policy version, incremented on each update.

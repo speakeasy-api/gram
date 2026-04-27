@@ -8,6 +8,7 @@ import { safeParse } from "../../lib/schemas.js";
 import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+import { Selector, Selector$inboundSchema } from "./selector.js";
 
 /**
  * The scope slug this grant applies to.
@@ -39,13 +40,13 @@ export type SubScopes = ClosedEnum<typeof SubScopes>;
 
 export type ListRoleGrant = {
   /**
-   * Resource allowlist. Null means unrestricted access. An array means only the listed resource IDs.
-   */
-  resources?: Array<string> | undefined;
-  /**
    * The scope slug this grant applies to.
    */
   scope: ListRoleGrantScope;
+  /**
+   * Selector constraints. Null means unrestricted.
+   */
+  selectors?: Array<Selector> | undefined;
   /**
    * The inherited scopes the primary scope grants.
    */
@@ -68,8 +69,8 @@ export const ListRoleGrant$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
-    resources: z.optional(z.array(z.string())),
     scope: ListRoleGrantScope$inboundSchema,
+    selectors: z.optional(z.array(Selector$inboundSchema)),
     sub_scopes: z.optional(z.array(SubScopes$inboundSchema)),
   }),
   z.transform((v) => {

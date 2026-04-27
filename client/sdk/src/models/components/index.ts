@@ -255,6 +255,7 @@ export * from "./searchusersfilter.js";
 export * from "./searchuserspayload.js";
 export * from "./searchusersresult.js";
 export * from "./securityvariable.js";
+export * from "./selector.js";
 export * from "./sendinviterequestbody.js";
 export * from "./serveimageform.js";
 export * from "./servernameoverride.js";

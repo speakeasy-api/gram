@@ -13927,6 +13927,16 @@ paths:
             description: Cursor to fetch the next page of results.
             type: string
         - allowEmptyValue: true
+          description: Maximum number of results to return per page.
+          in: query
+          name: limit
+          schema:
+            description: Maximum number of results to return per page.
+            format: int64
+            maximum: 200
+            minimum: 1
+            type: integer
+        - allowEmptyValue: true
           description: API Key header
           in: header
           name: Gram-Key
@@ -14049,6 +14059,16 @@ paths:
           schema:
             description: Cursor to fetch the next page of results.
             type: string
+        - allowEmptyValue: true
+          description: Maximum number of results to return per page.
+          in: query
+          name: limit
+          schema:
+            description: Maximum number of results to return per page.
+            format: int64
+            maximum: 200
+            minimum: 1
+            type: integer
         - allowEmptyValue: true
           description: API Key header
           in: header
@@ -21126,6 +21146,11 @@ components:
         name:
           type: string
           description: The policy name.
+        presidio_entities:
+          type: array
+          items:
+            type: string
+          description: Presidio entity types to detect.
         sources:
           type: array
           items:
@@ -23997,11 +24022,6 @@ components:
     ListRoleGrant:
       type: object
       properties:
-        resources:
-          type: array
-          items:
-            type: string
-          description: Resource allowlist. Null means unrestricted access. An array means only the listed resource IDs.
         scope:
           type: string
           description: The scope slug this grant applies to.
@@ -24013,6 +24033,11 @@ components:
             - mcp:read
             - mcp:write
             - mcp:connect
+        selectors:
+          type: array
+          items:
+            $ref: '#/components/schemas/Selector'
+          description: Selector constraints. Null means unrestricted.
         sub_scopes:
           type: array
           items:
@@ -25372,6 +25397,13 @@ components:
         - policy
         - sort_order
         - created_at
+    PokeResponseBody:
+      type: object
+      properties:
+        ok:
+          type: boolean
+      required:
+        - ok
     Project:
       type: object
       properties:
@@ -26057,6 +26089,11 @@ components:
           type: integer
           description: Number of messages not yet analyzed at the current policy version.
           format: int64
+        presidio_entities:
+          type: array
+          items:
+            type: string
+          description: Presidio entity types to scan for. When empty, scans all entities.
         project_id:
           type: string
           description: The project ID.
@@ -26242,11 +26279,6 @@ components:
     RoleGrant:
       type: object
       properties:
-        resources:
-          type: array
-          items:
-            type: string
-          description: Resource allowlist. Null means unrestricted access. An array means only the listed resource IDs.
         scope:
           type: string
           description: The scope slug this grant applies to.
@@ -26258,6 +26290,11 @@ components:
             - mcp:read
             - mcp:write
             - mcp:connect
+        selectors:
+          type: array
+          items:
+            $ref: '#/components/schemas/Selector'
+          description: Selector constraints. Null means unrestricted.
       required:
         - scope
     ScopeDefinition:
@@ -26656,6 +26693,35 @@ components:
         - in_placement
         - scheme
         - env_variables
+    Selector:
+      type: object
+      properties:
+        disposition:
+          type: string
+          description: Tool disposition filter (MCP scopes only).
+          enum:
+            - read_only
+            - destructive
+            - idempotent
+            - open_world
+        resource_id:
+          type: string
+          description: The resource identifier, or '*' for all resources of this kind.
+        resource_kind:
+          type: string
+          description: The kind of resource this selector targets.
+          enum:
+            - project
+            - mcp
+            - org
+            - '*'
+        tool:
+          type: string
+          description: Specific tool name filter (MCP scopes only).
+      description: A constraint that narrows which resources a grant applies to.
+      required:
+        - resource_kind
+        - resource_id
     SendInviteRequestBody:
       type: object
       properties:
@@ -28337,6 +28403,11 @@ components:
         name:
           type: string
           description: The policy name.
+        presidio_entities:
+          type: array
+          items:
+            type: string
+          description: Presidio entity types to detect.
         sources:
           type: array
           items:
@@ -28950,6 +29021,8 @@ components:
 tags:
   - name: access
     description: Manage roles and team member access control.
+  - name: admin
+    description: Operational endpoints for administrative tasks.
   - name: assets
     description: Manages assets used by Gram projects.
   - name: assistants

@@ -1,3 +1,4 @@
+import { ExternalMCPServer } from "@gram/client/models/components";
 import type { PulseMCPServer } from "../hooks";
 import type { FilterState } from "./useFilterState";
 
@@ -40,6 +41,12 @@ export interface ParsedServerMetadata {
   // Dates
   publishedAt?: Date;
   updatedAt?: Date;
+}
+
+export function isPulseMcpServer(
+  server: ExternalMCPServer,
+): server is PulseMCPServer {
+  return !!server.meta;
 }
 
 export type PulseMcpAuthType = "none" | "apikey" | "oauth" | "other";

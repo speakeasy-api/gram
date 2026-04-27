@@ -29,9 +29,13 @@ func LoadGrants(ctx context.Context, db accessrepo.DBTX, organizationID string, 
 
 	grantRows := make([]Grant, 0, len(rows))
 	for _, row := range rows {
+		selectors, err := SelectorFromRow(row.Selectors, Scope(row.Scope), row.Resource)
+		if err != nil {
+			return nil, fmt.Errorf("unmarshal grant selector: %w", err)
+		}
 		grantRows = append(grantRows, Grant{
 			Scope:    Scope(row.Scope),
-			Resource: row.Resource,
+			Selector: selectors,
 		})
 	}
 
