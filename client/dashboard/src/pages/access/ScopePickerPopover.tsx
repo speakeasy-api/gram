@@ -969,7 +969,9 @@ function getLabel(
   if (customMode) {
     const count = customToolCount ?? 0;
     if (count === 0) return "Select...";
-    return `${count} selector${count === 1 ? "" : "s"}`;
+    const hasTools = (selectors ?? []).some((s) => s.tool);
+    const noun = hasTools ? "tool" : "rule";
+    return `${count} ${noun}${count === 1 ? "" : "s"} selected`;
   }
   if (selectors === null) {
     return resourceType === "project" ? "All projects" : "All servers";
