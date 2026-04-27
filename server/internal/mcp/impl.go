@@ -616,7 +616,6 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 	sessionID := parseMcpSessionID(r.Header)
 	if req.Method == "initialize" {
 		w.Header().Set("Mcp-Session-Id", sessionID)
-		println("\n\n\nSETTING MCP-SESSION-ID TO ", sessionID, "\n\n\n")
 	}
 
 	// Load header display names for remapping
