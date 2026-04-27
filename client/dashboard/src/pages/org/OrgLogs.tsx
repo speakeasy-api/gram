@@ -235,7 +235,7 @@ export function OrgLogsInner() {
                 className="text-muted-foreground ml-6 text-sm"
               >
                 Reject tool calls in Cursor and Claude Code that don't come
-                from a Gram-issued toolset. Requires the Gram hooks to be
+                from a Speakeasy-issued MCP server. Requires Speakeasy hooks to be
                 installed on the agent.
               </Type>
             </Stack>

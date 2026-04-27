@@ -41,6 +41,7 @@ type Service struct {
 	auth               *auth.Auth
 	authz              *authz.Engine
 	cache              cache.Cache
+	toolsetCache       cache.TypedCacheObject[mv.ToolsetBaseContents]
 	temporalEnv        *tenv.Environment
 	repo               *repo.Queries
 	productFeatures    ProductFeaturesClient
@@ -99,6 +100,7 @@ func NewService(
 		auth:               auth.New(logger, db, sessionsMgr, authz),
 		authz:              authz,
 		cache:              cacheAdapter,
+		toolsetCache:       cache.NewTypedObjectCache[mv.ToolsetBaseContents](logger.With(attr.SlogCacheNamespace("toolset")), cacheAdapter, cache.SuffixNone),
 		temporalEnv:        temporalEnv,
 		repo:               repo.New(db),
 		productFeatures:    pfClient,
@@ -201,18 +203,13 @@ func (s *Service) validateGramToolsetCall(
 		return deny("tool call missing tool name")
 	}
 
-	toolsetCache := cache.NewTypedObjectCache[mv.ToolsetBaseContents](
-		s.logger.With(attr.SlogCacheNamespace("toolset")),
-		s.cache,
-		cache.SuffixNone,
-	)
 	described, err := mv.DescribeToolset(
 		ctx,
 		s.logger,
 		s.db,
 		mv.ProjectID(toolsetRow.ProjectID),
 		mv.ToolsetSlug(toolsetRow.Slug),
-		&toolsetCache,
+		&s.toolsetCache,
 	)
 	if err != nil {
 		return deny(fmt.Sprintf("failed to load toolset %s", toolsetID))

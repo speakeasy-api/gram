@@ -96,9 +96,6 @@ func handleToolsList(
 	}
 
 	if blockShadowMCPEnabled(ctx, logger, features, toolset.OrganizationID) {
-		println("\n\n\nBLOCKING SHADOW MCP, session ID: ", payload.sessionID, "\n\n\n")
-		j, _ := json.MarshalIndent(req, "", "  ")
-		println("\n\n\nREQUEST:\n", string(j), "\n\n\n")
 		for _, t := range tools {
 			injected, err := injectToolsetIDConstant(t.InputSchema, toolset.ID)
 			if err != nil {
