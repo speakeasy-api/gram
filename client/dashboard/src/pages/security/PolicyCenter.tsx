@@ -647,36 +647,41 @@ function PolicySheetBody({
         <RadioGroup
           value={formAction}
           onValueChange={(v) => setFormAction(v as PolicyAction)}
-          className="space-y-2"
         >
-          <label
-            htmlFor="action-flag"
-            className="hover:bg-muted/50 flex cursor-pointer items-start gap-3 rounded-md border p-3"
-          >
-            <RadioGroupItem value="flag" id="action-flag" className="mt-0.5" />
-            <div>
-              <div className="text-sm font-medium">Flag</div>
-              <div className="text-muted-foreground text-xs">
-                Log findings for review without interrupting the session
+          <div className="border-border divide-border divide-y rounded-lg border">
+            <label
+              htmlFor="action-flag"
+              className="hover:bg-muted/50 flex cursor-pointer items-start gap-3 p-3"
+            >
+              <RadioGroupItem
+                value="flag"
+                id="action-flag"
+                className="mt-0.5"
+              />
+              <div>
+                <div className="text-sm font-medium">Flag</div>
+                <div className="text-muted-foreground text-xs">
+                  Log findings for review without interrupting the session
+                </div>
               </div>
-            </div>
-          </label>
-          <label
-            htmlFor="action-block"
-            className="hover:bg-muted/50 flex cursor-pointer items-start gap-3 rounded-md border p-3"
-          >
-            <RadioGroupItem
-              value="block"
-              id="action-block"
-              className="mt-0.5"
-            />
-            <div>
-              <div className="text-sm font-medium">Block</div>
-              <div className="text-muted-foreground text-xs">
-                Deny prompts and tool calls that match detection rules
+            </label>
+            <label
+              htmlFor="action-block"
+              className="hover:bg-muted/50 flex cursor-pointer items-start gap-3 p-3"
+            >
+              <RadioGroupItem
+                value="block"
+                id="action-block"
+                className="mt-0.5"
+              />
+              <div>
+                <div className="text-sm font-medium">Block</div>
+                <div className="text-muted-foreground text-xs">
+                  Deny prompts and tool calls that match detection rules
+                </div>
               </div>
-            </div>
-          </label>
+            </label>
+          </div>
         </RadioGroup>
       </div>
 
