@@ -485,17 +485,18 @@ func collectionRemoteHeader(systemName, displayName string, sensitive bool) *typ
 	placeholderName := toolconfig.ToPosixName(displayName)
 	description := fmt.Sprintf("Set from %s", placeholderName)
 	placeholder := fmt.Sprintf("${%s}", placeholderName)
-	header := &types.ExternalMCPRemoteHeader{
+	var isSecret *bool
+	if sensitive {
+		isSecret = conv.PtrEmpty(true)
+	}
+
+	return &types.ExternalMCPRemoteHeader{
 		Name:        toolconfig.ToHTTPHeader(systemName),
 		Description: &description,
+		IsSecret:    isSecret,
 		IsRequired:  conv.PtrEmpty(true),
 		Placeholder: &placeholder,
 	}
-	if sensitive {
-		header.IsSecret = conv.PtrEmpty(true)
-	}
-
-	return header
 }
 
 func (s *Service) attachServerToCollection(ctx context.Context, queries *repo.Queries, collectionID, toolsetID uuid.UUID, organizationID, userID string) error {
