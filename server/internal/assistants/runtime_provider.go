@@ -17,6 +17,9 @@ import (
 const (
 	RuntimeProviderLocal = runtimeBackendLocal
 	RuntimeProviderFlyIO = runtimeBackendFlyIO
+
+	defaultFlyRuntimeRegion = "us"
+	defaultFlyRuntimePrefix = "gram-asst"
 )
 
 type RuntimeBackendConfig struct {
@@ -48,32 +51,20 @@ func normalizeRuntimeProvider(provider string) string {
 	}
 }
 
-// NewRuntimeBackend selects the runtime implementation. The provider string
-// is validated by assistantRuntimeConfigFromCLI before reaching here. Local
-// builds the firecracker-backed manager; remote providers without a wired
-// implementation return a stub that errors on any runtime operation so the
-// CRUD surface can still mount and the server starts cleanly. Unknown
-// providers panic — that is a programmer error.
 func NewRuntimeBackend(logger *slog.Logger, httpPolicy *guardian.Policy, config RuntimeBackendConfig) RuntimeBackend {
 	provider := normalizeRuntimeProvider(config.Provider)
 	switch provider {
 	case RuntimeProviderLocal:
 		return NewRuntimeManager(logger, httpPolicy, config.Local)
 	case RuntimeProviderFlyIO:
-		return newDeferredRuntimeBackend(provider)
+		return NewFlyRuntimeBackend(logger, httpPolicy, config.Fly)
 	default:
 		panic(fmt.Sprintf("assistants.NewRuntimeBackend: unsupported provider %q (CLI validation should have rejected this)", provider))
 	}
 }
 
 func ValidateRuntimeBackendServerURL(ctx context.Context, runtime RuntimeBackend, serverURL *url.URL) error {
-	if runtime == nil {
-		return nil
-	}
-	if _, deferred := runtime.(*deferredRuntimeBackend); deferred {
-		return nil
-	}
-	if runtime.Backend() != runtimeBackendFlyIO {
+	if runtime == nil || runtime.Backend() != runtimeBackendFlyIO {
 		return nil
 	}
 	_, err := runtime.ServerURL(ctx, assistantRuntimeRecord{
