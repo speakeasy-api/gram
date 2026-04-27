@@ -218,8 +218,11 @@ export function ScopePickerPopover({
           label="Specific tools"
           selected={!!customMode}
           onClick={() => {
-            onCustomModeChange?.(true);
-            if (isUnrestricted) onChangeSelectors([]);
+            if (!customMode) {
+              onCustomModeChange?.(true);
+              onChangeSelectors([]);
+              onChangeAnnotations?.([]);
+            }
           }}
         />
       )}
