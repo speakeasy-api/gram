@@ -613,7 +613,6 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 		return oops.E(oops.CodeBadRequest, err, "failed to decode request body").Log(ctx, s.logger)
 	}
 
-	sessionID := parseMcpSessionID(r.Header)
 	if req.Method == "initialize" {
 		w.Header().Set("Mcp-Session-Id", sessionID)
 	}
