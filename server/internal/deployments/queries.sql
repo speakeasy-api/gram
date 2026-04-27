@@ -156,6 +156,8 @@ SELECT
   deployments_functions.name as deployments_functions_name,
   deployments_functions.slug as deployments_functions_slug,
   deployments_functions.runtime as deployments_functions_runtime,
+  deployments_functions.scale as deployments_functions_scale,
+  deployments_functions.memory_mib as deployments_functions_memory_mib,
   deployments_packages.package_id as deployment_package_id,
   packages.name as package_name,
   package_versions.major as package_version_major,
@@ -313,6 +315,8 @@ INSERT INTO deployments_functions (
   , name
   , slug
   , runtime
+  , memory_mib
+  , scale
 )
 SELECT 
   @clone_deployment_id
@@ -320,6 +324,8 @@ SELECT
   , current.name
   , current.slug
   , current.runtime
+  , COALESCE(current.memory_mib, @default_memory_mib::int)
+  , COALESCE(current.scale, @default_scale::int)
 FROM deployments_functions as current
 WHERE current.deployment_id = @original_deployment_id
   AND current.asset_id <> ALL (@excluded_ids::uuid[])
@@ -440,18 +446,24 @@ INSERT INTO deployments_functions (
   , name
   , slug
   , runtime
+  , memory_mib
+  , scale
 ) VALUES (
   @deployment_id
   , @asset_id
   , @name
   , @slug
   , @runtime
+  , sqlc.narg(memory_mib)
+  , sqlc.narg(scale)
 )
 ON CONFLICT (deployment_id, slug) DO UPDATE
 SET
   asset_id = EXCLUDED.asset_id
   , name = EXCLUDED.name
   , runtime = EXCLUDED.runtime
+  , memory_mib = COALESCE(EXCLUDED.memory_mib, deployments_functions.memory_mib)
+  , scale = COALESCE(EXCLUDED.scale, deployments_functions.scale)
 RETURNING id, asset_id, name, slug;
 
 -- name: UpsertDeploymentPackage :one

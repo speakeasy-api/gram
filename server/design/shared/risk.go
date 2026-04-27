@@ -15,6 +15,7 @@ var RiskPolicy = Type("RiskPolicy", func() {
 	})
 	Attribute("name", String, "The policy name.")
 	Attribute("sources", ArrayOf(String), "Detection sources enabled for this policy.")
+	Attribute("presidio_entities", ArrayOf(String), "Presidio entity types to scan for. When empty, scans all entities.")
 	Attribute("enabled", Boolean, "Whether the policy is active.")
 	Attribute("version", Int64, "Policy version, incremented on each update.")
 	Attribute("created_at", String, "When the policy was created.", func() {

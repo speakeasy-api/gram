@@ -11,6 +11,10 @@ export type AddFunctionsForm = {
    */
   assetId: string;
   /**
+   * The amount of memory in MiB to allocate for the function (1 MiB = 1024 * 1024 bytes).
+   */
+  memoryMib?: number | undefined;
+  /**
    * The functions file display name.
    */
   name: string;
@@ -18,6 +22,10 @@ export type AddFunctionsForm = {
    * The runtime to use when executing functions. Allowed values are: nodejs:22, nodejs:24, python:3.12.
    */
   runtime: string;
+  /**
+   * The number of instances to scale the function to.
+   */
+  scale?: number | undefined;
   /**
    * A short url-friendly label that uniquely identifies a resource.
    */
@@ -27,8 +35,10 @@ export type AddFunctionsForm = {
 /** @internal */
 export type AddFunctionsForm$Outbound = {
   asset_id: string;
+  memory_mib?: number | undefined;
   name: string;
   runtime: string;
+  scale?: number | undefined;
   slug: string;
 };
 
@@ -39,13 +49,16 @@ export const AddFunctionsForm$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     assetId: z.string(),
+    memoryMib: z.optional(z.int()),
     name: z.string(),
     runtime: z.string(),
+    scale: z.optional(z.int()),
     slug: z.string(),
   }),
   z.transform((v) => {
     return remap$(v, {
       assetId: "asset_id",
+      memoryMib: "memory_mib",
     });
   }),
 );

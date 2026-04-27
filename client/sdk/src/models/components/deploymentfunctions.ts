@@ -18,6 +18,10 @@ export type DeploymentFunctions = {
    */
   id: string;
   /**
+   * The memory limit in MiB of function runner machines.
+   */
+  memoryMib?: number | undefined;
+  /**
    * The name to give the document as it will be displayed in UIs.
    */
   name: string;
@@ -25,6 +29,10 @@ export type DeploymentFunctions = {
    * The runtime to use when executing functions.
    */
   runtime: string;
+  /**
+   * The number of instances to run for the function.
+   */
+  scale?: number | undefined;
   /**
    * A short url-friendly label that uniquely identifies a resource.
    */
@@ -39,13 +47,16 @@ export const DeploymentFunctions$inboundSchema: z.ZodMiniType<
   z.object({
     asset_id: z.string(),
     id: z.string(),
+    memory_mib: z.optional(z.int()),
     name: z.string(),
     runtime: z.string(),
+    scale: z.optional(z.int()),
     slug: z.string(),
   }),
   z.transform((v) => {
     return remap$(v, {
       "asset_id": "assetId",
+      "memory_mib": "memoryMib",
     });
   }),
 );

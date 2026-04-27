@@ -819,6 +819,7 @@ CREATE TABLE IF NOT EXISTS assistants (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   project_id uuid NOT NULL,
   organization_id TEXT NOT NULL,
+  created_by_user_id TEXT,
   name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 120),
   model TEXT NOT NULL CHECK (model <> '' AND CHAR_LENGTH(model) <= 200),
   instructions TEXT NOT NULL,
@@ -2086,6 +2087,7 @@ CREATE TABLE IF NOT EXISTS risk_policies (
   enabled BOOLEAN NOT NULL DEFAULT TRUE,
   name TEXT NOT NULL,
   sources TEXT[] NOT NULL,
+  presidio_entities TEXT[],
   version BIGINT NOT NULL,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),

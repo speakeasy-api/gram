@@ -199,7 +199,7 @@ type LogToolsetAttachExternalOAuthEvent struct {
 	ToolsetSlug         string
 	ToolsetVersionAfter int64
 
-	ExternalOAuthServerID   string
+	ExternalOAuthServerID   string //nolint:glint // TODO(AGE-1954): discuss URN treatment for external OAuth server identifiers; pending team discussion
 	ExternalOAuthServerSlug string
 }
 
@@ -256,7 +256,7 @@ type LogToolsetDetachExternalOAuthEvent struct {
 	ToolsetSlug         string
 	ToolsetVersionAfter int64
 
-	ExternalOAuthServerID   *string
+	ExternalOAuthServerID   *string //nolint:glint // TODO(AGE-1954): discuss URN treatment for external OAuth server identifiers; pending team discussion
 	ExternalOAuthServerSlug *string
 }
 
@@ -313,7 +313,7 @@ type LogToolsetAttachOAuthProxyEvent struct {
 	ToolsetSlug         string
 	ToolsetVersionAfter int64
 
-	OAuthProxyServerID   string
+	OAuthProxyServerID   string //nolint:glint // TODO(AGE-1954): discuss URN treatment for OAuth proxy server identifiers; pending team discussion
 	OAuthProxyServerSlug string
 }
 
@@ -370,7 +370,7 @@ type LogToolsetDetachOAuthProxyEvent struct {
 	ToolsetSlug         string
 	ToolsetVersionAfter int64
 
-	OAuthProxyServerID   *string
+	OAuthProxyServerID   *string //nolint:glint // TODO(AGE-1954): discuss URN treatment for OAuth proxy server identifiers; pending team discussion
 	OAuthProxyServerSlug *string
 }
 
@@ -427,7 +427,7 @@ type LogToolsetUpdateOAuthProxyEvent struct {
 	ToolsetSlug         string
 	ToolsetVersionAfter int64
 
-	OAuthProxyServerID   string
+	OAuthProxyServerID   string //nolint:glint // TODO(AGE-1954): discuss URN treatment for OAuth proxy server identifiers; pending team discussion
 	OAuthProxyServerSlug string
 
 	ToolsetSnapshotBefore *types.Toolset
