@@ -147,6 +147,7 @@ function PolicyCenterContent() {
     Set<RuleCategory>
   >(new Set<RuleCategory>(["secrets", "pii"]));
   const [formAction, setFormAction] = useState<PolicyAction>("flag");
+  const [formAutoName, setFormAutoName] = useState(true);
 
   const [runPanelPolicy, setRunPanelPolicy] = useState<RiskPolicy | null>(null);
 
@@ -183,6 +184,7 @@ function PolicyCenterContent() {
     setFormEnabled(true);
     setSelectedCategories(new Set<RuleCategory>(["secrets", "pii"]));
     setFormAction("flag");
+    setFormAutoName(true);
     setSheetOpen(true);
   };
 
@@ -194,6 +196,7 @@ function PolicyCenterContent() {
       policyToCategories(policy.sources, policy.presidioEntities),
     );
     setFormAction((policy.action as PolicyAction) ?? "flag");
+    setFormAutoName(policy.autoName ?? true);
     setSheetOpen(true);
   };
 
@@ -210,6 +213,7 @@ function PolicyCenterContent() {
             sources,
             presidioEntities,
             action: formAction,
+            autoName: formAutoName,
           },
         },
       });
@@ -217,11 +221,12 @@ function PolicyCenterContent() {
       createMutation.mutate({
         request: {
           createRiskPolicyRequestBody: {
-            name: formName,
+            ...(formAutoName ? {} : { name: formName }),
             enabled: formEnabled,
             sources,
             presidioEntities,
             action: formAction,
+            autoName: formAutoName,
           },
         },
       });
@@ -450,6 +455,8 @@ function PolicyCenterContent() {
                 setSelectedCategories={setSelectedCategories}
                 formAction={formAction}
                 setFormAction={setFormAction}
+                formAutoName={formAutoName}
+                setFormAutoName={setFormAutoName}
               />
             </div>
             <SheetFooter className="px-6 pb-6">
@@ -511,6 +518,8 @@ function PolicySheetBody({
   setSelectedCategories,
   formAction,
   setFormAction,
+  formAutoName,
+  setFormAutoName,
 }: {
   formName: string;
   setFormName: (v: string) => void;
@@ -520,6 +529,8 @@ function PolicySheetBody({
   setSelectedCategories: (v: Set<RuleCategory>) => void;
   formAction: PolicyAction;
   setFormAction: (v: PolicyAction) => void;
+  formAutoName: boolean;
+  setFormAutoName: (v: boolean) => void;
 }) {
   const [expandedCategory, setExpandedCategory] = useState<RuleCategory | null>(
     null,
@@ -529,12 +540,25 @@ function PolicySheetBody({
     <div className="space-y-6 py-4">
       {/* Policy Name */}
       <div className="space-y-2">
-        <Label className="text-sm font-medium">Policy Name</Label>
-        <Input
-          value={formName}
-          onChange={(value) => setFormName(value)}
-          placeholder="e.g. Secret Detection"
-        />
+        <div className="flex items-center justify-between">
+          <Label className="text-sm font-medium">Policy Name</Label>
+          <div className="flex items-center gap-2">
+            <span className="text-muted-foreground text-xs">Auto</span>
+            <Switch checked={formAutoName} onCheckedChange={setFormAutoName} />
+          </div>
+        </div>
+        {formAutoName ? (
+          <p className="text-muted-foreground text-xs">
+            Name will be generated automatically based on detection rules and
+            action.
+          </p>
+        ) : (
+          <Input
+            value={formName}
+            onChange={(value) => setFormName(value)}
+            placeholder="e.g. Secret Detection"
+          />
+        )}
       </div>
 
       {/* Detection Rules */}

@@ -145,6 +145,12 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 		return nil, err
 	}
 
+	// Default auto_name to true when creating (auto-generate unless user provides a name).
+	autoName := true
+	if payload.AutoName != nil {
+		autoName = *payload.AutoName
+	}
+
 	name := ""
 	if payload.Name != nil {
 		name = *payload.Name
@@ -169,14 +175,15 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 		enabled = *payload.Enabled
 	}
 
-	// Auto-generate a name if none provided.
-	if name == "" {
+	// Auto-generate a name if auto_name is true or no name provided.
+	if autoName || name == "" {
 		existingPolicies, _ := s.repo.ListRiskPolicies(ctx, *authCtx.ProjectID)
 		var existingNames []string
 		for _, p := range existingPolicies {
 			existingNames = append(existingNames, p.Name)
 		}
 		name = s.generatePolicyName(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), sources, payload.PresidioEntities, action, existingNames)
+		autoName = true
 	}
 
 	if err := validatePolicyName(name); err != nil {
@@ -203,6 +210,7 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 		PresidioEntities: payload.PresidioEntities,
 		Enabled:          enabled,
 		Action:           actionPG,
+		AutoName:         pgtype.Bool{Bool: autoName, Valid: true},
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "create risk policy").Log(ctx, s.logger)
@@ -339,6 +347,26 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		actionPG = conv.ToPGText(*payload.Action)
 	}
 
+	// Handle auto_name: if explicitly set, use that; otherwise preserve current.
+	autoNamePG := current.AutoName
+	if payload.AutoName != nil {
+		autoNamePG = pgtype.Bool{Bool: *payload.AutoName, Valid: true}
+	}
+
+	// If auto_name is true, regenerate the name.
+	name := payload.Name
+	if autoNamePG.Valid && autoNamePG.Bool {
+		action := actionOrDefault(actionPG)
+		existingPolicies, _ := s.repo.ListRiskPolicies(ctx, *authCtx.ProjectID)
+		var existingNames []string
+		for _, p := range existingPolicies {
+			if p.ID != id {
+				existingNames = append(existingNames, p.Name)
+			}
+		}
+		name = s.generatePolicyName(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), sources, presidioEntities, action, existingNames)
+	}
+
 	snapshotBefore := policyRowSnapshot(current)
 
 	dbtx, err := s.db.Begin(ctx)
@@ -350,11 +378,12 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 	row, err := repo.New(dbtx).UpdateRiskPolicy(ctx, repo.UpdateRiskPolicyParams{
 		ID:               id,
 		ProjectID:        *authCtx.ProjectID,
-		Name:             payload.Name,
+		Name:             name,
 		Sources:          sources,
 		PresidioEntities: presidioEntities,
 		Enabled:          enabled,
 		Action:           actionPG,
+		AutoName:         autoNamePG,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "update risk policy").Log(ctx, s.logger)
@@ -742,6 +771,7 @@ func (s *Service) policyToType(ctx context.Context, row repo.RiskPolicy) (*types
 		PresidioEntities: row.PresidioEntities,
 		Enabled:          row.Enabled,
 		Action:           actionOrDefault(row.Action),
+		AutoName:         row.AutoName.Valid && row.AutoName.Bool,
 		Version:          row.Version,
 		CreatedAt:        row.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:        row.UpdatedAt.Time.Format(time.RFC3339),
@@ -763,6 +793,7 @@ func policyRowSnapshot(row repo.RiskPolicy) *types.RiskPolicy {
 		PresidioEntities: row.PresidioEntities,
 		Enabled:          row.Enabled,
 		Action:           actionOrDefault(row.Action),
+		AutoName:         row.AutoName.Valid && row.AutoName.Bool,
 		Version:          row.Version,
 		CreatedAt:        row.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:        row.UpdatedAt.Time.Format(time.RFC3339),

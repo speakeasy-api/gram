@@ -29,6 +29,7 @@ var _ = Service("risk", func() {
 				Enum("flag", "block")
 				Default("flag")
 			})
+			Attribute("auto_name", Boolean, "Whether the policy name should be auto-generated.")
 		})
 
 		Result(shared.RiskPolicy)
@@ -118,6 +119,7 @@ var _ = Service("risk", func() {
 			Attribute("action", String, "Policy action: flag or block.", func() {
 				Enum("flag", "block")
 			})
+			Attribute("auto_name", Boolean, "Whether the policy name should be auto-generated.")
 			Required("id", "name")
 		})
 

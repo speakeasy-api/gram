@@ -942,6 +942,7 @@ type RiskPolicy struct {
 	Sources          []string
 	PresidioEntities []string
 	Action           pgtype.Text
+	AutoName         pgtype.Bool
 	Version          int64
 	CreatedAt        pgtype.Timestamptz
 	UpdatedAt        pgtype.Timestamptz

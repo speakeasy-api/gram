@@ -21003,6 +21003,9 @@ components:
                     enum:
                         - flag
                         - block
+                auto_name:
+                    type: boolean
+                    description: Whether the policy name should be auto-generated.
                 enabled:
                     type: boolean
                     description: Whether the policy is active.
@@ -25886,6 +25889,9 @@ components:
                     enum:
                         - flag
                         - block
+                auto_name:
+                    type: boolean
+                    description: Whether the policy name is auto-generated. When true, the name is regenerated on each update.
                 created_at:
                     type: string
                     description: When the policy was created.
@@ -25937,6 +25943,7 @@ components:
                 - sources
                 - enabled
                 - action
+                - auto_name
                 - version
                 - created_at
                 - updated_at
@@ -28215,6 +28222,9 @@ components:
                     enum:
                         - flag
                         - block
+                auto_name:
+                    type: boolean
+                    description: Whether the policy name should be auto-generated.
                 enabled:
                     type: boolean
                     description: Whether the policy is active.

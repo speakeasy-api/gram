@@ -26,6 +26,8 @@ type CreateRiskPolicyRequestBody struct {
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Policy action: flag or block.
 	Action string `form:"action" json:"action" xml:"action"`
+	// Whether the policy name should be auto-generated.
+	AutoName *bool `form:"auto_name,omitempty" json:"auto_name,omitempty" xml:"auto_name,omitempty"`
 }
 
 // UpdateRiskPolicyRequestBody is the type of the "risk" service
@@ -43,6 +45,8 @@ type UpdateRiskPolicyRequestBody struct {
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Policy action: flag or block.
 	Action *string `form:"action,omitempty" json:"action,omitempty" xml:"action,omitempty"`
+	// Whether the policy name should be auto-generated.
+	AutoName *bool `form:"auto_name,omitempty" json:"auto_name,omitempty" xml:"auto_name,omitempty"`
 }
 
 // TriggerRiskAnalysisRequestBody is the type of the "risk" service
@@ -69,6 +73,9 @@ type CreateRiskPolicyResponseBody struct {
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Policy action: flag (log only) or block (deny in real-time).
 	Action *string `form:"action,omitempty" json:"action,omitempty" xml:"action,omitempty"`
+	// Whether the policy name is auto-generated. When true, the name is
+	// regenerated on each update.
+	AutoName *bool `form:"auto_name,omitempty" json:"auto_name,omitempty" xml:"auto_name,omitempty"`
 	// Policy version, incremented on each update.
 	Version *int64 `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
 	// When the policy was created.
@@ -105,6 +112,9 @@ type GetRiskPolicyResponseBody struct {
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Policy action: flag (log only) or block (deny in real-time).
 	Action *string `form:"action,omitempty" json:"action,omitempty" xml:"action,omitempty"`
+	// Whether the policy name is auto-generated. When true, the name is
+	// regenerated on each update.
+	AutoName *bool `form:"auto_name,omitempty" json:"auto_name,omitempty" xml:"auto_name,omitempty"`
 	// Policy version, incremented on each update.
 	Version *int64 `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
 	// When the policy was created.
@@ -134,6 +144,9 @@ type UpdateRiskPolicyResponseBody struct {
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Policy action: flag (log only) or block (deny in real-time).
 	Action *string `form:"action,omitempty" json:"action,omitempty" xml:"action,omitempty"`
+	// Whether the policy name is auto-generated. When true, the name is
+	// regenerated on each update.
+	AutoName *bool `form:"auto_name,omitempty" json:"auto_name,omitempty" xml:"auto_name,omitempty"`
 	// Policy version, incremented on each update.
 	Version *int64 `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
 	// When the policy was created.
@@ -1851,6 +1864,9 @@ type RiskPolicyResponseBody struct {
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Policy action: flag (log only) or block (deny in real-time).
 	Action *string `form:"action,omitempty" json:"action,omitempty" xml:"action,omitempty"`
+	// Whether the policy name is auto-generated. When true, the name is
+	// regenerated on each update.
+	AutoName *bool `form:"auto_name,omitempty" json:"auto_name,omitempty" xml:"auto_name,omitempty"`
 	// Policy version, incremented on each update.
 	Version *int64 `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
 	// When the policy was created.
@@ -1917,9 +1933,10 @@ type RiskChatSummaryResponseBody struct {
 // of the "createRiskPolicy" endpoint of the "risk" service.
 func NewCreateRiskPolicyRequestBody(p *risk.CreateRiskPolicyPayload) *CreateRiskPolicyRequestBody {
 	body := &CreateRiskPolicyRequestBody{
-		Name:    p.Name,
-		Enabled: p.Enabled,
-		Action:  p.Action,
+		Name:     p.Name,
+		Enabled:  p.Enabled,
+		Action:   p.Action,
+		AutoName: p.AutoName,
 	}
 	if p.Sources != nil {
 		body.Sources = make([]string, len(p.Sources))
@@ -1946,10 +1963,11 @@ func NewCreateRiskPolicyRequestBody(p *risk.CreateRiskPolicyPayload) *CreateRisk
 // of the "updateRiskPolicy" endpoint of the "risk" service.
 func NewUpdateRiskPolicyRequestBody(p *risk.UpdateRiskPolicyPayload) *UpdateRiskPolicyRequestBody {
 	body := &UpdateRiskPolicyRequestBody{
-		ID:      p.ID,
-		Name:    p.Name,
-		Enabled: p.Enabled,
-		Action:  p.Action,
+		ID:       p.ID,
+		Name:     p.Name,
+		Enabled:  p.Enabled,
+		Action:   p.Action,
+		AutoName: p.AutoName,
 	}
 	if p.Sources != nil {
 		body.Sources = make([]string, len(p.Sources))
@@ -1984,6 +2002,7 @@ func NewCreateRiskPolicyRiskPolicyOK(body *CreateRiskPolicyResponseBody) *types.
 		Name:            *body.Name,
 		Enabled:         *body.Enabled,
 		Action:          *body.Action,
+		AutoName:        *body.AutoName,
 		Version:         *body.Version,
 		CreatedAt:       *body.CreatedAt,
 		UpdatedAt:       *body.UpdatedAt,
@@ -2329,6 +2348,7 @@ func NewGetRiskPolicyRiskPolicyOK(body *GetRiskPolicyResponseBody) *types.RiskPo
 		Name:            *body.Name,
 		Enabled:         *body.Enabled,
 		Action:          *body.Action,
+		AutoName:        *body.AutoName,
 		Version:         *body.Version,
 		CreatedAt:       *body.CreatedAt,
 		UpdatedAt:       *body.UpdatedAt,
@@ -2508,6 +2528,7 @@ func NewUpdateRiskPolicyRiskPolicyOK(body *UpdateRiskPolicyResponseBody) *types.
 		Name:            *body.Name,
 		Enabled:         *body.Enabled,
 		Action:          *body.Action,
+		AutoName:        *body.AutoName,
 		Version:         *body.Version,
 		CreatedAt:       *body.CreatedAt,
 		UpdatedAt:       *body.UpdatedAt,
@@ -3502,6 +3523,9 @@ func ValidateCreateRiskPolicyResponseBody(body *CreateRiskPolicyResponseBody) (e
 	if body.Action == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("action", "body"))
 	}
+	if body.AutoName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("auto_name", "body"))
+	}
 	if body.Version == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("version", "body"))
 	}
@@ -3574,6 +3598,9 @@ func ValidateGetRiskPolicyResponseBody(body *GetRiskPolicyResponseBody) (err err
 	if body.Action == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("action", "body"))
 	}
+	if body.AutoName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("auto_name", "body"))
+	}
 	if body.Version == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("version", "body"))
 	}
@@ -3629,6 +3656,9 @@ func ValidateUpdateRiskPolicyResponseBody(body *UpdateRiskPolicyResponseBody) (e
 	}
 	if body.Action == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("action", "body"))
+	}
+	if body.AutoName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("auto_name", "body"))
 	}
 	if body.Version == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("version", "body"))
@@ -5916,6 +5946,9 @@ func ValidateRiskPolicyResponseBody(body *RiskPolicyResponseBody) (err error) {
 	}
 	if body.Action == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("action", "body"))
+	}
+	if body.AutoName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("auto_name", "body"))
 	}
 	if body.Version == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("version", "body"))

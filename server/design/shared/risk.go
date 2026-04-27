@@ -21,6 +21,7 @@ var RiskPolicy = Type("RiskPolicy", func() {
 		Enum("flag", "block")
 		Default("flag")
 	})
+	Attribute("auto_name", Boolean, "Whether the policy name is auto-generated. When true, the name is regenerated on each update.")
 	Attribute("version", Int64, "Policy version, incremented on each update.")
 	Attribute("created_at", String, "When the policy was created.", func() {
 		Format(FormatDateTime)
@@ -31,7 +32,7 @@ var RiskPolicy = Type("RiskPolicy", func() {
 	Attribute("pending_messages", Int64, "Number of messages not yet analyzed at the current policy version.")
 	Attribute("total_messages", Int64, "Total number of messages in the project.")
 
-	Required("id", "project_id", "name", "sources", "enabled", "action", "version", "created_at", "updated_at", "pending_messages", "total_messages")
+	Required("id", "project_id", "name", "sources", "enabled", "action", "auto_name", "version", "created_at", "updated_at", "pending_messages", "total_messages")
 })
 
 var RiskResult = Type("RiskResult", func() {
