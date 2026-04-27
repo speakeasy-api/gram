@@ -120,7 +120,6 @@ func SyncGrants(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, orgI
 				OrganizationID: orgID,
 				PrincipalUrn:   principalURN,
 				Scope:          grant.Scope,
-				Resource:       WildcardResource,
 				Selectors:      selBytes,
 			}); err != nil {
 				return fmt.Errorf("upsert unrestricted grant %q for role %q: %w", grant.Scope, roleSlug, err)
@@ -141,7 +140,6 @@ func SyncGrants(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, orgI
 				OrganizationID: orgID,
 				PrincipalUrn:   principalURN,
 				Scope:          grant.Scope,
-				Resource:       sel.ResourceID(),
 				Selectors:      selBytes,
 			}); err != nil {
 				return fmt.Errorf("upsert grant %q for role %q: %w", grant.Scope, roleSlug, err)
@@ -167,7 +165,7 @@ func GrantsForRole(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, o
 
 	grantRows := make([]Grant, 0, len(rows))
 	for _, row := range rows {
-		selectors, err := SelectorFromRow(row.Selectors, Scope(row.Scope), row.Resource)
+		selectors, err := SelectorFromRow(row.Selectors)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "unmarshal grant selector").Log(ctx, logger)
 		}

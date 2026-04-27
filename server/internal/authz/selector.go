@@ -155,17 +155,13 @@ func (s Selector) ResourceID() string {
 	return WildcardResource
 }
 
-// SelectorFromRow parses the selectors JSONB column, falling back to
-// constructing a selector from the scope and resource if selectors is NULL.
-func SelectorFromRow(selectors []byte, scope Scope, resource string) (Selector, error) {
-	if len(selectors) > 0 {
-		var sel Selector
-		if err := json.Unmarshal(selectors, &sel); err != nil {
-			return nil, fmt.Errorf("unmarshal selector: %w", err)
-		}
-		return sel, nil
+// SelectorFromRow parses the selectors JSONB column into a Selector.
+func SelectorFromRow(selectors []byte) (Selector, error) {
+	var sel Selector
+	if err := json.Unmarshal(selectors, &sel); err != nil {
+		return nil, fmt.Errorf("unmarshal selector: %w", err)
 	}
-	return NewSelector(scope, resource), nil
+	return sel, nil
 }
 
 // MarshalJSON implements json.Marshaler. A nil selector marshals as the
