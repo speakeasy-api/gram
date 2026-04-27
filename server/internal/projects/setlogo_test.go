@@ -23,7 +23,7 @@ func TestSetLogo_CreatesAuditLog(t *testing.T) {
 	ctx, ti := newTestProjectsService(t, true)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-	ctx = withAccessGrants(t, ctx, ti.conn, authz.NewGrant(authz.ScopeProjectWrite, authCtx.ProjectID.String()))
+	ctx = withAccessGrants(t, ctx, ti.conn, authz.Grant{Scope: authz.ScopeProjectWrite, Selector: authz.NewSelector(authz.ScopeProjectWrite, authCtx.ProjectID.String())})
 	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionProjectUpdate)
 	require.NoError(t, err)
 
@@ -51,7 +51,7 @@ func TestSetLogo_InvalidAssetID_DoesNotCreateAuditLog(t *testing.T) {
 	ctx, ti := newTestProjectsService(t, true)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-	ctx = withAccessGrants(t, ctx, ti.conn, authz.NewGrant(authz.ScopeProjectWrite, authCtx.ProjectID.String()))
+	ctx = withAccessGrants(t, ctx, ti.conn, authz.Grant{Scope: authz.ScopeProjectWrite, Selector: authz.NewSelector(authz.ScopeProjectWrite, authCtx.ProjectID.String())})
 	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionProjectUpdate)
 	require.NoError(t, err)
 
@@ -75,7 +75,7 @@ func TestSetLogo_AuditLogSnapshots(t *testing.T) {
 	ctx, ti := newTestProjectsService(t, true)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-	ctx = withAccessGrants(t, ctx, ti.conn, authz.NewGrant(authz.ScopeProjectWrite, authCtx.ProjectID.String()))
+	ctx = withAccessGrants(t, ctx, ti.conn, authz.Grant{Scope: authz.ScopeProjectWrite, Selector: authz.NewSelector(authz.ScopeProjectWrite, authCtx.ProjectID.String())})
 	assetID := uuid.New()
 
 	result, err := ti.service.SetLogo(ctx, &projects.SetLogoPayload{
@@ -118,7 +118,7 @@ func TestSetLogo_Success(t *testing.T) {
 	ctx, ti := newTestProjectsService(t, true)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-	ctx = withAccessGrants(t, ctx, ti.conn, authz.NewGrant(authz.ScopeProjectWrite, authCtx.ProjectID.String()))
+	ctx = withAccessGrants(t, ctx, ti.conn, authz.Grant{Scope: authz.ScopeProjectWrite, Selector: authz.NewSelector(authz.ScopeProjectWrite, authCtx.ProjectID.String())})
 
 	// Create a test asset ID
 	assetID := uuid.New()
@@ -167,7 +167,7 @@ func TestSetLogo_InvalidAssetID(t *testing.T) {
 	ctx, ti := newTestProjectsService(t, true)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-	ctx = withAccessGrants(t, ctx, ti.conn, authz.NewGrant(authz.ScopeProjectWrite, authCtx.ProjectID.String()))
+	ctx = withAccessGrants(t, ctx, ti.conn, authz.Grant{Scope: authz.ScopeProjectWrite, Selector: authz.NewSelector(authz.ScopeProjectWrite, authCtx.ProjectID.String())})
 
 	payload := &projects.SetLogoPayload{
 		ApikeyToken:      nil,
@@ -295,7 +295,7 @@ func TestSetLogo_DatabaseErrorProjectNotFound(t *testing.T) {
 	// Set a non-existent project ID
 	nonExistentProjectID := uuid.New()
 	authCtx.ProjectID = &nonExistentProjectID
-	ctx = withAccessGrants(t, ctx, ti.conn, authz.NewGrant(authz.ScopeProjectWrite, nonExistentProjectID.String()))
+	ctx = withAccessGrants(t, ctx, ti.conn, authz.Grant{Scope: authz.ScopeProjectWrite, Selector: authz.NewSelector(authz.ScopeProjectWrite, nonExistentProjectID.String())})
 
 	// Call SetLogo
 	payload := &projects.SetLogoPayload{

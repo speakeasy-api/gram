@@ -62,7 +62,7 @@ func TestService_ListUsers_AllowsOrgReadGrant(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgRead, authCtx.ActiveOrganizationID))
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgRead, Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID)})
 
 	res, err := ti.service.ListUsers(ctx, &gen.ListUsersPayload{})
 	require.NoError(t, err)
@@ -83,7 +83,7 @@ func TestService_ListUsers_AllowsOrgAdminGrantViaScopeHierarchy(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID))
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)})
 
 	res, err := ti.service.ListUsers(ctx, &gen.ListUsersPayload{})
 	require.NoError(t, err)
@@ -107,7 +107,7 @@ func TestService_ListUsers_ForbiddenWithGrantForDifferentOrganization(t *testing
 	t.Parallel()
 
 	ctx, ti := newTestOrganizationsServiceRBAC(t)
-	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, "org_other"))
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, "org_other")})
 
 	res, err := ti.service.ListUsers(ctx, &gen.ListUsersPayload{})
 	var oopsErr *oops.ShareableError

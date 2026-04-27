@@ -38,7 +38,7 @@ func TestTemplates_RBAC_ReadOps_AllowedWithBuildReadGrant(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeProjectRead, authCtx.ProjectID.String()))
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeProjectRead, Selector: authz.NewSelector(authz.ScopeProjectRead, authCtx.ProjectID.String())})
 
 	_, err := ti.service.ListTemplates(ctx, &gen.ListTemplatesPayload{
 		SessionToken:     nil,
@@ -57,7 +57,7 @@ func TestTemplates_RBAC_ReadOps_AllowedWithBuildWriteGrant(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeProjectWrite, authCtx.ProjectID.String()))
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeProjectWrite, Selector: authz.NewSelector(authz.ScopeProjectWrite, authCtx.ProjectID.String())})
 
 	_, err := ti.service.ListTemplates(ctx, &gen.ListTemplatesPayload{
 		SessionToken:     nil,
@@ -71,7 +71,7 @@ func TestTemplates_RBAC_ReadOps_DeniedWithWrongResourceID(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestTemplateService(t)
-	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeProjectRead, uuid.NewString()))
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeProjectRead, Selector: authz.NewSelector(authz.ScopeProjectRead, uuid.NewString())})
 
 	_, err := ti.service.ListTemplates(ctx, &gen.ListTemplatesPayload{
 		SessionToken:     nil,
@@ -116,7 +116,7 @@ func TestTemplates_RBAC_WriteOps_DeniedWithReadOnlyGrant(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeProjectRead, authCtx.ProjectID.String()))
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeProjectRead, Selector: authz.NewSelector(authz.ScopeProjectRead, authCtx.ProjectID.String())})
 
 	_, err := ti.service.CreateTemplate(ctx, &gen.CreateTemplatePayload{
 		SessionToken:     nil,
@@ -145,7 +145,7 @@ func TestTemplates_RBAC_WriteOps_AllowedWithBuildWriteGrant(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeProjectWrite, authCtx.ProjectID.String()))
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeProjectWrite, Selector: authz.NewSelector(authz.ScopeProjectWrite, authCtx.ProjectID.String())})
 
 	name := "nonexistent-template"
 	err := ti.service.DeleteTemplate(ctx, &gen.DeleteTemplatePayload{

@@ -41,7 +41,7 @@ func TestServePublic_RBAC_PrivateMCP_DeniedWithUnrelatedGrant(t *testing.T) {
 	toolset := createPrivateMCPToolset(t, ctx, ti, "rbac-unrelated-"+uuid.NewString()[:8])
 
 	authzEngine := authz.NewEngine(ti.logger, ti.conn, authztest.RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
-	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeMCPConnect, uuid.NewString()))
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeMCPConnect, Selector: authz.NewSelector(authz.ScopeMCPConnect, uuid.NewString())})
 
 	err := authzEngine.Require(ctx, authz.Check{Scope: authz.ScopeMCPConnect, ResourceID: toolset.ID.String()})
 	var oopsErr *oops.ShareableError
@@ -56,7 +56,7 @@ func TestServePublic_RBAC_PrivateMCP_AllowedWithWriteGrant(t *testing.T) {
 	toolset := createPrivateMCPToolset(t, ctx, ti, "rbac-write-implies-connect-"+uuid.NewString()[:8])
 
 	authzEngine := authz.NewEngine(ti.logger, ti.conn, authztest.RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
-	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeMCPWrite, toolset.ID.String()))
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeMCPWrite, Selector: authz.NewSelector(authz.ScopeMCPWrite, toolset.ID.String())})
 
 	err := authzEngine.Require(ctx, authz.Check{Scope: authz.ScopeMCPConnect, ResourceID: toolset.ID.String()})
 	require.NoError(t, err)
@@ -69,7 +69,7 @@ func TestServePublic_RBAC_PrivateMCP_AllowedWithConnectGrant(t *testing.T) {
 	toolset := createPrivateMCPToolset(t, ctx, ti, "rbac-allowed-"+uuid.NewString()[:8])
 
 	authzEngine := authz.NewEngine(ti.logger, ti.conn, authztest.RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
-	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeMCPConnect, toolset.ID.String()))
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeMCPConnect, Selector: authz.NewSelector(authz.ScopeMCPConnect, toolset.ID.String())})
 
 	err := authzEngine.Require(ctx, authz.Check{Scope: authz.ScopeMCPConnect, ResourceID: toolset.ID.String()})
 	require.NoError(t, err)
