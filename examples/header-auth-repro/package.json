@@ -1,0 +1,13 @@
+{
+  "name": "header-auth-repro",
+  "private": true,
+  "type": "module",
+  "version": "0.0.0",
+  "description": "Toy server and OpenAPI spec for testing custom header API key auth",
+  "engines": {
+    "node": ">=22.18.0"
+  },
+  "scripts": {
+    "start": "node ./src/server.js"
+  }
+}
