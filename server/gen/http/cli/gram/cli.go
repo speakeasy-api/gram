@@ -78,7 +78,7 @@ func UsageCommands() []string {
 		"integrations (get|list)",
 		"keys (create-key|list-keys|revoke-key|verify-key)",
 		"mcp-metadata (get-mcp-metadata|set-mcp-metadata|export-mcp-metadata)",
-		"organizations (send-invite|revoke-invite|list-invites|get-invite-by-token|list-users|remove-user)",
+		"organizations (send-invite|revoke-invite|list-invites|get-invite-by-token|list-users|set-account-type|list-all|remove-user)",
 		"packages (create-package|update-package|list-packages|list-versions|publish)",
 		"plugins (list-plugins|get-plugin|create-plugin|update-plugin|delete-plugin|add-plugin-server|update-plugin-server|remove-plugin-server|set-plugin-assignments|download-plugin-package|get-publish-status|publish-plugins)",
 		"features (get-product-features|set-product-feature)",
@@ -678,6 +678,15 @@ func ParseEndpoint(
 
 		organizationsListUsersFlags            = flag.NewFlagSet("list-users", flag.ExitOnError)
 		organizationsListUsersSessionTokenFlag = organizationsListUsersFlags.String("session-token", "", "")
+
+		organizationsSetAccountTypeFlags           = flag.NewFlagSet("set-account-type", flag.ExitOnError)
+		organizationsSetAccountTypeBodyFlag        = organizationsSetAccountTypeFlags.String("body", "REQUIRED", "")
+		organizationsSetAccountTypeApikeyTokenFlag = organizationsSetAccountTypeFlags.String("apikey-token", "", "")
+
+		organizationsListAllFlags           = flag.NewFlagSet("list-all", flag.ExitOnError)
+		organizationsListAllLimitFlag       = organizationsListAllFlags.String("limit", "", "")
+		organizationsListAllOffsetFlag      = organizationsListAllFlags.String("offset", "", "")
+		organizationsListAllApikeyTokenFlag = organizationsListAllFlags.String("apikey-token", "", "")
 
 		organizationsRemoveUserFlags            = flag.NewFlagSet("remove-user", flag.ExitOnError)
 		organizationsRemoveUserUserIDFlag       = organizationsRemoveUserFlags.String("user-id", "REQUIRED", "")
@@ -1383,6 +1392,8 @@ func ParseEndpoint(
 	organizationsListInvitesFlags.Usage = organizationsListInvitesUsage
 	organizationsGetInviteByTokenFlags.Usage = organizationsGetInviteByTokenUsage
 	organizationsListUsersFlags.Usage = organizationsListUsersUsage
+	organizationsSetAccountTypeFlags.Usage = organizationsSetAccountTypeUsage
+	organizationsListAllFlags.Usage = organizationsListAllUsage
 	organizationsRemoveUserFlags.Usage = organizationsRemoveUserUsage
 
 	packagesFlags.Usage = packagesUsage
@@ -2000,6 +2011,12 @@ func ParseEndpoint(
 
 			case "list-users":
 				epf = organizationsListUsersFlags
+
+			case "set-account-type":
+				epf = organizationsSetAccountTypeFlags
+
+			case "list-all":
+				epf = organizationsListAllFlags
 
 			case "remove-user":
 				epf = organizationsRemoveUserFlags
@@ -2774,6 +2791,12 @@ func ParseEndpoint(
 			case "list-users":
 				endpoint = c.ListUsers()
 				data, err = organizationsc.BuildListUsersPayload(*organizationsListUsersSessionTokenFlag)
+			case "set-account-type":
+				endpoint = c.SetAccountType()
+				data, err = organizationsc.BuildSetAccountTypePayload(*organizationsSetAccountTypeBodyFlag, *organizationsSetAccountTypeApikeyTokenFlag)
+			case "list-all":
+				endpoint = c.ListAll()
+				data, err = organizationsc.BuildListAllPayload(*organizationsListAllLimitFlag, *organizationsListAllOffsetFlag, *organizationsListAllApikeyTokenFlag)
 			case "remove-user":
 				endpoint = c.RemoveUser()
 				data, err = organizationsc.BuildRemoveUserPayload(*organizationsRemoveUserUserIDFlag, *organizationsRemoveUserSessionTokenFlag)
@@ -5604,6 +5627,8 @@ func organizationsUsage() {
 	fmt.Fprintln(os.Stderr, `    list-invites: List pending WorkOS invitations for the active organization.`)
 	fmt.Fprintln(os.Stderr, `    get-invite-by-token: Resolve a WorkOS invitation from its token (e.g. accept-flow).`)
 	fmt.Fprintln(os.Stderr, `    list-users: List users in the active organization from Gram organization_user_relationships.`)
+	fmt.Fprintln(os.Stderr, `    set-account-type: Set a Gram organization's account tier (admin only - requires speakeasy-team API key).`)
+	fmt.Fprintln(os.Stderr, `    list-all: List every Gram organization (admin only - requires speakeasy-team API key).`)
 	fmt.Fprintln(os.Stderr, `    remove-user: Remove a user from the active organization in Gram and delete their WorkOS organization membership.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
@@ -5701,6 +5726,48 @@ func organizationsListUsersUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organizations list-users --session-token \"abc123\"")
+}
+
+func organizationsSetAccountTypeUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] organizations set-account-type", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Set a Gram organization's account tier (admin only - requires speakeasy-team API key).`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organizations set-account-type --body '{\n      \"gram_account_type\": \"pro\",\n      \"organization_id\": \"abc123\"\n   }' --apikey-token \"abc123\"")
+}
+
+func organizationsListAllUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] organizations list-all", os.Args[0])
+	fmt.Fprint(os.Stderr, " -limit INT")
+	fmt.Fprint(os.Stderr, " -offset INT")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List every Gram organization (admin only - requires speakeasy-team API key).`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -limit INT: `)
+	fmt.Fprintln(os.Stderr, `    -offset INT: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organizations list-all --limit 2 --offset 1 --apikey-token \"abc123\"")
 }
 
 func organizationsRemoveUserUsage() {

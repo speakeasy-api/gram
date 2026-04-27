@@ -37,6 +37,14 @@ type Client struct {
 	// endpoint.
 	ListUsersDoer goahttp.Doer
 
+	// SetAccountType Doer is the HTTP client used to make requests to the
+	// setAccountType endpoint.
+	SetAccountTypeDoer goahttp.Doer
+
+	// ListAll Doer is the HTTP client used to make requests to the listAll
+	// endpoint.
+	ListAllDoer goahttp.Doer
+
 	// RemoveUser Doer is the HTTP client used to make requests to the removeUser
 	// endpoint.
 	RemoveUserDoer goahttp.Doer
@@ -67,6 +75,8 @@ func NewClient(
 		ListInvitesDoer:      doer,
 		GetInviteByTokenDoer: doer,
 		ListUsersDoer:        doer,
+		SetAccountTypeDoer:   doer,
+		ListAllDoer:          doer,
 		RemoveUserDoer:       doer,
 		RestoreResponseBody:  restoreBody,
 		scheme:               scheme,
@@ -191,6 +201,54 @@ func (c *Client) ListUsers() goa.Endpoint {
 		resp, err := c.ListUsersDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("organizations", "listUsers", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SetAccountType returns an endpoint that makes HTTP requests to the
+// organizations service setAccountType server.
+func (c *Client) SetAccountType() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSetAccountTypeRequest(c.encoder)
+		decodeResponse = DecodeSetAccountTypeResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSetAccountTypeRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SetAccountTypeDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("organizations", "setAccountType", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListAll returns an endpoint that makes HTTP requests to the organizations
+// service listAll server.
+func (c *Client) ListAll() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListAllRequest(c.encoder)
+		decodeResponse = DecodeListAllResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListAllRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListAllDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("organizations", "listAll", err)
 		}
 		return decodeResponse(resp)
 	}

@@ -10,8 +10,10 @@ package client
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 
 	organizations "github.com/speakeasy-api/gram/server/gen/organizations"
+	goa "goa.design/goa/v3/pkg"
 )
 
 // BuildSendInvitePayload builds the payload for the organizations sendInvite
@@ -99,6 +101,95 @@ func BuildListUsersPayload(organizationsListUsersSessionToken string) (*organiza
 	}
 	v := &organizations.ListUsersPayload{}
 	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildSetAccountTypePayload builds the payload for the organizations
+// setAccountType endpoint from CLI flags.
+func BuildSetAccountTypePayload(organizationsSetAccountTypeBody string, organizationsSetAccountTypeApikeyToken string) (*organizations.SetAccountTypePayload, error) {
+	var err error
+	var body SetAccountTypeRequestBody
+	{
+		err = json.Unmarshal([]byte(organizationsSetAccountTypeBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"gram_account_type\": \"pro\",\n      \"organization_id\": \"abc123\"\n   }'")
+		}
+		if !(body.GramAccountType == "free" || body.GramAccountType == "pro" || body.GramAccountType == "enterprise") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.gram_account_type", body.GramAccountType, []any{"free", "pro", "enterprise"}))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if organizationsSetAccountTypeApikeyToken != "" {
+			apikeyToken = &organizationsSetAccountTypeApikeyToken
+		}
+	}
+	v := &organizations.SetAccountTypePayload{
+		OrganizationID:  body.OrganizationID,
+		GramAccountType: body.GramAccountType,
+	}
+	v.ApikeyToken = apikeyToken
+
+	return v, nil
+}
+
+// BuildListAllPayload builds the payload for the organizations listAll
+// endpoint from CLI flags.
+func BuildListAllPayload(organizationsListAllLimit string, organizationsListAllOffset string, organizationsListAllApikeyToken string) (*organizations.ListAllPayload, error) {
+	var err error
+	var limit *int
+	{
+		if organizationsListAllLimit != "" {
+			var v int64
+			v, err = strconv.ParseInt(organizationsListAllLimit, 10, strconv.IntSize)
+			val := int(v)
+			limit = &val
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for limit, must be INT")
+			}
+			if *limit < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", *limit, 1, true))
+			}
+			if *limit > 500 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", *limit, 500, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var offset *int
+	{
+		if organizationsListAllOffset != "" {
+			var v int64
+			v, err = strconv.ParseInt(organizationsListAllOffset, 10, strconv.IntSize)
+			val := int(v)
+			offset = &val
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for offset, must be INT")
+			}
+			if *offset < 0 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("offset", *offset, 0, true))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var apikeyToken *string
+	{
+		if organizationsListAllApikeyToken != "" {
+			apikeyToken = &organizationsListAllApikeyToken
+		}
+	}
+	v := &organizations.ListAllPayload{}
+	v.Limit = limit
+	v.Offset = offset
+	v.ApikeyToken = apikeyToken
 
 	return v, nil
 }

@@ -24,6 +24,8 @@ type Server struct {
 	ListInvites      http.Handler
 	GetInviteByToken http.Handler
 	ListUsers        http.Handler
+	SetAccountType   http.Handler
+	ListAll          http.Handler
 	RemoveUser       http.Handler
 }
 
@@ -59,6 +61,8 @@ func New(
 			{"ListInvites", "GET", "/rpc/organizations.listInvites"},
 			{"GetInviteByToken", "GET", "/rpc/organizations.getInviteByToken"},
 			{"ListUsers", "GET", "/rpc/organizations.listUsers"},
+			{"SetAccountType", "POST", "/rpc/organizations.setAccountType"},
+			{"ListAll", "GET", "/rpc/organizations.listAll"},
 			{"RemoveUser", "DELETE", "/rpc/organizations.removeUser"},
 		},
 		SendInvite:       NewSendInviteHandler(e.SendInvite, mux, decoder, encoder, errhandler, formatter),
@@ -66,6 +70,8 @@ func New(
 		ListInvites:      NewListInvitesHandler(e.ListInvites, mux, decoder, encoder, errhandler, formatter),
 		GetInviteByToken: NewGetInviteByTokenHandler(e.GetInviteByToken, mux, decoder, encoder, errhandler, formatter),
 		ListUsers:        NewListUsersHandler(e.ListUsers, mux, decoder, encoder, errhandler, formatter),
+		SetAccountType:   NewSetAccountTypeHandler(e.SetAccountType, mux, decoder, encoder, errhandler, formatter),
+		ListAll:          NewListAllHandler(e.ListAll, mux, decoder, encoder, errhandler, formatter),
 		RemoveUser:       NewRemoveUserHandler(e.RemoveUser, mux, decoder, encoder, errhandler, formatter),
 	}
 }
@@ -80,6 +86,8 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.ListInvites = m(s.ListInvites)
 	s.GetInviteByToken = m(s.GetInviteByToken)
 	s.ListUsers = m(s.ListUsers)
+	s.SetAccountType = m(s.SetAccountType)
+	s.ListAll = m(s.ListAll)
 	s.RemoveUser = m(s.RemoveUser)
 }
 
@@ -93,6 +101,8 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountListInvitesHandler(mux, h.ListInvites)
 	MountGetInviteByTokenHandler(mux, h.GetInviteByToken)
 	MountListUsersHandler(mux, h.ListUsers)
+	MountSetAccountTypeHandler(mux, h.SetAccountType)
+	MountListAllHandler(mux, h.ListAll)
 	MountRemoveUserHandler(mux, h.RemoveUser)
 }
 
@@ -343,6 +353,112 @@ func NewListUsersHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "listUsers")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "organizations")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountSetAccountTypeHandler configures the mux to serve the "organizations"
+// service "setAccountType" endpoint.
+func MountSetAccountTypeHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/organizations.setAccountType", f)
+}
+
+// NewSetAccountTypeHandler creates a HTTP handler which loads the HTTP request
+// and calls the "organizations" service "setAccountType" endpoint.
+func NewSetAccountTypeHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeSetAccountTypeRequest(mux, decoder)
+		encodeResponse = EncodeSetAccountTypeResponse(encoder)
+		encodeError    = EncodeSetAccountTypeError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "setAccountType")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "organizations")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListAllHandler configures the mux to serve the "organizations" service
+// "listAll" endpoint.
+func MountListAllHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/organizations.listAll", f)
+}
+
+// NewListAllHandler creates a HTTP handler which loads the HTTP request and
+// calls the "organizations" service "listAll" endpoint.
+func NewListAllHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListAllRequest(mux, decoder)
+		encodeResponse = EncodeListAllResponse(encoder)
+		encodeError    = EncodeListAllError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listAll")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "organizations")
 		payload, err := decodeRequest(r)
 		if err != nil {

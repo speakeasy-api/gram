@@ -42,6 +42,17 @@ func (q *Queries) AttachWorkOSUserToOrg(ctx context.Context, arg AttachWorkOSUse
 	return err
 }
 
+const countAllOrganizations = `-- name: CountAllOrganizations :one
+SELECT COUNT(*) FROM organization_metadata
+`
+
+func (q *Queries) CountAllOrganizations(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, countAllOrganizations)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const deleteOrganizationUserRelationship = `-- name: DeleteOrganizationUserRelationship :exec
 UPDATE organization_user_relationships
 SET deleted_at = clock_timestamp()
@@ -150,6 +161,60 @@ func (q *Queries) HasOrganizationUserRelationship(ctx context.Context, arg HasOr
 	return exists, err
 }
 
+const listAllOrganizations = `-- name: ListAllOrganizations :many
+SELECT id, slug, name, gram_account_type, workos_id, whitelisted, disabled_at, created_at, updated_at
+FROM organization_metadata
+ORDER BY created_at DESC
+LIMIT $2 OFFSET $1
+`
+
+type ListAllOrganizationsParams struct {
+	Off int32
+	Lim int32
+}
+
+type ListAllOrganizationsRow struct {
+	ID              string
+	Slug            string
+	Name            string
+	GramAccountType string
+	WorkosID        pgtype.Text
+	Whitelisted     bool
+	DisabledAt      pgtype.Timestamptz
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+}
+
+func (q *Queries) ListAllOrganizations(ctx context.Context, arg ListAllOrganizationsParams) ([]ListAllOrganizationsRow, error) {
+	rows, err := q.db.Query(ctx, listAllOrganizations, arg.Off, arg.Lim)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAllOrganizationsRow
+	for rows.Next() {
+		var i ListAllOrganizationsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Slug,
+			&i.Name,
+			&i.GramAccountType,
+			&i.WorkosID,
+			&i.Whitelisted,
+			&i.DisabledAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listOrganizationUsers = `-- name: ListOrganizationUsers :many
 SELECT
   our.id, our.organization_id, our.user_id, our.workos_membership_id, our.created_at, our.updated_at, our.deleted_at, our.deleted,
@@ -208,7 +273,7 @@ func (q *Queries) ListOrganizationUsers(ctx context.Context, organizationID stri
 	return items, nil
 }
 
-const setAccountType = `-- name: SetAccountType :exec
+const setAccountType = `-- name: SetAccountType :execrows
 UPDATE organization_metadata
 SET gram_account_type = $1,
     updated_at = clock_timestamp()
@@ -220,9 +285,12 @@ type SetAccountTypeParams struct {
 	ID              string
 }
 
-func (q *Queries) SetAccountType(ctx context.Context, arg SetAccountTypeParams) error {
-	_, err := q.db.Exec(ctx, setAccountType, arg.GramAccountType, arg.ID)
-	return err
+func (q *Queries) SetAccountType(ctx context.Context, arg SetAccountTypeParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setAccountType, arg.GramAccountType, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const setOrgWorkosID = `-- name: SetOrgWorkosID :one

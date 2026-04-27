@@ -20,17 +20,21 @@ type Client struct {
 	ListInvitesEndpoint      goa.Endpoint
 	GetInviteByTokenEndpoint goa.Endpoint
 	ListUsersEndpoint        goa.Endpoint
+	SetAccountTypeEndpoint   goa.Endpoint
+	ListAllEndpoint          goa.Endpoint
 	RemoveUserEndpoint       goa.Endpoint
 }
 
 // NewClient initializes a "organizations" service client given the endpoints.
-func NewClient(sendInvite, revokeInvite, listInvites, getInviteByToken, listUsers, removeUser goa.Endpoint) *Client {
+func NewClient(sendInvite, revokeInvite, listInvites, getInviteByToken, listUsers, setAccountType, listAll, removeUser goa.Endpoint) *Client {
 	return &Client{
 		SendInviteEndpoint:       sendInvite,
 		RevokeInviteEndpoint:     revokeInvite,
 		ListInvitesEndpoint:      listInvites,
 		GetInviteByTokenEndpoint: getInviteByToken,
 		ListUsersEndpoint:        listUsers,
+		SetAccountTypeEndpoint:   setAccountType,
+		ListAllEndpoint:          listAll,
 		RemoveUserEndpoint:       removeUser,
 	}
 }
@@ -141,6 +145,47 @@ func (c *Client) ListUsers(ctx context.Context, p *ListUsersPayload) (res *ListU
 		return
 	}
 	return ires.(*ListUsersResult), nil
+}
+
+// SetAccountType calls the "setAccountType" endpoint of the "organizations"
+// service.
+// SetAccountType may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) SetAccountType(ctx context.Context, p *SetAccountTypePayload) (err error) {
+	_, err = c.SetAccountTypeEndpoint(ctx, p)
+	return
+}
+
+// ListAll calls the "listAll" endpoint of the "organizations" service.
+// ListAll may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListAll(ctx context.Context, p *ListAllPayload) (res *ListAllOrganizationsResult, err error) {
+	var ires any
+	ires, err = c.ListAllEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListAllOrganizationsResult), nil
 }
 
 // RemoveUser calls the "removeUser" endpoint of the "organizations" service.

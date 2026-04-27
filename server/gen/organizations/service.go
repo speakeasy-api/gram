@@ -27,6 +27,11 @@ type Service interface {
 	// List users in the active organization from Gram
 	// organization_user_relationships.
 	ListUsers(context.Context, *ListUsersPayload) (res *ListUsersResult, err error)
+	// Set a Gram organization's account tier (admin only - requires speakeasy-team
+	// API key).
+	SetAccountType(context.Context, *SetAccountTypePayload) (err error)
+	// List every Gram organization (admin only - requires speakeasy-team API key).
+	ListAll(context.Context, *ListAllPayload) (res *ListAllOrganizationsResult, err error)
 	// Remove a user from the active organization in Gram and delete their WorkOS
 	// organization membership.
 	RemoveUser(context.Context, *RemoveUserPayload) (err error)
@@ -52,13 +57,36 @@ const ServiceName = "organizations"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [6]string{"sendInvite", "revokeInvite", "listInvites", "getInviteByToken", "listUsers", "removeUser"}
+var MethodNames = [8]string{"sendInvite", "revokeInvite", "listInvites", "getInviteByToken", "listUsers", "setAccountType", "listAll", "removeUser"}
 
 // GetInviteByTokenPayload is the payload type of the organizations service
 // getInviteByToken method.
 type GetInviteByTokenPayload struct {
 	// Invitation token from the invite link.
 	Token string
+}
+
+// ListAllOrganizationsResult is the result type of the organizations service
+// listAll method.
+type ListAllOrganizationsResult struct {
+	// Gram organizations for this page.
+	Organizations []*OrganizationSummary
+	// Total number of Gram organizations (ignores limit/offset).
+	Total int
+	// Maximum number of organizations returned in this response.
+	Limit int
+	// Number of organizations skipped before this page.
+	Offset int
+}
+
+// ListAllPayload is the payload type of the organizations service listAll
+// method.
+type ListAllPayload struct {
+	// Maximum organizations to return (default 100, max 500).
+	Limit *int
+	// Number of organizations to skip.
+	Offset      *int
+	ApikeyToken *string
 }
 
 // ListInvitesPayload is the payload type of the organizations service
@@ -123,6 +151,25 @@ type OrganizationInvitationAccept struct {
 	AcceptInvitationURL string
 }
 
+type OrganizationSummary struct {
+	// Gram organization ID.
+	ID string
+	// Organization slug.
+	Slug string
+	// Organization display name.
+	Name string
+	// Gram account tier.
+	GramAccountType string
+	// WorkOS organization ID, when linked.
+	WorkosID *string
+	// Whether the organization is whitelisted.
+	Whitelisted bool
+	// When the organization was disabled, if applicable.
+	DisabledAt *string
+	CreatedAt  string
+	UpdatedAt  string
+}
+
 type OrganizationUser struct {
 	// Gram relationship row ID.
 	ID string
@@ -166,6 +213,16 @@ type SendInvitePayload struct {
 	// Optional WorkOS role slug for the invitee.
 	RoleSlug     *string
 	SessionToken *string
+}
+
+// SetAccountTypePayload is the payload type of the organizations service
+// setAccountType method.
+type SetAccountTypePayload struct {
+	// The Gram organization ID to update.
+	OrganizationID string
+	// The new account tier.
+	GramAccountType string
+	ApikeyToken     *string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

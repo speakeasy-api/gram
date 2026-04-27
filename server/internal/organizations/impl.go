@@ -3,6 +3,7 @@ package organizations
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"strconv"
 	"strings"
@@ -261,6 +262,95 @@ func (s *Service) GetInviteByToken(ctx context.Context, payload *gen.GetInviteBy
 	}
 
 	return invitationToGenAccept(invite, orgName), nil
+}
+
+const (
+	defaultListAllLimit = 100
+	maxListAllLimit     = 500
+	maxListAllOffset    = 1_000_000
+)
+
+func (s *Service) SetAccountType(ctx context.Context, payload *gen.SetAccountTypePayload) error {
+	if _, err := auth.RequireSpeakeasyTeam(ctx, s.logger, "set organization account type"); err != nil {
+		return fmt.Errorf("require speakeasy-team: %w", err)
+	}
+
+	n, err := orgrepo.New(s.db).SetAccountType(ctx, orgrepo.SetAccountTypeParams{
+		ID:              payload.OrganizationID,
+		GramAccountType: payload.GramAccountType,
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "set account type").Log(ctx, s.logger, attr.SlogOrganizationID(payload.OrganizationID))
+	}
+	if n == 0 {
+		return oops.E(oops.CodeNotFound, nil, "organization not found").Log(ctx, s.logger, attr.SlogOrganizationID(payload.OrganizationID))
+	}
+
+	return nil
+}
+
+func (s *Service) ListAll(ctx context.Context, payload *gen.ListAllPayload) (*gen.ListAllOrganizationsResult, error) {
+	if _, err := auth.RequireSpeakeasyTeam(ctx, s.logger, "list all organizations"); err != nil {
+		return nil, fmt.Errorf("require speakeasy-team: %w", err)
+	}
+
+	limit := int32(defaultListAllLimit)
+	if payload.Limit != nil && *payload.Limit > 0 {
+		v := *payload.Limit
+		if v > maxListAllLimit {
+			v = maxListAllLimit
+		}
+		limit = int32(v)
+	}
+	var offset int32
+	if payload.Offset != nil && *payload.Offset > 0 {
+		v := *payload.Offset
+		if v > maxListAllOffset {
+			v = maxListAllOffset
+		}
+		offset = int32(v)
+	}
+
+	repo := orgrepo.New(s.db)
+	rows, err := repo.ListAllOrganizations(ctx, orgrepo.ListAllOrganizationsParams{
+		Lim: limit,
+		Off: offset,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list organizations").Log(ctx, s.logger)
+	}
+
+	total, err := repo.CountAllOrganizations(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "count organizations").Log(ctx, s.logger)
+	}
+
+	orgs := make([]*gen.OrganizationSummary, 0, len(rows))
+	for _, r := range rows {
+		var disabledAt *string
+		if r.DisabledAt.Valid {
+			s := r.DisabledAt.Time.Format(time.RFC3339)
+			disabledAt = &s
+		}
+		orgs = append(orgs, &gen.OrganizationSummary{
+			ID:              r.ID,
+			Slug:            r.Slug,
+			Name:            r.Name,
+			GramAccountType: r.GramAccountType,
+			WorkosID:        conv.FromPGText[string](r.WorkosID),
+			Whitelisted:     r.Whitelisted,
+			DisabledAt:      disabledAt,
+			CreatedAt:       r.CreatedAt.Time.Format(time.RFC3339),
+			UpdatedAt:       r.UpdatedAt.Time.Format(time.RFC3339),
+		})
+	}
+
+	return &gen.ListAllOrganizationsResult{
+		Organizations: orgs,
+		Total:         int(total),
+		Limit:         int(limit),
+		Offset:        int(offset),
+	}, nil
 }
 
 // ListUsers returns Gram organization members from organization_user_relationships.
