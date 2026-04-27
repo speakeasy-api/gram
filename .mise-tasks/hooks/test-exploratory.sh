@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-#MISE description="Exploratory test: block then flag a secret through the full claude -p hook pipeline"
+#MISE description="Exploratory test: block then flag a secret through the hook pipeline"
 #MISE dir="{{ config_root }}"
 
 set -euo pipefail
@@ -16,87 +16,96 @@ echo "Date: $(date)"
 echo "Server: $GRAM_SERVER_URL"
 echo ""
 
-# The claude -p plugin authenticates via OTEL logs, which maps the session
-# to a project. Policies are scoped to that project. We update ALL policies
-# in the DB to ensure the test works regardless of which project the
-# session resolves to.
+# Pre-seed a session in Redis so the hook handler can resolve the project.
+# Uses the seed-session Go tool which writes msgpack (matching go-redis/cache format).
+PROJECT_ID=$(docker exec gram-gram-db-1 psql -U gram -d gram -tAc \
+  "SELECT id FROM projects LIMIT 1")
+ORG_ID=$(docker exec gram-gram-db-1 psql -U gram -d gram -tAc \
+  "SELECT organization_id FROM projects LIMIT 1")
+SESSION_ID="test-exploratory-$$"
 
-claude_with_plugin() {
-  claude -p "$1" \
-    --plugin-dir ./hooks/plugin-claude-test \
-    --permission-mode bypassPermissions \
-    --max-budget-usd 0.10 2>&1
-}
-
-# Warmup: run a clean prompt first to establish a session and let OTEL
-# logs validate it in Redis. The blocking hooks need session metadata
-# to resolve the project.
-echo "--- Warmup: establish session ---"
-set +e
-claude -p "hello" \
-  --plugin-dir ./hooks/plugin-claude-test \
-  --permission-mode bypassPermissions \
-  --max-budget-usd 0.05 > /dev/null 2>&1
-set -e
-sleep 3
-echo "Session warmup complete"
+echo "Project: $PROJECT_ID"
+echo "Org:     $ORG_ID"
+echo "Session: $SESSION_ID"
 echo ""
 
-echo "--- Step 1: Set ALL policies to 'block' ---"
-docker exec gram-gram-db-1 psql -U gram -d gram -c \
+go run ./server/cmd/seed-session \
+  --session-id="$SESSION_ID" \
+  --project-id="$PROJECT_ID" \
+  --org-id="$ORG_ID"
+
+hook() {
+  curl -sk -w "\n%{http_code}" -X POST \
+    -H "Content-Type: application/json" \
+    -d "{\"hook_event_name\":\"$1\",\"prompt\":\"$2\",\"session_id\":\"$SESSION_ID\",\"tool_name\":\"$3\",\"tool_input\":$4}" \
+    "$GRAM_SERVER_URL/rpc/hooks.claude" 2>/dev/null
+}
+
+parse() {
+  http_code=$(echo "$1" | tail -1)
+  body=$(echo "$1" | sed '$d')
+}
+
+pass=0; fail=0
+
+check() {
+  local label="$1" expected="$2" actual="$3"
+  if [ "$expected" = "$actual" ]; then
+    echo "PASS $label (HTTP $actual)"
+    pass=$((pass + 1))
+  else
+    echo "FAIL $label (expected $expected, got $actual)"
+    echo "  Body: $body"
+    fail=$((fail + 1))
+  fi
+}
+
+# --- Block mode ---
+echo "--- Set ALL policies to 'block' ---"
+docker exec gram-gram-db-1 psql -U gram -d gram -tAc \
   "UPDATE risk_policies SET action = 'block' WHERE deleted IS FALSE;"
 echo ""
 
-echo "--- Step 2: Send AWS key via claude -p (expect blocked) ---"
-set +e
-output=$(claude_with_plugin "hey AKIAIOSFODNN7EXAMPLE")
-exit_code=$?
-set -e
-echo "Exit code: $exit_code"
-echo "Output: '$output'"
-echo ""
-if [ -z "$output" ] || echo "$output" | grep -qi "block\|denied\|hook"; then
-  echo "PASS: Prompt with secret was BLOCKED (empty output)"
+response=$(hook "UserPromptSubmit" "hey AKIAIOSFODNN7REALKEY" "" "null")
+parse "$response"
+check "BLOCK UserPromptSubmit with AWS key" "403" "$http_code"
+
+response=$(hook "PreToolUse" "" "Bash" "{\"command\":\"export AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYREALKEYXX\"}")
+parse "$response"
+if echo "$body" | grep -q '"permissionDecision":"deny"'; then
+  echo "PASS BLOCK PreToolUse with AWS secret (deny)"
+  pass=$((pass + 1))
 else
-  echo "WARN: Got output despite block policy. Session may not have validated in time."
-  echo "      This is expected on the first run if OTEL logs haven't been sent yet."
+  check "BLOCK PreToolUse with AWS secret" "200+deny" "$http_code"
 fi
+
+response=$(hook "UserPromptSubmit" "help me refactor this function" "" "null")
+parse "$response"
+check "BLOCK UserPromptSubmit clean prompt" "200" "$http_code"
+
 echo ""
 
-echo "--- Step 3: Send clean prompt via claude -p (expect allowed) ---"
-set +e
-output=$(claude_with_plugin "say exactly: CLEAN_TEST_OK")
-exit_code=$?
-set -e
-echo "Exit code: $exit_code"
-echo "Output: '$output'"
-echo ""
-if [ -n "$output" ]; then
-  echo "PASS: Clean prompt was ALLOWED (model responded)"
-else
-  echo "INFO: Empty output (may have been rate limited or budget exceeded)"
-fi
-echo ""
-
-echo "--- Step 4: Set ALL policies to 'flag' ---"
-docker exec gram-gram-db-1 psql -U gram -d gram -c \
+# --- Flag mode ---
+echo "--- Set ALL policies to 'flag' ---"
+docker exec gram-gram-db-1 psql -U gram -d gram -tAc \
   "UPDATE risk_policies SET action = 'flag' WHERE deleted IS FALSE;"
 echo ""
 
-echo "--- Step 5: Send same AWS key via claude -p (expect allowed, flag only) ---"
-set +e
-output=$(claude_with_plugin "hey AKIAIOSFODNN7EXAMPLE")
-exit_code=$?
-set -e
-echo "Exit code: $exit_code"
-echo "Output: '$output'"
-echo ""
-if [ -n "$output" ]; then
-  echo "PASS: Prompt with secret was ALLOWED (flag policy, model responded)"
+response=$(hook "UserPromptSubmit" "hey AKIAIOSFODNN7REALKEY" "" "null")
+parse "$response"
+check "FLAG UserPromptSubmit with AWS key (should allow)" "200" "$http_code"
+
+response=$(hook "PreToolUse" "" "Bash" "{\"command\":\"export AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYREALKEYXX\"}")
+parse "$response"
+if echo "$body" | grep -q '"permissionDecision":"allow"'; then
+  echo "PASS FLAG PreToolUse with AWS secret (allow)"
+  pass=$((pass + 1))
 else
-  echo "INFO: Empty output (budget may be exhausted from previous steps)"
+  check "FLAG PreToolUse with AWS secret" "200+allow" "$http_code"
 fi
 
 echo ""
-echo "=== Done ==="
+echo "=== Results: $pass passed, $fail failed ==="
 echo "Full log saved to: $log"
+
+if [ "$fail" -gt 0 ]; then exit 1; fi
