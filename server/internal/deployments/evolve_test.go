@@ -594,6 +594,77 @@ func TestDeploymentsService_Evolve_ExcludeAllOpenAPIv3(t *testing.T) {
 	require.Empty(t, evolvedTools, "expected no tools after excluding all assets")
 }
 
+func TestDeploymentsService_Evolve_ExcludeSingleOpenAPIAttachmentWhenAssetIsShared(t *testing.T) {
+	t.Parallel()
+
+	assetStorage := assetstest.NewTestBlobStore(t)
+	ctx, ti := newTestDeploymentService(t, assetStorage)
+
+	bs := bytes.NewBuffer(testenv.ReadFixture(t, "fixtures/todo-valid.yaml"))
+	ares, err := ti.assets.UploadOpenAPIv3(ctx, &agen.UploadOpenAPIv3Form{
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		ContentType:      "application/x-yaml",
+		ContentLength:    int64(bs.Len()),
+	}, io.NopCloser(bs))
+	require.NoError(t, err, "upload shared openapi v3 asset")
+
+	initial, err := ti.service.CreateDeployment(ctx, &gen.CreateDeploymentPayload{
+		IdempotencyKey: "test-initial-deployment-shared-openapi-attachments",
+		Openapiv3Assets: []*gen.AddOpenAPIv3DeploymentAssetForm{
+			{
+				AssetID: ares.Asset.ID,
+				Name:    "livestorm",
+				Slug:    "livestorm",
+			},
+			{
+				AssetID: ares.Asset.ID,
+				Name:    "livestorm-api",
+				Slug:    "livestorm-api",
+			},
+		},
+		Functions:        []*gen.AddFunctionsForm{},
+		Packages:         []*gen.AddDeploymentPackageForm{},
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		GithubRepo:       nil,
+		GithubPr:         nil,
+		GithubSha:        nil,
+		ExternalID:       nil,
+		ExternalURL:      nil,
+	})
+	require.NoError(t, err, "create initial deployment")
+	require.Len(t, initial.Deployment.Openapiv3Assets, 2)
+
+	var excludeAttachmentID string
+	for _, asset := range initial.Deployment.Openapiv3Assets {
+		if asset.Name == "livestorm-api" {
+			excludeAttachmentID = asset.ID
+			break
+		}
+	}
+	require.NotEmpty(t, excludeAttachmentID)
+
+	evolved, err := ti.service.Evolve(ctx, &gen.EvolvePayload{
+		ApikeyToken:            nil,
+		SessionToken:           nil,
+		ProjectSlugInput:       nil,
+		DeploymentID:           nil,
+		UpsertOpenapiv3Assets:  []*gen.AddOpenAPIv3DeploymentAssetForm{},
+		UpsertFunctions:        []*gen.AddFunctionsForm{},
+		UpsertPackages:         []*gen.AddPackageForm{},
+		ExcludeOpenapiv3Assets: []string{excludeAttachmentID},
+		ExcludeFunctions:       []string{},
+		ExcludePackages:        []string{},
+	})
+	require.NoError(t, err, "evolve deployment excluding one attachment")
+	require.Len(t, evolved.Deployment.Openapiv3Assets, 1)
+	require.Equal(t, "livestorm", evolved.Deployment.Openapiv3Assets[0].Name)
+	require.Equal(t, "livestorm", string(evolved.Deployment.Openapiv3Assets[0].Slug))
+}
+
 func TestDeploymentsService_Evolve_UpsertPackages(t *testing.T) {
 	t.Parallel()
 

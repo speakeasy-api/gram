@@ -32,10 +32,8 @@ export function RemoveSourceDialogContent({
 
   const handleConfirm = async () => {
     setPending(true);
-    // For external MCPs, pass the slug; for others, pass the asset ID
-    const identifier = asset.type === "externalmcp" ? asset.slug : asset.id;
     try {
-      await onConfirmRemoval(identifier, asset.type);
+      await onConfirmRemoval(asset.sourceId, asset.type);
     } finally {
       onClose();
     }
