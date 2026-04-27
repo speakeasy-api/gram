@@ -791,8 +791,6 @@ func (tp *ToolProxy) doExternalMCP(
 		Headers:       headers,
 	}
 
-	j, _ := json.MarshalIndent(headers, "", "  ")
-	println("\n\n\nHEADERS:\n", string(j), "\n\n\n")
 
 	// Connect to the external MCP server
 	client, err := externalmcp.NewClient(ctx, logger, tp.policy, plan.RemoteURL, plan.TransportType, opts)
