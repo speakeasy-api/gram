@@ -23,3 +23,9 @@ actions:
   - target: $.paths..security
     update:
       - {}
+  - target: $.paths.*[?count(@.tags[?@=='admin'])>0]
+    remove: true
+  - target: $.paths[?length(@)==0]
+    remove: true
+  - target: $.paths[?match(@~, "^/admin.*")]
+    remove: true

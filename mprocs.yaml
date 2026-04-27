@@ -9,6 +9,9 @@ procs:
   worker:
     cmd: ["mise", "run", "start:worker"]
     stop: SIGTERM
+  admin:
+    cmd: ["mise", "run", "start:admin"]
+    stop: SIGTERM
   dashboard:
     cmd: ["mise", "run", "start:dashboard"]
     stop:
