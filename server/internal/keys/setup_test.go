@@ -100,7 +100,7 @@ func withDefaultOrgAdminGrant(t *testing.T, ctx context.Context, conn *pgxpool.P
 	ctx = contextvalues.SetAuthContext(ctx, authCtx)
 
 	principal := urn.NewPrincipal(urn.PrincipalTypeRole, "keys-default-grants-"+uuid.NewString())
-	_, err := accessrepo.New(conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{
+	_, err := accessrepo.New(conn).InsertPrincipalGrant(ctx, accessrepo.InsertPrincipalGrantParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		PrincipalUrn:   principal,
 		Scope:          string(authz.ScopeOrgAdmin),

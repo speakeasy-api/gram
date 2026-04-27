@@ -15,6 +15,7 @@ import (
 
 	assetsrepo "github.com/speakeasy-api/gram/server/internal/assets/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
@@ -146,6 +147,8 @@ func (d *DeployFunctionRunners) do(ctx context.Context, args DeployFunctionRunne
 				FunctionID:   task.functionID,
 				AccessID:     task.accessID,
 				Runtime:      task.runtime,
+				MemoryMiB:    task.memoryMiB,
+				Scale:        task.scale,
 				Assets: []functions.RunnerAsset{{
 					AssetID:       task.assetID,
 					AssetURL:      task.assetURL,
@@ -184,6 +187,8 @@ type deployFunctionRunnerTask struct {
 	functionID       uuid.UUID
 	accessID         uuid.UUID
 	runtime          functions.Runtime
+	memoryMiB        int
+	scale            int
 	bearerSecret     string
 	assetID          uuid.UUID
 	assetURL         *url.URL
@@ -217,6 +222,16 @@ func (d *DeployFunctionRunners) preflightFunction(
 		return empty, oops.E(oops.CodeInvariantViolation, nil, "function has empty asset integrity hash").Log(ctx, logger)
 	}
 
+	mem := int(fnc.MemoryMib.Int32)
+	if mem < 0 || mem > constants.MaxFunctionMemoryMiB {
+		return empty, oops.E(oops.CodeInvariantViolation, nil, "function has invalid memory configuration").Log(ctx, logger)
+	}
+
+	scale := int(fnc.Scale.Int32)
+	if scale < 0 || scale > constants.MaxFunctionScale {
+		return empty, oops.E(oops.CodeInvariantViolation, nil, "function has invalid scale configuration").Log(ctx, logger)
+	}
+
 	assetURL, err := url.Parse(fa.Url)
 	if err != nil {
 		return empty, oops.E(oops.CodeInvariantViolation, err, "function has malformed asset URL").Log(ctx, logger)
@@ -247,6 +262,8 @@ func (d *DeployFunctionRunners) preflightFunction(
 		functionID:       fnc.ID,
 		accessID:         c.ID,
 		runtime:          functions.Runtime(fnc.Runtime),
+		memoryMiB:        mem,
+		scale:            scale,
 		bearerSecret:     base64.StdEncoding.EncodeToString([]byte(sec)),
 		assetID:          fnc.AssetID,
 		assetURL:         assetURL,

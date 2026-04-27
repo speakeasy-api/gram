@@ -34,10 +34,11 @@ func TestService_Callback(t *testing.T) {
 		require.Equal(t, result.SessionToken, result.SessionCookie)
 	})
 
-	t.Run("successful callback for speakeasy user defaults to speakeasy-team", func(t *testing.T) {
+	t.Run("speakeasy user without state uses first returned organization", func(t *testing.T) {
 		t.Parallel()
 
 		userInfo := speakeasyMockUserInfo()
+		userInfo.Organizations[0], userInfo.Organizations[1] = userInfo.Organizations[1], userInfo.Organizations[0]
 		ctx, instance := newTestAuthService(t, userInfo)
 		code := "mock_code"
 		payload := &gen.CallbackPayload{
@@ -55,26 +56,81 @@ func TestService_Callback(t *testing.T) {
 		require.NoError(t, err, "load session after callback")
 		authCtx, ok := contextvalues.GetAuthContext(ctx)
 		require.True(t, ok, "auth context should be set after callback")
-		require.Equal(t, "speakeasy-team-123", authCtx.ActiveOrganizationID, "incorrect active organization id for speakeasy user")
+		require.Equal(t, "other-org-123", authCtx.ActiveOrganizationID, "speakeasy user without state should use first returned org")
+	})
+
+	t.Run("callback final destination selects active organization", func(t *testing.T) {
+		t.Parallel()
+
+		userInfo := speakeasyMockUserInfo()
+		ctx, instance := newTestAuthService(t, userInfo)
+		redirectURL := "https://dev.getgram.ai/other-org/projects/default"
+
+		stateJSON, err := json.Marshal(map[string]string{
+			"final_destination_url": redirectURL,
+		})
+		require.NoError(t, err)
+		stateParam := base64.RawURLEncoding.EncodeToString(stateJSON)
+
+		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{
+			Code:  "mock_code",
+			State: &stateParam,
+		})
+		require.NoError(t, err)
+		require.NotNil(t, result)
+
+		require.Equal(t, "/other-org/projects/default", result.Location)
+		require.NotEmpty(t, result.SessionToken)
+
+		ctx, err = instance.sessionManager.Authenticate(ctx, result.SessionToken)
+		require.NoError(t, err, "load session after callback")
+		authCtx, ok := contextvalues.GetAuthContext(ctx)
+		require.True(t, ok, "auth context should be set after callback")
+		require.Equal(t, "other-org-123", authCtx.ActiveOrganizationID, "final destination org should select active org")
+	})
+
+	t.Run("non-admin admin override is ignored", func(t *testing.T) {
+		t.Parallel()
+
+		userInfo := defaultMockUserInfo()
+		userInfo.Organizations = append(userInfo.Organizations, MockOrganizationEntry{
+			ID:                 "override-org-123",
+			Name:               "Override Organization",
+			Slug:               "override-org",
+			UserWorkspaceSlugs: []string{"override-workspace"},
+		})
+
+		ctx, instance := newTestAuthService(t, userInfo)
+		ctx = contextvalues.SetAdminOverrideInContext(ctx, "override-org")
+
+		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{Code: "mock_code"})
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		require.NotEmpty(t, result.SessionToken)
+
+		ctx, err = instance.sessionManager.Authenticate(ctx, result.SessionToken)
+		require.NoError(t, err, "load session after callback")
+		authCtx, ok := contextvalues.GetAuthContext(ctx)
+		require.True(t, ok, "auth context should be set after callback")
+		require.Equal(t, "org-123", authCtx.ActiveOrganizationID, "non-admin users should ignore admin override")
 	})
 
 	t.Run("successful callback for admin with override", func(t *testing.T) {
 		t.Parallel()
 
 		userInfo := adminMockUserInfo()
-		// Add multiple orgs including speakeasy-team
+		userInfo.UserID = "admin-override-user-123"
+		userInfo.Email = "admin-override@speakeasyapi.dev"
 		userInfo.Organizations = append(userInfo.Organizations, MockOrganizationEntry{
-			ID:                 "speakeasy-team-456",
-			Name:               "Speakeasy Team",
-			Slug:               "speakeasy-team",
-			WorkosID:           nil,
-			UserWorkspaceSlugs: []string{"speakeasy-workspace"},
+			ID:                 "customer-org-123",
+			Name:               "Customer Organization",
+			Slug:               "customer-org",
+			UserWorkspaceSlugs: []string{"customer-workspace"},
 		})
-
 		ctx, instance := newTestAuthService(t, userInfo)
 
 		// Set admin override in context
-		ctx = contextvalues.SetAdminOverrideInContext(ctx, "admin-org")
+		ctx = contextvalues.SetAdminOverrideInContext(ctx, "customer-org")
 		code := "mock_code"
 		payload := &gen.CallbackPayload{
 			Code: code,
@@ -91,7 +147,7 @@ func TestService_Callback(t *testing.T) {
 		require.NoError(t, err, "load session after callback")
 		authCtx, ok := contextvalues.GetAuthContext(ctx)
 		require.True(t, ok, "auth context should be set after callback")
-		require.Equal(t, "admin-org-123", authCtx.ActiveOrganizationID, "incorrect active organization id for admin override")
+		require.Equal(t, "customer-org-123", authCtx.ActiveOrganizationID, "incorrect active organization id for admin override")
 	})
 
 	t.Run("user with no organizations returns successful redirect", func(t *testing.T) {

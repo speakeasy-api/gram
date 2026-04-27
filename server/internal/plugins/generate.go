@@ -4,7 +4,17 @@ import (
 	"encoding/json"
 	"fmt"
 	"path"
+	"strings"
+	"unicode/utf8"
+
+	"github.com/speakeasy-api/gram/server/internal/conv"
 )
+
+// ServerEnvConfig represents a user-facing environment variable required by a server.
+type ServerEnvConfig struct {
+	VariableName string
+	DisplayName  string // Shown to the user in Claude's userConfig prompt
+}
 
 // PluginServerInfo contains the resolved information for a single MCP server.
 type PluginServerInfo struct {
@@ -12,6 +22,10 @@ type PluginServerInfo struct {
 	Policy      string
 	// Resolved MCP URL (e.g. https://app.getgram.ai/mcp/{slug}).
 	MCPURL string
+	// IsPublic indicates whether the toolset is publicly accessible (no Gram API key needed).
+	IsPublic bool
+	// EnvConfigs are user-facing environment variables for public servers.
+	EnvConfigs []ServerEnvConfig
 }
 
 // PluginInfo contains the data needed to generate packages for a single plugin.
@@ -28,6 +42,9 @@ type GenerateConfig struct {
 	OrgEmail string
 	// Base server URL (e.g. https://app.getgram.ai).
 	ServerURL string
+	// APIKey is the plaintext Gram API key to inject into MCP server configs.
+	// If empty, configs will use placeholder variables instead.
+	APIKey string
 }
 
 // GeneratePluginPackages produces the complete file map for a plugin distribution
@@ -59,7 +76,7 @@ func GeneratePluginPackages(plugins []PluginInfo, cfg GenerateConfig) (map[strin
 	owner := marketplaceOwner{Name: cfg.OrgName, Email: cfg.OrgEmail}
 
 	claudeManifest, err := marshalJSON(marketplaceManifest{
-		Name:    cfg.OrgName + "-gram",
+		Name:    conv.ToSlug(cfg.OrgName) + "-gram",
 		Owner:   owner,
 		Plugins: claudePlugins,
 	})
@@ -69,7 +86,7 @@ func GeneratePluginPackages(plugins []PluginInfo, cfg GenerateConfig) (map[strin
 	files[".claude-plugin/marketplace.json"] = claudeManifest
 
 	cursorManifest, err := marshalJSON(marketplaceManifest{
-		Name:    cfg.OrgName + "-gram",
+		Name:    conv.ToSlug(cfg.OrgName) + "-gram",
 		Owner:   owner,
 		Plugins: cursorPlugins,
 	})
@@ -78,7 +95,65 @@ func GeneratePluginPackages(plugins []PluginInfo, cfg GenerateConfig) (map[strin
 	}
 	files[".cursor-plugin/marketplace.json"] = cursorManifest
 
+	files["README.md"] = generateReadme(plugins, cfg)
+
 	return files, nil
+}
+
+// escapeMarkdownCell sanitizes user-controlled text for inclusion in a single
+// Markdown table cell: collapses line breaks, escapes pipes that would otherwise
+// split the row, and caps excessively long values.
+func escapeMarkdownCell(s string) string {
+	s = strings.ReplaceAll(s, "\r\n", " ")
+	s = strings.ReplaceAll(s, "\n", " ")
+	s = strings.ReplaceAll(s, "\r", " ")
+	s = strings.ReplaceAll(s, "|", `\|`)
+
+	const maxRunes = 200
+	if utf8.RuneCountInString(s) > maxRunes {
+		runes := []rune(s)
+		s = string(runes[:maxRunes]) + "…"
+	}
+	return s
+}
+
+func generateReadme(plugins []PluginInfo, cfg GenerateConfig) []byte {
+	var b strings.Builder
+
+	b.WriteString("# " + cfg.OrgName + " Plugins\n\n")
+	b.WriteString("This repository contains plugin packages managed by [Gram](https://getgram.ai). ")
+	b.WriteString("Each plugin bundles MCP servers for distribution via Claude Code and Cursor marketplaces.\n\n")
+	b.WriteString("## How this repo works\n\n")
+	b.WriteString("- **Read-only access.** Collaborators are granted pull permission only. You can clone and inspect the repository, but you cannot push to it.\n")
+	b.WriteString("- **Auto-managed by Gram.** Each publish from the Gram dashboard overwrites this repository's contents. Any manual edits, new branches, or local commits will be discarded on the next publish — make changes in Gram instead.\n\n")
+
+	if len(plugins) > 0 {
+		b.WriteString("## Plugins\n\n")
+		b.WriteString("| Plugin | Description | Servers |\n")
+		b.WriteString("|--------|-------------|--------:|\n")
+		for _, p := range plugins {
+			desc := strings.TrimSpace(p.Description)
+			if desc == "" {
+				desc = "—"
+			}
+			fmt.Fprintf(&b, "| %s | %s | %d |\n", escapeMarkdownCell(p.Name), escapeMarkdownCell(desc), len(p.Servers))
+		}
+		b.WriteString("\n")
+	}
+
+	b.WriteString("## Installation\n\n")
+	b.WriteString("### Claude Code\n\n")
+	b.WriteString("1. Go to your organization's [Claude admin console](https://claude.ai)\n")
+	b.WriteString("2. Navigate to **Settings → Plugin Marketplaces**\n")
+	b.WriteString("3. Click **Add Marketplace** and paste this repository's URL\n")
+	b.WriteString("4. Plugins will be automatically available to members of your organization\n\n")
+	b.WriteString("### Cursor\n\n")
+	b.WriteString("1. Open your team's [Cursor dashboard](https://cursor.com/dashboard)\n")
+	b.WriteString("2. Navigate to **Settings → Plugins → Import**\n")
+	b.WriteString("3. Paste this repository's URL to import the marketplace\n")
+	b.WriteString("4. Plugins will be available to team members\n")
+
+	return []byte(b.String())
 }
 
 // GenerateSinglePluginPackage produces files for a single plugin with files at
@@ -120,11 +195,34 @@ func generateCursorPlugin(files map[string][]byte, p PluginInfo, cfg GenerateCon
 }
 
 func generateClaudePluginInDir(files map[string][]byte, subdir string, p PluginInfo, cfg GenerateConfig) error {
-	userConfig := map[string]userConfigEntry{
-		"GRAM_API_KEY": {
+	// Collect userConfig entries across all servers that need user-provided values.
+	userConfig := make(map[string]userConfigEntry)
+
+	// Determine if any private server needs a Gram API key prompt.
+	needsGramKeyPrompt := false
+	for _, s := range p.Servers {
+		if !s.IsPublic && cfg.APIKey == "" {
+			needsGramKeyPrompt = true
+		}
+		// Public servers may need user-provided env vars.
+		for _, ec := range s.EnvConfigs {
+			userConfig[ec.VariableName] = userConfigEntry{
+				Description: ec.DisplayName,
+				Sensitive:   true,
+			}
+		}
+	}
+
+	if needsGramKeyPrompt {
+		userConfig["GRAM_API_KEY"] = userConfigEntry{
 			Description: "Your Gram API key for authenticating MCP server connections",
 			Sensitive:   true,
-		},
+		}
+	}
+
+	var userConfigPtr map[string]userConfigEntry
+	if len(userConfig) > 0 {
+		userConfigPtr = userConfig
 	}
 
 	pluginJSON, err := marshalJSON(claudePluginMeta{
@@ -133,7 +231,7 @@ func generateClaudePluginInDir(files map[string][]byte, subdir string, p PluginI
 		Version:     "0.1.0",
 		Author:      pluginAuthor{Name: cfg.OrgName, URL: "https://getgram.ai"},
 		Homepage:    "https://getgram.ai",
-		UserConfig:  userConfig,
+		UserConfig:  userConfigPtr,
 	})
 	if err != nil {
 		return fmt.Errorf("marshal plugin.json: %w", err)
@@ -142,12 +240,25 @@ func generateClaudePluginInDir(files map[string][]byte, subdir string, p PluginI
 
 	mcpServers := make(map[string]claudeMCPServer)
 	for _, s := range p.Servers {
+		headers := make(map[string]string)
+
+		if s.IsPublic {
+			// Public servers use env config variables for auth.
+			for _, ec := range s.EnvConfigs {
+				headers[ec.DisplayName] = "${user_config." + ec.VariableName + "}"
+			}
+		} else if cfg.APIKey != "" {
+			// Private server with injected key.
+			headers["Authorization"] = "Bearer " + cfg.APIKey
+		} else {
+			// Private server without key — prompt user.
+			headers["Authorization"] = "Bearer ${user_config.GRAM_API_KEY}"
+		}
+
 		mcpServers[s.DisplayName] = claudeMCPServer{
-			Type: "http",
-			URL:  s.MCPURL,
-			Headers: map[string]string{
-				"Authorization": "Bearer ${user_config.GRAM_API_KEY}",
-			},
+			Type:    "http",
+			URL:     s.MCPURL,
+			Headers: headers,
 		}
 	}
 	mcpJSON, err := marshalJSON(claudeMCPConfig{MCPServers: mcpServers})
@@ -180,11 +291,21 @@ func generateCursorPluginInDir(files map[string][]byte, subdir, name string, p P
 
 	mcpServers := make(map[string]cursorMCPServer)
 	for _, s := range p.Servers {
+		headers := make(map[string]string)
+
+		if s.IsPublic {
+			for _, ec := range s.EnvConfigs {
+				headers[ec.DisplayName] = "${env:" + ec.VariableName + "}"
+			}
+		} else if cfg.APIKey != "" {
+			headers["Authorization"] = "Bearer " + cfg.APIKey
+		} else {
+			headers["Authorization"] = "Bearer ${env:GRAM_API_KEY}"
+		}
+
 		mcpServers[s.DisplayName] = cursorMCPServer{
-			URL: s.MCPURL,
-			Headers: map[string]string{
-				"Authorization": "Bearer ${env:GRAM_API_KEY}",
-			},
+			URL:     s.MCPURL,
+			Headers: headers,
 		}
 	}
 	mcpJSON, err := marshalJSON(cursorMCPConfig{MCPServers: mcpServers})

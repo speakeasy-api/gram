@@ -126,6 +126,11 @@ OIDC_EXTERNAL_URL = "http://{{env.MOCK_IDP_HOST}}:{{env.MOCK_IDP_PORT}}"
 ## - Local development with SSL enabled.
 GRAM_SSL_CERT_FILE = "{{config_root}}/local/ssl/certs/local.pem"
 GRAM_SSL_KEY_FILE = "{{config_root}}/local/ssl/keys/local-key.pem"
+## GitHub App for plugin publishing (leave unset to disable)
+# GRAM_PLUGINS_GITHUB_APP_ID = ""
+# GRAM_PLUGINS_GITHUB_PRIVATE_KEY = ""
+# GRAM_PLUGINS_GITHUB_ORG = ""
+# GRAM_PLUGINS_GITHUB_INSTALLATION_ID = ""
 
 ##########################
 ## Observability config ##

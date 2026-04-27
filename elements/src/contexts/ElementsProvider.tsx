@@ -191,6 +191,12 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
     toolsWithCustomComponents,
   );
 
+  // Read inside `sendMessages` via ref so prompt changes don't churn the
+  // transport useMemo identity. Same pattern as ensureValidHeadersRef /
+  // approvalHelpersRef below.
+  const systemPromptRef = useRef(systemPrompt);
+  systemPromptRef.current = systemPrompt;
+
   // Initialize error tracking on mount
   useEffect(() => {
     initErrorTracking({
@@ -422,7 +428,7 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
           const modelMessages = compaction.messages;
 
           const result = streamText({
-            system: systemPrompt,
+            system: systemPromptRef.current,
             model: modelToUse,
             messages: modelMessages,
             tools,
@@ -494,7 +500,6 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
       config.contextCompaction?.compactAtFraction,
       config.contextCompaction?.keepRecent,
       model,
-      systemPrompt,
       mcpTools,
       getApprovalHelpers,
       apiUrl,

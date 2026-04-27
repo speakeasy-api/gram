@@ -90,7 +90,62 @@ func newTestPluginsService(t *testing.T) (context.Context, *testInstance) {
 		authz.Grant{Scope: authz.ScopeOrgAdmin, Resource: authCtx.ActiveOrganizationID},
 	)
 
-	svc := plugins.NewService(logger, tracerProvider, conn, sessionManager, authz.NewEngine(logger, conn, authztest.RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache), "https://app.getgram.ai")
+	svc := plugins.NewService(
+		logger, tracerProvider, conn, sessionManager,
+		authz.NewEngine(logger, conn, authztest.RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache),
+		nil, "local", "https://app.getgram.ai",
+	)
+
+	return ctx, &testInstance{
+		service:        svc,
+		conn:           conn,
+		sessionManager: sessionManager,
+	}
+}
+
+func newTestPluginsServiceWithGitHub(t *testing.T, ghClient plugins.GitHubPublisher) (context.Context, *testInstance) {
+	t.Helper()
+
+	ctx := context.Background()
+
+	logger := testenv.NewLogger(t)
+	tracerProvider := testenv.NewTracerProvider(t)
+
+	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+	require.NoError(t, err)
+
+	conn, err := infra.CloneTestDatabase(t, "testdb")
+	require.NoError(t, err)
+
+	redisClient, err := infra.NewRedisClient(t, 0)
+	require.NoError(t, err)
+
+	billingClient := billing.NewStubClient(logger, tracerProvider)
+
+	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, guardianPolicy, conn, redisClient, cache.Suffix("gram-local"), billingClient)
+
+	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	authCtx.AccountType = "enterprise"
+	ctx = contextvalues.SetAuthContext(ctx, authCtx)
+
+	ctx = withauthzGrants(t, ctx, conn,
+		authz.Grant{Scope: authz.ScopeOrgRead, Resource: authCtx.ActiveOrganizationID},
+		authz.Grant{Scope: authz.ScopeOrgAdmin, Resource: authCtx.ActiveOrganizationID},
+	)
+
+	ghConfig := &plugins.GitHubConfig{
+		Client:         ghClient,
+		Org:            "test-org",
+		InstallationID: 12345,
+	}
+
+	svc := plugins.NewService(
+		logger, tracerProvider, conn, sessionManager,
+		authz.NewEngine(logger, conn, authztest.RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache),
+		ghConfig, "local", "https://app.getgram.ai",
+	)
 
 	return ctx, &testInstance{
 		service:        svc,
@@ -126,7 +181,7 @@ func withauthzGrants(t *testing.T, ctx context.Context, conn *pgxpool.Pool, gran
 
 	userPrincipal := urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)
 	for _, grant := range grants {
-		_, err := accessrepo.New(conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{
+		_, err := accessrepo.New(conn).InsertPrincipalGrant(ctx, accessrepo.InsertPrincipalGrantParams{
 			OrganizationID: authCtx.ActiveOrganizationID,
 			PrincipalUrn:   userPrincipal,
 			Scope:          string(grant.Scope),

@@ -162,6 +162,14 @@ run();
 * [uploadImage](docs/sdks/assets/README.md#uploadimage) - uploadImage assets
 * [uploadOpenAPIv3](docs/sdks/assets/README.md#uploadopenapiv3) - uploadOpenAPIv3 assets
 
+### [Assistants](docs/sdks/assistants/README.md)
+
+* [create](docs/sdks/assistants/README.md#create) - createAssistant assistants
+* [delete](docs/sdks/assistants/README.md#delete) - deleteAssistant assistants
+* [get](docs/sdks/assistants/README.md#get) - getAssistant assistants
+* [list](docs/sdks/assistants/README.md#list) - listAssistants assistants
+* [update](docs/sdks/assistants/README.md#update) - updateAssistant assistants
+
 ### [Auditlogs](docs/sdks/auditlogs/README.md)
 
 * [list](docs/sdks/auditlogs/README.md#list) - list auditlogs
@@ -302,7 +310,9 @@ run();
 * [deletePlugin](docs/sdks/plugins/README.md#deleteplugin) - deletePlugin plugins
 * [downloadPluginPackage](docs/sdks/plugins/README.md#downloadpluginpackage) - downloadPluginPackage plugins
 * [getPlugin](docs/sdks/plugins/README.md#getplugin) - getPlugin plugins
+* [getPublishStatus](docs/sdks/plugins/README.md#getpublishstatus) - getPublishStatus plugins
 * [listPlugins](docs/sdks/plugins/README.md#listplugins) - listPlugins plugins
+* [publishPlugins](docs/sdks/plugins/README.md#publishplugins) - publishPlugins plugins
 * [removePluginServer](docs/sdks/plugins/README.md#removepluginserver) - removePluginServer plugins
 * [setPluginAssignments](docs/sdks/plugins/README.md#setpluginassignments) - setPluginAssignments plugins
 * [updatePlugin](docs/sdks/plugins/README.md#updateplugin) - updatePlugin plugins
@@ -466,6 +476,11 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`assetsUploadFunctions`](docs/sdks/assets/README.md#uploadfunctions) - uploadFunctions assets
 - [`assetsUploadImage`](docs/sdks/assets/README.md#uploadimage) - uploadImage assets
 - [`assetsUploadOpenAPIv3`](docs/sdks/assets/README.md#uploadopenapiv3) - uploadOpenAPIv3 assets
+- [`assistantsCreate`](docs/sdks/assistants/README.md#create) - createAssistant assistants
+- [`assistantsDelete`](docs/sdks/assistants/README.md#delete) - deleteAssistant assistants
+- [`assistantsGet`](docs/sdks/assistants/README.md#get) - getAssistant assistants
+- [`assistantsList`](docs/sdks/assistants/README.md#list) - listAssistants assistants
+- [`assistantsUpdate`](docs/sdks/assistants/README.md#update) - updateAssistant assistants
 - [`auditlogsList`](docs/sdks/auditlogs/README.md#list) - list auditlogs
 - [`auditlogsListFacets`](docs/sdks/auditlogs/README.md#listfacets) - listFacets auditlogs
 - [`authCallback`](docs/sdks/auth/README.md#callback) - callback auth
@@ -550,7 +565,9 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`pluginsDeletePlugin`](docs/sdks/plugins/README.md#deleteplugin) - deletePlugin plugins
 - [`pluginsDownloadPluginPackage`](docs/sdks/plugins/README.md#downloadpluginpackage) - downloadPluginPackage plugins
 - [`pluginsGetPlugin`](docs/sdks/plugins/README.md#getplugin) - getPlugin plugins
+- [`pluginsGetPublishStatus`](docs/sdks/plugins/README.md#getpublishstatus) - getPublishStatus plugins
 - [`pluginsListPlugins`](docs/sdks/plugins/README.md#listplugins) - listPlugins plugins
+- [`pluginsPublishPlugins`](docs/sdks/plugins/README.md#publishplugins) - publishPlugins plugins
 - [`pluginsRemovePluginServer`](docs/sdks/plugins/README.md#removepluginserver) - removePluginServer plugins
 - [`pluginsSetPluginAssignments`](docs/sdks/plugins/README.md#setpluginassignments) - setPluginAssignments plugins
 - [`pluginsUpdatePlugin`](docs/sdks/plugins/README.md#updateplugin) - updatePlugin plugins
@@ -662,6 +679,11 @@ To learn about this feature and how to get started, check
 - [`useAddExternalOAuthServerMutation`](docs/sdks/toolsets/README.md#addexternaloauthserver) - addExternalOAuthServer toolsets
 - [`useAddOAuthProxyServerMutation`](docs/sdks/toolsets/README.md#addoauthproxyserver) - addOAuthProxyServer toolsets
 - [`useAddPluginServerMutation`](docs/sdks/plugins/README.md#addpluginserver) - addPluginServer plugins
+- [`useAssistantsCreateMutation`](docs/sdks/assistants/README.md#create) - createAssistant assistants
+- [`useAssistantsDeleteMutation`](docs/sdks/assistants/README.md#delete) - deleteAssistant assistants
+- [`useAssistantsGet`](docs/sdks/assistants/README.md#get) - getAssistant assistants
+- [`useAssistantsList`](docs/sdks/assistants/README.md#list) - listAssistants assistants
+- [`useAssistantsUpdateMutation`](docs/sdks/assistants/README.md#update) - updateAssistant assistants
 - [`useAuditLogFacets`](docs/sdks/auditlogs/README.md#listfacets) - listFacets auditlogs
 - [`useAuditLogs`](docs/sdks/auditlogs/README.md#list) - list auditlogs
 - [`useChatDeleteMutation`](docs/sdks/chat/README.md#delete) - deleteChat chat
@@ -780,6 +802,8 @@ To learn about this feature and how to get started, check
 - [`useProject`](docs/sdks/projects/README.md#read) - getProject projects
 - [`useProjectsSetOrganizationWhitelistMutation`](docs/sdks/projects/README.md#setorganizationwhitelist) - setOrganizationWhitelist projects
 - [`usePublishPackageMutation`](docs/sdks/packages/README.md#publish) - publish packages
+- [`usePublishPluginsMutation`](docs/sdks/plugins/README.md#publishplugins) - publishPlugins plugins
+- [`usePublishStatus`](docs/sdks/plugins/README.md#getpublishstatus) - getPublishStatus plugins
 - [`useRbacStatus`](docs/sdks/access/README.md#getrbacstatus) - getRBACStatus access
 - [`useRedeployDeploymentMutation`](docs/sdks/deployments/README.md#redeploydeployment) - redeploy deployments
 - [`useRegisterDomainMutation`](docs/sdks/domains/README.md#registerdomain) - createDomain domains

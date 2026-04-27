@@ -28,11 +28,13 @@ info:
 
 	// Create source and reader
 	source := Source{
-		Type:     SourceTypeOpenAPIV3,
-		Location: testFile,
-		Name:     "Test API",
-		Slug:     "test-api",
-		Runtime:  "nodejs:22",
+		Type:      SourceTypeOpenAPIV3,
+		Location:  testFile,
+		Name:      "Test API",
+		Slug:      "test-api",
+		Runtime:   "",
+		Scale:     nil,
+		MemoryMiB: nil,
 	}
 
 	reader := NewSourceReader(source)
@@ -70,11 +72,13 @@ func TestSourceReader_JSONFile(t *testing.T) {
 
 	// Create source and reader
 	source := Source{
-		Type:     SourceTypeOpenAPIV3,
-		Location: testFile,
-		Name:     "Test JSON API",
-		Slug:     "test-json-api",
-		Runtime:  "nodejs:22",
+		Type:      SourceTypeOpenAPIV3,
+		Location:  testFile,
+		Name:      "Test JSON API",
+		Slug:      "test-json-api",
+		Runtime:   "",
+		Scale:     nil,
+		MemoryMiB: nil,
 	}
 
 	reader := NewSourceReader(source)
@@ -99,11 +103,13 @@ func TestSourceReader_JSONFile(t *testing.T) {
 func TestSourceReader_NonexistentFile(t *testing.T) {
 	t.Parallel()
 	source := Source{
-		Type:     SourceTypeOpenAPIV3,
-		Location: "/nonexistent/path/file.yaml",
-		Name:     "Nonexistent API",
-		Slug:     "nonexistent-api",
-		Runtime:  "nodejs:22",
+		Type:      SourceTypeOpenAPIV3,
+		Location:  "/nonexistent/path/file.yaml",
+		Name:      "Nonexistent API",
+		Slug:      "nonexistent-api",
+		Runtime:   "",
+		Scale:     nil,
+		MemoryMiB: nil,
 	}
 
 	reader := NewSourceReader(source)
@@ -131,11 +137,13 @@ func TestSourceReader_RemoteURL(t *testing.T) {
 	defer staticServer.Close()
 
 	source := Source{
-		Type:     SourceTypeOpenAPIV3,
-		Location: staticServer.URL + "/api-spec.yaml",
-		Name:     "Remote API",
-		Slug:     "remote-api",
-		Runtime:  "nodejs:22",
+		Type:      SourceTypeOpenAPIV3,
+		Location:  staticServer.URL + "/api-spec.yaml",
+		Name:      "Remote API",
+		Slug:      "remote-api",
+		Runtime:   "",
+		Scale:     nil,
+		MemoryMiB: nil,
 	}
 
 	reader := NewSourceReader(source)
@@ -165,11 +173,13 @@ func TestSourceReader_RemoteURL_Error(t *testing.T) {
 	defer server.Close()
 
 	source := Source{
-		Type:     SourceTypeOpenAPIV3,
-		Location: server.URL + "/nonexistent.yaml",
-		Name:     "Remote API",
-		Slug:     "remote-api",
-		Runtime:  "nodejs:22",
+		Type:      SourceTypeOpenAPIV3,
+		Location:  server.URL + "/nonexistent.yaml",
+		Name:      "Remote API",
+		Slug:      "remote-api",
+		Runtime:   "",
+		Scale:     nil,
+		MemoryMiB: nil,
 	}
 
 	reader := NewSourceReader(source)

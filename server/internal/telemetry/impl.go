@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	telem_srv "github.com/speakeasy-api/gram/server/gen/http/telemetry/server"
 	telem_gen "github.com/speakeasy-api/gram/server/gen/telemetry"
@@ -942,10 +941,10 @@ func (s *Service) GetProjectOverview(ctx context.Context, payload *telem_gen.Get
 	comparisonEnd := timeStart
 
 	// Convert timestamps for PostgreSQL queries
-	timeStartPG := pgtype.Timestamptz{Time: time.Unix(0, timeStart), Valid: true, InfinityModifier: pgtype.Finite}
-	timeEndPG := pgtype.Timestamptz{Time: time.Unix(0, timeEnd), Valid: true, InfinityModifier: pgtype.Finite}
-	comparisonStartPG := pgtype.Timestamptz{Time: time.Unix(0, comparisonStart), Valid: true, InfinityModifier: pgtype.Finite}
-	comparisonEndPG := pgtype.Timestamptz{Time: time.Unix(0, comparisonEnd), Valid: true, InfinityModifier: pgtype.Finite}
+	timeStartPG := conv.ToPGTimestamptz(time.Unix(0, timeStart))
+	timeEndPG := conv.ToPGTimestamptz(time.Unix(0, timeEnd))
+	comparisonStartPG := conv.ToPGTimestamptz(time.Unix(0, comparisonStart))
+	comparisonEndPG := conv.ToPGTimestamptz(time.Unix(0, comparisonEnd))
 
 	// Determine metrics mode: Check if session capture is enabled
 	sessionCaptureEnabled, err := s.sessionCaptureEnabled(ctx, authCtx.ActiveOrganizationID)
@@ -1524,14 +1523,16 @@ func (s *Service) GetHooksSummary(ctx context.Context, payload *telem_gen.GetHoo
 		bucketSizeNs = fiveMinNs
 	}
 
-	// Run all six independent ClickHouse queries in parallel
+	// Run all eight independent ClickHouse queries in parallel
 	var (
-		serverRows       []repo.HooksServerSummaryRow
-		userRows         []repo.HooksUserSummaryRow
-		skillRows        []repo.SkillSummaryRow
-		breakdownRows    []repo.HooksBreakdownRow
-		timeSeriesPoints []repo.HooksTimeSeriesPoint
-		sessionCount     int64
+		serverRows            []repo.HooksServerSummaryRow
+		userRows              []repo.HooksUserSummaryRow
+		skillRows             []repo.SkillSummaryRow
+		skillBreakdownRows    []repo.SkillBreakdownRow
+		breakdownRows         []repo.HooksBreakdownRow
+		timeSeriesPoints      []repo.HooksTimeSeriesPoint
+		skillTimeSeriesPoints []repo.SkillTimeSeriesPoint
+		sessionCount          int64
 	)
 	eg, egCtx := errgroup.WithContext(ctx)
 	projectID := authCtx.ProjectID.String()
@@ -1580,6 +1581,19 @@ func (s *Service) GetHooksSummary(ctx context.Context, payload *telem_gen.GetHoo
 	})
 	eg.Go(func() error {
 		var err error
+		skillBreakdownRows, err = s.chRepo.GetSkillBreakdown(egCtx, repo.GetSkillBreakdownParams{
+			GramProjectID: projectID,
+			TimeStart:     timeStart,
+			TimeEnd:       timeEnd,
+			Filters:       attributeFilters,
+		})
+		if err != nil {
+			return fmt.Errorf("get skill breakdown: %w", err)
+		}
+		return nil
+	})
+	eg.Go(func() error {
+		var err error
 		breakdownRows, err = s.chRepo.GetHooksBreakdown(egCtx, repo.GetHooksBreakdownParams{
 			GramProjectID:  projectID,
 			TimeStart:      timeStart,
@@ -1604,6 +1618,20 @@ func (s *Service) GetHooksSummary(ctx context.Context, payload *telem_gen.GetHoo
 		})
 		if err != nil {
 			return fmt.Errorf("get hooks time series: %w", err)
+		}
+		return nil
+	})
+	eg.Go(func() error {
+		var err error
+		skillTimeSeriesPoints, err = s.chRepo.GetSkillTimeSeries(egCtx, repo.GetSkillTimeSeriesParams{
+			GramProjectID: projectID,
+			TimeStart:     timeStart,
+			TimeEnd:       timeEnd,
+			BucketSizeNs:  bucketSizeNs,
+			Filters:       attributeFilters,
+		})
+		if err != nil {
+			return fmt.Errorf("get skill time series: %w", err)
 		}
 		return nil
 	})
@@ -1663,6 +1691,16 @@ func (s *Service) GetHooksSummary(ctx context.Context, payload *telem_gen.GetHoo
 		})
 	}
 
+	// Transform skill breakdown rows into response
+	skillBreakdown := make([]*telem_gen.SkillBreakdownRow, 0, len(skillBreakdownRows))
+	for _, row := range skillBreakdownRows {
+		skillBreakdown = append(skillBreakdown, &telem_gen.SkillBreakdownRow{
+			SkillName: row.SkillName,
+			UserEmail: row.UserEmail,
+			UseCount:  int64(row.UseCount), //nolint:gosec // Bounded count
+		})
+	}
+
 	// Transform breakdown rows into response
 	breakdown := make([]*telem_gen.HooksBreakdownRow, 0, len(breakdownRows))
 	for _, row := range breakdownRows {
@@ -1688,16 +1726,27 @@ func (s *Service) GetHooksSummary(ctx context.Context, payload *telem_gen.GetHoo
 		})
 	}
 
+	skillTimeSeries := make([]*telem_gen.SkillTimeSeriesPoint, 0, len(skillTimeSeriesPoints))
+	for _, pt := range skillTimeSeriesPoints {
+		skillTimeSeries = append(skillTimeSeries, &telem_gen.SkillTimeSeriesPoint{
+			BucketStartNs: strconv.FormatInt(pt.BucketStartNs, 10),
+			SkillName:     pt.SkillName,
+			EventCount:    int64(pt.EventCount), //nolint:gosec // Bounded count
+		})
+	}
+
 	totalSessions = sessionCount
 
 	return &telem_gen.GetHooksSummaryResult{
-		Servers:       servers,
-		Users:         users,
-		Skills:        skills,
-		TotalEvents:   totalEvents,
-		TotalSessions: totalSessions,
-		Breakdown:     breakdown,
-		TimeSeries:    timeSeries,
+		Servers:         servers,
+		Users:           users,
+		Skills:          skills,
+		SkillBreakdown:  skillBreakdown,
+		TotalEvents:     totalEvents,
+		TotalSessions:   totalSessions,
+		Breakdown:       breakdown,
+		TimeSeries:      timeSeries,
+		SkillTimeSeries: skillTimeSeries,
 	}, nil
 }
 

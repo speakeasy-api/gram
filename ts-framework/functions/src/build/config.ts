@@ -30,6 +30,15 @@ export type UserConfig = {
    */
   deployStagingFile?: string | undefined;
   /**
+   * The number of instances to run for the function when deployed to Gram.
+   */
+  scale?: number | undefined;
+  /**
+   * The memory limit in MiB of function runner machines when deployed to Gram.
+   */
+  memoryMiB?: number | undefined;
+
+  /**
    * The slug to use for the function when deploying to Gram. If this option is
    * not set then the slug will be inferred from the nearest `package.json` file
    * using the `name` field.
@@ -56,6 +65,8 @@ const userConfigSchema = z.object({
   deployProject: z.string().optional(),
   deployStagingFile: z.string().default("gram.deploy.json"),
   slug: z.string().optional(),
+  scale: z.number().int().positive().optional(),
+  memoryMiB: z.number().int().positive().optional(),
   openBrowserAfterDeploy: z.boolean().optional(),
   requireInterop: z.boolean().default(true),
 }) satisfies z.ZodType<UserConfig>;

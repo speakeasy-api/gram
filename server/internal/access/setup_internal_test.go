@@ -47,7 +47,7 @@ func seedInternalOrganization(t *testing.T, ctx context.Context, conn *pgxpool.P
 func seedInternalGrant(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, principal urn.Principal, scope string, resource string) {
 	t.Helper()
 
-	_, err := accessrepo.New(conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{
+	_, err := accessrepo.New(conn).InsertPrincipalGrant(ctx, accessrepo.InsertPrincipalGrantParams{
 		OrganizationID: organizationID,
 		PrincipalUrn:   principal,
 		Scope:          scope,

@@ -1,5 +1,10 @@
 import { useQueryState } from "nuqs";
+import { recommended } from "@gram-ai/elements/plugins";
 import { RequireScope } from "@/components/require-scope";
+import {
+  InsightsConfig,
+  InsightsProvider,
+} from "@/components/insights-sidebar";
 import { Page } from "@/components/page-layout";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,12 +17,15 @@ import {
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { Switch } from "@/components/ui/switch";
-import { useOrganization } from "@/contexts/Auth";
+import { useOrganization, useSession } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
+import { useRBAC } from "@/hooks/useRBAC";
 import type { AuditLog } from "@gram/client/models/components";
+import { chatSessionsCreate } from "@gram/client/funcs/chatSessionsCreate";
 import {
   useAuditLogsInfinite,
   useAuditLogFacets,
+  useGramContext,
 } from "@gram/client/react-query";
 import { Icon, Input } from "@speakeasy-api/moonshine";
 import React, {
@@ -35,7 +43,7 @@ import {
   getActionColorConfig,
 } from "@/lib/audit-log-colors";
 import { StructuredDiff } from "@/components/auditlogs/structured-diff";
-import { cn } from "@/lib/utils";
+import { cn, getServerURL } from "@/lib/utils";
 
 type FacetOption = {
   count?: number;
@@ -178,7 +186,10 @@ function renderSubject(log: AuditLog, orgSlug: string) {
     return (
       <SimpleTooltip tooltip={subjectLabel}>
         <span
-          className={cn(monoClass, "inline-block max-w-[34ch] align-bottom")}
+          className={cn(
+            monoClass,
+            "inline-block max-w-[34ch] truncate align-bottom",
+          )}
         >
           {truncateMiddle(subjectLabel)}
         </span>
@@ -499,8 +510,118 @@ function FacetSelect({
   );
 }
 
-export default function OrgAuditLogs() {
+/**
+ * Wraps the audit logs page in an InsightsProvider so the AI Insights
+ * trigger appears in the breadcrumb bar. Uses the org's first project
+ * for Elements session auth (required by the chat API).
+ */
+function AuditLogsInsightsWrapper({ children }: { children: React.ReactNode }) {
+  const organization = useOrganization();
+  const { session } = useSession();
+  const client = useGramContext();
+
+  const projectSlug = organization.projects[0]?.slug ?? "";
+
+  const getSession = useCallback(async () => {
+    const res = await chatSessionsCreate(
+      client,
+      {
+        createRequestBody: {
+          embedOrigin: window.location.origin,
+        },
+      },
+      undefined,
+      {
+        headers: {
+          "Gram-Project": projectSlug,
+        },
+      },
+    );
+    return res.value?.clientToken ?? "";
+  }, [client, projectSlug]);
+
+  const serverURL = getServerURL();
+
+  // Derive observability MCP URL the same way useObservabilityMcpConfig does.
+  const mcpUrl = serverURL.includes("app.getgram.ai")
+    ? "https://app.getgram.ai/mcp/speakeasy-team-gram"
+    : serverURL.includes("dev.getgram.ai")
+      ? "https://dev.getgram.ai/mcp/speakeasy-team-gram"
+      : import.meta.env.VITE_GRAM_OBSERVABILITY_MCP_URL || undefined;
+
+  const auditToolsFilter = useCallback(
+    ({ toolName }: { toolName: string }) =>
+      toolName.includes("audit") ||
+      toolName.includes("logs") ||
+      toolName.includes("tool_calls"),
+    [],
+  );
+
+  const mcpConfig = useMemo(
+    () => ({
+      projectSlug,
+      plugins: recommended.except("generative-ui"),
+      tools: {
+        toolsToInclude: auditToolsFilter,
+      },
+      api: {
+        url: serverURL,
+        session: getSession,
+        headers: {
+          "X-Gram-Source": "dashboard-ai-insights-audit-logs",
+        },
+      },
+      environment: {
+        GRAM_SERVER_URL: serverURL,
+        GRAM_SESSION_HEADER_GRAM_SESSION: session,
+        GRAM_APIKEY_HEADER_GRAM_KEY: "",
+        GRAM_PROJECT_SLUG_HEADER_GRAM_PROJECT: projectSlug,
+      },
+      ...(mcpUrl && { mcp: mcpUrl }),
+    }),
+    [projectSlug, auditToolsFilter, serverURL, getSession, session, mcpUrl],
+  );
+
   return (
+    <InsightsProvider
+      mcpConfig={mcpConfig}
+      title="Audit Log Insights"
+      subtitle="Ask about organization activity, changes, and audit events."
+      suggestions={[
+        {
+          title: "Recent changes",
+          label: "What changed recently?",
+          prompt:
+            "Summarize the most significant recent changes across the organization based on the audit logs.",
+        },
+        {
+          title: "Security review",
+          label: "Security-relevant events",
+          prompt:
+            "What security-relevant events have occurred recently? Look for API key changes, permission modifications, or unusual patterns.",
+        },
+        {
+          title: "Active users",
+          label: "Most active team members",
+          prompt:
+            "Who have been the most active users recently and what kinds of changes have they been making?",
+        },
+      ]}
+    >
+      {children}
+    </InsightsProvider>
+  );
+}
+
+export default function OrgAuditLogs() {
+  const { hasAnyScope } = useRBAC();
+  const organization = useOrganization();
+  // Only wrap with InsightsProvider when user has org:read or org:admin
+  // and at least one project exists (needed for Elements session auth).
+  const showInsights =
+    hasAnyScope(["org:read", "org:admin"]) && organization.projects.length > 0;
+
+  const page = (
     <Page>
       <Page.Header>
         <Page.Header.Breadcrumbs />
@@ -512,6 +633,10 @@ export default function OrgAuditLogs() {
       </Page.Body>
     </Page>
   );
+
+  if (!showInsights) return page;
+
+  return <AuditLogsInsightsWrapper>{page}</AuditLogsInsightsWrapper>;
 }
 
 export function OrgAuditLogsInner() {
@@ -581,6 +706,41 @@ export function OrgAuditLogsInner() {
     () => groupLogsByDate(logs, tsMode),
     [logs, tsMode],
   );
+
+  // Feed current page state to the AI Insights sidebar as context.
+  const insightsContext = useMemo(() => {
+    const parts: string[] = [
+      "The user is viewing the organization Audit Logs page.",
+      `Organization: ${organization.name || orgSlug}`,
+    ];
+    if (selectedProjectSlug !== "all") {
+      parts.push(`Filtered to project: ${selectedProjectSlug}`);
+    }
+    if (selectedAction !== "all") {
+      parts.push(`Filtered to action: ${selectedAction}`);
+    }
+    if (selectedActor !== "all") {
+      parts.push(`Filtered to actor: ${selectedActor}`);
+    }
+    parts.push(`Currently showing ${logs.length} audit log entries.`);
+    if (dateGroups.length > 0) {
+      const firstDate = dateGroups[0].date;
+      const lastDate = dateGroups[dateGroups.length - 1].date;
+      parts.push(
+        `Date range: ${formatDateHeader(lastDate, tsMode)} to ${formatDateHeader(firstDate, tsMode)}`,
+      );
+    }
+    return parts.join("\n");
+  }, [
+    organization.name,
+    orgSlug,
+    selectedProjectSlug,
+    selectedAction,
+    selectedActor,
+    logs.length,
+    dateGroups,
+    tsMode,
+  ]);
 
   const logFlatIndices = useMemo(() => {
     const map = new Map<string, number>();
@@ -725,7 +885,11 @@ export function OrgAuditLogsInner() {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const logsContainer = logsContainerRef.current;
-      const activeElement = document.activeElement;
+      // Walk through shadow roots to find the real focused element
+      let activeElement = document.activeElement;
+      while (activeElement?.shadowRoot?.activeElement) {
+        activeElement = activeElement.shadowRoot.activeElement;
+      }
       const isWithinLogsSection = logsContainer?.contains(
         activeElement as Node,
       );
@@ -761,7 +925,8 @@ export function OrgAuditLogsInner() {
       const isInInput =
         activeElement?.tagName === "INPUT" ||
         activeElement?.tagName === "TEXTAREA" ||
-        activeElement?.tagName === "SELECT";
+        activeElement?.tagName === "SELECT" ||
+        activeElement?.closest("[contenteditable]") !== null;
       if (!isInInput) {
         switch (e.key) {
           case "/": {
@@ -826,6 +991,7 @@ export function OrgAuditLogsInner() {
 
   return (
     <div className="flex w-full flex-col gap-4">
+      <InsightsConfig contextInfo={insightsContext} />
       <div>
         <Type className="font-medium">Recent activity across Gram</Type>
         <Type muted small className="mt-1">

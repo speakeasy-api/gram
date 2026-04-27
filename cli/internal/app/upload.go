@@ -55,6 +55,16 @@ Example:
 				Usage:    "Runtime to use for function execution (required for functions)",
 				Required: false,
 			},
+			&cli.UintFlag{
+				Name:     "scale",
+				Usage:    "Number of instances to run for a function",
+				Required: false,
+			},
+			&cli.UintFlag{
+				Name:     "memory-mib",
+				Usage:    "Amount of memory in MiB to allocate for the function (1 MiB = 1024 * 1024 bytes)",
+				Required: false,
+			},
 		},
 		Action: func(c *cli.Context) error {
 			ctx, cancel := signal.NotifyContext(
@@ -96,11 +106,23 @@ Example:
 }
 
 func parseSource(c *cli.Context) deploy.Source {
+	scale := new(c.Uint("scale"))
+	if *scale == 0 {
+		scale = nil
+	}
+
+	mem := new(c.Uint("memory-mib"))
+	if *mem == 0 {
+		mem = nil
+	}
+
 	return deploy.Source{
-		Type:     deploy.SourceType(c.String("type")),
-		Location: c.String("location"),
-		Name:     c.String("name"),
-		Slug:     c.String("slug"),
-		Runtime:  c.String("runtime"),
+		Type:      deploy.SourceType(c.String("type")),
+		Location:  c.String("location"),
+		Name:      c.String("name"),
+		Slug:      c.String("slug"),
+		Runtime:   c.String("runtime"),
+		Scale:     scale,
+		MemoryMiB: mem,
 	}
 }

@@ -13,6 +13,7 @@ junit-report.xml
 !.vscode/extensions.json
 *.code-workspace
 .idea
+.run
 /posting
 /gram.posting.yaml
 /posting.env
@@ -58,4 +59,5 @@ package-lock.json
 .claude/worktrees/
 .granary/
 .claude/hooks/*
+**/.claude/scheduled_tasks.lock
 flagged-chats.jsonl

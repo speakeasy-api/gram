@@ -16,6 +16,7 @@ import (
 	aboutc "github.com/speakeasy-api/gram/server/gen/http/about/client"
 	accessc "github.com/speakeasy-api/gram/server/gen/http/access/client"
 	assetsc "github.com/speakeasy-api/gram/server/gen/http/assets/client"
+	assistantsc "github.com/speakeasy-api/gram/server/gen/http/assistants/client"
 	auditlogsc "github.com/speakeasy-api/gram/server/gen/http/auditlogs/client"
 	authc "github.com/speakeasy-api/gram/server/gen/http/auth/client"
 	chatc "github.com/speakeasy-api/gram/server/gen/http/chat/client"
@@ -60,6 +61,7 @@ func UsageCommands() []string {
 		"about openapi",
 		"access (list-roles|get-role|create-role|update-role|delete-role|list-scopes|list-members|list-grants|update-member-role|get-rbac-status|enable-rbac|disable-rbac)",
 		"assets (serve-image|upload-image|upload-functions|upload-open-ap-iv3|fetch-open-ap-iv3-from-url|serve-open-ap-iv3|serve-function|list-assets|upload-chat-attachment|serve-chat-attachment|create-signed-chat-attachment-url|serve-chat-attachment-signed)",
+		"assistants (list-assistants|get-assistant|create-assistant|update-assistant|delete-assistant)",
 		"auditlogs (list|list-facets)",
 		"auth (callback|login|switch-scopes|logout|register|info)",
 		"chat (list-chats|load-chat|generate-title|credit-usage|list-chats-with-resolutions|delete-chat|submit-feedback)",
@@ -78,7 +80,7 @@ func UsageCommands() []string {
 		"mcp-metadata (get-mcp-metadata|set-mcp-metadata|export-mcp-metadata)",
 		"organizations (send-invite|revoke-invite|list-invites|get-invite-by-token|list-users|remove-user)",
 		"packages (create-package|update-package|list-packages|list-versions|publish)",
-		"plugins (list-plugins|get-plugin|create-plugin|update-plugin|delete-plugin|add-plugin-server|update-plugin-server|remove-plugin-server|set-plugin-assignments|download-plugin-package)",
+		"plugins (list-plugins|get-plugin|create-plugin|update-plugin|delete-plugin|add-plugin-server|update-plugin-server|remove-plugin-server|set-plugin-assignments|download-plugin-package|get-publish-status|publish-plugins)",
 		"features (get-product-features|set-product-feature)",
 		"projects (get-project|create-project|list-projects|set-logo|list-allowed-origins|upsert-allowed-origin|delete-project|set-organization-whitelist)",
 		"remote-mcp (create-server|list-servers|get-server|update-server|delete-server)",
@@ -100,8 +102,8 @@ func UsageExamples() string {
 	return os.Args[0] + " " + "about openapi" + "\n" +
 		os.Args[0] + " " + "access list-roles --apikey-token \"abc123\" --session-token \"abc123\"" + "\n" +
 		os.Args[0] + " " + "assets serve-image --id \"abc123\"" + "\n" +
+		os.Args[0] + " " + "assistants list-assistants --session-token \"abc123\" --project-slug-input \"abc123\"" + "\n" +
 		os.Args[0] + " " + "auditlogs list --cursor \"abc123\" --project-slug \"abc123\" --actor-id \"abc123\" --action \"abc123\" --apikey-token \"abc123\" --session-token \"abc123\"" + "\n" +
-		os.Args[0] + " " + "auth callback --code \"abc123\" --state \"abc123\"" + "\n" +
 		""
 }
 
@@ -248,6 +250,32 @@ func ParseEndpoint(
 
 		assetsServeChatAttachmentSignedFlags     = flag.NewFlagSet("serve-chat-attachment-signed", flag.ExitOnError)
 		assetsServeChatAttachmentSignedTokenFlag = assetsServeChatAttachmentSignedFlags.String("token", "REQUIRED", "")
+
+		assistantsFlags = flag.NewFlagSet("assistants", flag.ContinueOnError)
+
+		assistantsListAssistantsFlags                = flag.NewFlagSet("list-assistants", flag.ExitOnError)
+		assistantsListAssistantsSessionTokenFlag     = assistantsListAssistantsFlags.String("session-token", "", "")
+		assistantsListAssistantsProjectSlugInputFlag = assistantsListAssistantsFlags.String("project-slug-input", "", "")
+
+		assistantsGetAssistantFlags                = flag.NewFlagSet("get-assistant", flag.ExitOnError)
+		assistantsGetAssistantIDFlag               = assistantsGetAssistantFlags.String("id", "REQUIRED", "")
+		assistantsGetAssistantSessionTokenFlag     = assistantsGetAssistantFlags.String("session-token", "", "")
+		assistantsGetAssistantProjectSlugInputFlag = assistantsGetAssistantFlags.String("project-slug-input", "", "")
+
+		assistantsCreateAssistantFlags                = flag.NewFlagSet("create-assistant", flag.ExitOnError)
+		assistantsCreateAssistantBodyFlag             = assistantsCreateAssistantFlags.String("body", "REQUIRED", "")
+		assistantsCreateAssistantSessionTokenFlag     = assistantsCreateAssistantFlags.String("session-token", "", "")
+		assistantsCreateAssistantProjectSlugInputFlag = assistantsCreateAssistantFlags.String("project-slug-input", "", "")
+
+		assistantsUpdateAssistantFlags                = flag.NewFlagSet("update-assistant", flag.ExitOnError)
+		assistantsUpdateAssistantBodyFlag             = assistantsUpdateAssistantFlags.String("body", "REQUIRED", "")
+		assistantsUpdateAssistantSessionTokenFlag     = assistantsUpdateAssistantFlags.String("session-token", "", "")
+		assistantsUpdateAssistantProjectSlugInputFlag = assistantsUpdateAssistantFlags.String("project-slug-input", "", "")
+
+		assistantsDeleteAssistantFlags                = flag.NewFlagSet("delete-assistant", flag.ExitOnError)
+		assistantsDeleteAssistantIDFlag               = assistantsDeleteAssistantFlags.String("id", "REQUIRED", "")
+		assistantsDeleteAssistantSessionTokenFlag     = assistantsDeleteAssistantFlags.String("session-token", "", "")
+		assistantsDeleteAssistantProjectSlugInputFlag = assistantsDeleteAssistantFlags.String("project-slug-input", "", "")
 
 		auditlogsFlags = flag.NewFlagSet("auditlogs", flag.ContinueOnError)
 
@@ -738,6 +766,15 @@ func ParseEndpoint(
 		pluginsDownloadPluginPackagePlatformFlag         = pluginsDownloadPluginPackageFlags.String("platform", "REQUIRED", "")
 		pluginsDownloadPluginPackageSessionTokenFlag     = pluginsDownloadPluginPackageFlags.String("session-token", "", "")
 		pluginsDownloadPluginPackageProjectSlugInputFlag = pluginsDownloadPluginPackageFlags.String("project-slug-input", "", "")
+
+		pluginsGetPublishStatusFlags                = flag.NewFlagSet("get-publish-status", flag.ExitOnError)
+		pluginsGetPublishStatusSessionTokenFlag     = pluginsGetPublishStatusFlags.String("session-token", "", "")
+		pluginsGetPublishStatusProjectSlugInputFlag = pluginsGetPublishStatusFlags.String("project-slug-input", "", "")
+
+		pluginsPublishPluginsFlags                = flag.NewFlagSet("publish-plugins", flag.ExitOnError)
+		pluginsPublishPluginsBodyFlag             = pluginsPublishPluginsFlags.String("body", "REQUIRED", "")
+		pluginsPublishPluginsSessionTokenFlag     = pluginsPublishPluginsFlags.String("session-token", "", "")
+		pluginsPublishPluginsProjectSlugInputFlag = pluginsPublishPluginsFlags.String("project-slug-input", "", "")
 
 		featuresFlags = flag.NewFlagSet("features", flag.ContinueOnError)
 
@@ -1236,6 +1273,13 @@ func ParseEndpoint(
 	assetsCreateSignedChatAttachmentURLFlags.Usage = assetsCreateSignedChatAttachmentURLUsage
 	assetsServeChatAttachmentSignedFlags.Usage = assetsServeChatAttachmentSignedUsage
 
+	assistantsFlags.Usage = assistantsUsage
+	assistantsListAssistantsFlags.Usage = assistantsListAssistantsUsage
+	assistantsGetAssistantFlags.Usage = assistantsGetAssistantUsage
+	assistantsCreateAssistantFlags.Usage = assistantsCreateAssistantUsage
+	assistantsUpdateAssistantFlags.Usage = assistantsUpdateAssistantUsage
+	assistantsDeleteAssistantFlags.Usage = assistantsDeleteAssistantUsage
+
 	auditlogsFlags.Usage = auditlogsUsage
 	auditlogsListFlags.Usage = auditlogsListUsage
 	auditlogsListFacetsFlags.Usage = auditlogsListFacetsUsage
@@ -1361,6 +1405,8 @@ func ParseEndpoint(
 	pluginsRemovePluginServerFlags.Usage = pluginsRemovePluginServerUsage
 	pluginsSetPluginAssignmentsFlags.Usage = pluginsSetPluginAssignmentsUsage
 	pluginsDownloadPluginPackageFlags.Usage = pluginsDownloadPluginPackageUsage
+	pluginsGetPublishStatusFlags.Usage = pluginsGetPublishStatusUsage
+	pluginsPublishPluginsFlags.Usage = pluginsPublishPluginsUsage
 
 	featuresFlags.Usage = featuresUsage
 	featuresGetProductFeaturesFlags.Usage = featuresGetProductFeaturesUsage
@@ -1488,6 +1534,8 @@ func ParseEndpoint(
 			svcf = accessFlags
 		case "assets":
 			svcf = assetsFlags
+		case "assistants":
+			svcf = assistantsFlags
 		case "auditlogs":
 			svcf = auditlogsFlags
 		case "auth":
@@ -1651,6 +1699,25 @@ func ParseEndpoint(
 
 			case "serve-chat-attachment-signed":
 				epf = assetsServeChatAttachmentSignedFlags
+
+			}
+
+		case "assistants":
+			switch epn {
+			case "list-assistants":
+				epf = assistantsListAssistantsFlags
+
+			case "get-assistant":
+				epf = assistantsGetAssistantFlags
+
+			case "create-assistant":
+				epf = assistantsCreateAssistantFlags
+
+			case "update-assistant":
+				epf = assistantsUpdateAssistantFlags
+
+			case "delete-assistant":
+				epf = assistantsDeleteAssistantFlags
 
 			}
 
@@ -1991,6 +2058,12 @@ func ParseEndpoint(
 
 			case "download-plugin-package":
 				epf = pluginsDownloadPluginPackageFlags
+
+			case "get-publish-status":
+				epf = pluginsGetPublishStatusFlags
+
+			case "publish-plugins":
+				epf = pluginsPublishPluginsFlags
 
 			}
 
@@ -2401,6 +2474,25 @@ func ParseEndpoint(
 				endpoint = c.ServeChatAttachmentSigned()
 				data, err = assetsc.BuildServeChatAttachmentSignedPayload(*assetsServeChatAttachmentSignedTokenFlag)
 			}
+		case "assistants":
+			c := assistantsc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "list-assistants":
+				endpoint = c.ListAssistants()
+				data, err = assistantsc.BuildListAssistantsPayload(*assistantsListAssistantsSessionTokenFlag, *assistantsListAssistantsProjectSlugInputFlag)
+			case "get-assistant":
+				endpoint = c.GetAssistant()
+				data, err = assistantsc.BuildGetAssistantPayload(*assistantsGetAssistantIDFlag, *assistantsGetAssistantSessionTokenFlag, *assistantsGetAssistantProjectSlugInputFlag)
+			case "create-assistant":
+				endpoint = c.CreateAssistant()
+				data, err = assistantsc.BuildCreateAssistantPayload(*assistantsCreateAssistantBodyFlag, *assistantsCreateAssistantSessionTokenFlag, *assistantsCreateAssistantProjectSlugInputFlag)
+			case "update-assistant":
+				endpoint = c.UpdateAssistant()
+				data, err = assistantsc.BuildUpdateAssistantPayload(*assistantsUpdateAssistantBodyFlag, *assistantsUpdateAssistantSessionTokenFlag, *assistantsUpdateAssistantProjectSlugInputFlag)
+			case "delete-assistant":
+				endpoint = c.DeleteAssistant()
+				data, err = assistantsc.BuildDeleteAssistantPayload(*assistantsDeleteAssistantIDFlag, *assistantsDeleteAssistantSessionTokenFlag, *assistantsDeleteAssistantProjectSlugInputFlag)
+			}
 		case "auditlogs":
 			c := auditlogsc.NewClient(scheme, host, doer, enc, dec, restore)
 			switch epn {
@@ -2740,6 +2832,12 @@ func ParseEndpoint(
 			case "download-plugin-package":
 				endpoint = c.DownloadPluginPackage()
 				data, err = pluginsc.BuildDownloadPluginPackagePayload(*pluginsDownloadPluginPackagePluginIDFlag, *pluginsDownloadPluginPackagePlatformFlag, *pluginsDownloadPluginPackageSessionTokenFlag, *pluginsDownloadPluginPackageProjectSlugInputFlag)
+			case "get-publish-status":
+				endpoint = c.GetPublishStatus()
+				data, err = pluginsc.BuildGetPublishStatusPayload(*pluginsGetPublishStatusSessionTokenFlag, *pluginsGetPublishStatusProjectSlugInputFlag)
+			case "publish-plugins":
+				endpoint = c.PublishPlugins()
+				data, err = pluginsc.BuildPublishPluginsPayload(*pluginsPublishPluginsBodyFlag, *pluginsPublishPluginsSessionTokenFlag, *pluginsPublishPluginsProjectSlugInputFlag)
 			}
 		case "features":
 			c := featuresc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -3646,6 +3744,129 @@ func assetsServeChatAttachmentSignedUsage() {
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assets serve-chat-attachment-signed --token \"abc123\"")
 }
 
+// assistantsUsage displays the usage of the assistants command and its
+// subcommands.
+func assistantsUsage() {
+	fmt.Fprintln(os.Stderr, `Manage assistants and their runtime configuration.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] assistants COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    list-assistants: List assistants for the current project.`)
+	fmt.Fprintln(os.Stderr, `    get-assistant: Get an assistant by ID.`)
+	fmt.Fprintln(os.Stderr, `    create-assistant: Create an assistant.`)
+	fmt.Fprintln(os.Stderr, `    update-assistant: Update an assistant.`)
+	fmt.Fprintln(os.Stderr, `    delete-assistant: Delete an assistant.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s assistants COMMAND --help\n", os.Args[0])
+}
+func assistantsListAssistantsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] assistants list-assistants", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List assistants for the current project.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistants list-assistants --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func assistantsGetAssistantUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] assistants get-assistant", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get an assistant by ID.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistants get-assistant --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func assistantsCreateAssistantUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] assistants create-assistant", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Create an assistant.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistants create-assistant --body '{\n      \"instructions\": \"abc123\",\n      \"max_concurrency\": 1,\n      \"model\": \"abc123\",\n      \"name\": \"abc123\",\n      \"status\": \"paused\",\n      \"toolsets\": [\n         {\n            \"environment_slug\": \"abc123\",\n            \"toolset_slug\": \"abc123\"\n         }\n      ],\n      \"warm_ttl_seconds\": 1\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func assistantsUpdateAssistantUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] assistants update-assistant", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Update an assistant.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistants update-assistant --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"instructions\": \"abc123\",\n      \"max_concurrency\": 1,\n      \"model\": \"abc123\",\n      \"name\": \"abc123\",\n      \"status\": \"paused\",\n      \"toolsets\": [\n         {\n            \"environment_slug\": \"abc123\",\n            \"toolset_slug\": \"abc123\"\n         }\n      ],\n      \"warm_ttl_seconds\": 1\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func assistantsDeleteAssistantUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] assistants delete-assistant", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Delete an assistant.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistants delete-assistant --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
 // auditlogsUsage displays the usage of the auditlogs command and its
 // subcommands.
 func auditlogsUsage() {
@@ -4198,7 +4419,7 @@ func deploymentsCreateDeploymentUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "deployments create-deployment --body '{\n      \"external_id\": \"bc5f4a555e933e6861d12edba4c2d87ef6caf8e6\",\n      \"external_mcps\": [\n         {\n            \"name\": \"My Slack Integration\",\n            \"organization_mcp_collection_registry_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"registry_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"registry_server_specifier\": \"slack\",\n            \"selected_remotes\": [\n               \"https://mcp.example.com/sse\"\n            ],\n            \"slug\": \"aaa\"\n         }\n      ],\n      \"external_url\": \"abc123\",\n      \"functions\": [\n         {\n            \"asset_id\": \"abc123\",\n            \"name\": \"abc123\",\n            \"runtime\": \"abc123\",\n            \"slug\": \"aaa\"\n         }\n      ],\n      \"github_pr\": \"1234\",\n      \"github_repo\": \"speakeasyapi/gram\",\n      \"github_sha\": \"f33e693e9e12552043bc0ec5c37f1b8a9e076161\",\n      \"non_blocking\": false,\n      \"openapiv3_assets\": [\n         {\n            \"asset_id\": \"abc123\",\n            \"name\": \"abc123\",\n            \"slug\": \"aaa\"\n         }\n      ],\n      \"packages\": [\n         {\n            \"name\": \"abc123\",\n            \"version\": \"abc123\"\n         }\n      ]\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\" --idempotency-key \"01jqq0ajmb4qh9eppz48dejr2m\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "deployments create-deployment --body '{\n      \"external_id\": \"bc5f4a555e933e6861d12edba4c2d87ef6caf8e6\",\n      \"external_mcps\": [\n         {\n            \"name\": \"My Slack Integration\",\n            \"organization_mcp_collection_registry_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"registry_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"registry_server_specifier\": \"slack\",\n            \"selected_remotes\": [\n               \"https://mcp.example.com/sse\"\n            ],\n            \"slug\": \"aaa\"\n         }\n      ],\n      \"external_url\": \"abc123\",\n      \"functions\": [\n         {\n            \"asset_id\": \"abc123\",\n            \"memory_mib\": 1,\n            \"name\": \"abc123\",\n            \"runtime\": \"abc123\",\n            \"scale\": 1,\n            \"slug\": \"aaa\"\n         }\n      ],\n      \"github_pr\": \"1234\",\n      \"github_repo\": \"speakeasyapi/gram\",\n      \"github_sha\": \"f33e693e9e12552043bc0ec5c37f1b8a9e076161\",\n      \"non_blocking\": false,\n      \"openapiv3_assets\": [\n         {\n            \"asset_id\": \"abc123\",\n            \"name\": \"abc123\",\n            \"slug\": \"aaa\"\n         }\n      ],\n      \"packages\": [\n         {\n            \"name\": \"abc123\",\n            \"version\": \"abc123\"\n         }\n      ]\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\" --idempotency-key \"01jqq0ajmb4qh9eppz48dejr2m\"")
 }
 
 func deploymentsEvolveUsage() {
@@ -4222,7 +4443,7 @@ func deploymentsEvolveUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "deployments evolve --body '{\n      \"deployment_id\": \"abc123\",\n      \"exclude_external_mcps\": [\n         \"abc123\"\n      ],\n      \"exclude_functions\": [\n         \"abc123\"\n      ],\n      \"exclude_openapiv3_assets\": [\n         \"abc123\"\n      ],\n      \"exclude_packages\": [\n         \"abc123\"\n      ],\n      \"non_blocking\": false,\n      \"upsert_external_mcps\": [\n         {\n            \"name\": \"My Slack Integration\",\n            \"organization_mcp_collection_registry_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"registry_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"registry_server_specifier\": \"slack\",\n            \"selected_remotes\": [\n               \"https://mcp.example.com/sse\"\n            ],\n            \"slug\": \"aaa\"\n         }\n      ],\n      \"upsert_functions\": [\n         {\n            \"asset_id\": \"abc123\",\n            \"name\": \"abc123\",\n            \"runtime\": \"abc123\",\n            \"slug\": \"aaa\"\n         }\n      ],\n      \"upsert_openapiv3_assets\": [\n         {\n            \"asset_id\": \"abc123\",\n            \"name\": \"abc123\",\n            \"slug\": \"aaa\"\n         }\n      ],\n      \"upsert_packages\": [\n         {\n            \"name\": \"abc123\",\n            \"version\": \"abc123\"\n         }\n      ]\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "deployments evolve --body '{\n      \"deployment_id\": \"abc123\",\n      \"exclude_external_mcps\": [\n         \"abc123\"\n      ],\n      \"exclude_functions\": [\n         \"abc123\"\n      ],\n      \"exclude_openapiv3_assets\": [\n         \"abc123\"\n      ],\n      \"exclude_packages\": [\n         \"abc123\"\n      ],\n      \"non_blocking\": false,\n      \"upsert_external_mcps\": [\n         {\n            \"name\": \"My Slack Integration\",\n            \"organization_mcp_collection_registry_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"registry_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"registry_server_specifier\": \"slack\",\n            \"selected_remotes\": [\n               \"https://mcp.example.com/sse\"\n            ],\n            \"slug\": \"aaa\"\n         }\n      ],\n      \"upsert_functions\": [\n         {\n            \"asset_id\": \"abc123\",\n            \"memory_mib\": 1,\n            \"name\": \"abc123\",\n            \"runtime\": \"abc123\",\n            \"scale\": 1,\n            \"slug\": \"aaa\"\n         }\n      ],\n      \"upsert_openapiv3_assets\": [\n         {\n            \"asset_id\": \"abc123\",\n            \"name\": \"abc123\",\n            \"slug\": \"aaa\"\n         }\n      ],\n      \"upsert_packages\": [\n         {\n            \"name\": \"abc123\",\n            \"version\": \"abc123\"\n         }\n      ]\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func deploymentsRedeployUsage() {
@@ -5651,6 +5872,8 @@ func pluginsUsage() {
 	fmt.Fprintln(os.Stderr, `    remove-plugin-server: Remove a server from a plugin.`)
 	fmt.Fprintln(os.Stderr, `    set-plugin-assignments: Replace all assignments for a plugin with the given list of principal URNs.`)
 	fmt.Fprintln(os.Stderr, `    download-plugin-package: Download a ZIP of a single plugin package for direct installation.`)
+	fmt.Fprintln(os.Stderr, `    get-publish-status: Check whether GitHub publishing is configured and connected for this project.`)
+	fmt.Fprintln(os.Stderr, `    publish-plugins: Generate and publish all plugin packages to a GitHub repository.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s plugins COMMAND --help\n", os.Args[0])
@@ -5875,6 +6098,48 @@ func pluginsDownloadPluginPackageUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "plugins download-plugin-package --plugin-id \"550e8400-e29b-41d4-a716-446655440000\" --platform \"cursor\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func pluginsGetPublishStatusUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] plugins get-publish-status", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Check whether GitHub publishing is configured and connected for this project.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "plugins get-publish-status --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func pluginsPublishPluginsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] plugins publish-plugins", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Generate and publish all plugin packages to a GitHub repository.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "plugins publish-plugins --body '{\n      \"github_username\": \"abc123\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // featuresUsage displays the usage of the features command and its subcommands.

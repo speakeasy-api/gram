@@ -1,5 +1,34 @@
 # dashboard
 
+## 0.43.1
+
+### Patch Changes
+
+- 1b6f532: add skill usage time series and users-per-skill charts
+- ac59dac: feat(plugins): replace the Claude-only download button on the plugin detail page with a Download Plugin dropdown offering both Claude and Cursor
+- Updated dependencies [2b2d423]
+  - @gram/client@0.33.6
+
+## 0.43.0
+
+### Minor Changes
+
+- e8e2d81: deps: lucide-react from 0.554 to 1.8.0
+- ea3e1aa: Add GitHub publishing for plugins. Admins can publish generated plugin
+  packages to a GitHub repository via a configured GitHub App, enabling
+  distribution through Claude Code and Cursor team marketplaces.
+
+### Patch Changes
+
+- a74a72b: fix(ai-insights): stop sidebar crash on rapid Explore-with-AI clicks, and render `chart` / `ui` widgets in the agent session pop-out
+- c797e16: fix: resolve ResizeObserver loop errors on navigation hover
+- e81699f: Show the published GitHub repo URL on the plugins page, and include it in the publish success toast.
+- 00a8f2a: Cursor hooks native MCP support. Token use tracking support for Cursor sessions
+- Updated dependencies [3c581aa]
+- Updated dependencies [a74a72b]
+- Updated dependencies [e8e2d81]
+  - @gram-ai/elements@1.30.0
+
 ## 0.42.0
 
 ### Minor Changes

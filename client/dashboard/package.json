@@ -1,7 +1,7 @@
 {
   "name": "dashboard",
   "private": true,
-  "version": "0.42.0",
+  "version": "0.43.1",
   "type": "module",
   "scripts": {
     "dev": "vite --port ${GRAM_SITE_PORT:-5173}",
@@ -58,6 +58,7 @@
     "@tailwindcss/vite": "^4.1.17",
     "@tanstack/react-query": "catalog:",
     "@tanstack/react-table": "^8.21.3",
+    "@tanstack/react-virtual": "^3.13.23",
     "@tremor/react": "^3.18.7",
     "@xyflow/react": "^12.8.6",
     "ai": "catalog:",
@@ -69,7 +70,7 @@
     "embla-carousel-react": "^8.6.0",
     "fflate": "^0.8.2",
     "hast": "^1.0.0",
-    "lucide-react": "^0.554.0",
+    "lucide-react": "catalog:",
     "monaco-editor": "^0.52.0",
     "motion": "^12.23.24",
     "motion-plus": "^1.5.1",
