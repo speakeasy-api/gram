@@ -39,13 +39,13 @@ export type SubScopes = ClosedEnum<typeof SubScopes>;
 
 export type ListRoleGrant = {
   /**
-   * Selector constraints. Null means unrestricted. Each selector is a set of key-value conditions.
-   */
-  selectors?: Array<Record<string, string>> | undefined;
-  /**
    * The scope slug this grant applies to.
    */
   scope: ListRoleGrantScope;
+  /**
+   * Selector constraints. Null means unrestricted. Each selector is a set of key-value conditions.
+   */
+  selectors?: Array<{ [k: string]: string }> | undefined;
   /**
    * The inherited scopes the primary scope grants.
    */
@@ -68,8 +68,8 @@ export const ListRoleGrant$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
-    selectors: z.optional(z.array(z.record(z.string(), z.string()))),
     scope: ListRoleGrantScope$inboundSchema,
+    selectors: z.optional(z.array(z.record(z.string(), z.string()))),
     sub_scopes: z.optional(z.array(SubScopes$inboundSchema)),
   }),
   z.transform((v) => {
