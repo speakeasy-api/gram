@@ -434,10 +434,12 @@ func (s *Service) CreateDeployment(ctx context.Context, form *gen.CreateDeployme
 		}
 
 		newFunctions = append(newFunctions, upsertFunctions{
-			assetID: assetID,
-			name:    add.Name,
-			slug:    string(add.Slug),
-			runtime: add.Runtime,
+			assetID:   assetID,
+			name:      add.Name,
+			slug:      string(add.Slug),
+			runtime:   add.Runtime,
+			memoryMiB: add.MemoryMib,
+			scale:     add.Scale,
 		})
 	}
 
@@ -619,10 +621,12 @@ func (s *Service) Evolve(ctx context.Context, form *gen.EvolvePayload) (*gen.Evo
 		}
 
 		functionsToUpsert = append(functionsToUpsert, upsertFunctions{
-			assetID: assetID,
-			name:    add.Name,
-			slug:    string(add.Slug),
-			runtime: add.Runtime,
+			assetID:   assetID,
+			name:      add.Name,
+			slug:      string(add.Slug),
+			runtime:   add.Runtime,
+			memoryMiB: add.MemoryMib,
+			scale:     add.Scale,
 		})
 	}
 

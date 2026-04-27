@@ -24,3 +24,7 @@ WHERE
 SELECT *
 FROM function_resource_definitions
 WHERE deployment_id = @deployment_id;
+
+-- name: ScrubDeploymentFunctionMachineSpecs :exec
+-- Simulates a legacy deployment by NULLing out memory_mib and scale, as if the row was inserted before these columns existed.
+UPDATE deployments_functions SET memory_mib = NULL, scale = NULL WHERE deployment_id = @deployment_id;

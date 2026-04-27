@@ -1977,11 +1977,13 @@ func unmarshalDeploymentFunctionsResponseBodyToTypesDeploymentFunctions(v *Deplo
 		return nil
 	}
 	res := &types.DeploymentFunctions{
-		ID:      *v.ID,
-		AssetID: *v.AssetID,
-		Name:    *v.Name,
-		Slug:    types.Slug(*v.Slug),
-		Runtime: *v.Runtime,
+		ID:        *v.ID,
+		AssetID:   *v.AssetID,
+		Name:      *v.Name,
+		Slug:      types.Slug(*v.Slug),
+		Runtime:   *v.Runtime,
+		Scale:     v.Scale,
+		MemoryMib: v.MemoryMib,
 	}
 
 	return res
@@ -2107,10 +2109,12 @@ func marshalDeploymentsAddFunctionsFormToAddFunctionsFormRequestBody(v *deployme
 		return nil
 	}
 	res := &AddFunctionsFormRequestBody{
-		AssetID: v.AssetID,
-		Name:    v.Name,
-		Slug:    string(v.Slug),
-		Runtime: v.Runtime,
+		AssetID:   v.AssetID,
+		Name:      v.Name,
+		Slug:      string(v.Slug),
+		Runtime:   v.Runtime,
+		MemoryMib: v.MemoryMib,
+		Scale:     v.Scale,
 	}
 
 	return res
@@ -2179,10 +2183,12 @@ func marshalAddFunctionsFormRequestBodyToDeploymentsAddFunctionsForm(v *AddFunct
 		return nil
 	}
 	res := &deployments.AddFunctionsForm{
-		AssetID: v.AssetID,
-		Name:    v.Name,
-		Slug:    types.Slug(v.Slug),
-		Runtime: v.Runtime,
+		AssetID:   v.AssetID,
+		Name:      v.Name,
+		Slug:      types.Slug(v.Slug),
+		Runtime:   v.Runtime,
+		MemoryMib: v.MemoryMib,
+		Scale:     v.Scale,
 	}
 
 	return res

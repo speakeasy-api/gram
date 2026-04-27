@@ -19291,12 +19291,24 @@ components:
         asset_id:
           type: string
           description: The ID of the functions file from the assets service.
+        memory_mib:
+          type: integer
+          description: The amount of memory in MiB to allocate for the function (1 MiB = 1024 * 1024 bytes).
+          format: int64
+          minimum: 0
+          maximum: 4096
         name:
           type: string
           description: The functions file display name.
         runtime:
           type: string
           description: 'The runtime to use when executing functions. Allowed values are: nodejs:22, nodejs:24, python:3.12.'
+        scale:
+          type: integer
+          description: The number of instances to scale the function to.
+          format: int64
+          minimum: 0
+          maximum: 5
         slug:
           type: string
           description: A short url-friendly label that uniquely identifies a resource.
@@ -21096,12 +21108,20 @@ components:
         id:
           type: string
           description: The ID of the deployment asset.
+        memory_mib:
+          type: integer
+          description: The memory limit in MiB of function runner machines.
+          format: int32
         name:
           type: string
           description: The name to give the document as it will be displayed in UIs.
         runtime:
           type: string
           description: The runtime to use when executing functions.
+        scale:
+          type: integer
+          description: The number of instances to run for the function.
+          format: int32
         slug:
           type: string
           description: A short url-friendly label that uniquely identifies a resource.
