@@ -32,12 +32,28 @@ import { $ } from "zx";
 // ---- Constants ----
 
 const SEED_BATCH = "insights-demo";
-// The observability MCP (the `mcp-logs` toolset, mcp_slug local-dev-org-nau79)
-// is scoped to the `ecommerce-api` project, so the AI Insights agent's
-// gram_search_logs tool only finds rows tagged with this project ID. Seeding
-// against the `default` project would put data somewhere the agent cannot see.
-const PROJECT_ID = "019d4695-4292-7a75-82bb-e6a3ab8c5829"; // ecommerce-api
+// The observability MCP (the `mcp-logs` toolset) is scoped to the
+// `ecommerce-api` project, so the AI Insights agent's gram_search_logs tool
+// only finds rows tagged with that project's ID. We resolve the UUID at
+// runtime from the slug because `mise db:reset` + `mise seed` mints fresh
+// IDs each time, and a hardcoded constant would silently put rows where
+// the agent can't see them.
+const PROJECT_SLUG = "ecommerce-api";
 const ORG_ID = "550e8400-e29b-41d4-a716-446655440000";
+
+let PROJECT_ID = "";
+
+async function resolveProjectID(): Promise<string> {
+  const result =
+    await $`docker exec gram-gram-db-1 psql -U gram -d gram -tA -c "SELECT id FROM projects WHERE slug = '${PROJECT_SLUG}' LIMIT 1"`.quiet();
+  const id = result.stdout.trim();
+  if (!id) {
+    throw new Error(
+      `Could not find project '${PROJECT_SLUG}' in Postgres. Run \`mise seed\` first to seed the base projects/toolsets.`,
+    );
+  }
+  return id;
+}
 
 // Real tool URNs from the ecommerce-api project so any agent-proposed variation
 // resolves to a real tool the human can review/apply. The synthetic narratives
@@ -355,6 +371,11 @@ function patternBackgroundSuccess(): LogRecord[] {
 
 async function main() {
   intro("seed:insights-data");
+
+  // Resolve the project UUID at runtime — see the PROJECT_SLUG comment above
+  // for why this can't be a hardcoded constant.
+  PROJECT_ID = await resolveProjectID();
+  log.info(`Targeting project '${PROJECT_SLUG}' (${PROJECT_ID})`);
 
   const allRecords: LogRecord[] = [
     ...patternCreateInvoiceSlugErrors(),
