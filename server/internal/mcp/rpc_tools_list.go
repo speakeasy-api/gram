@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
@@ -51,6 +52,7 @@ func handleToolsList(
 	toolsetCache *cache.TypedCacheObject[mv.ToolsetBaseContents],
 	vectorToolStore *rag.ToolsetVectorStore,
 	temporalEnv *temporal.Environment,
+	features *productfeatures.Client,
 ) (json.RawMessage, error) {
 	projectID := mv.ProjectID(payload.projectID)
 
@@ -90,6 +92,20 @@ func handleToolsList(
 		tools, err = buildToolListEntries(ctx, logger, guardianPolicy, db, env, payload, toolset)
 		if err != nil {
 			return nil, err
+		}
+	}
+
+	if blockShadowMCPEnabled(ctx, logger, features, toolset.OrganizationID) {
+		println("\n\n\nBLOCKING SHADOW MCP, session ID: ", payload.sessionID, "\n\n\n")
+		j, _ := json.MarshalIndent(req, "", "  ")
+		println("\n\n\nREQUEST:\n", string(j), "\n\n\n")
+		for _, t := range tools {
+			injected, err := injectToolsetIDConstant(t.InputSchema, toolset.ID)
+			if err != nil {
+				logger.WarnContext(ctx, "failed to inject toolset id constant into tool input schema", attr.SlogError(err), attr.SlogToolName(t.Name))
+				continue
+			}
+			t.InputSchema = injected
 		}
 	}
 

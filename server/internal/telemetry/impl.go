@@ -1743,6 +1743,7 @@ func (s *Service) ListHooksTraces(ctx context.Context, payload *telem_gen.ListHo
 			StartTimeUnixNano: strconv.FormatInt(item.StartTimeUnixNano, 10),
 			LogCount:          item.LogCount,
 			HookStatus:        item.HookStatus,
+			BlockReason:       item.BlockReason,
 			GramUrn:           item.GramURN,
 			ToolName:          item.ToolName,
 			ToolSource:        item.ToolSource,

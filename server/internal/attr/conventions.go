@@ -224,6 +224,10 @@ const (
 	HookIsInterruptKey          = attribute.Key("gram.hook.is_interrupt")
 	HookSourceKey               = attribute.Key("gram.hook.source")
 	HookServerNameOverrideIDKey = attribute.Key("gram.hook.server_name_override_id")
+	// HookBlockReasonKey is set on hook telemetry entries when the Gram hook
+	// denied the tool call (e.g. shadow-MCP guard). Its presence (non-empty)
+	// signals the trace should render as "blocked" in dashboards.
+	HookBlockReasonKey = attribute.Key("gram.hook.block_reason")
 
 	PaginationTsStartKey     = attribute.Key("gram.pagination.ts_start")
 	PaginationTsEndKey       = attribute.Key("gram.pagination.ts_end")

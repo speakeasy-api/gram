@@ -806,11 +806,30 @@ function HooksInnerContent({
   summaryIsError: boolean;
 }) {
   const orgRoutes = useOrgRoutes();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { from, to } = useMemo(
     () => customRange ?? getPresetRange(dateRange),
     [customRange, dateRange],
   );
-  const [activeTab, setActiveTab] = useState<"metrics" | "logs">("metrics");
+  const activeTab: "metrics" | "logs" =
+    searchParams.get("tab") === "logs" ? "logs" : "metrics";
+  const setActiveTab = useCallback(
+    (tab: "metrics" | "logs") => {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          if (tab === "metrics") {
+            next.delete("tab");
+          } else {
+            next.set("tab", tab);
+          }
+          return next;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
   const { expandedChart, setExpandedChart } = useExpandedChart();
   useEffect(() => {
     if (summaryPending) setExpandedChart(null);
@@ -974,7 +993,7 @@ function HooksInnerContent({
                     <div className="min-w-0 flex-1">Server / Tool</div>
                     <div className="w-[260px] shrink-0">User</div>
                     <div className="w-[120px] shrink-0">Source</div>
-                    <div className="w-20 shrink-0 text-right">Status</div>
+                    <div className="w-24 shrink-0 text-right">Status</div>
                   </div>
 
                   {/* Scrollable trace list */}
@@ -1279,23 +1298,33 @@ function HookTraceRow({
   }, [displayServerName, serverName, toolName, skillName]);
 
   const statusConfig = useMemo(() => {
-    if (trace.hookStatus === "failure") {
+    if (trace.hookStatus === "blocked") {
+      return {
+        color: "text-amber-600 dark:text-amber-400",
+        bgColor: "bg-amber-500/10",
+        label: "Blocked",
+        icon: "shield-alert" as const,
+      };
+    } else if (trace.hookStatus === "failure") {
       return {
         color: "text-destructive",
         bgColor: "bg-destructive/10",
         label: "Failure",
+        icon: null,
       };
     } else if (trace.hookStatus === "success") {
       return {
         color: "text-emerald-500",
         bgColor: "bg-emerald-500/10",
         label: "Success",
+        icon: null,
       };
     }
     return {
       color: "text-muted-foreground",
       bgColor: "bg-muted",
       label: "Pending",
+      icon: null,
     };
   }, [trace.hookStatus]);
 
@@ -1365,7 +1394,7 @@ function HookTraceRow({
         </div>
 
         {/* Status badge */}
-        <div className="flex w-20 shrink-0 justify-end">
+        <div className="flex w-24 shrink-0 justify-end">
           <div
             className={cn(
               "inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium",
@@ -1373,14 +1402,18 @@ function HookTraceRow({
               statusConfig.color,
             )}
           >
-            <div
-              className={cn(
-                "size-1.5 rounded-full",
-                statusConfig.color === "text-muted-foreground"
-                  ? "bg-muted-foreground"
-                  : "bg-current",
-              )}
-            />
+            {statusConfig.icon ? (
+              <Icon name={statusConfig.icon} className="size-3" />
+            ) : (
+              <div
+                className={cn(
+                  "size-1.5 rounded-full",
+                  statusConfig.color === "text-muted-foreground"
+                    ? "bg-muted-foreground"
+                    : "bg-current",
+                )}
+              />
+            )}
             {statusConfig.label}
           </div>
         </div>
@@ -1388,13 +1421,31 @@ function HookTraceRow({
 
       {/* Expanded child logs */}
       {isExpanded && (
-        <TraceLogsList
-          traceId={trace.traceId}
-          toolName={toolName || "unknown"}
-          isExpanded={isExpanded}
-          onLogClick={onLogClick}
-          parentTimestamp={trace.startTimeUnixNano}
-        />
+        <>
+          {trace.hookStatus === "blocked" && (
+            <div className="flex items-start gap-3 border-y border-amber-500/30 bg-amber-500/10 px-5 py-3">
+              <Icon
+                name="shield-alert"
+                className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400"
+              />
+              <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                <div className="text-xs font-semibold tracking-wide text-amber-700 uppercase dark:text-amber-300">
+                  Blocked
+                </div>
+                <div className="text-foreground text-sm break-words">
+                  {trace.blockReason || "No reason provided"}
+                </div>
+              </div>
+            </div>
+          )}
+          <TraceLogsList
+            traceId={trace.traceId}
+            toolName={toolName || "unknown"}
+            isExpanded={isExpanded}
+            onLogClick={onLogClick}
+            parentTimestamp={trace.startTimeUnixNano}
+          />
+        </>
       )}
 
       {editDialogProps && (

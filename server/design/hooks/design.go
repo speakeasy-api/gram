@@ -48,6 +48,7 @@ var ClaudeHookResult = Type("ClaudeHookResult", func() {
 	Attribute("continue", Boolean, "Whether to continue (SessionStart only)")
 	Attribute("stopReason", String, "Reason if blocked (SessionStart only)")
 	Attribute("suppressOutput", Boolean, "Whether to suppress the hook's output")
+	Attribute("systemMessage", String, "Warning message shown to the user in the terminal")
 	Attribute("hookSpecificOutput", Any, "Hook-specific output as JSON object")
 })
 

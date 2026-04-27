@@ -281,6 +281,8 @@ type HookTraceSummary struct {
 	LogCount uint64
 	// Hook execution status
 	HookStatus *string
+	// Reason set when hook_status is 'blocked' (e.g. shadow-MCP guard rejection)
+	BlockReason *string
 	// Gram URN associated with this hook trace
 	GramUrn string
 	// Tool name (from materialized column)
