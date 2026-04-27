@@ -17,7 +17,7 @@
     "directory": "ts-framework/functions"
   },
   "bin": {
-    "gf": "./src/bin/cli.ts"
+    "gf": "./dist/bin/cli.js"
   },
   "scripts": {
     "test": "vitest run",
