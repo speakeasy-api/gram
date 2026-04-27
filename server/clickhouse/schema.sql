@@ -116,7 +116,8 @@ CREATE TABLE IF NOT EXISTS trace_summaries (
     -- signal failure by setting the gram.hook.error attribute and success by
     -- setting gen_ai.tool.call.result.
     has_result SimpleAggregateFunction(max, UInt8),
-    has_error SimpleAggregateFunction(max, UInt8)
+    has_error SimpleAggregateFunction(max, UInt8),
+    has_blocked SimpleAggregateFunction(max, UInt8)
 ) ENGINE = AggregatingMergeTree
 ORDER BY (gram_project_id, trace_id)
 TTL fromUnixTimestamp64Nano(start_time_unix_nano) + INTERVAL 30 DAY
@@ -143,7 +144,8 @@ SELECT
         toString(attributes.http.response.status_code) != ''
     ) AS http_status_code,
     max(if(toString(attributes.gen_ai.tool.call.result) != '', 1, 0)) AS has_result,
-    max(if(toString(attributes.gram.hook.error) != '', 1, 0)) AS has_error
+    max(if(toString(attributes.gram.hook.error) != '', 1, 0)) AS has_error,
+    max(if(toString(attributes.gram.hook.blocked) != '', 1, 0)) AS has_blocked
 FROM telemetry_logs
 WHERE trace_id IS NOT NULL AND trace_id != '' AND NOT startsWith(telemetry_logs.gram_urn, 'urn:uuid:')
 GROUP BY trace_id, gram_project_id;
