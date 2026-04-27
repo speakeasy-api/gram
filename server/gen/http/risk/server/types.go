@@ -24,6 +24,8 @@ type CreateRiskPolicyRequestBody struct {
 	PresidioEntities []string `form:"presidio_entities,omitempty" json:"presidio_entities,omitempty" xml:"presidio_entities,omitempty"`
 	// Whether the policy is active.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
+	// Policy action: flag, block, or redact.
+	Action *string `form:"action,omitempty" json:"action,omitempty" xml:"action,omitempty"`
 }
 
 // UpdateRiskPolicyRequestBody is the type of the "risk" service
@@ -39,6 +41,8 @@ type UpdateRiskPolicyRequestBody struct {
 	PresidioEntities []string `form:"presidio_entities,omitempty" json:"presidio_entities,omitempty" xml:"presidio_entities,omitempty"`
 	// Whether the policy is active.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
+	// Policy action: flag, block, or redact.
+	Action *string `form:"action,omitempty" json:"action,omitempty" xml:"action,omitempty"`
 }
 
 // TriggerRiskAnalysisRequestBody is the type of the "risk" service
@@ -63,6 +67,9 @@ type CreateRiskPolicyResponseBody struct {
 	PresidioEntities []string `form:"presidio_entities,omitempty" json:"presidio_entities,omitempty" xml:"presidio_entities,omitempty"`
 	// Whether the policy is active.
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
+	// Policy action: flag (log only), block (deny in real-time), or redact
+	// (replace sensitive content).
+	Action string `form:"action" json:"action" xml:"action"`
 	// Policy version, incremented on each update.
 	Version int64 `form:"version" json:"version" xml:"version"`
 	// When the policy was created.
@@ -97,6 +104,9 @@ type GetRiskPolicyResponseBody struct {
 	PresidioEntities []string `form:"presidio_entities,omitempty" json:"presidio_entities,omitempty" xml:"presidio_entities,omitempty"`
 	// Whether the policy is active.
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
+	// Policy action: flag (log only), block (deny in real-time), or redact
+	// (replace sensitive content).
+	Action string `form:"action" json:"action" xml:"action"`
 	// Policy version, incremented on each update.
 	Version int64 `form:"version" json:"version" xml:"version"`
 	// When the policy was created.
@@ -124,6 +134,9 @@ type UpdateRiskPolicyResponseBody struct {
 	PresidioEntities []string `form:"presidio_entities,omitempty" json:"presidio_entities,omitempty" xml:"presidio_entities,omitempty"`
 	// Whether the policy is active.
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
+	// Policy action: flag (log only), block (deny in real-time), or redact
+	// (replace sensitive content).
+	Action string `form:"action" json:"action" xml:"action"`
 	// Policy version, incremented on each update.
 	Version int64 `form:"version" json:"version" xml:"version"`
 	// When the policy was created.
@@ -1839,6 +1852,9 @@ type RiskPolicyResponseBody struct {
 	PresidioEntities []string `form:"presidio_entities,omitempty" json:"presidio_entities,omitempty" xml:"presidio_entities,omitempty"`
 	// Whether the policy is active.
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
+	// Policy action: flag (log only), block (deny in real-time), or redact
+	// (replace sensitive content).
+	Action string `form:"action" json:"action" xml:"action"`
 	// Policy version, incremented on each update.
 	Version int64 `form:"version" json:"version" xml:"version"`
 	// When the policy was created.
@@ -1909,6 +1925,7 @@ func NewCreateRiskPolicyResponseBody(res *types.RiskPolicy) *CreateRiskPolicyRes
 		ProjectID:       res.ProjectID,
 		Name:            res.Name,
 		Enabled:         res.Enabled,
+		Action:          res.Action,
 		Version:         res.Version,
 		CreatedAt:       res.CreatedAt,
 		UpdatedAt:       res.UpdatedAt,
@@ -1959,6 +1976,7 @@ func NewGetRiskPolicyResponseBody(res *types.RiskPolicy) *GetRiskPolicyResponseB
 		ProjectID:       res.ProjectID,
 		Name:            res.Name,
 		Enabled:         res.Enabled,
+		Action:          res.Action,
 		Version:         res.Version,
 		CreatedAt:       res.CreatedAt,
 		UpdatedAt:       res.UpdatedAt,
@@ -1990,6 +2008,7 @@ func NewUpdateRiskPolicyResponseBody(res *types.RiskPolicy) *UpdateRiskPolicyRes
 		ProjectID:       res.ProjectID,
 		Name:            res.Name,
 		Enabled:         res.Enabled,
+		Action:          res.Action,
 		Version:         res.Version,
 		CreatedAt:       res.CreatedAt,
 		UpdatedAt:       res.UpdatedAt,
@@ -3360,6 +3379,9 @@ func NewCreateRiskPolicyPayload(body *CreateRiskPolicyRequestBody, apikeyToken *
 		Name:    *body.Name,
 		Enabled: body.Enabled,
 	}
+	if body.Action != nil {
+		v.Action = *body.Action
+	}
 	if body.Sources != nil {
 		v.Sources = make([]string, len(body.Sources))
 		for i, val := range body.Sources {
@@ -3371,6 +3393,9 @@ func NewCreateRiskPolicyPayload(body *CreateRiskPolicyRequestBody, apikeyToken *
 		for i, val := range body.PresidioEntities {
 			v.PresidioEntities[i] = val
 		}
+	}
+	if body.Action == nil {
+		v.Action = "flag"
 	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
@@ -3408,6 +3433,7 @@ func NewUpdateRiskPolicyPayload(body *UpdateRiskPolicyRequestBody, apikeyToken *
 		ID:      *body.ID,
 		Name:    *body.Name,
 		Enabled: body.Enabled,
+		Action:  body.Action,
 	}
 	if body.Sources != nil {
 		v.Sources = make([]string, len(body.Sources))
@@ -3499,6 +3525,11 @@ func ValidateCreateRiskPolicyRequestBody(body *CreateRiskPolicyRequestBody) (err
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
+	if body.Action != nil {
+		if !(*body.Action == "flag" || *body.Action == "block" || *body.Action == "redact") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "block", "redact"}))
+		}
+	}
 	return
 }
 
@@ -3513,6 +3544,11 @@ func ValidateUpdateRiskPolicyRequestBody(body *UpdateRiskPolicyRequestBody) (err
 	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.Action != nil {
+		if !(*body.Action == "flag" || *body.Action == "block" || *body.Action == "redact") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "block", "redact"}))
+		}
 	}
 	return
 }

@@ -2146,6 +2146,7 @@ func marshalTypesRiskPolicyToRiskPolicyResponseBody(v *types.RiskPolicy) *RiskPo
 		ProjectID:       v.ProjectID,
 		Name:            v.Name,
 		Enabled:         v.Enabled,
+		Action:          v.Action,
 		Version:         v.Version,
 		CreatedAt:       v.CreatedAt,
 		UpdatedAt:       v.UpdatedAt,

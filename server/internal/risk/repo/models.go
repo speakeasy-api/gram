@@ -17,6 +17,7 @@ type RiskPolicy struct {
 	Name             string
 	Sources          []string
 	PresidioEntities []string
+	Action           string
 	Version          int64
 	CreatedAt        pgtype.Timestamptz
 	UpdatedAt        pgtype.Timestamptz

@@ -75,6 +75,14 @@ The main frontend application lives in `client/dashboard/` (not `client/` direct
 
 - **"migration file X was added out of order" error**: Rename the migration file to have a timestamp after the latest existing migration (e.g., `20260129_foo.sql` → `20260203000001_foo.sql`), then run `mise db:hash` to regenerate `atlas.sum`.
 
+### Migration PR Policy
+
+- Database changes to `schema.sql` or `migrations/` on any working branch should always be copied out into a standalone PR starting with `mig: ...`. This allows migrations to be reviewed and merged independently of feature code.
+
+### Schema Conventions
+
+- Avoid `DEFAULT` values and `CHECK CONSTRAINT` in `schema.sql` and migration files. Defaults and validation are easier to control in Go code and won't require additional migrations to change later.
+
 ## Mise CLI
 
 The `mise` tasks listed in this guide should be used where building, testing or linting is needed. The commands can take arguments directly and don't need a `--` separator. For example, to run the server in development mode, use:

@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -40,6 +41,7 @@ type Service struct {
 	repo               *repo.Queries
 	productFeatures    ProductFeaturesClient
 	chatTitleGenerator ChatTitleGenerator
+	riskScanner        risk.RiskScanner
 }
 
 // SessionMetadata contains validated session information from the Logs endpoint
@@ -58,6 +60,7 @@ type HookSpecificOutput struct {
 	AdditionalContext        *string `json:"additionalContext,omitempty"`
 	PermissionDecision       *string `json:"permissionDecision,omitempty"`
 	PermissionDecisionReason *string `json:"permissionDecisionReason,omitempty"`
+	UpdatedInput             any     `json:"updatedInput,omitempty"`
 }
 
 // ProductFeaturesClient checks whether product features are enabled for an org.
@@ -85,6 +88,7 @@ func NewService(
 	authz *authz.Engine,
 	pfClient ProductFeaturesClient,
 	chatTitleGenerator ChatTitleGenerator,
+	riskScanner risk.RiskScanner,
 ) *Service {
 	return &Service{
 		tracer:             tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/hooks"),
@@ -98,6 +102,7 @@ func NewService(
 		repo:               repo.New(db),
 		productFeatures:    pfClient,
 		chatTitleGenerator: chatTitleGenerator,
+		riskScanner:        riskScanner,
 	}
 }
 

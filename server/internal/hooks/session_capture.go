@@ -71,6 +71,7 @@ func makeHookResult(hookEventName string) *gen.ClaudeHookResult {
 			AdditionalContext:        nil,
 			PermissionDecision:       nil,
 			PermissionDecisionReason: nil,
+			UpdatedInput:             nil,
 		},
 		Continue:       nil,
 		StopReason:     nil,
@@ -79,7 +80,16 @@ func makeHookResult(hookEventName string) *gen.ClaudeHookResult {
 }
 
 // handleUserPromptSubmit captures the user's prompt text as a chat message.
+// When an enforcing risk policy matches, it blocks the prompt.
+// Note: UserPromptSubmit hooks cannot modify prompt text, only block or add context.
+// For both "block" and "redact" policies, we block the prompt entirely.
 func (s *Service) handleUserPromptSubmit(ctx context.Context, payload *gen.ClaudeHookPayload) (*gen.ClaudeHookResult, error) {
+	if s.riskScanner != nil && payload.Prompt != nil && payload.SessionID != nil {
+		scanResult := s.scanClaudeForEnforcement(ctx, payload)
+		if scanResult != nil && (scanResult.Action == "block" || scanResult.Action == "redact") {
+			return nil, fmt.Errorf("blocked by policy %q: %s detected", scanResult.PolicyName, scanResult.Description)
+		}
+	}
 	return makeHookResult(payload.HookEventName), nil
 }
 

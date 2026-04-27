@@ -75,6 +75,8 @@ type CreateRiskPolicyPayload struct {
 	PresidioEntities []string
 	// Whether the policy is active.
 	Enabled *bool
+	// Policy action: flag, block, or redact.
+	Action string
 }
 
 // DeleteRiskPolicyPayload is the payload type of the risk service
@@ -196,6 +198,8 @@ type UpdateRiskPolicyPayload struct {
 	PresidioEntities []string
 	// Whether the policy is active.
 	Enabled *bool
+	// Policy action: flag, block, or redact.
+	Action *string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

@@ -1,4 +1,4 @@
-export type PolicyAction = "flag" | "block";
+export type PolicyAction = "flag" | "block" | "redact";
 
 export type CheckScope =
   | "user_messages"
