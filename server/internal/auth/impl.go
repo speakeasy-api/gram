@@ -239,14 +239,16 @@ func (s *Service) Login(ctx context.Context, payload *gen.LoginPayload) (res *ge
 }
 
 func activeOrganizationFromState(payload *gen.CallbackPayload, organizations []sessions.Organization) (sessions.Organization, bool) {
+	var empty sessions.Organization
+
 	state := decodeStateParam(payload)
 	if state == nil {
-		return sessions.Organization{}, false
+		return empty, false
 	}
 
 	orgSlug := organizationSlugFromDestinationURL(state.FinalDestinationURL)
 	if orgSlug == "" {
-		return sessions.Organization{}, false
+		return empty, false
 	}
 
 	for _, org := range organizations {
@@ -255,7 +257,7 @@ func activeOrganizationFromState(payload *gen.CallbackPayload, organizations []s
 		}
 	}
 
-	return sessions.Organization{}, false
+	return empty, false
 }
 
 func organizationSlugFromDestinationURL(destinationURL string) string {

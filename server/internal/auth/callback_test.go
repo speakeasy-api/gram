@@ -119,6 +119,8 @@ func TestService_Callback(t *testing.T) {
 		t.Parallel()
 
 		userInfo := adminMockUserInfo()
+		userInfo.UserID = "admin-override-user-123"
+		userInfo.Email = "admin-override@speakeasyapi.dev"
 		userInfo.Organizations = append(userInfo.Organizations, MockOrganizationEntry{
 			ID:                 "customer-org-123",
 			Name:               "Customer Organization",
