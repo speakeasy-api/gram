@@ -2,6 +2,7 @@ package guardian_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -9,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/speakeasy-api/gram/server/internal/dns"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/require"
@@ -490,4 +492,120 @@ func TestPolicy_IPv6VariationsBlocking(t *testing.T) {
 			require.ErrorIs(t, err, guardian.ErrBlockedIP, "Expected ErrBlockedIP for %s", tt.address)
 		})
 	}
+}
+
+func TestPolicy_ValidateHost_EmptyHost(t *testing.T) {
+	t.Parallel()
+	policy := guardian.NewDefaultPolicy(testenv.NewTracerProvider(t))
+	err := policy.ValidateHost(t.Context(), "")
+	require.Error(t, err)
+	require.ErrorIs(t, err, guardian.ErrBadHost)
+}
+
+func TestPolicy_ValidateHost_BlockedIPv4Literal(t *testing.T) {
+	t.Parallel()
+	policy := guardian.NewDefaultPolicy(testenv.NewTracerProvider(t))
+	for _, host := range []string{"127.0.0.1", "10.0.0.1", "172.16.0.1", "192.168.1.1", "169.254.169.254"} {
+		err := policy.ValidateHost(t.Context(), host)
+		require.Error(t, err, "expected %s to be blocked", host)
+		require.ErrorIs(t, err, guardian.ErrBlockedIP, "expected ErrBlockedIP for %s", host)
+	}
+}
+
+func TestPolicy_ValidateHost_BlockedIPv6Literal(t *testing.T) {
+	t.Parallel()
+	policy := guardian.NewDefaultPolicy(testenv.NewTracerProvider(t))
+	for _, host := range []string{"::1", "fe80::1", "fc00::1"} {
+		err := policy.ValidateHost(t.Context(), host)
+		require.Error(t, err, "expected %s to be blocked", host)
+		require.ErrorIs(t, err, guardian.ErrBlockedIP, "expected ErrBlockedIP for %s", host)
+	}
+}
+
+func TestPolicy_ValidateHost_AllowedPublicIPv4Literal(t *testing.T) {
+	t.Parallel()
+	policy := guardian.NewDefaultPolicy(testenv.NewTracerProvider(t))
+	err := policy.ValidateHost(t.Context(), "8.8.8.8")
+	require.NoError(t, err)
+}
+
+func TestPolicy_ValidateHost_AllowedPublicIPv6Literal(t *testing.T) {
+	t.Parallel()
+	policy := guardian.NewDefaultPolicy(testenv.NewTracerProvider(t))
+	err := policy.ValidateHost(t.Context(), "2606:4700:4700::1111")
+	require.NoError(t, err)
+}
+
+func TestPolicy_ValidateHost_HostnameResolvesToBlockedIP(t *testing.T) {
+	t.Parallel()
+	mock := dns.NewMockResolver(dns.MockResolverConfig{
+		LookupIPFunc: func(ctx context.Context, network, host string) ([]net.IP, error) {
+			return []net.IP{net.ParseIP("10.0.0.1")}, nil
+		},
+	})
+	policy := guardian.NewDefaultPolicy(testenv.NewTracerProvider(t)).WithResolver(mock)
+	err := policy.ValidateHost(t.Context(), "internal.example.com")
+	require.Error(t, err)
+	require.ErrorIs(t, err, guardian.ErrBlockedIP)
+}
+
+func TestPolicy_ValidateHost_HostnameResolvesToAllowedIP(t *testing.T) {
+	t.Parallel()
+	mock := dns.NewMockResolver(dns.MockResolverConfig{
+		LookupIPFunc: func(ctx context.Context, network, host string) ([]net.IP, error) {
+			return []net.IP{net.ParseIP("1.2.3.4")}, nil
+		},
+	})
+	policy := guardian.NewDefaultPolicy(testenv.NewTracerProvider(t)).WithResolver(mock)
+	err := policy.ValidateHost(t.Context(), "example.com")
+	require.NoError(t, err)
+}
+
+func TestPolicy_ValidateHost_HostnameResolvesToMixedAddressesWithOneBlocked(t *testing.T) {
+	t.Parallel()
+	mock := dns.NewMockResolver(dns.MockResolverConfig{
+		LookupIPFunc: func(ctx context.Context, network, host string) ([]net.IP, error) {
+			return []net.IP{net.ParseIP("1.2.3.4"), net.ParseIP("127.0.0.1")}, nil
+		},
+	})
+	policy := guardian.NewDefaultPolicy(testenv.NewTracerProvider(t)).WithResolver(mock)
+	err := policy.ValidateHost(t.Context(), "split.example.com")
+	require.Error(t, err)
+	require.ErrorIs(t, err, guardian.ErrBlockedIP)
+}
+
+func TestPolicy_ValidateHost_HostnameResolutionError(t *testing.T) {
+	t.Parallel()
+	resolveErr := errors.New("nxdomain")
+	mock := dns.NewMockResolver(dns.MockResolverConfig{
+		LookupIPFunc: func(ctx context.Context, network, host string) ([]net.IP, error) {
+			return nil, resolveErr
+		},
+	})
+	policy := guardian.NewDefaultPolicy(testenv.NewTracerProvider(t)).WithResolver(mock)
+	err := policy.ValidateHost(t.Context(), "broken.example.com")
+	require.Error(t, err)
+	require.ErrorIs(t, err, guardian.ErrBadHost)
+	require.ErrorIs(t, err, resolveErr)
+}
+
+func TestPolicy_ValidateHost_HostnameResolvesToNoAddresses(t *testing.T) {
+	t.Parallel()
+	mock := dns.NewMockResolver(dns.MockResolverConfig{
+		LookupIPFunc: func(ctx context.Context, network, host string) ([]net.IP, error) {
+			return nil, nil
+		},
+	})
+	policy := guardian.NewDefaultPolicy(testenv.NewTracerProvider(t)).WithResolver(mock)
+	err := policy.ValidateHost(t.Context(), "empty.example.com")
+	require.Error(t, err)
+	require.ErrorIs(t, err, guardian.ErrBadHost)
+}
+
+func TestPolicy_ValidateHost_UnsafePolicyPermitsBlockedLiteral(t *testing.T) {
+	t.Parallel()
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
+	require.NoError(t, err)
+	require.NoError(t, policy.ValidateHost(t.Context(), "127.0.0.1"))
+	require.NoError(t, policy.ValidateHost(t.Context(), "10.0.0.1"))
 }

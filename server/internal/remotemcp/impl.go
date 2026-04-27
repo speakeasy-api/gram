@@ -25,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -40,12 +41,13 @@ type Service struct {
 	auth    *auth.Auth
 	authz   *authz.Engine
 	headers *Headers
+	policy  *guardian.Policy
 }
 
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, enc *encryption.Client, authzEngine *authz.Engine) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, enc *encryption.Client, authzEngine *authz.Engine, policy *guardian.Policy) *Service {
 	logger = logger.With(attr.SlogComponent("remotemcp"))
 
 	return &Service{
@@ -55,6 +57,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		auth:    auth.New(logger, db, sessions, authzEngine),
 		authz:   authzEngine,
 		headers: NewHeaders(logger, db, enc),
+		policy:  policy,
 	}
 }
 
@@ -80,7 +83,7 @@ func (s *Service) CreateServer(ctx context.Context, payload *gen.CreateServerPay
 
 	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
 
-	if err := validateURL(payload.URL); err != nil {
+	if err := validateURL(ctx, s.policy, payload.URL); err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid url").Log(ctx, logger)
 	}
 
@@ -250,7 +253,7 @@ func (s *Service) UpdateServer(ctx context.Context, payload *gen.UpdateServerPay
 	}
 
 	if payload.URL != nil {
-		if err := validateURL(*payload.URL); err != nil {
+		if err := validateURL(ctx, s.policy, *payload.URL); err != nil {
 			return nil, oops.E(oops.CodeBadRequest, err, "invalid url").Log(ctx, logger)
 		}
 	}
@@ -467,8 +470,9 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 	return s.auth.Authorize(ctx, key, schema)
 }
 
-// validateURL checks that the given URL string is a valid absolute HTTP(S) URL.
-func validateURL(rawURL string) error {
+// validateURL checks that the given URL string is a valid absolute HTTP(S) URL
+// whose host is permitted by the supplied [guardian.Policy].
+func validateURL(ctx context.Context, policy *guardian.Policy, rawURL string) error {
 	u, err := url.Parse(rawURL)
 	if err != nil {
 		return fmt.Errorf("parse url: %w", err)
@@ -480,6 +484,10 @@ func validateURL(rawURL string) error {
 
 	if u.Host == "" {
 		return fmt.Errorf("url must include a host")
+	}
+
+	if err := policy.ValidateHost(ctx, u.Hostname()); err != nil {
+		return fmt.Errorf("validate host: %w", err)
 	}
 
 	return nil
