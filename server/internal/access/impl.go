@@ -519,6 +519,9 @@ func (s *Service) DeleteRole(ctx context.Context, payload *gen.DeleteRolePayload
 			continue
 		}
 		if _, err := s.roles.UpdateMemberRole(ctx, m.ID, authz.SystemRoleMember); err != nil {
+			if reassigned {
+				s.authz.InvalidateAllRoleCaches(ctx, ac.ActiveOrganizationID)
+			}
 			return oops.E(oops.CodeUnexpected, err, "reassign member to default role").Log(ctx, logger)
 		}
 		reassigned = true

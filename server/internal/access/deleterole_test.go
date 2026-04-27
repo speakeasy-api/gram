@@ -102,6 +102,43 @@ func TestService_DeleteRole_ReassignFailureHaltsDelete(t *testing.T) {
 	require.Len(t, grants, 1)
 }
 
+func TestService_DeleteRole_PartialReassignFailureStopsLoop(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+
+	ti.roles.On("ListRoles", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Role{
+		mockRole("role_custom", "Custom Builder", "custom-builder", "Old description"),
+	}, nil).Once()
+	// Iteration order over the slice is deterministic, so seed an explicit
+	// success-then-failure pair to exercise the partial-failure cache flush.
+	ti.roles.On("ListMembers", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Member{
+		mockMember(mockidp.MockOrgID, "membership_1", "user_1", "custom-builder"),
+		mockMember(mockidp.MockOrgID, "membership_2", "user_2", "custom-builder"),
+	}, nil).Once()
+	ti.roles.On("UpdateMemberRole", mock.Anything, "membership_1", authz.SystemRoleMember).Return(&thirdpartyworkos.Member{
+		ID:             "membership_1",
+		UserID:         "user_1",
+		OrganizationID: mockidp.MockOrgID,
+		RoleSlug:       authz.SystemRoleMember,
+		CreatedAt:      mockMembershipTimestamp,
+	}, nil).Once()
+	ti.roles.On("UpdateMemberRole", mock.Anything, "membership_2", authz.SystemRoleMember).Return((*thirdpartyworkos.Member)(nil), errors.New("workos unavailable")).Once()
+	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), authz.ScopeProjectRead, "project-1")
+
+	err := ti.service.DeleteRole(ctx, &gen.DeleteRolePayload{ID: "role_custom"})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "reassign member to default role")
+
+	// The mock's AssertExpectations (registered in newMockRoleProvider) verifies
+	// that DeleteRole was never called and the loop stopped at the first failure.
+	grants := listPrincipalGrants(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"))
+	require.Len(t, grants, 1)
+}
+
 func TestService_DeleteRole_NotFound(t *testing.T) {
 	t.Parallel()
 
