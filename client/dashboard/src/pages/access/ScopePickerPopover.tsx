@@ -198,7 +198,11 @@ export function ScopePickerPopover({
   const isResourceSelected = (id: string) =>
     selectors?.some((s) => s.resourceId === id) ?? false;
 
-  const scopeOptions = (
+  const renderScopeOptions = ({
+    includeCollection,
+  }: {
+    includeCollection: boolean;
+  }) => (
     <div className="shrink-0 pb-1.5">
       <ScopeOption
         label={resourceType === "project" ? "All projects" : "All servers"}
@@ -246,7 +250,7 @@ export function ScopePickerPopover({
           }}
         />
       )}
-      {isMcpConnect && (
+      {isMcpConnect && includeCollection && (
         <ScopeOption
           label="Specific collections"
           selected={!!collectionMode}
@@ -417,7 +421,7 @@ export function ScopePickerPopover({
             transitionTimingFunction: "cubic-bezier(0.32, 0.72, 0, 1)",
           }}
         >
-          {scopeOptions}
+          {renderScopeOptions({ includeCollection: true })}
           {resourceList}
           {customMode && (
             <div className="-mx-1.5 -mb-1.5 flex max-h-[min(420px,60vh)] flex-col">
@@ -466,7 +470,7 @@ export function ScopePickerPopover({
             </button>
           </div>
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-1.5">
-            {scopeOptions}
+            {renderScopeOptions({ includeCollection: false })}
             {customTabs()}
           </div>
         </Dialog.Content>
