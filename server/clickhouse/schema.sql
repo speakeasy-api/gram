@@ -53,6 +53,7 @@ CREATE TABLE IF NOT EXISTS telemetry_logs (
     toolset_slug String MATERIALIZED toString(attributes.gram.toolset.slug) COMMENT 'Toolset slug (materialized from attributes.gram.toolset.slug).',
     user_email String MATERIALIZED toString(attributes.user.email) COMMENT 'User email (materialized from attributes.user.email).',
     hook_source String MATERIALIZED toString(attributes.gram.hook.source) COMMENT 'Hook source (materialized from attributes.gram.hook.source).',
+    hook_block_reason String MATERIALIZED toString(attributes.gram.hook.block_reason) COMMENT 'Hook block reason set when the Gram hook denied a tool call (materialized from attributes.gram.hook.block_reason).',
     skill_name String MATERIALIZED if(toString(attributes.gram.tool.name) = 'Skill', JSONExtractString(toString(attributes.gen_ai.tool.call.arguments), 'skill'), '') COMMENT 'Skill name extracted from tool arguments when tool_name is Skill (materialized).'
 ) ENGINE = MergeTree
 PARTITION BY toYYYYMMDD(fromUnixTimestamp64Nano(time_unix_nano))
@@ -85,6 +86,7 @@ CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_event_source ON telemetry_logs
 CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_toolset_slug ON telemetry_logs (toolset_slug) TYPE bloom_filter(0.01) GRANULARITY 1;
 CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_user_email ON telemetry_logs (user_email) TYPE bloom_filter(0.01) GRANULARITY 1;
 CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_hook_source ON telemetry_logs (hook_source) TYPE bloom_filter(0.01) GRANULARITY 1;
+CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_hook_block_reason ON telemetry_logs (hook_block_reason) TYPE bloom_filter(0.01) GRANULARITY 1;
 CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_skill_name ON telemetry_logs (skill_name) TYPE bloom_filter(0.01) GRANULARITY 1;
 
 CREATE TABLE IF NOT EXISTS trace_summaries (
@@ -112,11 +114,19 @@ CREATE TABLE IF NOT EXISTS trace_summaries (
     -- Trace status signals (0 = false, 1 = true). Using max() ensures once we
     -- see a 1, it stays 1 across merges. Status is derived at query time as:
     -- has_error → failure, has_result → success, otherwise pending. This keeps
-    -- the MV agnostic to specific hook event names: any future integration can
+    -- the MV agnostic to specific hook event names: any future integration canhas_error
     -- signal failure by setting the gram.hook.error attribute and success by
     -- setting gen_ai.tool.call.result.
     has_result SimpleAggregateFunction(max, UInt8),
-    has_error SimpleAggregateFunction(max, UInt8)
+    has_error SimpleAggregateFunction(max, UInt8),
+    -- Set when the Gram hook denied the tool call (e.g. shadow-MCP guard).
+    -- Once we see a 1, it stays 1 across merges. Status is derived at query
+    -- time as: has_block → blocked, has_error → failure, has_result → success,
+    -- otherwise pending.
+    has_block SimpleAggregateFunction(max, UInt8),
+    -- The first non-empty block reason observed, surfaced in dashboards next
+    -- to the blocked status.
+    block_reason SimpleAggregateFunction(any, String)
 ) ENGINE = AggregatingMergeTree
 ORDER BY (gram_project_id, trace_id)
 TTL fromUnixTimestamp64Nano(start_time_unix_nano) + INTERVAL 30 DAY
@@ -143,7 +153,9 @@ SELECT
         toString(attributes.http.response.status_code) != ''
     ) AS http_status_code,
     max(if(toString(attributes.gen_ai.tool.call.result) != '', 1, 0)) AS has_result,
-    max(if(toString(attributes.gram.hook.error) != '', 1, 0)) AS has_error
+    max(if(toString(attributes.gram.hook.error) != '', 1, 0)) AS has_error,
+    max(if(toString(attributes.gram.hook.block_reason) != '', 1, 0)) AS has_block,
+    anyIf(toString(attributes.gram.hook.block_reason), toString(attributes.gram.hook.block_reason) != '') AS block_reason
 FROM telemetry_logs
 WHERE trace_id IS NOT NULL AND trace_id != '' AND NOT startsWith(telemetry_logs.gram_urn, 'urn:uuid:')
 GROUP BY trace_id, gram_project_id;
