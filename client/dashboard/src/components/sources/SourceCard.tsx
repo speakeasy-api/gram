@@ -17,6 +17,7 @@ import { ArrowRight, CircleAlertIcon, FileCode, Network } from "lucide-react";
 
 export type NamedAsset =
   | (Asset & {
+      sourceId: string;
       deploymentAssetId: string;
       name: string;
       slug: string;
@@ -24,6 +25,7 @@ export type NamedAsset =
     })
   | {
       id: string;
+      sourceId: string;
       deploymentAssetId: string;
       name: string;
       slug: string;

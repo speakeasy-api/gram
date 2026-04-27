@@ -1378,6 +1378,9 @@ func environmentVariablesForTools(ctx context.Context, tx DBTX, toolsetID uuid.U
 	securityVarsMap := make(map[string]*types.SecurityVariable)
 	for _, entry := range securityEntries {
 		key := entry.Key
+		if entry.Openapiv3DocumentID.Valid {
+			key = fmt.Sprintf("%s/%s", entry.Openapiv3DocumentID.UUID.String(), entry.Key)
+		}
 		if _, exists := securityVarsMap[key]; !exists {
 			// Look up display name from MCP metadata
 			// Display names are keyed by env var name, so we check each env var

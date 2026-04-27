@@ -106,6 +106,7 @@ export default function Sources() {
             }
             return {
               ...asset,
+              sourceId: deploymentAsset.id,
               deploymentAssetId: deploymentAsset.id,
               name: deploymentAsset.name,
               slug: deploymentAsset.slug,
@@ -127,6 +128,7 @@ export default function Sources() {
             }
             return {
               ...asset,
+              sourceId: deploymentAsset.id,
               deploymentAssetId: deploymentAsset.id,
               name: deploymentAsset.name,
               slug: deploymentAsset.slug,
@@ -140,6 +142,7 @@ export default function Sources() {
     const externalMcpSources = (deployment.externalMcps ?? []).map(
       (externalMcp) => ({
         id: externalMcp.id,
+        sourceId: externalMcp.slug,
         deploymentAssetId: externalMcp.id,
         name: externalMcp.name,
         slug: externalMcp.slug,
