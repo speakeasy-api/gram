@@ -1,5 +1,11 @@
 # @gram-ai/functions
 
+## 0.15.1
+
+### Patch Changes
+
+- 09bf8d5: Restore corrrect bin path in package.json
+
 ## 0.15.0
 
 ### Minor Changes
