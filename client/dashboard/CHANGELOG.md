@@ -1,5 +1,16 @@
 # dashboard
 
+## 0.44.0
+
+### Minor Changes
+
+- 58b4498: Support tool-level RBAC for MCP servers. Grants now use typed selectors with `resource_kind`, `resource_id`, `disposition`, and `tool` fields instead of untyped string maps. The dashboard scope picker stores toolset UUIDs (not slugs) as resource identifiers, fixing a bug where grants created via the UI never matched backend authorization checks. Public MCP servers correctly skip per-tool RBAC enforcement.
+
+### Patch Changes
+
+- 9ff743e: fix(dashboard): factor impersonation banner into page height calc so the bottom of the page stays reachable when impersonating an organization
+- 5efc8d4: dashboard navigation polish: collapse both project- and org-level sidebars to an icon rail, fade-and-slide nav labels on collapse, show a click-loading spinner on nav items, reorder Chat Elements below Plugins, and unify the MCP and Playground empty states to match the Sources card pattern
+
 ## 0.43.1
 
 ### Patch Changes
