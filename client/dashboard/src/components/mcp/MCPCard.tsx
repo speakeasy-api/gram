@@ -166,7 +166,7 @@ export function MCPCard({ toolset }: { toolset: ToolsetEntry }) {
       {/* Footer row with status indicator and open link */}
       <div className="mt-auto flex items-center justify-between gap-2 pt-2">
         {statusIndicator}
-        {oauthStatus == "required-unconfigured" ? (
+        {oauthStatus === "required-unconfigured" ? (
           <div className="text-warning flex items-center gap-1 text-sm">
             <span>Set up</span>
             <ArrowRight className="h-3.5 w-3.5" />
