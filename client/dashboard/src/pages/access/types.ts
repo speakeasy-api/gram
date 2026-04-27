@@ -18,8 +18,8 @@ export type AnnotationHint =
   | "idempotentHint"
   | "openWorldHint";
 
-/** The three tool-selection tabs in custom mode. */
-export type CustomTab = "select" | "auto-groups" | "collection";
+/** The tool-selection tabs in custom mode. */
+export type CustomTab = "select" | "auto-groups";
 
 /** A single grant within a role: a scope + optional selector constraints. */
 export interface RoleGrant {

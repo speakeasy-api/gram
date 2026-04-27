@@ -96,6 +96,10 @@ export function CreateRoleDialog({
   const [initialized, setInitialized] = useState(false);
   // Track which MCP scopes have "Custom" mode selected (UI-only state)
   const [customScopes, setCustomScopes] = useState<Set<string>>(new Set());
+  // Track which MCP scopes have "Specific collections" mode selected (UI-only state)
+  const [collectionScopes, setCollectionScopes] = useState<Set<string>>(
+    new Set(),
+  );
 
   const queryClient = useQueryClient();
   const { data: membersData } = useMembers();
@@ -305,6 +309,7 @@ export function CreateRoleDialog({
     setShowMembers(false);
     setShowPermissions(true);
     setCustomScopes(new Set());
+    setCollectionScopes(new Set());
     setInitialized(false);
     onOpenChange(false);
   };
@@ -487,6 +492,20 @@ export function CreateRoleDialog({
                                         setCustomScopes((prev) => {
                                           const next = new Set(prev);
                                           if (custom) {
+                                            next.add(scopeDef.slug);
+                                          } else {
+                                            next.delete(scopeDef.slug);
+                                          }
+                                          return next;
+                                        })
+                                      }
+                                      collectionMode={collectionScopes.has(
+                                        scopeDef.slug,
+                                      )}
+                                      onCollectionModeChange={(mode) =>
+                                        setCollectionScopes((prev) => {
+                                          const next = new Set(prev);
+                                          if (mode) {
                                             next.add(scopeDef.slug);
                                           } else {
                                             next.delete(scopeDef.slug);
