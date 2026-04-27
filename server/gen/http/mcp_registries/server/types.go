@@ -861,6 +861,41 @@ type ExternalMCPRemoteResponseBody struct {
 	URL string `form:"url" json:"url" xml:"url"`
 	// Transport type (sse or streamable-http)
 	TransportType string `form:"transport_type" json:"transport_type" xml:"transport_type"`
+	// HTTP headers the MCP client should collect and send when connecting to this
+	// remote
+	Headers []*ExternalMCPRemoteHeaderResponseBody `form:"headers,omitempty" json:"headers,omitempty" xml:"headers,omitempty"`
+	// URL template variables for this remote endpoint
+	Variables map[string]*ExternalMCPRemoteVariableResponseBody `form:"variables,omitempty" json:"variables,omitempty" xml:"variables,omitempty"`
+}
+
+// ExternalMCPRemoteHeaderResponseBody is used to define fields on response
+// body types.
+type ExternalMCPRemoteHeaderResponseBody struct {
+	// Header name
+	Name string `form:"name" json:"name" xml:"name"`
+	// Description of the header
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// Whether this header value should be treated as secret
+	IsSecret *bool `form:"is_secret,omitempty" json:"is_secret,omitempty" xml:"is_secret,omitempty"`
+	// Whether this header is required
+	IsRequired *bool `form:"is_required,omitempty" json:"is_required,omitempty" xml:"is_required,omitempty"`
+	// Placeholder value to show when collecting this header
+	Placeholder *string `form:"placeholder,omitempty" json:"placeholder,omitempty" xml:"placeholder,omitempty"`
+}
+
+// ExternalMCPRemoteVariableResponseBody is used to define fields on response
+// body types.
+type ExternalMCPRemoteVariableResponseBody struct {
+	// Description of the variable
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// Whether this variable is required
+	IsRequired *bool `form:"is_required,omitempty" json:"is_required,omitempty" xml:"is_required,omitempty"`
+	// Whether this variable value should be treated as secret
+	IsSecret *bool `form:"is_secret,omitempty" json:"is_secret,omitempty" xml:"is_secret,omitempty"`
+	// Default value for the variable
+	Default *string `form:"default,omitempty" json:"default,omitempty" xml:"default,omitempty"`
+	// Allowed values for the variable
+	Choices []string `form:"choices,omitempty" json:"choices,omitempty" xml:"choices,omitempty"`
 }
 
 // NewListRegistriesResponseBody builds the HTTP response body from the result

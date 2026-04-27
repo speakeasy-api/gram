@@ -7,6 +7,7 @@ import { Combobox } from "@/components/ui/combobox";
 import { Type } from "@/components/ui/type";
 import { useOrganization } from "@/contexts/Auth";
 import {
+  AlertTriangle,
   Calendar,
   Download,
   FolderOpen,
@@ -39,6 +40,8 @@ import { Pencil } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AddServerDialog } from "@/pages/catalog/AddServerDialog";
 import type { PulseMCPServer as CatalogServer } from "@/pages/catalog/hooks";
+import { buildCollectionMcpJson, formatMcpJson } from "@/lib/mcp-json";
+import { toast } from "sonner";
 
 export function CollectionDetailRoot() {
   return <Outlet />;
@@ -165,6 +168,16 @@ export default function CollectionDetail() {
     meta: {},
   }));
 
+  const collectionMcpJson = useMemo(
+    () => buildCollectionMcpJson(rawServers),
+    [rawServers],
+  );
+
+  const excludedServersNotice =
+    collectionMcpJson.excludedCount === 1
+      ? "1 server was excluded because it has no active endpoint."
+      : `${collectionMcpJson.excludedCount} servers were excluded because they have no active endpoint.`;
+
   const projectOptions = useMemo(
     () =>
       projects.map((project) => ({
@@ -190,6 +203,26 @@ export default function CollectionDetail() {
   };
 
   const totalTools = servers.reduce((sum, s) => sum + s.toolCount, 0);
+
+  const handleDownloadCollectionMcpJson = () => {
+    if (!collection || collectionMcpJson.includedCount === 0) {
+      return;
+    }
+
+    const blob = new Blob([formatMcpJson(collectionMcpJson.config)], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${collection.slug ?? collection.id}-mcp.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    toast.success("mcp.json generated");
+  };
 
   if (!collection) {
     return (
@@ -264,9 +297,35 @@ export default function CollectionDetail() {
                     </Button.Icon>
                     <Button.Text>Edit</Button.Text>
                   </Button>
+                  <Button
+                    size="sm"
+                    disabled={
+                      isLoading || collectionMcpJson.includedCount === 0
+                    }
+                    onClick={handleDownloadCollectionMcpJson}
+                  >
+                    <Button.Icon>
+                      <Download />
+                    </Button.Icon>
+                    <Button.Text>Generate mcp.json</Button.Text>
+                  </Button>
                 </div>
               </div>
             </div>
+
+            {!isLoading && collectionMcpJson.excludedCount > 0 && (
+              <div className="border-warning-default bg-warning-softest mb-4 flex items-start gap-3 rounded-md border p-3">
+                <AlertTriangle className="text-warning-foreground mt-0.5 h-4 w-4 shrink-0" />
+                <div>
+                  <Type variant="body" className="font-medium">
+                    Some servers were excluded
+                  </Type>
+                  <Type small className="text-warning-foreground">
+                    {excludedServersNotice}
+                  </Type>
+                </div>
+              </div>
+            )}
 
             {/* Edit Form */}
             {editing && (

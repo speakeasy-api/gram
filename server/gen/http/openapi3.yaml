@@ -21892,6 +21892,11 @@ components:
         ExternalMCPRemote:
             type: object
             properties:
+                headers:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ExternalMCPRemoteHeader'
+                    description: HTTP headers the MCP client should collect and send when connecting to this remote
                 transport_type:
                     type: string
                     description: Transport type (sse or streamable-http)
@@ -21902,10 +21907,57 @@ components:
                     type: string
                     description: URL of the remote endpoint
                     format: uri
+                variables:
+                    type: object
+                    description: URL template variables for this remote endpoint
+                    additionalProperties:
+                        $ref: '#/components/schemas/ExternalMCPRemoteVariable'
             description: A remote endpoint for an MCP server
             required:
                 - url
                 - transport_type
+        ExternalMCPRemoteHeader:
+            type: object
+            properties:
+                description:
+                    type: string
+                    description: Description of the header
+                is_required:
+                    type: boolean
+                    description: Whether this header is required
+                is_secret:
+                    type: boolean
+                    description: Whether this header value should be treated as secret
+                name:
+                    type: string
+                    description: Header name
+                placeholder:
+                    type: string
+                    description: Placeholder value to show when collecting this header
+            description: A header requirement for a remote MCP server
+            required:
+                - name
+        ExternalMCPRemoteVariable:
+            type: object
+            properties:
+                choices:
+                    type: array
+                    items:
+                        type: string
+                    description: Allowed values for the variable
+                default:
+                    type: string
+                    description: Default value for the variable
+                description:
+                    type: string
+                    description: Description of the variable
+                is_required:
+                    type: boolean
+                    description: Whether this variable is required
+                is_secret:
+                    type: boolean
+                    description: Whether this variable value should be treated as secret
+            description: A URL template variable for a remote MCP server
         ExternalMCPServer:
             type: object
             properties:
