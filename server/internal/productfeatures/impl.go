@@ -79,7 +79,7 @@ func (s *Service) SetProductFeature(ctx context.Context, payload *gen.SetProduct
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
 		return oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceID: authCtx.ActiveOrganizationID}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Conditions: nil}); err != nil {
 		return fmt.Errorf("require org admin: %w", err)
 	}
 
@@ -127,7 +127,7 @@ func (s *Service) GetProductFeatures(ctx context.Context, payload *gen.GetProduc
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceID: authCtx.ActiveOrganizationID}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Conditions: nil}); err != nil {
 		return nil, fmt.Errorf("require org read: %w", err)
 	}
 

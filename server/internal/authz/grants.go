@@ -191,7 +191,7 @@ func GrantsToScopedGrants(rows []Grant) []*ScopedGrant {
 		scope := string(row.Scope)
 		agg, ok := byScope[scope]
 		if !ok {
-			agg = &scopeAgg{}
+			agg = &scopeAgg{unrestricted: false, selectors: nil}
 			byScope[scope] = agg
 		}
 		resourceID := row.Selector.ResourceID()
