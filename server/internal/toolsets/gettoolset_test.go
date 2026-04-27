@@ -1,12 +1,16 @@
 package toolsets_test
 
 import (
+	"bytes"
+	"io"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	agen "github.com/speakeasy-api/gram/server/gen/assets"
+	dgen "github.com/speakeasy-api/gram/server/gen/deployments"
 	gen "github.com/speakeasy-api/gram/server/gen/toolsets"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
@@ -72,6 +76,108 @@ func TestToolsetsService_GetToolset_Success(t *testing.T) {
 	afterCount, err := audittest.AuditLogCount(ctx, ti.conn)
 	require.NoError(t, err)
 	require.Equal(t, beforeCount, afterCount)
+}
+
+func TestToolsetsService_GetToolset_ScopesHTTPSecurityVariablesToSelectedOpenAPIDocument(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestToolsetsService(t)
+
+	spec := []byte(`openapi: 3.0.3
+info:
+  title: Livestorm
+  version: "1"
+servers:
+  - url: https://api.example.com/v1
+components:
+  securitySchemes:
+    api_key:
+      type: apiKey
+      name: Authorization
+      in: header
+    oauth2:
+      type: http
+      scheme: bearer
+paths:
+  /ping:
+    get:
+      operationId: ping
+      security:
+        - api_key: []
+        - oauth2: []
+      responses:
+        "200":
+          description: ok
+`)
+
+	upload := func(name string) string {
+		t.Helper()
+
+		body := bytes.NewReader(spec)
+		res, err := ti.assets.UploadOpenAPIv3(ctx, &agen.UploadOpenAPIv3Form{
+			ContentType:   "application/x-yaml",
+			ContentLength: int64(len(spec)),
+		}, io.NopCloser(body))
+		require.NoError(t, err, "upload %s", name)
+		return res.Asset.ID
+	}
+
+	dep, err := ti.deployments.CreateDeployment(ctx, &dgen.CreateDeploymentPayload{
+		IdempotencyKey: "same-security-keys",
+		Openapiv3Assets: []*dgen.AddOpenAPIv3DeploymentAssetForm{
+			{
+				AssetID: upload("livestorm"),
+				Name:    "livestorm",
+				Slug:    "livestorm",
+			},
+			{
+				AssetID: upload("livestorm-api"),
+				Name:    "livestorm-api",
+				Slug:    "livestorm-api",
+			},
+		},
+	})
+	require.NoError(t, err)
+	require.Equal(t, "completed", dep.Deployment.Status)
+
+	repo := testrepo.New(ti.conn)
+	tools, err := repo.ListDeploymentHTTPTools(ctx, uuid.MustParse(dep.Deployment.ID))
+	require.NoError(t, err)
+
+	var livestormURNs []string
+	for _, tool := range tools {
+		if tool.Openapiv3DocumentID.Valid && tool.Name == "livestorm_ping" {
+			livestormURNs = append(livestormURNs, tool.ToolUrn.String())
+		}
+	}
+	require.Len(t, livestormURNs, 1)
+
+	created, err := ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
+		Name:     "Livestorm",
+		ToolUrns: livestormURNs,
+	})
+	require.NoError(t, err)
+
+	result, err := ti.service.GetToolset(ctx, &gen.GetToolsetPayload{
+		Slug: created.Slug,
+	})
+	require.NoError(t, err)
+
+	require.Len(t, result.SecurityVariables, 2)
+
+	var envVars []string
+	for _, securityVariable := range result.SecurityVariables {
+		envVars = append(envVars, securityVariable.EnvVariables...)
+	}
+
+	require.ElementsMatch(t, []string{
+		"LIVESTORM_API_KEY",
+		"LIVESTORM_OAUTH2",
+	}, envVars)
+	require.NotContains(t, envVars, "LIVESTORM_API_API_KEY")
+	require.NotContains(t, envVars, "LIVESTORM_API_OAUTH2")
+	require.Len(t, result.ServerVariables, 1)
+	require.ElementsMatch(t, []string{"LIVESTORM_SERVER_URL"}, result.ServerVariables[0].EnvVariables)
 }
 
 func TestToolsetsService_GetToolset_IncludesOrigin(t *testing.T) {

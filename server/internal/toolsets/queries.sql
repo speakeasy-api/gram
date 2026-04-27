@@ -97,7 +97,12 @@ RETURNING id, name, slug;
 -- name: GetHTTPSecurityDefinitions :many
 SELECT *
 FROM http_security
-WHERE key = ANY(@security_keys::TEXT[]) AND deployment_id = ANY(@deployment_ids::UUID[]);
+WHERE key = ANY(@security_keys::TEXT[])
+  AND deployment_id = ANY(@deployment_ids::UUID[])
+  AND (
+    cardinality(@openapiv3_document_ids::UUID[]) = 0
+    OR openapiv3_document_id = ANY(@openapiv3_document_ids::UUID[])
+  );
 
 -- name: GetToolsetByMcpSlug :one
 SELECT *

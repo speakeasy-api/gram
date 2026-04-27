@@ -242,7 +242,7 @@ external_deployments AS (
   WHERE deployments_packages.deployment_id = (SELECT id FROM deployment)
 )
 SELECT
-  htd.id, htd.tool_urn, htd.deployment_id, htd.name, htd.security, htd.server_env_var,
+  htd.id, htd.tool_urn, htd.deployment_id, htd.openapiv3_document_id, htd.name, htd.security, htd.server_env_var,
   htd.read_only_hint, htd.destructive_hint, htd.idempotent_hint, htd.open_world_hint,
   htd.http_method
 FROM http_tool_definitions htd
@@ -259,17 +259,18 @@ type FindHttpToolEntriesByUrnParams struct {
 }
 
 type FindHttpToolEntriesByUrnRow struct {
-	ID              uuid.UUID
-	ToolUrn         urn.Tool
-	DeploymentID    uuid.UUID
-	Name            string
-	Security        []byte
-	ServerEnvVar    string
-	ReadOnlyHint    pgtype.Bool
-	DestructiveHint pgtype.Bool
-	IdempotentHint  pgtype.Bool
-	OpenWorldHint   pgtype.Bool
-	HttpMethod      string
+	ID                  uuid.UUID
+	ToolUrn             urn.Tool
+	DeploymentID        uuid.UUID
+	Openapiv3DocumentID uuid.NullUUID
+	Name                string
+	Security            []byte
+	ServerEnvVar        string
+	ReadOnlyHint        pgtype.Bool
+	DestructiveHint     pgtype.Bool
+	IdempotentHint      pgtype.Bool
+	OpenWorldHint       pgtype.Bool
+	HttpMethod          string
 }
 
 func (q *Queries) FindHttpToolEntriesByUrn(ctx context.Context, arg FindHttpToolEntriesByUrnParams) ([]FindHttpToolEntriesByUrnRow, error) {
@@ -285,6 +286,7 @@ func (q *Queries) FindHttpToolEntriesByUrn(ctx context.Context, arg FindHttpTool
 			&i.ID,
 			&i.ToolUrn,
 			&i.DeploymentID,
+			&i.Openapiv3DocumentID,
 			&i.Name,
 			&i.Security,
 			&i.ServerEnvVar,
