@@ -537,45 +537,6 @@ function PolicySheetBody({
         />
       </div>
 
-      {/* Action */}
-      <div className="space-y-2">
-        <Label className="text-sm font-medium">Action</Label>
-        <RadioGroup
-          value={formAction}
-          onValueChange={(v) => setFormAction(v as PolicyAction)}
-          className="space-y-2"
-        >
-          <label
-            htmlFor="action-flag"
-            className="hover:bg-muted/50 flex cursor-pointer items-start gap-3 rounded-md border p-3"
-          >
-            <RadioGroupItem value="flag" id="action-flag" className="mt-0.5" />
-            <div>
-              <div className="text-sm font-medium">Flag</div>
-              <div className="text-muted-foreground text-xs">
-                Log findings for review without interrupting the session
-              </div>
-            </div>
-          </label>
-          <label
-            htmlFor="action-block"
-            className="hover:bg-muted/50 flex cursor-pointer items-start gap-3 rounded-md border p-3"
-          >
-            <RadioGroupItem
-              value="block"
-              id="action-block"
-              className="mt-0.5"
-            />
-            <div>
-              <div className="text-sm font-medium">Block</div>
-              <div className="text-muted-foreground text-xs">
-                Deny prompts and tool calls that match detection rules
-              </div>
-            </div>
-          </label>
-        </RadioGroup>
-      </div>
-
       {/* Detection Rules */}
       <div className="space-y-3">
         <Label className="text-sm font-medium">Detection Rules</Label>
@@ -678,6 +639,45 @@ function PolicySheetBody({
             );
           })}
         </div>
+      </div>
+
+      {/* Action */}
+      <div className="space-y-2">
+        <Label className="text-sm font-medium">Action</Label>
+        <RadioGroup
+          value={formAction}
+          onValueChange={(v) => setFormAction(v as PolicyAction)}
+          className="space-y-2"
+        >
+          <label
+            htmlFor="action-flag"
+            className="hover:bg-muted/50 flex cursor-pointer items-start gap-3 rounded-md border p-3"
+          >
+            <RadioGroupItem value="flag" id="action-flag" className="mt-0.5" />
+            <div>
+              <div className="text-sm font-medium">Flag</div>
+              <div className="text-muted-foreground text-xs">
+                Log findings for review without interrupting the session
+              </div>
+            </div>
+          </label>
+          <label
+            htmlFor="action-block"
+            className="hover:bg-muted/50 flex cursor-pointer items-start gap-3 rounded-md border p-3"
+          >
+            <RadioGroupItem
+              value="block"
+              id="action-block"
+              className="mt-0.5"
+            />
+            <div>
+              <div className="text-sm font-medium">Block</div>
+              <div className="text-muted-foreground text-xs">
+                Deny prompts and tool calls that match detection rules
+              </div>
+            </div>
+          </label>
+        </RadioGroup>
       </div>
 
       {/* Enabled toggle */}
