@@ -10,7 +10,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assistants"
 )
 
-func TestAssistantRuntimeConfigFromCLIRejectsFlyProvider(t *testing.T) {
+func TestAssistantRuntimeConfigFromCLIAcceptsFlyProvider(t *testing.T) {
 	t.Parallel()
 
 	ctx := newAssistantRuntimeCLIContext(t, map[string]string{
@@ -18,7 +18,18 @@ func TestAssistantRuntimeConfigFromCLIRejectsFlyProvider(t *testing.T) {
 	})
 
 	cfg, err := assistantRuntimeConfigFromCLI(ctx)
-	require.ErrorContains(t, err, "invalid assistant runtime provider: flyio")
+	require.NoError(t, err)
+	require.Equal(t, assistants.RuntimeProviderFlyIO, cfg.Provider)
+}
+
+func TestAssistantRuntimeConfigFromCLIRejectsUnknownProvider(t *testing.T) {
+	t.Parallel()
+
+	ctx := newAssistantRuntimeCLIContext(t, map[string]string{})
+	require.NoError(t, ctx.Set("assistant-runtime-provider", "bogus"))
+
+	cfg, err := assistantRuntimeConfigFromCLI(ctx)
+	require.ErrorContains(t, err, "invalid assistant runtime provider: bogus")
 	require.Empty(t, cfg.Provider)
 }
 

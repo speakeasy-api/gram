@@ -16,12 +16,12 @@ import (
 var assistantRuntimeFlags = []cli.Flag{
 	&cli.StringFlag{
 		Name:    "assistant-runtime-provider",
-		Usage:   "Assistant runtime provider. Allowed values: local.",
+		Usage:   "Assistant runtime provider. Allowed values: local, flyio.",
 		Value:   assistants.RuntimeProviderLocal,
 		EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_PROVIDER"},
 		Action: func(_ *cli.Context, val string) error {
 			switch val {
-			case "", assistants.RuntimeProviderLocal, "firecracker":
+			case "", assistants.RuntimeProviderLocal, assistants.RuntimeProviderFlyIO, "firecracker":
 				return nil
 			default:
 				return fmt.Errorf("invalid assistant runtime provider: %s", val)
@@ -139,8 +139,8 @@ func assistantRuntimeConfigFromCLI(c *cli.Context) (assistants.RuntimeBackendCon
 	switch provider {
 	case "", "firecracker":
 		provider = assistants.RuntimeProviderLocal
-	}
-	if provider != assistants.RuntimeProviderLocal {
+	case assistants.RuntimeProviderLocal, assistants.RuntimeProviderFlyIO:
+	default:
 		return assistants.RuntimeBackendConfig{}, fmt.Errorf("invalid assistant runtime provider: %s", provider)
 	}
 
@@ -179,11 +179,12 @@ func assistantRuntimeConfigFromCLI(c *cli.Context) (assistants.RuntimeBackendCon
 	}, nil
 }
 
-// newAssistantRuntime resolves CLI flags into a fully wired assistant
-// RuntimeBackend. The local Firecracker manager talks to private 172.x guest
-// IPs, so it is intentionally given the unsafe loopback-allowing policy
-// produced by newGuardianPolicy in `local` environments only — this code path
-// is not reachable in production.
+// newAssistantRuntime resolves CLI flags into an assistant RuntimeBackend.
+// Construction is deferred for any non-local provider: a stub backend is
+// returned so the assistants service can mount its CRUD surface without
+// touching Lima/Firecracker paths or other host-specific resources that
+// only exist in the local development environment. Concrete remote
+// providers (flyio) are wired up in their own follow-up PRs.
 func newAssistantRuntime(
 	ctx context.Context,
 	logger *slog.Logger,
@@ -196,7 +197,9 @@ func newAssistantRuntime(
 	if err != nil {
 		return nil, err
 	}
-	cfg.Local.OnUnexpectedExit = assistants.NewUnexpectedRuntimeExitHandler(logger, db)
+	if cfg.Provider == assistants.RuntimeProviderLocal {
+		cfg.Local.OnUnexpectedExit = assistants.NewUnexpectedRuntimeExitHandler(logger, db)
+	}
 	rb := assistants.NewRuntimeBackend(logger, guardianPolicy, cfg)
 	if err := assistants.ValidateRuntimeBackendServerURL(ctx, rb, serverURL); err != nil {
 		return nil, fmt.Errorf("validate assistant runtime server url: %w", err)
