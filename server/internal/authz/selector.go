@@ -16,13 +16,17 @@ type Selector map[string]string
 
 // Matches reports whether this (grant) selector satisfies the given check
 // selector. A nil/empty grant selector matches any check (defensive fallback).
-// For each key in the grant selector, the check must contain the same key with
-// either an equal value or the grant value must be "*".
+// For each key present in BOTH the grant and check selectors, the values must
+// be equal or the grant value must be "*". Keys present in the grant but absent
+// from the check are skipped — the check is not constraining that dimension.
+// This allows disposition-scoped grants (e.g. {"disposition":"read_only"}) to
+// match connection-level checks that don't yet specify a disposition.
 func (s Selector) Matches(check Selector) bool {
 	for k, grantVal := range s {
 		checkVal, ok := check[k]
 		if !ok {
-			return false
+			// Check doesn't constrain this dimension — skip.
+			continue
 		}
 		if grantVal != "*" && grantVal != checkVal {
 			return false

@@ -33,12 +33,14 @@ func TestSelector_Matches_exactKeyMatch(t *testing.T) {
 	require.False(t, grant.Matches(Selector{"resource_id": "proj_456"}))
 }
 
-func TestSelector_Matches_grantKeyMissingInCheckFails(t *testing.T) {
+func TestSelector_Matches_grantKeyMissingInCheckSkipped(t *testing.T) {
 	t.Parallel()
 
+	// When a key exists in the grant but not in the check, it's skipped —
+	// the check isn't constraining that dimension.
 	grant := Selector{"resource_id": "proj_123"}
-	require.False(t, grant.Matches(Selector{}))
-	require.False(t, grant.Matches(Selector{"other_key": "proj_123"}))
+	require.True(t, grant.Matches(Selector{}))
+	require.True(t, grant.Matches(Selector{"other_key": "proj_123"}))
 }
 
 func TestSelector_Matches_multipleKeys(t *testing.T) {
@@ -47,7 +49,8 @@ func TestSelector_Matches_multipleKeys(t *testing.T) {
 	grant := Selector{"resource_id": "proj_123", "tool_id": "tool_abc"}
 	require.True(t, grant.Matches(Selector{"resource_id": "proj_123", "tool_id": "tool_abc"}))
 	require.False(t, grant.Matches(Selector{"resource_id": "proj_123", "tool_id": "tool_xyz"}))
-	require.False(t, grant.Matches(Selector{"resource_id": "proj_123"}))
+	// Check without tool_id — not constraining that dimension, so grant matches.
+	require.True(t, grant.Matches(Selector{"resource_id": "proj_123"}))
 }
 
 func TestSelector_Matches_nilGrantMatchesAnything(t *testing.T) {
@@ -175,4 +178,23 @@ func TestSelector_Matches_resourceKindWildcardMatchesAny(t *testing.T) {
 	grant := Selector{"resource_kind": "*", "resource_id": "*"}
 	require.True(t, grant.Matches(Selector{"resource_kind": "project", "resource_id": "proj_123"}))
 	require.True(t, grant.Matches(Selector{"resource_kind": "mcp", "resource_id": "tool_a"}))
+}
+
+func TestSelector_Matches_dispositionGrantMatchesConnectionCheck(t *testing.T) {
+	t.Parallel()
+
+	// A disposition-scoped grant matches a connection-level check that
+	// doesn't specify disposition (check isn't constraining that dimension).
+	grant := Selector{"resource_kind": "mcp", "resource_id": "*", "disposition": "read_only"}
+	check := Selector{"resource_kind": "mcp", "resource_id": "toolsetA"}
+	require.True(t, grant.Matches(check))
+}
+
+func TestSelector_Matches_dispositionGrantDeniesWrongDisposition(t *testing.T) {
+	t.Parallel()
+
+	// When the check specifies a disposition, it must match the grant's.
+	grant := Selector{"resource_kind": "mcp", "resource_id": "*", "disposition": "read_only"}
+	require.True(t, grant.Matches(Selector{"resource_kind": "mcp", "resource_id": "toolsetA", "disposition": "read_only"}))
+	require.False(t, grant.Matches(Selector{"resource_kind": "mcp", "resource_id": "toolsetA", "disposition": "destructive"}))
 }
