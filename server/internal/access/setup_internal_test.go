@@ -55,7 +55,6 @@ func seedInternalGrant(t *testing.T, ctx context.Context, conn *pgxpool.Pool, or
 		OrganizationID: organizationID,
 		PrincipalUrn:   principal,
 		Scope:          scope,
-		Resource:       resource,
 		Selectors:      selectors,
 	})
 	require.NoError(t, err)
