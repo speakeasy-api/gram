@@ -8,6 +8,14 @@ SELECT *
 FROM toolsets
 WHERE id = @id AND deleted IS FALSE;
 
+-- name: GetToolsetByIDAndProject :one
+-- Project-scoped variant of GetToolsetByID. Use this when the caller has a
+-- project context and needs to enforce that the toolset belongs to it
+-- (e.g. ownership checks on referenced toolset_id columns in other tables).
+SELECT *
+FROM toolsets
+WHERE id = @id AND project_id = @project_id AND deleted IS FALSE;
+
 -- name: GetToolsetByMCPSlug :one
 -- project_id is required to ensure uniqueness since mcp_slug is only unique within a project
 SELECT *

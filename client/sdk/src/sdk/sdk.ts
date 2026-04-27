@@ -20,8 +20,10 @@ import { HooksServerNames } from "./hooksservernames.js";
 import { Instances } from "./instances.js";
 import { Integrations } from "./integrations.js";
 import { Keys } from "./keys.js";
+import { McpFrontends } from "./mcpfrontends.js";
 import { McpMetadata } from "./mcpmetadata.js";
 import { McpRegistries } from "./mcpregistries.js";
+import { McpSlugs } from "./mcpslugs.js";
 import { Organizations } from "./organizations.js";
 import { Packages } from "./packages.js";
 import { Plugins } from "./plugins.js";
@@ -119,6 +121,11 @@ export class Gram extends ClientSDK {
     return (this._keys ??= new Keys(this._options));
   }
 
+  private _mcpFrontends?: McpFrontends;
+  get mcpFrontends(): McpFrontends {
+    return (this._mcpFrontends ??= new McpFrontends(this._options));
+  }
+
   private _mcpMetadata?: McpMetadata;
   get mcpMetadata(): McpMetadata {
     return (this._mcpMetadata ??= new McpMetadata(this._options));
@@ -127,6 +134,11 @@ export class Gram extends ClientSDK {
   private _mcpRegistries?: McpRegistries;
   get mcpRegistries(): McpRegistries {
     return (this._mcpRegistries ??= new McpRegistries(this._options));
+  }
+
+  private _mcpSlugs?: McpSlugs;
+  get mcpSlugs(): McpSlugs {
+    return (this._mcpSlugs ??= new McpSlugs(this._options));
   }
 
   private _organizations?: Organizations;

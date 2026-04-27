@@ -42,6 +42,10 @@ Audit logging lives in `server/internal/audit/` with its management-API surface 
 
 **`Log*Event` and `Log*` naming.** One `Log<Verb>Event` struct plus one `Log<Verb>` function per action, declared in the subject file. `Log*` functions take `(ctx, dbtx repo.DBTX, event Log*Event) error` so the audit insert is atomic with the caller's mutation.
 
+**Subject identifier fields.** Event structs carry the subject's identifier as a URN type, not a raw `uuid.UUID`. Field name is `<Subject>URN` (e.g. `KeyURN urn.APIKey`, `McpFrontendURN urn.McpFrontend`), and the `Log*` function populates `SubjectID` from `event.<Subject>URN.ID.String()`. If no URN type exists yet, add one under `server/internal/urn/` before introducing the event struct — see `server/internal/urn/api_key.go` for the template.
+
+**Snapshot fields.** Update event structs declare snapshot fields as `<Subject>SnapshotBefore` / `<Subject>SnapshotAfter` with concrete pointer types (e.g. `*types.Toolset`, `*types.McpFrontend`). Do not use `any` or bare `SnapshotBefore` / `SnapshotAfter` — the typed form keeps `marshalAuditPayload` callers honest about the shape being persisted. Pass the view through directly unless a specific field on the type needs stripping for size or sensitivity reasons (see `toolsets.go` for the one clone-and-strip case).
+
 ### Non-generated files
 
 | File                                                              | Purpose                                                                                                                                     |
@@ -88,7 +92,7 @@ When a handler mutates a resource whose subject already has `Action*`/`Log*` def
 1. Open the service's `impl.go` and locate the handler. Confirm the handler already uses a transaction; if not, wrap the repo calls in `s.db.Begin(ctx)` → `defer o11y.NoLogDefer(rollback)` → `dbtx.Commit(ctx)`.
 2. After the primary repo writes succeed and before `Commit`, call the subject's `audit.Log<Verb>` with a populated `Log<Verb>Event`. Pass the same `dbtx` the repo writes used so the audit row commits atomically with them.
 3. Build the actor from `contextvalues.GetAuthContext(ctx)` — typically `urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)`, plus `authCtx.Email` for `ActorDisplayName`. Principal types live in `server/internal/urn`. Fill in the subject-specific identifier fields (subject id, display name, slug) from the repo row you just wrote.
-4. For updates, populate `SnapshotBefore` and `SnapshotAfter` with the pre- and post-mutation state. For creates and deletes, leave them nil unless the snapshot is independently useful.
+4. For updates, populate the typed snapshot fields (`<Subject>SnapshotBefore` / `<Subject>SnapshotAfter`) with the pre- and post-mutation state. For creates and deletes, leave them nil unless the snapshot is independently useful.
 5. Treat audit-log failures as `oops.CodeUnexpected`. Audit logging is not optional — if it fails, fail the request.
 6. Add a test that asserts the event was recorded (see "How to assert audit events in tests" below).
 
@@ -97,7 +101,7 @@ When a handler mutates a resource whose subject already has `Action*`/`Log*` def
 Use this when the subject already has a file but you're introducing a new verb.
 
 1. In the subject's file, add an `Action<Subject><Verb>` constant alongside the existing ones.
-2. Add a `Log<Subject><Verb>Event` struct with the fields the caller needs to supply. At minimum: `OrganizationID`, `ProjectID` (zero value for org-scoped subjects), `Actor`, `ActorDisplayName`, `ActorSlug`, plus subject-specific identifier fields (`<Subject>ID`, display name, slug). Updates additionally carry `SnapshotBefore any` and `SnapshotAfter any`.
+2. Add a `Log<Subject><Verb>Event` struct with the fields the caller needs to supply. At minimum: `OrganizationID`, `ProjectID` (zero value for org-scoped subjects), `Actor`, `ActorDisplayName`, `ActorSlug`, plus the subject URN (`<Subject>URN urn.<Subject>`) and any additional display name / slug fields the subject needs. Updates additionally carry typed snapshot fields (`<Subject>SnapshotBefore` / `<Subject>SnapshotAfter` with concrete pointer types — e.g. `*types.<Subject>`).
 3. Add a `Log<Subject><Verb>` function that translates the event into `repo.InsertAuditLogParams`, passes any snapshots through `marshalAuditPayload` (which handles nil internally), calls `repo.New(dbtx).InsertAuditLog`, and wraps errors with `fmt.Errorf("log %s: %w", action, err)`.
 4. Call the new function from the handler as described under "How to audit a handler in a service".
 
@@ -115,7 +119,7 @@ Use this when introducing an entirely new kind of resource that doesn't map onto
 
 1. **Renaming an `Action` value is a breaking change** for consumers of `auditlogs.list` that filter on action strings. Avoid it; add a new action and dual-write if a behaviour rename is needed.
 2. Adding a new field to a `Log*Event` struct is safe — update every call site (`exhaustruct` will flag missed ones).
-3. Changing the shape of `SnapshotBefore`/`SnapshotAfter` is safe for new rows only; old rows retain the old shape. If consumers parse snapshots, version the payload inside the JSON.
+3. Changing the shape of the snapshot payload (the concrete type referenced by `<Subject>SnapshotBefore` / `<Subject>SnapshotAfter`) is safe for new rows only; old rows retain the old shape. If consumers parse snapshots, version the payload inside the JSON.
 4. Do not edit the string values of `subjectType*` constants; the same breakage argument as action renames applies.
 
 ### How to assert audit events in tests

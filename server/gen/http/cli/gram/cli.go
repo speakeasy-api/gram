@@ -33,8 +33,10 @@ import (
 	instancesc "github.com/speakeasy-api/gram/server/gen/http/instances/client"
 	integrationsc "github.com/speakeasy-api/gram/server/gen/http/integrations/client"
 	keysc "github.com/speakeasy-api/gram/server/gen/http/keys/client"
+	mcpfrontendsc "github.com/speakeasy-api/gram/server/gen/http/mcp_frontends/client"
 	mcpmetadatac "github.com/speakeasy-api/gram/server/gen/http/mcp_metadata/client"
 	mcpregistriesc "github.com/speakeasy-api/gram/server/gen/http/mcp_registries/client"
+	mcpslugsc "github.com/speakeasy-api/gram/server/gen/http/mcp_slugs/client"
 	organizationsc "github.com/speakeasy-api/gram/server/gen/http/organizations/client"
 	packagesc "github.com/speakeasy-api/gram/server/gen/http/packages/client"
 	pluginsc "github.com/speakeasy-api/gram/server/gen/http/plugins/client"
@@ -79,7 +81,9 @@ func UsageCommands() []string {
 		"instances get-instance",
 		"integrations (get|list)",
 		"keys (create-key|list-keys|revoke-key|verify-key)",
+		"mcp-frontends (create-mcp-frontend|get-mcp-frontend|list-mcp-frontends|update-mcp-frontend|delete-mcp-frontend)",
 		"mcp-metadata (get-mcp-metadata|set-mcp-metadata|export-mcp-metadata)",
+		"mcp-slugs (create-mcp-slug|get-mcp-slug|list-mcp-slugs|update-mcp-slug|delete-mcp-slug)",
 		"organizations (send-invite|revoke-invite|list-invites|get-invite-by-token|list-users|remove-user)",
 		"packages (create-package|update-package|list-packages|list-versions|publish)",
 		"plugins (list-plugins|get-plugin|create-plugin|update-plugin|delete-plugin|add-plugin-server|update-plugin-server|remove-plugin-server|set-plugin-assignments|download-plugin-package|get-publish-status|publish-plugins)",
@@ -646,6 +650,37 @@ func ParseEndpoint(
 		keysVerifyKeyFlags           = flag.NewFlagSet("verify-key", flag.ExitOnError)
 		keysVerifyKeyApikeyTokenFlag = keysVerifyKeyFlags.String("apikey-token", "", "")
 
+		mcpFrontendsFlags = flag.NewFlagSet("mcp-frontends", flag.ContinueOnError)
+
+		mcpFrontendsCreateMcpFrontendFlags                = flag.NewFlagSet("create-mcp-frontend", flag.ExitOnError)
+		mcpFrontendsCreateMcpFrontendBodyFlag             = mcpFrontendsCreateMcpFrontendFlags.String("body", "REQUIRED", "")
+		mcpFrontendsCreateMcpFrontendSessionTokenFlag     = mcpFrontendsCreateMcpFrontendFlags.String("session-token", "", "")
+		mcpFrontendsCreateMcpFrontendApikeyTokenFlag      = mcpFrontendsCreateMcpFrontendFlags.String("apikey-token", "", "")
+		mcpFrontendsCreateMcpFrontendProjectSlugInputFlag = mcpFrontendsCreateMcpFrontendFlags.String("project-slug-input", "", "")
+
+		mcpFrontendsGetMcpFrontendFlags                = flag.NewFlagSet("get-mcp-frontend", flag.ExitOnError)
+		mcpFrontendsGetMcpFrontendIDFlag               = mcpFrontendsGetMcpFrontendFlags.String("id", "REQUIRED", "")
+		mcpFrontendsGetMcpFrontendSessionTokenFlag     = mcpFrontendsGetMcpFrontendFlags.String("session-token", "", "")
+		mcpFrontendsGetMcpFrontendApikeyTokenFlag      = mcpFrontendsGetMcpFrontendFlags.String("apikey-token", "", "")
+		mcpFrontendsGetMcpFrontendProjectSlugInputFlag = mcpFrontendsGetMcpFrontendFlags.String("project-slug-input", "", "")
+
+		mcpFrontendsListMcpFrontendsFlags                = flag.NewFlagSet("list-mcp-frontends", flag.ExitOnError)
+		mcpFrontendsListMcpFrontendsSessionTokenFlag     = mcpFrontendsListMcpFrontendsFlags.String("session-token", "", "")
+		mcpFrontendsListMcpFrontendsApikeyTokenFlag      = mcpFrontendsListMcpFrontendsFlags.String("apikey-token", "", "")
+		mcpFrontendsListMcpFrontendsProjectSlugInputFlag = mcpFrontendsListMcpFrontendsFlags.String("project-slug-input", "", "")
+
+		mcpFrontendsUpdateMcpFrontendFlags                = flag.NewFlagSet("update-mcp-frontend", flag.ExitOnError)
+		mcpFrontendsUpdateMcpFrontendBodyFlag             = mcpFrontendsUpdateMcpFrontendFlags.String("body", "REQUIRED", "")
+		mcpFrontendsUpdateMcpFrontendSessionTokenFlag     = mcpFrontendsUpdateMcpFrontendFlags.String("session-token", "", "")
+		mcpFrontendsUpdateMcpFrontendApikeyTokenFlag      = mcpFrontendsUpdateMcpFrontendFlags.String("apikey-token", "", "")
+		mcpFrontendsUpdateMcpFrontendProjectSlugInputFlag = mcpFrontendsUpdateMcpFrontendFlags.String("project-slug-input", "", "")
+
+		mcpFrontendsDeleteMcpFrontendFlags                = flag.NewFlagSet("delete-mcp-frontend", flag.ExitOnError)
+		mcpFrontendsDeleteMcpFrontendIDFlag               = mcpFrontendsDeleteMcpFrontendFlags.String("id", "REQUIRED", "")
+		mcpFrontendsDeleteMcpFrontendSessionTokenFlag     = mcpFrontendsDeleteMcpFrontendFlags.String("session-token", "", "")
+		mcpFrontendsDeleteMcpFrontendApikeyTokenFlag      = mcpFrontendsDeleteMcpFrontendFlags.String("apikey-token", "", "")
+		mcpFrontendsDeleteMcpFrontendProjectSlugInputFlag = mcpFrontendsDeleteMcpFrontendFlags.String("project-slug-input", "", "")
+
 		mcpMetadataFlags = flag.NewFlagSet("mcp-metadata", flag.ContinueOnError)
 
 		mcpMetadataGetMcpMetadataFlags                = flag.NewFlagSet("get-mcp-metadata", flag.ExitOnError)
@@ -665,6 +700,40 @@ func ParseEndpoint(
 		mcpMetadataExportMcpMetadataApikeyTokenFlag      = mcpMetadataExportMcpMetadataFlags.String("apikey-token", "", "")
 		mcpMetadataExportMcpMetadataSessionTokenFlag     = mcpMetadataExportMcpMetadataFlags.String("session-token", "", "")
 		mcpMetadataExportMcpMetadataProjectSlugInputFlag = mcpMetadataExportMcpMetadataFlags.String("project-slug-input", "", "")
+
+		mcpSlugsFlags = flag.NewFlagSet("mcp-slugs", flag.ContinueOnError)
+
+		mcpSlugsCreateMcpSlugFlags                = flag.NewFlagSet("create-mcp-slug", flag.ExitOnError)
+		mcpSlugsCreateMcpSlugBodyFlag             = mcpSlugsCreateMcpSlugFlags.String("body", "REQUIRED", "")
+		mcpSlugsCreateMcpSlugSessionTokenFlag     = mcpSlugsCreateMcpSlugFlags.String("session-token", "", "")
+		mcpSlugsCreateMcpSlugApikeyTokenFlag      = mcpSlugsCreateMcpSlugFlags.String("apikey-token", "", "")
+		mcpSlugsCreateMcpSlugProjectSlugInputFlag = mcpSlugsCreateMcpSlugFlags.String("project-slug-input", "", "")
+
+		mcpSlugsGetMcpSlugFlags                = flag.NewFlagSet("get-mcp-slug", flag.ExitOnError)
+		mcpSlugsGetMcpSlugIDFlag               = mcpSlugsGetMcpSlugFlags.String("id", "", "")
+		mcpSlugsGetMcpSlugCustomDomainIDFlag   = mcpSlugsGetMcpSlugFlags.String("custom-domain-id", "", "")
+		mcpSlugsGetMcpSlugSlugFlag             = mcpSlugsGetMcpSlugFlags.String("slug", "", "")
+		mcpSlugsGetMcpSlugSessionTokenFlag     = mcpSlugsGetMcpSlugFlags.String("session-token", "", "")
+		mcpSlugsGetMcpSlugApikeyTokenFlag      = mcpSlugsGetMcpSlugFlags.String("apikey-token", "", "")
+		mcpSlugsGetMcpSlugProjectSlugInputFlag = mcpSlugsGetMcpSlugFlags.String("project-slug-input", "", "")
+
+		mcpSlugsListMcpSlugsFlags                = flag.NewFlagSet("list-mcp-slugs", flag.ExitOnError)
+		mcpSlugsListMcpSlugsMcpFrontendIDFlag    = mcpSlugsListMcpSlugsFlags.String("mcp-frontend-id", "", "")
+		mcpSlugsListMcpSlugsSessionTokenFlag     = mcpSlugsListMcpSlugsFlags.String("session-token", "", "")
+		mcpSlugsListMcpSlugsApikeyTokenFlag      = mcpSlugsListMcpSlugsFlags.String("apikey-token", "", "")
+		mcpSlugsListMcpSlugsProjectSlugInputFlag = mcpSlugsListMcpSlugsFlags.String("project-slug-input", "", "")
+
+		mcpSlugsUpdateMcpSlugFlags                = flag.NewFlagSet("update-mcp-slug", flag.ExitOnError)
+		mcpSlugsUpdateMcpSlugBodyFlag             = mcpSlugsUpdateMcpSlugFlags.String("body", "REQUIRED", "")
+		mcpSlugsUpdateMcpSlugSessionTokenFlag     = mcpSlugsUpdateMcpSlugFlags.String("session-token", "", "")
+		mcpSlugsUpdateMcpSlugApikeyTokenFlag      = mcpSlugsUpdateMcpSlugFlags.String("apikey-token", "", "")
+		mcpSlugsUpdateMcpSlugProjectSlugInputFlag = mcpSlugsUpdateMcpSlugFlags.String("project-slug-input", "", "")
+
+		mcpSlugsDeleteMcpSlugFlags                = flag.NewFlagSet("delete-mcp-slug", flag.ExitOnError)
+		mcpSlugsDeleteMcpSlugIDFlag               = mcpSlugsDeleteMcpSlugFlags.String("id", "REQUIRED", "")
+		mcpSlugsDeleteMcpSlugSessionTokenFlag     = mcpSlugsDeleteMcpSlugFlags.String("session-token", "", "")
+		mcpSlugsDeleteMcpSlugApikeyTokenFlag      = mcpSlugsDeleteMcpSlugFlags.String("apikey-token", "", "")
+		mcpSlugsDeleteMcpSlugProjectSlugInputFlag = mcpSlugsDeleteMcpSlugFlags.String("project-slug-input", "", "")
 
 		organizationsFlags = flag.NewFlagSet("organizations", flag.ContinueOnError)
 
@@ -1383,10 +1452,24 @@ func ParseEndpoint(
 	keysRevokeKeyFlags.Usage = keysRevokeKeyUsage
 	keysVerifyKeyFlags.Usage = keysVerifyKeyUsage
 
+	mcpFrontendsFlags.Usage = mcpFrontendsUsage
+	mcpFrontendsCreateMcpFrontendFlags.Usage = mcpFrontendsCreateMcpFrontendUsage
+	mcpFrontendsGetMcpFrontendFlags.Usage = mcpFrontendsGetMcpFrontendUsage
+	mcpFrontendsListMcpFrontendsFlags.Usage = mcpFrontendsListMcpFrontendsUsage
+	mcpFrontendsUpdateMcpFrontendFlags.Usage = mcpFrontendsUpdateMcpFrontendUsage
+	mcpFrontendsDeleteMcpFrontendFlags.Usage = mcpFrontendsDeleteMcpFrontendUsage
+
 	mcpMetadataFlags.Usage = mcpMetadataUsage
 	mcpMetadataGetMcpMetadataFlags.Usage = mcpMetadataGetMcpMetadataUsage
 	mcpMetadataSetMcpMetadataFlags.Usage = mcpMetadataSetMcpMetadataUsage
 	mcpMetadataExportMcpMetadataFlags.Usage = mcpMetadataExportMcpMetadataUsage
+
+	mcpSlugsFlags.Usage = mcpSlugsUsage
+	mcpSlugsCreateMcpSlugFlags.Usage = mcpSlugsCreateMcpSlugUsage
+	mcpSlugsGetMcpSlugFlags.Usage = mcpSlugsGetMcpSlugUsage
+	mcpSlugsListMcpSlugsFlags.Usage = mcpSlugsListMcpSlugsUsage
+	mcpSlugsUpdateMcpSlugFlags.Usage = mcpSlugsUpdateMcpSlugUsage
+	mcpSlugsDeleteMcpSlugFlags.Usage = mcpSlugsDeleteMcpSlugUsage
 
 	organizationsFlags.Usage = organizationsUsage
 	organizationsSendInviteFlags.Usage = organizationsSendInviteUsage
@@ -1577,8 +1660,12 @@ func ParseEndpoint(
 			svcf = integrationsFlags
 		case "keys":
 			svcf = keysFlags
+		case "mcp-frontends":
+			svcf = mcpFrontendsFlags
 		case "mcp-metadata":
 			svcf = mcpMetadataFlags
+		case "mcp-slugs":
+			svcf = mcpSlugsFlags
 		case "organizations":
 			svcf = organizationsFlags
 		case "packages":
@@ -1991,6 +2078,25 @@ func ParseEndpoint(
 
 			}
 
+		case "mcp-frontends":
+			switch epn {
+			case "create-mcp-frontend":
+				epf = mcpFrontendsCreateMcpFrontendFlags
+
+			case "get-mcp-frontend":
+				epf = mcpFrontendsGetMcpFrontendFlags
+
+			case "list-mcp-frontends":
+				epf = mcpFrontendsListMcpFrontendsFlags
+
+			case "update-mcp-frontend":
+				epf = mcpFrontendsUpdateMcpFrontendFlags
+
+			case "delete-mcp-frontend":
+				epf = mcpFrontendsDeleteMcpFrontendFlags
+
+			}
+
 		case "mcp-metadata":
 			switch epn {
 			case "get-mcp-metadata":
@@ -2001,6 +2107,25 @@ func ParseEndpoint(
 
 			case "export-mcp-metadata":
 				epf = mcpMetadataExportMcpMetadataFlags
+
+			}
+
+		case "mcp-slugs":
+			switch epn {
+			case "create-mcp-slug":
+				epf = mcpSlugsCreateMcpSlugFlags
+
+			case "get-mcp-slug":
+				epf = mcpSlugsGetMcpSlugFlags
+
+			case "list-mcp-slugs":
+				epf = mcpSlugsListMcpSlugsFlags
+
+			case "update-mcp-slug":
+				epf = mcpSlugsUpdateMcpSlugFlags
+
+			case "delete-mcp-slug":
+				epf = mcpSlugsDeleteMcpSlugFlags
 
 			}
 
@@ -2769,6 +2894,25 @@ func ParseEndpoint(
 				endpoint = c.VerifyKey()
 				data, err = keysc.BuildVerifyKeyPayload(*keysVerifyKeyApikeyTokenFlag)
 			}
+		case "mcp-frontends":
+			c := mcpfrontendsc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "create-mcp-frontend":
+				endpoint = c.CreateMcpFrontend()
+				data, err = mcpfrontendsc.BuildCreateMcpFrontendPayload(*mcpFrontendsCreateMcpFrontendBodyFlag, *mcpFrontendsCreateMcpFrontendSessionTokenFlag, *mcpFrontendsCreateMcpFrontendApikeyTokenFlag, *mcpFrontendsCreateMcpFrontendProjectSlugInputFlag)
+			case "get-mcp-frontend":
+				endpoint = c.GetMcpFrontend()
+				data, err = mcpfrontendsc.BuildGetMcpFrontendPayload(*mcpFrontendsGetMcpFrontendIDFlag, *mcpFrontendsGetMcpFrontendSessionTokenFlag, *mcpFrontendsGetMcpFrontendApikeyTokenFlag, *mcpFrontendsGetMcpFrontendProjectSlugInputFlag)
+			case "list-mcp-frontends":
+				endpoint = c.ListMcpFrontends()
+				data, err = mcpfrontendsc.BuildListMcpFrontendsPayload(*mcpFrontendsListMcpFrontendsSessionTokenFlag, *mcpFrontendsListMcpFrontendsApikeyTokenFlag, *mcpFrontendsListMcpFrontendsProjectSlugInputFlag)
+			case "update-mcp-frontend":
+				endpoint = c.UpdateMcpFrontend()
+				data, err = mcpfrontendsc.BuildUpdateMcpFrontendPayload(*mcpFrontendsUpdateMcpFrontendBodyFlag, *mcpFrontendsUpdateMcpFrontendSessionTokenFlag, *mcpFrontendsUpdateMcpFrontendApikeyTokenFlag, *mcpFrontendsUpdateMcpFrontendProjectSlugInputFlag)
+			case "delete-mcp-frontend":
+				endpoint = c.DeleteMcpFrontend()
+				data, err = mcpfrontendsc.BuildDeleteMcpFrontendPayload(*mcpFrontendsDeleteMcpFrontendIDFlag, *mcpFrontendsDeleteMcpFrontendSessionTokenFlag, *mcpFrontendsDeleteMcpFrontendApikeyTokenFlag, *mcpFrontendsDeleteMcpFrontendProjectSlugInputFlag)
+			}
 		case "mcp-metadata":
 			c := mcpmetadatac.NewClient(scheme, host, doer, enc, dec, restore)
 			switch epn {
@@ -2781,6 +2925,25 @@ func ParseEndpoint(
 			case "export-mcp-metadata":
 				endpoint = c.ExportMcpMetadata()
 				data, err = mcpmetadatac.BuildExportMcpMetadataPayload(*mcpMetadataExportMcpMetadataBodyFlag, *mcpMetadataExportMcpMetadataApikeyTokenFlag, *mcpMetadataExportMcpMetadataSessionTokenFlag, *mcpMetadataExportMcpMetadataProjectSlugInputFlag)
+			}
+		case "mcp-slugs":
+			c := mcpslugsc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "create-mcp-slug":
+				endpoint = c.CreateMcpSlug()
+				data, err = mcpslugsc.BuildCreateMcpSlugPayload(*mcpSlugsCreateMcpSlugBodyFlag, *mcpSlugsCreateMcpSlugSessionTokenFlag, *mcpSlugsCreateMcpSlugApikeyTokenFlag, *mcpSlugsCreateMcpSlugProjectSlugInputFlag)
+			case "get-mcp-slug":
+				endpoint = c.GetMcpSlug()
+				data, err = mcpslugsc.BuildGetMcpSlugPayload(*mcpSlugsGetMcpSlugIDFlag, *mcpSlugsGetMcpSlugCustomDomainIDFlag, *mcpSlugsGetMcpSlugSlugFlag, *mcpSlugsGetMcpSlugSessionTokenFlag, *mcpSlugsGetMcpSlugApikeyTokenFlag, *mcpSlugsGetMcpSlugProjectSlugInputFlag)
+			case "list-mcp-slugs":
+				endpoint = c.ListMcpSlugs()
+				data, err = mcpslugsc.BuildListMcpSlugsPayload(*mcpSlugsListMcpSlugsMcpFrontendIDFlag, *mcpSlugsListMcpSlugsSessionTokenFlag, *mcpSlugsListMcpSlugsApikeyTokenFlag, *mcpSlugsListMcpSlugsProjectSlugInputFlag)
+			case "update-mcp-slug":
+				endpoint = c.UpdateMcpSlug()
+				data, err = mcpslugsc.BuildUpdateMcpSlugPayload(*mcpSlugsUpdateMcpSlugBodyFlag, *mcpSlugsUpdateMcpSlugSessionTokenFlag, *mcpSlugsUpdateMcpSlugApikeyTokenFlag, *mcpSlugsUpdateMcpSlugProjectSlugInputFlag)
+			case "delete-mcp-slug":
+				endpoint = c.DeleteMcpSlug()
+				data, err = mcpslugsc.BuildDeleteMcpSlugPayload(*mcpSlugsDeleteMcpSlugIDFlag, *mcpSlugsDeleteMcpSlugSessionTokenFlag, *mcpSlugsDeleteMcpSlugApikeyTokenFlag, *mcpSlugsDeleteMcpSlugProjectSlugInputFlag)
 			}
 		case "organizations":
 			c := organizationsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -5560,6 +5723,139 @@ func keysVerifyKeyUsage() {
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "keys verify-key --apikey-token \"abc123\"")
 }
 
+// mcpFrontendsUsage displays the usage of the mcp-frontends command and its
+// subcommands.
+func mcpFrontendsUsage() {
+	fmt.Fprintln(os.Stderr, `Managing MCP frontends, which configure authentication, environment, and backend selection for an MCP server.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] mcp-frontends COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    create-mcp-frontend: Create a new MCP frontend`)
+	fmt.Fprintln(os.Stderr, `    get-mcp-frontend: Get an MCP frontend by ID`)
+	fmt.Fprintln(os.Stderr, `    list-mcp-frontends: List all MCP frontends for a project`)
+	fmt.Fprintln(os.Stderr, `    update-mcp-frontend: Update an MCP frontend. This is a full-record replace: fields omitted from the request become null on the stored record. The id and visibility fields are required; exactly one of remote_mcp_server_id or toolset_id must be provided; at most one of external_oauth_server_id or oauth_proxy_server_id may be provided.`)
+	fmt.Fprintln(os.Stderr, `    delete-mcp-frontend: Delete an MCP frontend`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s mcp-frontends COMMAND --help\n", os.Args[0])
+}
+func mcpFrontendsCreateMcpFrontendUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] mcp-frontends create-mcp-frontend", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Create a new MCP frontend`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-frontends create-mcp-frontend --body '{\n      \"environment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"external_oauth_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"oauth_proxy_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"remote_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"visibility\": \"private\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func mcpFrontendsGetMcpFrontendUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] mcp-frontends get-mcp-frontend", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get an MCP frontend by ID`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-frontends get-mcp-frontend --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func mcpFrontendsListMcpFrontendsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] mcp-frontends list-mcp-frontends", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List all MCP frontends for a project`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-frontends list-mcp-frontends --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func mcpFrontendsUpdateMcpFrontendUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] mcp-frontends update-mcp-frontend", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Update an MCP frontend. This is a full-record replace: fields omitted from the request become null on the stored record. The id and visibility fields are required; exactly one of remote_mcp_server_id or toolset_id must be provided; at most one of external_oauth_server_id or oauth_proxy_server_id may be provided.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-frontends update-mcp-frontend --body '{\n      \"environment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"external_oauth_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"oauth_proxy_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"remote_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"visibility\": \"private\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func mcpFrontendsDeleteMcpFrontendUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] mcp-frontends delete-mcp-frontend", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Delete an MCP frontend`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-frontends delete-mcp-frontend --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
 // mcpMetadataUsage displays the usage of the mcp-metadata command and its
 // subcommands.
 func mcpMetadataUsage() {
@@ -5643,6 +5939,145 @@ func mcpMetadataExportMcpMetadataUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-metadata export-mcp-metadata --body '{\n      \"mcp_slug\": \"aaa\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+// mcpSlugsUsage displays the usage of the mcp-slugs command and its
+// subcommands.
+func mcpSlugsUsage() {
+	fmt.Fprintln(os.Stderr, `Managing MCP slugs, the url-friendly identifiers that address MCP frontends.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] mcp-slugs COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    create-mcp-slug: Create a new MCP slug for an MCP frontend`)
+	fmt.Fprintln(os.Stderr, `    get-mcp-slug: Get an MCP slug by id or by (custom_domain_id, slug). Provide either id, or slug with an optional custom_domain_id — not both.`)
+	fmt.Fprintln(os.Stderr, `    list-mcp-slugs: List MCP slugs for a project. Optionally filter to only those associated with a specific MCP frontend.`)
+	fmt.Fprintln(os.Stderr, `    update-mcp-slug: Update an MCP slug. This is a full-record replace: fields omitted from the request become null on the stored record. The id, mcp_frontend_id, and slug fields are required.`)
+	fmt.Fprintln(os.Stderr, `    delete-mcp-slug: Delete an MCP slug`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s mcp-slugs COMMAND --help\n", os.Args[0])
+}
+func mcpSlugsCreateMcpSlugUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] mcp-slugs create-mcp-slug", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Create a new MCP slug for an MCP frontend`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-slugs create-mcp-slug --body '{\n      \"custom_domain_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"mcp_frontend_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"slug\": \"aaa\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func mcpSlugsGetMcpSlugUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] mcp-slugs get-mcp-slug", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -custom-domain-id STRING")
+	fmt.Fprint(os.Stderr, " -slug STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get an MCP slug by id or by (custom_domain_id, slug). Provide either id, or slug with an optional custom_domain_id — not both.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -custom-domain-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -slug STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-slugs get-mcp-slug --id \"550e8400-e29b-41d4-a716-446655440000\" --custom-domain-id \"550e8400-e29b-41d4-a716-446655440000\" --slug \"aaa\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func mcpSlugsListMcpSlugsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] mcp-slugs list-mcp-slugs", os.Args[0])
+	fmt.Fprint(os.Stderr, " -mcp-frontend-id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List MCP slugs for a project. Optionally filter to only those associated with a specific MCP frontend.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -mcp-frontend-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-slugs list-mcp-slugs --mcp-frontend-id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func mcpSlugsUpdateMcpSlugUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] mcp-slugs update-mcp-slug", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Update an MCP slug. This is a full-record replace: fields omitted from the request become null on the stored record. The id, mcp_frontend_id, and slug fields are required.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-slugs update-mcp-slug --body '{\n      \"custom_domain_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"mcp_frontend_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"slug\": \"aaa\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func mcpSlugsDeleteMcpSlugUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] mcp-slugs delete-mcp-slug", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Delete an MCP slug`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-slugs delete-mcp-slug --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // organizationsUsage displays the usage of the organizations command and its

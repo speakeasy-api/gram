@@ -273,6 +273,14 @@ run();
 * [revokeById](docs/sdks/keys/README.md#revokebyid) - revokeKey keys
 * [validate](docs/sdks/keys/README.md#validate) - verifyKey keys
 
+### [McpFrontends](docs/sdks/mcpfrontends/README.md)
+
+* [create](docs/sdks/mcpfrontends/README.md#create) - createMcpFrontend mcpFrontends
+* [delete](docs/sdks/mcpfrontends/README.md#delete) - deleteMcpFrontend mcpFrontends
+* [get](docs/sdks/mcpfrontends/README.md#get) - getMcpFrontend mcpFrontends
+* [list](docs/sdks/mcpfrontends/README.md#list) - listMcpFrontends mcpFrontends
+* [update](docs/sdks/mcpfrontends/README.md#update) - updateMcpFrontend mcpFrontends
+
 ### [McpMetadata](docs/sdks/mcpmetadata/README.md)
 
 * [export](docs/sdks/mcpmetadata/README.md#export) - exportMcpMetadata mcpMetadata
@@ -285,6 +293,14 @@ run();
 * [getServerDetails](docs/sdks/mcpregistries/README.md#getserverdetails) - getServerDetails mcpRegistries
 * [listCatalog](docs/sdks/mcpregistries/README.md#listcatalog) - listCatalog mcpRegistries
 * [listRegistries](docs/sdks/mcpregistries/README.md#listregistries) - listRegistries mcpRegistries
+
+### [McpSlugs](docs/sdks/mcpslugs/README.md)
+
+* [create](docs/sdks/mcpslugs/README.md#create) - createMcpSlug mcpSlugs
+* [delete](docs/sdks/mcpslugs/README.md#delete) - deleteMcpSlug mcpSlugs
+* [get](docs/sdks/mcpslugs/README.md#get) - getMcpSlug mcpSlugs
+* [list](docs/sdks/mcpslugs/README.md#list) - listMcpSlugs mcpSlugs
+* [update](docs/sdks/mcpslugs/README.md#update) - updateMcpSlug mcpSlugs
 
 ### [Organizations](docs/sdks/organizations/README.md)
 
@@ -542,6 +558,11 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`keysList`](docs/sdks/keys/README.md#list) - listKeys keys
 - [`keysRevokeById`](docs/sdks/keys/README.md#revokebyid) - revokeKey keys
 - [`keysValidate`](docs/sdks/keys/README.md#validate) - verifyKey keys
+- [`mcpFrontendsCreate`](docs/sdks/mcpfrontends/README.md#create) - createMcpFrontend mcpFrontends
+- [`mcpFrontendsDelete`](docs/sdks/mcpfrontends/README.md#delete) - deleteMcpFrontend mcpFrontends
+- [`mcpFrontendsGet`](docs/sdks/mcpfrontends/README.md#get) - getMcpFrontend mcpFrontends
+- [`mcpFrontendsList`](docs/sdks/mcpfrontends/README.md#list) - listMcpFrontends mcpFrontends
+- [`mcpFrontendsUpdate`](docs/sdks/mcpfrontends/README.md#update) - updateMcpFrontend mcpFrontends
 - [`mcpMetadataExport`](docs/sdks/mcpmetadata/README.md#export) - exportMcpMetadata mcpMetadata
 - [`mcpMetadataGet`](docs/sdks/mcpmetadata/README.md#get) - getMcpMetadata mcpMetadata
 - [`mcpMetadataSet`](docs/sdks/mcpmetadata/README.md#set) - setMcpMetadata mcpMetadata
@@ -549,6 +570,11 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`mcpRegistriesGetServerDetails`](docs/sdks/mcpregistries/README.md#getserverdetails) - getServerDetails mcpRegistries
 - [`mcpRegistriesListCatalog`](docs/sdks/mcpregistries/README.md#listcatalog) - listCatalog mcpRegistries
 - [`mcpRegistriesListRegistries`](docs/sdks/mcpregistries/README.md#listregistries) - listRegistries mcpRegistries
+- [`mcpSlugsCreate`](docs/sdks/mcpslugs/README.md#create) - createMcpSlug mcpSlugs
+- [`mcpSlugsDelete`](docs/sdks/mcpslugs/README.md#delete) - deleteMcpSlug mcpSlugs
+- [`mcpSlugsGet`](docs/sdks/mcpslugs/README.md#get) - getMcpSlug mcpSlugs
+- [`mcpSlugsList`](docs/sdks/mcpslugs/README.md#list) - listMcpSlugs mcpSlugs
+- [`mcpSlugsUpdate`](docs/sdks/mcpslugs/README.md#update) - updateMcpSlug mcpSlugs
 - [`organizationsGetInviteByToken`](docs/sdks/organizations/README.md#getinvitebytoken) - getInviteByToken organizations
 - [`organizationsListInvites`](docs/sdks/organizations/README.md#listinvites) - listInvites organizations
 - [`organizationsListUsers`](docs/sdks/organizations/README.md#listusers) - listUsers organizations
@@ -705,6 +731,8 @@ To learn about this feature and how to get started, check
 - [`useCreateCustomerSessionMutation`](docs/sdks/usage/README.md#createcustomersession) - createCustomerSession usage
 - [`useCreateDeploymentMutation`](docs/sdks/deployments/README.md#create) - createDeployment deployments
 - [`useCreateEnvironmentMutation`](docs/sdks/environments/README.md#create) - createEnvironment environments
+- [`useCreateMcpFrontendMutation`](docs/sdks/mcpfrontends/README.md#create) - createMcpFrontend mcpFrontends
+- [`useCreateMcpSlugMutation`](docs/sdks/mcpslugs/README.md#create) - createMcpSlug mcpSlugs
 - [`useCreatePackageMutation`](docs/sdks/packages/README.md#create) - createPackage packages
 - [`useCreatePluginMutation`](docs/sdks/plugins/README.md#createplugin) - createPlugin plugins
 - [`useCreateProjectMutation`](docs/sdks/projects/README.md#create) - createProject projects
@@ -718,6 +746,8 @@ To learn about this feature and how to get started, check
 - [`useDeleteDomainMutation`](docs/sdks/domains/README.md#deletedomain) - deleteDomain domains
 - [`useDeleteEnvironmentMutation`](docs/sdks/environments/README.md#deletebyslug) - deleteEnvironment environments
 - [`useDeleteGlobalVariationMutation`](docs/sdks/variations/README.md#deleteglobal) - deleteGlobal variations
+- [`useDeleteMcpFrontendMutation`](docs/sdks/mcpfrontends/README.md#delete) - deleteMcpFrontend mcpFrontends
+- [`useDeleteMcpSlugMutation`](docs/sdks/mcpslugs/README.md#delete) - deleteMcpSlug mcpSlugs
 - [`useDeletePluginMutation`](docs/sdks/plugins/README.md#deleteplugin) - deletePlugin plugins
 - [`useDeleteProjectMutation`](docs/sdks/projects/README.md#deletebyid) - deleteProject projects
 - [`useDeleteRemoteMcpServerMutation`](docs/sdks/remotemcp/README.md#deleteserver) - deleteServer remoteMcp
@@ -741,7 +771,9 @@ To learn about this feature and how to get started, check
 - [`useGetDomain`](docs/sdks/domains/README.md#getdomain) - getDomain domains
 - [`useGetHooksSummary`](docs/sdks/telemetry/README.md#gethookssummary) - getHooksSummary telemetry
 - [`useGetInviteByToken`](docs/sdks/organizations/README.md#getinvitebytoken) - getInviteByToken organizations
+- [`useGetMcpFrontend`](docs/sdks/mcpfrontends/README.md#get) - getMcpFrontend mcpFrontends
 - [`useGetMcpMetadata`](docs/sdks/mcpmetadata/README.md#get) - getMcpMetadata mcpMetadata
+- [`useGetMcpSlug`](docs/sdks/mcpslugs/README.md#get) - getMcpSlug mcpSlugs
 - [`useGetObservabilityOverview`](docs/sdks/telemetry/README.md#getobservabilityoverview) - getObservabilityOverview telemetry
 - [`useGetPeriodUsage`](docs/sdks/usage/README.md#getperiodusage) - getPeriodUsage usage
 - [`useGetProjectMetricsSummary`](docs/sdks/telemetry/README.md#getprojectmetricssummary) - getProjectMetricsSummary telemetry
@@ -791,9 +823,11 @@ To learn about this feature and how to get started, check
 - [`useListVersions`](docs/sdks/packages/README.md#listversions) - listVersions packages
 - [`useLoadChat`](docs/sdks/chat/README.md#load) - loadChat chat
 - [`useLogoutMutation`](docs/sdks/auth/README.md#logout) - logout auth
+- [`useMcpFrontends`](docs/sdks/mcpfrontends/README.md#list) - listMcpFrontends mcpFrontends
 - [`useMcpMetadataSetMutation`](docs/sdks/mcpmetadata/README.md#set) - setMcpMetadata mcpMetadata
 - [`useMcpRegistriesClearCacheMutation`](docs/sdks/mcpregistries/README.md#clearcache) - clearCache mcpRegistries
 - [`useMcpRegistriesGetServerDetails`](docs/sdks/mcpregistries/README.md#getserverdetails) - getServerDetails mcpRegistries
+- [`useMcpSlugs`](docs/sdks/mcpslugs/README.md#list) - listMcpSlugs mcpSlugs
 - [`useMembers`](docs/sdks/access/README.md#listmembers) - listMembers access
 - [`usePauseTriggerMutation`](docs/sdks/triggers/README.md#pause) - pauseTriggerInstance triggers
 - [`usePlugin`](docs/sdks/plugins/README.md#getplugin) - getPlugin plugins
@@ -852,6 +886,8 @@ To learn about this feature and how to get started, check
 - [`useTriggerDefinitions`](docs/sdks/triggers/README.md#listdefinitions) - listTriggerDefinitions triggers
 - [`useTriggers`](docs/sdks/triggers/README.md#list) - listTriggerInstances triggers
 - [`useUpdateEnvironmentMutation`](docs/sdks/environments/README.md#updatebyslug) - updateEnvironment environments
+- [`useUpdateMcpFrontendMutation`](docs/sdks/mcpfrontends/README.md#update) - updateMcpFrontend mcpFrontends
+- [`useUpdateMcpSlugMutation`](docs/sdks/mcpslugs/README.md#update) - updateMcpSlug mcpSlugs
 - [`useUpdateMemberRoleMutation`](docs/sdks/access/README.md#updatememberrole) - updateMemberRole access
 - [`useUpdateOAuthProxyServerMutation`](docs/sdks/toolsets/README.md#updateoauthproxyserver) - updateOAuthProxyServer toolsets
 - [`useUpdatePackageMutation`](docs/sdks/packages/README.md#update) - updatePackage packages
