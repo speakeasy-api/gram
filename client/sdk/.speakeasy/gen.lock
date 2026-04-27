@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 2513cd9838c0a57baf810400984149c2
+  docChecksum: 07b86bef73033027e37ad0f4813441a3
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
-  releaseVersion: 0.33.7
-  configChecksum: beb35cd99e450093f6a64fc566e10c76
+  releaseVersion: 0.33.8
+  configChecksum: cad1c15a116405027e48e2bd3d094362
 persistentEdits:
   generation_id: bb7e101e-7ad4-46ab-85f8-4945a377ddd8
   pristine_commit_hash: 8f637eb1797d8010346278d429048da266e99c54
@@ -218,6 +218,8 @@ trackedFiles:
     last_write_checksum: sha1:9b6481e8af0916f6e44a3dc2be0aafc40a9a381f
   docs/models/components/deploymentsummary.md:
     last_write_checksum: sha1:5d4ab2325f17cf618cafef456b8e52dd33d4da9a
+  docs/models/components/disposition.md:
+    last_write_checksum: sha1:d51c0ffed16ab9b7706cd9c7d439d66379aac4e7
   docs/models/components/engine.md:
     last_write_checksum: sha1:011590e0a0948b257fe56e89b478e1576fdb488b
   docs/models/components/environment.md:
@@ -401,7 +403,7 @@ trackedFiles:
   docs/models/components/listriskresultsresult.md:
     last_write_checksum: sha1:b9598d5d1bcbb33c95b7f7b15e7e2c4310bdb3b3
   docs/models/components/listrolegrant.md:
-    last_write_checksum: sha1:c281e1345787c7f4bc2df9ae6dfdb3b759fe167c
+    last_write_checksum: sha1:9966c7ef9b493f13874668b32dce53ab4db0e94d
   docs/models/components/listrolegrantscope.md:
     last_write_checksum: sha1:a81ad3d27cce782e6ebd3811d17d3e196a202d78
   docs/models/components/listrolesresult.md:
@@ -592,6 +594,8 @@ trackedFiles:
     last_write_checksum: sha1:62b0fa197ad020da45d804e389ba7ea3a4eef4e5
   docs/models/components/resourceentry.md:
     last_write_checksum: sha1:1fd4caa06e03fef506b201ec27e04238a238450d
+  docs/models/components/resourcekind.md:
+    last_write_checksum: sha1:75eca1edcb6f2f328aef0dceba6d152c9df7927e
   docs/models/components/resourcetype.md:
     last_write_checksum: sha1:e51f6391a253740b0891d0c289ea1578ee55c77d
   docs/models/components/responsefilter.md:
@@ -607,7 +611,7 @@ trackedFiles:
   docs/models/components/role.md:
     last_write_checksum: sha1:809bed93dac0663775bca80b214937f21a60184a
   docs/models/components/rolegrant.md:
-    last_write_checksum: sha1:10f4c56e21163bd1657a49539426683165aedfae
+    last_write_checksum: sha1:a305c738b2b10e7d43ef1d091a60a1ff2ee307de
   docs/models/components/scope.md:
     last_write_checksum: sha1:7a48140d97052a0aa3dd6f528bb9ebea59fc3798
   docs/models/components/scopedefinition.md:
@@ -648,6 +652,8 @@ trackedFiles:
     last_write_checksum: sha1:56ee4b00c88b7a2f716e60637afbc398ddd3266b
   docs/models/components/securityvariable.md:
     last_write_checksum: sha1:c9440e44db862ae2ab790d1f490d7a145a23cd9d
+  docs/models/components/selector.md:
+    last_write_checksum: sha1:10a19568442887d9624a8862dec7b9b2ad6a27e8
   docs/models/components/sendinviterequestbody.md:
     last_write_checksum: sha1:0e198484928f538a25089e08a8082cced7ed28fc
   docs/models/components/serveimageform.md:
@@ -2112,11 +2118,11 @@ trackedFiles:
     pristine_git_object: bf1f7d6d396e43fdddcc27f74052233f952ed602
   jsr.json:
     id: 7f6ab7767282
-    last_write_checksum: sha1:b10ba5a9be2e1cf6803cb233cc913f427c517865
+    last_write_checksum: sha1:8a9f6312d6c86724c1e989bf4fdd8077db2598cf
     pristine_git_object: 37015b45d10dbc89a9a32f9f2230620a633c7af5
   package.json:
     id: 7030d0b2f71b
-    last_write_checksum: sha1:77b71fd37a8acc2e1737ea879e27ae35283623b0
+    last_write_checksum: sha1:12c2e7956948821f826c2b260af0ce6639e76bd5
     pristine_git_object: efd88030fdaeb4cfabe39268b1f7e684dda63c7e
   src/core.ts:
     id: f431fdbcd144
@@ -2732,7 +2738,7 @@ trackedFiles:
     pristine_git_object: b9f82967e336f398ea542003dc4b7b2508bc4e76
   src/lib/config.ts:
     id: 320761608fb3
-    last_write_checksum: sha1:c958a00326a01e865582c7d93993f8b9e7bb1af2
+    last_write_checksum: sha1:02ef2a18ed955f4399c24946174b96647e70127e
     pristine_git_object: 582b9fc70b7ac2bf3e01969f3ea9b751959bbd2b
   src/lib/dlv.ts:
     id: b1988214835a
@@ -3144,7 +3150,7 @@ trackedFiles:
     pristine_git_object: a6f415c341273d2f679cbaa39ea48eaede35f633
   src/models/components/index.ts:
     id: 0aa842dce54d
-    last_write_checksum: sha1:e5af6fccd914361047c0ef04f225162c80326c25
+    last_write_checksum: sha1:6a1dbb770a54a7df72a07d58e6451718db5756c7
     pristine_git_object: 4c964f216a07beb3007a26774ce7bdaa48c9f74c
   src/models/components/inforesponsebody.ts:
     id: a1447891c5a4
@@ -3253,7 +3259,7 @@ trackedFiles:
   src/models/components/listriskresultsresult.ts:
     last_write_checksum: sha1:d16223e7b7bc4d6f6ee25b9876b4746553baff8c
   src/models/components/listrolegrant.ts:
-    last_write_checksum: sha1:78cbb12a7f96e9308a81918c4ddfe2fa2af84c3d
+    last_write_checksum: sha1:55ccad219f6e204d8f922f4df851b358fb4b2929
   src/models/components/listrolesresult.ts:
     last_write_checksum: sha1:c6334302437232f7d088e953ea4b0360f1e6c8c2
   src/models/components/listscopesresult.ts:
@@ -3493,7 +3499,7 @@ trackedFiles:
   src/models/components/role.ts:
     last_write_checksum: sha1:0471a9177cc9f7a8494dfa8d834808500d1b05a7
   src/models/components/rolegrant.ts:
-    last_write_checksum: sha1:6e230f95ddec94497ea6ab9ac44d559099acb603
+    last_write_checksum: sha1:e383873fe8a97d50a4aa15efc39d15d1bd68bdae
   src/models/components/scopedefinition.ts:
     last_write_checksum: sha1:3875f0a64b92fe8ffde06782a1a9e4fedf54920e
   src/models/components/searchchatsfilter.ts:
@@ -3536,6 +3542,8 @@ trackedFiles:
     id: 4aa96a84a4f9
     last_write_checksum: sha1:b6435b1d385bc4ce89a1a172f494119f689414cb
     pristine_git_object: 3f1430d434bf71f00ca1101ef800ddac5e4d1a59
+  src/models/components/selector.ts:
+    last_write_checksum: sha1:f611d997b9ec7f58bc56a16f0aaca896e22c274e
   src/models/components/sendinviterequestbody.ts:
     last_write_checksum: sha1:7f8b96e7dbb98bd5d702627bb6ee08d3e4df36c3
   src/models/components/serveimageform.ts:

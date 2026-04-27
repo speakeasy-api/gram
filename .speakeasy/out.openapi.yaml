@@ -23970,11 +23970,6 @@ components:
     ListRoleGrant:
       type: object
       properties:
-        resources:
-          type: array
-          items:
-            type: string
-          description: Resource allowlist. Null means unrestricted access. An array means only the listed resource IDs.
         scope:
           type: string
           description: The scope slug this grant applies to.
@@ -23986,6 +23981,11 @@ components:
             - mcp:read
             - mcp:write
             - mcp:connect
+        selectors:
+          type: array
+          items:
+            $ref: '#/components/schemas/Selector'
+          description: Selector constraints. Null means unrestricted.
         sub_scopes:
           type: array
           items:
@@ -26220,11 +26220,6 @@ components:
     RoleGrant:
       type: object
       properties:
-        resources:
-          type: array
-          items:
-            type: string
-          description: Resource allowlist. Null means unrestricted access. An array means only the listed resource IDs.
         scope:
           type: string
           description: The scope slug this grant applies to.
@@ -26236,6 +26231,11 @@ components:
             - mcp:read
             - mcp:write
             - mcp:connect
+        selectors:
+          type: array
+          items:
+            $ref: '#/components/schemas/Selector'
+          description: Selector constraints. Null means unrestricted.
       required:
         - scope
     ScopeDefinition:
@@ -26634,6 +26634,35 @@ components:
         - in_placement
         - scheme
         - env_variables
+    Selector:
+      type: object
+      properties:
+        disposition:
+          type: string
+          description: Tool disposition filter (MCP scopes only).
+          enum:
+            - read_only
+            - destructive
+            - idempotent
+            - open_world
+        resource_id:
+          type: string
+          description: The resource identifier, or '*' for all resources of this kind.
+        resource_kind:
+          type: string
+          description: The kind of resource this selector targets.
+          enum:
+            - project
+            - mcp
+            - org
+            - '*'
+        tool:
+          type: string
+          description: Specific tool name filter (MCP scopes only).
+      description: A constraint that narrows which resources a grant applies to.
+      required:
+        - resource_kind
+        - resource_id
     SendInviteRequestBody:
       type: object
       properties:

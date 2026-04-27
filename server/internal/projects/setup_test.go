@@ -81,9 +81,9 @@ func newTestProjectsService(t *testing.T, enableRBAC bool) (context.Context, *te
 	ctx = contextvalues.SetAuthContext(ctx, authCtx)
 
 	ctx = withAccessGrants(t, ctx, conn,
-		authz.Grant{Scope: authz.ScopeProjectRead, Resource: authCtx.ProjectID.String()},
-		authz.Grant{Scope: authz.ScopeProjectWrite, Resource: authCtx.ProjectID.String()},
-		authz.Grant{Scope: authz.ScopeOrgAdmin, Resource: authCtx.ActiveOrganizationID},
+		authz.Grant{Scope: authz.ScopeProjectRead, Selector: authz.NewSelector(authz.ScopeProjectRead, authCtx.ProjectID.String())},
+		authz.Grant{Scope: authz.ScopeProjectWrite, Selector: authz.NewSelector(authz.ScopeProjectWrite, authCtx.ProjectID.String())},
+		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
 	)
 
 	// Create test asset storage for testing
@@ -109,7 +109,7 @@ func withAccessGrants(t *testing.T, ctx context.Context, conn *pgxpool.Pool, gra
 
 	userPrincipal := urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)
 	for _, grant := range grants {
-		seedGrant(t, ctx, conn, authCtx.ActiveOrganizationID, userPrincipal, grant.Scope, grant.Resource)
+		seedGrant(t, ctx, conn, authCtx.ActiveOrganizationID, userPrincipal, grant.Scope, grant.Selector.ResourceID())
 	}
 
 	loadedGrants, err := authz.LoadGrants(ctx, conn, authCtx.ActiveOrganizationID, []urn.Principal{userPrincipal})
@@ -126,7 +126,7 @@ func withExactAccessGrants(t *testing.T, ctx context.Context, conn *pgxpool.Pool
 
 	principal := urn.NewPrincipal(urn.PrincipalTypeRole, "test-exact-grants")
 	for _, grant := range grants {
-		seedGrant(t, ctx, conn, authCtx.ActiveOrganizationID, principal, grant.Scope, grant.Resource)
+		seedGrant(t, ctx, conn, authCtx.ActiveOrganizationID, principal, grant.Scope, grant.Selector.ResourceID())
 	}
 
 	loadedGrants, err := authz.LoadGrants(ctx, conn, authCtx.ActiveOrganizationID, []urn.Principal{principal})
@@ -138,11 +138,15 @@ func withExactAccessGrants(t *testing.T, ctx context.Context, conn *pgxpool.Pool
 func seedGrant(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, principal urn.Principal, scope authz.Scope, resource string) {
 	t.Helper()
 
-	_, err := accessrepo.New(conn).InsertPrincipalGrant(ctx, accessrepo.InsertPrincipalGrantParams{
+	selectors, err := authz.NewSelector(scope, resource).MarshalJSON()
+	require.NoError(t, err)
+
+	_, err = accessrepo.New(conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{
 		OrganizationID: organizationID,
 		PrincipalUrn:   principal,
 		Scope:          string(scope),
 		Resource:       resource,
+		Selectors:      selectors,
 	})
 	require.NoError(t, err)
 }
