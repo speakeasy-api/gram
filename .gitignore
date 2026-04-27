@@ -55,6 +55,7 @@ poetry-installer-error-*.log
 package-lock.json
 /examples/*/pnpm-lock.yaml
 .worktrees
+.claude/worktrees/
 .granary/
 .claude/hooks/*
 flagged-chats.jsonl
