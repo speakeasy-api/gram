@@ -115,6 +115,7 @@ export function setRiskListResultsByChatData(
   queryKeyBase: [
     parameters: {
       cursor?: string | undefined;
+      limit?: number | undefined;
       gramKey?: string | undefined;
       gramSession?: string | undefined;
       gramProject?: string | undefined;
@@ -132,6 +133,7 @@ export function invalidateRiskListResultsByChat(
   queryKeyBase: TupleToPrefixes<
     [parameters: {
       cursor?: string | undefined;
+      limit?: number | undefined;
       gramKey?: string | undefined;
       gramSession?: string | undefined;
       gramProject?: string | undefined;

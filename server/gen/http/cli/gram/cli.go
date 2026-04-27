@@ -903,12 +903,14 @@ func ParseEndpoint(
 		riskListRiskResultsPolicyIDFlag         = riskListRiskResultsFlags.String("policy-id", "", "")
 		riskListRiskResultsChatIDFlag           = riskListRiskResultsFlags.String("chat-id", "", "")
 		riskListRiskResultsCursorFlag           = riskListRiskResultsFlags.String("cursor", "", "")
+		riskListRiskResultsLimitFlag            = riskListRiskResultsFlags.String("limit", "", "")
 		riskListRiskResultsApikeyTokenFlag      = riskListRiskResultsFlags.String("apikey-token", "", "")
 		riskListRiskResultsSessionTokenFlag     = riskListRiskResultsFlags.String("session-token", "", "")
 		riskListRiskResultsProjectSlugInputFlag = riskListRiskResultsFlags.String("project-slug-input", "", "")
 
 		riskListRiskResultsByChatFlags                = flag.NewFlagSet("list-risk-results-by-chat", flag.ExitOnError)
 		riskListRiskResultsByChatCursorFlag           = riskListRiskResultsByChatFlags.String("cursor", "", "")
+		riskListRiskResultsByChatLimitFlag            = riskListRiskResultsByChatFlags.String("limit", "", "")
 		riskListRiskResultsByChatApikeyTokenFlag      = riskListRiskResultsByChatFlags.String("apikey-token", "", "")
 		riskListRiskResultsByChatSessionTokenFlag     = riskListRiskResultsByChatFlags.String("session-token", "", "")
 		riskListRiskResultsByChatProjectSlugInputFlag = riskListRiskResultsByChatFlags.String("project-slug-input", "", "")
@@ -2921,10 +2923,10 @@ func ParseEndpoint(
 				data, err = riskc.BuildDeleteRiskPolicyPayload(*riskDeleteRiskPolicyIDFlag, *riskDeleteRiskPolicyApikeyTokenFlag, *riskDeleteRiskPolicySessionTokenFlag, *riskDeleteRiskPolicyProjectSlugInputFlag)
 			case "list-risk-results":
 				endpoint = c.ListRiskResults()
-				data, err = riskc.BuildListRiskResultsPayload(*riskListRiskResultsPolicyIDFlag, *riskListRiskResultsChatIDFlag, *riskListRiskResultsCursorFlag, *riskListRiskResultsApikeyTokenFlag, *riskListRiskResultsSessionTokenFlag, *riskListRiskResultsProjectSlugInputFlag)
+				data, err = riskc.BuildListRiskResultsPayload(*riskListRiskResultsPolicyIDFlag, *riskListRiskResultsChatIDFlag, *riskListRiskResultsCursorFlag, *riskListRiskResultsLimitFlag, *riskListRiskResultsApikeyTokenFlag, *riskListRiskResultsSessionTokenFlag, *riskListRiskResultsProjectSlugInputFlag)
 			case "list-risk-results-by-chat":
 				endpoint = c.ListRiskResultsByChat()
-				data, err = riskc.BuildListRiskResultsByChatPayload(*riskListRiskResultsByChatCursorFlag, *riskListRiskResultsByChatApikeyTokenFlag, *riskListRiskResultsByChatSessionTokenFlag, *riskListRiskResultsByChatProjectSlugInputFlag)
+				data, err = riskc.BuildListRiskResultsByChatPayload(*riskListRiskResultsByChatCursorFlag, *riskListRiskResultsByChatLimitFlag, *riskListRiskResultsByChatApikeyTokenFlag, *riskListRiskResultsByChatSessionTokenFlag, *riskListRiskResultsByChatProjectSlugInputFlag)
 			case "get-risk-policy-status":
 				endpoint = c.GetRiskPolicyStatus()
 				data, err = riskc.BuildGetRiskPolicyStatusPayload(*riskGetRiskPolicyStatusIDFlag, *riskGetRiskPolicyStatusApikeyTokenFlag, *riskGetRiskPolicyStatusSessionTokenFlag, *riskGetRiskPolicyStatusProjectSlugInputFlag)
@@ -6593,7 +6595,7 @@ func riskCreateRiskPolicyUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk create-risk-policy --body '{\n      \"enabled\": false,\n      \"name\": \"abc123\",\n      \"sources\": [\n         \"abc123\"\n      ]\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk create-risk-policy --body '{\n      \"enabled\": false,\n      \"name\": \"abc123\",\n      \"presidio_entities\": [\n         \"abc123\"\n      ],\n      \"sources\": [\n         \"abc123\"\n      ]\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func riskListRiskPoliciesUsage() {
@@ -6663,7 +6665,7 @@ func riskUpdateRiskPolicyUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk update-risk-policy --body '{\n      \"enabled\": false,\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"sources\": [\n         \"abc123\"\n      ]\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk update-risk-policy --body '{\n      \"enabled\": false,\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"presidio_entities\": [\n         \"abc123\"\n      ],\n      \"sources\": [\n         \"abc123\"\n      ]\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func riskDeleteRiskPolicyUsage() {
@@ -6696,6 +6698,7 @@ func riskListRiskResultsUsage() {
 	fmt.Fprint(os.Stderr, " -policy-id STRING")
 	fmt.Fprint(os.Stderr, " -chat-id STRING")
 	fmt.Fprint(os.Stderr, " -cursor STRING")
+	fmt.Fprint(os.Stderr, " -limit INT")
 	fmt.Fprint(os.Stderr, " -apikey-token STRING")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
@@ -6709,19 +6712,21 @@ func riskListRiskResultsUsage() {
 	fmt.Fprintln(os.Stderr, `    -policy-id STRING: `)
 	fmt.Fprintln(os.Stderr, `    -chat-id STRING: `)
 	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
+	fmt.Fprintln(os.Stderr, `    -limit INT: `)
 	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk list-risk-results --policy-id \"550e8400-e29b-41d4-a716-446655440000\" --chat-id \"550e8400-e29b-41d4-a716-446655440000\" --cursor \"abc123\" --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk list-risk-results --policy-id \"550e8400-e29b-41d4-a716-446655440000\" --chat-id \"550e8400-e29b-41d4-a716-446655440000\" --cursor \"abc123\" --limit 2 --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func riskListRiskResultsByChatUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] risk list-risk-results-by-chat", os.Args[0])
 	fmt.Fprint(os.Stderr, " -cursor STRING")
+	fmt.Fprint(os.Stderr, " -limit INT")
 	fmt.Fprint(os.Stderr, " -apikey-token STRING")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
@@ -6733,13 +6738,14 @@ func riskListRiskResultsByChatUsage() {
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
+	fmt.Fprintln(os.Stderr, `    -limit INT: `)
 	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk list-risk-results-by-chat --cursor \"abc123\" --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk list-risk-results-by-chat --cursor \"abc123\" --limit 2 --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func riskGetRiskPolicyStatusUsage() {
