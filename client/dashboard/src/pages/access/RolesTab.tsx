@@ -6,7 +6,10 @@ import {
   invalidateAllRoles,
   useRoles,
 } from "@gram/client/react-query/roles.js";
-import { invalidateAllMembers } from "@gram/client/react-query/members.js";
+import {
+  invalidateAllMembers,
+  useMembers,
+} from "@gram/client/react-query/members.js";
 import { useDeleteRoleMutation } from "@gram/client/react-query/deleteRole.js";
 import { SkeletonTable } from "@/components/ui/skeleton";
 import {
@@ -33,6 +36,14 @@ export function RolesTab() {
   const queryClient = useQueryClient();
   const { data: rolesData, isLoading } = useRoles();
   const roles = rolesData?.roles ?? [];
+  const { data: membersData } = useMembers();
+  const members = membersData?.members ?? [];
+
+  const defaultRole =
+    roles.find((r) => r.isSystem && r.name === "Member") ?? null;
+  const membersOfDeletingRole = deletingRole
+    ? members.filter((m) => m.roleId === deletingRole.id)
+    : [];
 
   const deleteRole = useDeleteRoleMutation({
     onSuccess: async () => {
@@ -214,6 +225,8 @@ export function RolesTab() {
         }}
         handleCancel={() => setDeletingRole(null)}
         role={deletingRole}
+        members={membersOfDeletingRole}
+        defaultRole={defaultRole}
       />
     </div>
   );
