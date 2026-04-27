@@ -1223,7 +1223,6 @@ export const DETECTION_RULES: Record<RuleCategory, DetectionRule[]> = {
       title: "IPv4 or IPv6 address",
       source: "presidio",
     },
-    { id: "URL", title: "Uniform Resource Locator", source: "presidio" },
     {
       id: "MAC_ADDRESS",
       title: "Network interface identifier",
