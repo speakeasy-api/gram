@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/audit/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -26,7 +27,7 @@ type LogRiskPolicyCreateEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	RiskPolicyID   uuid.UUID
+	RiskPolicyID   uuid.UUID //nolint:glint // TODO(AGE-1954): introduce urn.RiskPolicy and migrate to RiskPolicyURN; pending team discussion
 	RiskPolicyName string
 }
 
@@ -68,11 +69,11 @@ type LogRiskPolicyUpdateEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	RiskPolicyID   uuid.UUID
+	RiskPolicyID   uuid.UUID //nolint:glint // TODO(AGE-1954): introduce urn.RiskPolicy and migrate to RiskPolicyURN; pending team discussion
 	RiskPolicyName string
 
-	SnapshotBefore any
-	SnapshotAfter  any
+	SnapshotBefore *types.RiskPolicy
+	SnapshotAfter  *types.RiskPolicy
 }
 
 func LogRiskPolicyUpdate(ctx context.Context, dbtx repo.DBTX, event LogRiskPolicyUpdateEvent) error {
@@ -124,7 +125,7 @@ type LogRiskPolicyDeleteEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	RiskPolicyID   uuid.UUID
+	RiskPolicyID   uuid.UUID //nolint:glint // TODO(AGE-1954): introduce urn.RiskPolicy and migrate to RiskPolicyURN; pending team discussion
 	RiskPolicyName string
 }
 
@@ -166,7 +167,7 @@ type LogRiskPolicyTriggerEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	RiskPolicyID   uuid.UUID
+	RiskPolicyID   uuid.UUID //nolint:glint // TODO(AGE-1954): introduce urn.RiskPolicy and migrate to RiskPolicyURN; pending team discussion
 	RiskPolicyName string
 }
 

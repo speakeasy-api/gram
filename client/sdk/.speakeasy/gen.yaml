@@ -26,7 +26,7 @@ generation:
   schemas:
     allOfMergeStrategy: shallowMerge
   requestBodyFieldName: ""
-  versioningStrategy: automatic
+  versioningStrategy: manual
   persistentEdits:
     enabled: never
   tests:
@@ -34,7 +34,7 @@ generation:
     generateNewTests: false
     skipResponseBodyAssertions: false
 typescript:
-  version: 0.33.2
+  version: 0.33.7
   acceptHeaderEnum: true
   additionalDependencies:
     dependencies: {}

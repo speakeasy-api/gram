@@ -211,3 +211,13 @@ func (q *Queries) ListDeploymentHTTPTools(ctx context.Context, deploymentID uuid
 	}
 	return items, nil
 }
+
+const scrubDeploymentFunctionMachineSpecs = `-- name: ScrubDeploymentFunctionMachineSpecs :exec
+UPDATE deployments_functions SET memory_mib = NULL, scale = NULL WHERE deployment_id = $1
+`
+
+// Simulates a legacy deployment by NULLing out memory_mib and scale, as if the row was inserted before these columns existed.
+func (q *Queries) ScrubDeploymentFunctionMachineSpecs(ctx context.Context, deploymentID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, scrubDeploymentFunctionMachineSpecs, deploymentID)
+	return err
+}

@@ -18,6 +18,9 @@ func disabledAllRulesPlugin() *plugin {
 				ServiceHasAutherAssertion:  serviceHasAutherAssertionSettings{Disabled: true},
 				ServiceHasAttachFunc:       serviceHasAttachFuncSettings{Disabled: true},
 				NoRepoFieldsInService:      noRepoFieldsInServiceSettings{Disabled: true},
+				AuditEventTypedSnapshot:    auditEventTypedSnapshotSettings{Disabled: true},
+				AuditEventURNNaming:        auditEventURNNamingSettings{Disabled: true},
+				AuditEventURNTyping:        auditEventURNTypingSettings{Disabled: true},
 			},
 		},
 	}
@@ -38,5 +41,5 @@ func TestBuildAnalyzersAllEnabled(t *testing.T) {
 	p := &plugin{}
 	analyzers, err := p.BuildAnalyzers()
 	require.NoError(t, err)
-	require.Len(t, analyzers, 6)
+	require.Len(t, analyzers, 9)
 }

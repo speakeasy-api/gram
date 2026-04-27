@@ -63,6 +63,19 @@ func NewLogger(
 	}
 }
 
+// NewStub returns a Logger with feature checks hard-wired to disabled. Log
+// is a no-op and the ClickHouse connection is never dialed.
+func NewStub(logger *slog.Logger) *Logger {
+	disabled := func(context.Context, string) (bool, error) { return false, nil }
+	return &Logger{
+		shutdownCtx:       context.Background,
+		logger:            logger.With(attr.SlogComponent("telemetry_logger_stub")),
+		chConn:            nil,
+		logsEnabled:       disabled,
+		toolIOLogsEnabled: disabled,
+	}
+}
+
 func (l *Logger) checkToolIOLogsEnabled(ctx context.Context, organizationID string) bool {
 	if l.toolIOLogsEnabled == nil {
 		return false

@@ -18,4 +18,8 @@ type DeploymentFunctions struct {
 	Slug Slug
 	// The runtime to use when executing functions.
 	Runtime string
+	// The number of instances to run for the function.
+	Scale *int32
+	// The memory limit in MiB of function runner machines.
+	MemoryMib *int32
 }

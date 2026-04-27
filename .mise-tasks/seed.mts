@@ -2427,6 +2427,7 @@ async function seedObservabilityData(init: {
           skill: skillName,
         });
       if (isFailure) postToolAttrs["gram.hook.error"] = "Tool execution failed";
+      else postToolAttrs["gen_ai.tool.call.result"] = "ok";
 
       chInserts.push(
         `(${postTimeNano}, ${postTimeNano}, '${isFailure ? "ERROR" : "INFO"}', 'Tool: ${toolName}, Hook: ${postHookEvent}', '${traceId}', '${sqlAttrs(postToolAttrs)}', '{}', '${projectId}', '${toolName}', '${hookSource}', '${sessionId}')`,
@@ -2435,7 +2436,9 @@ async function seedObservabilityData(init: {
   }
 
   const chSQL = `
+    SET mutations_sync = 1;
     ALTER TABLE telemetry_logs DELETE WHERE gram_project_id = '${projectId}';
+    ALTER TABLE trace_summaries DELETE WHERE gram_project_id = '${projectId}';
     INSERT INTO telemetry_logs (time_unix_nano, observed_time_unix_nano, severity_text, body, trace_id, attributes, resource_attributes, gram_project_id, gram_urn, service_name, gram_chat_id) VALUES
     ${chInserts.join(",\n")};
   `;
