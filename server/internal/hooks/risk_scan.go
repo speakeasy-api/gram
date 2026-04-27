@@ -130,11 +130,14 @@ func (s *Service) recordClaudeBlockedEvent(ctx context.Context, payload *gen.Cla
 	if payload.ToolUseID != nil {
 		traceID = hashToolCallIDToTraceID(*payload.ToolUseID)
 	}
+	if traceID == "" {
+		traceID = generateTraceID()
+	}
 
 	attrs := map[attr.Key]any{
 		attr.EventSourceKey:    string(telemetry.EventSourceHook),
 		attr.ToolNameKey:       toolName,
-		attr.HookEventKey:      "PreToolUse",
+		attr.HookEventKey:      payload.HookEventName,
 		attr.HookBlockedKey:    reason,
 		attr.SpanIDKey:         generateSpanID(),
 		attr.TraceIDKey:        traceID,
