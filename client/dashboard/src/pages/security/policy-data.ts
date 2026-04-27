@@ -1218,6 +1218,16 @@ export const DETECTION_RULES: Record<RuleCategory, DetectionRule[]> = {
       title: "Geographically defined location",
       source: "presidio",
     },
+    {
+      id: "IP_ADDRESS",
+      title: "IPv4 or IPv6 address",
+      source: "presidio",
+    },
+    {
+      id: "MAC_ADDRESS",
+      title: "Network interface identifier",
+      source: "presidio",
+    },
   ],
   government_ids: [
     {
