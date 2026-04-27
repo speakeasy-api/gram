@@ -162,6 +162,14 @@ run();
 * [uploadImage](docs/sdks/assets/README.md#uploadimage) - uploadImage assets
 * [uploadOpenAPIv3](docs/sdks/assets/README.md#uploadopenapiv3) - uploadOpenAPIv3 assets
 
+### [Assistants](docs/sdks/assistants/README.md)
+
+* [create](docs/sdks/assistants/README.md#create) - createAssistant assistants
+* [delete](docs/sdks/assistants/README.md#delete) - deleteAssistant assistants
+* [get](docs/sdks/assistants/README.md#get) - getAssistant assistants
+* [list](docs/sdks/assistants/README.md#list) - listAssistants assistants
+* [update](docs/sdks/assistants/README.md#update) - updateAssistant assistants
+
 ### [Auditlogs](docs/sdks/auditlogs/README.md)
 
 * [list](docs/sdks/auditlogs/README.md#list) - list auditlogs
@@ -470,6 +478,11 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`assetsUploadFunctions`](docs/sdks/assets/README.md#uploadfunctions) - uploadFunctions assets
 - [`assetsUploadImage`](docs/sdks/assets/README.md#uploadimage) - uploadImage assets
 - [`assetsUploadOpenAPIv3`](docs/sdks/assets/README.md#uploadopenapiv3) - uploadOpenAPIv3 assets
+- [`assistantsCreate`](docs/sdks/assistants/README.md#create) - createAssistant assistants
+- [`assistantsDelete`](docs/sdks/assistants/README.md#delete) - deleteAssistant assistants
+- [`assistantsGet`](docs/sdks/assistants/README.md#get) - getAssistant assistants
+- [`assistantsList`](docs/sdks/assistants/README.md#list) - listAssistants assistants
+- [`assistantsUpdate`](docs/sdks/assistants/README.md#update) - updateAssistant assistants
 - [`auditlogsList`](docs/sdks/auditlogs/README.md#list) - list auditlogs
 - [`auditlogsListFacets`](docs/sdks/auditlogs/README.md#listfacets) - listFacets auditlogs
 - [`authCallback`](docs/sdks/auth/README.md#callback) - callback auth
@@ -670,6 +683,11 @@ To learn about this feature and how to get started, check
 - [`useAddExternalOAuthServerMutation`](docs/sdks/toolsets/README.md#addexternaloauthserver) - addExternalOAuthServer toolsets
 - [`useAddOAuthProxyServerMutation`](docs/sdks/toolsets/README.md#addoauthproxyserver) - addOAuthProxyServer toolsets
 - [`useAddPluginServerMutation`](docs/sdks/plugins/README.md#addpluginserver) - addPluginServer plugins
+- [`useAssistantsCreateMutation`](docs/sdks/assistants/README.md#create) - createAssistant assistants
+- [`useAssistantsDeleteMutation`](docs/sdks/assistants/README.md#delete) - deleteAssistant assistants
+- [`useAssistantsGet`](docs/sdks/assistants/README.md#get) - getAssistant assistants
+- [`useAssistantsList`](docs/sdks/assistants/README.md#list) - listAssistants assistants
+- [`useAssistantsUpdateMutation`](docs/sdks/assistants/README.md#update) - updateAssistant assistants
 - [`useAuditLogFacets`](docs/sdks/auditlogs/README.md#listfacets) - listFacets auditlogs
 - [`useAuditLogs`](docs/sdks/auditlogs/README.md#list) - list auditlogs
 - [`useChatDeleteMutation`](docs/sdks/chat/README.md#delete) - deleteChat chat
