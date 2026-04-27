@@ -10,6 +10,7 @@ import { Type } from "@/components/ui/type";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import type { Role } from "@gram/client/models/components/role.js";
 import type { Tool, Toolset } from "@/lib/toolTypes";
+import { resourceKindForScope, selectorMatches } from "@/hooks/useRBAC";
 import { useOrgRoutes } from "@/routes";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useRoles } from "@gram/client/react-query/roles.js";
@@ -50,13 +51,19 @@ function getAccessLevel(
   // selectors undefined/null = unrestricted
   if (grant.selectors === undefined || grant.selectors === null) return "full";
   if (grant.selectors.length === 0) return "none";
-  // Check if any selector targets this toolset as a server
+
+  const check: Record<string, string> = {
+    resource_kind: resourceKindForScope(scope),
+    resource_id: toolsetSlug,
+  };
+
+  // Check if any selector matches this server (without tool constraint)
   const hasServer = grant.selectors.some(
-    (s) => s.resource_id === toolsetSlug && !s.tool,
+    (s) => selectorMatches(s, check) && !s.tool,
   );
-  // Check if any selector targets specific tools on this server
+  // Check if any selector matches with a specific tool on this server
   const hasTools = grant.selectors.some(
-    (s) => s.resource_id === toolsetSlug && s.tool,
+    (s) => selectorMatches(s, check) && !!s.tool,
   );
   if (hasServer) return "server";
   if (hasTools) return "tools";
@@ -71,8 +78,12 @@ function getToolIdsForScope(
 ): string[] {
   const grant = role.grants.find((g) => g.scope === scope);
   if (!grant?.selectors) return [];
+  const check: Record<string, string> = {
+    resource_kind: resourceKindForScope(scope),
+    resource_id: toolsetSlug,
+  };
   return grant.selectors
-    .filter((s) => s.resource_id === toolsetSlug && s.tool)
+    .filter((s) => selectorMatches(s, check) && s.tool)
     .map((s) => s.tool);
 }
 

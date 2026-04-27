@@ -108,8 +108,9 @@ func SyncGrants(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, orgI
 
 		scope := Scope(grant.Scope)
 
-		// No selectors = unrestricted (wildcard) access for this scope.
-		if len(grant.Selectors) == 0 {
+		// nil selectors = unrestricted (wildcard) access for this scope.
+		// Empty non-nil slice ([]Selector{}) = no grant rows (no access).
+		if grant.Selectors == nil {
 			sel := NewSelector(scope, WildcardResource)
 			selBytes, err := sel.MarshalJSON()
 			if err != nil {

@@ -882,6 +882,9 @@ func roleGrantPayloads(grants []*gen.RoleGrant) []*authz.RoleGrant {
 		}
 
 		var selectors []authz.Selector
+		if grant.Selectors != nil {
+			selectors = make([]authz.Selector, 0, len(grant.Selectors))
+		}
 		for _, s := range grant.Selectors {
 			if s == nil {
 				continue

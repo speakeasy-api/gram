@@ -73,6 +73,33 @@ func TestService_syncGrants_replacesRoleGrants(t *testing.T) {
 	require.Equal(t, "project-other", otherSel.ResourceID())
 }
 
+func TestService_syncGrants_emptySelectorsCreatesNoGrant(t *testing.T) {
+	t.Parallel()
+
+	ctx, svc, conn := newInternalTestService(t)
+	organizationID := "org_sync_grants_empty_sel"
+	roleSlug := "custom-empty-sel"
+	rolePrincipal := urn.NewPrincipal(urn.PrincipalTypeRole, roleSlug)
+
+	seedInternalOrganization(t, ctx, conn, organizationID)
+
+	// Empty non-nil selectors = no access (not wildcard).
+	err := authz.SyncGrants(ctx, svc.logger, conn, organizationID, roleSlug, []*authz.RoleGrant{
+		{
+			Scope:     string(authz.ScopeMCPConnect),
+			Selectors: []authz.Selector{},
+		},
+	})
+	require.NoError(t, err)
+
+	rows, err := accessrepo.New(conn).ListPrincipalGrantsByOrg(ctx, accessrepo.ListPrincipalGrantsByOrgParams{
+		OrganizationID: organizationID,
+		PrincipalUrn:   rolePrincipal.String(),
+	})
+	require.NoError(t, err)
+	require.Empty(t, rows, "empty selectors should produce zero grant rows, not a wildcard")
+}
+
 func TestService_syncGrants_clearsRoleGrantsWhenEmpty(t *testing.T) {
 	t.Parallel()
 
