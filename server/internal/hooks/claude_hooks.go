@@ -183,7 +183,12 @@ func extractSessionMetadata(payload *gen.LogsPayload) claudeLogMetadata {
 }
 
 // Claude is the unified endpoint for all Claude Code hook events
-func (s *Service) Claude(ctx context.Context, payload *gen.ClaudeHookPayload) (*gen.ClaudeHookResult, error) {
+func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (*gen.ClaudeHookResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.E(oops.CodeUnauthorized, nil, "unauthorized")
+	}
+
 	s.logger.InfoContext(ctx, fmt.Sprintf("🪝 HOOK Claude: %s", payload.HookEventName),
 		attr.SlogEvent("claude_hook"),
 		attr.SlogValueAny(map[string]any{
@@ -192,7 +197,7 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudeHookPayload) (*
 		}),
 	)
 
-	s.recordHook(ctx, payload)
+	s.recordHook(ctx, payload, authCtx.ActiveOrganizationID, authCtx.ProjectID.String())
 
 	// Route to appropriate handler based on hook type
 	switch payload.HookEventName {
@@ -218,7 +223,7 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudeHookPayload) (*
 	}
 }
 
-func (s *Service) handleSessionStart(ctx context.Context, payload *gen.ClaudeHookPayload) (*gen.ClaudeHookResult, error) {
+func (s *Service) handleSessionStart(ctx context.Context, payload *gen.ClaudePayload) (*gen.ClaudeHookResult, error) {
 	// Always allow sessions to start
 	continueVal := true
 	result := makeHookResult(payload.HookEventName)
@@ -226,25 +231,33 @@ func (s *Service) handleSessionStart(ctx context.Context, payload *gen.ClaudeHoo
 	return result, nil
 }
 
-func (s *Service) recordHook(ctx context.Context, payload *gen.ClaudeHookPayload) {
+func (s *Service) recordHook(ctx context.Context, payload *gen.ClaudePayload, orgID, projectID string) {
 	if payload.SessionID == nil || *payload.SessionID == "" {
 		s.logger.WarnContext(ctx, "Tool event called without session ID")
 		return
 	}
 
 	sessionID := *payload.SessionID
+	// Prefer Redis-cached metadata when available — it has Claude-side
+	// tags (UserEmail, ServiceName, ClaudeOrgID) populated by the OTEL
+	// logs endpoint that aren't on the request itself. Fall back to a
+	// metadata struct synthesized from the auth context so plugin
+	// installs work without any prior OTEL setup.
 	metadata, err := s.getSessionMetadata(ctx, sessionID)
-	if err == nil {
-		s.persistHook(ctx, payload, &metadata)
-	} else {
-		// Session not validated yet - buffer in Redis
-		if err := s.bufferHook(ctx, sessionID, payload); err != nil {
-			s.logger.ErrorContext(ctx, "Failed to buffer hook", attr.SlogError(err))
+	if err != nil {
+		metadata = SessionMetadata{
+			SessionID:   sessionID,
+			ServiceName: "",
+			UserEmail:   "",
+			ClaudeOrgID: "",
+			GramOrgID:   orgID,
+			ProjectID:   projectID,
 		}
 	}
+	s.persistHook(ctx, payload, &metadata)
 }
 
-func (s *Service) persistHook(ctx context.Context, payload *gen.ClaudeHookPayload, metadata *SessionMetadata) {
+func (s *Service) persistHook(ctx context.Context, payload *gen.ClaudePayload, metadata *SessionMetadata) {
 	if isConversationEvent(payload.HookEventName) {
 		if err := s.persistConversationEvent(ctx, payload, metadata); err != nil {
 			s.logger.ErrorContext(ctx, "Failed to persist conversation event", attr.SlogError(err))
@@ -265,7 +278,7 @@ func (s *Service) getSessionMetadata(ctx context.Context, sessionID string) (Ses
 	return metadata, nil
 }
 
-func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudeHookPayload) (*gen.ClaudeHookResult, error) {
+func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePayload) (*gen.ClaudeHookResult, error) {
 	// For now, always allow tools
 	allow := "allow"
 	result := makeHookResult(payload.HookEventName)
@@ -275,11 +288,11 @@ func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudeHookP
 	return result, nil
 }
 
-func (s *Service) handlePostToolUse(ctx context.Context, payload *gen.ClaudeHookPayload) (*gen.ClaudeHookResult, error) {
+func (s *Service) handlePostToolUse(ctx context.Context, payload *gen.ClaudePayload) (*gen.ClaudeHookResult, error) {
 	return makeHookResult(payload.HookEventName), nil
 }
 
-func (s *Service) handlePostToolUseFailure(ctx context.Context, payload *gen.ClaudeHookPayload) (*gen.ClaudeHookResult, error) {
+func (s *Service) handlePostToolUseFailure(ctx context.Context, payload *gen.ClaudePayload) (*gen.ClaudeHookResult, error) {
 	return makeHookResult(payload.HookEventName), nil
 }
 

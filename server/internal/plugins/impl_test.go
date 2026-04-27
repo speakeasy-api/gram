@@ -542,22 +542,29 @@ func TestPluginsService_PublishPlugins_CreatesAPIKeyWithCorrectScope(t *testing.
 	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
 	require.NoError(t, err)
 
-	// Verify a key was created with consumer scope.
+	// Verify two keys were created — one consumer-scoped (MCP) and one
+	// hooks-scoped (base plugin observability).
 	keys, err := keysrepo.New(ti.conn).ListAPIKeysByOrganization(ctx, authCtx.ActiveOrganizationID)
 	require.NoError(t, err)
 
-	var pluginKey *keysrepo.ApiKey
+	var mcpKey, hooksKey *keysrepo.ApiKey
 	for i := range keys {
-		if strings.HasPrefix(keys[i].Name, "plugins-") {
-			pluginKey = &keys[i]
-			break
+		switch {
+		case strings.HasPrefix(keys[i].Name, "plugins-mcp-"):
+			mcpKey = &keys[i]
+		case strings.HasPrefix(keys[i].Name, "plugins-hooks-"):
+			hooksKey = &keys[i]
 		}
 	}
-	require.NotNil(t, pluginKey, "expected a plugins-* API key to be created")
-	require.Contains(t, pluginKey.Scopes, "consumer")
-	require.True(t, strings.HasPrefix(pluginKey.KeyPrefix, "gram_local_"))
+	require.NotNil(t, mcpKey, "expected a plugins-mcp-* API key")
+	require.Contains(t, mcpKey.Scopes, "consumer")
+	require.True(t, strings.HasPrefix(mcpKey.KeyPrefix, "gram_local_"))
 
-	// Verify the key is injected into the pushed MCP config.
+	require.NotNil(t, hooksKey, "expected a plugins-hooks-* API key")
+	require.Contains(t, hooksKey.Scopes, "hooks")
+	require.True(t, strings.HasPrefix(hooksKey.KeyPrefix, "gram_local_"))
+
+	// Verify the MCP key is injected into the pushed MCP config.
 	mcpJSON := mock.lastPushedFiles["key-test/.mcp.json"]
 	require.NotNil(t, mcpJSON)
 	require.Contains(t, string(mcpJSON), "gram_local_")
@@ -591,19 +598,23 @@ func TestPluginsService_PublishPlugins_RePublishCreatesAdditionalKey(t *testing.
 	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
 	require.NoError(t, err)
 
-	// Count plugin keys — currently creates one per publish (known issue).
+	// Count plugin keys — each publish creates two keys (mcp + hooks).
 	keys, err := keysrepo.New(ti.conn).ListAPIKeysByOrganization(ctx, authCtx.ActiveOrganizationID)
 	require.NoError(t, err)
 
-	count := 0
+	var mcpCount, hooksCount int
 	for _, k := range keys {
-		if strings.HasPrefix(k.Name, "plugins-") {
-			count++
+		switch {
+		case strings.HasPrefix(k.Name, "plugins-mcp-"):
+			mcpCount++
+		case strings.HasPrefix(k.Name, "plugins-hooks-"):
+			hooksCount++
 		}
 	}
-	// Documents the current behavior: each publish creates a new key.
-	// A future improvement should revoke the previous key first.
-	require.Equal(t, 2, count, "expected 2 plugin keys after 2 publishes")
+	// Documents the current behavior: each publish mints fresh keys without
+	// revoking prior ones. A future improvement should revoke first.
+	require.Equal(t, 2, mcpCount, "expected 2 mcp keys after 2 publishes")
+	require.Equal(t, 2, hooksCount, "expected 2 hooks keys after 2 publishes")
 }
 
 // PublishPlugins must not persist the API key (or audit log entry, or
@@ -876,4 +887,137 @@ func TestPluginsService_PublishPlugins_PublicToolsetWithoutMetadata(t *testing.T
 
 	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
 	require.NoError(t, err)
+}
+
+// PublishPlugins always emits a per-org "base" plugin containing observability
+// hooks. The hook script bakes in the hooks-scoped API key so team members
+// don't need to configure credentials per-machine.
+func TestPluginsService_PublishPlugins_EmitsBasePlugin(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockGitHubPublisher{}
+	ctx, ti := newTestPluginsServiceWithGitHub(t, mock)
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Base Test"})
+	require.NoError(t, err)
+
+	toolset := createTestToolset(t, ctx, ti.conn, "base-toolset")
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
+		PluginID:    plugin.ID,
+		ToolsetID:   toolset.ID.String(),
+		DisplayName: "Server",
+		Policy:      "required",
+		SortOrder:   0,
+	})
+	require.NoError(t, err)
+
+	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
+	require.NoError(t, err)
+
+	claudeBase, cursorBase := orgBaseSlugs(t, ctx, ti)
+
+	// Both Claude and Cursor base plugins must be present.
+	require.NotNil(t, mock.lastPushedFiles[claudeBase+"/.claude-plugin/plugin.json"], "claude base plugin.json missing")
+	require.NotNil(t, mock.lastPushedFiles[claudeBase+"/hooks.json"], "claude base hooks.json missing")
+	require.NotNil(t, mock.lastPushedFiles[claudeBase+"/hook.sh"], "claude base hook.sh missing")
+
+	require.NotNil(t, mock.lastPushedFiles[cursorBase+"/.cursor-plugin/plugin.json"], "cursor base plugin.json missing")
+	require.NotNil(t, mock.lastPushedFiles[cursorBase+"/hooks.json"], "cursor base hooks.json missing")
+	require.NotNil(t, mock.lastPushedFiles[cursorBase+"/hook.sh"], "cursor base hook.sh missing")
+}
+
+// The base hook script must contain the freshly-minted hooks-scoped API key
+// (Bearer-token form) so team members can install the plugin without any
+// per-machine credential configuration.
+func TestPluginsService_PublishPlugins_BaseHookScriptContainsAPIKey(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockGitHubPublisher{}
+	ctx, ti := newTestPluginsServiceWithGitHub(t, mock)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Hook Key"})
+	require.NoError(t, err)
+	toolset := createTestToolset(t, ctx, ti.conn, "hookkey-toolset")
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
+		PluginID:    plugin.ID,
+		ToolsetID:   toolset.ID.String(),
+		DisplayName: "S",
+		Policy:      "required",
+		SortOrder:   0,
+	})
+	require.NoError(t, err)
+
+	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
+	require.NoError(t, err)
+
+	keys, err := keysrepo.New(ti.conn).ListAPIKeysByOrganization(ctx, authCtx.ActiveOrganizationID)
+	require.NoError(t, err)
+	var hooksKeyPrefix string
+	for _, k := range keys {
+		if strings.HasPrefix(k.Name, "plugins-hooks-") {
+			hooksKeyPrefix = k.KeyPrefix
+			break
+		}
+	}
+	require.NotEmpty(t, hooksKeyPrefix, "expected a plugins-hooks-* API key")
+
+	claudeBase, cursorBase := orgBaseSlugs(t, ctx, ti)
+	// Both endpoints now require Gram-Key + Gram-Project per
+	// server/design/hooks/design.go.
+	for _, path := range []string{claudeBase + "/hook.sh", cursorBase + "/hook.sh"} {
+		script := string(mock.lastPushedFiles[path])
+		require.NotEmpty(t, script, path+" missing")
+		require.Contains(t, script, "Gram-Key: "+hooksKeyPrefix, "%s does not embed hooks key in Gram-Key", path)
+		// Must NOT contain the MCP key — separate scope, separate concerns.
+		require.NotContains(t, script, "plugins-mcp-", "%s leaked the MCP key", path)
+	}
+}
+
+// The base plugin must appear FIRST in each platform's marketplace listing
+// so team admins see it before any feature plugins.
+func TestPluginsService_PublishPlugins_BaseListedFirstInMarketplace(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockGitHubPublisher{}
+	ctx, ti := newTestPluginsServiceWithGitHub(t, mock)
+
+	// Create two feature plugins so we can verify order, not just presence.
+	for _, name := range []string{"Alpha", "Bravo"} {
+		p, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: name})
+		require.NoError(t, err)
+		ts := createTestToolset(t, ctx, ti.conn, "ts-"+name)
+		_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
+			PluginID:    p.ID,
+			ToolsetID:   ts.ID.String(),
+			DisplayName: "Server " + name,
+			Policy:      "required",
+			SortOrder:   0,
+		})
+		require.NoError(t, err)
+	}
+
+	_, err := ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
+	require.NoError(t, err)
+
+	claudeBase, cursorBase := orgBaseSlugs(t, ctx, ti)
+	for _, p := range []struct {
+		path        string
+		expectFirst string
+	}{
+		{".claude-plugin/marketplace.json", claudeBase},
+		{".cursor-plugin/marketplace.json", cursorBase},
+	} {
+		raw := mock.lastPushedFiles[p.path]
+		require.NotNil(t, raw, p.path+" missing")
+		var market struct {
+			Plugins []struct {
+				Name string `json:"name"`
+			} `json:"plugins"`
+		}
+		require.NoError(t, json.Unmarshal(raw, &market))
+		require.GreaterOrEqual(t, len(market.Plugins), 3, "expected base + 2 features in %s", p.path)
+		require.Equal(t, p.expectFirst, market.Plugins[0].Name, "base plugin must be first in %s", p.path)
+	}
 }

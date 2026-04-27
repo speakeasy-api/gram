@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
+	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -152,6 +153,18 @@ func newTestPluginsServiceWithGitHub(t *testing.T, ghClient plugins.GitHubPublis
 		conn:           conn,
 		sessionManager: sessionManager,
 	}
+}
+
+// orgBaseSlugs returns the per-org base plugin directory names that
+// PublishPlugins will produce, computed the same way the impl does.
+func orgBaseSlugs(t *testing.T, ctx context.Context, ti *testInstance) (claudeBase, cursorBase string) {
+	t.Helper()
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	orgName, err := pluginsrepo.New(ti.conn).GetOrganizationName(ctx, authCtx.ActiveOrganizationID)
+	require.NoError(t, err)
+	cfg := plugins.GenerateConfig{OrgName: orgName}
+	return plugins.ClaudeBaseSlug(cfg), plugins.CursorBaseSlug(cfg)
 }
 
 func createTestToolset(t *testing.T, ctx context.Context, conn *pgxpool.Pool, name string) toolsetsrepo.Toolset {

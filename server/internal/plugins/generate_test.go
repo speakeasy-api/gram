@@ -185,3 +185,55 @@ func TestGenerateMarketplaceManifest(t *testing.T) {
 	require.Equal(t, "./a-cursor", cursorManifest.Plugins[0].Source)
 	require.Equal(t, "./b-cursor", cursorManifest.Plugins[1].Source)
 }
+
+func TestRenderHookScriptClaudeUsesGramKeyAndProjectHeaders(t *testing.T) {
+	t.Parallel()
+	// Claude's hook endpoint now declares Security(ByKey, ProjectSlug)
+	// just like Cursor, so both headers are required for plugin-driven
+	// org/project attribution.
+	cfg := GenerateConfig{
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+		ProjectSlug: "acme-prod",
+	}
+	script := string(renderHookScript(cfg, "claude"))
+
+	require.Contains(t, script, "https://app.getgram.ai/rpc/hooks.claude")
+	require.NotContains(t, script, "/hooks/claude", "must not use the legacy /hooks/<platform> path")
+	require.Contains(t, script, "Gram-Key: gram_local_secret_xyz")
+	require.Contains(t, script, "Gram-Project: acme-prod")
+	require.NotContains(t, script, "Authorization", "endpoint reads Gram-Key, not Authorization")
+}
+
+func TestRenderHookScriptCursorUsesGramKeyAndProjectHeaders(t *testing.T) {
+	t.Parallel()
+	// Cursor's hook endpoint reads Gram-Key + Gram-Project per
+	// server/gen/http/hooks/server/encode_decode.go:261.
+	cfg := GenerateConfig{
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+		ProjectSlug: "acme-prod",
+	}
+	script := string(renderHookScript(cfg, "cursor"))
+
+	require.Contains(t, script, "https://app.getgram.ai/rpc/hooks.cursor")
+	require.NotContains(t, script, "/hooks/cursor", "must not use the legacy /hooks/<platform> path")
+	require.Contains(t, script, `Gram-Key: gram_local_secret_xyz`, "cursor reads Gram-Key, not Authorization")
+	require.NotContains(t, script, "Authorization", "cursor endpoint does not read Authorization")
+	require.Contains(t, script, `Gram-Project: acme-prod`, "cursor requires the project header per design")
+}
+
+func TestRenderHookScriptCursorOmitsProjectHeaderWhenSlugMissing(t *testing.T) {
+	t.Parallel()
+	// Defensive: if generateConfig is ever called without a slug, we should
+	// emit a script that's at least syntactically valid rather than embed an
+	// empty header.
+	cfg := GenerateConfig{
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+	}
+	script := string(renderHookScript(cfg, "cursor"))
+
+	require.Contains(t, script, "Gram-Key: gram_local_secret_xyz", "key still emitted without a slug")
+	require.NotContains(t, script, "Gram-Project")
+}
