@@ -283,10 +283,22 @@ ${bullets}
 `;
   }, [memories]);
 
-  // Investigation protocol paragraph (verbatim from the design spec). Always
-  // appended; tells the agent how to structure multi-step investigations.
+  // Investigation protocol. The imperative voice on step 3 + the standalone
+  // "memory creation is non-optional" paragraph below are deliberate: in
+  // practice, models systematically under-invoke state-creating actions
+  // (memory writes) in favor of immediate-visible-feedback ones (proposals
+  // the user will see). Phrasing memory writes as MUST + tying them to a
+  // concrete consequence ("future sessions lose this context") is what
+  // converts the model from "memory exists" to "memory used."
   const investigationProtocol = `
-When asked to diagnose an issue, follow this loop: (1) form a single hypothesis, (2) gather evidence with read tools, (3) record what you learned via \`insights_record_finding\`, (4) if evidence points to a tool or toolset fix, call \`insights_propose_variation\` or \`insights_propose_toolset_change\` with a clear \`reasoning\`. Do NOT apply proposals yourself; the human will review.`;
+When asked to diagnose an issue, follow this loop:
+(1) Form a single hypothesis.
+(2) Gather evidence with read tools.
+(3) You MUST call \`insights_record_finding\` with at least one one-line bullet summarizing what you learned, BEFORE proposing any fix. Findings auto-expire after 7 days and are how investigations leave a trail; skipping this step loses the value of the investigation between sessions.
+(4) If evidence points to a tool or toolset fix, call \`insights_propose_variation\` or \`insights_propose_toolset_change\` with a clear \`reasoning\`.
+(5) After completing the investigation, if the finding generalizes (e.g. "users across our API consistently confuse slugs with UUIDs", "auth failures cluster on a specific tool family"), you MUST also call \`insights_remember\` with kind=fact or kind=playbook so the next session inherits this knowledge instead of rediscovering it. Do not skip this for repeating patterns — that is the entire point of workspace memory.
+
+Do NOT apply proposals yourself; the human reviews and applies.`;
 
   // Build system prompt with optional context info.
   const baseInstructions = `${workspaceMemoryBlock}You are a helpful assistant for analyzing logs in Gram, an AI observability platform. Focus exclusively on log search and analysis.
