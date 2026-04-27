@@ -11,9 +11,11 @@ import (
 	"time"
 
 	goahttp "goa.design/goa/v3/http"
+	"goa.design/goa/v3/security"
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
@@ -182,8 +184,20 @@ func extractSessionMetadata(payload *gen.LogsPayload) claudeLogMetadata {
 	return metadata
 }
 
-// Claude is the unified endpoint for all Claude Code hook events
-func (s *Service) Claude(ctx context.Context, payload *gen.ClaudeHookPayload) (*gen.ClaudeHookResult, error) {
+// Claude is the unified endpoint for all Claude Code hook events.
+//
+// Two attribution paths run side-by-side during the migration off the
+// OTEL-only flow:
+//  1. Plugin path — when the request carries Gram-Key + Gram-Project
+//     (e.g. from the per-org base plugin's hook.sh), the handler validates
+//     them via s.auth and uses the resulting auth context for org/project.
+//  2. OTEL path — when the headers are absent (existing customers running
+//     Claude with OTEL forwarding), the handler falls back to looking up
+//     Redis session metadata seeded by /rpc/hooks.otel/v1/logs.
+//
+// Once all customers move to plugin-based attribution, switch this method
+// to the same Security() block as Method("cursor") and remove the fallback.
+func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (*gen.ClaudeHookResult, error) {
 	s.logger.InfoContext(ctx, fmt.Sprintf("🪝 HOOK Claude: %s", payload.HookEventName),
 		attr.SlogEvent("claude_hook"),
 		attr.SlogValueAny(map[string]any{
@@ -191,6 +205,14 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudeHookPayload) (*
 			"toolName":      payload.ToolName,
 		}),
 	)
+
+	if hasOptionalPluginAuth(payload) {
+		var err error
+		ctx, err = s.authorizePluginRequest(ctx, *payload.ApikeyToken, *payload.ProjectSlugInput)
+		if err != nil {
+			return nil, err
+		}
+	}
 
 	s.recordHook(ctx, payload)
 
@@ -218,7 +240,7 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudeHookPayload) (*
 	}
 }
 
-func (s *Service) handleSessionStart(ctx context.Context, payload *gen.ClaudeHookPayload) (*gen.ClaudeHookResult, error) {
+func (s *Service) handleSessionStart(ctx context.Context, payload *gen.ClaudePayload) (*gen.ClaudeHookResult, error) {
 	// Always allow sessions to start
 	continueVal := true
 	result := makeHookResult(payload.HookEventName)
@@ -226,25 +248,78 @@ func (s *Service) handleSessionStart(ctx context.Context, payload *gen.ClaudeHoo
 	return result, nil
 }
 
-func (s *Service) recordHook(ctx context.Context, payload *gen.ClaudeHookPayload) {
+// hasOptionalPluginAuth returns true when the Claude request carries both
+// the Gram-Key and Gram-Project headers, which signals plugin-driven
+// attribution and triggers explicit auth in Claude().
+func hasOptionalPluginAuth(payload *gen.ClaudePayload) bool {
+	return payload.ApikeyToken != nil && *payload.ApikeyToken != "" &&
+		payload.ProjectSlugInput != nil && *payload.ProjectSlugInput != ""
+}
+
+// authorizePluginRequest validates the API key and project slug supplied
+// by a plugin-driven Claude request. Returns the auth-populated context
+// on success, or a 401 on either failure (the request explicitly tried
+// to authenticate, so we don't silently fall back to OTEL on bad creds).
+func (s *Service) authorizePluginRequest(ctx context.Context, key, projectSlug string) (context.Context, error) {
+	keyScheme := &security.APIKeyScheme{
+		Name:           constants.KeySecurityScheme,
+		Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+		RequiredScopes: []string{"hooks"},
+	}
+	ctx, err := s.auth.Authorize(ctx, key, keyScheme)
+	if err != nil {
+		return ctx, err
+	}
+	projectScheme := &security.APIKeyScheme{
+		Name:           constants.ProjectSlugSecuritySchema,
+		Scopes:         []string{},
+		RequiredScopes: []string{"hooks"},
+	}
+	return s.auth.Authorize(ctx, projectSlug, projectScheme)
+}
+
+func (s *Service) recordHook(ctx context.Context, payload *gen.ClaudePayload) {
 	if payload.SessionID == nil || *payload.SessionID == "" {
 		s.logger.WarnContext(ctx, "Tool event called without session ID")
 		return
 	}
 
 	sessionID := *payload.SessionID
+
+	// Plugin path: when the request authenticated via Gram-Key + Gram-Project,
+	// org/project come from the auth context. We still consult Redis to enrich
+	// with OTEL-supplied tags (UserEmail, ServiceName, ClaudeOrgID) when
+	// available, but the auth-derived org/project always wins.
+	if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil && authCtx.ProjectID != nil {
+		metadata := SessionMetadata{
+			SessionID:   sessionID,
+			ServiceName: "",
+			UserEmail:   "",
+			ClaudeOrgID: "",
+			GramOrgID:   authCtx.ActiveOrganizationID,
+			ProjectID:   authCtx.ProjectID.String(),
+		}
+		if cached, err := s.getSessionMetadata(ctx, sessionID); err == nil {
+			metadata.ServiceName = cached.ServiceName
+			metadata.UserEmail = cached.UserEmail
+			metadata.ClaudeOrgID = cached.ClaudeOrgID
+		}
+		s.persistHook(ctx, payload, &metadata)
+		return
+	}
+
+	// OTEL path: Redis session metadata or buffer until OTEL Logs validates.
 	metadata, err := s.getSessionMetadata(ctx, sessionID)
 	if err == nil {
 		s.persistHook(ctx, payload, &metadata)
 	} else {
-		// Session not validated yet - buffer in Redis
 		if err := s.bufferHook(ctx, sessionID, payload); err != nil {
 			s.logger.ErrorContext(ctx, "Failed to buffer hook", attr.SlogError(err))
 		}
 	}
 }
 
-func (s *Service) persistHook(ctx context.Context, payload *gen.ClaudeHookPayload, metadata *SessionMetadata) {
+func (s *Service) persistHook(ctx context.Context, payload *gen.ClaudePayload, metadata *SessionMetadata) {
 	if isConversationEvent(payload.HookEventName) {
 		if err := s.persistConversationEvent(ctx, payload, metadata); err != nil {
 			s.logger.ErrorContext(ctx, "Failed to persist conversation event", attr.SlogError(err))
@@ -265,7 +340,7 @@ func (s *Service) getSessionMetadata(ctx context.Context, sessionID string) (Ses
 	return metadata, nil
 }
 
-func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudeHookPayload) (*gen.ClaudeHookResult, error) {
+func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePayload) (*gen.ClaudeHookResult, error) {
 	// For now, always allow tools
 	allow := "allow"
 	result := makeHookResult(payload.HookEventName)
@@ -275,11 +350,11 @@ func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudeHookP
 	return result, nil
 }
 
-func (s *Service) handlePostToolUse(ctx context.Context, payload *gen.ClaudeHookPayload) (*gen.ClaudeHookResult, error) {
+func (s *Service) handlePostToolUse(ctx context.Context, payload *gen.ClaudePayload) (*gen.ClaudeHookResult, error) {
 	return makeHookResult(payload.HookEventName), nil
 }
 
-func (s *Service) handlePostToolUseFailure(ctx context.Context, payload *gen.ClaudeHookPayload) (*gen.ClaudeHookResult, error) {
+func (s *Service) handlePostToolUseFailure(ctx context.Context, payload *gen.ClaudePayload) (*gen.ClaudeHookResult, error) {
 	return makeHookResult(payload.HookEventName), nil
 }
 

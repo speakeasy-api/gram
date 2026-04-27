@@ -7280,6 +7280,21 @@ paths:
             summary: claude hooks
             description: Unified endpoint for all Claude Code hook events. Handles SessionStart, PreToolUse, PostToolUse, and PostToolUseFailure.
             operationId: hooks#claude
+            parameters:
+                - name: Gram-Key
+                  in: header
+                  description: Optional API key for plugin-driven attribution.
+                  allowEmptyValue: true
+                  schema:
+                    type: string
+                    description: Optional API key for plugin-driven attribution.
+                - name: Gram-Project
+                  in: header
+                  description: Optional project slug for plugin-driven attribution.
+                  allowEmptyValue: true
+                  schema:
+                    type: string
+                    description: Optional project slug for plugin-driven attribution.
             requestBody:
                 required: true
                 content:

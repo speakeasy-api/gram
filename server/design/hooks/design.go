@@ -116,10 +116,24 @@ var _ = Service("hooks", func() {
 	Method("claude", func() {
 		Description("Unified endpoint for all Claude Code hook events. Handles SessionStart, PreToolUse, PostToolUse, and PostToolUseFailure.")
 
-		Payload(ClaudeHookPayload)
+		// Gram-Key + Gram-Project are OPTIONAL on this endpoint during the
+		// migration off the OTEL-only attribution flow. When both are set
+		// (e.g. by the per-org base plugin's hook script) the handler uses
+		// them to attribute hooks directly. When absent, the handler falls
+		// back to looking up Redis session metadata seeded by the OTEL
+		// /rpc/hooks.otel/v1/logs endpoint. Once all customers move to
+		// plugin-based attribution, this method should switch to the same
+		// Security() block as Method("cursor").
+		Payload(func() {
+			Extend(ClaudeHookPayload)
+			Attribute("apikey_token", String, "Optional API key for plugin-driven attribution.")
+			Attribute("project_slug_input", String, "Optional project slug for plugin-driven attribution.")
+		})
 		Result(ClaudeHookResult)
 		HTTP(func() {
 			POST("/rpc/hooks.claude")
+			Header("apikey_token:Gram-Key")
+			Header("project_slug_input:Gram-Project")
 		})
 	})
 

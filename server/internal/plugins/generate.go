@@ -342,13 +342,12 @@ func generateCursorBasePlugin(files map[string][]byte, cfg GenerateConfig) error
 }
 
 // renderHookScript produces the bash wrapper that forwards hook event JSON
-// from stdin to the appropriate Gram endpoint. Auth headers differ per
-// platform because the Goa designs do:
-//   - Claude (server/design/hooks/design.go:116) declares no Security() block,
-//     so the script sends no auth header. Org/project attribution is set up
-//     out-of-band via /rpc/hooks.otel/v1/logs (claude_hooks.go:88).
-//   - Cursor (design.go:129) reads the Gram-Key + Gram-Project headers via
-//     server/gen/http/hooks/server/encode_decode.go:261.
+// from stdin to the appropriate Gram endpoint. Both platforms now send
+// Gram-Key + Gram-Project headers:
+//   - Cursor (design.go:129) requires them via Security(ByKey, ProjectSlug).
+//   - Claude (design.go:116) accepts them as optional headers; the handler
+//     uses them for plugin-driven org/project attribution when present and
+//     falls back to OTEL-seeded Redis session metadata when absent.
 func renderHookScript(cfg GenerateConfig, platform string) []byte {
 	endpoint := fmt.Sprintf("%s/rpc/hooks.%s", cfg.ServerURL, platform)
 	keyPrefix := cfg.HooksAPIKey
@@ -356,12 +355,9 @@ func renderHookScript(cfg GenerateConfig, platform string) []byte {
 		keyPrefix = keyPrefix[:12]
 	}
 
-	var authHeaders string
-	if platform == "cursor" {
-		authHeaders = fmt.Sprintf("  -H \"Gram-Key: %s\" \\\n", cfg.HooksAPIKey)
-		if cfg.ProjectSlug != "" {
-			authHeaders += fmt.Sprintf("  -H \"Gram-Project: %s\" \\\n", cfg.ProjectSlug)
-		}
+	authHeaders := fmt.Sprintf("  -H \"Gram-Key: %s\" \\\n", cfg.HooksAPIKey)
+	if cfg.ProjectSlug != "" {
+		authHeaders += fmt.Sprintf("  -H \"Gram-Project: %s\" \\\n", cfg.ProjectSlug)
 	}
 
 	return fmt.Appendf(nil, `#!/usr/bin/env bash
