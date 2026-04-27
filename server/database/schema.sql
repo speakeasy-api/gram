@@ -2088,7 +2088,7 @@ CREATE TABLE IF NOT EXISTS risk_policies (
   name TEXT NOT NULL,
   sources TEXT[] NOT NULL,
   presidio_entities TEXT[],
-  action TEXT NOT NULL DEFAULT 'flag',
+  action TEXT,
   version BIGINT NOT NULL,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
