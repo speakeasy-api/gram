@@ -5,11 +5,13 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { RequireScope } from "@/components/require-scope";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useOrganization } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { getServerURL } from "@/lib/utils";
 import { cn } from "@/lib/utils";
+import { useOrgRoutes } from "@/routes";
 import { useListCollections } from "@gram/client/react-query/listCollections.js";
 import { useListToolsetsForOrg } from "@gram/client/react-query/listToolsetsForOrg.js";
 import {
@@ -20,10 +22,10 @@ import {
   Maximize2,
   Minimize2,
   Globe,
+  Plus,
   Repeat,
   Shield,
   Loader2,
-  SquareLibrary,
   Tag,
   Wrench,
   X,
@@ -50,6 +52,9 @@ interface ScopePickerPopoverProps {
   /** Whether "Custom" mode is active (MCP scopes only) */
   customMode?: boolean;
   onCustomModeChange?: (custom: boolean) => void;
+  /** Whether "Specific collections" mode is active (MCP scopes only) */
+  collectionMode?: boolean;
+  onCollectionModeChange?: (mode: boolean) => void;
   /** Selected annotation hints for auto-group matching */
   annotations?: AnnotationHint[];
   onChangeAnnotations?: (annotations: AnnotationHint[]) => void;
@@ -132,6 +137,8 @@ export function ScopePickerPopover({
   onChangeSelectors,
   customMode,
   onCustomModeChange,
+  collectionMode,
+  onCollectionModeChange,
   annotations,
   onChangeAnnotations,
   customTab,
@@ -142,9 +149,9 @@ export function ScopePickerPopover({
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const customToolCount = useMemo(() => {
-    if (!customMode) return 0;
+    if (!customMode && !collectionMode) return 0;
     return (selectors ?? []).length;
-  }, [customMode, selectors]);
+  }, [customMode, collectionMode, selectors]);
 
   // Org-scoped permissions have no resource picker — they're always org-wide
   if (resourceType === "org") {
@@ -162,7 +169,13 @@ export function ScopePickerPopover({
     name: p.name,
   }));
 
-  const label = getLabel(resourceType, selectors, customMode, customToolCount);
+  const label = getLabel(
+    resourceType,
+    selectors,
+    customMode,
+    collectionMode,
+    customToolCount,
+  );
 
   const resourceKind = resourceType === "project" ? "project" : "mcp";
 
@@ -189,11 +202,14 @@ export function ScopePickerPopover({
     <div className="shrink-0 pb-1.5">
       <ScopeOption
         label={resourceType === "project" ? "All projects" : "All servers"}
-        selected={isUnrestricted && !customMode}
+        selected={isUnrestricted && !customMode && !collectionMode}
         onClick={() => {
           if (customMode) {
             onCustomModeChange?.(false);
             onChangeAnnotations?.([]);
+          }
+          if (collectionMode) {
+            onCollectionModeChange?.(false);
           }
           onChangeSelectors(null);
         }}
@@ -202,12 +218,15 @@ export function ScopePickerPopover({
         label={
           resourceType === "project" ? "Specific projects" : "Specific servers"
         }
-        selected={!isUnrestricted && !customMode}
+        selected={!isUnrestricted && !customMode && !collectionMode}
         onClick={() => {
           if (customMode) {
             onCustomModeChange?.(false);
             onChangeSelectors([]);
             onChangeAnnotations?.([]);
+          } else if (collectionMode) {
+            onCollectionModeChange?.(false);
+            onChangeSelectors([]);
           } else if (isUnrestricted) {
             onChangeSelectors([]);
           }
@@ -219,6 +238,7 @@ export function ScopePickerPopover({
           selected={!!customMode}
           onClick={() => {
             if (!customMode) {
+              if (collectionMode) onCollectionModeChange?.(false);
               onCustomModeChange?.(true);
               onChangeSelectors([]);
               onChangeAnnotations?.([]);
@@ -226,10 +246,26 @@ export function ScopePickerPopover({
           }}
         />
       )}
+      {isMcpConnect && (
+        <ScopeOption
+          label="Specific collections"
+          selected={!!collectionMode}
+          onClick={() => {
+            if (!collectionMode) {
+              if (customMode) {
+                onCustomModeChange?.(false);
+                onChangeAnnotations?.([]);
+              }
+              onCollectionModeChange?.(true);
+              onChangeSelectors([]);
+            }
+          }}
+        />
+      )}
     </div>
   );
 
-  const resourceList = !isUnrestricted && !customMode && (
+  const resourceList = !isUnrestricted && !customMode && !collectionMode && (
     <>
       <div className="bg-border my-1 h-px" />
       {resourceType === "project"
@@ -287,14 +323,6 @@ export function ScopePickerPopover({
           <Tag className="h-3.5 w-3.5" />
           By annotation
         </TabsTrigger>
-        <div className="bg-border/40 my-1 w-px self-stretch" />
-        <TabsTrigger
-          value="collection"
-          className="text-muted-foreground hover:bg-muted/50 data-[state=active]:bg-muted data-[state=active]:text-foreground h-auto rounded-sm border-none px-3 py-2 text-sm shadow-none data-[state=active]:shadow-none"
-        >
-          <SquareLibrary className="h-3.5 w-3.5" />
-          By collection
-        </TabsTrigger>
       </TabsList>
       <TabsContent
         value="select"
@@ -346,17 +374,20 @@ export function ScopePickerPopover({
           mcpServers={mcpServers}
         />
       </TabsContent>
-      <TabsContent
-        value="collection"
-        className="min-h-[200px] flex-1 overflow-y-auto px-2 py-1"
-      >
+    </Tabs>
+  );
+
+  const collectionPanel = (
+    <div className="-mx-1.5 -mb-1.5 flex max-h-[min(420px,60vh)] flex-col overflow-hidden">
+      <div className="border-border flex min-h-0 flex-1 flex-col overflow-y-auto border-y px-2 py-1">
         <CollectionGroupPanel
           mcpServers={mcpServers}
           selectors={selectors ?? []}
           onChangeSelectors={onChangeSelectors}
+          onNavigate={() => setPopoverOpen(false)}
         />
-      </TabsContent>
-    </Tabs>
+      </div>
+    </div>
   );
 
   return (
@@ -376,7 +407,11 @@ export function ScopePickerPopover({
           sideOffset={8}
           className={cn(
             "p-1.5 transition-[width] duration-500",
-            customMode ? "w-[620px]" : "max-h-[300px] w-44 overflow-y-auto",
+            customMode
+              ? "w-[620px]"
+              : collectionMode
+                ? "w-[360px]"
+                : "max-h-[300px] w-44 overflow-y-auto",
           )}
           style={{
             transitionTimingFunction: "cubic-bezier(0.32, 0.72, 0, 1)",
@@ -404,6 +439,7 @@ export function ScopePickerPopover({
               )}
             </div>
           )}
+          {collectionMode && collectionPanel}
         </PopoverContent>
       </Popover>
 
@@ -753,12 +789,15 @@ function CollectionGroupPanel({
   mcpServers,
   selectors,
   onChangeSelectors,
+  onNavigate,
 }: {
   mcpServers: ServerGroup[];
   selectors: Selector[];
   onChangeSelectors: (selectors: Selector[] | null) => void;
+  onNavigate?: () => void;
 }) {
   const client = useSdkClient();
+  const orgRoutes = useOrgRoutes();
 
   // Fetch org-level collections
   const { data: collectionsData, isLoading: collectionsLoading } =
@@ -819,6 +858,39 @@ function CollectionGroupPanel({
       .filter((g) => g.servers.some((s) => s.tools.length > 0));
   }, [collections, serverQueries, mcpSlugToServer]);
 
+  const goToCreateCollection = () => {
+    onNavigate?.();
+    orgRoutes.collections.create.goTo();
+  };
+
+  const intro = (
+    <div className="text-muted-foreground px-2 pt-2 pb-1 text-xs leading-relaxed">
+      Collections are reusable groups of MCP servers that can be installed into
+      multiple projects at once. Selecting a collection grants access to all of
+      its tools.
+    </div>
+  );
+
+  const createButton = (
+    <RequireScope
+      scope="org:admin"
+      level="component"
+      reason="You need org admin to create a collection."
+      className="w-full"
+    >
+      {({ disabled }) => (
+        <button
+          type="button"
+          onClick={disabled ? undefined : goToCreateCollection}
+          className="border-border bg-background hover:bg-muted/50 text-foreground mx-2 my-2 flex cursor-pointer items-center justify-center gap-1.5 rounded-md border border-dashed px-3 py-2 text-xs transition-colors"
+        >
+          <Plus className="h-3 w-3" />
+          Create new collection
+        </button>
+      )}
+    </RequireScope>
+  );
+
   if (collectionsLoading) {
     return (
       <div className="flex items-center justify-center py-6">
@@ -829,14 +901,19 @@ function CollectionGroupPanel({
 
   if (collections.length === 0 || collectionGroups.length === 0) {
     return (
-      <div className="text-muted-foreground py-6 text-center text-sm">
-        No collections with tools found
+      <div className="py-1">
+        {intro}
+        <div className="text-muted-foreground px-2 py-4 text-center text-sm">
+          No collections with tools found
+        </div>
+        {createButton}
       </div>
     );
   }
 
   return (
     <div className="py-1">
+      {intro}
       <div className="text-muted-foreground px-2 py-2 text-sm">
         Select all tools by collection:
       </div>
@@ -900,6 +977,7 @@ function CollectionGroupPanel({
           </button>
         );
       })}
+      {createButton}
     </div>
   );
 }
@@ -967,6 +1045,7 @@ function getLabel(
   resourceType: ResourceType,
   selectors: Selector[] | null,
   customMode?: boolean,
+  collectionMode?: boolean,
   customToolCount?: number,
 ): string {
   if (customMode) {
@@ -975,6 +1054,11 @@ function getLabel(
     const hasTools = (selectors ?? []).some((s) => s.tool);
     const noun = hasTools ? "tool" : "rule";
     return `${count} ${noun}${count === 1 ? "" : "s"} selected`;
+  }
+  if (collectionMode) {
+    const count = (selectors ?? []).length;
+    if (count === 0) return "Select...";
+    return `${count} tool${count === 1 ? "" : "s"} selected`;
   }
   if (selectors === null) {
     return resourceType === "project" ? "All projects" : "All servers";
