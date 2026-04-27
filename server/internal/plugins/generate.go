@@ -53,15 +53,30 @@ type GenerateConfig struct {
 	ProjectSlug string
 }
 
-// BaseHookEvents lists every hook event Gram captures from Claude Code and
-// Cursor. The base plugin registers its hook script against all of them so a
-// single install gives the org full observability.
-var BaseHookEvents = []string{
+// ClaudeBaseHookEvents are the Claude Code hook events the base plugin
+// registers against. Names match Claude's hooks.json schema.
+var ClaudeBaseHookEvents = []string{
 	"PreToolUse",
 	"PostToolUse",
 	"SessionStart",
 	"UserPromptSubmit",
 	"Stop",
+}
+
+// CursorBaseHookEvents are Cursor's native hook event names (per
+// server/design/hooks/design.go:58). Cursor uses different event names
+// than Claude, not a lowercased mirror, so the two lists are maintained
+// separately.
+var CursorBaseHookEvents = []string{
+	"beforeSubmitPrompt",
+	"stop",
+	"afterAgentResponse",
+	"afterAgentThought",
+	"preToolUse",
+	"postToolUse",
+	"postToolUseFailure",
+	"beforeMCPExecution",
+	"afterMCPExecution",
 }
 
 // GeneratePluginPackages produces the complete file map for a plugin distribution
@@ -82,14 +97,16 @@ func GeneratePluginPackages(plugins []PluginInfo, cfg GenerateConfig) (map[strin
 		if err := generateCursorBasePlugin(files, cfg); err != nil {
 			return nil, fmt.Errorf("generate cursor base plugin: %w", err)
 		}
+		claudeBase := ClaudeBaseSlug(cfg)
 		claudePlugins = append(claudePlugins, marketplaceEntry{
-			Name:        "base",
-			Source:      "./base",
+			Name:        claudeBase,
+			Source:      "./" + claudeBase,
 			Description: "Required: Gram observability hooks for " + cfg.OrgName + ".",
 		})
+		cursorBase := CursorBaseSlug(cfg)
 		cursorPlugins = append(cursorPlugins, marketplaceEntry{
-			Name:        "base-cursor",
-			Source:      "./base-cursor",
+			Name:        cursorBase,
+			Source:      "./" + cursorBase,
 			Description: "Required: Gram observability hooks for " + cfg.OrgName + ".",
 		})
 	}
@@ -168,7 +185,7 @@ func generateReadme(plugins []PluginInfo, cfg GenerateConfig) []byte {
 	b.WriteString("- **Auto-managed by Gram.** Each publish from the Gram dashboard overwrites this repository's contents. Any manual edits, new branches, or local commits will be discarded on the next publish — make changes in Gram instead.\n\n")
 
 	if cfg.HooksAPIKey != "" {
-		b.WriteString("> **Required:** install the `base` plugin alongside any feature plugins to enable Gram observability. Without it, your team will install MCP servers but tool events will not be reported to your Gram dashboard.\n\n")
+		fmt.Fprintf(&b, "> **Required:** install the `%s` plugin alongside any feature plugins to enable Gram observability. Without it, your team will install MCP servers but tool events will not be reported to your Gram dashboard.\n\n", ClaudeBaseSlug(cfg))
 	}
 
 	if len(plugins) > 0 {
@@ -192,8 +209,9 @@ func generateReadme(plugins []PluginInfo, cfg GenerateConfig) []byte {
 	b.WriteString("3. Click **Add Marketplace** and paste this repository's URL\n")
 	b.WriteString("4. Plugins will be automatically available to members of your organization\n")
 	if cfg.HooksAPIKey != "" {
-		b.WriteString("\nMark the `base` plugin as required so observability is on by default for all team members:\n\n")
-		b.WriteString("```json\n{\n  \"plugins\": {\n    \"required\": [\"base@" + conv.ToSlug(cfg.OrgName) + "-gram\"]\n  }\n}\n```\n")
+		base := ClaudeBaseSlug(cfg)
+		fmt.Fprintf(&b, "\nMark the `%s` plugin as required so observability is on by default for all team members:\n\n", base)
+		fmt.Fprintf(&b, "```json\n{\n  \"plugins\": {\n    \"required\": [\"%s@%s-gram\"]\n  }\n}\n```\n", base, conv.ToSlug(cfg.OrgName))
 	}
 	b.WriteString("\n### Cursor\n\n")
 	b.WriteString("1. Open your team's [Cursor dashboard](https://cursor.com/dashboard)\n")
@@ -201,7 +219,7 @@ func generateReadme(plugins []PluginInfo, cfg GenerateConfig) []byte {
 	b.WriteString("3. Paste this repository's URL to import the marketplace\n")
 	b.WriteString("4. Plugins will be available to team members\n")
 	if cfg.HooksAPIKey != "" {
-		b.WriteString("\nIn Cursor's team marketplace settings, mark the `base-cursor` plugin as required so observability is on by default for all team members.\n")
+		fmt.Fprintf(&b, "\nIn Cursor's team marketplace settings, mark the `%s` plugin as required so observability is on by default for all team members.\n", CursorBaseSlug(cfg))
 	}
 
 	return []byte(b.String())
@@ -245,11 +263,20 @@ func generateCursorPlugin(files map[string][]byte, p PluginInfo, cfg GenerateCon
 	return generateCursorPluginInDir(files, p.Slug+"-cursor", p.Slug+"-cursor", p, cfg)
 }
 
+// ClaudeBaseSlug / CursorBaseSlug derive the base plugin's directory name
+// and marketplace identifier from the org slug. Namespacing per-org avoids
+// collisions with user plugins that legitimately use slug "base".
+// Exported because tests need to predict the published path.
+func ClaudeBaseSlug(cfg GenerateConfig) string { return conv.ToSlug(cfg.OrgName) + "-base" }
+func CursorBaseSlug(cfg GenerateConfig) string {
+	return conv.ToSlug(cfg.OrgName) + "-base-cursor"
+}
+
 // generateClaudeBasePlugin emits the per-org "base" plugin containing Gram
 // observability hooks for Claude Code. The hook script bakes in the org's
 // hooks-scoped API key so no per-machine credential setup is required.
 func generateClaudeBasePlugin(files map[string][]byte, cfg GenerateConfig) error {
-	const subdir = "base"
+	subdir := ClaudeBaseSlug(cfg)
 	pluginJSON, err := marshalJSON(claudePluginMeta{
 		Name:        subdir,
 		Description: "Gram observability hooks for " + cfg.OrgName + ". Install this plugin to forward tool events to your team's Gram dashboard.",
@@ -266,8 +293,8 @@ func generateClaudeBasePlugin(files map[string][]byte, cfg GenerateConfig) error
 	matchers := []claudeHookMatcher{
 		{Matcher: "*", Hooks: []claudeHookCommand{{Type: "command", Command: "./hook.sh"}}},
 	}
-	hookEvents := make(map[string][]claudeHookMatcher, len(BaseHookEvents))
-	for _, event := range BaseHookEvents {
+	hookEvents := make(map[string][]claudeHookMatcher, len(ClaudeBaseHookEvents))
+	for _, event := range ClaudeBaseHookEvents {
 		hookEvents[event] = matchers
 	}
 	hooksJSON, err := marshalJSON(claudeHooksConfig{Hooks: hookEvents})
@@ -285,7 +312,7 @@ func generateClaudeBasePlugin(files map[string][]byte, cfg GenerateConfig) error
 // shape as the Claude variant but uses Cursor's hook event names + script
 // destination URL.
 func generateCursorBasePlugin(files map[string][]byte, cfg GenerateConfig) error {
-	const subdir = "base-cursor"
+	subdir := CursorBaseSlug(cfg)
 	pluginJSON, err := marshalJSON(cursorPluginMeta{
 		Name:        subdir,
 		DisplayName: "Base (Cursor)",
@@ -299,9 +326,9 @@ func generateCursorBasePlugin(files map[string][]byte, cfg GenerateConfig) error
 	}
 	files[path.Join(subdir, ".cursor-plugin/plugin.json")] = pluginJSON
 
-	hookEvents := make(map[string][]cursorHookCommand, len(BaseHookEvents))
-	for _, event := range BaseHookEvents {
-		hookEvents[cursorHookEventName(event)] = []cursorHookCommand{{Command: "./hook.sh"}}
+	hookEvents := make(map[string][]cursorHookCommand, len(CursorBaseHookEvents))
+	for _, event := range CursorBaseHookEvents {
+		hookEvents[event] = []cursorHookCommand{{Command: "./hook.sh"}}
 	}
 	hooksJSON, err := marshalJSON(cursorHooksConfig{Version: 1, Hooks: hookEvents})
 	if err != nil {
@@ -315,29 +342,36 @@ func generateCursorBasePlugin(files map[string][]byte, cfg GenerateConfig) error
 }
 
 // renderHookScript produces the bash wrapper that forwards hook event JSON
-// from stdin to the appropriate Gram endpoint with the embedded API key.
-// Cursor's endpoint additionally requires the Gram-Project header; Claude's
-// does not declare a Security() block on the design side, so the project
-// header is only emitted for the cursor variant.
+// from stdin to the appropriate Gram endpoint. Auth headers differ per
+// platform because the Goa designs do:
+//   - Claude (server/design/hooks/design.go:116) declares no Security() block,
+//     so the script sends no auth header. Org/project attribution is set up
+//     out-of-band via /rpc/hooks.otel/v1/logs (claude_hooks.go:88).
+//   - Cursor (design.go:129) reads the Gram-Key + Gram-Project headers via
+//     server/gen/http/hooks/server/encode_decode.go:261.
 func renderHookScript(cfg GenerateConfig, platform string) []byte {
 	endpoint := fmt.Sprintf("%s/rpc/hooks.%s", cfg.ServerURL, platform)
 	keyPrefix := cfg.HooksAPIKey
 	if len(keyPrefix) > 12 {
 		keyPrefix = keyPrefix[:12]
 	}
-	projectHeader := ""
-	if platform == "cursor" && cfg.ProjectSlug != "" {
-		projectHeader = fmt.Sprintf("  -H \"Gram-Project: %s\" \\\n", cfg.ProjectSlug)
+
+	var authHeaders string
+	if platform == "cursor" {
+		authHeaders = fmt.Sprintf("  -H \"Gram-Key: %s\" \\\n", cfg.HooksAPIKey)
+		if cfg.ProjectSlug != "" {
+			authHeaders += fmt.Sprintf("  -H \"Gram-Project: %s\" \\\n", cfg.ProjectSlug)
+		}
 	}
+
 	return fmt.Appendf(nil, `#!/usr/bin/env bash
 # Generated by Gram. Do not edit — overwritten on every publish.
 # Key prefix: %s (correlate with the dashboard's API Keys page).
 exec curl -sS -X POST \
-  -H "Authorization: Bearer %s" \
-  -H "Content-Type: application/json" \
-%s  --data-binary @- \
+%s  -H "Content-Type: application/json" \
+  --data-binary @- \
   %q
-`, keyPrefix, cfg.HooksAPIKey, projectHeader, endpoint)
+`, keyPrefix, authHeaders, endpoint)
 }
 
 func generateClaudePluginInDir(files map[string][]byte, subdir string, p PluginInfo, cfg GenerateConfig) error {
@@ -553,15 +587,6 @@ type cursorHooksConfig struct {
 
 type cursorHookCommand struct {
 	Command string `json:"command"`
-}
-
-// cursorHookEventName converts Gram's PascalCase event names to Cursor's
-// camelCase (e.g. "PreToolUse" -> "preToolUse").
-func cursorHookEventName(event string) string {
-	if event == "" {
-		return event
-	}
-	return strings.ToLower(event[:1]) + event[1:]
 }
 
 func marshalJSON(v any) ([]byte, error) {

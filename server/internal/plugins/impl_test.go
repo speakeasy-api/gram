@@ -914,14 +914,16 @@ func TestPluginsService_PublishPlugins_EmitsBasePlugin(t *testing.T) {
 	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
 	require.NoError(t, err)
 
-	// Both Claude and Cursor base plugins must be present.
-	require.NotNil(t, mock.lastPushedFiles["base/.claude-plugin/plugin.json"], "claude base plugin.json missing")
-	require.NotNil(t, mock.lastPushedFiles["base/hooks.json"], "claude base hooks.json missing")
-	require.NotNil(t, mock.lastPushedFiles["base/hook.sh"], "claude base hook.sh missing")
+	claudeBase, cursorBase := orgBaseSlugs(t, ctx, ti)
 
-	require.NotNil(t, mock.lastPushedFiles["base-cursor/.cursor-plugin/plugin.json"], "cursor base plugin.json missing")
-	require.NotNil(t, mock.lastPushedFiles["base-cursor/hooks.json"], "cursor base hooks.json missing")
-	require.NotNil(t, mock.lastPushedFiles["base-cursor/hook.sh"], "cursor base hook.sh missing")
+	// Both Claude and Cursor base plugins must be present.
+	require.NotNil(t, mock.lastPushedFiles[claudeBase+"/.claude-plugin/plugin.json"], "claude base plugin.json missing")
+	require.NotNil(t, mock.lastPushedFiles[claudeBase+"/hooks.json"], "claude base hooks.json missing")
+	require.NotNil(t, mock.lastPushedFiles[claudeBase+"/hook.sh"], "claude base hook.sh missing")
+
+	require.NotNil(t, mock.lastPushedFiles[cursorBase+"/.cursor-plugin/plugin.json"], "cursor base plugin.json missing")
+	require.NotNil(t, mock.lastPushedFiles[cursorBase+"/hooks.json"], "cursor base hooks.json missing")
+	require.NotNil(t, mock.lastPushedFiles[cursorBase+"/hook.sh"], "cursor base hook.sh missing")
 }
 
 // The base hook script must contain the freshly-minted hooks-scoped API key
@@ -961,13 +963,19 @@ func TestPluginsService_PublishPlugins_BaseHookScriptContainsAPIKey(t *testing.T
 	}
 	require.NotEmpty(t, hooksKeyPrefix, "expected a plugins-hooks-* API key")
 
-	for _, path := range []string{"base/hook.sh", "base-cursor/hook.sh"} {
-		script := string(mock.lastPushedFiles[path])
-		require.NotEmpty(t, script, path+" missing")
-		require.Contains(t, script, "Authorization: Bearer "+hooksKeyPrefix, "hook script %s does not embed hooks key", path)
-		// Must NOT contain the MCP key — separate scope, separate concerns.
-		require.NotContains(t, script, "plugins-mcp-")
-	}
+	claudeBase, cursorBase := orgBaseSlugs(t, ctx, ti)
+	// Claude's endpoint has no Security() block, so the Claude script sends no
+	// auth header at all — assert the key is not embedded there. Cursor reads
+	// Gram-Key, so assert the embedded value lands in that header.
+	claudeScript := string(mock.lastPushedFiles[claudeBase+"/hook.sh"])
+	require.NotEmpty(t, claudeScript, "claude base hook.sh missing")
+	require.NotContains(t, claudeScript, hooksKeyPrefix, "claude script must not embed the hooks key (endpoint accepts no auth)")
+	require.NotContains(t, claudeScript, "plugins-mcp-")
+
+	cursorScript := string(mock.lastPushedFiles[cursorBase+"/hook.sh"])
+	require.NotEmpty(t, cursorScript, "cursor base hook.sh missing")
+	require.Contains(t, cursorScript, "Gram-Key: "+hooksKeyPrefix, "cursor script does not embed hooks key in Gram-Key header")
+	require.NotContains(t, cursorScript, "plugins-mcp-")
 }
 
 // The base plugin must appear FIRST in each platform's marketplace listing
@@ -996,12 +1004,13 @@ func TestPluginsService_PublishPlugins_BaseListedFirstInMarketplace(t *testing.T
 	_, err := ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
 	require.NoError(t, err)
 
+	claudeBase, cursorBase := orgBaseSlugs(t, ctx, ti)
 	for _, p := range []struct {
 		path        string
 		expectFirst string
 	}{
-		{".claude-plugin/marketplace.json", "base"},
-		{".cursor-plugin/marketplace.json", "base-cursor"},
+		{".claude-plugin/marketplace.json", claudeBase},
+		{".cursor-plugin/marketplace.json", cursorBase},
 	} {
 		raw := mock.lastPushedFiles[p.path]
 		require.NotNil(t, raw, p.path+" missing")

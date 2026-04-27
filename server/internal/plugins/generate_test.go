@@ -186,8 +186,11 @@ func TestGenerateMarketplaceManifest(t *testing.T) {
 	require.Equal(t, "./b-cursor", cursorManifest.Plugins[1].Source)
 }
 
-func TestRenderHookScriptClaudeUsesRPCEndpointAndOmitsProjectHeader(t *testing.T) {
+func TestRenderHookScriptClaudeSendsNoAuthHeaders(t *testing.T) {
 	t.Parallel()
+	// Claude's hook endpoint declares no Security() block (design.go:116),
+	// so any auth header on the request is dropped. We deliberately omit
+	// them so the script doesn't lie about what's being sent.
 	cfg := GenerateConfig{
 		ServerURL:   "https://app.getgram.ai",
 		HooksAPIKey: "gram_local_secret_xyz",
@@ -197,12 +200,15 @@ func TestRenderHookScriptClaudeUsesRPCEndpointAndOmitsProjectHeader(t *testing.T
 
 	require.Contains(t, script, "https://app.getgram.ai/rpc/hooks.claude")
 	require.NotContains(t, script, "/hooks/claude", "must not use the legacy /hooks/<platform> path")
-	require.NotContains(t, script, "Gram-Project", "claude endpoint has no Security() block; header would be wasted")
-	require.Contains(t, script, "Bearer gram_local_secret_xyz")
+	require.NotContains(t, script, "Authorization", "claude endpoint has no Security() block")
+	require.NotContains(t, script, "Gram-Key", "claude endpoint accepts no API key header")
+	require.NotContains(t, script, "Gram-Project", "claude endpoint accepts no project header")
 }
 
-func TestRenderHookScriptCursorIncludesProjectHeader(t *testing.T) {
+func TestRenderHookScriptCursorUsesGramKeyAndProjectHeaders(t *testing.T) {
 	t.Parallel()
+	// Cursor's hook endpoint reads Gram-Key + Gram-Project per
+	// server/gen/http/hooks/server/encode_decode.go:261.
 	cfg := GenerateConfig{
 		ServerURL:   "https://app.getgram.ai",
 		HooksAPIKey: "gram_local_secret_xyz",
@@ -212,8 +218,9 @@ func TestRenderHookScriptCursorIncludesProjectHeader(t *testing.T) {
 
 	require.Contains(t, script, "https://app.getgram.ai/rpc/hooks.cursor")
 	require.NotContains(t, script, "/hooks/cursor", "must not use the legacy /hooks/<platform> path")
+	require.Contains(t, script, `Gram-Key: gram_local_secret_xyz`, "cursor reads Gram-Key, not Authorization")
+	require.NotContains(t, script, "Authorization", "cursor endpoint does not read Authorization")
 	require.Contains(t, script, `Gram-Project: acme-prod`, "cursor requires the project header per design")
-	require.Contains(t, script, "Bearer gram_local_secret_xyz")
 }
 
 func TestRenderHookScriptCursorOmitsProjectHeaderWhenSlugMissing(t *testing.T) {
@@ -227,5 +234,6 @@ func TestRenderHookScriptCursorOmitsProjectHeaderWhenSlugMissing(t *testing.T) {
 	}
 	script := string(renderHookScript(cfg, "cursor"))
 
+	require.Contains(t, script, "Gram-Key: gram_local_secret_xyz", "key still emitted without a slug")
 	require.NotContains(t, script, "Gram-Project")
 }
