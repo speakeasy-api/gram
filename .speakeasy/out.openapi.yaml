@@ -25345,6 +25345,13 @@ components:
         - policy
         - sort_order
         - created_at
+    PokeResponseBody:
+      type: object
+      properties:
+        ok:
+          type: boolean
+      required:
+        - ok
     Project:
       type: object
       properties:
@@ -28962,6 +28969,8 @@ components:
 tags:
   - name: access
     description: Manage roles and team member access control.
+  - name: admin
+    description: Operational endpoints for administrative tasks.
   - name: assets
     description: Manages assets used by Gram projects.
   - name: assistants

@@ -15,6 +15,7 @@ import (
 
 	aboutc "github.com/speakeasy-api/gram/server/gen/http/about/client"
 	accessc "github.com/speakeasy-api/gram/server/gen/http/access/client"
+	adminc "github.com/speakeasy-api/gram/server/gen/http/admin/client"
 	assetsc "github.com/speakeasy-api/gram/server/gen/http/assets/client"
 	assistantsc "github.com/speakeasy-api/gram/server/gen/http/assistants/client"
 	auditlogsc "github.com/speakeasy-api/gram/server/gen/http/auditlogs/client"
@@ -60,6 +61,7 @@ func UsageCommands() []string {
 	return []string{
 		"about openapi",
 		"access (list-roles|get-role|create-role|update-role|delete-role|list-scopes|list-members|list-grants|update-member-role|get-rbac-status|enable-rbac|disable-rbac)",
+		"admin poke",
 		"assets (serve-image|upload-image|upload-functions|upload-open-ap-iv3|fetch-open-ap-iv3-from-url|serve-open-ap-iv3|serve-function|list-assets|upload-chat-attachment|serve-chat-attachment|create-signed-chat-attachment-url|serve-chat-attachment-signed)",
 		"assistants (list-assistants|get-assistant|create-assistant|update-assistant|delete-assistant)",
 		"auditlogs (list|list-facets)",
@@ -101,9 +103,9 @@ func UsageCommands() []string {
 func UsageExamples() string {
 	return os.Args[0] + " " + "about openapi" + "\n" +
 		os.Args[0] + " " + "access list-roles --apikey-token \"abc123\" --session-token \"abc123\"" + "\n" +
+		os.Args[0] + " " + "admin poke" + "\n" +
 		os.Args[0] + " " + "assets serve-image --id \"abc123\"" + "\n" +
 		os.Args[0] + " " + "assistants list-assistants --session-token \"abc123\" --project-slug-input \"abc123\"" + "\n" +
-		os.Args[0] + " " + "auditlogs list --cursor \"abc123\" --project-slug \"abc123\" --actor-id \"abc123\" --action \"abc123\" --apikey-token \"abc123\" --session-token \"abc123\"" + "\n" +
 		""
 }
 
@@ -172,6 +174,10 @@ func ParseEndpoint(
 
 		accessDisableRBACFlags            = flag.NewFlagSet("disable-rbac", flag.ExitOnError)
 		accessDisableRBACSessionTokenFlag = accessDisableRBACFlags.String("session-token", "", "")
+
+		adminFlags = flag.NewFlagSet("admin", flag.ContinueOnError)
+
+		adminPokeFlags = flag.NewFlagSet("poke", flag.ExitOnError)
 
 		assetsFlags = flag.NewFlagSet("assets", flag.ContinueOnError)
 
@@ -1259,6 +1265,9 @@ func ParseEndpoint(
 	accessEnableRBACFlags.Usage = accessEnableRBACUsage
 	accessDisableRBACFlags.Usage = accessDisableRBACUsage
 
+	adminFlags.Usage = adminUsage
+	adminPokeFlags.Usage = adminPokeUsage
+
 	assetsFlags.Usage = assetsUsage
 	assetsServeImageFlags.Usage = assetsServeImageUsage
 	assetsUploadImageFlags.Usage = assetsUploadImageUsage
@@ -1532,6 +1541,8 @@ func ParseEndpoint(
 			svcf = aboutFlags
 		case "access":
 			svcf = accessFlags
+		case "admin":
+			svcf = adminFlags
 		case "assets":
 			svcf = assetsFlags
 		case "assistants":
@@ -1659,6 +1670,13 @@ func ParseEndpoint(
 
 			case "disable-rbac":
 				epf = accessDisableRBACFlags
+
+			}
+
+		case "admin":
+			switch epn {
+			case "poke":
+				epf = adminPokeFlags
 
 			}
 
@@ -2421,6 +2439,12 @@ func ParseEndpoint(
 			case "disable-rbac":
 				endpoint = c.DisableRBAC()
 				data, err = accessc.BuildDisableRBACPayload(*accessDisableRBACSessionTokenFlag)
+			}
+		case "admin":
+			c := adminc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "poke":
+				endpoint = c.Poke()
 			}
 		case "assets":
 			c := assetsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -3425,6 +3449,32 @@ func accessDisableRBACUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access disable-rbac --session-token \"abc123\"")
+}
+
+// adminUsage displays the usage of the admin command and its subcommands.
+func adminUsage() {
+	fmt.Fprintln(os.Stderr, `Operational endpoints for administrative tasks.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] admin COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    poke: Poke implements poke.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s admin COMMAND --help\n", os.Args[0])
+}
+func adminPokeUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin poke", os.Args[0])
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Poke implements poke.`)
+
+	// Flags list
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin poke")
 }
 
 // assetsUsage displays the usage of the assets command and its subcommands.

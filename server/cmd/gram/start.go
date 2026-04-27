@@ -865,7 +865,7 @@ func newStartCommand() *cli.Command {
 
 				logger.InfoContext(ctx, "shutting down server")
 
-				graceCtx, graceCancel := context.WithTimeout(ctx, 10*time.Second)
+				graceCtx, graceCancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 				defer graceCancel()
 
 				if err := srv.Shutdown(graceCtx); err != nil {
