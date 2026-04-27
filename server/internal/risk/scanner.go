@@ -150,7 +150,7 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text s
 			}
 			if len(findings) > 0 {
 				return &ScanResult{
-					Action:      policy.Action,
+					Action:      actionOrDefault(policy.Action),
 					PolicyID:    policy.ID.String(),
 					PolicyName:  policy.Name,
 					Source:      "gitleaks",
@@ -171,7 +171,7 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text s
 			if len(batchResults) > 0 && len(batchResults[0]) > 0 {
 				f := batchResults[0][0]
 				return &ScanResult{
-					Action:      policy.Action,
+					Action:      actionOrDefault(policy.Action),
 					PolicyID:    policy.ID.String(),
 					PolicyName:  policy.Name,
 					Source:      "presidio",

@@ -149,6 +149,7 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 	if err := validateAction(action); err != nil {
 		return nil, err
 	}
+	actionPG := conv.ToPGText(action)
 
 	sources := payload.Sources
 	if sources == nil {
@@ -179,7 +180,7 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 		Sources:          sources,
 		PresidioEntities: payload.PresidioEntities,
 		Enabled:          enabled,
-		Action:           action,
+		Action:           actionPG,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "create risk policy").Log(ctx, s.logger)
@@ -308,12 +309,12 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		enabled = *payload.Enabled
 	}
 
-	action := current.Action
+	actionPG := current.Action
 	if payload.Action != nil {
-		action = *payload.Action
-		if err := validateAction(action); err != nil {
+		if err := validateAction(*payload.Action); err != nil {
 			return nil, err
 		}
+		actionPG = conv.ToPGText(*payload.Action)
 	}
 
 	snapshotBefore := policyRowSnapshot(current)
@@ -331,7 +332,7 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		Sources:          sources,
 		PresidioEntities: presidioEntities,
 		Enabled:          enabled,
-		Action:           action,
+		Action:           actionPG,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "update risk policy").Log(ctx, s.logger)
@@ -718,7 +719,7 @@ func (s *Service) policyToType(ctx context.Context, row repo.RiskPolicy) (*types
 		Sources:          row.Sources,
 		PresidioEntities: row.PresidioEntities,
 		Enabled:          row.Enabled,
-		Action:           row.Action,
+		Action:           actionOrDefault(row.Action),
 		Version:          row.Version,
 		CreatedAt:        row.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:        row.UpdatedAt.Time.Format(time.RFC3339),
@@ -739,7 +740,7 @@ func policyRowSnapshot(row repo.RiskPolicy) *types.RiskPolicy {
 		Sources:          row.Sources,
 		PresidioEntities: row.PresidioEntities,
 		Enabled:          row.Enabled,
-		Action:           row.Action,
+		Action:           actionOrDefault(row.Action),
 		Version:          row.Version,
 		CreatedAt:        row.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:        row.UpdatedAt.Time.Format(time.RFC3339),
@@ -755,6 +756,15 @@ func validateAction(action string) error {
 	default:
 		return oops.E(oops.CodeInvalid, nil, "action must be one of: flag, block")
 	}
+}
+
+// actionOrDefault extracts the action string from a nullable pgtype.Text,
+// defaulting to "flag" when NULL or empty.
+func actionOrDefault(t pgtype.Text) string {
+	if !t.Valid || t.String == "" {
+		return "flag"
+	}
+	return t.String
 }
 
 func validatePolicyName(name string) error {

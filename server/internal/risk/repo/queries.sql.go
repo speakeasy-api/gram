@@ -153,7 +153,7 @@ type CreateRiskPolicyParams struct {
 	Sources          []string
 	PresidioEntities []string
 	Enabled          bool
-	Action           string
+	Action           pgtype.Text
 }
 
 func (q *Queries) CreateRiskPolicy(ctx context.Context, arg CreateRiskPolicyParams) (RiskPolicy, error) {
@@ -828,7 +828,7 @@ type UpdateRiskPolicyParams struct {
 	Sources          []string
 	PresidioEntities []string
 	Enabled          bool
-	Action           string
+	Action           pgtype.Text
 	ID               uuid.UUID
 	ProjectID        uuid.UUID
 }
