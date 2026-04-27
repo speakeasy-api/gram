@@ -13,23 +13,22 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
 )
 
-// RiskScanner checks text against enforcing (block/redact) risk policies.
+// RiskScanner checks text against blocking risk policies.
 type RiskScanner interface {
-	// ScanForEnforcement scans text against all enabled block/redact policies
-	// for the given project. Returns nil if no enforcing policy matches.
+	// ScanForEnforcement scans text against all enabled blocking policies
+	// for the given project. Returns nil if no blocking policy matches.
 	ScanForEnforcement(ctx context.Context, projectID uuid.UUID, text string) (*ScanResult, error)
 }
 
-// ScanResult describes a match from an enforcing risk policy.
+// ScanResult describes a match from a blocking risk policy.
 type ScanResult struct {
-	Action       string // "block" or "redact"
-	PolicyID     string
-	PolicyName   string
-	Source       string // "gitleaks" or "presidio"
-	RuleID       string
-	Description  string
-	Match        string
-	RedactedText string // populated only when Action == "redact"
+	Action      string // "block"
+	PolicyID    string
+	PolicyName  string
+	Source      string // "gitleaks" or "presidio"
+	RuleID      string
+	Description string
+	Match       string
 }
 
 // Scanner implements RiskScanner using gitleaks and optionally Presidio.
@@ -64,31 +63,10 @@ func (s *Scanner) ScanForEnforcement(ctx context.Context, projectID uuid.UUID, t
 		return nil, nil
 	}
 
-	// Block policies take priority over redact.
-	// Process block policies first, then redact.
-	var redactPolicies []repo.RiskPolicy
 	for _, p := range policies {
-		if p.Action == "block" {
-			result, err := s.scanPolicy(ctx, p, text)
-			if err != nil {
-				s.logger.WarnContext(ctx, "scan failed for block policy",
-					attr.SlogError(err),
-					attr.SlogRiskPolicyID(p.ID.String()),
-				)
-				continue
-			}
-			if result != nil {
-				return result, nil
-			}
-		} else {
-			redactPolicies = append(redactPolicies, p)
-		}
-	}
-
-	for _, p := range redactPolicies {
 		result, err := s.scanPolicy(ctx, p, text)
 		if err != nil {
-			s.logger.WarnContext(ctx, "scan failed for redact policy",
+			s.logger.WarnContext(ctx, "scan failed for block policy",
 				attr.SlogError(err),
 				attr.SlogRiskPolicyID(p.ID.String()),
 			)
@@ -111,19 +89,14 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text s
 				return nil, fmt.Errorf("gitleaks scan: %w", err)
 			}
 			if len(findings) > 0 {
-				redacted := ""
-				if policy.Action == "redact" {
-					redacted = redactFindings(text, findings)
-				}
 				return &ScanResult{
-					Action:       policy.Action,
-					PolicyID:     policy.ID.String(),
-					PolicyName:   policy.Name,
-					Source:       "gitleaks",
-					RuleID:       findings[0].RuleID,
-					Description:  findings[0].Description,
-					Match:        findings[0].Match,
-					RedactedText: redacted,
+					Action:      policy.Action,
+					PolicyID:    policy.ID.String(),
+					PolicyName:  policy.Name,
+					Source:      "gitleaks",
+					RuleID:      findings[0].RuleID,
+					Description: findings[0].Description,
+					Match:       findings[0].Match,
 				}, nil
 			}
 
@@ -137,54 +110,17 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text s
 			}
 			if len(batchResults) > 0 && len(batchResults[0]) > 0 {
 				f := batchResults[0][0]
-				redacted := ""
-				if policy.Action == "redact" {
-					redacted = redactFindings(text, batchResults[0])
-				}
 				return &ScanResult{
-					Action:       policy.Action,
-					PolicyID:     policy.ID.String(),
-					PolicyName:   policy.Name,
-					Source:       "presidio",
-					RuleID:       f.RuleID,
-					Description:  f.Description,
-					Match:        f.Match,
-					RedactedText: redacted,
+					Action:      policy.Action,
+					PolicyID:    policy.ID.String(),
+					PolicyName:  policy.Name,
+					Source:      "presidio",
+					RuleID:      f.RuleID,
+					Description: f.Description,
+					Match:       f.Match,
 				}, nil
 			}
 		}
 	}
 	return nil, nil
-}
-
-// redactFindings replaces all finding matches in text with [REDACTED] placeholders.
-// Processes findings from end to start to preserve byte positions.
-func redactFindings(text string, findings []ra.Finding) string {
-	if len(findings) == 0 {
-		return text
-	}
-
-	// Sort by start position descending so replacements don't shift positions.
-	sorted := make([]ra.Finding, len(findings))
-	copy(sorted, findings)
-	for i := 0; i < len(sorted)-1; i++ {
-		for j := i + 1; j < len(sorted); j++ {
-			if sorted[j].StartPos > sorted[i].StartPos {
-				sorted[i], sorted[j] = sorted[j], sorted[i]
-			}
-		}
-	}
-
-	result := text
-	for _, f := range sorted {
-		if f.StartPos < 0 || f.EndPos > len(result) || f.StartPos >= f.EndPos {
-			continue
-		}
-		placeholder := "[REDACTED]"
-		if f.RuleID != "" {
-			placeholder = fmt.Sprintf("[REDACTED:%s]", f.RuleID)
-		}
-		result = result[:f.StartPos] + placeholder + result[f.EndPos:]
-	}
-	return result
 }

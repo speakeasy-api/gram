@@ -60,7 +60,6 @@ type HookSpecificOutput struct {
 	AdditionalContext        *string `json:"additionalContext,omitempty"`
 	PermissionDecision       *string `json:"permissionDecision,omitempty"`
 	PermissionDecisionReason *string `json:"permissionDecisionReason,omitempty"`
-	UpdatedInput             any     `json:"updatedInput,omitempty"`
 }
 
 // ProductFeaturesClient checks whether product features are enabled for an org.

@@ -267,25 +267,13 @@ func (s *Service) getSessionMetadata(ctx context.Context, sessionID string) (Ses
 
 func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudeHookPayload) (*gen.ClaudeHookResult, error) {
 	if s.riskScanner != nil && payload.SessionID != nil {
-		scanResult := s.scanClaudeForEnforcement(ctx, payload)
-		if scanResult != nil && scanResult.Action == "block" {
+		if scanResult := s.scanClaudeForEnforcement(ctx, payload); scanResult != nil {
 			deny := "deny"
 			reason := fmt.Sprintf("Blocked by policy %q: %s detected", scanResult.PolicyName, scanResult.Description)
 			result := makeHookResult(payload.HookEventName)
 			if output, ok := result.HookSpecificOutput.(*HookSpecificOutput); ok {
 				output.PermissionDecision = &deny
 				output.PermissionDecisionReason = &reason
-			}
-			return result, nil
-		}
-		if scanResult != nil && scanResult.Action == "redact" && scanResult.RedactedText != "" {
-			allow := "allow"
-			reason := fmt.Sprintf("Content redacted by policy %q: %s detected", scanResult.PolicyName, scanResult.Description)
-			result := makeHookResult(payload.HookEventName)
-			if output, ok := result.HookSpecificOutput.(*HookSpecificOutput); ok {
-				output.PermissionDecision = &allow
-				output.PermissionDecisionReason = &reason
-				output.UpdatedInput = payload.ToolInput // TODO: replace with redacted version once tool input parsing is implemented
 			}
 			return result, nil
 		}

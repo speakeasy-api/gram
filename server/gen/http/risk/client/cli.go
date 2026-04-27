@@ -26,8 +26,8 @@ func BuildCreateRiskPolicyPayload(riskCreateRiskPolicyBody string, riskCreateRis
 		if err != nil {
 			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"action\": \"block\",\n      \"enabled\": false,\n      \"name\": \"abc123\",\n      \"presidio_entities\": [\n         \"abc123\"\n      ],\n      \"sources\": [\n         \"abc123\"\n      ]\n   }'")
 		}
-		if !(body.Action == "flag" || body.Action == "block" || body.Action == "redact") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", body.Action, []any{"flag", "block", "redact"}))
+		if !(body.Action == "flag" || body.Action == "block") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", body.Action, []any{"flag", "block"}))
 		}
 		if err != nil {
 			return nil, err
@@ -161,8 +161,8 @@ func BuildUpdateRiskPolicyPayload(riskUpdateRiskPolicyBody string, riskUpdateRis
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
 		if body.Action != nil {
-			if !(*body.Action == "flag" || *body.Action == "block" || *body.Action == "redact") {
-				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "block", "redact"}))
+			if !(*body.Action == "flag" || *body.Action == "block") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "block"}))
 			}
 		}
 		if err != nil {

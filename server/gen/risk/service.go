@@ -75,7 +75,7 @@ type CreateRiskPolicyPayload struct {
 	PresidioEntities []string
 	// Whether the policy is active.
 	Enabled *bool
-	// Policy action: flag, block, or redact.
+	// Policy action: flag or block.
 	Action string
 }
 
@@ -198,7 +198,7 @@ type UpdateRiskPolicyPayload struct {
 	PresidioEntities []string
 	// Whether the policy is active.
 	Enabled *bool
-	// Policy action: flag, block, or redact.
+	// Policy action: flag or block.
 	Action *string
 }
 

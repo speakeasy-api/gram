@@ -231,5 +231,5 @@ SELECT *
 FROM risk_policies
 WHERE project_id = @project_id
   AND enabled IS TRUE
-  AND action IN ('block', 'redact')
+  AND action = 'block'
   AND deleted IS FALSE;

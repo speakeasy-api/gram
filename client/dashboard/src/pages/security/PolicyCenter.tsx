@@ -575,23 +575,6 @@ function PolicySheetBody({
               </div>
             </div>
           </label>
-          <label
-            htmlFor="action-redact"
-            className="hover:bg-muted/50 flex cursor-pointer items-start gap-3 rounded-md border p-3"
-          >
-            <RadioGroupItem
-              value="redact"
-              id="action-redact"
-              className="mt-0.5"
-            />
-            <div>
-              <div className="text-sm font-medium">Redact</div>
-              <div className="text-muted-foreground text-xs">
-                Replace sensitive content with [REDACTED] before it reaches the
-                model
-              </div>
-            </div>
-          </label>
         </RadioGroup>
       </div>
 
@@ -866,11 +849,10 @@ function RunPanel({
 
 const ACTION_BADGE_CONFIG: Record<
   PolicyAction,
-  { label: string; variant: "secondary" | "destructive" | "outline" }
+  { label: string; variant: "secondary" | "destructive" }
 > = {
   flag: { label: "Flag", variant: "secondary" },
   block: { label: "Block", variant: "destructive" },
-  redact: { label: "Redact", variant: "outline" },
 };
 
 function ActionBadge({ action }: { action: PolicyAction }) {

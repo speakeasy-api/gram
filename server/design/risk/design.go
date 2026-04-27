@@ -25,8 +25,8 @@ var _ = Service("risk", func() {
 			Attribute("sources", ArrayOf(String), "Detection sources to enable.")
 			Attribute("presidio_entities", ArrayOf(String), "Presidio entity types to detect.")
 			Attribute("enabled", Boolean, "Whether the policy is active.")
-			Attribute("action", String, "Policy action: flag, block, or redact.", func() {
-				Enum("flag", "block", "redact")
+			Attribute("action", String, "Policy action: flag or block.", func() {
+				Enum("flag", "block")
 				Default("flag")
 			})
 			Required("name")
@@ -116,8 +116,8 @@ var _ = Service("risk", func() {
 			Attribute("sources", ArrayOf(String), "Detection sources to enable.")
 			Attribute("presidio_entities", ArrayOf(String), "Presidio entity types to detect.")
 			Attribute("enabled", Boolean, "Whether the policy is active.")
-			Attribute("action", String, "Policy action: flag, block, or redact.", func() {
-				Enum("flag", "block", "redact")
+			Attribute("action", String, "Policy action: flag or block.", func() {
+				Enum("flag", "block")
 			})
 			Required("id", "name")
 		})

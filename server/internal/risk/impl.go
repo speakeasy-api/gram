@@ -750,10 +750,10 @@ func policyRowSnapshot(row repo.RiskPolicy) *types.RiskPolicy {
 
 func validateAction(action string) error {
 	switch action {
-	case "flag", "block", "redact":
+	case "flag", "block":
 		return nil
 	default:
-		return oops.E(oops.CodeInvalid, nil, "action must be one of: flag, block, redact")
+		return oops.E(oops.CodeInvalid, nil, "action must be one of: flag, block")
 	}
 }
 

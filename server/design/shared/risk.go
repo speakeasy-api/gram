@@ -17,8 +17,8 @@ var RiskPolicy = Type("RiskPolicy", func() {
 	Attribute("sources", ArrayOf(String), "Detection sources enabled for this policy.")
 	Attribute("presidio_entities", ArrayOf(String), "Presidio entity types to scan for. When empty, scans all entities.")
 	Attribute("enabled", Boolean, "Whether the policy is active.")
-	Attribute("action", String, "Policy action: flag (log only), block (deny in real-time), or redact (replace sensitive content).", func() {
-		Enum("flag", "block", "redact")
+	Attribute("action", String, "Policy action: flag (log only) or block (deny in real-time).", func() {
+		Enum("flag", "block")
 		Default("flag")
 	})
 	Attribute("version", Int64, "Policy version, incremented on each update.")

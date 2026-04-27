@@ -363,7 +363,7 @@ SELECT id, project_id, organization_id, enabled, name, sources, presidio_entitie
 FROM risk_policies
 WHERE project_id = $1
   AND enabled IS TRUE
-  AND action IN ('block', 'redact')
+  AND action = 'block'
   AND deleted IS FALSE
 `
 
