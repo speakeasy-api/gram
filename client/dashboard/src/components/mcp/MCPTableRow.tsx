@@ -9,6 +9,7 @@ import { ToolsetEntry } from "@gram/client/models/components";
 import { useLatestDeployment } from "@gram/client/react-query";
 import { AlertTriangleIcon, Link2, Network, Package } from "lucide-react";
 import { useMemo } from "react";
+import { useNavigate } from "react-router";
 import {
   useCatalogIconMap,
   useExternalMcpOAuthConfigStatus,
@@ -18,10 +19,19 @@ import { Badge } from "../ui/badge";
 
 export function MCPTableRow({ toolset }: { toolset: ToolsetEntry }) {
   const routes = useRoutes();
+  const navigate = useNavigate();
   const { url: mcpUrl } = useMcpUrl(toolset);
   const catalogIconMap = useCatalogIconMap();
   const { data: deploymentResult } = useLatestDeployment();
   const oauthStatus = useExternalMcpOAuthConfigStatus(toolset.slug);
+
+  const handleClick = () => {
+    if (oauthStatus === "required-unconfigured") {
+      navigate(`${routes.mcp.details.href(toolset.slug)}#authentication`);
+    } else {
+      routes.mcp.details.goTo(toolset.slug);
+    }
+  };
 
   const externalMcpInfo = useMemo(() => {
     const externalMcpUrn = toolset.toolUrns?.find((urn) =>
@@ -61,7 +71,7 @@ export function MCPTableRow({ toolset }: { toolset: ToolsetEntry }) {
 
   return (
     <DotRow
-      onClick={() => routes.mcp.details.goTo(toolset.slug)}
+      onClick={handleClick}
       icon={
         externalMcpInfo?.logoUrl ? (
           <img
