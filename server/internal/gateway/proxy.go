@@ -783,7 +783,6 @@ func (tp *ToolProxy) doExternalMCP(
 		oauthToken = env.OAuthToken
 	}
 
-	println("\n\n\nOAUTH TOKEN: ", oauthToken, "\n\n\n")
 
 	// Build headers from environment variables
 	headers := externalmcp.BuildHeaders(env.SystemEnv, env.UserConfig, plan.HeaderDefinitions, oauthToken)
