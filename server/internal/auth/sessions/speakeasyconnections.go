@@ -230,7 +230,9 @@ func (s *Manager) GetUserInfoFromSpeakeasy(ctx context.Context, idToken string) 
 
 	// If applicable we will only utilize non-free organizations, plus an applied admin override
 	if len(nonFreeOrganizations) > 0 {
-		organizations = nonFreeOrganizations
+		if !user.Admin { // admins can access any org
+			organizations = nonFreeOrganizations
+		}
 		// At this point if a user has paid organizations we consider them whitelisted
 		whitelisted = true
 	}
