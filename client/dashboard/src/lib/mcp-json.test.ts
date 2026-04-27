@@ -112,15 +112,15 @@ describe("buildCollectionMcpJson", () => {
   it("includes remote header metadata when generating configs", () => {
     const result = buildCollectionMcpJson([
       makeServer({
-        title: "Livestorm",
+        title: "Analytics",
         remotes: [
           {
             transportType: "streamable-http",
-            url: "https://app.getgram.ai/mcp/livestorm",
+            url: "https://app.getgram.ai/mcp/analytics",
             headers: [
               {
-                name: "MCP-Livestorm-API-Key",
-                placeholder: "${MCP_LIVESTORM_API_KEY}",
+                name: "MCP-Service-API-Key",
+                placeholder: "${SERVICE_API_KEY}",
                 isRequired: true,
                 isSecret: true,
               },
@@ -130,9 +130,8 @@ describe("buildCollectionMcpJson", () => {
       }),
     ]);
 
-    expect(result.config.mcpServers.Livestorm.headers).toEqual({
-      Authorization: "Bearer ${GRAM_API_KEY}",
-      "MCP-Livestorm-API-Key": "${MCP_LIVESTORM_API_KEY}",
+    expect(result.config.mcpServers.Analytics.headers).toEqual({
+      "MCP-Service-API-Key": "${SERVICE_API_KEY}",
     });
   });
 });

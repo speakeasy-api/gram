@@ -71,9 +71,7 @@ function getUsableRemote(server: ExternalMCPServer) {
 function getRemoteHeaders(
   remote: NonNullable<ExternalMCPServer["remotes"]>[number],
 ): Record<string, string> {
-  const headers: Record<string, string> = {
-    Authorization: AUTHORIZATION_HEADER_VALUE,
-  };
+  const headers: Record<string, string> = {};
 
   for (const header of remote.headers ?? []) {
     const name = header.name.trim();
@@ -86,7 +84,13 @@ function getRemoteHeaders(
     headers[name] = value;
   }
 
-  return headers;
+  if (Object.keys(headers).length > 0) {
+    return headers;
+  }
+
+  return {
+    Authorization: AUTHORIZATION_HEADER_VALUE,
+  };
 }
 
 function getServerDisplayName(server: ExternalMCPServer): string {

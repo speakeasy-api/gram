@@ -444,15 +444,10 @@ func (s *Service) collectionRemoteHeaders(ctx context.Context, mcpMetaRepo *mcpm
 	headers := make([]*types.ExternalMCPRemoteHeader, 0)
 
 	if !toolset.McpIsPublic {
-		description := "Gram API key for authenticating MCP server connections"
-		placeholder := "Bearer ${GRAM_API_KEY}"
-		headers = append(headers, &types.ExternalMCPRemoteHeader{
-			Name:        "Authorization",
-			Description: &description,
-			IsSecret:    conv.PtrEmpty(true),
-			IsRequired:  conv.PtrEmpty(true),
-			Placeholder: &placeholder,
-		})
+		headers = append(headers,
+			collectionRemoteHeader("gram_environment", "gram-environment", false),
+			collectionRemoteHeader("authorization", "gram-key", true),
+		)
 	}
 
 	metadataRecord, err := mcpMetaRepo.GetMetadataForToolset(ctx, toolset.ID)
@@ -480,19 +475,27 @@ func (s *Service) collectionRemoteHeaders(ctx context.Context, mcpMetaRepo *mcpm
 			}
 		}
 
-		placeholderName := toolconfig.ToPosixName(displayName)
-		description := fmt.Sprintf("Set from %s", placeholderName)
-		placeholder := fmt.Sprintf("${%s}", placeholderName)
-		headers = append(headers, &types.ExternalMCPRemoteHeader{
-			Name:        toolconfig.ToHTTPHeader(fmt.Sprintf("MCP-%s", config.VariableName)),
-			Description: &description,
-			IsSecret:    conv.PtrEmpty(true),
-			IsRequired:  conv.PtrEmpty(true),
-			Placeholder: &placeholder,
-		})
+		headers = append(headers, collectionRemoteHeader(fmt.Sprintf("MCP-%s", config.VariableName), displayName, true))
 	}
 
 	return headers, nil
+}
+
+func collectionRemoteHeader(systemName, displayName string, sensitive bool) *types.ExternalMCPRemoteHeader {
+	placeholderName := toolconfig.ToPosixName(displayName)
+	description := fmt.Sprintf("Set from %s", placeholderName)
+	placeholder := fmt.Sprintf("${%s}", placeholderName)
+	header := &types.ExternalMCPRemoteHeader{
+		Name:        toolconfig.ToHTTPHeader(systemName),
+		Description: &description,
+		IsRequired:  conv.PtrEmpty(true),
+		Placeholder: &placeholder,
+	}
+	if sensitive {
+		header.IsSecret = conv.PtrEmpty(true)
+	}
+
+	return header
 }
 
 func (s *Service) attachServerToCollection(ctx context.Context, queries *repo.Queries, collectionID, toolsetID uuid.UUID, organizationID, userID string) error {

@@ -87,6 +87,25 @@ func TestCollectionsService_ListServers_PreservesOriginLineage(t *testing.T) {
 	require.NotNil(t, result.Servers[0].OrganizationMcpCollectionRegistryID)
 	require.NotNil(t, result.Servers[0].Remotes)
 	require.Len(t, result.Servers[0].Remotes, 1)
+
+	headers := result.Servers[0].Remotes[0].Headers
+	require.Len(t, headers, 2)
+	headersByName := make(map[string]*types.ExternalMCPRemoteHeader, len(headers))
+	for _, header := range headers {
+		headersByName[header.Name] = header
+	}
+
+	environmentHeader := headersByName[toolconfig.ToHTTPHeader("gram_environment")]
+	require.NotNil(t, environmentHeader)
+	require.NotNil(t, environmentHeader.Placeholder)
+	require.Equal(t, "${GRAM_ENVIRONMENT}", *environmentHeader.Placeholder)
+
+	authorizationHeader := headersByName[toolconfig.ToHTTPHeader("authorization")]
+	require.NotNil(t, authorizationHeader)
+	require.NotNil(t, authorizationHeader.IsSecret)
+	require.True(t, *authorizationHeader.IsSecret)
+	require.NotNil(t, authorizationHeader.Placeholder)
+	require.Equal(t, "${GRAM_KEY}", *authorizationHeader.Placeholder)
 }
 
 func TestCollectionsService_ListServers_IncludesUserProvidedEnvironmentHeaders(t *testing.T) {
@@ -101,8 +120,8 @@ func TestCollectionsService_ListServers_IncludesUserProvidedEnvironmentHeaders(t
 		t,
 		ctx,
 		ti,
-		"Livestorm Toolset",
-		"com.speakeasy.example/livestorm",
+		"Example Toolset",
+		"com.speakeasy.example/server",
 	)
 	toolsetID, err := uuid.Parse(toolset.ID)
 	require.NoError(t, err)
@@ -125,8 +144,8 @@ func TestCollectionsService_ListServers_IncludesUserProvidedEnvironmentHeaders(t
 	_, err = mcpRepo.UpsertEnvironmentConfig(ctx, mcpmetarepo.UpsertEnvironmentConfigParams{
 		ProjectID:         *authCtx.ProjectID,
 		McpMetadataID:     metadata.ID,
-		VariableName:      "LIVESTORM_API_KEY",
-		HeaderDisplayName: pgtype.Text{String: "MCP-Livestorm-API-Key", Valid: true},
+		VariableName:      "SERVICE_API_KEY",
+		HeaderDisplayName: pgtype.Text{String: "External API Key", Valid: true},
 		ProvidedBy:        "user",
 	})
 	require.NoError(t, err)
@@ -181,14 +200,14 @@ func TestCollectionsService_ListServers_IncludesUserProvidedEnvironmentHeaders(t
 		headersByName[header.Name] = header
 	}
 
-	livestormHeader := headersByName[toolconfig.ToHTTPHeader("MCP-LIVESTORM_API_KEY")]
-	require.NotNil(t, livestormHeader)
-	require.NotNil(t, livestormHeader.IsSecret)
-	require.True(t, *livestormHeader.IsSecret)
-	require.NotNil(t, livestormHeader.IsRequired)
-	require.True(t, *livestormHeader.IsRequired)
-	require.NotNil(t, livestormHeader.Placeholder)
-	require.Equal(t, "${MCP_LIVESTORM_API_KEY}", *livestormHeader.Placeholder)
+	customDisplayHeader := headersByName[toolconfig.ToHTTPHeader("MCP-SERVICE_API_KEY")]
+	require.NotNil(t, customDisplayHeader)
+	require.NotNil(t, customDisplayHeader.IsSecret)
+	require.True(t, *customDisplayHeader.IsSecret)
+	require.NotNil(t, customDisplayHeader.IsRequired)
+	require.True(t, *customDisplayHeader.IsRequired)
+	require.NotNil(t, customDisplayHeader.Placeholder)
+	require.Equal(t, "${EXTERNAL_API_KEY}", *customDisplayHeader.Placeholder)
 
 	headerlessHeader := headersByName[toolconfig.ToHTTPHeader("MCP-HEADERLESS_SECRET")]
 	require.NotNil(t, headerlessHeader)

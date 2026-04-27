@@ -363,11 +363,6 @@ func toExternalMCPRemoteVariables(variables map[string]RemoteVariable) map[strin
 	return result
 }
 
-//go:fix inline
-func boolPtr(v bool) *bool {
-	return new(v)
-}
-
 // ClearCache removes all cached entries for the given registry URL.
 func (c *RegistryClient) ClearCache(ctx context.Context, registryURL string) error {
 	if c.listCache != nil {
