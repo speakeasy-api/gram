@@ -121,14 +121,29 @@ func (s *Service) requireAuth(ctx context.Context) (*contextvalues.AuthContext, 
 	return authCtx, nil
 }
 
-// requireScope enforces an insights scope directly against the authz engine.
-// Chat sessions and API keys bypass RBAC in the engine (see
-// authz.Engine.ShouldEnforce), which is the seed point for their access — they
-// inherit the right to call propose/read from how they authenticate, not from
-// a project-scope grant. Session users on enterprise accounts get the insights
-// scopes via the SystemRoleGrants table in server/internal/authz/grants.go.
+// requireScope enforces an insights scope against the authz engine, with a
+// graceful fallback to the broader project-level scope (project:read for
+// reads, project:write for writes). Chat sessions and API keys bypass RBAC
+// entirely (see authz.Engine.ShouldEnforce). Session users with the new
+// insights:* grants pass on the strict check; dev-toolbar override states
+// and any caller who already has project-level access pass on the fallback.
+//
+// The fallback isn't permissive — anyone who can read a project can already
+// see its tools and toolsets via /rpc/tools.list and /rpc/toolsets.list, and
+// anyone who can write to a project can already mutate them via
+// /rpc/variations.upsertGlobal directly. Routing the same access through the
+// insights surface doesn't expand what they can do; it just lets them do it
+// from the AI Insights sidebar.
 func (s *Service) requireScope(ctx context.Context, projectID string, scope authz.Scope) error {
-	return s.authz.Require(ctx, authz.Check{Scope: scope, ResourceID: projectID})
+	fallback := authz.ScopeProjectRead
+	switch scope {
+	case authz.ScopeInsightsApply, authz.ScopeInsightsPropose:
+		fallback = authz.ScopeProjectWrite
+	}
+	return s.authz.RequireAny(ctx,
+		authz.Check{Scope: scope, ResourceID: projectID},
+		authz.Check{Scope: fallback, ResourceID: projectID},
+	)
 }
 
 // ---- Proposals ----
