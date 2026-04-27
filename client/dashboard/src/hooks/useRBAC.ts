@@ -9,6 +9,38 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 export { Scope };
 
 /**
+ * Derive the resource kind from a scope's family prefix.
+ * Mirrors the server-side ResourceKindForScope in authz/selector.go.
+ */
+export function resourceKindForScope(scope: string): string {
+  if (scope.startsWith("project:")) return "project";
+  if (scope.startsWith("remote-mcp:") || scope.startsWith("mcp:")) return "mcp";
+  if (scope.startsWith("org:")) return "org";
+  return "*";
+}
+
+/**
+ * Check if a grant selector matches a check selector.
+ * Mirrors the server-side Selector.Matches in authz/selector.go.
+ *
+ * For each key in the grant selector, if the check also has that key the
+ * values must match (or the grant value must be "*"). Keys present in the
+ * grant but absent from the check are skipped — the check isn't constraining
+ * that dimension.
+ */
+export function selectorMatches(
+  grantSelector: Record<string, string>,
+  checkSelector: Record<string, string>,
+): boolean {
+  for (const [key, grantVal] of Object.entries(grantSelector)) {
+    const checkVal = checkSelector[key];
+    if (checkVal === undefined) continue;
+    if (grantVal !== "*" && grantVal !== checkVal) return false;
+  }
+  return true;
+}
+
+/**
  * Core RBAC hook. Fetches the current user's effective grants and provides
  * helpers to check whether the user holds a particular scope.
  *
@@ -73,14 +105,12 @@ export function useRBAC() {
           return false;
         // Unrestricted grant — no selectors
         if (!grant.selectors) return true;
-        // Selector-scoped grant — check if any selector matches the resource
-        if (resourceId)
-          return grant.selectors.some(
-            (s) => s.resource_id === resourceId || s.resource_id === "*",
-          );
-        // Caller didn't specify a resource but grant has selectors —
-        // still counts as "has scope" for UI visibility purposes
-        return true;
+        // Build a check selector mirroring the backend's Check.selector().
+        const check: Record<string, string> = {
+          resource_kind: resourceKindForScope(scope),
+        };
+        if (resourceId) check.resource_id = resourceId;
+        return grant.selectors.some((s) => selectorMatches(s, check));
       });
     },
     [isRbacEnabled, grants],
