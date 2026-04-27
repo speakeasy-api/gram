@@ -104,7 +104,14 @@ func (e *Engine) PrepareContext(ctx context.Context) (context.Context, error) {
 	}
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.SessionID == nil {
+	if !ok || authCtx == nil {
+		return ctx, nil
+	}
+
+	// Assistant-token auth has no session but should resolve grants against
+	// the owning user stamped as UserID on the context.
+	_, isAssistant := contextvalues.GetAssistantPrincipal(ctx)
+	if authCtx.SessionID == nil && !isAssistant {
 		return ctx, nil
 	}
 
@@ -340,7 +347,12 @@ func (e *Engine) ShouldEnforce(ctx context.Context) (bool, error) {
 		return true, nil
 	}
 
-	if authCtx.AccountType != "enterprise" || authCtx.SessionID == nil {
+	if authCtx.AccountType != "enterprise" {
+		return false, nil
+	}
+
+	_, isAssistant := contextvalues.GetAssistantPrincipal(ctx)
+	if authCtx.SessionID == nil && !isAssistant {
 		return false, nil
 	}
 

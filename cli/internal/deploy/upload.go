@@ -26,10 +26,12 @@ func (ur *UploadRequest) Read(ctx context.Context) (io.ReadCloser, int64, error)
 }
 
 type UploadResponse struct {
-	AssetID string
-	Name    string
-	Slug    types.Slug
-	Runtime string
+	AssetID   string
+	Name      string
+	Slug      types.Slug
+	Runtime   string
+	Scale     *uint
+	MemoryMiB *uint
 }
 
 func Upload(
@@ -64,9 +66,11 @@ func Upload(
 		return nil, fmt.Errorf(msg, req.ProjectSlug, source.Location, err)
 	}
 	return &UploadResponse{
-		AssetID: asset.ID,
-		Name:    source.Name,
-		Slug:    types.Slug(source.Slug),
-		Runtime: source.Runtime,
+		AssetID:   asset.ID,
+		Name:      source.Name,
+		Slug:      types.Slug(source.Slug),
+		Runtime:   source.Runtime,
+		Scale:     source.Scale,
+		MemoryMiB: source.MemoryMiB,
 	}, nil
 }

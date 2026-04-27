@@ -81,6 +81,7 @@ type MockOrganizationEntry struct {
 // createMockAuthServer creates an httptest.Server that serves mock auth responses
 func createMockAuthServer(userInfo *MockUserInfo) *httptest.Server {
 	mux := http.NewServeMux()
+	idToken := fmt.Sprintf("mock_id_token_%p", userInfo)
 
 	// Mock the validate endpoint that sessions.GetUserInfoFromSpeakeasy calls
 	mux.HandleFunc("/v1/speakeasy_provider/validate", func(w http.ResponseWriter, r *http.Request) {
@@ -252,7 +253,7 @@ func createMockAuthServer(userInfo *MockUserInfo) *httptest.Server {
 		tokenResp := struct {
 			IDToken string `json:"id_token"`
 		}{
-			IDToken: "mock_id_token",
+			IDToken: idToken,
 		}
 
 		if err := json.NewEncoder(w).Encode(tokenResp); err != nil {

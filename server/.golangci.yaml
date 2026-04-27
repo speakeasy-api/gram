@@ -123,6 +123,12 @@ linters:
               disabled: true
             no-repo-fields-in-service:
               disabled: true
+            audit-event-typed-snapshot:
+              disabled: false
+            audit-event-urn-naming:
+              disabled: false
+            audit-event-urn-typing:
+              disabled: false
     gosec:
       excludes:
         # Temporarily ignore this lint rule because it needs to be a separate

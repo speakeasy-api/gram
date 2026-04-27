@@ -32,6 +32,7 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
+	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
 	auth_repo "github.com/speakeasy-api/gram/server/internal/auth/repo"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
@@ -90,6 +91,7 @@ type Service struct {
 	telemLogger         *tm.Logger
 	vectorToolStore     *rag.ToolsetVectorStore
 	temporal            *temporal.Environment
+	assistantTokens     *assistanttokens.Manager
 	sessions            *sessions.Manager
 	chatSessionsManager *chatsessions.Manager
 	externalmcpRepo     *externalmcp_repo.Queries
@@ -142,6 +144,7 @@ func NewService(
 	triggerApp *bgtriggers.App,
 	temporal *temporal.Environment,
 	authzEngine *authz.Engine,
+	assistantTokens *assistanttokens.Manager,
 ) *Service {
 	tracer := tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/mcp")
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/mcp")
@@ -191,6 +194,7 @@ func NewService(
 		features:            features,
 		vectorToolStore:     vectorToolStore,
 		temporal:            temporal,
+		assistantTokens:     assistantTokens,
 		sessions:            sessions,
 		chatSessionsManager: chatSessionsManager,
 		enc:                 enc,
@@ -911,6 +915,10 @@ func parseMcpSessionID(headers http.Header) string {
 func (s *Service) authenticateToken(ctx context.Context, token string, toolsetID uuid.UUID, isOAuthCapable bool) (context.Context, error) {
 	if token == "" {
 		return ctx, oops.C(oops.CodeUnauthorized)
+	}
+
+	if authorizedCtx, _, err := s.assistantTokens.Authorize(ctx, token); err == nil {
+		return authorizedCtx, nil
 	}
 
 	var oAuthToken *oauth.Token

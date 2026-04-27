@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	telem_srv "github.com/speakeasy-api/gram/server/gen/http/telemetry/server"
 	telem_gen "github.com/speakeasy-api/gram/server/gen/telemetry"
@@ -942,10 +941,10 @@ func (s *Service) GetProjectOverview(ctx context.Context, payload *telem_gen.Get
 	comparisonEnd := timeStart
 
 	// Convert timestamps for PostgreSQL queries
-	timeStartPG := pgtype.Timestamptz{Time: time.Unix(0, timeStart), Valid: true, InfinityModifier: pgtype.Finite}
-	timeEndPG := pgtype.Timestamptz{Time: time.Unix(0, timeEnd), Valid: true, InfinityModifier: pgtype.Finite}
-	comparisonStartPG := pgtype.Timestamptz{Time: time.Unix(0, comparisonStart), Valid: true, InfinityModifier: pgtype.Finite}
-	comparisonEndPG := pgtype.Timestamptz{Time: time.Unix(0, comparisonEnd), Valid: true, InfinityModifier: pgtype.Finite}
+	timeStartPG := conv.ToPGTimestamptz(time.Unix(0, timeStart))
+	timeEndPG := conv.ToPGTimestamptz(time.Unix(0, timeEnd))
+	comparisonStartPG := conv.ToPGTimestamptz(time.Unix(0, comparisonStart))
+	comparisonEndPG := conv.ToPGTimestamptz(time.Unix(0, comparisonEnd))
 
 	// Determine metrics mode: Check if session capture is enabled
 	sessionCaptureEnabled, err := s.sessionCaptureEnabled(ctx, authCtx.ActiveOrganizationID)

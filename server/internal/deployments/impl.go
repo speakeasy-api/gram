@@ -434,10 +434,12 @@ func (s *Service) CreateDeployment(ctx context.Context, form *gen.CreateDeployme
 		}
 
 		newFunctions = append(newFunctions, upsertFunctions{
-			assetID: assetID,
-			name:    add.Name,
-			slug:    string(add.Slug),
-			runtime: add.Runtime,
+			assetID:   assetID,
+			name:      add.Name,
+			slug:      string(add.Slug),
+			runtime:   add.Runtime,
+			memoryMiB: add.MemoryMib,
+			scale:     add.Scale,
 		})
 	}
 
@@ -619,10 +621,12 @@ func (s *Service) Evolve(ctx context.Context, form *gen.EvolvePayload) (*gen.Evo
 		}
 
 		functionsToUpsert = append(functionsToUpsert, upsertFunctions{
-			assetID: assetID,
-			name:    add.Name,
-			slug:    string(add.Slug),
-			runtime: add.Runtime,
+			assetID:   assetID,
+			name:      add.Name,
+			slug:      string(add.Slug),
+			runtime:   add.Runtime,
+			memoryMiB: add.MemoryMib,
+			scale:     add.Scale,
 		})
 	}
 
@@ -899,7 +903,7 @@ func (s *Service) Redeploy(ctx context.Context, payload *gen.RedeployPayload) (*
 
 		DeploymentURN: urn.NewDeployment(newID),
 
-		SourceDeploymentID: urn.NewDeployment(deploymentID),
+		SourceDeploymentURN: urn.NewDeployment(deploymentID),
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error adding deployment redeploy audit log").Log(ctx, s.logger)
 	}

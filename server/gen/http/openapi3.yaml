@@ -2389,6 +2389,467 @@ paths:
             x-speakeasy-name-override: uploadOpenAPIv3
             x-speakeasy-react-hook:
                 name: UploadOpenAPIv3
+    /rpc/assistants.create:
+        post:
+            description: Create an assistant.
+            operationId: createAssistant
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateAssistantForm'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Assistant'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: createAssistant assistants
+            tags:
+                - assistants
+            x-speakeasy-name-override: create
+    /rpc/assistants.delete:
+        delete:
+            description: Delete an assistant.
+            operationId: deleteAssistant
+            parameters:
+                - allowEmptyValue: true
+                  description: The assistant ID.
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The assistant ID.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: deleteAssistant assistants
+            tags:
+                - assistants
+            x-speakeasy-name-override: delete
+    /rpc/assistants.get:
+        get:
+            description: Get an assistant by ID.
+            operationId: getAssistant
+            parameters:
+                - allowEmptyValue: true
+                  description: The assistant ID.
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The assistant ID.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Assistant'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: getAssistant assistants
+            tags:
+                - assistants
+            x-speakeasy-name-override: get
+    /rpc/assistants.list:
+        get:
+            description: List assistants for the current project.
+            operationId: listAssistants
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListAssistantsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: listAssistants assistants
+            tags:
+                - assistants
+            x-speakeasy-name-override: list
+    /rpc/assistants.update:
+        post:
+            description: Update an assistant.
+            operationId: updateAssistant
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateAssistantForm'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Assistant'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: updateAssistant assistants
+            tags:
+                - assistants
+            x-speakeasy-name-override: update
     /rpc/auditlogs.list:
         get:
             description: List audit logs across organization and projects.
@@ -19085,12 +19546,24 @@ components:
                 asset_id:
                     type: string
                     description: The ID of the functions file from the assets service.
+                memory_mib:
+                    type: integer
+                    description: The amount of memory in MiB to allocate for the function (1 MiB = 1024 * 1024 bytes).
+                    format: int64
+                    minimum: 0
+                    maximum: 4096
                 name:
                     type: string
                     description: The functions file display name.
                 runtime:
                     type: string
                     description: 'The runtime to use when executing functions. Allowed values are: nodejs:22, nodejs:24, python:3.12.'
+                scale:
+                    type: integer
+                    description: The number of instances to scale the function to.
+                    format: int64
+                    minimum: 0
+                    maximum: 5
                 slug:
                     type: string
                     description: A short url-friendly label that uniquely identifies a resource.
@@ -19276,6 +19749,76 @@ components:
                 - content_length
                 - created_at
                 - updated_at
+        Assistant:
+            type: object
+            properties:
+                created_at:
+                    type: string
+                    description: Creation timestamp.
+                    format: date-time
+                id:
+                    type: string
+                    description: The assistant ID.
+                    format: uuid
+                instructions:
+                    type: string
+                    description: The system instructions for the assistant.
+                max_concurrency:
+                    type: integer
+                    description: Maximum active warm runtimes for the assistant.
+                    format: int64
+                model:
+                    type: string
+                    description: The model identifier used by the assistant.
+                name:
+                    type: string
+                    description: The assistant name.
+                project_id:
+                    type: string
+                    description: The project ID owning the assistant.
+                    format: uuid
+                status:
+                    type: string
+                    description: The assistant status.
+                    enum:
+                        - active
+                        - paused
+                toolsets:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AssistantToolsetRef'
+                    description: Toolsets available to the assistant.
+                updated_at:
+                    type: string
+                    description: Last update timestamp.
+                    format: date-time
+                warm_ttl_seconds:
+                    type: integer
+                    description: Warm runtime TTL in seconds.
+                    format: int64
+            required:
+                - id
+                - project_id
+                - name
+                - model
+                - instructions
+                - toolsets
+                - warm_ttl_seconds
+                - max_concurrency
+                - status
+                - created_at
+                - updated_at
+        AssistantToolsetRef:
+            type: object
+            properties:
+                environment_slug:
+                    type: string
+                    description: Optional environment slug used when invoking the toolset.
+                toolset_slug:
+                    type: string
+                    description: The toolset slug exposed to the assistant.
+            required:
+                - toolset_slug
         AttachServerRequestBody:
             type: object
             properties:
@@ -19958,6 +20501,42 @@ components:
                 - slack_client_id
                 - slack_client_secret
                 - slack_signing_secret
+        CreateAssistantForm:
+            type: object
+            properties:
+                instructions:
+                    type: string
+                    description: The system instructions for the assistant.
+                max_concurrency:
+                    type: integer
+                    description: Optional maximum active warm runtimes.
+                    format: int64
+                model:
+                    type: string
+                    description: The model identifier used by the assistant.
+                name:
+                    type: string
+                    description: The assistant name.
+                status:
+                    type: string
+                    description: Optional initial status.
+                    enum:
+                        - active
+                        - paused
+                toolsets:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AssistantToolsetRef'
+                    description: Toolsets available to the assistant.
+                warm_ttl_seconds:
+                    type: integer
+                    description: Optional warm runtime TTL in seconds.
+                    format: int64
+            required:
+                - name
+                - model
+                - instructions
+                - toolsets
         CreateDeploymentForm:
             type: object
             properties:
@@ -20890,12 +21469,20 @@ components:
                 id:
                     type: string
                     description: The ID of the deployment asset.
+                memory_mib:
+                    type: integer
+                    description: The memory limit in MiB of function runner machines.
+                    format: int32
                 name:
                     type: string
                     description: The name to give the document as it will be displayed in UIs.
                 runtime:
                     type: string
                     description: The runtime to use when executing functions.
+                scale:
+                    type: integer
+                    description: The number of instances to run for the function.
+                    format: int32
                 slug:
                     type: string
                     description: A short url-friendly label that uniquely identifies a resource.
@@ -22714,6 +23301,16 @@ components:
                     description: The list of assets
             required:
                 - assets
+        ListAssistantsResult:
+            type: object
+            properties:
+                assistants:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/Assistant'
+                    description: Assistants for the current project.
+            required:
+                - assistants
         ListAttributeKeysPayload:
             type: object
             properties:
@@ -27184,6 +27781,43 @@ components:
                     format: uuid
             required:
                 - id
+        UpdateAssistantForm:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: The assistant ID.
+                    format: uuid
+                instructions:
+                    type: string
+                    description: The system instructions for the assistant.
+                max_concurrency:
+                    type: integer
+                    description: Maximum active warm runtimes.
+                    format: int64
+                model:
+                    type: string
+                    description: The model identifier used by the assistant.
+                name:
+                    type: string
+                    description: The assistant name.
+                status:
+                    type: string
+                    description: The assistant status.
+                    enum:
+                        - active
+                        - paused
+                toolsets:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AssistantToolsetRef'
+                    description: Toolsets available to the assistant.
+                warm_ttl_seconds:
+                    type: integer
+                    description: Warm runtime TTL in seconds.
+                    format: int64
+            required:
+                - id
         UpdateEnvironmentForm:
             type: object
             properties:
@@ -28058,6 +28692,8 @@ tags:
       description: Manage roles and team member access control.
     - name: assets
       description: Manages assets used by Gram projects.
+    - name: assistants
+      description: Manage assistants and their runtime configuration.
     - name: auditlogs
       description: Manages audit logs in Gram.
     - name: auth

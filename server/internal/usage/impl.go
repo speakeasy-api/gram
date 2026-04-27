@@ -186,9 +186,16 @@ func (s *Service) GetPeriodUsage(ctx context.Context, payload *gen.GetPeriodUsag
 		return nil, err
 	}
 
-	periodUsage, err := s.billingRepo.GetPeriodUsage(ctx, authCtx.ActiveOrganizationID)
+	// Prefer the cached period usage (populated hourly by the background worker and on
+	// subscription changes via webhook). Only fall back to a live Polar fetch on cache miss
+	// (new orgs that haven't been through a refresh cycle yet).
+	periodUsage, err := s.billingRepo.GetStoredPeriodUsage(ctx, authCtx.ActiveOrganizationID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to get period usage").Log(ctx, s.logger)
+		s.logger.InfoContext(ctx, "period usage cache miss, fetching from billing provider")
+		periodUsage, err = s.billingRepo.GetPeriodUsage(ctx, authCtx.ActiveOrganizationID)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to get period usage").Log(ctx, s.logger)
+		}
 	}
 
 	// The actual number of enabled servers right this moment, which may not be updated in Polar yet.

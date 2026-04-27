@@ -21,6 +21,7 @@ import (
 	standardwebhooks "github.com/standard-webhooks/standard-webhooks/libraries/go"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
+	"golang.org/x/sync/errgroup"
 
 	gen "github.com/speakeasy-api/gram/server/gen/usage"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -681,32 +682,78 @@ func (p *Client) readPeriodUsage(ctx context.Context, orgID string, customer *po
 	 * This happens always for free tier, but also in other cases where the customer state is confused
 	 */
 
-	if usage.ToolCalls == -1 {
-		// For free tier, we need to read the meter directly because the user won't have a subscription
-		toolCallsRes, err := p.getMeterQuantitiesRaw(ctx, p.catalog.MeterIDToolCalls, orgID, time.Now().Add(-1*time.Hour*24*30), time.Now())
-		if err != nil {
-			return nil, fmt.Errorf("get tool call usage: %w", err)
+	// Fetch any missing meter quantities concurrently — for free-tier users all three
+	// will be -1 since there's no subscription with credited meters. Previously these
+	// ran sequentially (~1s each to api.polar.sh), causing ~3s of unnecessary latency.
+	needToolCalls := usage.ToolCalls == -1
+	needServers := usage.Servers == -1
+	needCredits := usage.Credits == -1
+
+	if needToolCalls || needServers || needCredits {
+		now := time.Now()
+		thirtyDaysAgo := now.Add(-1 * time.Hour * 24 * 30)
+
+		toolCallsCh := make(chan *MeterQuantities, 1)
+		serversCh := make(chan *MeterQuantities, 1)
+		creditsCh := make(chan *MeterQuantities, 1)
+
+		g, gCtx := errgroup.WithContext(ctx)
+
+		if needToolCalls {
+			g.Go(func() error {
+				defer close(toolCallsCh)
+				res, err := p.getMeterQuantitiesRaw(gCtx, p.catalog.MeterIDToolCalls, orgID, thirtyDaysAgo, now)
+				if err != nil {
+					return fmt.Errorf("get tool call usage: %w", err)
+				}
+				toolCallsCh <- res
+				return nil
+			})
+		} else {
+			close(toolCallsCh)
 		}
 
-		usage.ToolCalls = int(toolCallsRes.Total)
-	}
-
-	if usage.Servers == -1 {
-		serversRes, err := p.getMeterQuantitiesRaw(ctx, p.catalog.MeterIDServers, orgID, time.Now().Add(-1*time.Hour*24*30), time.Now())
-		if err != nil {
-			return nil, fmt.Errorf("get server usage: %w", err)
+		if needServers {
+			g.Go(func() error {
+				defer close(serversCh)
+				res, err := p.getMeterQuantitiesRaw(gCtx, p.catalog.MeterIDServers, orgID, thirtyDaysAgo, now)
+				if err != nil {
+					return fmt.Errorf("get server usage: %w", err)
+				}
+				serversCh <- res
+				return nil
+			})
+		} else {
+			close(serversCh)
 		}
 
-		usage.Servers = int(serversRes.Total)
-	}
-
-	if usage.Credits == -1 {
-		creditsRes, err := p.getMeterQuantitiesRaw(ctx, p.catalog.MeterIDCredits, orgID, time.Now().Add(-1*time.Hour*24*30), time.Now())
-		if err != nil {
-			return nil, fmt.Errorf("get credit usage: %w", err)
+		if needCredits {
+			g.Go(func() error {
+				defer close(creditsCh)
+				res, err := p.getMeterQuantitiesRaw(gCtx, p.catalog.MeterIDCredits, orgID, thirtyDaysAgo, now)
+				if err != nil {
+					return fmt.Errorf("get credit usage: %w", err)
+				}
+				creditsCh <- res
+				return nil
+			})
+		} else {
+			close(creditsCh)
 		}
 
-		usage.Credits = int(creditsRes.Total)
+		if err := g.Wait(); err != nil {
+			return nil, fmt.Errorf("fetch meter quantities: %w", err)
+		}
+
+		if res := <-toolCallsCh; res != nil {
+			usage.ToolCalls = int(res.Total)
+		}
+		if res := <-serversCh; res != nil {
+			usage.Servers = int(res.Total)
+		}
+		if res := <-creditsCh; res != nil {
+			usage.Credits = int(res.Total)
+		}
 	}
 
 	if usage.IncludedToolCalls == -1 || usage.IncludedServers == -1 || usage.IncludedCredits == -1 {

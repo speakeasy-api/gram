@@ -92,6 +92,11 @@ type AddFunctionsForm struct {
 	// The runtime to use when executing functions. Allowed values are: nodejs:22,
 	// nodejs:24, python:3.12.
 	Runtime string
+	// The amount of memory in MiB to allocate for the function (1 MiB = 1024 *
+	// 1024 bytes).
+	MemoryMib *uint
+	// The number of instances to scale the function to.
+	Scale *uint
 }
 
 type AddOpenAPIv3DeploymentAssetForm struct {
