@@ -17,6 +17,7 @@ import (
 	"go.temporal.io/sdk/worker"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -505,6 +506,8 @@ func newWorkerCommand() *cli.Command {
 			oauthService := oauth.NewService(logger, tracerProvider, meterProvider, db, serverURL, cache.NewRedisCacheAdapter(redisClient), encryptionClient, env, sessionManager)
 			triggerApp := newTriggersApp(logger, db, encryptionClient, temporalEnv, telemetryLogger, serverURL)
 
+			assistantTokenManager := assistanttokens.New(c.String("jwt-signing-key"), db, authzEngine)
+
 			mcpService := mcp.NewService(
 				logger,
 				tracerProvider,
@@ -529,6 +532,7 @@ func newWorkerCommand() *cli.Command {
 				triggerApp,
 				temporalEnv,
 				authzEngine,
+				assistantTokenManager,
 			)
 
 			chatClient := chat.NewAgenticChatClient(
