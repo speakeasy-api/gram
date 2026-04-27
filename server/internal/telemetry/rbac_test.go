@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	telem_gen "github.com/speakeasy-api/gram/server/gen/telemetry"
-	"github.com/speakeasy-api/gram/server/internal/access"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -45,7 +45,7 @@ func TestTelemetry_RBAC_ReadOps_AllowedWithBuildReadGrant(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	ctx = authztest.WithExactGrants(t, ctx, access.NewGrant(access.ScopeBuildRead, authCtx.ProjectID.String()))
+	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeProjectRead, authCtx.ProjectID.String()))
 
 	_, err := ti.service.SearchLogs(ctx, &telem_gen.SearchLogsPayload{
 		Limit:            10,
@@ -71,7 +71,7 @@ func TestTelemetry_RBAC_ReadOps_AllowedWithBuildWriteGrant(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	ctx = authztest.WithExactGrants(t, ctx, access.NewGrant(access.ScopeBuildWrite, authCtx.ProjectID.String()))
+	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeProjectWrite, authCtx.ProjectID.String()))
 
 	_, err := ti.service.SearchLogs(ctx, &telem_gen.SearchLogsPayload{
 		Limit:            10,
@@ -92,7 +92,7 @@ func TestTelemetry_RBAC_ReadOps_DeniedWithWrongResourceID(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestLogsService(t)
-	ctx = authztest.WithExactGrants(t, ctx, access.NewGrant(access.ScopeBuildRead, uuid.NewString()))
+	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeProjectRead, uuid.NewString()))
 
 	_, err := ti.service.SearchLogs(ctx, &telem_gen.SearchLogsPayload{
 		Limit:            10,

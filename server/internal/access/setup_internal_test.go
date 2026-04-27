@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -47,7 +48,7 @@ func seedInternalOrganization(t *testing.T, ctx context.Context, conn *pgxpool.P
 func seedInternalGrant(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, principal urn.Principal, scope string, resource string) {
 	t.Helper()
 
-	selectors, err := NewSelector(Scope(scope), resource).MarshalJSON()
+	selectors, err := authz.NewSelector(authz.Scope(scope), resource).MarshalJSON()
 	require.NoError(t, err)
 
 	_, err = accessrepo.New(conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{

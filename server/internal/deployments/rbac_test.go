@@ -10,8 +10,8 @@ import (
 
 	agen "github.com/speakeasy-api/gram/server/gen/assets"
 	gen "github.com/speakeasy-api/gram/server/gen/deployments"
-	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -73,7 +73,7 @@ func TestDeployments_RBAC_ReadOps_AllowedWithBuildReadGrant(t *testing.T) {
 	require.NotNil(t, authCtx)
 
 	projectID := authCtx.ProjectID.String()
-	ctx = authztest.WithExactGrants(t, ctx, access.NewGrant(access.ScopeBuildRead, projectID))
+	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeProjectRead, projectID))
 
 	_, err := ti.service.ListDeployments(ctx, &gen.ListDeploymentsPayload{
 		Cursor:           nil,
@@ -109,7 +109,7 @@ func TestDeployments_RBAC_ReadOps_AllowedWithBuildWriteGrant(t *testing.T) {
 	require.NotNil(t, authCtx)
 
 	projectID := authCtx.ProjectID.String()
-	ctx = authztest.WithExactGrants(t, ctx, access.NewGrant(access.ScopeBuildWrite, projectID))
+	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeProjectWrite, projectID))
 
 	_, err := ti.service.ListDeployments(ctx, &gen.ListDeploymentsPayload{
 		Cursor:           nil,
@@ -126,7 +126,7 @@ func TestDeployments_RBAC_ReadOps_DeniedWithWrongResourceID(t *testing.T) {
 	assetStorage := assetstest.NewTestBlobStore(t)
 	ctx, ti := newTestDeploymentService(t, assetStorage)
 
-	ctx = authztest.WithExactGrants(t, ctx, access.NewGrant(access.ScopeBuildRead, uuid.NewString()))
+	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeProjectRead, uuid.NewString()))
 
 	_, err := ti.service.ListDeployments(ctx, &gen.ListDeploymentsPayload{
 		Cursor:           nil,
@@ -206,7 +206,7 @@ func TestDeployments_RBAC_WriteOps_DeniedWithReadOnlyGrant(t *testing.T) {
 	require.NotNil(t, authCtx)
 
 	projectID := authCtx.ProjectID.String()
-	ctx = authztest.WithExactGrants(t, ctx, access.NewGrant(access.ScopeBuildRead, projectID))
+	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeProjectRead, projectID))
 
 	_, err := ti.service.CreateDeployment(ctx, &gen.CreateDeploymentPayload{
 		IdempotencyKey:   "rbac-test-create-readonly",
@@ -240,7 +240,7 @@ func TestDeployments_RBAC_WriteOps_AllowedWithBuildWriteGrant(t *testing.T) {
 	require.NotNil(t, authCtx)
 
 	projectID := authCtx.ProjectID.String()
-	ctx = authztest.WithExactGrants(t, ctx, access.NewGrant(access.ScopeBuildWrite, projectID))
+	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeProjectWrite, projectID))
 
 	bs := bytes.NewBuffer(testenv.ReadFixture(t, "fixtures/todo-valid.yaml"))
 	ares, err := ti.assets.UploadOpenAPIv3(ctx, &agen.UploadOpenAPIv3Form{

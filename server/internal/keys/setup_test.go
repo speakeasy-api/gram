@@ -10,7 +10,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/access"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
@@ -101,11 +100,11 @@ func withDefaultOrgAdminGrant(t *testing.T, ctx context.Context, conn *pgxpool.P
 	ctx = contextvalues.SetAuthContext(ctx, authCtx)
 
 	principal := urn.NewPrincipal(urn.PrincipalTypeRole, "keys-default-grants-"+uuid.NewString())
-	selectors, _ := access.NewSelector(access.ScopeOrgAdmin, authCtx.ActiveOrganizationID).MarshalJSON()
+	selectors, _ := authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID).MarshalJSON()
 	_, err := accessrepo.New(conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		PrincipalUrn:   principal,
-		Scope:          string(access.ScopeOrgAdmin),
+		Scope:          string(authz.ScopeOrgAdmin),
 		Resource:       authCtx.ActiveOrganizationID,
 		Selectors:      selectors,
 	})

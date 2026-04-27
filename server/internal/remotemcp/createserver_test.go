@@ -6,9 +6,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/remote_mcp"
-	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 )
 
@@ -127,7 +127,7 @@ func TestCreateServer_RBACForbidden(t *testing.T) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
-	ctx = withExactAccessGrants(t, ctx, ti.conn, access.NewGrant(access.ScopeMCPRead, authCtx.ProjectID.String()))
+	ctx = withExactAccessGrants(t, ctx, ti.conn, authz.NewGrant(authz.ScopeMCPRead, authCtx.ProjectID.String()))
 
 	payload := &gen.CreateServerPayload{
 		SessionToken:     nil,

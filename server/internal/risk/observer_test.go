@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/risk"
-	"github.com/speakeasy-api/gram/server/internal/access"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 )
 
@@ -17,7 +17,7 @@ func TestOnMessagesStored_SignalsEnabledPolicies(t *testing.T) {
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	ctx = withExactAccessGrants(t, ctx, ti.conn,
-		access.NewGrant(access.ScopeOrgAdmin, authCtx.ActiveOrganizationID),
+		authz.NewGrant(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID),
 	)
 
 	enabled := true

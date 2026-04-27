@@ -7,7 +7,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/projects"
-	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -22,7 +21,7 @@ func TestProjectsService_CreateProject_CreatesAuditLog(t *testing.T) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
-	ctx = withAccessGrants(t, ctx, ti.conn, access.NewGrant(access.ScopeOrgAdmin, authCtx.ActiveOrganizationID))
+	ctx = withAccessGrants(t, ctx, ti.conn, authz.NewGrant(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID))
 
 	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionProjectCreate)
 	require.NoError(t, err)
@@ -116,7 +115,7 @@ func TestProjectsService_CreateProject_AuditLogRecord(t *testing.T) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
-	ctx = withAccessGrants(t, ctx, ti.conn, access.NewGrant(access.ScopeOrgAdmin, authCtx.ActiveOrganizationID))
+	ctx = withAccessGrants(t, ctx, ti.conn, authz.NewGrant(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID))
 
 	name := "audit-create-project-record-" + uuid.NewString()[:8]
 	result, err := ti.service.CreateProject(ctx, &gen.CreateProjectPayload{

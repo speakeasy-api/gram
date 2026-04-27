@@ -18,12 +18,12 @@ WHERE organization_id = @organization_id
   AND principal_urn = ANY(@principal_urns::text[]);
 
 -- name: UpsertPrincipalGrant :one
--- Creates or updates a single grant row. On conflict (same org/principal/scope/resource
--- with no selectors), the selectors and updated_at are refreshed.
+-- Creates or updates a single grant row. On conflict (same org/principal/scope/selectors),
+-- the updated_at is refreshed. Uses the selector partial index for non-NULL selectors.
 INSERT INTO principal_grants (organization_id, principal_urn, scope, resource, selectors)
 VALUES (@organization_id, @principal_urn, @scope, @resource, @selectors)
-ON CONFLICT (organization_id, principal_urn, scope, resource) WHERE selectors IS NULL
-DO UPDATE SET selectors = @selectors, updated_at = clock_timestamp()
+ON CONFLICT (organization_id, principal_urn, scope, selectors) WHERE selectors IS NOT NULL
+DO UPDATE SET updated_at = clock_timestamp()
 RETURNING id, organization_id, principal_urn, principal_type, scope, resource, selectors, created_at, updated_at;
 
 -- name: DeletePrincipalGrant :execrows

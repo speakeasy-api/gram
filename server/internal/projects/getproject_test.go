@@ -9,7 +9,6 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/projects"
 	"github.com/speakeasy-api/gram/server/gen/types"
-	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -26,7 +25,7 @@ func TestProjectsService_GetProject(t *testing.T) {
 		authCtx, ok := contextvalues.GetAuthContext(ctx)
 		require.True(t, ok)
 		require.NotNil(t, authCtx.ProjectSlug)
-		ctx = withAccessGrants(t, ctx, ti.conn, access.NewGrant(access.ScopeBuildRead, authCtx.ProjectID.String()))
+		ctx = withAccessGrants(t, ctx, ti.conn, authz.NewGrant(authz.ScopeProjectRead, authCtx.ProjectID.String()))
 
 		result, err := ti.service.GetProject(ctx, &gen.GetProjectPayload{
 			Slug: types.Slug(*authCtx.ProjectSlug),
@@ -148,7 +147,7 @@ func TestProjectsService_GetProject(t *testing.T) {
 		authCtx, ok := contextvalues.GetAuthContext(ctx)
 		require.True(t, ok)
 		require.NotNil(t, authCtx.ProjectSlug)
-		ctx = withAccessGrants(t, ctx, ti.conn, access.NewGrant(access.ScopeBuildRead, authCtx.ProjectID.String()))
+		ctx = withAccessGrants(t, ctx, ti.conn, authz.NewGrant(authz.ScopeProjectRead, authCtx.ProjectID.String()))
 
 		// Store the project slug from the first context
 		projectSlug := *authCtx.ProjectSlug

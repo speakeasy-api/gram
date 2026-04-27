@@ -51,7 +51,7 @@ func TestService_syncGrants_replacesRoleGrants(t *testing.T) {
 
 	got := make([]string, 0, len(rows))
 	for _, row := range rows {
-		selectors, err := selectorFromRow(row.Selectors, Scope(row.Scope), row.Resource)
+		selectors, err := authz.SelectorFromRow(row.Selectors, authz.Scope(row.Scope), row.Resource)
 		require.NoError(t, err)
 		got = append(got, row.Scope+"|"+selectors.ResourceID())
 	}
@@ -68,7 +68,7 @@ func TestService_syncGrants_replacesRoleGrants(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Len(t, otherRows, 1)
-	otherSel, err := selectorFromRow(otherRows[0].Selectors, Scope(otherRows[0].Scope), otherRows[0].Resource)
+	otherSel, err := authz.SelectorFromRow(otherRows[0].Selectors, authz.Scope(otherRows[0].Scope), otherRows[0].Resource)
 	require.NoError(t, err)
 	require.Equal(t, "project-other", otherSel.ResourceID())
 }

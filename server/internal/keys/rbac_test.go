@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/keys"
-	"github.com/speakeasy-api/gram/server/internal/access"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -29,7 +29,7 @@ func TestKeysService_CreateKey_AllowsOrgAdminGrant(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestKeysService(t)
-	ctx = authztest.WithExactGrants(t, ctx, access.NewGrant(access.ScopeOrgAdmin, testAuthContext(t, ctx).ActiveOrganizationID))
+	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, testAuthContext(t, ctx).ActiveOrganizationID))
 
 	key, err := ti.service.CreateKey(ctx, &gen.CreateKeyPayload{Name: "rbac-allow-create", Scopes: []string{"consumer"}})
 	require.NoError(t, err)
@@ -52,7 +52,7 @@ func TestKeysService_ListKeys_AllowsOrgAdminGrant(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestKeysService(t)
-	ctx = authztest.WithExactGrants(t, ctx, access.NewGrant(access.ScopeOrgAdmin, testAuthContext(t, ctx).ActiveOrganizationID))
+	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, testAuthContext(t, ctx).ActiveOrganizationID))
 	_, err := ti.service.CreateKey(ctx, &gen.CreateKeyPayload{Name: "rbac-allow-list", Scopes: []string{"consumer"}})
 	require.NoError(t, err)
 
@@ -65,7 +65,7 @@ func TestKeysService_RevokeKey_ForbiddenWithoutOrgAdminGrant(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestKeysService(t)
-	ctx = authztest.WithExactGrants(t, ctx, access.NewGrant(access.ScopeOrgAdmin, testAuthContext(t, ctx).ActiveOrganizationID))
+	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, testAuthContext(t, ctx).ActiveOrganizationID))
 	key, err := ti.service.CreateKey(ctx, &gen.CreateKeyPayload{Name: "rbac-denied-revoke", Scopes: []string{"consumer"}})
 	require.NoError(t, err)
 
@@ -80,7 +80,7 @@ func TestKeysService_RevokeKey_AllowsOrgAdminGrant(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestKeysService(t)
-	ctx = authztest.WithExactGrants(t, ctx, access.NewGrant(access.ScopeOrgAdmin, testAuthContext(t, ctx).ActiveOrganizationID))
+	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, testAuthContext(t, ctx).ActiveOrganizationID))
 	key, err := ti.service.CreateKey(ctx, &gen.CreateKeyPayload{Name: "rbac-allow-revoke", Scopes: []string{"consumer"}})
 	require.NoError(t, err)
 

@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	gen "github.com/speakeasy-api/gram/server/gen/organizations"
-	"github.com/speakeasy-api/gram/server/internal/access"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -62,7 +62,7 @@ func TestService_ListUsers_AllowsOrgReadGrant(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	ctx = authztest.WithExactGrants(t, ctx, access.NewGrant(access.ScopeOrgRead, authCtx.ActiveOrganizationID))
+	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgRead, authCtx.ActiveOrganizationID))
 
 	res, err := ti.service.ListUsers(ctx, &gen.ListUsersPayload{})
 	require.NoError(t, err)
@@ -83,7 +83,7 @@ func TestService_ListUsers_AllowsOrgAdminGrantViaScopeHierarchy(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	ctx = authztest.WithExactGrants(t, ctx, access.NewGrant(access.ScopeOrgAdmin, authCtx.ActiveOrganizationID))
+	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID))
 
 	res, err := ti.service.ListUsers(ctx, &gen.ListUsersPayload{})
 	require.NoError(t, err)
@@ -107,7 +107,7 @@ func TestService_ListUsers_ForbiddenWithGrantForDifferentOrganization(t *testing
 	t.Parallel()
 
 	ctx, ti := newTestOrganizationsServiceRBAC(t)
-	ctx = authztest.WithExactGrants(t, ctx, access.NewGrant(access.ScopeOrgAdmin, "org_other"))
+	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, "org_other"))
 
 	res, err := ti.service.ListUsers(ctx, &gen.ListUsersPayload{})
 	var oopsErr *oops.ShareableError

@@ -7,7 +7,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/projects"
-	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
@@ -63,7 +62,7 @@ func TestProjectsService_ListProjects_FiltersByBuildReadGrant(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	ctx = withAccessGrants(t, ctx, ti.conn, access.NewGrant(access.ScopeBuildRead, allowedProject.ID.String()))
+	ctx = withAccessGrants(t, ctx, ti.conn, authz.NewGrant(authz.ScopeProjectRead, allowedProject.ID.String()))
 
 	result, err := ti.service.ListProjects(ctx, &gen.ListProjectsPayload{
 		SessionToken:   nil,

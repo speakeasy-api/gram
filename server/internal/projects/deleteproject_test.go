@@ -8,7 +8,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/projects"
-	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -24,7 +23,7 @@ func TestProjectsService_DeleteProject_CreatesAuditLog(t *testing.T) {
 	project := createProjectForDeletion(t, ctx, ti, "audit-delete-project-"+uuid.NewString()[:8])
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-	ctx = withAccessGrants(t, ctx, ti.conn, access.NewGrant(access.ScopeOrgAdmin, authCtx.ActiveOrganizationID))
+	ctx = withAccessGrants(t, ctx, ti.conn, authz.NewGrant(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID))
 
 	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionProjectDelete)
 	require.NoError(t, err)
@@ -75,7 +74,7 @@ func TestProjectsService_DeleteProject_ForbiddenWithoutOrgAdminGrant(t *testing.
 
 	ctx, ti := newTestProjectsService(t, true)
 	project := createProjectForDeletion(t, ctx, ti, "no-wildcard-"+uuid.NewString()[:8])
-	ctx = withExactAccessGrants(t, ctx, ti.conn, access.NewGrant(access.ScopeBuildWrite, project.ID.String()))
+	ctx = withExactAccessGrants(t, ctx, ti.conn, authz.NewGrant(authz.ScopeProjectWrite, project.ID.String()))
 
 	err := ti.service.DeleteProject(ctx, &gen.DeleteProjectPayload{
 		ID:           project.ID.String(),
@@ -163,7 +162,7 @@ func TestProjectsService_DeleteProject(t *testing.T) {
 		nonExistentProjectID := uuid.New()
 		authCtx, ok := contextvalues.GetAuthContext(ctx)
 		require.True(t, ok)
-		ctx = withAccessGrants(t, ctx, ti.conn, access.NewGrant(access.ScopeOrgAdmin, authCtx.ActiveOrganizationID))
+		ctx = withAccessGrants(t, ctx, ti.conn, authz.NewGrant(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID))
 
 		err := ti.service.DeleteProject(ctx, &gen.DeleteProjectPayload{
 			ID: nonExistentProjectID.String(),
