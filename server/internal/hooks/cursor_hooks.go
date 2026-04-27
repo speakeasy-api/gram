@@ -52,7 +52,7 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.
 
 	switch payload.HookEventName {
 	case "preToolUse", "beforeMCPExecution":
-		if scanResult := s.scanCursorForEnforcement(ctx, payload, projectID); scanResult != nil {
+		if scanResult := s.scanCursorForEnforcement(ctx, payload, orgID, projectID); scanResult != nil {
 			deny := "deny"
 			msg := fmt.Sprintf("Blocked by policy %q: %s detected", scanResult.PolicyName, scanResult.Description)
 			result.Permission = &deny
@@ -62,7 +62,7 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.
 			result.Permission = &allow
 		}
 	case "beforeSubmitPrompt":
-		if scanResult := s.scanCursorForEnforcement(ctx, payload, projectID); scanResult != nil {
+		if scanResult := s.scanCursorForEnforcement(ctx, payload, orgID, projectID); scanResult != nil {
 			deny := "deny"
 			msg := fmt.Sprintf("Blocked by policy %q: %s detected", scanResult.PolicyName, scanResult.Description)
 			result.Permission = &deny
