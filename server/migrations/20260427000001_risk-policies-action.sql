@@ -1,0 +1,1 @@
+ALTER TABLE risk_policies ADD COLUMN IF NOT EXISTS action TEXT;

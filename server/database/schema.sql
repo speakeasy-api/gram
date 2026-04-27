@@ -2088,6 +2088,8 @@ CREATE TABLE IF NOT EXISTS risk_policies (
   name TEXT NOT NULL,
   sources TEXT[] NOT NULL,
   presidio_entities TEXT[],
+  action TEXT,
+  auto_name BOOLEAN,
   version BIGINT NOT NULL,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
