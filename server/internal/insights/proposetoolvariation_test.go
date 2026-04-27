@@ -42,7 +42,13 @@ func TestInsightsService_ProposeToolVariation_HappyPath(t *testing.T) {
 	// for why). With no existing variation in the test fixture, the live
 	// snapshot is "null".
 	requireJSONEqual(t, "null", result.Proposal.CurrentValue, "current value should be live snapshot (null when no variation exists)")
-	requireJSONEqual(t, proposedValue, result.Proposal.ProposedValue, "proposed value should match")
+	// proposed_value is canonicalized server-side: src_tool_name is forced
+	// from tool_name and src_tool_urn is filled in from the project's
+	// http_tool_definitions when missing. With no fixture tool present in
+	// the test project, src_tool_urn is left blank and src_tool_name gets
+	// filled in. The original `description` field is preserved.
+	expectedProposed := `{"description":"new clearer description","src_tool_name":"create_invoice"}`
+	requireJSONEqual(t, expectedProposed, result.Proposal.ProposedValue, "proposed value should be canonicalized")
 	require.NotNil(t, result.Proposal.Reasoning, "reasoning should not be nil")
 	require.Equal(t, reasoning, *result.Proposal.Reasoning, "reasoning should match")
 	require.NotEmpty(t, result.Proposal.CreatedAt, "created at should not be empty")

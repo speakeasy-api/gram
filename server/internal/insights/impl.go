@@ -52,6 +52,7 @@ const (
 type VariationsService interface {
 	UpsertGlobal(ctx context.Context, payload *variationsgen.UpsertGlobalPayload) (*variationsgen.UpsertGlobalToolVariationResult, error)
 	ListGlobal(ctx context.Context, payload *variationsgen.ListGlobalPayload) (*variationsgen.ListVariationsResult, error)
+	DeleteGlobal(ctx context.Context, payload *variationsgen.DeleteGlobalPayload) (*variationsgen.DeleteGlobalToolVariationResult, error)
 }
 
 // ToolsetsService is the narrow read+write API that the insights service needs
@@ -164,13 +165,33 @@ func (s *Service) ProposeToolVariation(ctx context.Context, payload *gen.Propose
 		currentRaw = []byte("null")
 	}
 
+	// Canonicalize src_tool_urn and src_tool_name in proposed_value:
+	// - Look up the URN from http_tool_definitions by (project, tool_name)
+	//   so the agent doesn't have to know it (frequent error). Returns ""
+	//   if the tool doesn't exist in this project — we let the propose
+	//   succeed regardless because the apply path will surface a clearer
+	//   error than the agent fabricating a URN here.
+	// - Force src_tool_name to payload.ToolName.
+	// Together this also closes the confused-deputy vector: even if the
+	// agent embeds a different src_tool_urn / src_tool_name in the JSON,
+	// what the human reviewer sees in the diff header (target_ref) is
+	// guaranteed to be the actual mutation target.
+	canonicalURN, urnErr := s.lookupToolURN(ctx, *authCtx.ProjectID, payload.ToolName)
+	if urnErr != nil {
+		return nil, oops.E(oops.CodeUnexpected, urnErr, "error resolving tool urn").Log(ctx, s.logger)
+	}
+	proposedRaw, canonErr := canonicalizeVariationForm([]byte(payload.ProposedValue), payload.ToolName, canonicalURN)
+	if canonErr != nil {
+		return nil, oops.E(oops.CodeInvalid, canonErr, "error normalizing proposed variation form").Log(ctx, s.logger)
+	}
+
 	row, err := s.repo.InsertProposal(ctx, repo.InsertProposalParams{
 		ProjectID:      *authCtx.ProjectID,
 		OrganizationID: authCtx.ActiveOrganizationID,
 		Kind:           kindToolVariation,
 		TargetRef:      payload.ToolName,
 		CurrentValue:   currentRaw,
-		ProposedValue:  []byte(payload.ProposedValue),
+		ProposedValue:  proposedRaw,
 		Reasoning:      conv.PtrToPGText(payload.Reasoning),
 		SourceChatID:   parseNullUUID(payload.SourceChatID),
 	})
@@ -571,6 +592,14 @@ func (s *Service) applyUnderlyingMutation(ctx context.Context, p repo.InsightsPr
 		if s.variations == nil {
 			return nil, oops.E(oops.CodeUnexpected, nil, "variations service not wired").Log(ctx, s.logger)
 		}
+		// A "null" target value means "this tool has no variation" — applying
+		// it = deleting the existing variation. This is the rollback path for
+		// proposals that were created against a tool which had no variation
+		// yet (current_value snapshotted as null). Without this branch,
+		// rollback would 422 in decodeVariationForm.
+		if len(value) == 0 || string(value) == "null" {
+			return s.deleteVariationForTool(ctx, p.TargetRef)
+		}
 		form, err := decodeVariationForm(value, p.TargetRef)
 		if err != nil {
 			return nil, oops.E(oops.CodeInvalid, err, "could not decode variation form from proposal value").Log(ctx, s.logger)
@@ -596,6 +625,57 @@ func (s *Service) applyUnderlyingMutation(ctx context.Context, p repo.InsightsPr
 	default:
 		return nil, oops.E(oops.CodeUnexpected, nil, "unknown proposal kind: %s", p.Kind).Log(ctx, s.logger)
 	}
+}
+
+// deleteVariationForTool removes the existing variation for a given tool
+// name, returning a "null" snapshot to indicate "no variation." If no
+// variation exists today, it's a no-op. Used by the rollback path when
+// the proposal's current_value is null (tool had no variation at propose
+// time, so reverting means deleting whatever the apply created).
+func (s *Service) deleteVariationForTool(ctx context.Context, toolName string) ([]byte, error) {
+	if s.variations == nil {
+		return nil, oops.E(oops.CodeUnexpected, nil, "variations service not wired").Log(ctx, s.logger)
+	}
+	res, err := s.variations.ListGlobal(ctx, &variationsgen.ListGlobalPayload{})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error listing variations for delete").Log(ctx, s.logger)
+	}
+	for _, v := range res.Variations {
+		if v == nil || v.SrcToolName != toolName {
+			continue
+		}
+		if _, err := s.variations.DeleteGlobal(ctx, &variationsgen.DeleteGlobalPayload{
+			VariationID: v.ID,
+		}); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "error deleting tool variation").Log(ctx, s.logger)
+		}
+		break
+	}
+	return []byte("null"), nil
+}
+
+// lookupToolURN resolves the canonical URN for a tool by (project, name).
+// Used by ProposeToolVariation to overwrite agent-supplied src_tool_urn so
+// the human reviewer's mental model is honest: the diff header shows the
+// tool name, and the mutation hits exactly that tool. Returns the empty
+// string with no error if the tool isn't found in the project — the
+// upsert path will then fail loudly with a clearer error than letting an
+// agent-fabricated URN reach UpsertGlobal.
+func (s *Service) lookupToolURN(ctx context.Context, projectID uuid.UUID, toolName string) (string, error) {
+	// Order by id DESC because http_tool_definitions uses uuidv7 IDs (which
+	// are time-sortable) and there can be multiple definitions per
+	// (project, name) across deployments — we want the most recent one.
+	const q = `SELECT tool_urn FROM http_tool_definitions
+		WHERE project_id = $1 AND name = $2 AND deleted IS FALSE
+		ORDER BY id DESC LIMIT 1`
+	var urn string
+	if err := s.db.QueryRow(ctx, q, projectID, toolName).Scan(&urn); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", nil
+		}
+		return "", fmt.Errorf("lookup tool urn: %w", err)
+	}
+	return urn, nil
 }
 
 // ---- Memories ----
@@ -822,13 +902,13 @@ func decodeVariationForm(raw []byte, targetRef string) (*variationsgen.UpsertGlo
 	if f.SrcToolURN == "" {
 		return nil, fmt.Errorf("src_tool_urn is required in proposed_value")
 	}
-	name := f.SrcToolName
-	if name == "" {
-		name = targetRef
-	}
+	// Force src_tool_name from target_ref. Defense-in-depth confused-deputy
+	// fix: even if the stored proposed_value has been tampered with somehow,
+	// the human reviewer's diff header (target_ref) and the actual mutation
+	// target stay in sync.
 	return &variationsgen.UpsertGlobalPayload{
 		SrcToolUrn:      f.SrcToolURN,
-		SrcToolName:     name,
+		SrcToolName:     targetRef,
 		Confirm:         f.Confirm,
 		ConfirmPrompt:   f.ConfirmPrompt,
 		Name:            f.Name,
@@ -842,6 +922,27 @@ func decodeVariationForm(raw []byte, targetRef string) (*variationsgen.UpsertGlo
 		IdempotentHint:  f.IdempotentHint,
 		OpenWorldHint:   f.OpenWorldHint,
 	}, nil
+}
+
+// canonicalizeVariationForm parses the agent-supplied proposed_value JSON,
+// overrides src_tool_urn and src_tool_name with the server-canonical values,
+// and re-serializes. canonicalURN may be empty if the lookup did not find
+// the tool — we still proceed so the apply path surfaces a clear error
+// rather than letting a fabricated URN slip into storage.
+func canonicalizeVariationForm(raw []byte, toolName, canonicalURN string) ([]byte, error) {
+	var f variationForm
+	if err := json.Unmarshal(raw, &f); err != nil {
+		return nil, fmt.Errorf("decode variation form: %w", err)
+	}
+	f.SrcToolName = toolName
+	if canonicalURN != "" {
+		f.SrcToolURN = canonicalURN
+	}
+	out, err := json.Marshal(f)
+	if err != nil {
+		return nil, fmt.Errorf("re-encode variation form: %w", err)
+	}
+	return out, nil
 }
 
 // marshalVariationSnapshot builds a comparable JSON snapshot of a tool
