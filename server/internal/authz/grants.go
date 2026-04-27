@@ -23,7 +23,7 @@ const (
 
 type RoleGrant struct {
 	Scope     string
-	Resources []string
+	Selectors []Selector
 }
 
 // SystemRoleGrants defines the canonical grant sets for the built-in system
@@ -59,19 +59,19 @@ func SeedSystemRoleGrants(ctx context.Context, logger *slog.Logger, db *pgxpool.
 
 type Grant struct {
 	Scope    Scope
-	Resource string
+	Selector Selector
 }
 
 type ScopedGrant struct {
 	Scope     string
 	SubScopes []string
-	Resources []string
+	Selectors []Selector
 }
 
 func grantsSatisfy(grants []Grant, checks []Check) bool {
-	for _, row := range grants {
+	for _, grant := range grants {
 		for _, check := range checks {
-			if row.Scope == check.Scope && row.Resource == check.ResourceID {
+			if grant.Scope == check.Scope && grant.Selector.Matches(check.selector()) {
 				return true
 			}
 		}
@@ -106,27 +106,45 @@ func SyncGrants(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, orgI
 			continue
 		}
 
-		if grant.Resources == nil {
-			if _, err := q.InsertPrincipalGrant(ctx, repo.InsertPrincipalGrantParams{
+		scope := Scope(grant.Scope)
+
+		// nil selectors = unrestricted (wildcard) access for this scope.
+		// Empty non-nil slice ([]Selector{}) = no grant rows (no access).
+		if grant.Selectors == nil {
+			sel := NewSelector(scope, WildcardResource)
+			selBytes, err := sel.MarshalJSON()
+			if err != nil {
+				return fmt.Errorf("marshal wildcard selector for %q: %w", grant.Scope, err)
+			}
+			if _, err := q.UpsertPrincipalGrant(ctx, repo.UpsertPrincipalGrantParams{
 				OrganizationID: orgID,
 				PrincipalUrn:   principalURN,
 				Scope:          grant.Scope,
 				Resource:       WildcardResource,
+				Selectors:      selBytes,
 			}); err != nil {
 				return fmt.Errorf("upsert unrestricted grant %q for role %q: %w", grant.Scope, roleSlug, err)
 			}
-
 			continue
 		}
 
-		for _, resource := range grant.Resources {
-			if _, err := q.InsertPrincipalGrant(ctx, repo.InsertPrincipalGrantParams{
+		for _, sel := range grant.Selectors {
+			if err := ValidateSelector(scope, sel); err != nil {
+				return fmt.Errorf("invalid selector for scope %q: %w", grant.Scope, err)
+			}
+
+			selBytes, err := sel.MarshalJSON()
+			if err != nil {
+				return fmt.Errorf("marshal selector for scope %q: %w", grant.Scope, err)
+			}
+			if _, err := q.UpsertPrincipalGrant(ctx, repo.UpsertPrincipalGrantParams{
 				OrganizationID: orgID,
 				PrincipalUrn:   principalURN,
 				Scope:          grant.Scope,
-				Resource:       resource,
+				Resource:       sel.ResourceID(),
+				Selectors:      selBytes,
 			}); err != nil {
-				return fmt.Errorf("upsert grant %q on resource %q for role %q: %w", grant.Scope, resource, roleSlug, err)
+				return fmt.Errorf("upsert grant %q for role %q: %w", grant.Scope, roleSlug, err)
 			}
 		}
 	}
@@ -149,36 +167,43 @@ func GrantsForRole(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, o
 
 	grantRows := make([]Grant, 0, len(rows))
 	for _, row := range rows {
+		selectors, err := SelectorFromRow(row.Selectors, Scope(row.Scope), row.Resource)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "unmarshal grant selector").Log(ctx, logger)
+		}
 		grantRows = append(grantRows, Grant{
 			Scope:    Scope(row.Scope),
-			Resource: row.Resource,
+			Selector: selectors,
 		})
 	}
 
-	return GrantsFromRows(grantRows), nil
+	return GrantsToScopedGrants(grantRows), nil
 }
 
 type scopeAgg struct {
 	unrestricted bool
-	resources    []string
+	selectors    []Selector
 }
 
-func GrantsFromRows(rows []Grant) []*ScopedGrant {
+// GrantsToScopedGrants groups raw grants by scope, collapsing wildcards.
+func GrantsToScopedGrants(rows []Grant) []*ScopedGrant {
 	byScope := make(map[string]*scopeAgg)
 	for _, row := range rows {
 		scope := string(row.Scope)
 		agg, ok := byScope[scope]
 		if !ok {
-			agg = &scopeAgg{unrestricted: false, resources: nil}
+			agg = &scopeAgg{unrestricted: false, selectors: nil}
 			byScope[scope] = agg
 		}
-		if row.Resource == WildcardResource {
+		resourceID := row.Selector.ResourceID()
+		if resourceID == WildcardResource && len(row.Selector) <= 2 {
+			// Pure wildcard: {"resource_kind":"*","resource_id":"*"} or similar.
 			agg.unrestricted = true
-			agg.resources = nil
+			agg.selectors = nil
 			continue
 		}
 		if !agg.unrestricted {
-			agg.resources = append(agg.resources, row.Resource)
+			agg.selectors = append(agg.selectors, row.Selector)
 		}
 	}
 
@@ -191,22 +216,11 @@ func GrantsFromRows(rows []Grant) []*ScopedGrant {
 	grants := make([]*ScopedGrant, 0, len(byScope))
 	for _, scope := range scopes {
 		agg := byScope[scope]
+		subScopes := CalculateSubScopes(Scope(scope))
+
+		grant := &ScopedGrant{Scope: scope, SubScopes: subScopes, Selectors: nil}
 		if !agg.unrestricted {
-			slices.Sort(agg.resources)
-		}
-
-		// also include the sub scopes that are granted by the primary scope
-		// by looking up the scope expansions map
-		scopeEnum := Scope(scope)
-
-		// The expansions map is reversed in the sense that the key is the lower privilege scope and the value is the higher privilege scopes that also satisfy it, so we need to reverse it.
-		subScopes := CalculateSubScopes(scopeEnum)
-
-		grant := &ScopedGrant{Scope: scope, SubScopes: subScopes, Resources: nil}
-		if agg.unrestricted {
-			grant.Resources = nil
-		} else {
-			grant.Resources = append([]string(nil), agg.resources...)
+			grant.Selectors = append([]Selector(nil), agg.selectors...)
 		}
 		grants = append(grants, grant)
 	}

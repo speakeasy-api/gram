@@ -10,6 +10,7 @@ package client
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -1255,6 +1256,9 @@ func EncodeListRiskResultsRequest(encoder func(*http.Request) goahttp.Encoder) f
 		if p.Cursor != nil {
 			values.Add("cursor", *p.Cursor)
 		}
+		if p.Limit != nil {
+			values.Add("limit", fmt.Sprintf("%v", *p.Limit))
+		}
 		req.URL.RawQuery = values.Encode()
 		return nil
 	}
@@ -1498,6 +1502,9 @@ func EncodeListRiskResultsByChatRequest(encoder func(*http.Request) goahttp.Enco
 		values := req.URL.Query()
 		if p.Cursor != nil {
 			values.Add("cursor", *p.Cursor)
+		}
+		if p.Limit != nil {
+			values.Add("limit", fmt.Sprintf("%v", *p.Limit))
 		}
 		req.URL.RawQuery = values.Encode()
 		return nil
@@ -2190,6 +2197,12 @@ func unmarshalRiskPolicyResponseBodyToTypesRiskPolicy(v *RiskPolicyResponseBody)
 	res.Sources = make([]string, len(v.Sources))
 	for i, val := range v.Sources {
 		res.Sources[i] = val
+	}
+	if v.PresidioEntities != nil {
+		res.PresidioEntities = make([]string, len(v.PresidioEntities))
+		for i, val := range v.PresidioEntities {
+			res.PresidioEntities[i] = val
+		}
 	}
 
 	return res

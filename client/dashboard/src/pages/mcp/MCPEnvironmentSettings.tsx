@@ -1,3 +1,4 @@
+import { useExternalMcpOAuthConfigStatus } from "@/components/sources/sources-hooks";
 import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -900,8 +901,13 @@ function OAuthSection({ toolset }: OAuthSectionProps) {
   );
   const availableOAuthAuthCode =
     toolset?.oauthEnablementMetadata?.oauth2SecurityCount > 0;
+  const externalMcpOAuthStatus = useExternalMcpOAuthConfigStatus(toolset.slug);
+  const externalMcpRequiresOAuth =
+    externalMcpOAuthStatus === "required-unconfigured";
   const isOAuthEligible =
-    toolset.mcpEnabled && (toolset.mcpIsPublic ? availableOAuthAuthCode : true);
+    toolset.mcpEnabled &&
+    ((toolset.mcpIsPublic ? availableOAuthAuthCode : true) ||
+      externalMcpRequiresOAuth);
 
   const oauthParadigm = getOAuthParadigm(toolset);
 
@@ -953,6 +959,7 @@ function OAuthSection({ toolset }: OAuthSectionProps) {
       <OAuthStatusDisplay
         isOAuthConnected={isOAuthConnected}
         isOAuthEligible={!!isOAuthEligible}
+        externalMcpRequiresOAuth={externalMcpRequiresOAuth}
         oauthParadigm={oauthParadigm}
         mcpEnabled={!!toolset.mcpEnabled}
         proxyEnvironmentSlug={proxyEnvironmentSlug}
@@ -1003,6 +1010,7 @@ const PARADIGM_LABELS: Record<OAuthParadigm, string> = {
 function OAuthStatusDisplay({
   isOAuthConnected,
   isOAuthEligible,
+  externalMcpRequiresOAuth,
   oauthParadigm,
   mcpEnabled,
   proxyEnvironmentSlug,
@@ -1011,6 +1019,7 @@ function OAuthStatusDisplay({
 }: {
   isOAuthConnected: boolean;
   isOAuthEligible: boolean;
+  externalMcpRequiresOAuth: boolean;
   oauthParadigm: OAuthParadigm | null;
   mcpEnabled: boolean;
   proxyEnvironmentSlug: string | undefined;
@@ -1049,6 +1058,23 @@ function OAuthStatusDisplay({
             </>
           )}
         </p>
+      </div>
+    );
+  }
+
+  if (externalMcpRequiresOAuth) {
+    return (
+      <div className="border-warning-foreground/80 bg-warning rounded-lg border border-dashed px-6 py-8 text-center">
+        <AlertTriangle className="text-warning mx-auto mb-1 h-5 w-5" />
+        <p className="text-warning-foreground mb-1 font-bold">
+          OAuth setup required
+        </p>
+        <p className="text-warning-foreground/80 mb-3 text-sm">
+          This MCP server requires OAuth configuration before it can be used.
+        </p>
+        <Button variant="secondary" onClick={onConfigureClick}>
+          <Button.Text>Configure OAuth</Button.Text>
+        </Button>
       </div>
     );
   }

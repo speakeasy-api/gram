@@ -37,10 +37,11 @@ type FetchUnanalyzedArgs struct {
 }
 
 type FetchUnanalyzedResult struct {
-	MessageIDs     []uuid.UUID
-	OrganizationID string
-	PolicyVersion  int64
-	Sources        []string
+	MessageIDs       []uuid.UUID
+	OrganizationID   string
+	PolicyVersion    int64
+	Sources          []string
+	PresidioEntities []string
 }
 
 func (a *FetchUnanalyzed) Do(ctx context.Context, args FetchUnanalyzedArgs) (_ *FetchUnanalyzedResult, err error) {
@@ -72,10 +73,11 @@ func (a *FetchUnanalyzed) Do(ctx context.Context, args FetchUnanalyzedArgs) (_ *
 		// by the list queries (JOIN rp.enabled IS TRUE).
 		span.SetAttributes(attribute.Bool("risk.policy_disabled", true))
 		return &FetchUnanalyzedResult{
-			MessageIDs:     nil,
-			OrganizationID: policy.OrganizationID,
-			PolicyVersion:  policy.Version,
-			Sources:        policy.Sources,
+			MessageIDs:       nil,
+			OrganizationID:   policy.OrganizationID,
+			PolicyVersion:    policy.Version,
+			Sources:          policy.Sources,
+			PresidioEntities: policy.PresidioEntities,
 		}, nil
 	}
 
@@ -92,9 +94,10 @@ func (a *FetchUnanalyzed) Do(ctx context.Context, args FetchUnanalyzedArgs) (_ *
 	span.SetAttributes(attribute.Int("risk.unanalyzed_count", len(ids)))
 
 	return &FetchUnanalyzedResult{
-		MessageIDs:     ids,
-		OrganizationID: policy.OrganizationID,
-		PolicyVersion:  policy.Version,
-		Sources:        policy.Sources,
+		MessageIDs:       ids,
+		OrganizationID:   policy.OrganizationID,
+		PolicyVersion:    policy.Version,
+		Sources:          policy.Sources,
+		PresidioEntities: policy.PresidioEntities,
 	}, nil
 }

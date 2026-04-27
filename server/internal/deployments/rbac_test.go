@@ -73,7 +73,7 @@ func TestDeployments_RBAC_ReadOps_AllowedWithBuildReadGrant(t *testing.T) {
 	require.NotNil(t, authCtx)
 
 	projectID := authCtx.ProjectID.String()
-	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeProjectRead, Resource: projectID})
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeProjectRead, Selector: authz.NewSelector(authz.ScopeProjectRead, projectID)})
 
 	_, err := ti.service.ListDeployments(ctx, &gen.ListDeploymentsPayload{
 		Cursor:           nil,
@@ -109,7 +109,7 @@ func TestDeployments_RBAC_ReadOps_AllowedWithBuildWriteGrant(t *testing.T) {
 	require.NotNil(t, authCtx)
 
 	projectID := authCtx.ProjectID.String()
-	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeProjectWrite, Resource: projectID})
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeProjectWrite, Selector: authz.NewSelector(authz.ScopeProjectWrite, projectID)})
 
 	_, err := ti.service.ListDeployments(ctx, &gen.ListDeploymentsPayload{
 		Cursor:           nil,
@@ -126,7 +126,7 @@ func TestDeployments_RBAC_ReadOps_DeniedWithWrongResourceID(t *testing.T) {
 	assetStorage := assetstest.NewTestBlobStore(t)
 	ctx, ti := newTestDeploymentService(t, assetStorage)
 
-	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeProjectRead, Resource: uuid.NewString()})
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeProjectRead, Selector: authz.NewSelector(authz.ScopeProjectRead, uuid.NewString())})
 
 	_, err := ti.service.ListDeployments(ctx, &gen.ListDeploymentsPayload{
 		Cursor:           nil,
@@ -206,7 +206,7 @@ func TestDeployments_RBAC_WriteOps_DeniedWithReadOnlyGrant(t *testing.T) {
 	require.NotNil(t, authCtx)
 
 	projectID := authCtx.ProjectID.String()
-	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeProjectRead, Resource: projectID})
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeProjectRead, Selector: authz.NewSelector(authz.ScopeProjectRead, projectID)})
 
 	_, err := ti.service.CreateDeployment(ctx, &gen.CreateDeploymentPayload{
 		IdempotencyKey:   "rbac-test-create-readonly",
@@ -240,7 +240,7 @@ func TestDeployments_RBAC_WriteOps_AllowedWithBuildWriteGrant(t *testing.T) {
 	require.NotNil(t, authCtx)
 
 	projectID := authCtx.ProjectID.String()
-	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeProjectWrite, Resource: projectID})
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeProjectWrite, Selector: authz.NewSelector(authz.ScopeProjectWrite, projectID)})
 
 	bs := bytes.NewBuffer(testenv.ReadFixture(t, "fixtures/todo-valid.yaml"))
 	ares, err := ti.assets.UploadOpenAPIv3(ctx, &agen.UploadOpenAPIv3Form{

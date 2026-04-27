@@ -59,7 +59,7 @@ export function OrgSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       : "https://app.speakeasy.com";
 
   return (
-    <Sidebar collapsible="offcanvas" {...props}>
+    <Sidebar collapsible="icon" {...props}>
       <SidebarContent className="pt-2">
         <SidebarGroup>
           <SidebarGroupLabel>projects</SidebarGroupLabel>

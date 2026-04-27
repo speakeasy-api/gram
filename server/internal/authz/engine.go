@@ -263,7 +263,7 @@ func (e *Engine) Require(ctx context.Context, checks ...Check) error {
 		}
 
 		if !grantsSatisfy(grants, check.expand()) {
-			return e.mapError(ctx, Denied(check.Scope, check.ResourceID))
+			return e.mapError(ctx, Denied(check.Scope, check.selector()))
 		}
 	}
 
@@ -297,7 +297,7 @@ func (e *Engine) RequireAny(ctx context.Context, checks ...Check) error {
 		return nil
 	}
 
-	return e.mapError(ctx, Denied(checks[0].Scope, checks[0].ResourceID))
+	return e.mapError(ctx, Denied(checks[0].Scope, checks[0].selector()))
 }
 
 func (e *Engine) Filter(ctx context.Context, scope Scope, resourceIDs []string) ([]string, error) {
@@ -316,11 +316,12 @@ func (e *Engine) Filter(ctx context.Context, scope Scope, resourceIDs []string) 
 
 	allowed := make([]string, 0, len(resourceIDs))
 	for _, resourceID := range resourceIDs {
-		if err := validateInput(Check{Scope: scope, ResourceID: resourceID}); err != nil {
+		c := Check{Scope: scope, ResourceKind: "", ResourceID: resourceID, Dimensions: nil}
+		if err := validateInput(c); err != nil {
 			return nil, e.mapError(ctx, err)
 		}
 
-		if grantsSatisfy(grants, Check{Scope: scope, ResourceID: resourceID}.expand()) {
+		if grantsSatisfy(grants, c.expand()) {
 			allowed = append(allowed, resourceID)
 		}
 	}

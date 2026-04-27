@@ -19,18 +19,19 @@ func readScopeOverrides(ctx context.Context) ([]RoleGrant, bool) {
 	return overrides, len(overrides) > 0
 }
 
-// GrantsFromOverrides builds a Grants object from parsed scope overrides.
-// Scopes with no resources get wildcard access; scopes with resources get
-// one grant per resource ID.
+// GrantsFromOverrides builds a Grants slice from parsed scope overrides.
+// Scopes with no selectors get wildcard access; scopes with selectors get
+// one grant per selector. For backward compatibility with the header format,
+// bare resource IDs are converted to selectors via NewSelector.
 func GrantsFromOverrides(overrides []RoleGrant) []Grant {
 	var grants []Grant
 	for _, o := range overrides {
-		if len(o.Resources) == 0 {
-			grants = append(grants, Grant{Scope: Scope(o.Scope), Resource: WildcardResource})
+		if len(o.Selectors) == 0 {
+			grants = append(grants, NewGrant(Scope(o.Scope), WildcardResource))
 			continue
 		}
-		for _, r := range o.Resources {
-			grants = append(grants, Grant{Scope: Scope(o.Scope), Resource: r})
+		for _, sel := range o.Selectors {
+			grants = append(grants, NewGrantWithSelector(Scope(o.Scope), sel))
 		}
 	}
 	return grants
@@ -51,12 +52,12 @@ func parseOverrideHeader(value string) []RoleGrant {
 			continue
 		}
 
-		override := RoleGrant{Scope: scope, Resources: nil}
+		override := RoleGrant{Scope: scope, Selectors: nil}
 		if hasResources && resourcesStr != "" {
 			for r := range strings.SplitSeq(resourcesStr, "|") {
 				r = strings.TrimSpace(r)
 				if r != "" {
-					override.Resources = append(override.Resources, r)
+					override.Selectors = append(override.Selectors, NewSelector(Scope(scope), r))
 				}
 			}
 		}

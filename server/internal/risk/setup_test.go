@@ -112,11 +112,13 @@ func withExactAccessGrants(t *testing.T, ctx context.Context, conn *pgxpool.Pool
 
 	principal := urn.NewPrincipal(urn.PrincipalTypeRole, "risk-rbac-grants-"+uuid.NewString())
 	for _, grant := range grants {
-		_, err := accessrepo.New(conn).InsertPrincipalGrant(ctx, accessrepo.InsertPrincipalGrantParams{
+		selectors, _ := grant.Selector.MarshalJSON()
+		_, err := accessrepo.New(conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{
 			OrganizationID: authCtx.ActiveOrganizationID,
 			PrincipalUrn:   principal,
 			Scope:          string(grant.Scope),
-			Resource:       grant.Resource,
+			Resource:       grant.Selector.ResourceID(),
+			Selectors:      selectors,
 		})
 		require.NoError(t, err)
 	}

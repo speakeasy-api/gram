@@ -388,6 +388,27 @@ func AnnotationsFromColumns(readOnly, destructive, idempotent, openWorld pgtype.
 	}
 }
 
+// DispositionFromAnnotations derives a single disposition string from tool
+// annotation hints. Priority: read_only > destructive > idempotent > open_world.
+// Returns empty string when no hints are set or annotations is nil.
+func DispositionFromAnnotations(a *types.ToolAnnotations) string {
+	if a == nil {
+		return ""
+	}
+	switch {
+	case a.ReadOnlyHint != nil && *a.ReadOnlyHint:
+		return "read_only"
+	case a.DestructiveHint != nil && *a.DestructiveHint:
+		return "destructive"
+	case a.IdempotentHint != nil && *a.IdempotentHint:
+		return "idempotent"
+	case a.OpenWorldHint != nil && *a.OpenWorldHint:
+		return "open_world"
+	default:
+		return ""
+	}
+}
+
 // ToToolListEntry converts a Tool to basic list entry fields.
 // ToolListEntry contains the fields needed for a tool list entry.
 type ToolListEntry struct {

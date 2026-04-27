@@ -67,8 +67,8 @@ func TestService_CreateRole(t *testing.T) {
 		Name:        "Custom Builder",
 		Description: "Can build selected resources",
 		Grants: []*gen.RoleGrant{
-			{Scope: string(authz.ScopeProjectRead), Resources: []string{"project-1", "project-2"}},
-			{Scope: string(authz.ScopeMCPConnect), Resources: nil},
+			{Scope: string(authz.ScopeProjectRead), Selectors: []*gen.Selector{{ResourceKind: "project", ResourceID: "project-1"}, {ResourceKind: "project", ResourceID: "project-2"}}},
+			{Scope: string(authz.ScopeMCPConnect), Selectors: nil},
 		},
 		MemberIds: []string{"local_user_1", "local_user_2"},
 	})
@@ -99,7 +99,7 @@ func TestService_CreateRole_WorkOSCreateFailure(t *testing.T) {
 		Name:        "Custom Builder",
 		Description: "Can build selected resources",
 		Grants: []*gen.RoleGrant{
-			{Scope: string(authz.ScopeProjectRead), Resources: []string{"project-1"}},
+			{Scope: string(authz.ScopeProjectRead), Selectors: []*gen.Selector{{ResourceKind: "project", ResourceID: "project-1"}}},
 		},
 	})
 	require.Error(t, err)
@@ -125,7 +125,7 @@ func TestService_CreateRole_ContinuesAfterConflictWhenRoleAlreadyExists(t *testi
 		Name:        "Custom Builder",
 		Description: "Can build selected resources",
 		Grants: []*gen.RoleGrant{
-			{Scope: string(authz.ScopeProjectRead), Resources: []string{"project-1"}},
+			{Scope: string(authz.ScopeProjectRead), Selectors: []*gen.Selector{{ResourceKind: "project", ResourceID: "project-1"}}},
 		},
 	})
 	require.NoError(t, err)
@@ -146,7 +146,7 @@ func TestService_CreateRole_RejectsEmptySlug(t *testing.T) {
 		Name:        "!!!",
 		Description: "Can build selected resources",
 		Grants: []*gen.RoleGrant{
-			{Scope: string(authz.ScopeProjectRead), Resources: []string{"project-1"}},
+			{Scope: string(authz.ScopeProjectRead), Selectors: []*gen.Selector{{ResourceKind: "project", ResourceID: "project-1"}}},
 		},
 	})
 	require.Error(t, err)
@@ -178,7 +178,7 @@ func TestService_CreateRole_AuditLog(t *testing.T) {
 		Description: "Tracks audit writes",
 		Grants: []*gen.RoleGrant{{
 			Scope:     string(authz.ScopeProjectRead),
-			Resources: []string{"project-1"},
+			Selectors: []*gen.Selector{{ResourceKind: "project", ResourceID: "project-1"}},
 		}},
 	})
 	require.NoError(t, err)
@@ -229,7 +229,7 @@ func TestService_CreateRole_GrantSyncFailureDoesNotAssignMembers(t *testing.T) {
 		Name:        "Broken Builder",
 		Description: "Will fail grant sync",
 		Grants: []*gen.RoleGrant{
-			{Scope: string(authz.ScopeProjectRead), Resources: []string{"project-1"}},
+			{Scope: string(authz.ScopeProjectRead), Selectors: []*gen.Selector{{ResourceKind: "project", ResourceID: "project-1"}}},
 		},
 		MemberIds: []string{"local_user_1", "local_user_2"},
 	})

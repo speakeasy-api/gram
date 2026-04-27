@@ -87,7 +87,7 @@ func TestService_ListInvites_AllowsOrgReadGrant(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgRead, Resource: authCtx.ActiveOrganizationID})
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgRead, Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID)})
 
 	ti.orgs.On("ListInvitations", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Invitation{}, nil).Once()
 
@@ -104,7 +104,7 @@ func TestService_ListInvites_AllowsOrgAdminGrantViaScopeHierarchy(t *testing.T) 
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Resource: authCtx.ActiveOrganizationID})
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)})
 
 	ti.orgs.On("ListInvitations", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Invitation{}, nil).Once()
 
@@ -130,7 +130,7 @@ func TestService_ListInvites_ForbiddenWithGrantForDifferentOrganization(t *testi
 	t.Parallel()
 
 	ctx, ti := newTestOrganizationsServiceRBAC(t)
-	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Resource: "org_other"})
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, "org_other")})
 
 	res, err := ti.service.ListInvites(ctx, &gen.ListInvitesPayload{})
 	var oopsErr *oops.ShareableError
