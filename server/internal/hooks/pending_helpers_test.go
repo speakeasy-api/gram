@@ -1,6 +1,7 @@
 package hooks
 
 import (
+	"context"
 	"sync"
 	"testing"
 	"time"
@@ -11,7 +12,15 @@ import (
 
 	"github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 )
+
+// otelOnlyCtx returns a context that simulates the OTEL flow: no auth
+// context attached, so recordHook routes through the Redis-session
+// lookup + bufferHook fallback rather than the plugin attribution path.
+func otelOnlyCtx(ctx context.Context) context.Context {
+	return contextvalues.SetAuthContext(ctx, nil)
+}
 
 var (
 	toolName   = "test_tool"
@@ -22,10 +31,13 @@ var (
 	toolUseID2 = "toolu_234"
 )
 
-// TestBufferHook_AtomicAppend tests that buffering hooks uses atomic RPUSH
+// TestBufferHook_AtomicAppend tests that buffering hooks uses atomic RPUSH.
+// Exercises the OTEL fallback path (no plugin auth headers) so recordHook
+// routes through the Redis buffer rather than the plugin attribution path.
 func TestBufferHook_AtomicAppend(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
+	ctx = otelOnlyCtx(ctx)
 
 	sessionID := uuid.NewString()
 	toolName := "test_tool"
@@ -57,10 +69,12 @@ func TestBufferHook_AtomicAppend(t *testing.T) {
 	assert.Equal(t, int64(1), length, "Should have exactly one buffered hook")
 }
 
-// TestBufferHook_MultipleConcurrent tests that concurrent buffering works correctly
+// TestBufferHook_MultipleConcurrent tests that concurrent buffering works
+// correctly under the OTEL fallback path.
 func TestBufferHook_MultipleConcurrent(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
+	ctx = otelOnlyCtx(ctx)
 
 	sessionID := uuid.NewString()
 	numHooks := 50
@@ -169,10 +183,12 @@ func TestFlushPendingHooks_EmptyList(t *testing.T) {
 	assert.Equal(t, int64(0), exists)
 }
 
-// TestBufferAndFlush_MultipleSessionsConcurrent tests buffering and flushing across multiple sessions
+// TestBufferAndFlush_MultipleSessionsConcurrent exercises buffering and
+// flushing across multiple sessions under the OTEL fallback path.
 func TestBufferAndFlush_MultipleSessionsConcurrent(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
+	ctx = otelOnlyCtx(ctx)
 
 	numSessions := 10
 	hooksPerSession := 5
