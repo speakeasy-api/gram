@@ -151,6 +151,7 @@ func WithResolver(resolver *net.Resolver) func(*htttpClientOptions) {
 type Policy struct {
 	tracerProvider    trace.TracerProvider
 	blockedCIDRBlocks []*net.IPNet
+	resolver          dns.Resolver
 }
 
 // NewDefaultPolicy creates a new Policy that blocks common private and reserved
@@ -159,6 +160,7 @@ func NewDefaultPolicy(tracerProvider trace.TracerProvider) *Policy {
 	return &Policy{
 		tracerProvider:    tracerProvider,
 		blockedCIDRBlocks: defaultBlockedCIDRBlocks,
+		resolver:          dns.NewNetResolver(),
 	}
 }
 
@@ -179,7 +181,17 @@ func NewUnsafePolicy(tracerProvider trace.TracerProvider, disallowedCIDRBlocks [
 	return &Policy{
 		tracerProvider:    tracerProvider,
 		blockedCIDRBlocks: disallowedBlocks,
+		resolver:          dns.NewNetResolver(),
 	}, nil
+}
+
+// WithResolver mutates the Policy in place to replace its resolver and
+// returns the receiver for chaining. Intended for tests that need to inject a
+// [dns.MockResolver]; production code should use the resolver supplied by the
+// constructor.
+func (p *Policy) WithResolver(resolver dns.Resolver) *Policy {
+	p.resolver = resolver
+	return p
 }
 
 // PooledClient returns an [http.Client] backed by a pooled transport that
@@ -262,7 +274,7 @@ func (p *Policy) Dialer(options ...func(*dialerOptions)) *net.Dialer {
 
 	resolver := opts.resolver
 	if resolver == nil {
-		resolver = dns.NewNetResolver().Resolver()
+		resolver = p.resolver.Resolver()
 	}
 
 	return &net.Dialer{
@@ -281,15 +293,66 @@ func (p *Policy) Dialer(options ...func(*dialerOptions)) *net.Dialer {
 				return fmt.Errorf("%s: %w: bad ip", address, ErrBadHost)
 			}
 
-			for _, block := range p.blockedCIDRBlocks {
-				if block.Contains(ip) {
-					return fmt.Errorf("%s: %w", ip, ErrBlockedIP)
-				}
-			}
-
-			return nil
+			return p.checkIP(ip)
 		},
 	}
+}
+
+// ValidateHost checks whether the given host is permitted by the policy's
+// CIDR blocklist. If host is an IP literal, it is checked directly; otherwise
+// host is resolved via the policy's resolver and every returned address is
+// checked. Returns [ErrBlockedIP] when any address falls within a blocked
+// CIDR, and [ErrBadHost] when host is empty, fails to resolve, or resolves to
+// no addresses.
+//
+// ValidateHost is intended for management-time URL validation so that callers
+// reject blocked hosts before persisting them. Runtime enforcement still
+// happens via [Policy.Dialer] regardless.
+//
+// For hostnames with multiple resolved addresses, ValidateHost fails closed:
+// any single blocked address rejects the host. This is stricter than the
+// runtime [net.Dialer], which only fails when it actually attempts a blocked
+// address. The asymmetry is intentional — validation should not persist a row
+// whose host points anywhere blocked, even if a public address happens to be
+// tried first at dial time.
+func (p *Policy) ValidateHost(ctx context.Context, host string) error {
+	if host == "" {
+		return fmt.Errorf("%w: empty host", ErrBadHost)
+	}
+
+	if ip := net.ParseIP(host); ip != nil {
+		return p.checkIP(ip)
+	}
+
+	ips, err := p.resolver.LookupIP(ctx, "ip", host)
+	if err != nil {
+		return fmt.Errorf("%s: lookup ip: %w: %w", host, ErrBadHost, err)
+	}
+	if len(ips) == 0 {
+		return fmt.Errorf("%s: %w: no addresses", host, ErrBadHost)
+	}
+
+	for _, ip := range ips {
+		if err := p.checkIP(ip); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// checkIP returns [ErrBlockedIP] if ip falls within any of the policy's
+// blocked CIDR ranges, and nil otherwise. It is the shared CIDR-membership
+// test used by both [Policy.Dialer]'s ControlContext callback and
+// [Policy.ValidateHost], so that runtime and management-time enforcement stay
+// in sync.
+func (p *Policy) checkIP(ip net.IP) error {
+	for _, block := range p.blockedCIDRBlocks {
+		if block.Contains(ip) {
+			return fmt.Errorf("%s: %w", ip, ErrBlockedIP)
+		}
+	}
+	return nil
 }
 
 func parseCIDR(cidr string) (*net.IPNet, error) {
