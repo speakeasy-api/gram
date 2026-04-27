@@ -309,7 +309,7 @@ func (e *Engine) Filter(ctx context.Context, scope Scope, resourceIDs []string) 
 
 	allowed := make([]string, 0, len(resourceIDs))
 	for _, resourceID := range resourceIDs {
-		c := Check{Scope: scope, ResourceKind: "", ResourceID: resourceID, Conditions: nil}
+		c := Check{Scope: scope, ResourceKind: "", ResourceID: resourceID, Dimensions: nil}
 		if err := validateInput(c); err != nil {
 			return nil, e.mapError(ctx, err)
 		}

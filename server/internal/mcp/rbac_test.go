@@ -113,7 +113,7 @@ func TestServePublic_RBAC_ToolLevelGrant_AllowsMatchingTool(t *testing.T) {
 	err := authzEngine.Require(ctx, authz.Check{
 		Scope:      authz.ScopeMCPConnect,
 		ResourceID: toolset.ID.String(),
-		Conditions: map[string]string{"tool": "allowed_tool"},
+		Dimensions: map[string]string{"tool": "allowed_tool"},
 	})
 	require.NoError(t, err)
 }
@@ -138,7 +138,7 @@ func TestServePublic_RBAC_ToolLevelGrant_DeniesWrongTool(t *testing.T) {
 	err := authzEngine.Require(ctx, authz.Check{
 		Scope:      authz.ScopeMCPConnect,
 		ResourceID: toolset.ID.String(),
-		Conditions: map[string]string{"tool": "forbidden_tool"},
+		Dimensions: map[string]string{"tool": "forbidden_tool"},
 	})
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
@@ -161,7 +161,7 @@ func TestServePublic_RBAC_ServerLevelGrant_AllowsAnyTool(t *testing.T) {
 	err := authzEngine.Require(ctx, authz.Check{
 		Scope:      authz.ScopeMCPConnect,
 		ResourceID: toolset.ID.String(),
-		Conditions: map[string]string{"tool": "any_tool_name"},
+		Dimensions: map[string]string{"tool": "any_tool_name"},
 	})
 	require.NoError(t, err)
 }
@@ -186,7 +186,7 @@ func TestServePublic_RBAC_ToolLevelGrant_DeniesWrongServer(t *testing.T) {
 	err := authzEngine.Require(ctx, authz.Check{
 		Scope:      authz.ScopeMCPConnect,
 		ResourceID: uuid.NewString(),
-		Conditions: map[string]string{"tool": "allowed_tool"},
+		Dimensions: map[string]string{"tool": "allowed_tool"},
 	})
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)

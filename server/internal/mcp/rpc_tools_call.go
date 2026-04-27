@@ -184,14 +184,20 @@ func handleToolsCall(
 
 	// Per-tool RBAC check: if the user is authenticated, verify they have
 	// mcp:connect for this specific tool (not just the server). The connection-
-	// level check only validates the server; this narrows to the tool dimension.
+	// level check only validates the server; this narrows to the tool and
+	// disposition dimensions.
 	if payload.authenticated && authzEngine != nil {
-		if err := authzEngine.Require(ctx, authz.Check{
-			Scope:        authz.ScopeMCPConnect,
-			ResourceKind: "",
-			ResourceID:   toolset.ID,
-			Conditions:   map[string]string{"tool": params.Name},
-		}); err != nil {
+		var disposition string
+		if tool != nil {
+			baseTool, err := conv.ToBaseTool(tool)
+			if err == nil {
+				disposition = conv.DispositionFromAnnotations(baseTool.Annotations)
+			}
+		}
+		if err := authzEngine.Require(ctx, authz.MCPToolCallCheck(toolset.ID, authz.MCPToolCallDimensions{
+			Tool:        params.Name,
+			Disposition: disposition,
+		})); err != nil {
 			return nil, err
 		}
 	}

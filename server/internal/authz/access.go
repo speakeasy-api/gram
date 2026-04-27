@@ -2,18 +2,18 @@ package authz
 
 import "maps"
 
-// Check describes a single authorization requirement. ResourceKind and
-// ResourceID identify the base resource. Conditions carry optional narrowing
-// dimensions (tool, method, disposition) for multi-dimensional checks.
+// Check describes a single authorization requirement. ResourceID identifies the
+// resource. ResourceKind overrides the kind derived from the scope — leave empty
+// to derive automatically. Dimensions carry optional narrowing attributes (tool,
+// disposition, collection) for multi-dimensional checks.
 type Check struct {
 	Scope        Scope
 	ResourceKind string
 	ResourceID   string
-	Conditions   map[string]string
+	Dimensions   map[string]string
 }
 
-// selector converts the check into a Selector for matching against grant
-// selectors. If ResourceKind is empty it is derived from the scope.
+// selector converts the check into a Selector for matching against grant selectors.
 func (c Check) selector() Selector {
 	kind := c.ResourceKind
 	if kind == "" {
@@ -23,7 +23,7 @@ func (c Check) selector() Selector {
 		"resource_kind": kind,
 		"resource_id":   c.ResourceID,
 	}
-	maps.Copy(s, c.Conditions)
+	maps.Copy(s, c.Dimensions)
 	return s
 }
 
@@ -33,11 +33,11 @@ func (c Check) selector() Selector {
 // check), so we only need one entry per scope level.
 func (c Check) expand() []Check {
 	checks := []Check{
-		{Scope: ScopeRoot, ResourceKind: c.ResourceKind, ResourceID: c.ResourceID, Conditions: c.Conditions},
+		{Scope: ScopeRoot, ResourceKind: c.ResourceKind, ResourceID: c.ResourceID, Dimensions: c.Dimensions},
 	}
 	scopes := append([]Scope{c.Scope}, scopeExpansions[c.Scope]...)
 	for _, s := range scopes {
-		checks = append(checks, Check{Scope: s, ResourceKind: c.ResourceKind, ResourceID: c.ResourceID, Conditions: c.Conditions})
+		checks = append(checks, Check{Scope: s, ResourceKind: c.ResourceKind, ResourceID: c.ResourceID, Dimensions: c.Dimensions})
 	}
 	return checks
 }
