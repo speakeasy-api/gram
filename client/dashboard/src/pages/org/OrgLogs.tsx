@@ -234,8 +234,8 @@ export function OrgLogsInner() {
                 variant="body"
                 className="text-muted-foreground ml-6 text-sm"
               >
-                Reject tool calls in Cursor and Claude Code that don't come
-                from a Speakeasy-issued MCP server. Requires Speakeasy hooks to be
+                Reject tool calls in Cursor and Claude Code that don't come from
+                a Speakeasy-issued MCP server. Requires Speakeasy hooks to be
                 installed on the agent.
               </Type>
             </Stack>

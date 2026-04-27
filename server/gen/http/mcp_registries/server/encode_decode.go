@@ -1012,6 +1012,68 @@ func marshalTypesExternalMCPRemoteToExternalMCPRemoteResponseBody(v *types.Exter
 		URL:           v.URL,
 		TransportType: v.TransportType,
 	}
+	if v.Headers != nil {
+		res.Headers = make([]*ExternalMCPRemoteHeaderResponseBody, len(v.Headers))
+		for i, val := range v.Headers {
+			if val == nil {
+				res.Headers[i] = nil
+				continue
+			}
+			res.Headers[i] = marshalTypesExternalMCPRemoteHeaderToExternalMCPRemoteHeaderResponseBody(val)
+		}
+	}
+	if v.Variables != nil {
+		res.Variables = make(map[string]*ExternalMCPRemoteVariableResponseBody, len(v.Variables))
+		for key, val := range v.Variables {
+			tk := key
+			if val == nil {
+				res.Variables[tk] = nil
+				continue
+			}
+			res.Variables[tk] = marshalTypesExternalMCPRemoteVariableToExternalMCPRemoteVariableResponseBody(val)
+		}
+	}
+
+	return res
+}
+
+// marshalTypesExternalMCPRemoteHeaderToExternalMCPRemoteHeaderResponseBody
+// builds a value of type *ExternalMCPRemoteHeaderResponseBody from a value of
+// type *types.ExternalMCPRemoteHeader.
+func marshalTypesExternalMCPRemoteHeaderToExternalMCPRemoteHeaderResponseBody(v *types.ExternalMCPRemoteHeader) *ExternalMCPRemoteHeaderResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &ExternalMCPRemoteHeaderResponseBody{
+		Name:        v.Name,
+		Description: v.Description,
+		IsSecret:    v.IsSecret,
+		IsRequired:  v.IsRequired,
+		Placeholder: v.Placeholder,
+	}
+
+	return res
+}
+
+// marshalTypesExternalMCPRemoteVariableToExternalMCPRemoteVariableResponseBody
+// builds a value of type *ExternalMCPRemoteVariableResponseBody from a value
+// of type *types.ExternalMCPRemoteVariable.
+func marshalTypesExternalMCPRemoteVariableToExternalMCPRemoteVariableResponseBody(v *types.ExternalMCPRemoteVariable) *ExternalMCPRemoteVariableResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &ExternalMCPRemoteVariableResponseBody{
+		Description: v.Description,
+		IsRequired:  v.IsRequired,
+		IsSecret:    v.IsSecret,
+		Default:     v.Default,
+	}
+	if v.Choices != nil {
+		res.Choices = make([]string, len(v.Choices))
+		for i, val := range v.Choices {
+			res.Choices[i] = val
+		}
+	}
 
 	return res
 }
