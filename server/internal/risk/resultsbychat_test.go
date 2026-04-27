@@ -51,7 +51,7 @@ func TestListRiskResultsByChat_GroupsFindings(t *testing.T) {
 		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
 	)
 
-	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: "ByChat Test"})
+	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: strPtr("ByChat Test")})
 	require.NoError(t, err)
 
 	policyID, _ := uuid.Parse(policy.ID)
@@ -83,7 +83,7 @@ func TestListRiskResultsByChat_ExcludesNotFound(t *testing.T) {
 		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
 	)
 
-	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: "ByChat NotFound"})
+	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: strPtr("ByChat NotFound")})
 	require.NoError(t, err)
 
 	policyID, _ := uuid.Parse(policy.ID)
@@ -104,7 +104,7 @@ func TestListRiskResultsByChat_CursorPagination(t *testing.T) {
 		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
 	)
 
-	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: "ByChat Cursor"})
+	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: strPtr("ByChat Cursor")})
 	require.NoError(t, err)
 
 	policyID, _ := uuid.Parse(policy.ID)
@@ -140,7 +140,7 @@ func TestListRiskResultsByChat_IncludesExternalUserID(t *testing.T) {
 		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
 	)
 
-	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: "ByChat User"})
+	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: strPtr("ByChat User")})
 	require.NoError(t, err)
 
 	policyID, _ := uuid.Parse(policy.ID)

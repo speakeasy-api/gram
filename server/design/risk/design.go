@@ -21,7 +21,7 @@ var _ = Service("risk", func() {
 			security.ByKeyPayload()
 			security.SessionPayload()
 			security.ProjectPayload()
-			Attribute("name", String, "The policy name.")
+			Attribute("name", String, "The policy name. If omitted, a name will be auto-generated.")
 			Attribute("sources", ArrayOf(String), "Detection sources to enable.")
 			Attribute("presidio_entities", ArrayOf(String), "Presidio entity types to detect.")
 			Attribute("enabled", Boolean, "Whether the policy is active.")
@@ -29,7 +29,6 @@ var _ = Service("risk", func() {
 				Enum("flag", "block")
 				Default("flag")
 			})
-			Required("name")
 		})
 
 		Result(shared.RiskPolicy)

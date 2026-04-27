@@ -21008,7 +21008,7 @@ components:
                     description: Whether the policy is active.
                 name:
                     type: string
-                    description: The policy name.
+                    description: The policy name. If omitted, a name will be auto-generated.
                 presidio_entities:
                     type: array
                     items:
@@ -21019,8 +21019,6 @@ components:
                     items:
                         type: string
                     description: Detection sources to enable.
-            required:
-                - name
         CreateRoleForm:
             type: object
             properties:

@@ -90,7 +90,7 @@ func newTestRiskService(t *testing.T) (context.Context, *testInstance) {
 
 	authzEngine := authz.NewEngine(logger, conn, authztest.RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
 
-	svc := risk.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, sig)
+	svc := risk.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, sig, nil)
 
 	return ctx, &testInstance{
 		service:        svc,
@@ -128,3 +128,5 @@ func withExactAccessGrants(t *testing.T, ctx context.Context, conn *pgxpool.Pool
 
 	return authz.GrantsToContext(ctx, loadedGrants)
 }
+
+func strPtr(s string) *string { return &s }

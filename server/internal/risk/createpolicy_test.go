@@ -22,7 +22,7 @@ func TestCreateRiskPolicy_Success(t *testing.T) {
 
 	enabled := true
 	result, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
-		Name:    "Test Policy",
+		Name:    strPtr("Test Policy"),
 		Sources: []string{"gitleaks"},
 		Enabled: &enabled,
 	})
@@ -46,7 +46,7 @@ func TestCreateRiskPolicy_DefaultSources(t *testing.T) {
 	ctx = withExactAccessGrants(t, ctx, ti.conn, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)})
 
 	result, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
-		Name: "No Sources",
+		Name: strPtr("No Sources"),
 	})
 	require.NoError(t, err)
 	require.Equal(t, []string{"gitleaks"}, result.Sources)
@@ -61,7 +61,7 @@ func TestCreateRiskPolicy_EmptyName(t *testing.T) {
 	ctx = withExactAccessGrants(t, ctx, ti.conn, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)})
 
 	_, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
-		Name: "",
+		Name: strPtr(""),
 	})
 	require.Error(t, err)
 }
@@ -78,7 +78,7 @@ func TestCreateRiskPolicy_NameTooLong(t *testing.T) {
 		longName.WriteString("a")
 	}
 	_, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
-		Name: longName.String(),
+		Name: strPtr(longName.String()),
 	})
 	require.Error(t, err)
 }
@@ -91,7 +91,7 @@ func TestCreateRiskPolicy_Unauthorized(t *testing.T) {
 	ctx = withExactAccessGrants(t, ctx, ti.conn)
 
 	_, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
-		Name: "Should Fail",
+		Name: strPtr("Should Fail"),
 	})
 	require.Error(t, err)
 	var oopsErr *oops.ShareableError
@@ -108,7 +108,7 @@ func TestCreateRiskPolicy_DisabledDoesNotSignal(t *testing.T) {
 
 	enabled := false
 	result, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
-		Name:    "Disabled Policy",
+		Name:    strPtr("Disabled Policy"),
 		Enabled: &enabled,
 	})
 	require.NoError(t, err)

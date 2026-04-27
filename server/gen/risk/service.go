@@ -67,8 +67,8 @@ type CreateRiskPolicyPayload struct {
 	ApikeyToken      *string
 	SessionToken     *string
 	ProjectSlugInput *string
-	// The policy name.
-	Name string
+	// The policy name. If omitted, a name will be auto-generated.
+	Name *string
 	// Detection sources to enable.
 	Sources []string
 	// Presidio entity types to detect.

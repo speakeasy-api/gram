@@ -16,8 +16,8 @@ import (
 // CreateRiskPolicyRequestBody is the type of the "risk" service
 // "createRiskPolicy" endpoint HTTP request body.
 type CreateRiskPolicyRequestBody struct {
-	// The policy name.
-	Name string `form:"name" json:"name" xml:"name"`
+	// The policy name. If omitted, a name will be auto-generated.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// Detection sources to enable.
 	Sources []string `form:"sources,omitempty" json:"sources,omitempty" xml:"sources,omitempty"`
 	// Presidio entity types to detect.

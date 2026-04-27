@@ -16,7 +16,7 @@ import (
 // CreateRiskPolicyRequestBody is the type of the "risk" service
 // "createRiskPolicy" endpoint HTTP request body.
 type CreateRiskPolicyRequestBody struct {
-	// The policy name.
+	// The policy name. If omitted, a name will be auto-generated.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// Detection sources to enable.
 	Sources []string `form:"sources,omitempty" json:"sources,omitempty" xml:"sources,omitempty"`
@@ -3372,7 +3372,7 @@ func NewTriggerRiskAnalysisGatewayErrorResponseBody(res *goa.ServiceError) *Trig
 // payload.
 func NewCreateRiskPolicyPayload(body *CreateRiskPolicyRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.CreateRiskPolicyPayload {
 	v := &risk.CreateRiskPolicyPayload{
-		Name:    *body.Name,
+		Name:    body.Name,
 		Enabled: body.Enabled,
 	}
 	if body.Action != nil {
@@ -3518,9 +3518,6 @@ func NewTriggerRiskAnalysisPayload(body *TriggerRiskAnalysisRequestBody, apikeyT
 // ValidateCreateRiskPolicyRequestBody runs the validations defined on
 // CreateRiskPolicyRequestBody
 func ValidateCreateRiskPolicyRequestBody(body *CreateRiskPolicyRequestBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
 	if body.Action != nil {
 		if !(*body.Action == "flag" || *body.Action == "block") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "block"}))

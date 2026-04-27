@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
+	or "github.com/OpenRouterTeam/go-sdk/models/components"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -23,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/background"
+	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -30,6 +33,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -42,13 +46,14 @@ type RiskAnalysisSignaler interface {
 }
 
 type Service struct {
-	tracer   trace.Tracer
-	logger   *slog.Logger
-	db       *pgxpool.Pool
-	repo     *repo.Queries
-	auth     *auth.Auth
-	authz    *authz.Engine
-	signaler RiskAnalysisSignaler
+	tracer           trace.Tracer
+	logger           *slog.Logger
+	db               *pgxpool.Pool
+	repo             *repo.Queries
+	auth             *auth.Auth
+	authz            *authz.Engine
+	signaler         RiskAnalysisSignaler
+	completionClient openrouter.CompletionClient
 }
 
 var _ chat.MessageObserver = (*Service)(nil)
@@ -75,17 +80,19 @@ func NewService(
 	sessions *sessions.Manager,
 	authzEngine *authz.Engine,
 	signaler RiskAnalysisSignaler,
+	completionClient openrouter.CompletionClient,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("risk"))
 
 	return &Service{
-		tracer:   tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/risk"),
-		logger:   logger,
-		db:       db,
-		repo:     repo.New(db),
-		auth:     auth.New(logger, db, sessions, authzEngine),
-		authz:    authzEngine,
-		signaler: signaler,
+		tracer:           tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/risk"),
+		logger:           logger,
+		db:               db,
+		repo:             repo.New(db),
+		auth:             auth.New(logger, db, sessions, authzEngine),
+		authz:            authzEngine,
+		signaler:         signaler,
+		completionClient: completionClient,
 	}
 }
 
@@ -138,8 +145,9 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 		return nil, err
 	}
 
-	if err := validatePolicyName(payload.Name); err != nil {
-		return nil, err
+	name := ""
+	if payload.Name != nil {
+		name = *payload.Name
 	}
 
 	action := payload.Action
@@ -161,6 +169,20 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 		enabled = *payload.Enabled
 	}
 
+	// Auto-generate a name if none provided.
+	if name == "" {
+		existingPolicies, _ := s.repo.ListRiskPolicies(ctx, *authCtx.ProjectID)
+		var existingNames []string
+		for _, p := range existingPolicies {
+			existingNames = append(existingNames, p.Name)
+		}
+		name = s.generatePolicyName(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), sources, payload.PresidioEntities, action, existingNames)
+	}
+
+	if err := validatePolicyName(name); err != nil {
+		return nil, err
+	}
+
 	id, err := uuid.NewV7()
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "generate policy id").Log(ctx, s.logger)
@@ -176,7 +198,7 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 		ID:               id,
 		ProjectID:        *authCtx.ProjectID,
 		OrganizationID:   authCtx.ActiveOrganizationID,
-		Name:             payload.Name,
+		Name:             name,
 		Sources:          sources,
 		PresidioEntities: payload.PresidioEntities,
 		Enabled:          enabled,
@@ -747,6 +769,84 @@ func policyRowSnapshot(row repo.RiskPolicy) *types.RiskPolicy {
 		PendingMessages:  -1,
 		TotalMessages:    -1,
 	}
+}
+
+func (s *Service) generatePolicyName(ctx context.Context, orgID, projectID string, sources, presidioEntities []string, action string, existingNames []string) string {
+	if s.completionClient == nil {
+		return s.fallbackPolicyName(sources, action)
+	}
+
+	prompt := fmt.Sprintf(
+		"Generate a short, human-friendly name (2-5 words) for a security policy with these settings:\n"+
+			"- Detection sources: %v\n"+
+			"- PII entities: %v\n"+
+			"- Action: %s\n"+
+			"- Existing policy names to avoid: %v\n\n"+
+			"Return ONLY the name, no quotes or explanation. Make it descriptive and distinct from existing names.",
+		sources, presidioEntities, action, existingNames,
+	)
+
+	nameCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	response, err := s.completionClient.GetCompletion(nameCtx, openrouter.CompletionRequest{
+		OrgID:     orgID,
+		ProjectID: projectID,
+		ChatID:    uuid.Nil,
+		Messages: []or.ChatMessages{
+			openrouter.CreateMessageUser(prompt),
+		},
+		Tools:          nil,
+		Temperature:    nil,
+		Model:          "",
+		Stream:         false,
+		UsageSource:    billing.ModelUsageSourceGram,
+		UserID:         "",
+		ExternalUserID: "",
+		UserEmail:      "",
+		HTTPMetadata:   nil,
+		APIKeyID:       "",
+		JSONSchema:     nil,
+	})
+	if err != nil {
+		s.logger.WarnContext(ctx, "failed to generate policy name via OpenRouter", attr.SlogError(err))
+		return s.fallbackPolicyName(sources, action)
+	}
+
+	name := strings.TrimSpace(openrouter.GetText(*response.Message))
+	if name == "" {
+		return s.fallbackPolicyName(sources, action)
+	}
+
+	// Truncate to 100 chars
+	runes := []rune(name)
+	if len(runes) > 100 {
+		name = string(runes[:100])
+	}
+
+	return name
+}
+
+func (s *Service) fallbackPolicyName(sources []string, action string) string {
+	var parts []string
+	for _, src := range sources {
+		switch src {
+		case "gitleaks":
+			parts = append(parts, "Secret")
+		case "presidio":
+			parts = append(parts, "PII")
+		}
+	}
+	if len(parts) == 0 {
+		parts = append(parts, "Risk")
+	}
+
+	actionLabel := "Scanner"
+	if action == "block" {
+		actionLabel = "Blocker"
+	}
+
+	return strings.Join(parts, " & ") + " " + actionLabel
 }
 
 func validateAction(action string) error {
