@@ -793,27 +793,30 @@ function CollectionGroupPanel({
     return map;
   }, [mcpServers]);
 
-  // Resolve each collection's servers to internal toolset servers with tools
+  // Resolve each collection's servers to internal toolset servers with tools.
+  // Filter out collections that have no tools (no matched servers or all empty).
   const collectionGroups = useMemo(() => {
-    return collections.map((c, i) => {
-      const serversResponse = serverQueries[i]?.data;
-      const externalServers = serversResponse?.servers ?? [];
+    return collections
+      .map((c, i) => {
+        const serversResponse = serverQueries[i]?.data;
+        const externalServers = serversResponse?.servers ?? [];
 
-      const matchedServers: Server[] = [];
-      for (const es of externalServers) {
-        const parts = es.registrySpecifier.split("/");
-        const mcpSlug = parts[parts.length - 1];
-        const server = mcpSlugToServer.get(mcpSlug);
-        if (server) matchedServers.push(server);
-      }
+        const matchedServers: Server[] = [];
+        for (const es of externalServers) {
+          const parts = es.registrySpecifier.split("/");
+          const mcpSlug = parts[parts.length - 1];
+          const server = mcpSlugToServer.get(mcpSlug);
+          if (server) matchedServers.push(server);
+        }
 
-      return {
-        id: c.id,
-        name: c.name,
-        slug: c.slug,
-        servers: matchedServers,
-      };
-    });
+        return {
+          id: c.id,
+          name: c.name,
+          slug: c.slug,
+          servers: matchedServers,
+        };
+      })
+      .filter((g) => g.servers.some((s) => s.tools.length > 0));
   }, [collections, serverQueries, mcpSlugToServer]);
 
   if (collectionsLoading) {
@@ -824,10 +827,10 @@ function CollectionGroupPanel({
     );
   }
 
-  if (collections.length === 0) {
+  if (collections.length === 0 || collectionGroups.length === 0) {
     return (
       <div className="text-muted-foreground py-6 text-center text-sm">
-        No collections found
+        No collections with tools found
       </div>
     );
   }
