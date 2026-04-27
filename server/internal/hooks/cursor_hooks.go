@@ -22,6 +22,16 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 )
 
+// xGramToolsetIDField is the JSON-schema property injected into every Gram-hosted
+// tool's input schema (see mcp.injectToolsetIDConstant). Tool callers must echo
+// this UUID back so the hook can validate the call against its toolset.
+const xGramToolsetIDField = "x-gram-toolset-id"
+
+// gramToolsetDenyUserMessage is the message rendered in the Cursor / Claude UI
+// when a Gram-hosted tool call fails admin-approval validation. The
+// fine-grained validation reason is logged separately for operators.
+const gramToolsetDenyUserMessage = "This MCP server has not been approved by your administrator. Please contact them to get it approved."
+
 // Cursor is the endpoint for Cursor hook events
 func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.CursorHookResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -40,9 +50,6 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.
 	orgID := authCtx.ActiveOrganizationID
 	projectID := authCtx.ProjectID.String()
 
-	// Record the hook (will route to ClickHouse for tool calls, PG for all events)
-	s.recordCursorHook(ctx, payload, orgID, projectID)
-
 	result := &gen.CursorHookResult{
 		Permission:        nil,
 		UserMessage:       nil,
@@ -50,17 +57,54 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.
 		AgentMessage:      nil,
 	}
 
+	// blockReason is empty unless this call is denied by the shadow-MCP guard.
+	// It propagates into the ClickHouse log entry as gram.hook.block_reason so
+	// the trace renders as "blocked" in dashboards.
+	var blockReason string
+
 	switch payload.HookEventName {
-	case "preToolUse", "beforeMCPExecution":
+	case "beforeMCPExecution":
+		// beforeMCPExecution only fires for MCP-routed (non-local) tool calls,
+		// so Gram-hosted tool validation runs here. Cursor's generic preToolUse
+		// also fires for native local tools (read_file, edit_file, etc.) and
+		// is left as allow.
+		if !s.blockShadowMCPEnabled(ctx, orgID) {
+			result.Permission = new("allow")
+			break
+		}
+		toolName := strings.TrimPrefix(conv.PtrValOr(payload.ToolName, ""), "MCP:")
+		if reason, denied := s.validateGramToolsetCall(ctx, payload.ToolInput, toolName, orgID); denied {
+			s.logger.InfoContext(ctx, "denying cursor tool call: failed gram toolset validation",
+				attr.SlogEvent("cursor_hook_denied"),
+				attr.SlogValueAny(map[string]any{
+					"hookEventName": payload.HookEventName,
+					"toolName":      conv.PtrValOr(payload.ToolName, ""),
+					"reason":        reason,
+				}),
+			)
+			blockReason = reason
+			userMsg := gramToolsetDenyUserMessage
+			result.Permission = new("deny")
+			result.UserMessage = &userMsg
+			result.AgentMessage = &userMsg
+		} else {
+			result.Permission = new("allow")
+		}
+	case "preToolUse":
 		result.Permission = new("allow")
 	default:
 		// nothing to do
 	}
 
+	// Record the hook (will route to ClickHouse for tool calls, PG for all events).
+	// Runs after the deny decision so the ClickHouse entry can carry the
+	// block reason as an attribute.
+	s.recordCursorHook(ctx, payload, orgID, projectID, blockReason)
+
 	return result, nil
 }
 
-func (s *Service) recordCursorHook(ctx context.Context, payload *gen.CursorPayload, orgID string, projectID string) {
+func (s *Service) recordCursorHook(ctx context.Context, payload *gen.CursorPayload, orgID string, projectID string, blockReason string) {
 	if payload.ConversationID == nil || *payload.ConversationID == "" {
 		s.logger.WarnContext(ctx, "Cursor event called without conversation ID")
 		return
@@ -75,10 +119,10 @@ func (s *Service) recordCursorHook(ctx context.Context, payload *gen.CursorPaylo
 		ProjectID:   projectID,
 	}
 
-	s.persistCursorHook(ctx, payload, metadata)
+	s.persistCursorHook(ctx, payload, metadata, blockReason)
 }
 
-func (s *Service) persistCursorHook(ctx context.Context, payload *gen.CursorPayload, metadata *SessionMetadata) {
+func (s *Service) persistCursorHook(ctx context.Context, payload *gen.CursorPayload, metadata *SessionMetadata, blockReason string) {
 	if isCursorConversationEvent(payload.HookEventName) {
 		// Conversation events: PG only (user prompts and agent responses)
 		var err error
@@ -95,16 +139,16 @@ func (s *Service) persistCursorHook(ctx context.Context, payload *gen.CursorPayl
 		}
 	} else {
 		// Tool call events: ClickHouse + PG
-		if err := s.persistCursorToolCallEvent(ctx, payload, metadata); err != nil {
+		if err := s.persistCursorToolCallEvent(ctx, payload, metadata, blockReason); err != nil {
 			s.logger.ErrorContext(ctx, "Failed to persist Cursor tool call event", attr.SlogError(err))
 		}
 	}
 }
 
 // persistCursorToolCallEvent writes tool call events to both ClickHouse and PostgreSQL
-func (s *Service) persistCursorToolCallEvent(ctx context.Context, payload *gen.CursorPayload, metadata *SessionMetadata) error {
+func (s *Service) persistCursorToolCallEvent(ctx context.Context, payload *gen.CursorPayload, metadata *SessionMetadata, blockReason string) error {
 	// Write to ClickHouse for telemetry
-	s.writeCursorHookToClickHouse(ctx, payload, metadata.GramOrgID, metadata.ProjectID)
+	s.writeCursorHookToClickHouse(ctx, payload, metadata.GramOrgID, metadata.ProjectID, blockReason)
 
 	// Write to PostgreSQL for chat history
 	switch payload.HookEventName {
@@ -129,8 +173,11 @@ func isCursorConversationEvent(eventName string) bool {
 // writeCursorHookToClickHouse writes a Cursor hook event directly to ClickHouse
 // Unlike Claude hooks, Cursor payloads are already authenticated and include user_email,
 // so no Redis buffering is needed.
-func (s *Service) writeCursorHookToClickHouse(ctx context.Context, payload *gen.CursorPayload, orgID string, projectID string) {
+func (s *Service) writeCursorHookToClickHouse(ctx context.Context, payload *gen.CursorPayload, orgID string, projectID string, blockReason string) {
 	attrs := s.buildCursorTelemetryAttributes(ctx, payload, orgID, projectID)
+	if blockReason != "" {
+		attrs[attr.HookBlockReasonKey] = blockReason
+	}
 	toolName, _ := attrs[attr.ToolNameKey].(string)
 
 	parsedProjectID, err := uuid.Parse(projectID)

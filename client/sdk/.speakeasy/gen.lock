@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: f9df84ee369abf250c924e4f401de6ee
+  docChecksum: c71433a62e18d50a17a5cec19272afbf
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -131,7 +131,7 @@ trackedFiles:
   docs/models/components/claudehookpayload.md:
     last_write_checksum: sha1:9aeeb4a542ec059884f17b4d64a4200ea5f462f5
   docs/models/components/claudehookresult.md:
-    last_write_checksum: sha1:21d6844ca377ca3ef5137263cb8e9bdca5f81b69
+    last_write_checksum: sha1:e29f7febd8b2bebbe3c91639ce9b538e22f23356
   docs/models/components/configureslackapprequestbody.md:
     last_write_checksum: sha1:028d8866b4e7924ecf4569eba1335fa533fb7f9c
   docs/models/components/confirm.md:
@@ -255,7 +255,7 @@ trackedFiles:
   docs/models/components/externaloauthserverform.md:
     last_write_checksum: sha1:2dfca2bf1f6cf89befb98dabc7e7db5d83523c65
   docs/models/components/featurename.md:
-    last_write_checksum: sha1:0002ce40c13e29d6b6b0e29defd6491f63b56d17
+    last_write_checksum: sha1:7414f3a0ea520aa56dce9f5e396cf1919ab78146
   docs/models/components/feedback.md:
     last_write_checksum: sha1:ef93dc1781469531617f39432611ded991048862
   docs/models/components/fetchopenapiv3fromurlform2.md:
@@ -311,7 +311,7 @@ trackedFiles:
   docs/models/components/getusermetricssummaryresult.md:
     last_write_checksum: sha1:7b76f799d62fe0f3eefe3dc7727880167ca5dd71
   docs/models/components/gramproductfeatures.md:
-    last_write_checksum: sha1:e321c7730ebee7ade692078391369b191180cd3a
+    last_write_checksum: sha1:49dcbe9c3b32ed9f64b7d71f90bef3005c368e0a
   docs/models/components/headerinput.md:
     last_write_checksum: sha1:adc9e1b54d733fb807511030368240cc0e7a2172
   docs/models/components/hookeventname.md:
@@ -321,13 +321,13 @@ trackedFiles:
   docs/models/components/hooksserversummary.md:
     last_write_checksum: sha1:65f741f7c4c0dd72b7fcc482bdc7b586b2419629
   docs/models/components/hookstatus.md:
-    last_write_checksum: sha1:842ea50d39d893d742df1d249f3cb13d9b510fc6
+    last_write_checksum: sha1:b38c625e57bbab28c782ce161ab891cf4a3a8cd5
   docs/models/components/hookstimeseriespoint.md:
     last_write_checksum: sha1:7417d6276d1004eea90e19a2d67a447bc1fea3e6
   docs/models/components/hooksusersummary.md:
     last_write_checksum: sha1:527d021e36b1f44fd86ee89dfd9814d2046e6797
   docs/models/components/hooktracesummary.md:
-    last_write_checksum: sha1:f34619e1f32a35a6197eeed98b8d6f2011ab773d
+    last_write_checksum: sha1:be3478cf2c94ca78f9bf3df1b15f2dd0dae6959b
   docs/models/components/httpmethod.md:
     last_write_checksum: sha1:f4bf8618fef5279a71cd413d3f6ca989ab29e766
   docs/models/components/httptooldefinition.md:
@@ -2883,7 +2883,7 @@ trackedFiles:
   src/models/components/claudehookpayload.ts:
     last_write_checksum: sha1:f990486e8333c922eb2244e05361ba69c4c472b7
   src/models/components/claudehookresult.ts:
-    last_write_checksum: sha1:78599a3249e3de7cd79124005c7d2cba73d3204c
+    last_write_checksum: sha1:d72da8680ef447c6322a6f1162d87dfeca8bf1ca
   src/models/components/configureslackapprequestbody.ts:
     last_write_checksum: sha1:62c8dae3e65243772f909cb6862a7c4e768fe912
   src/models/components/createassistantform.ts:
@@ -3139,7 +3139,7 @@ trackedFiles:
   src/models/components/getusermetricssummaryresult.ts:
     last_write_checksum: sha1:c45ae48235990ba664b1fa62cc0a9df2406ea25d
   src/models/components/gramproductfeatures.ts:
-    last_write_checksum: sha1:8e7d5b6d52e1b0a2909ca4abf3d071cffd08a784
+    last_write_checksum: sha1:36b54c6d1b6cf3e4af620d0339fe356b40f3623a
   src/models/components/headerinput.ts:
     last_write_checksum: sha1:4be0fa70c99fe8b12b02906b04cedb33c78868a0
   src/models/components/hooksbreakdownrow.ts:
@@ -3151,7 +3151,7 @@ trackedFiles:
   src/models/components/hooksusersummary.ts:
     last_write_checksum: sha1:3eeb9121e84176a2d5134fbf9b129ab0c6096933
   src/models/components/hooktracesummary.ts:
-    last_write_checksum: sha1:6b9789032603476e6f335bf55a59d515fbe88d71
+    last_write_checksum: sha1:79861b2de47418c549e53ba46b5805c6d1bed631
   src/models/components/httptooldefinition.ts:
     id: 4530c9b75199
     last_write_checksum: sha1:311e62a412f4d5baa16d1130eb70af497a7ca6a4
@@ -3580,7 +3580,7 @@ trackedFiles:
     last_write_checksum: sha1:880bca89d1b570199aa3c9161292f13052406ea9
   src/models/components/setproductfeaturerequestbody.ts:
     id: 777e1e95ac32
-    last_write_checksum: sha1:fa575a3e22da689572bcb546bd750bb0bd47e720
+    last_write_checksum: sha1:d83fcb90cf13dd2296c0bc117d00726619daabdf
     pristine_git_object: 9fb7bac3d53f59bb384ae78dee065d0fb9f9a21e
   src/models/components/setprojectlogoresult.ts:
     id: 88cdb2cc5e3d
@@ -6843,7 +6843,7 @@ examples:
     speakeasy-default-get-product-features:
       responses:
         "200":
-          application/json: {"logs_enabled": false, "session_capture_enabled": false, "tool_io_logs_enabled": false}
+          application/json: {"block_shadow_mcp_enabled": false, "logs_enabled": false, "session_capture_enabled": false, "tool_io_logs_enabled": false}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":

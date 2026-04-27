@@ -150,6 +150,8 @@ type ClaudeResponseBody struct {
 	StopReason *string `form:"stopReason,omitempty" json:"stopReason,omitempty" xml:"stopReason,omitempty"`
 	// Whether to suppress the hook's output
 	SuppressOutput *bool `form:"suppressOutput,omitempty" json:"suppressOutput,omitempty" xml:"suppressOutput,omitempty"`
+	// Warning message shown to the user in the terminal
+	SystemMessage *string `form:"systemMessage,omitempty" json:"systemMessage,omitempty" xml:"systemMessage,omitempty"`
 	// Hook-specific output as JSON object
 	HookSpecificOutput any `form:"hookSpecificOutput,omitempty" json:"hookSpecificOutput,omitempty" xml:"hookSpecificOutput,omitempty"`
 }
@@ -1142,6 +1144,7 @@ func NewClaudeHookResultOK(body *ClaudeResponseBody) *hooks.ClaudeHookResult {
 		Continue:           body.Continue,
 		StopReason:         body.StopReason,
 		SuppressOutput:     body.SuppressOutput,
+		SystemMessage:      body.SystemMessage,
 		HookSpecificOutput: body.HookSpecificOutput,
 	}
 

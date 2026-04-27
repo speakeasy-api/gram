@@ -178,6 +178,7 @@ func (s *Service) GetProductFeatures(ctx context.Context, payload *gen.GetProduc
 		LogsEnabled:           isEnabled(FeatureLogs),
 		ToolIoLogsEnabled:     isEnabled(FeatureToolIOLogs),
 		SessionCaptureEnabled: isEnabled(FeatureSessionCapture),
+		BlockShadowMcpEnabled: isEnabled(FeatureBlockShadowMCP),
 	}, nil
 }
 

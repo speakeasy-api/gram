@@ -108,6 +108,16 @@ func handleToolsCall(
 		}
 	}
 
+	// Strip the x-gram-toolset-id property the agent echoed back from the
+	// tool's input schema (see injectToolsetIDConstant in rpc_tools_list.go).
+	// It is not part of the underlying tool's real schema, so passing it
+	// through would cause the executor to reject the call.
+	stripped, err := stripGramToolsetIDProperty(params.Arguments)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "failed to parse tool arguments").Log(ctx, logger)
+	}
+	params.Arguments = stripped
+
 	var mcpURL string
 	if requestContext, _ := contextvalues.GetRequestContext(ctx); requestContext != nil {
 		mcpURL = requestContext.Host + requestContext.ReqURL

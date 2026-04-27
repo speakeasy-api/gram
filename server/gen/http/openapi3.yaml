@@ -20566,6 +20566,9 @@ components:
                 suppressOutput:
                     type: boolean
                     description: Whether to suppress the hook's output
+                systemMessage:
+                    type: string
+                    description: Warning message shown to the user in the terminal
             description: Unified result for all Claude Code hook events with proper response structure
         ConfigureSlackAppRequestBody:
             type: object
@@ -22909,6 +22912,9 @@ components:
         GramProductFeatures:
             type: object
             properties:
+                block_shadow_mcp_enabled:
+                    type: boolean
+                    description: Whether shadow-MCP guarding is enabled (injects required toolset id and rejects unsigned tool calls)
                 logs_enabled:
                     type: boolean
                     description: Whether logging is enabled
@@ -22923,6 +22929,7 @@ components:
                 - logs_enabled
                 - tool_io_logs_enabled
                 - session_capture_enabled
+                - block_shadow_mcp_enabled
         HTTPToolDefinition:
             type: object
             properties:
@@ -23054,6 +23061,9 @@ components:
         HookTraceSummary:
             type: object
             properties:
+                block_reason:
+                    type: string
+                    description: Reason set when hook_status is 'blocked' (e.g. shadow-MCP guard rejection)
                 event_source:
                     type: string
                     description: Event source (from materialized column)
@@ -23070,6 +23080,7 @@ components:
                         - success
                         - failure
                         - pending
+                        - blocked
                 log_count:
                     type: integer
                     description: Total number of logs in this trace
@@ -26855,6 +26866,7 @@ components:
                         - logs
                         - tool_io_logs
                         - session_capture
+                        - block_shadow_mcp
                     maxLength: 60
             required:
                 - feature_name

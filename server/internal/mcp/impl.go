@@ -614,7 +614,9 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	sessionID := parseMcpSessionID(r.Header)
-	w.Header().Set("Mcp-Session-Id", sessionID)
+	if req.Method == "initialize" {
+		w.Header().Set("Mcp-Session-Id", sessionID)
+	}
 
 	// Load header display names for remapping
 	headerDisplayNames := s.loadHeaderDisplayNames(ctx, toolset.ID)
@@ -883,7 +885,7 @@ func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *ra
 	case "notifications/initialized", "notifications/cancelled":
 		return nil, nil
 	case "tools/list":
-		return handleToolsList(ctx, s.logger, s.guardianPolicy, s.db, s.env, payload, req, s.posthog, &s.toolsetCache, s.vectorToolStore, s.temporal)
+		return handleToolsList(ctx, s.logger, s.guardianPolicy, s.db, s.env, payload, req, s.posthog, &s.toolsetCache, s.vectorToolStore, s.temporal, s.features)
 	case "tools/call":
 		return handleToolsCall(ctx, s.logger, s.metrics, s.authz, s.guardianPolicy, s.db, s.env, payload, req, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache, s.telemLogger, s.vectorToolStore, s.temporal, s.mcpMetadataRepo)
 	case "prompts/list":
@@ -1057,6 +1059,7 @@ func (s *Service) HandleToolsList(
 		&s.toolsetCache,
 		s.vectorToolStore,
 		s.temporal,
+		s.features,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("handle tools list: %w", err)
