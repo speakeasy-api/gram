@@ -166,20 +166,20 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 	}
 
 	activeOrg := userInfo.Organizations[0]
+	selectedActiveOrgFromState := false
+	if org, ok := activeOrganizationFromState(payload, userInfo.Organizations); ok {
+		activeOrg = org
+		selectedActiveOrgFromState = true
+	}
 
-	// For speakeasy users and admins we default speakeasy-team being the active organization if present
-	// For admins we allow you to override the active organization returned by header if present
-	if strings.HasSuffix(userInfo.Email, "@speakeasy.com") || strings.HasSuffix(userInfo.Email, "@speakeasyapi.dev") || userInfo.Admin {
-		override := "speakeasy-team"
-		if userInfo.Admin {
-			if adminOverride, _ := contextvalues.GetAdminOverrideFromContext(ctx); adminOverride != "" {
-				override = adminOverride
-			}
-		}
-		for _, org := range userInfo.Organizations {
-			if org.Slug == override {
-				activeOrg = org
-				break
+	// For admins we allow you to override the active organization returned by header if present.
+	if !selectedActiveOrgFromState && userInfo.Admin {
+		if adminOverride, _ := contextvalues.GetAdminOverrideFromContext(ctx); adminOverride != "" {
+			for _, org := range userInfo.Organizations {
+				if org.Slug == adminOverride {
+					activeOrg = org
+					break
+				}
 			}
 		}
 	}
@@ -236,6 +236,48 @@ func (s *Service) Login(ctx context.Context, payload *gen.LoginPayload) (res *ge
 	return &gen.LoginResult{
 		Location: location,
 	}, nil
+}
+
+func activeOrganizationFromState(payload *gen.CallbackPayload, organizations []sessions.Organization) (sessions.Organization, bool) {
+	var empty sessions.Organization
+
+	state := decodeStateParam(payload)
+	if state == nil {
+		return empty, false
+	}
+
+	orgSlug := organizationSlugFromDestinationURL(state.FinalDestinationURL)
+	if orgSlug == "" {
+		return empty, false
+	}
+
+	for _, org := range organizations {
+		if org.Slug == orgSlug {
+			return org, true
+		}
+	}
+
+	return empty, false
+}
+
+func organizationSlugFromDestinationURL(destinationURL string) string {
+	location := relativeURL(destinationURL)
+	if location == "" {
+		return ""
+	}
+
+	parsed, err := url.Parse(location)
+	if err != nil {
+		return ""
+	}
+
+	path := strings.Trim(parsed.Path, "/")
+	if path == "" {
+		return ""
+	}
+
+	orgSlug, _, _ := strings.Cut(path, "/")
+	return orgSlug
 }
 
 func (s *Service) SwitchScopes(ctx context.Context, payload *gen.SwitchScopesPayload) (res *gen.SwitchScopesResult, err error) {
