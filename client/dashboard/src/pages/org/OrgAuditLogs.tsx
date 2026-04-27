@@ -186,7 +186,10 @@ function renderSubject(log: AuditLog, orgSlug: string) {
     return (
       <SimpleTooltip tooltip={subjectLabel}>
         <span
-          className={cn(monoClass, "inline-block max-w-[34ch] align-bottom")}
+          className={cn(
+            monoClass,
+            "inline-block max-w-[34ch] truncate align-bottom",
+          )}
         >
           {truncateMiddle(subjectLabel)}
         </span>
@@ -882,7 +885,11 @@ export function OrgAuditLogsInner() {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const logsContainer = logsContainerRef.current;
-      const activeElement = document.activeElement;
+      // Walk through shadow roots to find the real focused element
+      let activeElement = document.activeElement;
+      while (activeElement?.shadowRoot?.activeElement) {
+        activeElement = activeElement.shadowRoot.activeElement;
+      }
       const isWithinLogsSection = logsContainer?.contains(
         activeElement as Node,
       );
@@ -918,7 +925,8 @@ export function OrgAuditLogsInner() {
       const isInInput =
         activeElement?.tagName === "INPUT" ||
         activeElement?.tagName === "TEXTAREA" ||
-        activeElement?.tagName === "SELECT";
+        activeElement?.tagName === "SELECT" ||
+        activeElement?.closest("[contenteditable]") !== null;
       if (!isInInput) {
         switch (e.key) {
           case "/": {

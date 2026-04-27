@@ -76,7 +76,7 @@ export default function SlackRegister() {
       <div className="bg-card w-full max-w-md rounded-xl border p-8 shadow-sm">
         <Stack gap={6} align="center">
           <div className="bg-muted/50 flex h-12 w-12 items-center justify-center rounded-full">
-            <Icon name="slack" className="text-muted-foreground h-6 w-6" />
+            <Icon name="bot" className="text-muted-foreground h-6 w-6" />
           </div>
 
           {state === "loading" && (

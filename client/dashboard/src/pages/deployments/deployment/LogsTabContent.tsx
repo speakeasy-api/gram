@@ -438,7 +438,11 @@ export const LogsTabContent = ({
     const handleKeyDown = (e: KeyboardEvent) => {
       // Check if the logs container or its children are focused
       const logsContainer = logsContainerRef.current;
-      const activeElement = document.activeElement;
+      // Walk through shadow roots to find the real focused element
+      let activeElement: Element | null = document.activeElement;
+      while (activeElement?.shadowRoot?.activeElement) {
+        activeElement = activeElement.shadowRoot.activeElement;
+      }
       const isWithinLogsSection = logsContainer?.contains(
         activeElement as Node,
       );
@@ -472,7 +476,11 @@ export const LogsTabContent = ({
         return;
       }
 
-      const isInInput = document.activeElement?.tagName === "INPUT";
+      const isInInput =
+        activeElement?.tagName === "INPUT" ||
+        activeElement?.tagName === "TEXTAREA" ||
+        activeElement?.tagName === "SELECT" ||
+        activeElement?.closest("[contenteditable]") !== null;
       if (!isInInput) {
         switch (e.key) {
           case "/": {

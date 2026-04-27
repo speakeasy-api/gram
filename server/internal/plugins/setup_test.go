@@ -14,7 +14,6 @@ import (
 
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/speakeasy-api/gram/server/internal/access"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -86,12 +85,63 @@ func newTestPluginsService(t *testing.T) (context.Context, *testInstance) {
 	authCtx.AccountType = "enterprise"
 	ctx = contextvalues.SetAuthContext(ctx, authCtx)
 
-	ctx = authztest.WithExactGrants(t, ctx,
-		access.NewGrant(access.ScopeOrgRead, authCtx.ActiveOrganizationID),
-		access.NewGrant(access.ScopeOrgAdmin, authCtx.ActiveOrganizationID),
+	ctx = withauthzGrants(t, ctx, conn,
+		authz.Grant{Scope: authz.ScopeOrgRead, Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID)},
+		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
 	)
 
-	svc := plugins.NewService(logger, tracerProvider, conn, sessionManager, authz.NewEngine(logger, conn, authztest.RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache), "https://app.getgram.ai")
+	svc := plugins.NewService(logger, tracerProvider, conn, sessionManager, authz.NewEngine(logger, conn, authztest.RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache), nil, "local", "https://app.getgram.ai")
+
+	return ctx, &testInstance{
+		service:        svc,
+		conn:           conn,
+		sessionManager: sessionManager,
+	}
+}
+
+func newTestPluginsServiceWithGitHub(t *testing.T, ghClient plugins.GitHubPublisher) (context.Context, *testInstance) {
+	t.Helper()
+
+	ctx := context.Background()
+
+	logger := testenv.NewLogger(t)
+	tracerProvider := testenv.NewTracerProvider(t)
+
+	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+	require.NoError(t, err)
+
+	conn, err := infra.CloneTestDatabase(t, "testdb")
+	require.NoError(t, err)
+
+	redisClient, err := infra.NewRedisClient(t, 0)
+	require.NoError(t, err)
+
+	billingClient := billing.NewStubClient(logger, tracerProvider)
+
+	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, guardianPolicy, conn, redisClient, cache.Suffix("gram-local"), billingClient)
+
+	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	authCtx.AccountType = "enterprise"
+	ctx = contextvalues.SetAuthContext(ctx, authCtx)
+
+	ctx = withauthzGrants(t, ctx, conn,
+		authz.Grant{Scope: authz.ScopeOrgRead, Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID)},
+		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
+	)
+
+	ghConfig := &plugins.GitHubConfig{
+		Client:         ghClient,
+		Org:            "test-org",
+		InstallationID: 12345,
+	}
+
+	svc := plugins.NewService(
+		logger, tracerProvider, conn, sessionManager,
+		authz.NewEngine(logger, conn, authztest.RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache),
+		ghConfig, "local", "https://app.getgram.ai",
+	)
 
 	return ctx, &testInstance{
 		service:        svc,

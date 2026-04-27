@@ -193,7 +193,7 @@ func (q *Queries) RemoveResourceFromGrants(ctx context.Context, arg RemoveResour
 const upsertPrincipalGrant = `-- name: UpsertPrincipalGrant :one
 INSERT INTO principal_grants (organization_id, principal_urn, scope, resource, selectors)
 VALUES ($1, $2, $3, $4, $5)
-ON CONFLICT (organization_id, principal_urn, scope, resource)
+ON CONFLICT (organization_id, principal_urn, scope, resource) WHERE selectors IS NULL
 DO UPDATE SET selectors = $5, updated_at = clock_timestamp()
 RETURNING id, organization_id, principal_urn, principal_type, scope, resource, selectors, created_at, updated_at
 `
@@ -206,8 +206,8 @@ type UpsertPrincipalGrantParams struct {
 	Selectors      []byte
 }
 
-// Creates or updates a single grant row. On conflict (same org/principal/scope/resource),
-// the selectors and updated_at are refreshed. Returns the full row.
+// Creates or updates a single grant row. On conflict (same org/principal/scope/resource
+// with no selectors), the selectors and updated_at are refreshed.
 func (q *Queries) UpsertPrincipalGrant(ctx context.Context, arg UpsertPrincipalGrantParams) (PrincipalGrant, error) {
 	row := q.db.QueryRow(ctx, upsertPrincipalGrant,
 		arg.OrganizationID,

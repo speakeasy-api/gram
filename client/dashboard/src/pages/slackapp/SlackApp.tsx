@@ -212,7 +212,7 @@ function CreateSlackAppDialog({
             </Type>
             {toolsets.length === 0 ? (
               <Type muted small>
-                No toolsets available. Create a toolset first.
+                No toolsets available. Create a toolset in this project first.
               </Type>
             ) : (
               <div className="grid max-h-60 grid-cols-2 gap-2 overflow-y-auto">
@@ -301,7 +301,7 @@ function SlackAppsInner() {
 
   return (
     <EnterpriseGate
-      icon="slack"
+      icon="bot"
       description="Assistants are available on the Enterprise plan. Book a time to get started."
     >
       <Page.Section>

@@ -146,6 +146,27 @@ func (q *Queries) DeletePlugin(ctx context.Context, arg DeletePluginParams) erro
 	return err
 }
 
+const getGitHubConnection = `-- name: GetGitHubConnection :one
+SELECT id, project_id, installation_id, repo_owner, repo_name, created_at, updated_at
+FROM plugin_github_connections
+WHERE project_id = $1
+`
+
+func (q *Queries) GetGitHubConnection(ctx context.Context, projectID uuid.UUID) (PluginGithubConnection, error) {
+	row := q.db.QueryRow(ctx, getGitHubConnection, projectID)
+	var i PluginGithubConnection
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.InstallationID,
+		&i.RepoOwner,
+		&i.RepoName,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getOrganizationName = `-- name: GetOrganizationName :one
 SELECT name FROM organization_metadata WHERE id = $1
 `
@@ -338,10 +359,11 @@ SELECT
   ps.policy AS server_policy,
   ps.sort_order AS server_sort_order,
   ps.toolset_id,
-  t.mcp_slug AS toolset_mcp_slug
+  t.mcp_slug AS toolset_mcp_slug,
+  t.mcp_is_public AS toolset_is_public
 FROM plugins p
 JOIN plugin_servers ps ON ps.plugin_id = p.id AND ps.deleted IS FALSE
-JOIN toolsets t ON t.id = ps.toolset_id AND t.deleted IS FALSE
+JOIN toolsets t ON t.id = ps.toolset_id AND t.deleted IS FALSE AND t.mcp_enabled IS TRUE
 WHERE p.project_id = $1
   AND p.deleted IS FALSE
 ORDER BY p.slug, ps.sort_order ASC
@@ -358,6 +380,7 @@ type ListPluginsWithServersForProjectRow struct {
 	ServerSortOrder   int32
 	ToolsetID         uuid.UUID
 	ToolsetMcpSlug    pgtype.Text
+	ToolsetIsPublic   bool
 }
 
 // Used during plugin generation: returns all active plugin servers joined with
@@ -382,6 +405,7 @@ func (q *Queries) ListPluginsWithServersForProject(ctx context.Context, projectI
 			&i.ServerSortOrder,
 			&i.ToolsetID,
 			&i.ToolsetMcpSlug,
+			&i.ToolsetIsPublic,
 		); err != nil {
 			return nil, err
 		}
@@ -526,6 +550,44 @@ func (q *Queries) UpdatePluginServer(ctx context.Context, arg UpdatePluginServer
 		&i.UpdatedAt,
 		&i.DeletedAt,
 		&i.Deleted,
+	)
+	return i, err
+}
+
+const upsertGitHubConnection = `-- name: UpsertGitHubConnection :one
+INSERT INTO plugin_github_connections (project_id, installation_id, repo_owner, repo_name)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (project_id) DO UPDATE
+  SET installation_id = EXCLUDED.installation_id,
+      repo_owner = EXCLUDED.repo_owner,
+      repo_name = EXCLUDED.repo_name,
+      updated_at = clock_timestamp()
+RETURNING id, project_id, installation_id, repo_owner, repo_name, created_at, updated_at
+`
+
+type UpsertGitHubConnectionParams struct {
+	ProjectID      uuid.UUID
+	InstallationID int64
+	RepoOwner      string
+	RepoName       string
+}
+
+func (q *Queries) UpsertGitHubConnection(ctx context.Context, arg UpsertGitHubConnectionParams) (PluginGithubConnection, error) {
+	row := q.db.QueryRow(ctx, upsertGitHubConnection,
+		arg.ProjectID,
+		arg.InstallationID,
+		arg.RepoOwner,
+		arg.RepoName,
+	)
+	var i PluginGithubConnection
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.InstallationID,
+		&i.RepoOwner,
+		&i.RepoName,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }

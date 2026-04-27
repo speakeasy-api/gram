@@ -59,6 +59,23 @@ func GetAPIKeyHash(key string) (string, error) {
 	return hex.EncodeToString(hash[:]), nil
 }
 
+// APIKeyPrefix returns the full key prefix for the given environment
+// (e.g., "gram_local_", "gram_test_", "gram_live_").
+func APIKeyPrefix(env string) string {
+	var keyEnv string
+	switch env {
+	case "local":
+		keyEnv = "local"
+	case "dev":
+		keyEnv = "test"
+	case "prod":
+		keyEnv = "live"
+	default:
+		keyEnv = "local"
+	}
+	return "gram_" + keyEnv + "_"
+}
+
 type ByKey struct {
 	keyDB       *repo.Queries
 	orgRepo     *orgRepo.Queries

@@ -1775,8 +1775,7 @@ CREATE TABLE IF NOT EXISTS principal_grants (
 
   CONSTRAINT principal_grants_pkey PRIMARY KEY (id),
   CONSTRAINT principal_grants_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
-  CONSTRAINT principal_grants_selectors_check CHECK (selectors IS NULL OR jsonb_typeof(selectors) = 'object'),
-  CONSTRAINT principal_grants_org_principal_scope_resource_key UNIQUE (organization_id, principal_urn, scope, resource)
+  CONSTRAINT principal_grants_selectors_check CHECK (selectors IS NULL OR jsonb_typeof(selectors) = 'object')
 );
 
 COMMENT ON TABLE principal_grants IS 'RBAC grants. Normalized: one row per (org, principal, scope, resource). Resource=''*'' means unrestricted. Selectors can further constrain applicability.';
@@ -1786,6 +1785,14 @@ COMMENT ON COLUMN principal_grants.principal_type IS 'Derived from principal_urn
 COMMENT ON COLUMN principal_grants.scope IS 'The scope being granted, e.g. "build:read". Validated in application code, not via FK.';
 COMMENT ON COLUMN principal_grants.resource IS '''*'' = unrestricted (scope applies to all resources in the org). Any other value = a specific resource ID this scope is granted on.';
 COMMENT ON COLUMN principal_grants.selectors IS 'Optional JSON selector constraints refining when the grant applies. NULL means the grant has no selector constraints.';
+
+CREATE UNIQUE INDEX IF NOT EXISTS principal_grants_org_principal_scope_selector_key
+ON principal_grants (organization_id, principal_urn, scope, selectors)
+WHERE selectors IS NOT NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS principal_grants_org_principal_scope_unrestricted_key
+ON principal_grants (organization_id, principal_urn, scope, resource)
+WHERE selectors IS NULL;
 
 CREATE INDEX IF NOT EXISTS principal_grants_selectors_idx
 ON principal_grants
@@ -2068,7 +2075,6 @@ CREATE UNIQUE INDEX IF NOT EXISTS plugin_github_connections_project_id_key
 -- "Octocat/Hello-World" and "octocat/hello-world" collide as expected.
 CREATE UNIQUE INDEX IF NOT EXISTS plugin_github_connections_installation_repo_key
   ON plugin_github_connections (installation_id, LOWER(repo_owner), LOWER(repo_name));
-
 
 -- Risk analysis policies for scanning chat messages against configurable rules.
 -- One workflow per policy drains unanalyzed messages and produces risk_results.

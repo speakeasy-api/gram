@@ -27,6 +27,7 @@ import { Button } from "@speakeasy-api/moonshine";
 import type { RiskResult } from "@gram/client/models/components";
 import { CircularProgress } from "./CircularProgress";
 import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
+import { MessageContent } from "@gram-ai/elements";
 
 interface ChatDetailPanelProps {
   chatId: string;
@@ -354,11 +355,13 @@ function MessageItem({
                 {message.role === "tool" ? (
                   <CodeBlock content={message.content ?? ""} maxHeight={300} />
                 ) : (
-                  <div className="whitespace-pre-wrap">
-                    {typeof message.content === "string"
-                      ? message.content.trim()
-                      : JSON.stringify(message.content)}
-                  </div>
+                  <MessageContent
+                    content={
+                      typeof message.content === "string"
+                        ? message.content.trim()
+                        : JSON.stringify(message.content)
+                    }
+                  />
                 )}
               </div>
             )}

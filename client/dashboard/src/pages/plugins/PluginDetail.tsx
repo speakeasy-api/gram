@@ -13,7 +13,17 @@ import { useUpdatePluginMutation } from "@gram/client/react-query/updatePlugin";
 import { useAddPluginServerMutation } from "@gram/client/react-query/addPluginServer";
 import { useRemovePluginServerMutation } from "@gram/client/react-query/removePluginServer";
 import { useListToolsets } from "@gram/client/react-query/listToolsets";
-import { Button, Column, Icon, Stack, Table } from "@speakeasy-api/moonshine";
+import {
+  Button,
+  Column,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  Icon,
+  Stack,
+  Table,
+} from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useParams } from "react-router";
@@ -25,6 +35,7 @@ export default function PluginDetail() {
   const queryClient = useQueryClient();
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isAddServerOpen, setIsAddServerOpen] = useState(false);
+  const [isDownloadMenuOpen, setIsDownloadMenuOpen] = useState(false);
 
   const { data: plugin } = usePluginSuspense({ id: pluginId! });
 
@@ -97,9 +108,10 @@ export default function PluginDetail() {
     });
   };
 
-  const handleDownload = async () => {
+  const handleDownload = async (platform: "claude" | "cursor") => {
+    setIsDownloadMenuOpen(false);
     const resp = await authFetch(
-      `/rpc/plugins.downloadPluginPackage?plugin_id=${pluginId}&platform=claude`,
+      `/rpc/plugins.downloadPluginPackage?plugin_id=${pluginId}&platform=${platform}`,
       {},
     );
     if (!resp.ok) return;
@@ -226,12 +238,30 @@ export default function PluginDetail() {
           Download
         </Heading>
         <div>
-          <Button variant="secondary" size="sm" onClick={handleDownload}>
-            <Button.LeftIcon>
-              <Icon name="download" className="h-4 w-4" />
-            </Button.LeftIcon>
-            <Button.Text>Download Claude Plugin</Button.Text>
-          </Button>
+          <DropdownMenu
+            open={isDownloadMenuOpen}
+            onOpenChange={setIsDownloadMenuOpen}
+          >
+            <DropdownMenuTrigger asChild>
+              <Button variant="secondary" size="sm">
+                <Button.LeftIcon>
+                  <Icon name="download" className="h-4 w-4" />
+                </Button.LeftIcon>
+                <Button.Text>Download Plugin</Button.Text>
+                <Button.RightIcon>
+                  <Icon name="chevron-down" className="h-4 w-4" />
+                </Button.RightIcon>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+              <DropdownMenuItem onClick={() => handleDownload("claude")}>
+                Claude
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleDownload("cursor")}>
+                Cursor
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
 
         {/* Edit Dialog */}
@@ -303,7 +333,8 @@ export default function PluginDetail() {
                   </select>
                 ) : (
                   <Type muted small>
-                    No toolsets available. Create a toolset first.
+                    No toolsets available. Create a toolset in this project
+                    first.
                   </Type>
                 )}
               </div>

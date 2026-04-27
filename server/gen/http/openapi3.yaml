@@ -10360,6 +10360,95 @@ paths:
             x-speakeasy-name-override: getPlugin
             x-speakeasy-react-hook:
                 name: Plugin
+    /rpc/plugins.getPublishStatus:
+        get:
+            description: Check whether GitHub publishing is configured and connected for this project.
+            operationId: getPublishStatus
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/PublishStatusResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: getPublishStatus plugins
+            tags:
+                - plugins
+            x-speakeasy-name-override: getPublishStatus
+            x-speakeasy-react-hook:
+                name: PublishStatus
     /rpc/plugins.listPlugins:
         get:
             description: List all plugins for the current project.
@@ -10449,6 +10538,101 @@ paths:
             x-speakeasy-name-override: listPlugins
             x-speakeasy-react-hook:
                 name: Plugins
+    /rpc/plugins.publishPlugins:
+        post:
+            description: Generate and publish all plugin packages to a GitHub repository.
+            operationId: publishPlugins
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/PublishPluginsRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/PublishPluginsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: publishPlugins plugins
+            tags:
+                - plugins
+            x-speakeasy-name-override: publishPlugins
+            x-speakeasy-react-hook:
+                name: PublishPlugins
     /rpc/plugins.removePluginServer:
         delete:
             description: Remove a server from a plugin.
@@ -21661,6 +21845,16 @@ components:
                     items:
                         $ref: '#/components/schemas/HooksServerSummary'
                     description: Aggregated metrics grouped by server
+                skill_breakdown:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/SkillBreakdownRow'
+                    description: Per-user skill breakdown
+                skill_time_series:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/SkillTimeSeriesPoint'
+                    description: Time-bucketed event counts by skill
                 skills:
                     type: array
                     items:
@@ -21693,6 +21887,8 @@ components:
                 - total_sessions
                 - breakdown
                 - time_series
+                - skill_time_series
+                - skill_breakdown
         GetInstanceForm:
             type: object
             properties:
@@ -24716,6 +24912,41 @@ components:
             required:
                 - package
                 - version
+        PublishPluginsRequestBody:
+            type: object
+            properties:
+                github_username:
+                    type: string
+                    description: GitHub username to add as a collaborator on the repo.
+        PublishPluginsResult:
+            type: object
+            properties:
+                repo_url:
+                    type: string
+                    description: The URL of the published GitHub repository.
+            required:
+                - repo_url
+        PublishStatusResult:
+            type: object
+            properties:
+                configured:
+                    type: boolean
+                    description: Whether GitHub publishing is configured on the server.
+                connected:
+                    type: boolean
+                    description: Whether this project has a GitHub connection.
+                repo_name:
+                    type: string
+                    description: GitHub repo name, if connected.
+                repo_owner:
+                    type: string
+                    description: GitHub repo owner, if connected.
+                repo_url:
+                    type: string
+                    description: Full GitHub repository URL, if connected.
+            required:
+                - configured
+                - connected
         RBACStatus:
             type: object
             properties:
@@ -25899,6 +26130,24 @@ components:
             required:
                 - toolset_id
                 - environment_id
+        SkillBreakdownRow:
+            type: object
+            properties:
+                skill_name:
+                    type: string
+                    description: Skill name
+                use_count:
+                    type: integer
+                    description: Use count for this skill/user combination
+                    format: int64
+                user_email:
+                    type: string
+                    description: User email address
+            description: Per-(skill, user) aggregated counts
+            required:
+                - skill_name
+                - user_email
+                - use_count
         SkillSummary:
             type: object
             properties:
@@ -25918,6 +26167,24 @@ components:
                 - skill_name
                 - use_count
                 - unique_users
+        SkillTimeSeriesPoint:
+            type: object
+            properties:
+                bucket_start_ns:
+                    type: string
+                    description: Bucket start time in Unix nanoseconds (string for JS int64 precision)
+                event_count:
+                    type: integer
+                    description: Number of skill use events in this bucket
+                    format: int64
+                skill_name:
+                    type: string
+                    description: Skill name
+            description: A single time-series bucket for skill usage activity
+            required:
+                - bucket_start_ns
+                - skill_name
+                - event_count
         SlackAppResult:
             type: object
             properties:
