@@ -32,7 +32,7 @@ type mockBillingRepo struct {
 func (m *mockBillingRepo) GetStoredPeriodUsage(ctx context.Context, orgID string) (*gen.PeriodUsage, error) {
 	args := m.Called(ctx, orgID)
 	if args.Get(0) == nil {
-		return nil, fmt.Errorf("mock: %w", args.Error(1)) //nolint:wrapcheck // test mock
+		return nil, fmt.Errorf("mock: %w", args.Error(1))
 	}
 	pu, ok := args.Get(0).(*gen.PeriodUsage)
 	if !ok {
@@ -44,7 +44,7 @@ func (m *mockBillingRepo) GetStoredPeriodUsage(ctx context.Context, orgID string
 func (m *mockBillingRepo) GetPeriodUsage(ctx context.Context, orgID string) (*gen.PeriodUsage, error) {
 	args := m.Called(ctx, orgID)
 	if args.Get(0) == nil {
-		return nil, fmt.Errorf("mock: %w", args.Error(1)) //nolint:wrapcheck // test mock
+		return nil, fmt.Errorf("mock: %w", args.Error(1))
 	}
 	pu, ok := args.Get(0).(*gen.PeriodUsage)
 	if !ok {
