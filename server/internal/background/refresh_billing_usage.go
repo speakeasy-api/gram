@@ -14,7 +14,7 @@ import (
 
 // safely wait for polar rate limits
 const (
-	refreshBillingUsageBatchSize     = 25
+	refreshBillingUsageBatchSize     = 5
 	refreshBillingUsagesWaitInterval = 10 * time.Second
 )
 
