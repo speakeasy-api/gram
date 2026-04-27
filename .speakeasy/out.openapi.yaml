@@ -21140,6 +21140,13 @@ components:
     CreateRiskPolicyRequestBody:
       type: object
       properties:
+        action:
+          type: string
+          description: 'Policy action: flag or block.'
+          default: flag
+          enum:
+            - flag
+            - block
         enabled:
           type: boolean
           description: Whether the policy is active.
@@ -23162,6 +23169,7 @@ components:
           enum:
             - success
             - failure
+            - blocked
             - pending
         log_count:
           type: integer
@@ -26019,6 +26027,13 @@ components:
     RiskPolicy:
       type: object
       properties:
+        action:
+          type: string
+          description: 'Policy action: flag (log only) or block (deny in real-time).'
+          default: flag
+          enum:
+            - flag
+            - block
         created_at:
           type: string
           description: When the policy was created.
@@ -26069,6 +26084,7 @@ components:
         - name
         - sources
         - enabled
+        - action
         - version
         - created_at
         - updated_at
@@ -28341,6 +28357,12 @@ components:
     UpdateRiskPolicyRequestBody:
       type: object
       properties:
+        action:
+          type: string
+          description: 'Policy action: flag or block.'
+          enum:
+            - flag
+            - block
         enabled:
           type: boolean
           description: Whether the policy is active.

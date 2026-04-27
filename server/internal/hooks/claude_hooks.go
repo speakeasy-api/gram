@@ -266,7 +266,19 @@ func (s *Service) getSessionMetadata(ctx context.Context, sessionID string) (Ses
 }
 
 func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudeHookPayload) (*gen.ClaudeHookResult, error) {
-	// For now, always allow tools
+	if s.riskScanner != nil && payload.SessionID != nil {
+		if scanResult := s.scanClaudeForEnforcement(ctx, payload); scanResult != nil {
+			deny := "deny"
+			reason := fmt.Sprintf("Blocked by policy %q: %s detected", scanResult.PolicyName, scanResult.Description)
+			result := makeHookResult(payload.HookEventName)
+			if output, ok := result.HookSpecificOutput.(*HookSpecificOutput); ok {
+				output.PermissionDecision = &deny
+				output.PermissionDecisionReason = &reason
+			}
+			return result, nil
+		}
+	}
+
 	allow := "allow"
 	result := makeHookResult(payload.HookEventName)
 	if output, ok := result.HookSpecificOutput.(*HookSpecificOutput); ok {

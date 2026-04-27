@@ -15,6 +15,7 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 export const HookStatus = {
   Success: "success",
   Failure: "failure",
+  Blocked: "blocked",
   Pending: "pending",
 } as const;
 /**

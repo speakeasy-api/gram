@@ -142,6 +142,15 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 		return nil, err
 	}
 
+	action := payload.Action
+	if action == "" {
+		action = "flag"
+	}
+	if err := validateAction(action); err != nil {
+		return nil, err
+	}
+	actionPG := conv.ToPGText(action)
+
 	sources := payload.Sources
 	if sources == nil {
 		sources = []string{"gitleaks"}
@@ -171,6 +180,7 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 		Sources:          sources,
 		PresidioEntities: payload.PresidioEntities,
 		Enabled:          enabled,
+		Action:           actionPG,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "create risk policy").Log(ctx, s.logger)
@@ -299,6 +309,14 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		enabled = *payload.Enabled
 	}
 
+	actionPG := current.Action
+	if payload.Action != nil {
+		if err := validateAction(*payload.Action); err != nil {
+			return nil, err
+		}
+		actionPG = conv.ToPGText(*payload.Action)
+	}
+
 	snapshotBefore := policyRowSnapshot(current)
 
 	dbtx, err := s.db.Begin(ctx)
@@ -314,6 +332,7 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		Sources:          sources,
 		PresidioEntities: presidioEntities,
 		Enabled:          enabled,
+		Action:           actionPG,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "update risk policy").Log(ctx, s.logger)
@@ -700,6 +719,7 @@ func (s *Service) policyToType(ctx context.Context, row repo.RiskPolicy) (*types
 		Sources:          row.Sources,
 		PresidioEntities: row.PresidioEntities,
 		Enabled:          row.Enabled,
+		Action:           actionOrDefault(row.Action),
 		Version:          row.Version,
 		CreatedAt:        row.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:        row.UpdatedAt.Time.Format(time.RFC3339),
@@ -720,12 +740,31 @@ func policyRowSnapshot(row repo.RiskPolicy) *types.RiskPolicy {
 		Sources:          row.Sources,
 		PresidioEntities: row.PresidioEntities,
 		Enabled:          row.Enabled,
+		Action:           actionOrDefault(row.Action),
 		Version:          row.Version,
 		CreatedAt:        row.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:        row.UpdatedAt.Time.Format(time.RFC3339),
 		PendingMessages:  -1,
 		TotalMessages:    -1,
 	}
+}
+
+func validateAction(action string) error {
+	switch action {
+	case "flag", "block":
+		return nil
+	default:
+		return oops.E(oops.CodeInvalid, nil, "action must be one of: flag, block")
+	}
+}
+
+// actionOrDefault extracts the action string from a nullable pgtype.Text,
+// defaulting to "flag" when NULL or empty.
+func actionOrDefault(t pgtype.Text) string {
+	if !t.Valid || t.String == "" {
+		return "flag"
+	}
+	return t.String
 }
 
 func validatePolicyName(name string) error {

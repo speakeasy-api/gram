@@ -232,6 +232,7 @@ const (
 	// Hooks
 	HookEventKey                = attribute.Key("gram.hook.event")
 	HookErrorKey                = attribute.Key("gram.hook.error")
+	HookBlockedKey              = attribute.Key("gram.hook.blocked")
 	HookIsInterruptKey          = attribute.Key("gram.hook.is_interrupt")
 	HookSourceKey               = attribute.Key("gram.hook.source")
 	HookServerNameOverrideIDKey = attribute.Key("gram.hook.server_name_override_id")

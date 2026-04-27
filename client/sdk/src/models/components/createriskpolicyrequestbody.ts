@@ -4,8 +4,25 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
+import { ClosedEnum } from "../../types/enums.js";
+
+/**
+ * Policy action: flag or block.
+ */
+export const Action = {
+  Flag: "flag",
+  Block: "block",
+} as const;
+/**
+ * Policy action: flag or block.
+ */
+export type Action = ClosedEnum<typeof Action>;
 
 export type CreateRiskPolicyRequestBody = {
+  /**
+   * Policy action: flag or block.
+   */
+  action?: Action | undefined;
   /**
    * Whether the policy is active.
    */
@@ -25,7 +42,13 @@ export type CreateRiskPolicyRequestBody = {
 };
 
 /** @internal */
+export const Action$outboundSchema: z.ZodMiniEnum<typeof Action> = z.enum(
+  Action,
+);
+
+/** @internal */
 export type CreateRiskPolicyRequestBody$Outbound = {
+  action: string;
   enabled?: boolean | undefined;
   name: string;
   presidio_entities?: Array<string> | undefined;
@@ -38,6 +61,7 @@ export const CreateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
   CreateRiskPolicyRequestBody
 > = z.pipe(
   z.object({
+    action: z._default(Action$outboundSchema, "flag"),
     enabled: z.optional(z.boolean()),
     name: z.string(),
     presidioEntities: z.optional(z.array(z.string())),

@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Switch } from "@/components/ui/switch";
 import {
   Sheet,
@@ -58,6 +59,7 @@ import {
   RULE_CATEGORY_META,
   DETECTION_RULES,
   type RuleCategory,
+  type PolicyAction,
 } from "./policy-data";
 import { cn } from "@/lib/utils";
 
@@ -144,6 +146,7 @@ function PolicyCenterContent() {
   const [selectedCategories, setSelectedCategories] = useState<
     Set<RuleCategory>
   >(new Set<RuleCategory>(["secrets", "pii"]));
+  const [formAction, setFormAction] = useState<PolicyAction>("flag");
 
   const [runPanelPolicy, setRunPanelPolicy] = useState<RiskPolicy | null>(null);
 
@@ -179,6 +182,7 @@ function PolicyCenterContent() {
     setFormName("");
     setFormEnabled(true);
     setSelectedCategories(new Set<RuleCategory>(["secrets", "pii"]));
+    setFormAction("flag");
     setSheetOpen(true);
   };
 
@@ -189,6 +193,7 @@ function PolicyCenterContent() {
     setSelectedCategories(
       policyToCategories(policy.sources, policy.presidioEntities),
     );
+    setFormAction((policy.action as PolicyAction) ?? "flag");
     setSheetOpen(true);
   };
 
@@ -204,6 +209,7 @@ function PolicyCenterContent() {
             enabled: formEnabled,
             sources,
             presidioEntities,
+            action: formAction,
           },
         },
       });
@@ -215,6 +221,7 @@ function PolicyCenterContent() {
             enabled: formEnabled,
             sources,
             presidioEntities,
+            action: formAction,
           },
         },
       });
@@ -335,6 +342,7 @@ function PolicyCenterContent() {
           <TableHeader>
             <TableRow>
               <TableHead>Name</TableHead>
+              <TableHead>Action</TableHead>
               <TableHead>Categories</TableHead>
               <TableHead>Progress</TableHead>
               <TableHead>Status</TableHead>
@@ -354,6 +362,11 @@ function PolicyCenterContent() {
                   onClick={() => handleEdit(policy)}
                 >
                   <TableCell className="font-medium">{policy.name}</TableCell>
+                  <TableCell>
+                    <ActionBadge
+                      action={(policy.action as PolicyAction) ?? "flag"}
+                    />
+                  </TableCell>
                   <TableCell>
                     <div className="flex gap-1">
                       {categories.map((cat) => (
@@ -437,6 +450,8 @@ function PolicyCenterContent() {
                 setFormEnabled={setFormEnabled}
                 selectedCategories={selectedCategories}
                 setSelectedCategories={setSelectedCategories}
+                formAction={formAction}
+                setFormAction={setFormAction}
               />
             </div>
             <SheetFooter className="px-6 pb-6">
@@ -496,6 +511,8 @@ function PolicySheetBody({
   setFormEnabled,
   selectedCategories,
   setSelectedCategories,
+  formAction,
+  setFormAction,
 }: {
   formName: string;
   setFormName: (v: string) => void;
@@ -503,6 +520,8 @@ function PolicySheetBody({
   setFormEnabled: (v: boolean) => void;
   selectedCategories: Set<RuleCategory>;
   setSelectedCategories: (v: Set<RuleCategory>) => void;
+  formAction: PolicyAction;
+  setFormAction: (v: PolicyAction) => void;
 }) {
   const [expandedCategory, setExpandedCategory] = useState<RuleCategory | null>(
     null,
@@ -518,6 +537,45 @@ function PolicySheetBody({
           onChange={(value) => setFormName(value)}
           placeholder="e.g. Secret Detection"
         />
+      </div>
+
+      {/* Action */}
+      <div className="space-y-2">
+        <Label className="text-sm font-medium">Action</Label>
+        <RadioGroup
+          value={formAction}
+          onValueChange={(v) => setFormAction(v as PolicyAction)}
+          className="space-y-2"
+        >
+          <label
+            htmlFor="action-flag"
+            className="hover:bg-muted/50 flex cursor-pointer items-start gap-3 rounded-md border p-3"
+          >
+            <RadioGroupItem value="flag" id="action-flag" className="mt-0.5" />
+            <div>
+              <div className="text-sm font-medium">Flag</div>
+              <div className="text-muted-foreground text-xs">
+                Log findings for review without interrupting the session
+              </div>
+            </div>
+          </label>
+          <label
+            htmlFor="action-block"
+            className="hover:bg-muted/50 flex cursor-pointer items-start gap-3 rounded-md border p-3"
+          >
+            <RadioGroupItem
+              value="block"
+              id="action-block"
+              className="mt-0.5"
+            />
+            <div>
+              <div className="text-sm font-medium">Block</div>
+              <div className="text-muted-foreground text-xs">
+                Deny prompts and tool calls that match detection rules
+              </div>
+            </div>
+          </label>
+        </RadioGroup>
       </div>
 
       {/* Detection Rules */}
@@ -783,4 +841,21 @@ function RunPanel({
       </SheetFooter>
     </>
   );
+}
+
+/* -------------------------------------------------------------------------- */
+/*  ActionBadge                                                               */
+/* -------------------------------------------------------------------------- */
+
+const ACTION_BADGE_CONFIG: Record<
+  PolicyAction,
+  { label: string; variant: "secondary" | "destructive" }
+> = {
+  flag: { label: "Flag", variant: "secondary" },
+  block: { label: "Block", variant: "destructive" },
+};
+
+function ActionBadge({ action }: { action: PolicyAction }) {
+  const config = ACTION_BADGE_CONFIG[action] ?? ACTION_BADGE_CONFIG.flag;
+  return <Badge variant={config.variant}>{config.label}</Badge>;
 }
