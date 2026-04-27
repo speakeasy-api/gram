@@ -14,8 +14,9 @@ import { XYFade } from "./ui/xy-fade.tsx";
 
 function PageLayout({ children }: { children: React.ReactNode }) {
   return (
-    // The height calculation accounts for the page body "visual" gutter
-    <div className="flex h-[calc(100vh-16px)] flex-col overflow-hidden">
+    // The height calculation accounts for the page body "visual" gutter and
+    // the impersonation banner (when present, via --banner-offset).
+    <div className="flex h-[calc(100vh-16px-var(--banner-offset,0px))] flex-col overflow-hidden">
       <ContentErrorBoundary>{children}</ContentErrorBoundary>
     </div>
   );

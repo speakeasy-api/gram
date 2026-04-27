@@ -40,7 +40,12 @@ export const AppLayout = () => {
       style={
         {
           "--sidebar-width": "14rem",
-          ...(isImpersonating ? { "--header-offset": "5.75rem" } : undefined),
+          ...(isImpersonating
+            ? {
+                "--header-offset": "5.75rem",
+                "--banner-offset": "2.25rem",
+              }
+            : undefined),
         } as React.CSSProperties
       }
     >
@@ -201,7 +206,12 @@ export const OrgLayout = () => {
       style={
         {
           "--sidebar-width": "14rem",
-          ...(isImpersonating ? { "--header-offset": "5.75rem" } : undefined),
+          ...(isImpersonating
+            ? {
+                "--header-offset": "5.75rem",
+                "--banner-offset": "2.25rem",
+              }
+            : undefined),
         } as React.CSSProperties
       }
     >
