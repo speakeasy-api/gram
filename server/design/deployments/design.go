@@ -5,6 +5,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/design/security"
 	"github.com/speakeasy-api/gram/server/design/shared"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 )
 
 var _ = Service("deployments", func() {
@@ -323,6 +324,16 @@ var AddFunctionsForm = Type("AddFunctionsForm", func() {
 	})
 	Attribute("runtime", String, func() {
 		Description("The runtime to use when executing functions. Allowed values are: nodejs:22, nodejs:24, python:3.12.")
+	})
+	Attribute("memory_mib", UInt, func() {
+		Description("The amount of memory in MiB to allocate for the function (1 MiB = 1024 * 1024 bytes).")
+		Minimum(0)
+		Maximum(constants.MaxFunctionMemoryMiB)
+	})
+	Attribute("scale", UInt, func() {
+		Description("The number of instances to scale the function to.")
+		Minimum(0)
+		Maximum(constants.MaxFunctionScale)
 	})
 })
 

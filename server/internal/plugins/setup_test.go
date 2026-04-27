@@ -86,15 +86,11 @@ func newTestPluginsService(t *testing.T) (context.Context, *testInstance) {
 	ctx = contextvalues.SetAuthContext(ctx, authCtx)
 
 	ctx = withauthzGrants(t, ctx, conn,
-		authz.Grant{Scope: authz.ScopeOrgRead, Resource: authCtx.ActiveOrganizationID},
-		authz.Grant{Scope: authz.ScopeOrgAdmin, Resource: authCtx.ActiveOrganizationID},
+		authz.Grant{Scope: authz.ScopeOrgRead, Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID)},
+		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
 	)
 
-	svc := plugins.NewService(
-		logger, tracerProvider, conn, sessionManager,
-		authz.NewEngine(logger, conn, authztest.RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache),
-		nil, "local", "https://app.getgram.ai",
-	)
+	svc := plugins.NewService(logger, tracerProvider, conn, sessionManager, authz.NewEngine(logger, conn, authztest.RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache), nil, "local", "https://app.getgram.ai")
 
 	return ctx, &testInstance{
 		service:        svc,
@@ -131,8 +127,8 @@ func newTestPluginsServiceWithGitHub(t *testing.T, ghClient plugins.GitHubPublis
 	ctx = contextvalues.SetAuthContext(ctx, authCtx)
 
 	ctx = withauthzGrants(t, ctx, conn,
-		authz.Grant{Scope: authz.ScopeOrgRead, Resource: authCtx.ActiveOrganizationID},
-		authz.Grant{Scope: authz.ScopeOrgAdmin, Resource: authCtx.ActiveOrganizationID},
+		authz.Grant{Scope: authz.ScopeOrgRead, Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID)},
+		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
 	)
 
 	ghConfig := &plugins.GitHubConfig{
@@ -181,11 +177,13 @@ func withauthzGrants(t *testing.T, ctx context.Context, conn *pgxpool.Pool, gran
 
 	userPrincipal := urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)
 	for _, grant := range grants {
-		_, err := accessrepo.New(conn).InsertPrincipalGrant(ctx, accessrepo.InsertPrincipalGrantParams{
+		selectors, _ := grant.Selector.MarshalJSON()
+		_, err := accessrepo.New(conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{
 			OrganizationID: authCtx.ActiveOrganizationID,
 			PrincipalUrn:   userPrincipal,
 			Scope:          string(grant.Scope),
-			Resource:       grant.Resource,
+			Resource:       grant.Selector.ResourceID(),
+			Selectors:      selectors,
 		})
 		require.NoError(t, err)
 	}

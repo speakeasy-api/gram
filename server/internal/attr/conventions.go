@@ -134,6 +134,17 @@ const (
 	TriggerInstanceIDKey           = attribute.Key("gram.trigger.instance_id")
 	TriggerTargetKindKey           = attribute.Key("gram.trigger.target.kind")
 	TriggerTargetRefKey            = attribute.Key("gram.trigger.target.ref")
+	AssistantIDKey                 = attribute.Key("gram.assistant.id")
+	AssistantThreadIDKey           = attribute.Key("gram.assistant.thread_id")
+	AssistantEventIDKey            = attribute.Key("gram.assistant.event_id")
+	AssistantAttemptKey            = attribute.Key("gram.assistant.attempt")
+	AssistantRuntimeIDKey          = attribute.Key("gram.assistant.runtime_id")
+	AssistantRuntimeBackendKey     = attribute.Key("gram.assistant.runtime_backend")
+	AssistantPhaseKey              = attribute.Key("gram.assistant.phase")
+	AssistantServerIPKey           = attribute.Key("gram.assistant.server_ip")
+	ChatModelKey                   = attribute.Key("gram.chat.model")
+	ChatToolCountKey               = attribute.Key("gram.chat.tool_count")
+	ChatToolNamesKey               = attribute.Key("gram.chat.tool_names")
 	FlyAppInternalIDKey            = attribute.Key("gram.fly.app_id")
 	FunctionIDKey                  = attribute.Key("gram.function.id")
 	FunctionsBackendKey            = attribute.Key("gram.functions.backend")
@@ -1224,3 +1235,27 @@ func SlogStatsToolCallCount(v int) slog.Attr      { return slog.Int(string(Stats
 
 func StatsMCPServerCount(v int) attribute.KeyValue { return StatsMCPServerCountKey.Int(v) }
 func SlogStatsMCPServerCount(v int) slog.Attr      { return slog.Int(string(StatsMCPServerCountKey), v) }
+
+func AssistantThreadID(v string) attribute.KeyValue { return AssistantThreadIDKey.String(v) }
+func SlogAssistantThreadID(v string) slog.Attr      { return slog.String(string(AssistantThreadIDKey), v) }
+
+func AssistantEventID(v string) attribute.KeyValue { return AssistantEventIDKey.String(v) }
+func SlogAssistantEventID(v string) slog.Attr      { return slog.String(string(AssistantEventIDKey), v) }
+
+func AssistantRuntimeID(v string) attribute.KeyValue { return AssistantRuntimeIDKey.String(v) }
+func SlogAssistantRuntimeID(v string) slog.Attr      { return slog.String(string(AssistantRuntimeIDKey), v) }
+
+func AssistantAttempt(v int) attribute.KeyValue { return AssistantAttemptKey.Int(v) }
+func SlogAssistantAttempt(v int) slog.Attr      { return slog.Int(string(AssistantAttemptKey), v) }
+
+func AssistantServerIP(v string) attribute.KeyValue { return AssistantServerIPKey.String(v) }
+func SlogAssistantServerIP(v string) slog.Attr      { return slog.String(string(AssistantServerIPKey), v) }
+
+func ChatModel(v string) attribute.KeyValue { return ChatModelKey.String(v) }
+func SlogChatModel(v string) slog.Attr      { return slog.String(string(ChatModelKey), v) }
+
+func ChatToolCount(v int) attribute.KeyValue { return ChatToolCountKey.Int(v) }
+func SlogChatToolCount(v int) slog.Attr      { return slog.Int(string(ChatToolCountKey), v) }
+
+func ChatToolNames(v any) attribute.KeyValue { return ChatToolNamesKey.String(fmt.Sprintf("%v", v)) }
+func SlogChatToolNames(v any) slog.Attr      { return slog.Any(string(ChatToolNamesKey), v) }

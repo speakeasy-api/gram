@@ -23,6 +23,7 @@ var _ = Service("risk", func() {
 			security.ProjectPayload()
 			Attribute("name", String, "The policy name.")
 			Attribute("sources", ArrayOf(String), "Detection sources to enable.")
+			Attribute("presidio_entities", ArrayOf(String), "Presidio entity types to detect.")
 			Attribute("enabled", Boolean, "Whether the policy is active.")
 			Required("name")
 		})
@@ -109,6 +110,7 @@ var _ = Service("risk", func() {
 			})
 			Attribute("name", String, "The policy name.")
 			Attribute("sources", ArrayOf(String), "Detection sources to enable.")
+			Attribute("presidio_entities", ArrayOf(String), "Presidio entity types to detect.")
 			Attribute("enabled", Boolean, "Whether the policy is active.")
 			Required("id", "name")
 		})
@@ -169,6 +171,10 @@ var _ = Service("risk", func() {
 				Format(FormatUUID)
 			})
 			Attribute("cursor", String, "Cursor to fetch the next page of results.")
+			Attribute("limit", Int, "Maximum number of results to return per page.", func() {
+				Minimum(1)
+				Maximum(200)
+			})
 		})
 
 		Result(ListRiskResultsResult)
@@ -181,6 +187,7 @@ var _ = Service("risk", func() {
 			Param("policy_id")
 			Param("chat_id")
 			Param("cursor")
+			Param("limit")
 			Response(StatusOK)
 		})
 
@@ -198,6 +205,10 @@ var _ = Service("risk", func() {
 			security.SessionPayload()
 			security.ProjectPayload()
 			Attribute("cursor", String, "Cursor to fetch the next page of results.")
+			Attribute("limit", Int, "Maximum number of results to return per page.", func() {
+				Minimum(1)
+				Maximum(200)
+			})
 		})
 
 		Result(ListRiskResultsByChatResult)
@@ -208,6 +219,7 @@ var _ = Service("risk", func() {
 			security.SessionHeader()
 			security.ProjectHeader()
 			Param("cursor")
+			Param("limit")
 			Response(StatusOK)
 		})
 

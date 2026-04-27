@@ -121,7 +121,7 @@ func (s *Service) GetDeployment(ctx context.Context, form *gen.GetDeploymentPayl
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceID: authCtx.ProjectID.String()}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
 		return nil, err
 	}
 
@@ -169,7 +169,7 @@ func (s *Service) GetDeploymentLogs(ctx context.Context, form *gen.GetDeployment
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceID: authCtx.ProjectID.String()}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
 		return nil, err
 	}
 
@@ -237,7 +237,7 @@ func (s *Service) GetLatestDeployment(ctx context.Context, _ *gen.GetLatestDeplo
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceID: authCtx.ProjectID.String()}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
 		return nil, err
 	}
 
@@ -283,7 +283,7 @@ func (s *Service) GetActiveDeployment(ctx context.Context, _ *gen.GetActiveDeplo
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceID: authCtx.ProjectID.String()}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
 		return nil, err
 	}
 
@@ -329,7 +329,7 @@ func (s *Service) ListDeployments(ctx context.Context, form *gen.ListDeployments
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceID: authCtx.ProjectID.String()}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
 		return nil, err
 	}
 
@@ -387,7 +387,7 @@ func (s *Service) CreateDeployment(ctx context.Context, form *gen.CreateDeployme
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceID: authCtx.ProjectID.String()}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
 		return nil, err
 	}
 
@@ -434,10 +434,12 @@ func (s *Service) CreateDeployment(ctx context.Context, form *gen.CreateDeployme
 		}
 
 		newFunctions = append(newFunctions, upsertFunctions{
-			assetID: assetID,
-			name:    add.Name,
-			slug:    string(add.Slug),
-			runtime: add.Runtime,
+			assetID:   assetID,
+			name:      add.Name,
+			slug:      string(add.Slug),
+			runtime:   add.Runtime,
+			memoryMiB: add.MemoryMib,
+			scale:     add.Scale,
 		})
 	}
 
@@ -567,7 +569,7 @@ func (s *Service) Evolve(ctx context.Context, form *gen.EvolvePayload) (*gen.Evo
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceID: authCtx.ProjectID.String()}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
 		return nil, err
 	}
 
@@ -619,10 +621,12 @@ func (s *Service) Evolve(ctx context.Context, form *gen.EvolvePayload) (*gen.Evo
 		}
 
 		functionsToUpsert = append(functionsToUpsert, upsertFunctions{
-			assetID: assetID,
-			name:    add.Name,
-			slug:    string(add.Slug),
-			runtime: add.Runtime,
+			assetID:   assetID,
+			name:      add.Name,
+			slug:      string(add.Slug),
+			runtime:   add.Runtime,
+			memoryMiB: add.MemoryMib,
+			scale:     add.Scale,
 		})
 	}
 
@@ -831,7 +835,7 @@ func (s *Service) Redeploy(ctx context.Context, payload *gen.RedeployPayload) (*
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceID: authCtx.ProjectID.String()}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
 		return nil, err
 	}
 
@@ -899,7 +903,7 @@ func (s *Service) Redeploy(ctx context.Context, payload *gen.RedeployPayload) (*
 
 		DeploymentURN: urn.NewDeployment(newID),
 
-		SourceDeploymentID: urn.NewDeployment(deploymentID),
+		SourceDeploymentURN: urn.NewDeployment(deploymentID),
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error adding deployment redeploy audit log").Log(ctx, s.logger)
 	}

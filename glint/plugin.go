@@ -26,6 +26,9 @@ type ruleSettings struct {
 	ServiceHasAutherAssertion  serviceHasAutherAssertionSettings  `json:"service-has-auther-assertion"`
 	ServiceHasAttachFunc       serviceHasAttachFuncSettings       `json:"service-has-attach-func"`
 	NoRepoFieldsInService      noRepoFieldsInServiceSettings      `json:"no-repo-fields-in-service"`
+	AuditEventTypedSnapshot    auditEventTypedSnapshotSettings    `json:"audit-event-typed-snapshot"`
+	AuditEventURNNaming        auditEventURNNamingSettings        `json:"audit-event-urn-naming"`
+	AuditEventURNTyping        auditEventURNTypingSettings        `json:"audit-event-urn-typing"`
 }
 
 type plugin struct {
@@ -60,6 +63,15 @@ func (p *plugin) BuildAnalyzers() ([]*analysis.Analyzer, error) {
 	}
 	if !p.settings.Rules.NoRepoFieldsInService.Disabled {
 		analyzers = append(analyzers, newNoRepoFieldsInServiceAnalyzer(p.settings.Rules.NoRepoFieldsInService))
+	}
+	if !p.settings.Rules.AuditEventTypedSnapshot.Disabled {
+		analyzers = append(analyzers, newAuditEventTypedSnapshotAnalyzer(p.settings.Rules.AuditEventTypedSnapshot))
+	}
+	if !p.settings.Rules.AuditEventURNNaming.Disabled {
+		analyzers = append(analyzers, newAuditEventURNNamingAnalyzer(p.settings.Rules.AuditEventURNNaming))
+	}
+	if !p.settings.Rules.AuditEventURNTyping.Disabled {
+		analyzers = append(analyzers, newAuditEventURNTypingAnalyzer(p.settings.Rules.AuditEventURNTyping))
 	}
 
 	return analyzers, nil

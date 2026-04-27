@@ -104,7 +104,14 @@ func (e *Engine) PrepareContext(ctx context.Context) (context.Context, error) {
 	}
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.SessionID == nil {
+	if !ok || authCtx == nil {
+		return ctx, nil
+	}
+
+	// Assistant-token auth has no session but should resolve grants against
+	// the owning user stamped as UserID on the context.
+	_, isAssistant := contextvalues.GetAssistantPrincipal(ctx)
+	if authCtx.SessionID == nil && !isAssistant {
 		return ctx, nil
 	}
 
@@ -256,7 +263,7 @@ func (e *Engine) Require(ctx context.Context, checks ...Check) error {
 		}
 
 		if !grantsSatisfy(grants, check.expand()) {
-			return e.mapError(ctx, Denied(check.Scope, check.ResourceID))
+			return e.mapError(ctx, Denied(check.Scope, check.selector()))
 		}
 	}
 
@@ -290,7 +297,7 @@ func (e *Engine) RequireAny(ctx context.Context, checks ...Check) error {
 		return nil
 	}
 
-	return e.mapError(ctx, Denied(checks[0].Scope, checks[0].ResourceID))
+	return e.mapError(ctx, Denied(checks[0].Scope, checks[0].selector()))
 }
 
 func (e *Engine) Filter(ctx context.Context, scope Scope, resourceIDs []string) ([]string, error) {
@@ -309,11 +316,12 @@ func (e *Engine) Filter(ctx context.Context, scope Scope, resourceIDs []string) 
 
 	allowed := make([]string, 0, len(resourceIDs))
 	for _, resourceID := range resourceIDs {
-		if err := validateInput(Check{Scope: scope, ResourceID: resourceID}); err != nil {
+		c := Check{Scope: scope, ResourceKind: "", ResourceID: resourceID, Dimensions: nil}
+		if err := validateInput(c); err != nil {
 			return nil, e.mapError(ctx, err)
 		}
 
-		if grantsSatisfy(grants, Check{Scope: scope, ResourceID: resourceID}.expand()) {
+		if grantsSatisfy(grants, c.expand()) {
 			allowed = append(allowed, resourceID)
 		}
 	}
@@ -339,7 +347,12 @@ func (e *Engine) ShouldEnforce(ctx context.Context) (bool, error) {
 		return true, nil
 	}
 
-	if authCtx.AccountType != "enterprise" || authCtx.SessionID == nil {
+	if authCtx.AccountType != "enterprise" {
+		return false, nil
+	}
+
+	_, isAssistant := contextvalues.GetAssistantPrincipal(ctx)
+	if authCtx.SessionID == nil && !isAssistant {
 		return false, nil
 	}
 

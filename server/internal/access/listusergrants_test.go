@@ -52,8 +52,10 @@ func TestService_ListGrants(t *testing.T) {
 	for _, grant := range result.Grants {
 		byScope[grant.Scope] = grant
 	}
-	require.Equal(t, []string{"project_123"}, byScope["project:read"].Resources)
-	require.Equal(t, []string{"tool_456"}, byScope["mcp:connect"].Resources)
+	require.Len(t, byScope["project:read"].Selectors, 1)
+	require.Equal(t, "project_123", byScope["project:read"].Selectors[0].ResourceID)
+	require.Len(t, byScope["mcp:connect"].Selectors, 1)
+	require.Equal(t, "tool_456", byScope["mcp:connect"].Selectors[0].ResourceID)
 }
 
 func TestService_ListGrants_MultipleRoles(t *testing.T) {
@@ -82,8 +84,10 @@ func TestService_ListGrants_MultipleRoles(t *testing.T) {
 	for _, grant := range result.Grants {
 		byScope[grant.Scope] = grant
 	}
-	require.Equal(t, []string{"project_123"}, byScope["project:read"].Resources)
-	require.Equal(t, []string{"tool_456"}, byScope["mcp:connect"].Resources)
+	require.Len(t, byScope["project:read"].Selectors, 1)
+	require.Equal(t, "project_123", byScope["project:read"].Selectors[0].ResourceID)
+	require.Len(t, byScope["mcp:connect"].Selectors, 1)
+	require.Equal(t, "tool_456", byScope["mcp:connect"].Selectors[0].ResourceID)
 }
 
 func TestService_ListGrants_NotConnected(t *testing.T) {
@@ -124,7 +128,7 @@ func TestService_ListGrants_NonEnterpriseReturnsFullAccess(t *testing.T) {
 	for _, scope := range expectedFullAccessScopes {
 		grant, ok := byScope[scope]
 		require.True(t, ok)
-		require.Nil(t, grant.Resources)
+		require.Nil(t, grant.Selectors)
 	}
 }
 
@@ -152,7 +156,7 @@ func TestService_ListGrants_RBACDisabledReturnsFullAccess(t *testing.T) {
 	for _, scope := range expectedFullAccessScopes {
 		grant, ok := byScope[scope]
 		require.True(t, ok)
-		require.Nil(t, grant.Resources)
+		require.Nil(t, grant.Selectors)
 	}
 }
 
@@ -180,7 +184,7 @@ func TestService_ListGrants_EnterpriseWithoutSessionReturnsFullAccess(t *testing
 	for _, scope := range expectedFullAccessScopes {
 		grant, ok := byScope[scope]
 		require.True(t, ok)
-		require.Nil(t, grant.Resources)
+		require.Nil(t, grant.Selectors)
 	}
 }
 

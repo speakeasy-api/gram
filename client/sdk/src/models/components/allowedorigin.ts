@@ -9,12 +9,12 @@ import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
-export const Status = {
+export const AllowedOriginStatus = {
   Pending: "pending",
   Approved: "approved",
   Rejected: "rejected",
 } as const;
-export type Status = ClosedEnum<typeof Status>;
+export type AllowedOriginStatus = ClosedEnum<typeof AllowedOriginStatus>;
 
 export type AllowedOrigin = {
   /**
@@ -33,7 +33,7 @@ export type AllowedOrigin = {
    * The ID of the project
    */
   projectId: string;
-  status: Status;
+  status: AllowedOriginStatus;
   /**
    * The last update date of the allowed origin.
    */
@@ -41,9 +41,9 @@ export type AllowedOrigin = {
 };
 
 /** @internal */
-export const Status$inboundSchema: z.ZodMiniEnum<typeof Status> = z.enum(
-  Status,
-);
+export const AllowedOriginStatus$inboundSchema: z.ZodMiniEnum<
+  typeof AllowedOriginStatus
+> = z.enum(AllowedOriginStatus);
 
 /** @internal */
 export const AllowedOrigin$inboundSchema: z.ZodMiniType<
@@ -58,7 +58,7 @@ export const AllowedOrigin$inboundSchema: z.ZodMiniType<
     id: z.string(),
     origin: z.string(),
     project_id: z.string(),
-    status: z._default(Status$inboundSchema, "pending"),
+    status: z._default(AllowedOriginStatus$inboundSchema, "pending"),
     updated_at: z.pipe(
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),

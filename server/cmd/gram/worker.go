@@ -17,10 +17,12 @@ import (
 	"go.temporal.io/sdk/worker"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/background"
+	risk_analysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/control"
@@ -264,6 +266,11 @@ func newWorkerCommand() *cli.Command {
 			EnvVars:  []string{"GRAM_CONFIG_FILE"},
 			Required: false,
 		},
+		&cli.StringFlag{
+			Name:    "presidio-analyzer-url",
+			Usage:   "Base URL of the Presidio Analyzer service (e.g. http://presidio-analyzer:3000). Empty disables PII scanning.",
+			EnvVars: []string{"PRESIDIO_ANALYZER_URL"},
+		},
 	}
 
 	flags = append(flags, redisFlags...)
@@ -505,6 +512,8 @@ func newWorkerCommand() *cli.Command {
 			oauthService := oauth.NewService(logger, tracerProvider, meterProvider, db, serverURL, cache.NewRedisCacheAdapter(redisClient), encryptionClient, env, sessionManager)
 			triggerApp := newTriggersApp(logger, db, encryptionClient, temporalEnv, telemetryLogger, serverURL)
 
+			assistantTokenManager := assistanttokens.New(c.String("jwt-signing-key"), db, authzEngine)
+
 			mcpService := mcp.NewService(
 				logger,
 				tracerProvider,
@@ -529,6 +538,7 @@ func newWorkerCommand() *cli.Command {
 				triggerApp,
 				temporalEnv,
 				authzEngine,
+				assistantTokenManager,
 			)
 
 			chatClient := chat.NewAgenticChatClient(
@@ -543,6 +553,12 @@ func newWorkerCommand() *cli.Command {
 			/**
 			 * END -- Agent client
 			 */
+
+			var piiScanner risk_analysis.PIIScanner = &risk_analysis.StubPIIScanner{}
+			if presidioURL := c.String("presidio-analyzer-url"); presidioURL != "" {
+				piiScanner = risk_analysis.NewPresidioClient(presidioURL, guardianPolicy.PooledClient(), tracerProvider, meterProvider, logger)
+				logger.InfoContext(ctx, "presidio PII scanner enabled", attr.SlogURL(presidioURL))
+			}
 
 			temporalWorker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, &background.WorkerOptions{
 				GuardianPolicy:      guardianPolicy,
@@ -566,6 +582,7 @@ func newWorkerCommand() *cli.Command {
 				TelemetryLogger:     telemetryLogger,
 				TriggersApp:         triggerApp,
 				CacheAdapter:        cache.NewRedisCacheAdapter(redisClient),
+				PIIScanner:          piiScanner,
 			})
 
 			return temporalWorker.Run(worker.InterruptCh())

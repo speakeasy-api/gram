@@ -3,7 +3,7 @@
 
 -- name: ListPrincipalGrantsByOrg :many
 -- Returns all grant rows for an organization, optionally filtered by principal URN.
-SELECT id, organization_id, principal_urn, principal_type, scope, resource, created_at, updated_at
+SELECT id, organization_id, principal_urn, principal_type, scope, resource, selectors, created_at, updated_at
 FROM principal_grants
 WHERE organization_id = @organization_id
   AND (@principal_urn::text = '' OR principal_urn = @principal_urn)
@@ -12,17 +12,19 @@ ORDER BY principal_urn, scope, resource;
 -- name: GetPrincipalGrants :many
 -- Returns all grant rows matching a set of principal URNs within an org.
 -- Used by the access resolver to load grants for a user+role in a single query.
-SELECT scope, resource
+SELECT scope, resource, selectors
 FROM principal_grants
 WHERE organization_id = @organization_id
   AND principal_urn = ANY(@principal_urns::text[]);
 
--- name: InsertPrincipalGrant :one
--- Inserts a single grant row. Callers (SyncGrants) delete-then-insert
--- within a transaction, so duplicates should not occur.
-INSERT INTO principal_grants (organization_id, principal_urn, scope, resource)
-VALUES (@organization_id, @principal_urn, @scope, @resource)
-RETURNING id, organization_id, principal_urn, principal_type, scope, resource, created_at, updated_at;
+-- name: UpsertPrincipalGrant :one
+-- Creates or updates a single grant row. On conflict (same org/principal/scope/selectors),
+-- the updated_at is refreshed. Uses the selector partial index for non-NULL selectors.
+INSERT INTO principal_grants (organization_id, principal_urn, scope, resource, selectors)
+VALUES (@organization_id, @principal_urn, @scope, @resource, @selectors)
+ON CONFLICT (organization_id, principal_urn, scope, selectors) WHERE selectors IS NOT NULL
+DO UPDATE SET updated_at = clock_timestamp()
+RETURNING id, organization_id, principal_urn, principal_type, scope, resource, selectors, created_at, updated_at;
 
 -- name: DeletePrincipalGrant :execrows
 -- Removes a specific grant row by ID, scoped to the organization for safety.

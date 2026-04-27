@@ -203,6 +203,15 @@ export async function deployFunction(logger: Logger, config: ParsedUserConfig) {
     "--location",
     relative(dirname(config.deployStagingFile), zipFilename),
   ];
+
+  if (config.scale) {
+    stageArgs.push("--scale", `${config.scale}`);
+  }
+
+  if (config.memoryMiB) {
+    stageArgs.push("--memory-mib", `${config.memoryMiB}`);
+  }
+
   logger.info(`Staging ${zipFilename} with slug: ${slug}`);
   await $`${gramCLI} stage ${stageArgs}`;
 

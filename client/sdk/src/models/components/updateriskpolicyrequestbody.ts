@@ -3,6 +3,7 @@
  */
 
 import * as z from "zod/v4-mini";
+import { remap as remap$ } from "../../lib/primitives.js";
 
 export type UpdateRiskPolicyRequestBody = {
   /**
@@ -18,6 +19,10 @@ export type UpdateRiskPolicyRequestBody = {
    */
   name: string;
   /**
+   * Presidio entity types to detect.
+   */
+  presidioEntities?: Array<string> | undefined;
+  /**
    * Detection sources to enable.
    */
   sources?: Array<string> | undefined;
@@ -28,6 +33,7 @@ export type UpdateRiskPolicyRequestBody$Outbound = {
   enabled?: boolean | undefined;
   id: string;
   name: string;
+  presidio_entities?: Array<string> | undefined;
   sources?: Array<string> | undefined;
 };
 
@@ -35,12 +41,20 @@ export type UpdateRiskPolicyRequestBody$Outbound = {
 export const UpdateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
   UpdateRiskPolicyRequestBody$Outbound,
   UpdateRiskPolicyRequestBody
-> = z.object({
-  enabled: z.optional(z.boolean()),
-  id: z.string(),
-  name: z.string(),
-  sources: z.optional(z.array(z.string())),
-});
+> = z.pipe(
+  z.object({
+    enabled: z.optional(z.boolean()),
+    id: z.string(),
+    name: z.string(),
+    presidioEntities: z.optional(z.array(z.string())),
+    sources: z.optional(z.array(z.string())),
+  }),
+  z.transform((v) => {
+    return remap$(v, {
+      presidioEntities: "presidio_entities",
+    });
+  }),
+);
 
 export function updateRiskPolicyRequestBodyToJSON(
   updateRiskPolicyRequestBody: UpdateRiskPolicyRequestBody,

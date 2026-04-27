@@ -1,3 +1,4 @@
+import { useExternalMcpOAuthConfigStatus } from "@/components/sources/sources-hooks";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { PrivateInput } from "@/components/ui/private-input";
@@ -13,7 +14,13 @@ import {
 } from "@gram/client/react-query";
 import { Badge, Stack } from "@speakeasy-api/moonshine";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle, ExternalLink, Loader2, LogOut } from "lucide-react";
+import {
+  AlertTriangle,
+  CheckCircle,
+  ExternalLink,
+  Loader2,
+  LogOut,
+} from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { usePlaygroundEnvironment } from "./usePlaygroundEnvironment";
 import { toast } from "sonner";
@@ -267,6 +274,9 @@ export function PlaygroundAuth({
     mcpMetadata,
   );
 
+  const oauthConfigStatus = useExternalMcpOAuthConfigStatus(toolset.slug);
+  const oauthConfigRequired = oauthConfigStatus === "required-unconfigured";
+
   // Notify parent component of the playground environment slug.
   // The cleanup clears the slug on unmount so the parent never holds
   // a stale value while remounting (e.g. on toolset switch via the
@@ -319,7 +329,7 @@ export function PlaygroundAuth({
   };
 
   // Show "no auth required" only if there are no env vars AND no OAuth
-  if (envVars.length === 0 && !hasOAuth) {
+  if (envVars.length === 0 && !hasOAuth && !oauthConfigRequired) {
     return (
       <div className="py-4 text-center">
         <Type variant="small" className="text-muted-foreground">
@@ -331,6 +341,33 @@ export function PlaygroundAuth({
 
   return (
     <div className="space-y-3">
+      {oauthConfigRequired && (
+        <div className="border-warning-foreground/80 bg-warning rounded-md border border-dashed p-3 text-center">
+          <AlertTriangle className="text-warning-foreground mx-auto mb-1 size-4" />
+          <Type
+            variant="small"
+            className="text-warning-foreground block font-bold"
+          >
+            OAuth setup required
+          </Type>
+          <Type
+            variant="small"
+            className="text-warning-foreground/80 mb-2 block"
+          >
+            This MCP server requires OAuth. Configure it before testing in the
+            playground.
+          </Type>
+          <routes.mcp.details.Link
+            params={[toolset.slug]}
+            hash="authentication"
+          >
+            <Button size="sm" variant="secondary" className="w-full">
+              Configure OAuth
+            </Button>
+          </routes.mcp.details.Link>
+        </div>
+      )}
+
       {/* Environment indicator */}
       {defaultEnvironmentName && (
         <div className="flex items-center gap-1.5">

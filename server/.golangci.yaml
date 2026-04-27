@@ -123,6 +123,12 @@ linters:
               disabled: true
             no-repo-fields-in-service:
               disabled: true
+            audit-event-typed-snapshot:
+              disabled: false
+            audit-event-urn-naming:
+              disabled: false
+            audit-event-urn-typing:
+              disabled: false
     gosec:
       excludes:
         # Temporarily ignore this lint rule because it needs to be a separate
@@ -198,6 +204,8 @@ linters:
         - '^github.com/urfave/cli/v2\..*Flag$'
         - '^gopkg.in/yaml.v3\.Node$'
         - '^github.com/redis/go-redis/v9\.Options$'
+        - '^github.com/testcontainers/testcontainers-go\.GenericContainerRequest$'
+        - '^github.com/testcontainers/testcontainers-go\.ContainerRequest$'
         - '^github.com/go-redis/cache/v9\.Options$'
         - '^github.com/go-redis/cache/v9\.Item$'
         - '^github.com/gomarkdown/markdown/html\.RendererOptions$'

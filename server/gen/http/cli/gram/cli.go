@@ -15,7 +15,9 @@ import (
 
 	aboutc "github.com/speakeasy-api/gram/server/gen/http/about/client"
 	accessc "github.com/speakeasy-api/gram/server/gen/http/access/client"
+	adminc "github.com/speakeasy-api/gram/server/gen/http/admin/client"
 	assetsc "github.com/speakeasy-api/gram/server/gen/http/assets/client"
+	assistantsc "github.com/speakeasy-api/gram/server/gen/http/assistants/client"
 	auditlogsc "github.com/speakeasy-api/gram/server/gen/http/auditlogs/client"
 	authc "github.com/speakeasy-api/gram/server/gen/http/auth/client"
 	chatc "github.com/speakeasy-api/gram/server/gen/http/chat/client"
@@ -59,7 +61,9 @@ func UsageCommands() []string {
 	return []string{
 		"about openapi",
 		"access (list-roles|get-role|create-role|update-role|delete-role|list-scopes|list-members|list-grants|update-member-role|get-rbac-status|enable-rbac|disable-rbac)",
+		"admin poke",
 		"assets (serve-image|upload-image|upload-functions|upload-open-ap-iv3|fetch-open-ap-iv3-from-url|serve-open-ap-iv3|serve-function|list-assets|upload-chat-attachment|serve-chat-attachment|create-signed-chat-attachment-url|serve-chat-attachment-signed)",
+		"assistants (list-assistants|get-assistant|create-assistant|update-assistant|delete-assistant)",
 		"auditlogs (list|list-facets)",
 		"auth (callback|login|switch-scopes|logout|register|info)",
 		"chat (list-chats|load-chat|generate-title|credit-usage|list-chats-with-resolutions|delete-chat|submit-feedback)",
@@ -99,9 +103,9 @@ func UsageCommands() []string {
 func UsageExamples() string {
 	return os.Args[0] + " " + "about openapi" + "\n" +
 		os.Args[0] + " " + "access list-roles --apikey-token \"abc123\" --session-token \"abc123\"" + "\n" +
+		os.Args[0] + " " + "admin poke" + "\n" +
 		os.Args[0] + " " + "assets serve-image --id \"abc123\"" + "\n" +
-		os.Args[0] + " " + "auditlogs list --cursor \"abc123\" --project-slug \"abc123\" --actor-id \"abc123\" --action \"abc123\" --apikey-token \"abc123\" --session-token \"abc123\"" + "\n" +
-		os.Args[0] + " " + "auth callback --code \"abc123\" --state \"abc123\"" + "\n" +
+		os.Args[0] + " " + "assistants list-assistants --session-token \"abc123\" --project-slug-input \"abc123\"" + "\n" +
 		""
 }
 
@@ -170,6 +174,10 @@ func ParseEndpoint(
 
 		accessDisableRBACFlags            = flag.NewFlagSet("disable-rbac", flag.ExitOnError)
 		accessDisableRBACSessionTokenFlag = accessDisableRBACFlags.String("session-token", "", "")
+
+		adminFlags = flag.NewFlagSet("admin", flag.ContinueOnError)
+
+		adminPokeFlags = flag.NewFlagSet("poke", flag.ExitOnError)
 
 		assetsFlags = flag.NewFlagSet("assets", flag.ContinueOnError)
 
@@ -248,6 +256,32 @@ func ParseEndpoint(
 
 		assetsServeChatAttachmentSignedFlags     = flag.NewFlagSet("serve-chat-attachment-signed", flag.ExitOnError)
 		assetsServeChatAttachmentSignedTokenFlag = assetsServeChatAttachmentSignedFlags.String("token", "REQUIRED", "")
+
+		assistantsFlags = flag.NewFlagSet("assistants", flag.ContinueOnError)
+
+		assistantsListAssistantsFlags                = flag.NewFlagSet("list-assistants", flag.ExitOnError)
+		assistantsListAssistantsSessionTokenFlag     = assistantsListAssistantsFlags.String("session-token", "", "")
+		assistantsListAssistantsProjectSlugInputFlag = assistantsListAssistantsFlags.String("project-slug-input", "", "")
+
+		assistantsGetAssistantFlags                = flag.NewFlagSet("get-assistant", flag.ExitOnError)
+		assistantsGetAssistantIDFlag               = assistantsGetAssistantFlags.String("id", "REQUIRED", "")
+		assistantsGetAssistantSessionTokenFlag     = assistantsGetAssistantFlags.String("session-token", "", "")
+		assistantsGetAssistantProjectSlugInputFlag = assistantsGetAssistantFlags.String("project-slug-input", "", "")
+
+		assistantsCreateAssistantFlags                = flag.NewFlagSet("create-assistant", flag.ExitOnError)
+		assistantsCreateAssistantBodyFlag             = assistantsCreateAssistantFlags.String("body", "REQUIRED", "")
+		assistantsCreateAssistantSessionTokenFlag     = assistantsCreateAssistantFlags.String("session-token", "", "")
+		assistantsCreateAssistantProjectSlugInputFlag = assistantsCreateAssistantFlags.String("project-slug-input", "", "")
+
+		assistantsUpdateAssistantFlags                = flag.NewFlagSet("update-assistant", flag.ExitOnError)
+		assistantsUpdateAssistantBodyFlag             = assistantsUpdateAssistantFlags.String("body", "REQUIRED", "")
+		assistantsUpdateAssistantSessionTokenFlag     = assistantsUpdateAssistantFlags.String("session-token", "", "")
+		assistantsUpdateAssistantProjectSlugInputFlag = assistantsUpdateAssistantFlags.String("project-slug-input", "", "")
+
+		assistantsDeleteAssistantFlags                = flag.NewFlagSet("delete-assistant", flag.ExitOnError)
+		assistantsDeleteAssistantIDFlag               = assistantsDeleteAssistantFlags.String("id", "REQUIRED", "")
+		assistantsDeleteAssistantSessionTokenFlag     = assistantsDeleteAssistantFlags.String("session-token", "", "")
+		assistantsDeleteAssistantProjectSlugInputFlag = assistantsDeleteAssistantFlags.String("project-slug-input", "", "")
 
 		auditlogsFlags = flag.NewFlagSet("auditlogs", flag.ContinueOnError)
 
@@ -875,12 +909,14 @@ func ParseEndpoint(
 		riskListRiskResultsPolicyIDFlag         = riskListRiskResultsFlags.String("policy-id", "", "")
 		riskListRiskResultsChatIDFlag           = riskListRiskResultsFlags.String("chat-id", "", "")
 		riskListRiskResultsCursorFlag           = riskListRiskResultsFlags.String("cursor", "", "")
+		riskListRiskResultsLimitFlag            = riskListRiskResultsFlags.String("limit", "", "")
 		riskListRiskResultsApikeyTokenFlag      = riskListRiskResultsFlags.String("apikey-token", "", "")
 		riskListRiskResultsSessionTokenFlag     = riskListRiskResultsFlags.String("session-token", "", "")
 		riskListRiskResultsProjectSlugInputFlag = riskListRiskResultsFlags.String("project-slug-input", "", "")
 
 		riskListRiskResultsByChatFlags                = flag.NewFlagSet("list-risk-results-by-chat", flag.ExitOnError)
 		riskListRiskResultsByChatCursorFlag           = riskListRiskResultsByChatFlags.String("cursor", "", "")
+		riskListRiskResultsByChatLimitFlag            = riskListRiskResultsByChatFlags.String("limit", "", "")
 		riskListRiskResultsByChatApikeyTokenFlag      = riskListRiskResultsByChatFlags.String("apikey-token", "", "")
 		riskListRiskResultsByChatSessionTokenFlag     = riskListRiskResultsByChatFlags.String("session-token", "", "")
 		riskListRiskResultsByChatProjectSlugInputFlag = riskListRiskResultsByChatFlags.String("project-slug-input", "", "")
@@ -1229,6 +1265,9 @@ func ParseEndpoint(
 	accessEnableRBACFlags.Usage = accessEnableRBACUsage
 	accessDisableRBACFlags.Usage = accessDisableRBACUsage
 
+	adminFlags.Usage = adminUsage
+	adminPokeFlags.Usage = adminPokeUsage
+
 	assetsFlags.Usage = assetsUsage
 	assetsServeImageFlags.Usage = assetsServeImageUsage
 	assetsUploadImageFlags.Usage = assetsUploadImageUsage
@@ -1242,6 +1281,13 @@ func ParseEndpoint(
 	assetsServeChatAttachmentFlags.Usage = assetsServeChatAttachmentUsage
 	assetsCreateSignedChatAttachmentURLFlags.Usage = assetsCreateSignedChatAttachmentURLUsage
 	assetsServeChatAttachmentSignedFlags.Usage = assetsServeChatAttachmentSignedUsage
+
+	assistantsFlags.Usage = assistantsUsage
+	assistantsListAssistantsFlags.Usage = assistantsListAssistantsUsage
+	assistantsGetAssistantFlags.Usage = assistantsGetAssistantUsage
+	assistantsCreateAssistantFlags.Usage = assistantsCreateAssistantUsage
+	assistantsUpdateAssistantFlags.Usage = assistantsUpdateAssistantUsage
+	assistantsDeleteAssistantFlags.Usage = assistantsDeleteAssistantUsage
 
 	auditlogsFlags.Usage = auditlogsUsage
 	auditlogsListFlags.Usage = auditlogsListUsage
@@ -1495,8 +1541,12 @@ func ParseEndpoint(
 			svcf = aboutFlags
 		case "access":
 			svcf = accessFlags
+		case "admin":
+			svcf = adminFlags
 		case "assets":
 			svcf = assetsFlags
+		case "assistants":
+			svcf = assistantsFlags
 		case "auditlogs":
 			svcf = auditlogsFlags
 		case "auth":
@@ -1623,6 +1673,13 @@ func ParseEndpoint(
 
 			}
 
+		case "admin":
+			switch epn {
+			case "poke":
+				epf = adminPokeFlags
+
+			}
+
 		case "assets":
 			switch epn {
 			case "serve-image":
@@ -1660,6 +1717,25 @@ func ParseEndpoint(
 
 			case "serve-chat-attachment-signed":
 				epf = assetsServeChatAttachmentSignedFlags
+
+			}
+
+		case "assistants":
+			switch epn {
+			case "list-assistants":
+				epf = assistantsListAssistantsFlags
+
+			case "get-assistant":
+				epf = assistantsGetAssistantFlags
+
+			case "create-assistant":
+				epf = assistantsCreateAssistantFlags
+
+			case "update-assistant":
+				epf = assistantsUpdateAssistantFlags
+
+			case "delete-assistant":
+				epf = assistantsDeleteAssistantFlags
 
 			}
 
@@ -2364,6 +2440,12 @@ func ParseEndpoint(
 				endpoint = c.DisableRBAC()
 				data, err = accessc.BuildDisableRBACPayload(*accessDisableRBACSessionTokenFlag)
 			}
+		case "admin":
+			c := adminc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "poke":
+				endpoint = c.Poke()
+			}
 		case "assets":
 			c := assetsc.NewClient(scheme, host, doer, enc, dec, restore)
 			switch epn {
@@ -2415,6 +2497,25 @@ func ParseEndpoint(
 			case "serve-chat-attachment-signed":
 				endpoint = c.ServeChatAttachmentSigned()
 				data, err = assetsc.BuildServeChatAttachmentSignedPayload(*assetsServeChatAttachmentSignedTokenFlag)
+			}
+		case "assistants":
+			c := assistantsc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "list-assistants":
+				endpoint = c.ListAssistants()
+				data, err = assistantsc.BuildListAssistantsPayload(*assistantsListAssistantsSessionTokenFlag, *assistantsListAssistantsProjectSlugInputFlag)
+			case "get-assistant":
+				endpoint = c.GetAssistant()
+				data, err = assistantsc.BuildGetAssistantPayload(*assistantsGetAssistantIDFlag, *assistantsGetAssistantSessionTokenFlag, *assistantsGetAssistantProjectSlugInputFlag)
+			case "create-assistant":
+				endpoint = c.CreateAssistant()
+				data, err = assistantsc.BuildCreateAssistantPayload(*assistantsCreateAssistantBodyFlag, *assistantsCreateAssistantSessionTokenFlag, *assistantsCreateAssistantProjectSlugInputFlag)
+			case "update-assistant":
+				endpoint = c.UpdateAssistant()
+				data, err = assistantsc.BuildUpdateAssistantPayload(*assistantsUpdateAssistantBodyFlag, *assistantsUpdateAssistantSessionTokenFlag, *assistantsUpdateAssistantProjectSlugInputFlag)
+			case "delete-assistant":
+				endpoint = c.DeleteAssistant()
+				data, err = assistantsc.BuildDeleteAssistantPayload(*assistantsDeleteAssistantIDFlag, *assistantsDeleteAssistantSessionTokenFlag, *assistantsDeleteAssistantProjectSlugInputFlag)
 			}
 		case "auditlogs":
 			c := auditlogsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -2846,10 +2947,10 @@ func ParseEndpoint(
 				data, err = riskc.BuildDeleteRiskPolicyPayload(*riskDeleteRiskPolicyIDFlag, *riskDeleteRiskPolicyApikeyTokenFlag, *riskDeleteRiskPolicySessionTokenFlag, *riskDeleteRiskPolicyProjectSlugInputFlag)
 			case "list-risk-results":
 				endpoint = c.ListRiskResults()
-				data, err = riskc.BuildListRiskResultsPayload(*riskListRiskResultsPolicyIDFlag, *riskListRiskResultsChatIDFlag, *riskListRiskResultsCursorFlag, *riskListRiskResultsApikeyTokenFlag, *riskListRiskResultsSessionTokenFlag, *riskListRiskResultsProjectSlugInputFlag)
+				data, err = riskc.BuildListRiskResultsPayload(*riskListRiskResultsPolicyIDFlag, *riskListRiskResultsChatIDFlag, *riskListRiskResultsCursorFlag, *riskListRiskResultsLimitFlag, *riskListRiskResultsApikeyTokenFlag, *riskListRiskResultsSessionTokenFlag, *riskListRiskResultsProjectSlugInputFlag)
 			case "list-risk-results-by-chat":
 				endpoint = c.ListRiskResultsByChat()
-				data, err = riskc.BuildListRiskResultsByChatPayload(*riskListRiskResultsByChatCursorFlag, *riskListRiskResultsByChatApikeyTokenFlag, *riskListRiskResultsByChatSessionTokenFlag, *riskListRiskResultsByChatProjectSlugInputFlag)
+				data, err = riskc.BuildListRiskResultsByChatPayload(*riskListRiskResultsByChatCursorFlag, *riskListRiskResultsByChatLimitFlag, *riskListRiskResultsByChatApikeyTokenFlag, *riskListRiskResultsByChatSessionTokenFlag, *riskListRiskResultsByChatProjectSlugInputFlag)
 			case "get-risk-policy-status":
 				endpoint = c.GetRiskPolicyStatus()
 				data, err = riskc.BuildGetRiskPolicyStatusPayload(*riskGetRiskPolicyStatusIDFlag, *riskGetRiskPolicyStatusApikeyTokenFlag, *riskGetRiskPolicyStatusSessionTokenFlag, *riskGetRiskPolicyStatusProjectSlugInputFlag)
@@ -3167,7 +3268,7 @@ func accessCreateRoleUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access create-role --body '{\n      \"description\": \"abc123\",\n      \"grants\": [\n         {\n            \"resources\": [\n               \"abc123\"\n            ],\n            \"scope\": \"org:admin\"\n         }\n      ],\n      \"member_ids\": [\n         \"abc123\"\n      ],\n      \"name\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access create-role --body '{\n      \"description\": \"abc123\",\n      \"grants\": [\n         {\n            \"scope\": \"org:admin\",\n            \"selectors\": [\n               {\n                  \"disposition\": \"destructive\",\n                  \"resource_id\": \"abc123\",\n                  \"resource_kind\": \"mcp\",\n                  \"tool\": \"abc123\"\n               }\n            ]\n         }\n      ],\n      \"member_ids\": [\n         \"abc123\"\n      ],\n      \"name\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
 }
 
 func accessUpdateRoleUsage() {
@@ -3189,7 +3290,7 @@ func accessUpdateRoleUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access update-role --body '{\n      \"description\": \"abc123\",\n      \"grants\": [\n         {\n            \"resources\": [\n               \"abc123\"\n            ],\n            \"scope\": \"org:admin\"\n         }\n      ],\n      \"id\": \"abc123\",\n      \"member_ids\": [\n         \"abc123\"\n      ],\n      \"name\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access update-role --body '{\n      \"description\": \"abc123\",\n      \"grants\": [\n         {\n            \"scope\": \"org:admin\",\n            \"selectors\": [\n               {\n                  \"disposition\": \"destructive\",\n                  \"resource_id\": \"abc123\",\n                  \"resource_kind\": \"mcp\",\n                  \"tool\": \"abc123\"\n               }\n            ]\n         }\n      ],\n      \"id\": \"abc123\",\n      \"member_ids\": [\n         \"abc123\"\n      ],\n      \"name\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
 }
 
 func accessDeleteRoleUsage() {
@@ -3348,6 +3449,32 @@ func accessDisableRBACUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access disable-rbac --session-token \"abc123\"")
+}
+
+// adminUsage displays the usage of the admin command and its subcommands.
+func adminUsage() {
+	fmt.Fprintln(os.Stderr, `Operational endpoints for administrative tasks.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] admin COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    poke: Poke implements poke.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s admin COMMAND --help\n", os.Args[0])
+}
+func adminPokeUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin poke", os.Args[0])
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Poke implements poke.`)
+
+	// Flags list
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin poke")
 }
 
 // assetsUsage displays the usage of the assets command and its subcommands.
@@ -3665,6 +3792,129 @@ func assetsServeChatAttachmentSignedUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assets serve-chat-attachment-signed --token \"abc123\"")
+}
+
+// assistantsUsage displays the usage of the assistants command and its
+// subcommands.
+func assistantsUsage() {
+	fmt.Fprintln(os.Stderr, `Manage assistants and their runtime configuration.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] assistants COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    list-assistants: List assistants for the current project.`)
+	fmt.Fprintln(os.Stderr, `    get-assistant: Get an assistant by ID.`)
+	fmt.Fprintln(os.Stderr, `    create-assistant: Create an assistant.`)
+	fmt.Fprintln(os.Stderr, `    update-assistant: Update an assistant.`)
+	fmt.Fprintln(os.Stderr, `    delete-assistant: Delete an assistant.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s assistants COMMAND --help\n", os.Args[0])
+}
+func assistantsListAssistantsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] assistants list-assistants", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List assistants for the current project.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistants list-assistants --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func assistantsGetAssistantUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] assistants get-assistant", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get an assistant by ID.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistants get-assistant --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func assistantsCreateAssistantUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] assistants create-assistant", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Create an assistant.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistants create-assistant --body '{\n      \"instructions\": \"abc123\",\n      \"max_concurrency\": 1,\n      \"model\": \"abc123\",\n      \"name\": \"abc123\",\n      \"status\": \"paused\",\n      \"toolsets\": [\n         {\n            \"environment_slug\": \"abc123\",\n            \"toolset_slug\": \"abc123\"\n         }\n      ],\n      \"warm_ttl_seconds\": 1\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func assistantsUpdateAssistantUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] assistants update-assistant", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Update an assistant.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistants update-assistant --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"instructions\": \"abc123\",\n      \"max_concurrency\": 1,\n      \"model\": \"abc123\",\n      \"name\": \"abc123\",\n      \"status\": \"paused\",\n      \"toolsets\": [\n         {\n            \"environment_slug\": \"abc123\",\n            \"toolset_slug\": \"abc123\"\n         }\n      ],\n      \"warm_ttl_seconds\": 1\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func assistantsDeleteAssistantUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] assistants delete-assistant", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Delete an assistant.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistants delete-assistant --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // auditlogsUsage displays the usage of the auditlogs command and its
@@ -4219,7 +4469,7 @@ func deploymentsCreateDeploymentUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "deployments create-deployment --body '{\n      \"external_id\": \"bc5f4a555e933e6861d12edba4c2d87ef6caf8e6\",\n      \"external_mcps\": [\n         {\n            \"name\": \"My Slack Integration\",\n            \"organization_mcp_collection_registry_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"registry_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"registry_server_specifier\": \"slack\",\n            \"selected_remotes\": [\n               \"https://mcp.example.com/sse\"\n            ],\n            \"slug\": \"aaa\"\n         }\n      ],\n      \"external_url\": \"abc123\",\n      \"functions\": [\n         {\n            \"asset_id\": \"abc123\",\n            \"name\": \"abc123\",\n            \"runtime\": \"abc123\",\n            \"slug\": \"aaa\"\n         }\n      ],\n      \"github_pr\": \"1234\",\n      \"github_repo\": \"speakeasyapi/gram\",\n      \"github_sha\": \"f33e693e9e12552043bc0ec5c37f1b8a9e076161\",\n      \"non_blocking\": false,\n      \"openapiv3_assets\": [\n         {\n            \"asset_id\": \"abc123\",\n            \"name\": \"abc123\",\n            \"slug\": \"aaa\"\n         }\n      ],\n      \"packages\": [\n         {\n            \"name\": \"abc123\",\n            \"version\": \"abc123\"\n         }\n      ]\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\" --idempotency-key \"01jqq0ajmb4qh9eppz48dejr2m\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "deployments create-deployment --body '{\n      \"external_id\": \"bc5f4a555e933e6861d12edba4c2d87ef6caf8e6\",\n      \"external_mcps\": [\n         {\n            \"name\": \"My Slack Integration\",\n            \"organization_mcp_collection_registry_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"registry_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"registry_server_specifier\": \"slack\",\n            \"selected_remotes\": [\n               \"https://mcp.example.com/sse\"\n            ],\n            \"slug\": \"aaa\"\n         }\n      ],\n      \"external_url\": \"abc123\",\n      \"functions\": [\n         {\n            \"asset_id\": \"abc123\",\n            \"memory_mib\": 1,\n            \"name\": \"abc123\",\n            \"runtime\": \"abc123\",\n            \"scale\": 1,\n            \"slug\": \"aaa\"\n         }\n      ],\n      \"github_pr\": \"1234\",\n      \"github_repo\": \"speakeasyapi/gram\",\n      \"github_sha\": \"f33e693e9e12552043bc0ec5c37f1b8a9e076161\",\n      \"non_blocking\": false,\n      \"openapiv3_assets\": [\n         {\n            \"asset_id\": \"abc123\",\n            \"name\": \"abc123\",\n            \"slug\": \"aaa\"\n         }\n      ],\n      \"packages\": [\n         {\n            \"name\": \"abc123\",\n            \"version\": \"abc123\"\n         }\n      ]\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\" --idempotency-key \"01jqq0ajmb4qh9eppz48dejr2m\"")
 }
 
 func deploymentsEvolveUsage() {
@@ -4243,7 +4493,7 @@ func deploymentsEvolveUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "deployments evolve --body '{\n      \"deployment_id\": \"abc123\",\n      \"exclude_external_mcps\": [\n         \"abc123\"\n      ],\n      \"exclude_functions\": [\n         \"abc123\"\n      ],\n      \"exclude_openapiv3_assets\": [\n         \"abc123\"\n      ],\n      \"exclude_packages\": [\n         \"abc123\"\n      ],\n      \"non_blocking\": false,\n      \"upsert_external_mcps\": [\n         {\n            \"name\": \"My Slack Integration\",\n            \"organization_mcp_collection_registry_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"registry_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"registry_server_specifier\": \"slack\",\n            \"selected_remotes\": [\n               \"https://mcp.example.com/sse\"\n            ],\n            \"slug\": \"aaa\"\n         }\n      ],\n      \"upsert_functions\": [\n         {\n            \"asset_id\": \"abc123\",\n            \"name\": \"abc123\",\n            \"runtime\": \"abc123\",\n            \"slug\": \"aaa\"\n         }\n      ],\n      \"upsert_openapiv3_assets\": [\n         {\n            \"asset_id\": \"abc123\",\n            \"name\": \"abc123\",\n            \"slug\": \"aaa\"\n         }\n      ],\n      \"upsert_packages\": [\n         {\n            \"name\": \"abc123\",\n            \"version\": \"abc123\"\n         }\n      ]\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "deployments evolve --body '{\n      \"deployment_id\": \"abc123\",\n      \"exclude_external_mcps\": [\n         \"abc123\"\n      ],\n      \"exclude_functions\": [\n         \"abc123\"\n      ],\n      \"exclude_openapiv3_assets\": [\n         \"abc123\"\n      ],\n      \"exclude_packages\": [\n         \"abc123\"\n      ],\n      \"non_blocking\": false,\n      \"upsert_external_mcps\": [\n         {\n            \"name\": \"My Slack Integration\",\n            \"organization_mcp_collection_registry_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"registry_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"registry_server_specifier\": \"slack\",\n            \"selected_remotes\": [\n               \"https://mcp.example.com/sse\"\n            ],\n            \"slug\": \"aaa\"\n         }\n      ],\n      \"upsert_functions\": [\n         {\n            \"asset_id\": \"abc123\",\n            \"memory_mib\": 1,\n            \"name\": \"abc123\",\n            \"runtime\": \"abc123\",\n            \"scale\": 1,\n            \"slug\": \"aaa\"\n         }\n      ],\n      \"upsert_openapiv3_assets\": [\n         {\n            \"asset_id\": \"abc123\",\n            \"name\": \"abc123\",\n            \"slug\": \"aaa\"\n         }\n      ],\n      \"upsert_packages\": [\n         {\n            \"name\": \"abc123\",\n            \"version\": \"abc123\"\n         }\n      ]\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func deploymentsRedeployUsage() {
@@ -6395,7 +6645,7 @@ func riskCreateRiskPolicyUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk create-risk-policy --body '{\n      \"enabled\": false,\n      \"name\": \"abc123\",\n      \"sources\": [\n         \"abc123\"\n      ]\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk create-risk-policy --body '{\n      \"enabled\": false,\n      \"name\": \"abc123\",\n      \"presidio_entities\": [\n         \"abc123\"\n      ],\n      \"sources\": [\n         \"abc123\"\n      ]\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func riskListRiskPoliciesUsage() {
@@ -6465,7 +6715,7 @@ func riskUpdateRiskPolicyUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk update-risk-policy --body '{\n      \"enabled\": false,\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"sources\": [\n         \"abc123\"\n      ]\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk update-risk-policy --body '{\n      \"enabled\": false,\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"presidio_entities\": [\n         \"abc123\"\n      ],\n      \"sources\": [\n         \"abc123\"\n      ]\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func riskDeleteRiskPolicyUsage() {
@@ -6498,6 +6748,7 @@ func riskListRiskResultsUsage() {
 	fmt.Fprint(os.Stderr, " -policy-id STRING")
 	fmt.Fprint(os.Stderr, " -chat-id STRING")
 	fmt.Fprint(os.Stderr, " -cursor STRING")
+	fmt.Fprint(os.Stderr, " -limit INT")
 	fmt.Fprint(os.Stderr, " -apikey-token STRING")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
@@ -6511,19 +6762,21 @@ func riskListRiskResultsUsage() {
 	fmt.Fprintln(os.Stderr, `    -policy-id STRING: `)
 	fmt.Fprintln(os.Stderr, `    -chat-id STRING: `)
 	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
+	fmt.Fprintln(os.Stderr, `    -limit INT: `)
 	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk list-risk-results --policy-id \"550e8400-e29b-41d4-a716-446655440000\" --chat-id \"550e8400-e29b-41d4-a716-446655440000\" --cursor \"abc123\" --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk list-risk-results --policy-id \"550e8400-e29b-41d4-a716-446655440000\" --chat-id \"550e8400-e29b-41d4-a716-446655440000\" --cursor \"abc123\" --limit 2 --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func riskListRiskResultsByChatUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] risk list-risk-results-by-chat", os.Args[0])
 	fmt.Fprint(os.Stderr, " -cursor STRING")
+	fmt.Fprint(os.Stderr, " -limit INT")
 	fmt.Fprint(os.Stderr, " -apikey-token STRING")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
@@ -6535,13 +6788,14 @@ func riskListRiskResultsByChatUsage() {
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
+	fmt.Fprintln(os.Stderr, `    -limit INT: `)
 	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk list-risk-results-by-chat --cursor \"abc123\" --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk list-risk-results-by-chat --cursor \"abc123\" --limit 2 --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func riskGetRiskPolicyStatusUsage() {

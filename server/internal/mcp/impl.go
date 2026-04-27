@@ -32,6 +32,7 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
+	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
 	auth_repo "github.com/speakeasy-api/gram/server/internal/auth/repo"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
@@ -90,6 +91,7 @@ type Service struct {
 	telemLogger         *tm.Logger
 	vectorToolStore     *rag.ToolsetVectorStore
 	temporal            *temporal.Environment
+	assistantTokens     *assistanttokens.Manager
 	sessions            *sessions.Manager
 	chatSessionsManager *chatsessions.Manager
 	externalmcpRepo     *externalmcp_repo.Queries
@@ -142,6 +144,7 @@ func NewService(
 	triggerApp *bgtriggers.App,
 	temporal *temporal.Environment,
 	authzEngine *authz.Engine,
+	assistantTokens *assistanttokens.Manager,
 ) *Service {
 	tracer := tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/mcp")
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/mcp")
@@ -191,6 +194,7 @@ func NewService(
 		features:            features,
 		vectorToolStore:     vectorToolStore,
 		temporal:            temporal,
+		assistantTokens:     assistantTokens,
 		sessions:            sessions,
 		chatSessionsManager: chatSessionsManager,
 		enc:                 enc,
@@ -576,7 +580,7 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 			if err != nil {
 				return oops.E(oops.CodeUnexpected, err, "failed to load access grants").Log(ctx, s.logger)
 			}
-			if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPConnect, ResourceID: toolset.ID.String()}); err != nil {
+			if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPConnect, ResourceKind: "", ResourceID: toolset.ID.String(), Dimensions: nil}); err != nil {
 				return err
 			}
 		}
@@ -884,7 +888,7 @@ func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *ra
 	case "tools/list":
 		return handleToolsList(ctx, s.logger, s.guardianPolicy, s.db, s.env, payload, req, s.posthog, &s.toolsetCache, s.vectorToolStore, s.temporal, s.features)
 	case "tools/call":
-		return handleToolsCall(ctx, s.logger, s.metrics, s.guardianPolicy, s.db, s.env, payload, req, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache, s.telemLogger, s.vectorToolStore, s.temporal, s.mcpMetadataRepo)
+		return handleToolsCall(ctx, s.logger, s.metrics, s.authz, s.guardianPolicy, s.db, s.env, payload, req, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache, s.telemLogger, s.vectorToolStore, s.temporal, s.mcpMetadataRepo)
 	case "prompts/list":
 		return handlePromptsList(ctx, s.logger, s.db, payload, req, &s.toolsetCache)
 	case "prompts/get":
@@ -914,6 +918,10 @@ func parseMcpSessionID(headers http.Header) string {
 func (s *Service) authenticateToken(ctx context.Context, token string, toolsetID uuid.UUID, isOAuthCapable bool) (context.Context, error) {
 	if token == "" {
 		return ctx, oops.C(oops.CodeUnauthorized)
+	}
+
+	if authorizedCtx, _, err := s.assistantTokens.Authorize(ctx, token); err == nil {
+		return authorizedCtx, nil
 	}
 
 	var oAuthToken *oauth.Token
@@ -1113,6 +1121,7 @@ func (s *Service) HandleToolsCall(
 		ctx,
 		s.logger,
 		s.metrics,
+		s.authz,
 		s.guardianPolicy,
 		s.db,
 		s.env,

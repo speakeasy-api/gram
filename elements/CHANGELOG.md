@@ -1,5 +1,16 @@
 # @gram-ai/elements
 
+## 1.30.0
+
+### Minor Changes
+
+- 3c581aa: Add `Plugin.id` field and `recommended.except()` helper for selectively excluding plugins by identifier.
+- e8e2d81: deps: lucide-react from 0.554 to 1.8.0
+
+### Patch Changes
+
+- a74a72b: fix(ai-insights): stop sidebar crash on rapid Explore-with-AI clicks, and render `chart` / `ui` widgets in the agent session pop-out
+
 ## 1.29.0
 
 ### Minor Changes
