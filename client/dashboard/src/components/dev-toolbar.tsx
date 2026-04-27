@@ -64,6 +64,24 @@ const SCOPE_DEFS: {
     resourceType: "mcp",
     description: "Execute MCP tool calls",
   },
+  {
+    scope: "insights:read",
+    label: "insights:read",
+    resourceType: "project",
+    description: "List AI Insights proposals & memories",
+  },
+  {
+    scope: "insights:propose",
+    label: "insights:propose",
+    resourceType: "project",
+    description: "Create AI Insights proposals & memories (agent)",
+  },
+  {
+    scope: "insights:apply",
+    label: "insights:apply",
+    resourceType: "project",
+    description: "Apply / dismiss / roll back AI Insights proposals (human)",
+  },
 ];
 
 type ScopeState = {
