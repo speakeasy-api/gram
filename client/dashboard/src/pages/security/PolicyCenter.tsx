@@ -323,18 +323,12 @@ function PolicyCenterContent() {
               information in chat messages.
             </p>
           </div>
-          <Button
-            onClick={handleCreate}
-            disabled={policies.length > 0}
-            tooltip={
-              policies.length > 0
-                ? "Only one policy per project is supported"
-                : undefined
-            }
-          >
-            <Plus className="mr-2 h-4 w-4" />
-            New Policy
-          </Button>
+          {policies.length === 0 && (
+            <Button onClick={handleCreate}>
+              <Plus className="mr-2 h-4 w-4" />
+              New Policy
+            </Button>
+          )}
         </div>
 
         <Table>

@@ -143,7 +143,7 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 	}
 
 	sources := payload.Sources
-	if len(sources) == 0 {
+	if sources == nil {
 		sources = []string{"gitleaks"}
 	}
 

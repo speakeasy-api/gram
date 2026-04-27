@@ -85,7 +85,6 @@ services:
         hard: 262144
 
   gram-presidio:
-    profiles: ["presidio"]
     image: mcr.microsoft.com/presidio-analyzer:2.2.362
     restart: unless-stopped
     ports:

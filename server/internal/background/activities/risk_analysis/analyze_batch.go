@@ -167,6 +167,9 @@ func (a *AnalyzeBatch) scan(ctx context.Context, sources []string, presidioEntit
 			})
 			if err != nil {
 				a.logger.WarnContext(ctx, "presidio scan failed, continuing with gitleaks only", attr.SlogError(err))
+				if a.metrics.presidioScanSkipped != nil {
+					a.metrics.presidioScanSkipped.Add(ctx, 1)
+				}
 				return
 			}
 			presidioFindings = results
