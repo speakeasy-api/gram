@@ -10701,6 +10701,7 @@ paths:
                     enum:
                         - claude
                         - cursor
+                        - codex
                     type: string
                 - allowEmptyValue: true
                   description: Session header
