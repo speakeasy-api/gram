@@ -45,8 +45,8 @@ func TestAnalyzeBatch_GracefulDegradationWhenPresidioDown(t *testing.T) {
 
 	// PresidioClient pointed at a dead URL simulates Presidio being down
 	deadClient := risk_analysis.NewPresidioClient(
-		"http://127.0.0.1:1",                   //nolint:forbidigo // Test-only dead URL.
-		&http.Client{Timeout: 1 * time.Second}, //nolint:forbidigo // Test-only HTTP client.
+		"http://127.0.0.1:1",
+		&http.Client{Timeout: 1 * time.Second},
 		testenv.NewTracerProvider(t),
 		testenv.NewMeterProvider(t),
 		testenv.NewLogger(t),
@@ -78,5 +78,5 @@ func TestAnalyzeBatch_GracefulDegradationWhenPresidioDown(t *testing.T) {
 	var result risk_analysis.AnalyzeBatchResult
 	require.NoError(t, val.Get(&result))
 	assert.Equal(t, 1, result.Processed)
-	assert.Greater(t, result.Findings, 0, "gitleaks findings should be preserved when presidio is down")
+	assert.Positive(t, result.Findings, "gitleaks findings should be preserved when presidio is down")
 }

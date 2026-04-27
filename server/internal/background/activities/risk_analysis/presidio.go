@@ -16,6 +16,7 @@ import (
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
 
@@ -135,8 +136,7 @@ func (p *PresidioClient) AnalyzeBatch(ctx context.Context, texts []string, entit
 				findings, err := p.analyze(ctx, texts[idx], entities)
 				if err != nil {
 					p.logger.WarnContext(ctx, "presidio analyze failed for text, skipping",
-						slog.Int("index", idx),
-						slog.String("error", err.Error()),
+						attr.SlogError(err),
 					)
 					continue
 				}

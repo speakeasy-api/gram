@@ -187,7 +187,7 @@ func (a *AnalyzeBatch) scan(ctx context.Context, sources []string, presidioEntit
 	for i := range n {
 		// Gitleaks findings come first so they take priority over presidio
 		// when both scanners match the same text region.
-		combined := append(gitleaksFindings[i], presidioFindings[i]...)
+		combined := slices.Concat(gitleaksFindings[i], presidioFindings[i])
 		merged[i] = dedup(combined)
 	}
 	return merged, nil
@@ -263,6 +263,7 @@ func (a *AnalyzeBatch) writeResults(ctx context.Context, args AnalyzeBatchArgs, 
 
 	tx, err := a.db.Begin(ctx)
 	if err != nil {
+		writeSpan.SetStatus(codes.Error, err.Error())
 		return fmt.Errorf("begin transaction: %w", err)
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })

@@ -468,7 +468,7 @@ func (s *Service) ListRiskResultsByChat(ctx context.Context, payload *gen.ListRi
 	rows, err := s.repo.ListRiskResultsGroupedByChat(ctx, repo.ListRiskResultsGroupedByChatParams{
 		ProjectID: *authCtx.ProjectID,
 		Cursor:    cursor,
-		PageLimit: int32(pageSize + 1),
+		PageLimit: conv.SafeInt32(pageSize + 1),
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list risk results by chat").Log(ctx, s.logger)
@@ -512,7 +512,7 @@ func (s *Service) listResultsByChat(ctx context.Context, projectID uuid.UUID, ra
 		ChatID:    chatID,
 		ProjectID: projectID,
 		Cursor:    cursor,
-		PageLimit: int32(pageSize + 1),
+		PageLimit: conv.SafeInt32(pageSize + 1),
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list risk results by chat").Log(ctx, s.logger)
@@ -534,7 +534,7 @@ func (s *Service) listResultsByPolicy(ctx context.Context, projectID uuid.UUID, 
 		ProjectID:    projectID,
 		RiskPolicyID: policyID,
 		Cursor:       cursor,
-		PageLimit:    int32(pageSize + 1),
+		PageLimit:    conv.SafeInt32(pageSize + 1),
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list risk results by policy").Log(ctx, s.logger)
@@ -551,7 +551,7 @@ func (s *Service) listResultsByProject(ctx context.Context, projectID uuid.UUID,
 	rows, err := s.repo.ListRiskResultsByProjectFound(ctx, repo.ListRiskResultsByProjectFoundParams{
 		ProjectID: projectID,
 		Cursor:    cursor,
-		PageLimit: int32(pageSize + 1),
+		PageLimit: conv.SafeInt32(pageSize + 1),
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list risk results").Log(ctx, s.logger)

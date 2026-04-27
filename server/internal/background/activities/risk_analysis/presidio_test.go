@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -21,12 +22,12 @@ func presidioClient(t *testing.T) *risk_analysis.PresidioClient {
 	if url == "" {
 		url = "http://127.0.0.1:5050"
 	}
-	resp, err := http.Get(url + "/health") //nolint:forbidigo // Test-only HTTP client.
+	resp, err := http.Get(url + "/health") //nolint:noctx // Test-only health check.
 	if err != nil || resp.StatusCode != http.StatusOK {
-		t.Skip("presidio not running at " + url)
+		t.Skipf("presidio not running at %s", url) //nolint:forbidigo // Integration test requires external service.
 	}
-	resp.Body.Close()                                                                                                                                                     //nolint:errcheck // Test only.
-	return risk_analysis.NewPresidioClient(url, &http.Client{Timeout: 30 * time.Second}, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), testenv.NewLogger(t)) //nolint:forbidigo // Test-only HTTP client.
+	resp.Body.Close() //nolint:errcheck // Test only.
+	return risk_analysis.NewPresidioClient(url, &http.Client{Timeout: 30 * time.Second}, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), testenv.NewLogger(t))
 }
 
 // --- Real positives: PII that should be detected ---
@@ -207,7 +208,7 @@ func TestCombinedScanners_BothSourcesAppear(t *testing.T) {
 	presidioResults, err := client.AnalyzeBatch(t.Context(), []string{content}, nil, nil)
 	require.NoError(t, err)
 
-	allFindings := append(gitleaksFindings, presidioResults[0]...)
+	allFindings := slices.Concat(gitleaksFindings, presidioResults[0])
 
 	sources := map[string]bool{}
 	for _, f := range allFindings {
@@ -256,7 +257,7 @@ func TestPresidio_StressBatch(t *testing.T) {
 	t.Logf("Stress test completed in %s. Finding counts: %v", elapsed, counts)
 
 	// Messages with emails should have findings
-	assert.Greater(t, counts["EMAIL_ADDRESS"], 0, "expected some EMAIL_ADDRESS detections")
+	assert.Positive(t, counts["EMAIL_ADDRESS"], "expected some EMAIL_ADDRESS detections")
 }
 
 // --- Helpers ---
