@@ -30,6 +30,10 @@ export type RiskPolicy = {
    */
   pendingMessages: number;
   /**
+   * Presidio entity types to scan for. When empty, scans all entities.
+   */
+  presidioEntities?: Array<string> | undefined;
+  /**
    * The project ID.
    */
   projectId: string;
@@ -63,6 +67,7 @@ export const RiskPolicy$inboundSchema: z.ZodMiniType<RiskPolicy, unknown> = z
       id: z.string(),
       name: z.string(),
       pending_messages: z.int(),
+      presidio_entities: z.optional(z.array(z.string())),
       project_id: z.string(),
       sources: z.array(z.string()),
       total_messages: z.int(),
@@ -76,6 +81,7 @@ export const RiskPolicy$inboundSchema: z.ZodMiniType<RiskPolicy, unknown> = z
       return remap$(v, {
         "created_at": "createdAt",
         "pending_messages": "pendingMessages",
+        "presidio_entities": "presidioEntities",
         "project_id": "projectId",
         "total_messages": "totalMessages",
         "updated_at": "updatedAt",

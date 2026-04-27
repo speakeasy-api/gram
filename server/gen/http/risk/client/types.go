@@ -20,6 +20,8 @@ type CreateRiskPolicyRequestBody struct {
 	Name string `form:"name" json:"name" xml:"name"`
 	// Detection sources to enable.
 	Sources []string `form:"sources,omitempty" json:"sources,omitempty" xml:"sources,omitempty"`
+	// Presidio entity types to detect.
+	PresidioEntities []string `form:"presidio_entities,omitempty" json:"presidio_entities,omitempty" xml:"presidio_entities,omitempty"`
 	// Whether the policy is active.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 }
@@ -33,6 +35,8 @@ type UpdateRiskPolicyRequestBody struct {
 	Name string `form:"name" json:"name" xml:"name"`
 	// Detection sources to enable.
 	Sources []string `form:"sources,omitempty" json:"sources,omitempty" xml:"sources,omitempty"`
+	// Presidio entity types to detect.
+	PresidioEntities []string `form:"presidio_entities,omitempty" json:"presidio_entities,omitempty" xml:"presidio_entities,omitempty"`
 	// Whether the policy is active.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 }
@@ -55,6 +59,8 @@ type CreateRiskPolicyResponseBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// Detection sources enabled for this policy.
 	Sources []string `form:"sources,omitempty" json:"sources,omitempty" xml:"sources,omitempty"`
+	// Presidio entity types to scan for. When empty, scans all entities.
+	PresidioEntities []string `form:"presidio_entities,omitempty" json:"presidio_entities,omitempty" xml:"presidio_entities,omitempty"`
 	// Whether the policy is active.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Policy version, incremented on each update.
@@ -87,6 +93,8 @@ type GetRiskPolicyResponseBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// Detection sources enabled for this policy.
 	Sources []string `form:"sources,omitempty" json:"sources,omitempty" xml:"sources,omitempty"`
+	// Presidio entity types to scan for. When empty, scans all entities.
+	PresidioEntities []string `form:"presidio_entities,omitempty" json:"presidio_entities,omitempty" xml:"presidio_entities,omitempty"`
 	// Whether the policy is active.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Policy version, incremented on each update.
@@ -112,6 +120,8 @@ type UpdateRiskPolicyResponseBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// Detection sources enabled for this policy.
 	Sources []string `form:"sources,omitempty" json:"sources,omitempty" xml:"sources,omitempty"`
+	// Presidio entity types to scan for. When empty, scans all entities.
+	PresidioEntities []string `form:"presidio_entities,omitempty" json:"presidio_entities,omitempty" xml:"presidio_entities,omitempty"`
 	// Whether the policy is active.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Policy version, incremented on each update.
@@ -1825,6 +1835,8 @@ type RiskPolicyResponseBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// Detection sources enabled for this policy.
 	Sources []string `form:"sources,omitempty" json:"sources,omitempty" xml:"sources,omitempty"`
+	// Presidio entity types to scan for. When empty, scans all entities.
+	PresidioEntities []string `form:"presidio_entities,omitempty" json:"presidio_entities,omitempty" xml:"presidio_entities,omitempty"`
 	// Whether the policy is active.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Policy version, incremented on each update.
@@ -1902,6 +1914,12 @@ func NewCreateRiskPolicyRequestBody(p *risk.CreateRiskPolicyPayload) *CreateRisk
 			body.Sources[i] = val
 		}
 	}
+	if p.PresidioEntities != nil {
+		body.PresidioEntities = make([]string, len(p.PresidioEntities))
+		for i, val := range p.PresidioEntities {
+			body.PresidioEntities[i] = val
+		}
+	}
 	return body
 }
 
@@ -1917,6 +1935,12 @@ func NewUpdateRiskPolicyRequestBody(p *risk.UpdateRiskPolicyPayload) *UpdateRisk
 		body.Sources = make([]string, len(p.Sources))
 		for i, val := range p.Sources {
 			body.Sources[i] = val
+		}
+	}
+	if p.PresidioEntities != nil {
+		body.PresidioEntities = make([]string, len(p.PresidioEntities))
+		for i, val := range p.PresidioEntities {
+			body.PresidioEntities[i] = val
 		}
 	}
 	return body
@@ -1948,6 +1972,12 @@ func NewCreateRiskPolicyRiskPolicyOK(body *CreateRiskPolicyResponseBody) *types.
 	v.Sources = make([]string, len(body.Sources))
 	for i, val := range body.Sources {
 		v.Sources[i] = val
+	}
+	if body.PresidioEntities != nil {
+		v.PresidioEntities = make([]string, len(body.PresidioEntities))
+		for i, val := range body.PresidioEntities {
+			v.PresidioEntities[i] = val
+		}
 	}
 
 	return v
@@ -2287,6 +2317,12 @@ func NewGetRiskPolicyRiskPolicyOK(body *GetRiskPolicyResponseBody) *types.RiskPo
 	for i, val := range body.Sources {
 		v.Sources[i] = val
 	}
+	if body.PresidioEntities != nil {
+		v.PresidioEntities = make([]string, len(body.PresidioEntities))
+		for i, val := range body.PresidioEntities {
+			v.PresidioEntities[i] = val
+		}
+	}
 
 	return v
 }
@@ -2458,6 +2494,12 @@ func NewUpdateRiskPolicyRiskPolicyOK(body *UpdateRiskPolicyResponseBody) *types.
 	v.Sources = make([]string, len(body.Sources))
 	for i, val := range body.Sources {
 		v.Sources[i] = val
+	}
+	if body.PresidioEntities != nil {
+		v.PresidioEntities = make([]string, len(body.PresidioEntities))
+		for i, val := range body.PresidioEntities {
+			v.PresidioEntities[i] = val
+		}
 	}
 
 	return v

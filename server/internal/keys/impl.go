@@ -36,7 +36,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-
 type Service struct {
 	tracer      trace.Tracer
 	logger      *slog.Logger
