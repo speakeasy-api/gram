@@ -27,7 +27,7 @@ export default function Prompts() {
         <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body>
-        <RequireScope scope={["build:read", "build:write"]} level="page">
+        <RequireScope scope={["project:read", "project:write"]} level="page">
           <PromptsInner />
         </RequireScope>
       </Page.Body>

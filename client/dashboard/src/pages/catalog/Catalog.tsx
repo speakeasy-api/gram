@@ -9,7 +9,10 @@ import { useViewMode } from "@/components/ui/use-view-mode";
 import { useProject } from "@/contexts/Auth";
 import { AddServerDialog } from "@/pages/catalog/AddServerDialog";
 import { CommandBar } from "@/pages/catalog/CommandBar";
-import { type Server, useInfiniteListMCPCatalog } from "@/pages/catalog/hooks";
+import {
+  type PulseMCPServer,
+  useInfiniteListMCPCatalog,
+} from "@/pages/catalog/hooks";
 import { useRoutes } from "@/routes";
 import { useLatestDeployment } from "@gram/client/react-query";
 import { Button, Input, Stack } from "@speakeasy-api/moonshine";
@@ -32,7 +35,7 @@ export function CatalogRoot() {
 
 export default function Catalog() {
   return (
-    <RequireScope scope={["build:read", "mcp:write"]} level="page">
+    <RequireScope scope={["project:read", "mcp:write"]} level="page">
       <CatalogInner />
     </RequireScope>
   );
@@ -51,7 +54,7 @@ function CatalogInner() {
     useSelectionState();
 
   const [viewMode, setViewMode] = useViewMode();
-  const [addingServers, setAddingServers] = useState<Server[]>([]);
+  const [addingServers, setAddingServers] = useState<PulseMCPServer[]>([]);
   const [gridElement, setGridElement] = useState<HTMLDivElement | null>(null);
 
   // Track if we've loaded all data (for client-side search)
@@ -95,7 +98,9 @@ function CatalogInner() {
 
   // Flatten all pages into a single list
   const allServers = useMemo(() => {
-    return data?.pages.flatMap((page) => page.servers as Server[]) ?? [];
+    return (
+      data?.pages.flatMap((page) => page.servers as PulseMCPServer[]) ?? []
+    );
   }, [data]);
 
   // Apply client-side filtering based on filter state

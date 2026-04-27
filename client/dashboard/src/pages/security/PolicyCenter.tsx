@@ -44,15 +44,15 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   useRiskListPolicies,
   useRiskCreatePolicyMutation,
-  useRiskUpdatePolicyMutation,
-  useRiskDeletePolicyMutation,
-  useRiskTriggerAnalysisMutation,
+  useRiskPoliciesUpdateMutation,
+  useRiskPoliciesDeleteMutation,
+  useRiskPoliciesTriggerMutation,
   invalidateAllRiskListPolicies,
 } from "@gram/client/react-query/index.js";
 import {
-  useRiskGetPolicyStatus,
-  invalidateAllRiskGetPolicyStatus,
-} from "@gram/client/react-query/riskGetPolicyStatus.js";
+  useRiskPoliciesStatus,
+  invalidateAllRiskPoliciesStatus,
+} from "@gram/client/react-query/riskPoliciesStatus.js";
 import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
 import {
   RULE_CATEGORY_META,
@@ -109,7 +109,7 @@ function PolicyCenterContent() {
 
   const invalidate = useCallback(() => {
     invalidateAllRiskListPolicies(queryClient);
-    invalidateAllRiskGetPolicyStatus(queryClient);
+    invalidateAllRiskPoliciesStatus(queryClient);
   }, [queryClient]);
 
   const createMutation = useRiskCreatePolicyMutation({
@@ -119,18 +119,18 @@ function PolicyCenterContent() {
     },
   });
 
-  const updateMutation = useRiskUpdatePolicyMutation({
+  const updateMutation = useRiskPoliciesUpdateMutation({
     onSuccess: () => {
       invalidate();
       setSheetOpen(false);
     },
   });
 
-  const deleteMutation = useRiskDeletePolicyMutation({
+  const deleteMutation = useRiskPoliciesDeleteMutation({
     onSuccess: invalidate,
   });
 
-  const triggerMutation = useRiskTriggerAnalysisMutation({
+  const triggerMutation = useRiskPoliciesTriggerMutation({
     onSuccess: invalidate,
   });
 
@@ -592,7 +592,7 @@ function RunPanel({
     isLoading,
     refetch,
     isFetching,
-  } = useRiskGetPolicyStatus({ id: policy.id }, undefined, {
+  } = useRiskPoliciesStatus({ id: policy.id }, undefined, {
     refetchInterval: 5000,
   });
 

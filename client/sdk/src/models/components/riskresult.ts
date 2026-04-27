@@ -69,6 +69,10 @@ export type RiskResult = {
    * Tags from the detection rule.
    */
   tags?: Array<string> | undefined;
+  /**
+   * The user who owns the chat session.
+   */
+  userId?: string | undefined;
 };
 
 /** @internal */
@@ -93,6 +97,7 @@ export const RiskResult$inboundSchema: z.ZodMiniType<RiskResult, unknown> = z
       source: z.string(),
       start_pos: z.optional(z.int()),
       tags: z.optional(z.array(z.string())),
+      user_id: z.optional(z.string()),
     }),
     z.transform((v) => {
       return remap$(v, {
@@ -105,6 +110,7 @@ export const RiskResult$inboundSchema: z.ZodMiniType<RiskResult, unknown> = z
         "policy_version": "policyVersion",
         "rule_id": "ruleId",
         "start_pos": "startPos",
+        "user_id": "userId",
       });
     }),
   );

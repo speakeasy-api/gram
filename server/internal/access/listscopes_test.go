@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/access"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 )
 
@@ -16,17 +17,17 @@ func TestService_ListScopes(t *testing.T) {
 
 	result, err := ti.service.ListScopes(ctx, &gen.ListScopesPayload{})
 	require.NoError(t, err)
-	require.Len(t, result.Scopes, 10)
+	require.Len(t, result.Scopes, 7)
 
 	bySlug := make(map[string]*gen.ScopeDefinition, len(result.Scopes))
 	for _, scope := range result.Scopes {
 		bySlug[scope.Slug] = scope
 	}
 
-	require.Equal(t, "org", bySlug[string(ScopeOrgRead)].ResourceType)
-	require.Equal(t, "project", bySlug[string(ScopeBuildWrite)].ResourceType)
-	require.Equal(t, "mcp", bySlug[string(ScopeMCPConnect)].ResourceType)
-	require.Equal(t, "Read organization metadata and members.", bySlug[string(ScopeOrgRead)].Description)
+	require.Equal(t, "org", bySlug[string(authz.ScopeOrgRead)].ResourceType)
+	require.Equal(t, "project", bySlug[string(authz.ScopeProjectWrite)].ResourceType)
+	require.Equal(t, "mcp", bySlug[string(authz.ScopeMCPConnect)].ResourceType)
+	require.Equal(t, "Read organization metadata and members.", bySlug[string(authz.ScopeOrgRead)].Description)
 }
 
 func TestService_ListScopes_Unauthorized(t *testing.T) {

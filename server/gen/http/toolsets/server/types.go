@@ -155,8 +155,8 @@ type ListToolsetsResponseBody struct {
 // ListToolsetsForOrgResponseBody is the type of the "toolsets" service
 // "listToolsetsForOrg" endpoint HTTP response body.
 type ListToolsetsForOrgResponseBody struct {
-	// The list of toolsets
-	Toolsets []*ToolsetEntryResponseBody `form:"toolsets" json:"toolsets" xml:"toolsets"`
+	// The list of toolset summaries
+	Toolsets []*ToolsetSummaryResponseBody `form:"toolsets" json:"toolsets" xml:"toolsets"`
 }
 
 // UpdateToolsetResponseBody is the type of the "toolsets" service
@@ -3469,6 +3469,36 @@ type PromptTemplateEntryResponseBody struct {
 	Kind *string `form:"kind,omitempty" json:"kind,omitempty" xml:"kind,omitempty"`
 }
 
+// ToolsetSummaryResponseBody is used to define fields on response body types.
+type ToolsetSummaryResponseBody struct {
+	// The ID of the toolset
+	ID string `form:"id" json:"id" xml:"id"`
+	// The project ID this toolset belongs to
+	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The organization ID this toolset belongs to
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// The name of the toolset
+	Name string `form:"name" json:"name" xml:"name"`
+	// The slug of the toolset
+	Slug string `form:"slug" json:"slug" xml:"slug"`
+	// The slug of the environment to use as the default for the toolset
+	DefaultEnvironmentSlug *string `form:"default_environment_slug,omitempty" json:"default_environment_slug,omitempty" xml:"default_environment_slug,omitempty"`
+	// The slug of the MCP to use for the toolset
+	McpSlug *string `form:"mcp_slug,omitempty" json:"mcp_slug,omitempty" xml:"mcp_slug,omitempty"`
+	// Whether the toolset is enabled for MCP
+	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
+	// Whether the toolset is public in MCP
+	McpIsPublic *bool `form:"mcp_is_public,omitempty" json:"mcp_is_public,omitempty" xml:"mcp_is_public,omitempty"`
+	// The mode to use for tool selection
+	ToolSelectionMode string `form:"tool_selection_mode" json:"tool_selection_mode" xml:"tool_selection_mode"`
+	// The tools in this toolset
+	Tools []*ToolEntryResponseBody `form:"tools" json:"tools" xml:"tools"`
+	// When the toolset was created.
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// When the toolset was last updated.
+	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
 // ToolsetOriginRequestBody is used to define fields on request body types.
 type ToolsetOriginRequestBody struct {
 	// The globally unique registry specifier this toolset originated from
@@ -3677,19 +3707,19 @@ func NewListToolsetsResponseBody(res *toolsets.ListToolsetsResult) *ListToolsets
 
 // NewListToolsetsForOrgResponseBody builds the HTTP response body from the
 // result of the "listToolsetsForOrg" endpoint of the "toolsets" service.
-func NewListToolsetsForOrgResponseBody(res *toolsets.ListToolsetsResult) *ListToolsetsForOrgResponseBody {
+func NewListToolsetsForOrgResponseBody(res *toolsets.ListToolsetSummariesResult) *ListToolsetsForOrgResponseBody {
 	body := &ListToolsetsForOrgResponseBody{}
 	if res.Toolsets != nil {
-		body.Toolsets = make([]*ToolsetEntryResponseBody, len(res.Toolsets))
+		body.Toolsets = make([]*ToolsetSummaryResponseBody, len(res.Toolsets))
 		for i, val := range res.Toolsets {
 			if val == nil {
 				body.Toolsets[i] = nil
 				continue
 			}
-			body.Toolsets[i] = marshalTypesToolsetEntryToToolsetEntryResponseBody(val)
+			body.Toolsets[i] = marshalTypesToolsetSummaryToToolsetSummaryResponseBody(val)
 		}
 	} else {
-		body.Toolsets = []*ToolsetEntryResponseBody{}
+		body.Toolsets = []*ToolsetSummaryResponseBody{}
 	}
 	return body
 }

@@ -13,6 +13,7 @@ import (
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	thirdpartyworkos "github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -66,10 +67,10 @@ func TestService_CreateRole(t *testing.T) {
 		Name:        "Custom Builder",
 		Description: "Can build selected resources",
 		Grants: []*gen.RoleGrant{
-			{Scope: string(ScopeBuildRead), Resources: []string{"project-1", "project-2"}},
-			{Scope: string(ScopeMCPConnect), Resources: nil},
+			{Scope: string(authz.ScopeProjectRead), Resources: []string{"project-1", "project-2"}},
+			{Scope: string(authz.ScopeMCPConnect), Resources: nil},
 		},
-		MemberIds: []string{"user_1", "user_2"},
+		MemberIds: []string{"local_user_1", "local_user_2"},
 	})
 	require.NoError(t, err)
 	require.Equal(t, "Custom Builder", role.Name)
@@ -98,7 +99,7 @@ func TestService_CreateRole_WorkOSCreateFailure(t *testing.T) {
 		Name:        "Custom Builder",
 		Description: "Can build selected resources",
 		Grants: []*gen.RoleGrant{
-			{Scope: string(ScopeBuildRead), Resources: []string{"project-1"}},
+			{Scope: string(authz.ScopeProjectRead), Resources: []string{"project-1"}},
 		},
 	})
 	require.Error(t, err)
@@ -124,7 +125,7 @@ func TestService_CreateRole_ContinuesAfterConflictWhenRoleAlreadyExists(t *testi
 		Name:        "Custom Builder",
 		Description: "Can build selected resources",
 		Grants: []*gen.RoleGrant{
-			{Scope: string(ScopeBuildRead), Resources: []string{"project-1"}},
+			{Scope: string(authz.ScopeProjectRead), Resources: []string{"project-1"}},
 		},
 	})
 	require.NoError(t, err)
@@ -145,7 +146,7 @@ func TestService_CreateRole_RejectsEmptySlug(t *testing.T) {
 		Name:        "!!!",
 		Description: "Can build selected resources",
 		Grants: []*gen.RoleGrant{
-			{Scope: string(ScopeBuildRead), Resources: []string{"project-1"}},
+			{Scope: string(authz.ScopeProjectRead), Resources: []string{"project-1"}},
 		},
 	})
 	require.Error(t, err)
@@ -176,7 +177,7 @@ func TestService_CreateRole_AuditLog(t *testing.T) {
 		Name:        "Audit Builder",
 		Description: "Tracks audit writes",
 		Grants: []*gen.RoleGrant{{
-			Scope:     string(ScopeBuildRead),
+			Scope:     string(authz.ScopeProjectRead),
 			Resources: []string{"project-1"},
 		}},
 	})
@@ -228,9 +229,9 @@ func TestService_CreateRole_GrantSyncFailureDoesNotAssignMembers(t *testing.T) {
 		Name:        "Broken Builder",
 		Description: "Will fail grant sync",
 		Grants: []*gen.RoleGrant{
-			{Scope: string(ScopeBuildRead), Resources: []string{"project-1"}},
+			{Scope: string(authz.ScopeProjectRead), Resources: []string{"project-1"}},
 		},
-		MemberIds: []string{"user_1", "user_2"},
+		MemberIds: []string{"local_user_1", "local_user_2"},
 	})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "sync grants for created role")

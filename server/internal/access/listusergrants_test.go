@@ -2,29 +2,29 @@ package access
 
 import (
 	"errors"
-	mockidp "github.com/speakeasy-api/gram/mock-speakeasy-idp"
 	"testing"
+
+	mockidp "github.com/speakeasy-api/gram/mock-speakeasy-idp"
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/access"
+	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	thirdpartyworkos "github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 var expectedFullAccessScopes = []string{
-	string(ScopeOrgRead),
-	string(ScopeOrgAdmin),
-	string(ScopeBuildRead),
-	string(ScopeBuildWrite),
-	string(ScopeMCPRead),
-	string(ScopeMCPWrite),
-	string(ScopeMCPConnect),
-	string(ScopeRemoteMCPRead),
-	string(ScopeRemoteMCPWrite),
-	string(ScopeRemoteMCPConnect),
+	string(authz.ScopeOrgRead),
+	string(authz.ScopeOrgAdmin),
+	string(authz.ScopeProjectRead),
+	string(authz.ScopeProjectWrite),
+	string(authz.ScopeMCPRead),
+	string(authz.ScopeMCPWrite),
+	string(authz.ScopeMCPConnect),
 }
 
 func TestService_ListGrants(t *testing.T) {
@@ -38,8 +38,8 @@ func TestService_ListGrants(t *testing.T) {
 	ctx = contextvalues.SetAuthContext(ctx, authCtx)
 
 	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, authCtx.UserID, "member@example.com", "Member User", "workos_user_member", "membership_1")
-	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID), ScopeBuildRead, "project_123")
-	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), ScopeMCPConnect, "tool_456")
+	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID), authz.ScopeProjectRead, "project_123")
+	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), authz.ScopeMCPConnect, "tool_456")
 
 	ti.roles.On("ListMembers", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Member{
 		mockMember(mockidp.MockOrgID, "membership_1", "workos_user_member", "custom-builder"),
@@ -48,10 +48,12 @@ func TestService_ListGrants(t *testing.T) {
 	result, err := ti.service.ListGrants(ctx, &gen.ListGrantsPayload{})
 	require.NoError(t, err)
 	require.Len(t, result.Grants, 2)
-	require.Equal(t, "build:read", result.Grants[0].Scope)
-	require.Equal(t, []string{"project_123"}, result.Grants[0].Resources)
-	require.Equal(t, "mcp:connect", result.Grants[1].Scope)
-	require.Equal(t, []string{"tool_456"}, result.Grants[1].Resources)
+	byScope := make(map[string]*gen.ListRoleGrant, len(result.Grants))
+	for _, grant := range result.Grants {
+		byScope[grant.Scope] = grant
+	}
+	require.Equal(t, []string{"project_123"}, byScope["project:read"].Resources)
+	require.Equal(t, []string{"tool_456"}, byScope["mcp:connect"].Resources)
 }
 
 func TestService_ListGrants_MultipleRoles(t *testing.T) {
@@ -65,8 +67,8 @@ func TestService_ListGrants_MultipleRoles(t *testing.T) {
 	ctx = contextvalues.SetAuthContext(ctx, authCtx)
 
 	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, authCtx.UserID, "member@example.com", "Member User", "workos_user_member", "membership_1")
-	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), ScopeBuildRead, "project_123")
-	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-mcp"), ScopeMCPConnect, "tool_456")
+	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), authz.ScopeProjectRead, "project_123")
+	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-mcp"), authz.ScopeMCPConnect, "tool_456")
 
 	ti.roles.On("ListMembers", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Member{
 		mockMember(mockidp.MockOrgID, "membership_1", "workos_user_member", "custom-builder"),
@@ -76,10 +78,12 @@ func TestService_ListGrants_MultipleRoles(t *testing.T) {
 	result, err := ti.service.ListGrants(ctx, &gen.ListGrantsPayload{})
 	require.NoError(t, err)
 	require.Len(t, result.Grants, 2)
-	require.Equal(t, "build:read", result.Grants[0].Scope)
-	require.Equal(t, []string{"project_123"}, result.Grants[0].Resources)
-	require.Equal(t, "mcp:connect", result.Grants[1].Scope)
-	require.Equal(t, []string{"tool_456"}, result.Grants[1].Resources)
+	byScope := make(map[string]*gen.ListRoleGrant, len(result.Grants))
+	for _, grant := range result.Grants {
+		byScope[grant.Scope] = grant
+	}
+	require.Equal(t, []string{"project_123"}, byScope["project:read"].Resources)
+	require.Equal(t, []string{"tool_456"}, byScope["mcp:connect"].Resources)
 }
 
 func TestService_ListGrants_NotConnected(t *testing.T) {
@@ -134,7 +138,7 @@ func TestService_ListGrants_RBACDisabledReturnsFullAccess(t *testing.T) {
 
 	authCtx.AccountType = "enterprise"
 	ctx = contextvalues.SetAuthContext(ctx, authCtx)
-	ti.service.access.features = stubFeatureChecker{enabled: false}
+	ti.service.authz = authz.NewEngine(ti.service.logger, ti.conn, authztest.RBACAlwaysDisabled, ti.roles, nil)
 
 	result, err := ti.service.ListGrants(ctx, &gen.ListGrantsPayload{})
 	require.NoError(t, err)

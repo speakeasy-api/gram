@@ -46,6 +46,9 @@ type RunnerDeployRequest struct {
 	Runtime Runtime
 	Assets  []RunnerAsset
 
+	MemoryMiB int
+	Scale     int
+
 	BearerSecret string
 }
 

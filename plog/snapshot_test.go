@@ -270,6 +270,22 @@ func TestHandler_WithAttrs(t *testing.T) {
 	assertSnapshot(t, "handler_with_attrs", output)
 }
 
+func TestHandler_DeduplicatesAttrKeys(t *testing.T) {
+	t.Parallel()
+	var buf bytes.Buffer
+	logger := plog.NewLogger(&buf, plog.WithNoColor(true))
+
+	// Chained With calls and a record-level attr reuse the same key. The last
+	// value should win and the key should appear only once.
+	nested := logger.
+		With("gram.component", "server").
+		With("gram.component", "http_logging_middleware")
+	nested.Info("response", "gram.component", "final", "status", 200)
+
+	output := normalizeTimestamps(buf.String())
+	assertSnapshot(t, "handler_dedup_attr_keys", output)
+}
+
 func TestHandler_WithGroup(t *testing.T) {
 	t.Parallel()
 	var buf bytes.Buffer

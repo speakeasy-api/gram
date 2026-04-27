@@ -1356,7 +1356,7 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
     domain && canAccessCustomDomain && !toolset.customDomainId ? (
       linkDomainButton
     ) : (
-      <RequireScope scope="build:write" level="component">
+      <RequireScope scope="project:write" level="component">
         <Button
           variant="secondary"
           size="sm"
@@ -1957,7 +1957,9 @@ export function OAuthDetailsModal({
                       className="hover:bg-destructive border-none hover:text-white"
                       onClick={() =>
                         removeOAuthMutation.mutate({
-                          request: { slug: toolset.slug },
+                          request: {
+                            slug: toolset.slug,
+                          },
                         })
                       }
                     >

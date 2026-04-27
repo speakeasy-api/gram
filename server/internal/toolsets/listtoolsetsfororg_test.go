@@ -249,10 +249,9 @@ func TestToolsetsService_ListToolsetsForOrg_VerifyDetails(t *testing.T) {
 	require.Equal(t, created.ID, ts.ID)
 	require.Equal(t, "Detailed Org Toolset", ts.Name)
 	require.Equal(t, "detailed-org-toolset", string(ts.Slug))
-	require.Equal(t, "An org toolset with details", *ts.Description)
 	require.NotEmpty(t, ts.ProjectID, "project ID should be populated")
-	require.NotNil(t, ts.CreatedAt)
-	require.NotNil(t, ts.UpdatedAt)
+	require.NotEmpty(t, ts.CreatedAt)
+	require.NotEmpty(t, ts.UpdatedAt)
 
 	afterCount, err := audittest.AuditLogCount(ctx, ti.conn)
 	require.NoError(t, err)

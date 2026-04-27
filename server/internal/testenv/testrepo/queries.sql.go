@@ -31,6 +31,31 @@ func (q *Queries) CountFunctionsAccess(ctx context.Context, arg CountFunctionsAc
 	return count, err
 }
 
+const insertChatMessage = `-- name: InsertChatMessage :one
+INSERT INTO chat_messages (chat_id, project_id, role, content)
+VALUES ($1, $2, $3, $4)
+RETURNING id
+`
+
+type InsertChatMessageParams struct {
+	ChatID    uuid.UUID
+	ProjectID uuid.NullUUID
+	Role      string
+	Content   string
+}
+
+func (q *Queries) InsertChatMessage(ctx context.Context, arg InsertChatMessageParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, insertChatMessage,
+		arg.ChatID,
+		arg.ProjectID,
+		arg.Role,
+		arg.Content,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const listDeploymentFunctionsResources = `-- name: ListDeploymentFunctionsResources :many
 SELECT id, resource_urn, project_id, deployment_id, function_id, runtime, name, description, uri, title, mime_type, variables, meta, created_at, updated_at, deleted_at, deleted
 FROM function_resource_definitions
@@ -185,4 +210,14 @@ func (q *Queries) ListDeploymentHTTPTools(ctx context.Context, deploymentID uuid
 		return nil, err
 	}
 	return items, nil
+}
+
+const scrubDeploymentFunctionMachineSpecs = `-- name: ScrubDeploymentFunctionMachineSpecs :exec
+UPDATE deployments_functions SET memory_mib = NULL, scale = NULL WHERE deployment_id = $1
+`
+
+// Simulates a legacy deployment by NULLing out memory_mib and scale, as if the row was inserted before these columns existed.
+func (q *Queries) ScrubDeploymentFunctionMachineSpecs(ctx context.Context, deploymentID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, scrubDeploymentFunctionMachineSpecs, deploymentID)
+	return err
 }

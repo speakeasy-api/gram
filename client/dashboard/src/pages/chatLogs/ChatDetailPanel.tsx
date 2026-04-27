@@ -27,12 +27,15 @@ import { Button } from "@speakeasy-api/moonshine";
 import type { RiskResult } from "@gram/client/models/components";
 import { CircularProgress } from "./CircularProgress";
 import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
+import { MessageContent } from "@gram-ai/elements";
 
 interface ChatDetailPanelProps {
   chatId: string;
   resolutions: ChatResolution[];
   onClose: () => void;
   onDelete: (chatId: string) => void;
+  /** When true, messages without risk findings are collapsed to a single line. */
+  collapseNonRisk?: boolean;
 }
 
 function getTraceId(chatId: string): string {
@@ -95,10 +98,12 @@ function ChatMessagesList({
   messages,
   messageResolutionMap,
   riskResultsByMessage,
+  collapseNonRisk,
 }: {
   messages: ChatMessage[];
   messageResolutionMap: Map<string, ChatResolution>;
   riskResultsByMessage: Map<string, RiskResult[]>;
+  collapseNonRisk?: boolean;
 }) {
   const groups = useMemo(() => {
     const byGeneration = new Map<number, ChatMessage[]>();
@@ -125,6 +130,7 @@ function ChatMessagesList({
             message={message}
             resolution={messageResolutionMap.get(message.id)}
             riskResults={riskResultsByMessage.get(message.id)}
+            collapseNonRisk={collapseNonRisk}
           />
         ))}
       </Stack>
@@ -152,6 +158,7 @@ function ChatMessagesList({
                   message={message}
                   resolution={messageResolutionMap.get(message.id)}
                   riskResults={riskResultsByMessage.get(message.id)}
+                  collapseNonRisk={collapseNonRisk}
                 />
               ))}
             </Stack>
@@ -166,20 +173,60 @@ function MessageItem({
   message,
   resolution,
   riskResults,
+  collapseNonRisk,
 }: {
   message: ChatMessage;
   resolution: ChatResolution | undefined;
   riskResults: RiskResult[] | undefined;
+  collapseNonRisk?: boolean;
 }) {
+  const hasRisk = riskResults && riskResults.length > 0;
+  const [expanded, setExpanded] = useState(false);
+  const isCollapsed = collapseNonRisk && !hasRisk && !expanded;
+
   const parsedToolCalls: ToolCall[] | null = useMemo(() => {
     if (!message.toolCalls) return null;
     try {
-      const parsed = JSON.parse(message.toolCalls) as unknown;
+      let parsed: unknown = JSON.parse(message.toolCalls);
+      // Handle double-encoded JSON strings
+      if (typeof parsed === "string") {
+        parsed = JSON.parse(parsed);
+      }
       return Array.isArray(parsed) ? (parsed as ToolCall[]) : null;
     } catch {
       return null;
     }
   }, [message.toolCalls]);
+
+  if (isCollapsed) {
+    const label =
+      message.role === "tool"
+        ? "Tool Result"
+        : message.role === "system"
+          ? "System Prompt"
+          : parsedToolCalls
+            ? `Tool Call: ${parsedToolCalls[0]?.function?.name ?? "unknown"}`
+            : message.role;
+    const preview =
+      !parsedToolCalls && typeof message.content === "string"
+        ? message.content.trim().slice(0, 80)
+        : "";
+
+    return (
+      <button
+        type="button"
+        onClick={() => setExpanded(true)}
+        className="text-muted-foreground hover:bg-muted/50 flex w-full items-center gap-2 rounded px-1 py-1 text-xs transition-colors"
+      >
+        <Icon name="chevron-right" className="size-3 shrink-0" />
+        <span className="capitalize">{label}</span>
+        {message.createdAt && (
+          <span>{format(new Date(message.createdAt), "HH:mm:ss")}</span>
+        )}
+        {preview && <span className="truncate opacity-60">{preview}...</span>}
+      </button>
+    );
+  }
 
   return (
     <div>
@@ -209,6 +256,9 @@ function MessageItem({
                   {message.createdAt &&
                     format(new Date(message.createdAt), "HH:mm:ss")}
                 </span>
+                {riskResults && riskResults.length > 0 && (
+                  <RiskBadgePopover results={riskResults} />
+                )}
               </div>
               <div className="bg-background overflow-hidden rounded-lg border text-sm">
                 <div className="bg-muted/30 border-b p-3">
@@ -305,11 +355,13 @@ function MessageItem({
                 {message.role === "tool" ? (
                   <CodeBlock content={message.content ?? ""} maxHeight={300} />
                 ) : (
-                  <div className="whitespace-pre-wrap">
-                    {typeof message.content === "string"
-                      ? message.content.trim()
-                      : JSON.stringify(message.content)}
-                  </div>
+                  <MessageContent
+                    content={
+                      typeof message.content === "string"
+                        ? message.content.trim()
+                        : JSON.stringify(message.content)
+                    }
+                  />
                 )}
               </div>
             )}
@@ -525,10 +577,13 @@ function RiskBadgePopover({ results }: { results: RiskResult[] }) {
           </Badge>
         </button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-80">
+      <PopoverContent
+        align="start"
+        className="max-h-[70vh] w-80 overflow-y-auto"
+      >
         <div className="space-y-3">
           <div className="text-sm font-semibold">Risk Findings</div>
-          <div className="divide-border max-h-60 divide-y overflow-y-auto">
+          <div className="divide-border divide-y">
             {results.map((r) => (
               <div key={r.id} className="py-2 first:pt-0 last:pb-0">
                 <div className="flex items-center gap-2">
@@ -578,6 +633,7 @@ export function ChatDetailPanel({
   resolutions,
   onClose,
   onDelete,
+  collapseNonRisk,
 }: ChatDetailPanelProps) {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const { data: chat, isLoading: chatLoading } = useLoadChat(
@@ -892,6 +948,7 @@ export function ChatDetailPanel({
               messages={chat.messages}
               messageResolutionMap={messageResolutionMap}
               riskResultsByMessage={riskResultsByMessage}
+              collapseNonRisk={collapseNonRisk}
             />
           </div>
         </TabsContent>

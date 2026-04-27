@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/projects"
-	"github.com/speakeasy-api/gram/server/internal/access"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 )
@@ -27,7 +27,7 @@ func TestProjectsService_ListProjects_SkipsRBACWhenDisabled(t *testing.T) {
 	require.NoError(t, err)
 
 	// Clear grants so no project would be visible if RBAC were enforced.
-	ctx = access.GrantsToContext(ctx, nil)
+	ctx = authz.GrantsToContext(ctx, nil)
 
 	result, err := ti.service.ListProjects(ctx, &gen.ListProjectsPayload{
 		OrganizationID: authCtx.ActiveOrganizationID,
@@ -62,7 +62,7 @@ func TestProjectsService_ListProjects_FiltersByBuildReadGrant(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	ctx = withAccessGrants(t, ctx, ti.conn, access.Grant{Scope: access.ScopeBuildRead, Resource: allowedProject.ID.String()})
+	ctx = withAccessGrants(t, ctx, ti.conn, authz.Grant{Scope: authz.ScopeProjectRead, Resource: allowedProject.ID.String()})
 
 	result, err := ti.service.ListProjects(ctx, &gen.ListProjectsPayload{
 		SessionToken:   nil,

@@ -1,18 +1,9 @@
-/** The system-defined scopes. Flat — no implied hierarchy. */
-export type Scope =
-  | "org:read"
-  | "org:admin"
-  | "build:read"
-  | "build:write"
-  | "mcp:read"
-  | "mcp:write"
-  | "mcp:connect"
-  | "remote-mcp:read"
-  | "remote-mcp:write"
-  | "remote-mcp:connect";
+import { Scope } from "@gram/client/models/components/rolegrant.js";
+
+export { Scope };
 
 /** What kind of resource a scope protects. */
-export type ResourceType = "org" | "project" | "mcp" | "remote-mcp";
+export type ResourceType = "org" | "project" | "mcp";
 
 /** The 4 MCP tool annotation hint keys. */
 export type AnnotationHint =
@@ -21,8 +12,8 @@ export type AnnotationHint =
   | "idempotentHint"
   | "openWorldHint";
 
-/** The four tool-selection tabs in custom mode. */
-export type CustomTab = "select" | "auto-groups" | "http-method" | "collection";
+/** The three tool-selection tabs in custom mode. */
+export type CustomTab = "select" | "auto-groups" | "collection";
 
 /** A single grant within a role: a scope + optional resource allowlist. */
 export interface RoleGrant {

@@ -3,6 +3,7 @@ package conv
 import (
 	"crypto/rand"
 	"fmt"
+	"math"
 	"regexp"
 	"strings"
 
@@ -167,13 +168,21 @@ func FromPGBool[T ~bool](t pgtype.Bool) *T {
 	return &val
 }
 
-// FromPGInt4 converts a pgtype.Int4 to *int. If not valid, returns nil.
-func FromPGInt4(t pgtype.Int4) *int {
+// FromPGInt4 converts a pgtype.Int4 to *int32. If not valid, returns nil.
+func FromPGInt4(t pgtype.Int4) *int32 {
 	if !t.Valid {
 		return nil
 	}
-	v := int(t.Int32)
-	return &v
+	return &t.Int32
+}
+
+// PtrInt32ToInt converts a *int32 to *int. If nil, returns nil.
+func PtrInt32ToInt(v *int32) *int {
+	if v == nil {
+		return nil
+	}
+	i := int(*v)
+	return &i
 }
 
 // FromPGFloat8 converts a pgtype.Float8 to *float64. If not valid, returns nil.
@@ -259,4 +268,27 @@ func SafeInt32(v int) int32 {
 		return minInt32
 	}
 	return int32(v)
+}
+
+// ClampedUintToInt32 converts a uint to an int32, clamping the value to
+// math.MaxInt32 if it exceeds the maximum value for int32. The second return
+// value indicates whether clamping occurred.
+func ClampedUintToInt32(v uint) (out int32, clamped bool) {
+	if v > math.MaxInt32 {
+		return math.MaxInt32, true
+	}
+	return int32(v), false
+}
+
+// ClampedIntToUint8 converts an int to a uint8, clamping the value to
+// math.MaxUint8 if it exceeds the maximum value for uint8, and to 0 if it is
+// negative. The second return value indicates whether clamping occurred.
+func ClampedIntToUint8(v int) (out uint8, clamped bool) {
+	if v > math.MaxUint8 {
+		return math.MaxUint8, true
+	}
+	if v < 0 {
+		return 0, true
+	}
+	return uint8(v), false
 }

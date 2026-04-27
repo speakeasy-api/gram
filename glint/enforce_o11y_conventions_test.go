@@ -29,18 +29,7 @@ func TestEnforceO11yConventionsCustomMessage(t *testing.T) {
 func TestBuildAnalyzersSkipsDisabledEnforceO11yConventions(t *testing.T) {
 	t.Parallel()
 
-	p := &plugin{
-		settings: settings{
-			Rules: ruleSettings{
-				NoAnonymousDefer:           noAnonymousDeferSettings{Disabled: true},
-				EnforceO11yConventions:     enforceO11yConventionsSettings{Disabled: true},
-				ServiceHasServiceAssertion: serviceHasServiceAssertionSettings{Disabled: true},
-				ServiceHasAutherAssertion:  serviceHasAutherAssertionSettings{Disabled: true},
-				ServiceHasAttachFunc:       serviceHasAttachFuncSettings{Disabled: true},
-				NoRepoFieldsInService:      noRepoFieldsInServiceSettings{Disabled: true},
-			},
-		},
-	}
+	p := disabledAllRulesPlugin()
 
 	analyzers, err := p.BuildAnalyzers()
 	require.NoError(t, err)

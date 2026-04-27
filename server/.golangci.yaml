@@ -58,7 +58,7 @@ linters:
       - path: internal/billing/stub\.go
         linters:
           - musttag
-      - path: _test\.go|internal/testenv/|cmd/|internal/dns/
+      - path: cmd/|internal/dns/
         linters:
           - forbidigo
       - path: internal/dns/net_resolver\.go
@@ -68,8 +68,7 @@ linters:
         linters:
           - exhaustruct
           - gosec
-      # False positives that scope constants, such as remote-mcp:write, are
-      # somehow hardcoded credentials.
+      # False positives that scope constants are somehow hardcoded credentials.
       - path: internal/access/scopes\.go
         linters:
           - gosec
@@ -104,6 +103,11 @@ linters:
         linters:
           - glint
         text: enforceo11yconventions
+      # Not interesting to enforce this in tests
+      - path: _test\.go|internal/testenv/|internal/testinfra/
+        linters:
+          - forbidigo
+        text: GG001|GG002
   settings:
     custom:
       glint:
@@ -119,6 +123,12 @@ linters:
               disabled: true
             no-repo-fields-in-service:
               disabled: true
+            audit-event-typed-snapshot:
+              disabled: false
+            audit-event-urn-naming:
+              disabled: false
+            audit-event-urn-typing:
+              disabled: false
     gosec:
       excludes:
         # Temporarily ignore this lint rule because it needs to be a separate
@@ -143,9 +153,12 @@ linters:
         - pattern: ^otel\.Tracer$
           pkg: ^go\.opentelemetry\.io/otel$
           msg: "GG003: pass a trace.TracerProvider to functions instead of using otel.Tracer directly."
+        - pattern: ^testing\.T\.(Skip|SkipNow|Skipf)$
+          pkg: ^testing$
+          msg: "GG004: avoid committing skipped tests."
         - pattern: ^net\.Lookup(Addr|CNAME|Host|IP|MX|NS|Port|SRV|TXT)$
           pkg: ^net$
-          msg: "Use dns.NewNetResolver() instead of net.Lookup* for testability."
+          msg: "GG005: Use dns.NewNetResolver() instead of net.Lookup* for testability."
     sloglint:
       no-mixed-args: true
       attr-only: true
@@ -270,6 +283,10 @@ linters:
         - "(*github.com/speakeasy-api/gram/server/internal/access.Manager).RequireAny("
         - "(*github.com/speakeasy-api/gram/server/internal/access.Manager).Filter("
         - "(*github.com/speakeasy-api/gram/server/internal/access.Manager).PrepareContext("
+        - "(*github.com/speakeasy-api/gram/server/internal/authz.Engine).Require("
+        - "(*github.com/speakeasy-api/gram/server/internal/authz.Engine).Filter("
+        - "(*github.com/speakeasy-api/gram/server/internal/authz.Engine).ShouldEnforce("
+        - "github.com/speakeasy-api/gram/server/internal/authz.GrantsForRole("
         - "(*github.com/speakeasy-api/gram/server/internal/auth.Auth).Authorize("
         - "(*github.com/speakeasy-api/gram/server/internal/auth/chatsessions.Manager).Authorize("
         - "(*github.com/speakeasy-api/gram/server/internal/auth.Auth).CheckProjectAccess("

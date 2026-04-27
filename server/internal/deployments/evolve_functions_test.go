@@ -1845,3 +1845,199 @@ func TestEvolve_UpdateFunctions_RemoveAuthInput(t *testing.T) {
 		require.Nil(t, tool.AuthInput, "evolved tools should have no authInput")
 	}
 }
+
+func TestEvolve_UpsertFunctionsSetsMemoryAndScale(t *testing.T) {
+	t.Parallel()
+
+	assetStorage := assetstest.NewTestBlobStore(t)
+	ctx, ti := newTestDeploymentService(t, assetStorage)
+
+	fres := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "nodejs:24")
+
+	// Create initial deployment with no memory/scale
+	initial, err := ti.service.Evolve(ctx, &gen.EvolvePayload{
+		ApikeyToken:           nil,
+		SessionToken:          nil,
+		ProjectSlugInput:      nil,
+		DeploymentID:          nil,
+		UpsertOpenapiv3Assets: []*gen.AddOpenAPIv3DeploymentAssetForm{},
+		UpsertFunctions: []*gen.AddFunctionsForm{
+			{
+				AssetID:   fres.Asset.ID,
+				Name:      "my-functions",
+				Slug:      "my-functions",
+				Runtime:   "nodejs:24",
+				MemoryMib: nil,
+				Scale:     nil,
+			},
+		},
+		UpsertPackages:         []*gen.AddPackageForm{},
+		ExcludeOpenapiv3Assets: []string{},
+		ExcludeFunctions:       []string{},
+		ExcludePackages:        []string{},
+	})
+	require.NoError(t, err, "create initial deployment")
+	require.Equal(t, "completed", initial.Deployment.Status)
+	require.Len(t, initial.Deployment.FunctionsAssets, 1)
+	require.Nil(t, initial.Deployment.FunctionsAssets[0].MemoryMib)
+	require.Nil(t, initial.Deployment.FunctionsAssets[0].Scale)
+
+	// Evolve to set memory and scale
+	evolved, err := ti.service.Evolve(ctx, &gen.EvolvePayload{
+		ApikeyToken:           nil,
+		SessionToken:          nil,
+		ProjectSlugInput:      nil,
+		DeploymentID:          nil,
+		UpsertOpenapiv3Assets: []*gen.AddOpenAPIv3DeploymentAssetForm{},
+		UpsertFunctions: []*gen.AddFunctionsForm{
+			{
+				AssetID:   fres.Asset.ID,
+				Name:      "my-functions",
+				Slug:      "my-functions",
+				Runtime:   "nodejs:24",
+				MemoryMib: new(uint(1024)),
+				Scale:     new(uint(2)),
+			},
+		},
+		UpsertPackages:         []*gen.AddPackageForm{},
+		ExcludeOpenapiv3Assets: []string{},
+		ExcludeFunctions:       []string{},
+		ExcludePackages:        []string{},
+	})
+	require.NoError(t, err, "evolve deployment to set memory and scale")
+	require.Equal(t, "completed", evolved.Deployment.Status)
+	require.Len(t, evolved.Deployment.FunctionsAssets, 1)
+	require.NotNil(t, evolved.Deployment.FunctionsAssets[0].MemoryMib)
+	require.Equal(t, int32(1024), *evolved.Deployment.FunctionsAssets[0].MemoryMib)
+	require.NotNil(t, evolved.Deployment.FunctionsAssets[0].Scale)
+	require.Equal(t, int32(2), *evolved.Deployment.FunctionsAssets[0].Scale)
+}
+
+func TestEvolve_UpsertFunctionsUpdatesMemoryAndScale(t *testing.T) {
+	t.Parallel()
+
+	assetStorage := assetstest.NewTestBlobStore(t)
+	ctx, ti := newTestDeploymentService(t, assetStorage)
+
+	fres := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "nodejs:24")
+
+	// Create initial deployment with memory=1024, scale=2
+	_, err := ti.service.Evolve(ctx, &gen.EvolvePayload{
+		ApikeyToken:           nil,
+		SessionToken:          nil,
+		ProjectSlugInput:      nil,
+		DeploymentID:          nil,
+		UpsertOpenapiv3Assets: []*gen.AddOpenAPIv3DeploymentAssetForm{},
+		UpsertFunctions: []*gen.AddFunctionsForm{
+			{
+				AssetID:   fres.Asset.ID,
+				Name:      "my-functions",
+				Slug:      "my-functions",
+				Runtime:   "nodejs:24",
+				MemoryMib: new(uint(1024)),
+				Scale:     new(uint(2)),
+			},
+		},
+		UpsertPackages:         []*gen.AddPackageForm{},
+		ExcludeOpenapiv3Assets: []string{},
+		ExcludeFunctions:       []string{},
+		ExcludePackages:        []string{},
+	})
+	require.NoError(t, err, "create initial deployment")
+
+	// Evolve to update memory=2048, scale=4
+	fres2 := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "nodejs:24")
+	evolved, err := ti.service.Evolve(ctx, &gen.EvolvePayload{
+		ApikeyToken:           nil,
+		SessionToken:          nil,
+		ProjectSlugInput:      nil,
+		DeploymentID:          nil,
+		UpsertOpenapiv3Assets: []*gen.AddOpenAPIv3DeploymentAssetForm{},
+		UpsertFunctions: []*gen.AddFunctionsForm{
+			{
+				AssetID:   fres2.Asset.ID,
+				Name:      "my-functions",
+				Slug:      "my-functions",
+				Runtime:   "nodejs:24",
+				MemoryMib: new(uint(2048)),
+				Scale:     new(uint(4)),
+			},
+		},
+		UpsertPackages:         []*gen.AddPackageForm{},
+		ExcludeOpenapiv3Assets: []string{},
+		ExcludeFunctions:       []string{},
+		ExcludePackages:        []string{},
+	})
+	require.NoError(t, err, "evolve deployment to update memory and scale")
+	require.Equal(t, "completed", evolved.Deployment.Status)
+	require.Len(t, evolved.Deployment.FunctionsAssets, 1)
+	require.NotNil(t, evolved.Deployment.FunctionsAssets[0].MemoryMib)
+	require.Equal(t, int32(2048), *evolved.Deployment.FunctionsAssets[0].MemoryMib)
+	require.NotNil(t, evolved.Deployment.FunctionsAssets[0].Scale)
+	require.Equal(t, int32(4), *evolved.Deployment.FunctionsAssets[0].Scale)
+}
+
+func TestEvolve_UpsertFunctionsPreservesMemoryAndScaleWhenOmitted(t *testing.T) {
+	t.Parallel()
+
+	assetStorage := assetstest.NewTestBlobStore(t)
+	ctx, ti := newTestDeploymentService(t, assetStorage)
+
+	fres := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "nodejs:24")
+
+	// Create initial deployment with memory=2048, scale=3
+	_, err := ti.service.Evolve(ctx, &gen.EvolvePayload{
+		ApikeyToken:           nil,
+		SessionToken:          nil,
+		ProjectSlugInput:      nil,
+		DeploymentID:          nil,
+		UpsertOpenapiv3Assets: []*gen.AddOpenAPIv3DeploymentAssetForm{},
+		UpsertFunctions: []*gen.AddFunctionsForm{
+			{
+				AssetID:   fres.Asset.ID,
+				Name:      "my-functions",
+				Slug:      "my-functions",
+				Runtime:   "nodejs:24",
+				MemoryMib: new(uint(2048)),
+				Scale:     new(uint(3)),
+			},
+		},
+		UpsertPackages:         []*gen.AddPackageForm{},
+		ExcludeOpenapiv3Assets: []string{},
+		ExcludeFunctions:       []string{},
+		ExcludePackages:        []string{},
+	})
+	require.NoError(t, err, "create initial deployment")
+
+	// Evolve with the same slug but a different asset and no memory/scale —
+	// the previous configuration must be preserved.
+	fres2 := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "nodejs:24")
+	evolved, err := ti.service.Evolve(ctx, &gen.EvolvePayload{
+		ApikeyToken:           nil,
+		SessionToken:          nil,
+		ProjectSlugInput:      nil,
+		DeploymentID:          nil,
+		UpsertOpenapiv3Assets: []*gen.AddOpenAPIv3DeploymentAssetForm{},
+		UpsertFunctions: []*gen.AddFunctionsForm{
+			{
+				AssetID:   fres2.Asset.ID,
+				Name:      "my-functions",
+				Slug:      "my-functions",
+				Runtime:   "nodejs:24",
+				MemoryMib: nil,
+				Scale:     nil,
+			},
+		},
+		UpsertPackages:         []*gen.AddPackageForm{},
+		ExcludeOpenapiv3Assets: []string{},
+		ExcludeFunctions:       []string{},
+		ExcludePackages:        []string{},
+	})
+	require.NoError(t, err, "evolve deployment without memory and scale")
+	require.Equal(t, "completed", evolved.Deployment.Status)
+	require.Len(t, evolved.Deployment.FunctionsAssets, 1)
+	require.NotNil(t, evolved.Deployment.FunctionsAssets[0].MemoryMib)
+	require.Equal(t, int32(2048), *evolved.Deployment.FunctionsAssets[0].MemoryMib)
+	require.NotNil(t, evolved.Deployment.FunctionsAssets[0].Scale)
+	require.Equal(t, int32(3), *evolved.Deployment.FunctionsAssets[0].Scale)
+}

@@ -136,6 +136,8 @@ INSERT INTO deployments_functions (
   , name
   , slug
   , runtime
+  , memory_mib
+  , scale
 )
 SELECT 
   $1
@@ -143,20 +145,30 @@ SELECT
   , current.name
   , current.slug
   , current.runtime
+  , COALESCE(current.memory_mib, $2::int)
+  , COALESCE(current.scale, $3::int)
 FROM deployments_functions as current
-WHERE current.deployment_id = $2
-  AND current.asset_id <> ALL ($3::uuid[])
+WHERE current.deployment_id = $4
+  AND current.asset_id <> ALL ($5::uuid[])
 RETURNING id
 `
 
 type CloneDeploymentFunctionsAssetsParams struct {
 	CloneDeploymentID    uuid.UUID
+	DefaultMemoryMib     int32
+	DefaultScale         int32
 	OriginalDeploymentID uuid.UUID
 	ExcludedIds          []uuid.UUID
 }
 
 func (q *Queries) CloneDeploymentFunctionsAssets(ctx context.Context, arg CloneDeploymentFunctionsAssetsParams) ([]uuid.UUID, error) {
-	rows, err := q.db.Query(ctx, cloneDeploymentFunctionsAssets, arg.CloneDeploymentID, arg.OriginalDeploymentID, arg.ExcludedIds)
+	rows, err := q.db.Query(ctx, cloneDeploymentFunctionsAssets,
+		arg.CloneDeploymentID,
+		arg.DefaultMemoryMib,
+		arg.DefaultScale,
+		arg.OriginalDeploymentID,
+		arg.ExcludedIds,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -1084,7 +1096,7 @@ func (q *Queries) GetDeploymentByIdempotencyKey(ctx context.Context, arg GetDepl
 }
 
 const getDeploymentFunctions = `-- name: GetDeploymentFunctions :many
-SELECT df.id, df.deployment_id, df.asset_id, df.name, df.slug, df.runtime, df.runner_version
+SELECT df.id, df.deployment_id, df.asset_id, df.name, df.slug, df.runtime, df.runner_version, df.memory_mib, df.scale
 FROM deployments_functions df
 INNER JOIN deployments d ON df.deployment_id = d.id
 WHERE 
@@ -1114,6 +1126,8 @@ func (q *Queries) GetDeploymentFunctions(ctx context.Context, arg GetDeploymentF
 			&i.Slug,
 			&i.Runtime,
 			&i.RunnerVersion,
+			&i.MemoryMib,
+			&i.Scale,
 		); err != nil {
 			return nil, err
 		}
@@ -1317,6 +1331,8 @@ SELECT
   deployments_functions.name as deployments_functions_name,
   deployments_functions.slug as deployments_functions_slug,
   deployments_functions.runtime as deployments_functions_runtime,
+  deployments_functions.scale as deployments_functions_scale,
+  deployments_functions.memory_mib as deployments_functions_memory_mib,
   deployments_packages.package_id as deployment_package_id,
   packages.name as package_name,
   package_versions.major as package_version_major,
@@ -1364,6 +1380,8 @@ type GetDeploymentWithAssetsRow struct {
 	DeploymentsFunctionsName           pgtype.Text
 	DeploymentsFunctionsSlug           pgtype.Text
 	DeploymentsFunctionsRuntime        pgtype.Text
+	DeploymentsFunctionsScale          pgtype.Int4
+	DeploymentsFunctionsMemoryMib      pgtype.Int4
 	DeploymentPackageID                uuid.NullUUID
 	PackageName                        pgtype.Text
 	PackageVersionMajor                pgtype.Int8
@@ -1416,6 +1434,8 @@ func (q *Queries) GetDeploymentWithAssets(ctx context.Context, arg GetDeployment
 			&i.DeploymentsFunctionsName,
 			&i.DeploymentsFunctionsSlug,
 			&i.DeploymentsFunctionsRuntime,
+			&i.DeploymentsFunctionsScale,
+			&i.DeploymentsFunctionsMemoryMib,
 			&i.DeploymentPackageID,
 			&i.PackageName,
 			&i.PackageVersionMajor,
@@ -1848,18 +1868,24 @@ INSERT INTO deployments_functions (
   , name
   , slug
   , runtime
+  , memory_mib
+  , scale
 ) VALUES (
   $1
   , $2
   , $3
   , $4
   , $5
+  , $6
+  , $7
 )
 ON CONFLICT (deployment_id, slug) DO UPDATE
 SET
   asset_id = EXCLUDED.asset_id
   , name = EXCLUDED.name
   , runtime = EXCLUDED.runtime
+  , memory_mib = COALESCE(EXCLUDED.memory_mib, deployments_functions.memory_mib)
+  , scale = COALESCE(EXCLUDED.scale, deployments_functions.scale)
 RETURNING id, asset_id, name, slug
 `
 
@@ -1869,6 +1895,8 @@ type UpsertDeploymentFunctionsAssetParams struct {
 	Name         string
 	Slug         string
 	Runtime      string
+	MemoryMib    pgtype.Int4
+	Scale        pgtype.Int4
 }
 
 type UpsertDeploymentFunctionsAssetRow struct {
@@ -1885,6 +1913,8 @@ func (q *Queries) UpsertDeploymentFunctionsAsset(ctx context.Context, arg Upsert
 		arg.Name,
 		arg.Slug,
 		arg.Runtime,
+		arg.MemoryMib,
+		arg.Scale,
 	)
 	var i UpsertDeploymentFunctionsAssetRow
 	err := row.Scan(

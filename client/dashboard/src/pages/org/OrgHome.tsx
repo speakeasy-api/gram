@@ -21,7 +21,7 @@ export default function OrgHome() {
       </Page.Header>
       <Page.Body>
         <RequireScope
-          scope={["org:read", "build:read", "org:admin"]}
+          scope={["org:read", "project:read", "org:admin"]}
           level="page"
         >
           <OrgHomeInner />

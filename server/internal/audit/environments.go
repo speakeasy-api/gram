@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/audit/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -71,8 +72,8 @@ type LogEnvironmentUpdateEvent struct {
 	EnvironmentURN            urn.Environment
 	EnvironmentName           string
 	EnvironmentSlug           string
-	EnvironmentSnapshotBefore any
-	EnvironmentSnapshotAfter  any
+	EnvironmentSnapshotBefore *types.Environment
+	EnvironmentSnapshotAfter  *types.Environment
 }
 
 func LogEnvironmentUpdate(ctx context.Context, dbtx repo.DBTX, event LogEnvironmentUpdateEvent) error {

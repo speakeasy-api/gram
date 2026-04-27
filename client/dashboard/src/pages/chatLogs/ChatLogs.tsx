@@ -126,7 +126,7 @@ function isValidPreset(value: string | null): value is DateRangePreset {
 
 export default function ChatLogs() {
   return (
-    <RequireScope scope="build:read" level="page">
+    <RequireScope scope="project:read" level="page">
       <ChatLogsInner />
     </RequireScope>
   );

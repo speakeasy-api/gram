@@ -41,6 +41,8 @@ type StageFunctionOptions struct {
 	Name       string
 	Location   string
 	Runtime    string
+	Scale      *uint
+	MemoryMiB  *uint
 }
 
 type StageOpenAPIOptions struct {
@@ -81,11 +83,13 @@ func DoStageFunction(opts StageFunctionOptions) error {
 
 	if err := appendSourcesToConfig(opts.ConfigFile, []deploy.Source{
 		{
-			Type:     deploy.SourceTypeFunction,
-			Slug:     opts.Slug,
-			Name:     name,
-			Location: opts.Location,
-			Runtime:  opts.Runtime,
+			Type:      deploy.SourceTypeFunction,
+			Slug:      opts.Slug,
+			Name:      name,
+			Location:  opts.Location,
+			Runtime:   opts.Runtime,
+			Scale:     opts.Scale,
+			MemoryMiB: opts.MemoryMiB,
 		},
 	}); err != nil {
 		return fmt.Errorf("failed to append source to config: %w", err)
@@ -119,11 +123,13 @@ func DoStageOpenAPI(opts StageOpenAPIOptions) error {
 
 	if err := appendSourcesToConfig(opts.ConfigFile, []deploy.Source{
 		{
-			Type:     deploy.SourceTypeOpenAPIV3,
-			Slug:     opts.Slug,
-			Name:     name,
-			Location: opts.Location,
-			Runtime:  "",
+			Type:      deploy.SourceTypeOpenAPIV3,
+			Slug:      opts.Slug,
+			Name:      name,
+			Location:  opts.Location,
+			Runtime:   "",
+			Scale:     nil, // not relevant for OpenAPI sources
+			MemoryMiB: nil, // not relevant for OpenAPI sources
 		},
 	}); err != nil {
 		return fmt.Errorf("failed to append source to config: %w", err)
@@ -221,14 +227,35 @@ func newStageFunctionCommand() *cli.Command {
 				},
 				Value: "nodejs:22",
 			},
+			&cli.UintFlag{
+				Name:     "scale",
+				Usage:    "Number of instances to run for the function",
+				Required: false,
+			},
+			&cli.UintFlag{
+				Name:     "memory-mib",
+				Usage:    "Amount of memory in MiB to allocate for the function (1 MiB = 1024 * 1024 bytes)",
+				Required: false,
+			},
 		},
 		Action: func(cCtx *cli.Context) error {
+			var scale *uint
+			if cCtx.Uint("scale") != 0 {
+				scale = new(cCtx.Uint("scale"))
+			}
+			var memory *uint
+			if cCtx.Uint("memory-mib") != 0 {
+				memory = new(cCtx.Uint("memory-mib"))
+			}
+
 			return DoStageFunction(StageFunctionOptions{
 				ConfigFile: cCtx.Path("config"),
 				Slug:       cCtx.String("slug"),
 				Name:       cCtx.String("name"),
 				Location:   cCtx.String("location"),
 				Runtime:    cCtx.String("runtime"),
+				Scale:      scale,
+				MemoryMiB:  memory,
 			})
 		},
 	}

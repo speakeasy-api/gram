@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	backoff "github.com/cenkalti/backoff/v5"
@@ -44,6 +45,12 @@ const (
 	defaultFlyBaseURL     = "https://api.fly.io"
 	defaultFlyMachinesURL = "https://api.machines.dev"
 	largeFunctionLimit    = 700 * 1024 // 700 KiB
+
+	defaultMachineMemoryMiB = 1024
+	maxMachineMemoryMiB     = 4096
+
+	defaultFunctionScale = 2
+	maxFunctionScale     = 5
 )
 
 type FlyRunnerOptions struct {
@@ -295,6 +302,7 @@ func (f *FlyRunner) Deploy(ctx context.Context, req RunnerDeployRequest) (res *R
 	// before starting to create resources on fly.io. This is to avoid leaving
 	// orphaned resources in case of errors.
 
+	span := trace.SpanFromContext(ctx)
 	appsRepo := repo.New(f.db)
 
 	slogArgs := []any{
@@ -470,9 +478,16 @@ func (f *FlyRunner) Deploy(ctx context.Context, req RunnerDeployRequest) (res *R
 	}
 
 	logger.InfoContext(ctx, "Starting runner machines")
-	ms, err := f.launchN(ctx, logger, appName, flapsc, region, machineConfig, minSecretVersion, 2)
+	rawScale := conv.Default(min(maxFunctionScale, max(0, req.Scale)), defaultFunctionScale)
+	scale, _ := conv.ClampedIntToUint8(rawScale)
+	ms, err := f.launchN(ctx, logger, appName, flapsc, region, machineConfig, minSecretVersion, scale)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to spin up function runner machines").Log(ctx, logger)
+		if len(ms) > 0 {
+			span.RecordError(err)
+			logger.WarnContext(ctx, "failed to spin up some function runner machines", attr.SlogError(err))
+		} else {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to spin up function runner machines").Log(ctx, logger)
+		}
 	}
 
 	_, err = f.client.AllocateSharedIPAddress(ctx, appName)
@@ -497,7 +512,11 @@ func (f *FlyRunner) Deploy(ctx context.Context, req RunnerDeployRequest) (res *R
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to mark app as ready").Log(ctx, logger)
 	}
 
-	msg := fmt.Sprintf("deployed function runner app (app=%s, scale=%d)", appName, len(ms))
+	var mem int
+	if machineConfig.Guest != nil {
+		mem = machineConfig.Guest.MemoryMB
+	}
+	msg := fmt.Sprintf("deployed function runner app (app=%s, scale=%d, mem=%d)", appName, len(ms), mem)
 	logger.InfoContext(ctx, msg, attr.SlogFlyMachineIDs(machineIDs))
 
 	return &RunnerDeployResult{
@@ -628,8 +647,8 @@ func (f *FlyRunner) newMachineConfig(req RunnerDeployRequest, image string, file
 	machineMeta := maps.Clone(baseMetadata)
 	machineMeta[fly.MachineConfigMetadataKeyFlyProcessGroup] = "gram_functions_runner"
 
-	memoryMB := 4096
-	softLimit, hardLimit := concurrencyLimits(memoryMB)
+	mem := conv.Default(min(maxMachineMemoryMiB, max(0, req.MemoryMiB)), defaultMachineMemoryMiB)
+	softLimit, hardLimit := concurrencyLimits(mem)
 
 	return &fly.MachineConfig{
 		Image: image,
@@ -642,7 +661,7 @@ func (f *FlyRunner) newMachineConfig(req RunnerDeployRequest, image string, file
 		Guest: &fly.MachineGuest{
 			CPUKind:       "shared",
 			CPUs:          2,
-			MemoryMB:      memoryMB,
+			MemoryMB:      mem,
 			GPUs:          0,
 			PersistRootfs: fly.MachinePersistRootfsNever,
 		},
@@ -698,44 +717,74 @@ func isFlyAppReady(err error) bool {
 }
 
 func (f *FlyRunner) launchN(ctx context.Context, logger *slog.Logger, appName string, flapsc *flaps.Client, region string, config *fly.MachineConfig, minSecretVersion *uint64, n uint8) ([]*fly.Machine, error) {
-	ms := make([]*fly.Machine, 0, n)
+	var wg sync.WaitGroup
+	errCh := make(chan error, n)
+	machinesCh := make(chan *fly.Machine, n)
 
-	for i := range n {
-		input := fly.LaunchMachineInput{
-			Region:                  region,
-			Timeout:                 0,
-			RequiresReplacement:     true,
-			SkipLaunch:              false,
-			SkipServiceRegistration: false,
-			SkipSecrets:             false,
-			LeaseTTL:                0,
-			Config:                  config,
-			MinSecretsVersion:       minSecretVersion,
-		}
-
-		var m *fly.Machine
-		var err error
-
-		// The first machine launch can hit a Fly.io propagation delay
-		// where the Machines API hasn't registered the app created via
-		// the GraphQL API yet. Retry with backoff for these transient
-		// errors only.
-		if i == 0 {
-			m, err = f.launchWithRetry(ctx, logger, appName, flapsc, input)
-		} else {
-			m, err = flapsc.Launch(ctx, appName, input)
-		}
-		if err != nil {
-			return ms, fmt.Errorf("failed to launch machine %d: %w", i, err)
-		}
-		ms = append(ms, m)
-
-		if err := flapsc.Wait(ctx, appName, m, "started", 30*time.Second); err != nil {
-			return nil, fmt.Errorf("waiting for machine %s to start: %w", m.ID, err)
-		}
+	var mem int
+	if config.Guest != nil {
+		mem = config.Guest.MemoryMB
 	}
 
-	return ms, nil
+	if err := inv.Check(
+		"fly runner launch machines",
+		fmt.Sprintf("scale must be between 1 and %d", maxFunctionScale), n > 0 && n <= maxFunctionScale,
+		fmt.Sprintf("machine memory must be between 0 and %d MiB", maxMachineMemoryMiB), mem >= 0 && mem <= maxMachineMemoryMiB,
+	); err != nil {
+		return nil, fmt.Errorf("invalid machine specs: %w", err)
+	}
+
+	for i := range n {
+		wg.Go(func() {
+			input := fly.LaunchMachineInput{
+				Region:                  region,
+				Timeout:                 0,
+				RequiresReplacement:     true,
+				SkipLaunch:              false,
+				SkipServiceRegistration: false,
+				SkipSecrets:             false,
+				LeaseTTL:                0,
+				Config:                  config,
+				MinSecretsVersion:       minSecretVersion,
+			}
+
+			var m *fly.Machine
+			var err error
+
+			// The first machine launch can hit a Fly.io propagation delay
+			// where the Machines API hasn't registered the app created via
+			// the GraphQL API yet. Retry with backoff for these transient
+			// errors only.
+			m, err = f.launchWithRetry(ctx, logger, appName, flapsc, input)
+			if err != nil {
+				errCh <- fmt.Errorf("failed to launch machine %d: %w", i, err)
+				return
+			}
+
+			if err := flapsc.Wait(ctx, appName, m, "started", 30*time.Second); err != nil {
+				errCh <- fmt.Errorf("waiting for machine %s to start: %w", m.ID, err)
+				return
+			}
+
+			machinesCh <- m
+		})
+	}
+
+	wg.Wait()
+	close(errCh)
+	close(machinesCh)
+
+	var err error
+	for e := range errCh {
+		err = errors.Join(err, e)
+	}
+
+	var machines []*fly.Machine
+	for m := range machinesCh {
+		machines = append(machines, m)
+	}
+
+	return machines, err
 }
 
 // launchWithRetry retries a machine launch with exponential backoff when the

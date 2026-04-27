@@ -1,5 +1,53 @@
 # server
 
+## 0.43.0
+
+### Minor Changes
+
+- 42e4248: Add support for scaling the number of instances and memory for machines deployed for a Gram Function. It is now possible to go up to 5 machines per function and up to 4096 MiB for each machine.
+
+## 0.42.1
+
+### Patch Changes
+
+- 2b2d423: added per-skill time series data to the hooks summary API to power skill usage charts.
+
+## 0.42.0
+
+### Minor Changes
+
+- ea3e1aa: Add GitHub publishing for plugins. Admins can publish generated plugin
+  packages to a GitHub repository via a configured GitHub App, enabling
+  distribution through Claude Code and Cursor team marketplaces.
+
+### Patch Changes
+
+- 672795f: Updated fly app reaping to target all apps used by old deployments, leaving only the most recent deployment's app(s) untouched. This is a more aggressive strategy that is coming ahead of support for scaling up fly apps to multiple machines per deployment.
+- f03a7d2: Fix a data race in concurrent OpenAPI tool extraction that could corrupt schemas or crash deployments when the same schema was referenced by multiple operations.
+- 00a8f2a: Cursor hooks native MCP support. Token use tracking support for Cursor sessions
+
+## 0.41.0
+
+### Minor Changes
+
+- d8c6ce1: add support for publishing external servers into collections.
+- 78e3323: Add remote MCP server management API endpoints with CRUD operations, RBAC scopes, header encryption, and audit logging
+- 1ee9f95: Improved Hooks dashboard with new charts, refined visuals, and smarter default filters.
+- 04c6c30: Add team invite flow with accept page, configurable expiry, and security hardening
+
+### Patch Changes
+
+- afe4b80: Normalize the `Source` column on `chat_messages` for Claude Code hook
+  intake so tool-call messages use the OTEL `service.name` like user and
+  assistant messages, instead of hardcoding `ClaudeCode`.
+- bbe494e: Fix chats breaking when switching providers mid-conversation. Assistant turns that contained both a text reply and a tool call could cause the next turn to fail with a validation error on some provider routes, leaving the conversation unrecoverable. Affected chats now continue to work seamlessly across providers.
+- 8c5d6e9: Add a defense-in-depth 413 guard on the `/completion` chat proxy — reject any
+  single tool-result message over 200KB with a clean HTTP 413 / `request_too_large`
+  error instead of forwarding to OpenRouter where it would surface as an opaque
+  "prompt is too long" 400. Clients are expected to truncate tool outputs
+  before sending (see `@gram-ai/elements` `tools.maxOutputBytes`), but this
+  guard keeps the error surface clean if they don't.
+
 ## 0.40.1
 
 ### Patch Changes

@@ -8,7 +8,7 @@ import {
   UseMutationResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { riskCreatePolicy } from "../funcs/riskCreatePolicy.js";
+import { riskPoliciesCreate } from "../funcs/riskPoliciesCreate.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
@@ -72,7 +72,7 @@ export function useRiskCreatePolicyMutation(
 }
 
 export function mutationKeyRiskCreatePolicy(): MutationKey {
-  return ["@gram/client", "risk", "createPolicy"];
+  return ["@gram/client", "policies", "create"];
 }
 
 export function buildRiskCreatePolicyMutation(
@@ -103,7 +103,7 @@ export function buildRiskCreatePolicyMutation(
           ),
         },
       };
-      return unwrapAsync(riskCreatePolicy(
+      return unwrapAsync(riskPoliciesCreate(
         client$,
         request,
         security,

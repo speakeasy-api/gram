@@ -99,7 +99,7 @@ function inferCustomTab(
   }
 
   // All tabs now use serverSlug:toolName, so we can't distinguish between
-  // "select", "http-method", and "collection" tabs from IDs alone.
+  // "select" and "collection" tabs from IDs alone.
   // Default to "select" — the user's tool selections are preserved correctly.
   return { tab: "select" };
 }
@@ -300,9 +300,8 @@ export function CreateRoleDialog({
         request: {
           updateRoleForm: {
             id: editingRole.id,
-            name,
-            description,
-            grants: sdkGrants,
+            // System roles are immutable in WorkOS — only member assignment is allowed.
+            ...(isSystemRole ? {} : { name, description, grants: sdkGrants }),
             memberIds:
               selectedMembers.size > 0
                 ? Array.from(selectedMembers)
@@ -503,6 +502,7 @@ export function CreateRoleDialog({
                                   {isChecked && !isSystemRole && (
                                     <ScopePickerPopover
                                       resourceType={scopeDef.resourceType}
+                                      scope={scopeDef.slug}
                                       resources={grant.resources}
                                       onChangeResources={(resources) =>
                                         setGrantResources(
@@ -674,10 +674,10 @@ export function CreateRoleDialog({
           <Button
             onClick={handleSubmit}
             disabled={
-              !name.trim() ||
-              !description.trim() ||
-              grantCount === 0 ||
-              isMutating
+              isMutating ||
+              (isSystemRole
+                ? selectedMembers.size === 0
+                : !name.trim() || !description.trim() || grantCount === 0)
             }
           >
             {isMutating && (

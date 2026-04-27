@@ -4,12 +4,15 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"regexp"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -24,20 +27,106 @@ import (
 
 	srv "github.com/speakeasy-api/gram/server/gen/http/plugins/server"
 	gen "github.com/speakeasy-api/gram/server/gen/plugins"
-	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
+	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
+	mcpmetarepo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/plugins/repo"
+	ghclient "github.com/speakeasy-api/gram/server/internal/thirdparty/github"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 var validPrincipalURN = regexp.MustCompile(`^(\*|role:[a-zA-Z0-9_-]+|user:[a-zA-Z0-9_-]+)$`)
+
+// GitHub usernames: 1-39 chars, starts with alphanumeric, alphanumeric or hyphen.
+// Strict enough to prevent path traversal in API URL construction.
+var validGitHubUsername = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9-]{0,38}$`)
+
+// GitHubPublisher is the interface for creating repos and pushing files to GitHub.
+type GitHubPublisher interface {
+	CreateRepo(ctx context.Context, installationID int64, org, name string, private bool) error
+	PushFiles(ctx context.Context, installationID int64, owner, repo, branch, commitMsg string, files map[string][]byte) (string, error)
+	AddCollaborator(ctx context.Context, installationID int64, owner, repo, username, permission string) error
+}
+
+// GitHubConfig holds the configured GitHub client and the Gram-owned org
+// where plugin repos are created. Nil means GitHub publishing is disabled.
+type GitHubConfig struct {
+	Client         GitHubPublisher
+	Org            string
+	InstallationID int64
+}
+
+// GitHubConfigInput is the raw deployment-time configuration for plugin
+// GitHub publishing. All fields must be set together (the feature is on)
+// or all must be unset (the feature is off). Pass to NewGitHubConfig.
+type GitHubConfigInput struct {
+	AppID          int64
+	PrivateKey     string
+	Org            string
+	InstallationID int64
+	HTTPClient     *guardian.HTTPClient
+}
+
+// NewGitHubConfig validates a GitHubConfigInput holistically and returns:
+//   - (nil, nil)        when no fields are set: feature is disabled
+//   - (config, nil)     when all fields are set: feature is enabled
+//   - (nil, error)      when only some fields are set: deployment is misconfigured
+//
+// The all-or-nothing check prevents the silent-disable footgun where setting
+// three of four env vars (e.g. forgetting GRAM_PLUGINS_GITHUB_APP_ID) leaves
+// the deployment running with publishing inexplicably off.
+func NewGitHubConfig(in GitHubConfigInput) (*GitHubConfig, error) {
+	set := 0
+	missing := []string{}
+	if in.AppID != 0 {
+		set++
+	} else {
+		missing = append(missing, "plugins-github-app-id")
+	}
+	if in.PrivateKey != "" {
+		set++
+	} else {
+		missing = append(missing, "plugins-github-private-key")
+	}
+	if in.Org != "" {
+		set++
+	} else {
+		missing = append(missing, "plugins-github-org")
+	}
+	if in.InstallationID != 0 {
+		set++
+	} else {
+		missing = append(missing, "plugins-github-installation-id")
+	}
+
+	switch set {
+	case 0:
+		return nil, nil
+	case 4:
+		client, err := ghclient.NewClient(in.AppID, []byte(in.PrivateKey), in.HTTPClient)
+		if err != nil {
+			return nil, fmt.Errorf("create github client: %w", err)
+		}
+		return &GitHubConfig{
+			Client:         client,
+			Org:            in.Org,
+			InstallationID: in.InstallationID,
+		}, nil
+	default:
+		return nil, fmt.Errorf("plugin github publishing requires all of plugins-github-app-id, plugins-github-private-key, plugins-github-org, plugins-github-installation-id; missing: %s", strings.Join(missing, ", "))
+	}
+}
 
 type Service struct {
 	tracer    trace.Tracer
@@ -45,8 +134,10 @@ type Service struct {
 	db        *pgxpool.Pool
 	repo      *repo.Queries
 	auth      *auth.Auth
-	access    *access.Manager
+	authz     *authz.Engine
+	github    *GitHubConfig
 	serverURL string
+	keyPrefix string
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -57,7 +148,9 @@ func NewService(
 	tracerProvider trace.TracerProvider,
 	db *pgxpool.Pool,
 	sessions *sessions.Manager,
-	accessManager *access.Manager,
+	authzEngine *authz.Engine,
+	github *GitHubConfig,
+	env string,
 	serverURL string,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("plugins"))
@@ -67,9 +160,11 @@ func NewService(
 		logger:    logger,
 		db:        db,
 		repo:      repo.New(db),
-		auth:      auth.New(logger, db, sessions, accessManager),
-		access:    accessManager,
+		auth:      auth.New(logger, db, sessions, authzEngine),
+		authz:     authzEngine,
+		github:    github,
 		serverURL: serverURL,
+		keyPrefix: auth.APIKeyPrefix(env),
 	}
 }
 
@@ -95,7 +190,7 @@ func (s *Service) ListPlugins(ctx context.Context, payload *gen.ListPluginsPaylo
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgRead, ResourceID: ac.ActiveOrganizationID}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceID: ac.ActiveOrganizationID}); err != nil {
 		return nil, err
 	}
 
@@ -132,7 +227,7 @@ func (s *Service) GetPlugin(ctx context.Context, payload *gen.GetPluginPayload) 
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgRead, ResourceID: ac.ActiveOrganizationID}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceID: ac.ActiveOrganizationID}); err != nil {
 		return nil, err
 	}
 
@@ -172,7 +267,7 @@ func (s *Service) CreatePlugin(ctx context.Context, payload *gen.CreatePluginPay
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgAdmin, ResourceID: ac.ActiveOrganizationID}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceID: ac.ActiveOrganizationID}); err != nil {
 		return nil, err
 	}
 
@@ -213,7 +308,7 @@ func (s *Service) UpdatePlugin(ctx context.Context, payload *gen.UpdatePluginPay
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgAdmin, ResourceID: ac.ActiveOrganizationID}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceID: ac.ActiveOrganizationID}); err != nil {
 		return nil, err
 	}
 
@@ -265,7 +360,7 @@ func (s *Service) DeletePlugin(ctx context.Context, payload *gen.DeletePluginPay
 		return oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgAdmin, ResourceID: ac.ActiveOrganizationID}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceID: ac.ActiveOrganizationID}); err != nil {
 		return err
 	}
 
@@ -320,7 +415,7 @@ func (s *Service) AddPluginServer(ctx context.Context, payload *gen.AddPluginSer
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgAdmin, ResourceID: ac.ActiveOrganizationID}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceID: ac.ActiveOrganizationID}); err != nil {
 		return nil, err
 	}
 
@@ -353,6 +448,9 @@ func (s *Service) AddPluginServer(ctx context.Context, payload *gen.AddPluginSer
 	if toolset.ProjectID != *ac.ProjectID {
 		return nil, oops.E(oops.CodeBadRequest, nil, "toolset belongs to a different project")
 	}
+	if !toolset.McpEnabled || !toolset.McpSlug.Valid || toolset.McpSlug.String == "" {
+		return nil, oops.E(oops.CodeBadRequest, nil, "toolset does not have MCP enabled")
+	}
 
 	row, err := s.repo.AddPluginServer(ctx, repo.AddPluginServerParams{
 		PluginID:    pluginID,
@@ -378,7 +476,7 @@ func (s *Service) UpdatePluginServer(ctx context.Context, payload *gen.UpdatePlu
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgAdmin, ResourceID: ac.ActiveOrganizationID}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceID: ac.ActiveOrganizationID}); err != nil {
 		return nil, err
 	}
 
@@ -422,7 +520,7 @@ func (s *Service) RemovePluginServer(ctx context.Context, payload *gen.RemovePlu
 		return oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgAdmin, ResourceID: ac.ActiveOrganizationID}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceID: ac.ActiveOrganizationID}); err != nil {
 		return err
 	}
 
@@ -460,7 +558,7 @@ func (s *Service) SetPluginAssignments(ctx context.Context, payload *gen.SetPlug
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgAdmin, ResourceID: ac.ActiveOrganizationID}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceID: ac.ActiveOrganizationID}); err != nil {
 		return nil, err
 	}
 
@@ -521,7 +619,7 @@ func (s *Service) DownloadPluginPackage(ctx context.Context, payload *gen.Downlo
 		return nil, nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgRead, ResourceID: ac.ActiveOrganizationID}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceID: ac.ActiveOrganizationID}); err != nil {
 		return nil, nil, err
 	}
 
@@ -601,6 +699,228 @@ func (s *Service) DownloadPluginPackage(ctx context.Context, payload *gen.Downlo
 	}, io.NopCloser(bytes.NewReader(buf.Bytes())), nil
 }
 
+// --- Publish & Distribution ---
+
+func (s *Service) GetPublishStatus(ctx context.Context, payload *gen.GetPublishStatusPayload) (*gen.PublishStatusResult, error) {
+	ac, err := s.authContext(ctx)
+	if err != nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceID: ac.ActiveOrganizationID}); err != nil {
+		return nil, err
+	}
+
+	result := &gen.PublishStatusResult{
+		Configured: s.github != nil,
+		Connected:  false,
+		RepoOwner:  nil,
+		RepoName:   nil,
+		RepoURL:    nil,
+	}
+
+	if s.github != nil {
+		conn, err := s.repo.GetGitHubConnection(ctx, *ac.ProjectID)
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeUnexpected, err, "get github connection").Log(ctx, s.logger)
+		}
+		if err == nil {
+			result.Connected = true
+			result.RepoOwner = &conn.RepoOwner
+			result.RepoName = &conn.RepoName
+			repoURL := fmt.Sprintf("https://github.com/%s/%s", conn.RepoOwner, conn.RepoName)
+			result.RepoURL = &repoURL
+		}
+	}
+
+	return result, nil
+}
+
+func (s *Service) PublishPlugins(ctx context.Context, payload *gen.PublishPluginsPayload) (*gen.PublishPluginsResult, error) {
+	ac, err := s.authContext(ctx)
+	if err != nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceID: ac.ActiveOrganizationID}); err != nil {
+		return nil, err
+	}
+
+	if s.github == nil {
+		return nil, oops.E(oops.CodeBadRequest, nil, "GitHub publishing is not configured")
+	}
+
+	pluginInfos, err := s.resolvePluginInfos(ctx, *ac.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(pluginInfos) == 0 {
+		return nil, oops.E(oops.CodeBadRequest, nil, "no plugins with servers to publish")
+	}
+
+	if payload.GithubUsername != nil && *payload.GithubUsername != "" && !validGitHubUsername.MatchString(*payload.GithubUsername) {
+		return nil, oops.E(oops.CodeBadRequest, nil, "invalid github username")
+	}
+
+	// PublishPlugins is session-only — repo names embed the project slug,
+	// which API key auth doesn't populate.
+	if ac.ProjectSlug == nil {
+		return nil, oops.E(oops.CodeUnauthorized, nil, "publish requires a session-authenticated context")
+	}
+
+	candidate, err := s.buildPluginAPIKeyCandidate()
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "build plugin api key").Log(ctx, s.logger)
+	}
+
+	cfg := s.generateConfig(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug)
+	cfg.APIKey = candidate.fullKey
+
+	files, err := GeneratePluginPackages(pluginInfos, cfg)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "generate plugin packages").Log(ctx, s.logger)
+	}
+
+	// GitHub repo owner/name are case-insensitive. Normalize at the boundary
+	// so the rows we persist round-trip cleanly through the case-insensitive
+	// unique index on (installation_id, LOWER(repo_owner), LOWER(repo_name)).
+	repoOwner := strings.ToLower(s.github.Org)
+	repoName := strings.ToLower(ac.OrganizationSlug + "-" + *ac.ProjectSlug + "-plugins")
+
+	if err := s.github.Client.CreateRepo(ctx, s.github.InstallationID, repoOwner, repoName, true); err != nil {
+		return nil, oops.E(oops.CodeGatewayError, err, "create github repo").Log(ctx, s.logger)
+	}
+
+	_, err = s.github.Client.PushFiles(
+		ctx,
+		s.github.InstallationID,
+		repoOwner,
+		repoName,
+		"main",
+		"Update plugin packages",
+		files,
+	)
+	if err != nil {
+		return nil, oops.E(oops.CodeGatewayError, err, "push plugin files to GitHub").Log(ctx, s.logger)
+	}
+
+	if payload.GithubUsername != nil && *payload.GithubUsername != "" {
+		if err := s.github.Client.AddCollaborator(ctx, s.github.InstallationID, repoOwner, repoName, *payload.GithubUsername, "pull"); err != nil {
+			s.logger.WarnContext(ctx, "failed to add collaborator (non-fatal)",
+				attr.SlogOrganizationID(ac.ActiveOrganizationID),
+				attr.SlogError(err),
+			)
+		}
+	}
+
+	// Persist the API key, audit log, and github connection atomically only
+	// after the GitHub publish has succeeded. This prevents leaking valid
+	// consumer credentials when GitHub fails. If this transaction itself
+	// fails, the published repo contains a key string with no DB record —
+	// re-publish overwrites it with a fresh valid key.
+	if err := s.persistPluginAPIKey(ctx, ac, candidate, repoOwner, repoName); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "persist plugin api key").Log(ctx, s.logger)
+	}
+
+	repoURL := fmt.Sprintf("https://github.com/%s/%s", repoOwner, repoName)
+	return &gen.PublishPluginsResult{RepoURL: repoURL}, nil
+}
+
+// pluginAPIKeyCandidate is the in-memory shape of a generated plugin API key
+// that has not yet been persisted to the database. It is built before GitHub
+// publishing so the key can be embedded in the published files, and only
+// persisted if the GitHub side succeeds.
+type pluginAPIKeyCandidate struct {
+	fullKey   string
+	keyHash   string
+	keyPrefix string
+	keyName   string
+}
+
+// buildPluginAPIKeyCandidate generates an API key in memory without writing
+// to the database. The caller must subsequently call persistPluginAPIKey to
+// commit the key.
+func (s *Service) buildPluginAPIKeyCandidate() (pluginAPIKeyCandidate, error) {
+	tokenBytes := make([]byte, 32)
+	if _, err := rand.Read(tokenBytes); err != nil {
+		return pluginAPIKeyCandidate{}, fmt.Errorf("generate token: %w", err)
+	}
+	token := hex.EncodeToString(tokenBytes)
+	fullKey := s.keyPrefix + token
+
+	keyHash, err := auth.GetAPIKeyHash(fullKey)
+	if err != nil {
+		return pluginAPIKeyCandidate{}, fmt.Errorf("hash key: %w", err)
+	}
+
+	return pluginAPIKeyCandidate{
+		fullKey:   fullKey,
+		keyHash:   keyHash,
+		keyPrefix: s.keyPrefix + token[:5],
+		keyName:   fmt.Sprintf("plugins-%s-%s", time.Now().UTC().Format("20060102-150405"), token[:6]),
+	}, nil
+}
+
+// persistPluginAPIKey atomically writes the API key, its audit log entry, and
+// the GitHub connection record in one transaction.
+func (s *Service) persistPluginAPIKey(
+	ctx context.Context,
+	ac *contextvalues.AuthContext,
+	candidate pluginAPIKeyCandidate,
+	repoOwner, repoName string,
+) error {
+	scopes := []string{auth.APIKeyScopeConsumer.String()}
+	projectID := uuid.NullUUID{UUID: *ac.ProjectID, Valid: true}
+
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin transaction: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+
+	createdKey, err := keysrepo.New(tx).CreateAPIKey(ctx, keysrepo.CreateAPIKeyParams{
+		OrganizationID:  ac.ActiveOrganizationID,
+		Name:            candidate.keyName,
+		KeyHash:         candidate.keyHash,
+		KeyPrefix:       candidate.keyPrefix,
+		Scopes:          scopes,
+		CreatedByUserID: ac.UserID,
+		ProjectID:       projectID,
+	})
+	if err != nil {
+		return fmt.Errorf("create api key: %w", err)
+	}
+
+	if err := audit.LogKeyCreate(ctx, tx, audit.LogKeyCreateEvent{
+		OrganizationID:   ac.ActiveOrganizationID,
+		ProjectID:        projectID,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
+		ActorDisplayName: ac.Email,
+		ActorSlug:        nil,
+		KeyURN:           urn.NewAPIKey(createdKey.ID),
+		KeyName:          candidate.keyName,
+		Scopes:           scopes,
+	}); err != nil {
+		return fmt.Errorf("audit log key creation: %w", err)
+	}
+
+	if _, err := s.repo.WithTx(tx).UpsertGitHubConnection(ctx, repo.UpsertGitHubConnectionParams{
+		ProjectID:      *ac.ProjectID,
+		InstallationID: s.github.InstallationID,
+		RepoOwner:      repoOwner,
+		RepoName:       repoName,
+	}); err != nil {
+		return fmt.Errorf("upsert github connection: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit transaction: %w", err)
+	}
+
+	return nil
+}
+
 // --- Internal helpers ---
 
 func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID) ([]PluginInfo, error) {
@@ -614,6 +934,7 @@ func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID) (
 		servers []PluginServerInfo
 	}
 	pluginMap := make(map[uuid.UUID]*pluginBuild)
+	mcpMeta := mcpmetarepo.New(s.db)
 
 	for _, r := range rows {
 		pb, ok := pluginMap[r.PluginID]
@@ -631,11 +952,55 @@ func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID) (
 		}
 
 		if mcpSlug := conv.FromPGText[string](r.ToolsetMcpSlug); mcpSlug != nil {
-			pb.servers = append(pb.servers, PluginServerInfo{
+			serverInfo := PluginServerInfo{
 				DisplayName: r.ServerDisplayName,
 				Policy:      r.ServerPolicy,
 				MCPURL:      fmt.Sprintf("%s/mcp/%s", s.serverURL, *mcpSlug),
-			})
+				IsPublic:    r.ToolsetIsPublic,
+				EnvConfigs:  nil,
+			}
+
+			// For public servers, load user-facing environment configs. A public
+			// toolset without an mcp_metadata row simply has no user-provided
+			// env vars — UpsertMetadata is explicit, not auto-created on publish.
+			if r.ToolsetIsPublic {
+				metadata, metaErr := mcpMeta.GetMetadataForToolset(ctx, r.ToolsetID)
+				switch {
+				case errors.Is(metaErr, pgx.ErrNoRows):
+					// No metadata configured → no env configs to surface.
+				case metaErr != nil:
+					return nil, oops.E(oops.CodeUnexpected, metaErr, "load mcp metadata for toolset").Log(ctx, s.logger)
+				default:
+					envConfigs, envErr := mcpMeta.ListEnvironmentConfigs(ctx, metadata.ID)
+					if envErr != nil {
+						return nil, oops.E(oops.CodeUnexpected, envErr, "load environment configs for toolset").Log(ctx, s.logger)
+					}
+					for _, ec := range envConfigs {
+						if ec.ProvidedBy != "user" {
+							continue
+						}
+						// DisplayName ends up as both the HTTP header name and
+						// the userConfig description in generated configs. The
+						// env variable name is not a valid header substitute,
+						// so skip configs with no HeaderDisplayName rather than
+						// emit a broken header.
+						headerName := conv.FromPGText[string](ec.HeaderDisplayName)
+						if headerName == nil {
+							s.logger.WarnContext(ctx, "skipping user env config with no header name",
+								attr.SlogToolsetID(r.ToolsetID.String()),
+								attr.SlogEnvVarName(ec.VariableName),
+							)
+							continue
+						}
+						serverInfo.EnvConfigs = append(serverInfo.EnvConfigs, ServerEnvConfig{
+							VariableName: ec.VariableName,
+							DisplayName:  *headerName,
+						})
+					}
+				}
+			}
+
+			pb.servers = append(pb.servers, serverInfo)
 		}
 	}
 
@@ -655,9 +1020,17 @@ func (s *Service) generateConfig(ctx context.Context, orgID, orgSlug string) Gen
 		OrgName:   orgSlug,
 		OrgEmail:  "",
 		ServerURL: s.serverURL,
+		APIKey:    "",
 	}
-	if orgName, err := s.repo.GetOrganizationName(ctx, orgID); err == nil {
+	orgName, err := s.repo.GetOrganizationName(ctx, orgID)
+	switch {
+	case err == nil:
 		cfg.OrgName = orgName
+	case !errors.Is(err, pgx.ErrNoRows):
+		s.logger.WarnContext(ctx, "failed to fetch organization name, falling back to slug",
+			attr.SlogOrganizationID(orgID),
+			attr.SlogError(err),
+		)
 	}
 	return cfg
 }

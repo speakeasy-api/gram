@@ -1,5 +1,79 @@
 # dashboard
 
+## 0.43.1
+
+### Patch Changes
+
+- 1b6f532: add skill usage time series and users-per-skill charts
+- ac59dac: feat(plugins): replace the Claude-only download button on the plugin detail page with a Download Plugin dropdown offering both Claude and Cursor
+- Updated dependencies [2b2d423]
+  - @gram/client@0.33.6
+
+## 0.43.0
+
+### Minor Changes
+
+- e8e2d81: deps: lucide-react from 0.554 to 1.8.0
+- ea3e1aa: Add GitHub publishing for plugins. Admins can publish generated plugin
+  packages to a GitHub repository via a configured GitHub App, enabling
+  distribution through Claude Code and Cursor team marketplaces.
+
+### Patch Changes
+
+- a74a72b: fix(ai-insights): stop sidebar crash on rapid Explore-with-AI clicks, and render `chart` / `ui` widgets in the agent session pop-out
+- c797e16: fix: resolve ResizeObserver loop errors on navigation hover
+- e81699f: Show the published GitHub repo URL on the plugins page, and include it in the publish success toast.
+- 00a8f2a: Cursor hooks native MCP support. Token use tracking support for Cursor sessions
+- Updated dependencies [3c581aa]
+- Updated dependencies [a74a72b]
+- Updated dependencies [e8e2d81]
+  - @gram-ai/elements@1.30.0
+
+## 0.42.0
+
+### Minor Changes
+
+- d8c6ce1: add support for publishing external servers into collections.
+- cd8d31f: charts on the Hooks analytics page can now be expanded to full-width for easier reading
+- a20f7df: Add risk analysis system for detecting secrets and sensitive data in chat messages.
+- 1ee9f95: Improved Hooks dashboard with new charts, refined visuals, and smarter default filters.
+- 04c6c30: Add team invite flow with accept page, configurable expiry, and security hardening
+
+### Patch Changes
+
+- 8c5d6e9: - Add stable URL deep-links for agent sessions in Chat Logs — the selected
+  session now syncs to a `chatId` search param so `/logs?chatId=<id>` is
+  shareable and survives reload.
+  - Upgrade the default AI Insights model from claude-sonnet-4.5 to
+    claude-sonnet-4.6.
+  - Insights sidebar now opts into tool-output byte capping (50KB per MCP tool
+    call) and tighter auto-compaction (60% of the model's context ceiling) to
+    avoid "prompt is too long" errors on long tool-heavy conversations.
+- 0f687d7: fix: remove gradient from onboarding banner
+- 78d4d2b: Fix project onboarding banner to support dark mode by using semantic
+  background tokens instead of hardcoded white.
+- e1f64de: Add a "blank MCP server" CTA on the empty-project MCP page (create empty server, add built-in tools, connect a data source later). Relabel `TriggerLogRow` counts from "N attempts" to "N events".
+- 442223d: Warn users before flipping an MCP server to Public when the attached environment has system-provided values that would be shared with every caller.
+- dc4b0f3: Add eight Slack platform tools: read channel messages, read thread messages, read user profile, search channels, search messages and files, search users, send message, and schedule message.
+- 5c81e5f: Fix plugin toolset picker to show project-scoped toolsets instead of all
+  org toolsets. Uses useListToolsets (project-scoped) instead of
+  useListToolsetsForOrg.
+- c05690d: Show skeleton loading state for toolset picker in plugin detail instead
+  of incorrectly displaying "No toolsets available" while loading.
+- 8ea73c8: Add info tooltips to every KPI and chart card on the Project Overview
+  dashboard, plus an "Explore with AI" wand on each chart that opens the
+  Insights sidebar and auto-submits a chart-specific question through the
+  thread runtime. The nav-bar AI Insights trigger also gains a brand
+  gradient border on hover.
+- f0cf087: Trigger infrastructure additions: `App.RegisterDispatcher` for post-construction dispatcher wiring; short-circuit Slack `url_verification` in `AuthenticateWebhook`; drop the `thread_ts`→`ts` fallback so top-level DM/channel messages correlate on the channel alone; populate `Task.EventJSON` and surface `bot_id`/`app_id` on Slack trigger events.
+- 8b698a3: Hooks dashboard bar charts now collapse to the top 6 rows with a "show more" link to expand the full dataset.
+- Updated dependencies [8c5d6e9]
+- Updated dependencies [d0356b5]
+- Updated dependencies [d8c6ce1]
+- Updated dependencies [1ee9f95]
+  - @gram-ai/elements@1.29.0
+  - @gram/client@0.34.0
+
 ## 0.41.1
 
 ### Patch Changes

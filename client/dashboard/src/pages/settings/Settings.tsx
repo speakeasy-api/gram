@@ -19,7 +19,7 @@ export default function Settings() {
         <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body>
-        <RequireScope scope="build:write" level="page">
+        <RequireScope scope="project:write" level="page">
           <Heading variant="h4" className="mb-2">
             Project Settings
           </Heading>

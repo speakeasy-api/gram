@@ -304,7 +304,9 @@ run();
 * [deletePlugin](docs/sdks/plugins/README.md#deleteplugin) - deletePlugin plugins
 * [downloadPluginPackage](docs/sdks/plugins/README.md#downloadpluginpackage) - downloadPluginPackage plugins
 * [getPlugin](docs/sdks/plugins/README.md#getplugin) - getPlugin plugins
+* [getPublishStatus](docs/sdks/plugins/README.md#getpublishstatus) - getPublishStatus plugins
 * [listPlugins](docs/sdks/plugins/README.md#listplugins) - listPlugins plugins
+* [publishPlugins](docs/sdks/plugins/README.md#publishplugins) - publishPlugins plugins
 * [removePluginServer](docs/sdks/plugins/README.md#removepluginserver) - removePluginServer plugins
 * [setPluginAssignments](docs/sdks/plugins/README.md#setpluginassignments) - setPluginAssignments plugins
 * [updatePlugin](docs/sdks/plugins/README.md#updateplugin) - updatePlugin plugins
@@ -333,16 +335,20 @@ run();
 
 * [list](docs/sdks/resources/README.md#list) - listResources resources
 
-### [Risk](docs/sdks/risk/README.md)
+### [Risk.Policies](docs/sdks/policies/README.md)
 
-* [createPolicy](docs/sdks/risk/README.md#createpolicy) - createRiskPolicy risk
-* [deletePolicy](docs/sdks/risk/README.md#deletepolicy) - deleteRiskPolicy risk
-* [getPolicy](docs/sdks/risk/README.md#getpolicy) - getRiskPolicy risk
-* [listPolicies](docs/sdks/risk/README.md#listpolicies) - listRiskPolicies risk
-* [getPolicyStatus](docs/sdks/risk/README.md#getpolicystatus) - getRiskPolicyStatus risk
-* [triggerAnalysis](docs/sdks/risk/README.md#triggeranalysis) - triggerRiskAnalysis risk
-* [updatePolicy](docs/sdks/risk/README.md#updatepolicy) - updateRiskPolicy risk
-* [listResults](docs/sdks/risk/README.md#listresults) - listRiskResults risk
+* [create](docs/sdks/policies/README.md#create) - createRiskPolicy risk
+* [delete](docs/sdks/policies/README.md#delete) - deleteRiskPolicy risk
+* [get](docs/sdks/policies/README.md#get) - getRiskPolicy risk
+* [list](docs/sdks/policies/README.md#list) - listRiskPolicies risk
+* [status](docs/sdks/policies/README.md#status) - getRiskPolicyStatus risk
+* [trigger](docs/sdks/policies/README.md#trigger) - triggerRiskAnalysis risk
+* [update](docs/sdks/policies/README.md#update) - updateRiskPolicy risk
+
+### [Risk.Results](docs/sdks/results/README.md)
+
+* [byChat](docs/sdks/results/README.md#bychat) - listRiskResultsByChat risk
+* [list](docs/sdks/results/README.md#list) - listRiskResults risk
 
 ### [Slack](docs/sdks/slack/README.md)
 
@@ -550,7 +556,9 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`pluginsDeletePlugin`](docs/sdks/plugins/README.md#deleteplugin) - deletePlugin plugins
 - [`pluginsDownloadPluginPackage`](docs/sdks/plugins/README.md#downloadpluginpackage) - downloadPluginPackage plugins
 - [`pluginsGetPlugin`](docs/sdks/plugins/README.md#getplugin) - getPlugin plugins
+- [`pluginsGetPublishStatus`](docs/sdks/plugins/README.md#getpublishstatus) - getPublishStatus plugins
 - [`pluginsListPlugins`](docs/sdks/plugins/README.md#listplugins) - listPlugins plugins
+- [`pluginsPublishPlugins`](docs/sdks/plugins/README.md#publishplugins) - publishPlugins plugins
 - [`pluginsRemovePluginServer`](docs/sdks/plugins/README.md#removepluginserver) - removePluginServer plugins
 - [`pluginsSetPluginAssignments`](docs/sdks/plugins/README.md#setpluginassignments) - setPluginAssignments plugins
 - [`pluginsUpdatePlugin`](docs/sdks/plugins/README.md#updateplugin) - updatePlugin plugins
@@ -569,14 +577,15 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`remoteMcpListServers`](docs/sdks/remotemcp/README.md#listservers) - listServers remoteMcp
 - [`remoteMcpUpdateServer`](docs/sdks/remotemcp/README.md#updateserver) - updateServer remoteMcp
 - [`resourcesList`](docs/sdks/resources/README.md#list) - listResources resources
-- [`riskCreatePolicy`](docs/sdks/risk/README.md#createpolicy) - createRiskPolicy risk
-- [`riskDeletePolicy`](docs/sdks/risk/README.md#deletepolicy) - deleteRiskPolicy risk
-- [`riskGetPolicy`](docs/sdks/risk/README.md#getpolicy) - getRiskPolicy risk
-- [`riskGetPolicyStatus`](docs/sdks/risk/README.md#getpolicystatus) - getRiskPolicyStatus risk
-- [`riskListPolicies`](docs/sdks/risk/README.md#listpolicies) - listRiskPolicies risk
-- [`riskListResults`](docs/sdks/risk/README.md#listresults) - listRiskResults risk
-- [`riskTriggerAnalysis`](docs/sdks/risk/README.md#triggeranalysis) - triggerRiskAnalysis risk
-- [`riskUpdatePolicy`](docs/sdks/risk/README.md#updatepolicy) - updateRiskPolicy risk
+- [`riskPoliciesCreate`](docs/sdks/policies/README.md#create) - createRiskPolicy risk
+- [`riskPoliciesDelete`](docs/sdks/policies/README.md#delete) - deleteRiskPolicy risk
+- [`riskPoliciesGet`](docs/sdks/policies/README.md#get) - getRiskPolicy risk
+- [`riskPoliciesList`](docs/sdks/policies/README.md#list) - listRiskPolicies risk
+- [`riskPoliciesStatus`](docs/sdks/policies/README.md#status) - getRiskPolicyStatus risk
+- [`riskPoliciesTrigger`](docs/sdks/policies/README.md#trigger) - triggerRiskAnalysis risk
+- [`riskPoliciesUpdate`](docs/sdks/policies/README.md#update) - updateRiskPolicy risk
+- [`riskResultsByChat`](docs/sdks/results/README.md#bychat) - listRiskResultsByChat risk
+- [`riskResultsList`](docs/sdks/results/README.md#list) - listRiskResults risk
 - [`slackConfigureSlackApp`](docs/sdks/slack/README.md#configureslackapp) - configureSlackApp slack
 - [`slackCreateSlackApp`](docs/sdks/slack/README.md#createslackapp) - createSlackApp slack
 - [`slackDeleteSlackApp`](docs/sdks/slack/README.md#deleteslackapp) - deleteSlackApp slack
@@ -780,6 +789,8 @@ To learn about this feature and how to get started, check
 - [`useProject`](docs/sdks/projects/README.md#read) - getProject projects
 - [`useProjectsSetOrganizationWhitelistMutation`](docs/sdks/projects/README.md#setorganizationwhitelist) - setOrganizationWhitelist projects
 - [`usePublishPackageMutation`](docs/sdks/packages/README.md#publish) - publish packages
+- [`usePublishPluginsMutation`](docs/sdks/plugins/README.md#publishplugins) - publishPlugins plugins
+- [`usePublishStatus`](docs/sdks/plugins/README.md#getpublishstatus) - getPublishStatus plugins
 - [`useRbacStatus`](docs/sdks/access/README.md#getrbacstatus) - getRBACStatus access
 - [`useRedeployDeploymentMutation`](docs/sdks/deployments/README.md#redeploydeployment) - redeploy deployments
 - [`useRegisterDomainMutation`](docs/sdks/domains/README.md#registerdomain) - createDomain domains
@@ -793,14 +804,15 @@ To learn about this feature and how to get started, check
 - [`useResumeTriggerMutation`](docs/sdks/triggers/README.md#resume) - resumeTriggerInstance triggers
 - [`useRevokeAPIKeyMutation`](docs/sdks/keys/README.md#revokebyid) - revokeKey keys
 - [`useRevokeInviteMutation`](docs/sdks/organizations/README.md#revokeinvite) - revokeInvite organizations
-- [`useRiskCreatePolicyMutation`](docs/sdks/risk/README.md#createpolicy) - createRiskPolicy risk
-- [`useRiskDeletePolicyMutation`](docs/sdks/risk/README.md#deletepolicy) - deleteRiskPolicy risk
-- [`useRiskGetPolicy`](docs/sdks/risk/README.md#getpolicy) - getRiskPolicy risk
-- [`useRiskGetPolicyStatus`](docs/sdks/risk/README.md#getpolicystatus) - getRiskPolicyStatus risk
-- [`useRiskListPolicies`](docs/sdks/risk/README.md#listpolicies) - listRiskPolicies risk
-- [`useRiskListResults`](docs/sdks/risk/README.md#listresults) - listRiskResults risk
-- [`useRiskTriggerAnalysisMutation`](docs/sdks/risk/README.md#triggeranalysis) - triggerRiskAnalysis risk
-- [`useRiskUpdatePolicyMutation`](docs/sdks/risk/README.md#updatepolicy) - updateRiskPolicy risk
+- [`useRiskCreatePolicyMutation`](docs/sdks/policies/README.md#create) - createRiskPolicy risk
+- [`useRiskListPolicies`](docs/sdks/policies/README.md#list) - listRiskPolicies risk
+- [`useRiskListResults`](docs/sdks/results/README.md#list) - listRiskResults risk
+- [`useRiskListResultsByChat`](docs/sdks/results/README.md#bychat) - listRiskResultsByChat risk
+- [`useRiskPoliciesDeleteMutation`](docs/sdks/policies/README.md#delete) - deleteRiskPolicy risk
+- [`useRiskPoliciesGet`](docs/sdks/policies/README.md#get) - getRiskPolicy risk
+- [`useRiskPoliciesStatus`](docs/sdks/policies/README.md#status) - getRiskPolicyStatus risk
+- [`useRiskPoliciesTriggerMutation`](docs/sdks/policies/README.md#trigger) - triggerRiskAnalysis risk
+- [`useRiskPoliciesUpdateMutation`](docs/sdks/policies/README.md#update) - updateRiskPolicy risk
 - [`useRole`](docs/sdks/access/README.md#getrole) - getRole access
 - [`useRoles`](docs/sdks/access/README.md#listroles) - listRoles access
 - [`useSearchChats`](docs/sdks/telemetry/README.md#searchchats) - searchChats telemetry

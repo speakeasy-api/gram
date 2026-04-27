@@ -8,11 +8,11 @@ import { Button } from "@speakeasy-api/moonshine";
 import { ArrowRight, Check } from "lucide-react";
 import { useMemo } from "react";
 import { Link } from "react-router";
-import type { Server } from "./hooks";
+import type { PulseMCPServer } from "./hooks";
 import { parseServerMetadata } from "./hooks/serverMetadata";
 
 interface ServerTableRowProps {
-  server: Server;
+  server: PulseMCPServer;
   detailHref: string;
   externalMcps: DeploymentExternalMCP[];
   isSelected?: boolean;

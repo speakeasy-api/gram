@@ -1437,8 +1437,8 @@ func (q *Queries) GetHooksSummary(ctx context.Context, arg GetHooksSummaryParams
 		"if(tool_source = '', 'local', tool_source) as server_name",
 		"count(*) as event_count",
 		"uniqExact(tool_name) as unique_tools",
-		"sumIf(hook_has_success, hook_has_success = 1) as success_count",
-		"sumIf(hook_has_failure, hook_has_failure = 1) as failure_count",
+		"sum(if(has_result = 1 AND has_error = 0, 1, 0)) as success_count",
+		"sumIf(has_error, has_error = 1) as failure_count",
 		"failure_count / greatest(success_count + failure_count, 1) as failure_rate",
 	).
 		From("trace_summaries").
@@ -1552,8 +1552,8 @@ func (q *Queries) GetHooksUserSummary(ctx context.Context, arg GetHooksUserSumma
 		"if(user_email = '', 'Unknown', user_email) as user_email",
 		"count(*) as event_count",
 		"uniqExact(tool_name) as unique_tools",
-		"sumIf(hook_has_success, hook_has_success = 1) as success_count",
-		"sumIf(hook_has_failure, hook_has_failure = 1) as failure_count",
+		"sum(if(has_result = 1 AND has_error = 0, 1, 0)) as success_count",
+		"sumIf(has_error, has_error = 1) as failure_count",
 		"failure_count / greatest(success_count + failure_count, 1) as failure_rate",
 	).
 		From("trace_summaries").
@@ -1658,6 +1658,64 @@ func (q *Queries) GetSkillsSummary(ctx context.Context, arg GetSkillsSummaryPara
 	return summaries, nil
 }
 
+// SkillBreakdownRow contains per-(skill, user) aggregated counts.
+type SkillBreakdownRow struct {
+	SkillName string `ch:"skill_name"`
+	UserEmail string `ch:"user_email"`
+	UseCount  uint64 `ch:"use_count"`
+}
+
+// GetSkillBreakdownParams defines parameters for getting per-user skill breakdown.
+type GetSkillBreakdownParams struct {
+	GramProjectID string
+	TimeStart     int64
+	TimeEnd       int64
+	Filters       []AttributeFilter
+}
+
+// GetSkillBreakdown retrieves per-(skill, user) usage counts.
+//
+//nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
+func (q *Queries) GetSkillBreakdown(ctx context.Context, arg GetSkillBreakdownParams) ([]SkillBreakdownRow, error) {
+	sb := sq.Select("skill_name", "user_email", "count(*) as use_count").
+		From("trace_summaries").
+		Where("gram_project_id = ?", arg.GramProjectID).
+		Where("event_source = 'hook'").
+		Where("tool_name = 'Skill'").
+		Where("start_time_unix_nano >= ?", arg.TimeStart).
+		Where("start_time_unix_nano <= ?", arg.TimeEnd).
+		Where("skill_name != ''")
+
+	// Apply attribute filters (user, server) but not type filters — skill type is hardcoded above.
+	sb = applyHookFiltersToBuilder(sb, arg.Filters, nil)
+	sb = sb.GroupBy("skill_name", "user_email").OrderBy("skill_name", "use_count DESC").
+		Limit(10000) // Defensive cap
+
+	query, args, err := sb.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("building skill breakdown query: %w", err)
+	}
+
+	rows, err := q.conn.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var result []SkillBreakdownRow
+	for rows.Next() {
+		var row SkillBreakdownRow
+		if err = rows.ScanStruct(&row); err != nil {
+			return nil, fmt.Errorf("scan skill breakdown row: %w", err)
+		}
+		result = append(result, row)
+	}
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
 // HooksBreakdownRow contains cross-dimensional aggregated counts for a unique (user, server, source, tool) combination.
 type HooksBreakdownRow struct {
 	UserEmail    string `ch:"user_email"`
@@ -1688,7 +1746,7 @@ func (q *Queries) GetHooksBreakdown(ctx context.Context, arg GetHooksBreakdownPa
 		"hook_source",
 		"tool_name",
 		"count(*) as event_count",
-		"sumIf(hook_has_failure, hook_has_failure = 1) as failure_count",
+		"sumIf(has_error, has_error = 1) as failure_count",
 	).
 		From("trace_summaries").
 		Where("gram_project_id = ?", arg.GramProjectID).
@@ -1758,7 +1816,7 @@ func (q *Queries) GetHooksTimeSeries(ctx context.Context, arg GetHooksTimeSeries
 		"if(tool_source = '', 'local', tool_source) as server_name",
 		"if(user_email = '', 'Unknown', user_email) as user_email",
 		"count(*) as event_count",
-		"sumIf(hook_has_failure, hook_has_failure = 1) as failure_count",
+		"sumIf(has_error, has_error = 1) as failure_count",
 	).
 		From("trace_summaries").
 		Where("gram_project_id = ?", arg.GramProjectID).
@@ -1799,6 +1857,74 @@ func (q *Queries) GetHooksTimeSeries(ctx context.Context, arg GetHooksTimeSeries
 	return points, nil
 }
 
+// SkillTimeSeriesPoint contains event counts for a single time bucket and skill combination.
+type SkillTimeSeriesPoint struct {
+	BucketStartNs int64  `ch:"bucket_start"`
+	SkillName     string `ch:"skill_name"`
+	EventCount    uint64 `ch:"event_count"`
+}
+
+// GetSkillTimeSeriesParams defines the parameters for the skill time series query.
+type GetSkillTimeSeriesParams struct {
+	GramProjectID string
+	TimeStart     int64
+	TimeEnd       int64
+	BucketSizeNs  int64 // Bucket size in nanoseconds (e.g. 5*60*1e9 for 5 minutes)
+	Filters       []AttributeFilter
+}
+
+// GetSkillTimeSeries retrieves time-bucketed hook event counts grouped by (bucket, skill).
+// BucketSizeNs controls the bucket granularity (e.g. 5 minutes = 5*60*1e9).
+//
+//nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
+func (q *Queries) GetSkillTimeSeries(ctx context.Context, arg GetSkillTimeSeriesParams) ([]SkillTimeSeriesPoint, error) {
+	sb := sq.Select(
+		fmt.Sprintf("intDiv(start_time_unix_nano, %d) * %d as bucket_start", arg.BucketSizeNs, arg.BucketSizeNs),
+		"skill_name",
+		"count(*) as event_count",
+	).
+		From("trace_summaries").
+		Where("gram_project_id = ?", arg.GramProjectID).
+		Where("event_source = 'hook'").
+		Where("tool_name = 'Skill'").
+		Where("start_time_unix_nano >= ?", arg.TimeStart).
+		Where("start_time_unix_nano <= ?", arg.TimeEnd).
+		Where("skill_name != ''")
+
+	// Apply attribute filters (user, server) but not type filters — skill type is hardcoded above.
+	sb = applyHookFiltersToBuilder(sb, arg.Filters, nil)
+
+	sb = sb.GroupBy("bucket_start", "skill_name").
+		OrderBy("bucket_start ASC").
+		Limit(10000) // Defensive cap
+
+	query, args, err := sb.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("building skill time series query: %w", err)
+	}
+
+	rows, err := q.conn.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var points []SkillTimeSeriesPoint
+	for rows.Next() {
+		var pt SkillTimeSeriesPoint
+		if err = rows.ScanStruct(&pt); err != nil {
+			return nil, fmt.Errorf("scanning skill time series point: %w", err)
+		}
+		points = append(points, pt)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return points, nil
+}
+
 // ListHooksTracesParams contains the parameters for listing hook traces.
 type ListHooksTracesParams struct {
 	GramProjectID  string
@@ -1828,7 +1954,7 @@ func (q *Queries) ListHooksTraces(ctx context.Context, arg ListHooksTracesParams
 		"user_email",
 		"hook_source",
 		"skill_name",
-		"multiIf(max(hook_has_failure) = 1, 'failure', max(hook_has_success) = 1, 'success', 'pending') as hook_status",
+		"multiIf(max(has_error) = 1, 'failure', max(has_result) = 1, 'success', 'pending') as hook_status",
 	).
 		From("trace_summaries").
 		Where("gram_project_id = ?", arg.GramProjectID).

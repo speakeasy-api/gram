@@ -14,13 +14,17 @@ export type CursorHookPayload = {
    */
   additionalData?: { [k: string]: any } | undefined;
   /**
-   * Tokens read from cache (stop only)
+   * Tokens read from cache (stop, afterAgentResponse)
    */
   cacheReadTokens?: number | undefined;
   /**
-   * Tokens written to cache (stop only)
+   * Tokens written to cache (stop, afterAgentResponse)
    */
   cacheWriteTokens?: number | undefined;
+  /**
+   * Command string for command-based MCP servers (beforeMCPExecution / afterMCPExecution only)
+   */
+  command?: string | undefined;
   /**
    * The composer mode, e.g. agent (beforeSubmitPrompt only)
    */
@@ -34,6 +38,10 @@ export type CursorHookPayload = {
    */
   cursorVersion?: string | undefined;
   /**
+   * Execution duration in milliseconds, excluding approval wait time (afterMCPExecution only)
+   */
+  duration?: number | undefined;
+  /**
    * Duration in milliseconds for the thinking block (afterAgentThought only)
    */
   durationMs?: number | undefined;
@@ -46,11 +54,11 @@ export type CursorHookPayload = {
    */
   generationId?: string | undefined;
   /**
-   * The type of hook event (e.g. beforeSubmitPrompt, stop, afterAgentResponse, afterAgentThought, preToolUse, postToolUse, postToolUseFailure)
+   * The type of hook event (e.g. beforeSubmitPrompt, stop, afterAgentResponse, afterAgentThought, preToolUse, postToolUse, postToolUseFailure, beforeMCPExecution, afterMCPExecution)
    */
   hookEventName: string;
   /**
-   * Total input tokens used (stop only)
+   * Total input tokens used (stop, afterAgentResponse)
    */
   inputTokens?: number | undefined;
   /**
@@ -66,13 +74,17 @@ export type CursorHookPayload = {
    */
   model?: string | undefined;
   /**
-   * Total output tokens used (stop only)
+   * Total output tokens used (stop, afterAgentResponse)
    */
   outputTokens?: number | undefined;
   /**
    * The user's prompt text (beforeSubmitPrompt only)
    */
   prompt?: string | undefined;
+  /**
+   * JSON-encoded string of the MCP tool response (afterMCPExecution only)
+   */
+  resultJson?: string | undefined;
   /**
    * The session ID from Cursor
    */
@@ -106,6 +118,10 @@ export type CursorHookPayload = {
    */
   transcriptPath?: string | undefined;
   /**
+   * URL of the MCP server (beforeMCPExecution / afterMCPExecution, URL-based servers only)
+   */
+  url?: string | undefined;
+  /**
    * Email of the authenticated Cursor user, if available
    */
   userEmail?: string | undefined;
@@ -116,9 +132,11 @@ export type CursorHookPayload$Outbound = {
   additional_data?: { [k: string]: any } | undefined;
   cache_read_tokens?: number | undefined;
   cache_write_tokens?: number | undefined;
+  command?: string | undefined;
   composer_mode?: string | undefined;
   conversation_id?: string | undefined;
   cursor_version?: string | undefined;
+  duration?: number | undefined;
   duration_ms?: number | undefined;
   error?: any | undefined;
   generation_id?: string | undefined;
@@ -129,6 +147,7 @@ export type CursorHookPayload$Outbound = {
   model?: string | undefined;
   output_tokens?: number | undefined;
   prompt?: string | undefined;
+  result_json?: string | undefined;
   session_id?: string | undefined;
   status?: string | undefined;
   text?: string | undefined;
@@ -137,6 +156,7 @@ export type CursorHookPayload$Outbound = {
   tool_response?: any | undefined;
   tool_use_id?: string | undefined;
   transcript_path?: string | undefined;
+  url?: string | undefined;
   user_email?: string | undefined;
 };
 
@@ -149,9 +169,11 @@ export const CursorHookPayload$outboundSchema: z.ZodMiniType<
     additionalData: z.optional(z.record(z.string(), z.any())),
     cacheReadTokens: z.optional(z.int()),
     cacheWriteTokens: z.optional(z.int()),
+    command: z.optional(z.string()),
     composerMode: z.optional(z.string()),
     conversationId: z.optional(z.string()),
     cursorVersion: z.optional(z.string()),
+    duration: z.optional(z.number()),
     durationMs: z.optional(z.int()),
     error: z.optional(z.any()),
     generationId: z.optional(z.string()),
@@ -162,6 +184,7 @@ export const CursorHookPayload$outboundSchema: z.ZodMiniType<
     model: z.optional(z.string()),
     outputTokens: z.optional(z.int()),
     prompt: z.optional(z.string()),
+    resultJson: z.optional(z.string()),
     sessionId: z.optional(z.string()),
     status: z.optional(z.string()),
     text: z.optional(z.string()),
@@ -170,6 +193,7 @@ export const CursorHookPayload$outboundSchema: z.ZodMiniType<
     toolResponse: z.optional(z.any()),
     toolUseId: z.optional(z.string()),
     transcriptPath: z.optional(z.string()),
+    url: z.optional(z.string()),
     userEmail: z.optional(z.string()),
   }),
   z.transform((v) => {
@@ -187,6 +211,7 @@ export const CursorHookPayload$outboundSchema: z.ZodMiniType<
       isInterrupt: "is_interrupt",
       loopCount: "loop_count",
       outputTokens: "output_tokens",
+      resultJson: "result_json",
       sessionId: "session_id",
       toolInput: "tool_input",
       toolName: "tool_name",

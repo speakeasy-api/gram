@@ -17,7 +17,3 @@ procs:
     cmd: ["mise", "run", "start:elements"]
     stop:
       send-keys: ["<C-c>"]
-  otel:
-    cmd: ["mise", "run", "start:oteltui"]
-    stop:
-      send-keys: ["<C-c>"]

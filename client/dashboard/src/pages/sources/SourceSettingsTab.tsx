@@ -132,7 +132,7 @@ export function SourceSettingsTab({
             Removing this source will remove it from the current deployment.
             This action cannot be undone.
           </Type>
-          <RequireScope scope="build:write" level="component">
+          <RequireScope scope="project:write" level="component">
             <Button
               variant="destructive-primary"
               size="md"

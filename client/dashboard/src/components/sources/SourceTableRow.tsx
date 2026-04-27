@@ -42,7 +42,7 @@ export function SourceTableRow({
 }) {
   const routes = useRoutes();
   const { hasScope } = useRBAC();
-  const canWrite = hasScope("build:write");
+  const canWrite = hasScope("project:write");
   const config = sourceTypeConfig[asset.type];
   const sourceKind = sourceTypeToUrnKind(asset.type);
 
