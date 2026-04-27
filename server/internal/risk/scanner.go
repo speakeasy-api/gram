@@ -4,10 +4,12 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/zricethezav/gitleaks/v8/detect"
 	"go.opentelemetry.io/otel/metric"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -69,21 +71,37 @@ func newScannerMetrics(meterProvider metric.MeterProvider, logger *slog.Logger) 
 }
 
 // Scanner implements RiskScanner using gitleaks and optionally Presidio.
+// It pre-creates a gitleaks detector at construction time to avoid the
+// per-scan mutex+init overhead on the hot path.
 type Scanner struct {
 	logger     *slog.Logger
 	repo       *repo.Queries
 	gitleaks   *ra.Scanner
-	piiScanner ra.PIIScanner // nil if Presidio is unavailable
+	gitleaksMu sync.Mutex         // DetectString is not concurrent-safe
+	detector   *detect.Detector   // pre-created, reused across scans
+	piiScanner ra.PIIScanner      // nil if Presidio is unavailable
 	metrics    *scannerMetrics
 }
 
 // NewScanner creates a RiskScanner. piiScanner may be nil if Presidio
 // is not available in the server process.
 func NewScanner(logger *slog.Logger, db *pgxpool.Pool, piiScanner ra.PIIScanner, meterProvider metric.MeterProvider) *Scanner {
+	scanner := ra.NewScanner()
+
+	// Pre-create a gitleaks detector to avoid per-scan init overhead.
+	// Scan() creates a new detector each call (with a global mutex),
+	// which is fine for batch workers but adds unnecessary latency on
+	// the real-time hook path.
+	det, err := detect.NewDetectorDefaultConfig()
+	if err != nil {
+		logger.Error("failed to pre-create gitleaks detector, will fall back to per-scan creation", attr.SlogError(err))
+	}
+
 	return &Scanner{
 		logger:     logger.With(attr.SlogComponent("risk-scanner")),
 		repo:       repo.New(db),
-		gitleaks:   ra.NewScanner(),
+		gitleaks:   scanner,
+		detector:   det,
 		piiScanner: piiScanner,
 		metrics:    newScannerMetrics(meterProvider, logger),
 	}
@@ -144,7 +162,7 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text s
 	for _, source := range policy.Sources {
 		switch source {
 		case "gitleaks":
-			findings, err := s.gitleaks.Scan(text)
+			findings, err := s.scanGitleaks(text)
 			if err != nil {
 				return nil, fmt.Errorf("gitleaks scan: %w", err)
 			}
@@ -183,4 +201,16 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text s
 		}
 	}
 	return nil, nil
+}
+
+// scanGitleaks uses the pre-created detector if available, falling back to
+// Scanner.Scan() (which creates a new detector per call) if construction failed.
+func (s *Scanner) scanGitleaks(text string) ([]ra.Finding, error) {
+	if s.detector == nil {
+		return s.gitleaks.Scan(text)
+	}
+	s.gitleaksMu.Lock()
+	raw := s.detector.DetectString(text)
+	s.gitleaksMu.Unlock()
+	return ra.ConvertFindings(text, raw), nil
 }
