@@ -58,7 +58,7 @@ func TestService_GetRole(t *testing.T) {
 	}
 	sels := grantsByScope[string(authz.ScopeProjectRead)].Selectors
 	require.Len(t, sels, 1)
-	require.Equal(t, "project-1", sels[0]["resource_id"])
+	require.Equal(t, "project-1", sels[0].ResourceID)
 	require.Nil(t, grantsByScope[string(authz.ScopeMCPConnect)].Selectors)
 }
 

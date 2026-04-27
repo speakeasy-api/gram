@@ -53,9 +53,9 @@ func TestService_ListGrants(t *testing.T) {
 		byScope[grant.Scope] = grant
 	}
 	require.Len(t, byScope["project:read"].Selectors, 1)
-	require.Equal(t, "project_123", byScope["project:read"].Selectors[0]["resource_id"])
+	require.Equal(t, "project_123", byScope["project:read"].Selectors[0].ResourceID)
 	require.Len(t, byScope["mcp:connect"].Selectors, 1)
-	require.Equal(t, "tool_456", byScope["mcp:connect"].Selectors[0]["resource_id"])
+	require.Equal(t, "tool_456", byScope["mcp:connect"].Selectors[0].ResourceID)
 }
 
 func TestService_ListGrants_MultipleRoles(t *testing.T) {
@@ -85,9 +85,9 @@ func TestService_ListGrants_MultipleRoles(t *testing.T) {
 		byScope[grant.Scope] = grant
 	}
 	require.Len(t, byScope["project:read"].Selectors, 1)
-	require.Equal(t, "project_123", byScope["project:read"].Selectors[0]["resource_id"])
+	require.Equal(t, "project_123", byScope["project:read"].Selectors[0].ResourceID)
 	require.Len(t, byScope["mcp:connect"].Selectors, 1)
-	require.Equal(t, "tool_456", byScope["mcp:connect"].Selectors[0]["resource_id"])
+	require.Equal(t, "tool_456", byScope["mcp:connect"].Selectors[0].ResourceID)
 }
 
 func TestService_ListGrants_NotConnected(t *testing.T) {

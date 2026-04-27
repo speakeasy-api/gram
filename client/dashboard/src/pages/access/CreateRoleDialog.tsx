@@ -66,8 +66,10 @@ function inferCustomTab(selectors: Selector[]): {
   const dispositionSelectors = selectors.filter((s) => s.disposition);
   if (dispositionSelectors.length > 0) {
     const annotations = dispositionSelectors
-      .map((s) => DISPOSITION_TO_ANNOTATION[s.disposition])
-      .filter(Boolean);
+      .map((s) =>
+        s.disposition ? DISPOSITION_TO_ANNOTATION[s.disposition] : undefined,
+      )
+      .filter((a): a is AnnotationHint => !!a);
     return { tab: "auto-groups", annotations };
   }
 

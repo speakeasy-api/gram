@@ -53,8 +53,8 @@ function getAccessLevel(
   if (grant.selectors.length === 0) return "none";
 
   const check: Record<string, string> = {
-    resource_kind: resourceKindForScope(scope),
-    resource_id: toolsetSlug,
+    resourceKind: resourceKindForScope(scope),
+    resourceId: toolsetSlug,
   };
 
   // Check if any selector matches this server (without tool constraint)
@@ -79,12 +79,12 @@ function getToolIdsForScope(
   const grant = role.grants.find((g) => g.scope === scope);
   if (!grant?.selectors) return [];
   const check: Record<string, string> = {
-    resource_kind: resourceKindForScope(scope),
-    resource_id: toolsetSlug,
+    resourceKind: resourceKindForScope(scope),
+    resourceId: toolsetSlug,
   };
   return grant.selectors
     .filter((s) => selectorMatches(s, check) && s.tool)
-    .map((s) => s.tool);
+    .map((s) => s.tool!);
 }
 
 /** Match tool identifiers against toolset tools (by id or name) */
@@ -220,9 +220,9 @@ export function MCPTeamAccessTab({ toolset }: { toolset: Toolset }) {
         const role = roleMap.get(member.roleId);
         if (!role) return null;
         const scopes = {
-          read: getAccessLevel(role, "mcp:read", toolset.slug),
-          write: getAccessLevel(role, "mcp:write", toolset.slug),
-          connect: getAccessLevel(role, "mcp:connect", toolset.slug),
+          read: getAccessLevel(role, "mcp:read", toolset.id),
+          write: getAccessLevel(role, "mcp:write", toolset.id),
+          connect: getAccessLevel(role, "mcp:connect", toolset.id),
         };
         return { member, role, scopes };
       })
@@ -234,14 +234,14 @@ export function MCPTeamAccessTab({ toolset }: { toolset: Toolset }) {
           m.scopes.connect !== "none",
       )
       .sort((a, b) => a.member.name.localeCompare(b.member.name));
-  }, [membersData?.members, rolesData?.roles, toolset.slug]);
+  }, [membersData?.members, rolesData?.roles, toolset.id]);
 
   const openToolSheet = (
     row: MemberAccess,
     scope: string,
     scopeLabel: string,
   ) => {
-    const toolIds = getToolIdsForScope(row.role, scope, toolset.slug);
+    const toolIds = getToolIdsForScope(row.role, scope, toolset.id);
     const matched = resolveTools(toolIds, toolset.tools);
     setSheetData({
       member: row.member,

@@ -1,12 +1,15 @@
 import { Scope } from "@gram/client/models/components/rolegrant.js";
+import type {
+  Selector,
+  Disposition,
+  ResourceKind,
+} from "@gram/client/models/components/selector.js";
 
 export { Scope };
+export type { Selector, Disposition, ResourceKind };
 
 /** What kind of resource a scope protects. */
 export type ResourceType = "org" | "project" | "mcp";
-
-/** A multi-dimensional selector constraint on a grant. */
-export type Selector = Record<string, string>;
 
 /** The 4 MCP tool annotation hint keys. */
 export type AnnotationHint =
@@ -31,7 +34,7 @@ export interface RoleGrant {
 
 /** Maps annotation hint keys to disposition values stored in selectors.
  * Must match the backend constants in authz/selector.go. */
-export const ANNOTATION_TO_DISPOSITION: Record<AnnotationHint, string> = {
+export const ANNOTATION_TO_DISPOSITION: Record<AnnotationHint, Disposition> = {
   readOnlyHint: "read_only",
   destructiveHint: "destructive",
   idempotentHint: "idempotent",

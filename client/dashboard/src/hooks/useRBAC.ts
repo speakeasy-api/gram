@@ -107,9 +107,9 @@ export function useRBAC() {
         if (!grant.selectors) return true;
         // Build a check selector mirroring the backend's Check.selector().
         const check: Record<string, string> = {
-          resource_kind: resourceKindForScope(scope),
+          resourceKind: resourceKindForScope(scope),
         };
-        if (resourceId) check.resource_id = resourceId;
+        if (resourceId) check.resourceId = resourceId;
         return grant.selectors.some((s) => selectorMatches(s, check));
       });
     },

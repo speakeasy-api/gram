@@ -78,7 +78,7 @@ func TestService_UpdateRole(t *testing.T) {
 		Name:        &name,
 		Description: &description,
 		Grants: []*gen.RoleGrant{
-			{Scope: string(authz.ScopeProjectWrite), Selectors: []map[string]string{{"resource_kind": "project", "resource_id": "project-1"}, {"resource_kind": "project", "resource_id": "project-2"}}},
+			{Scope: string(authz.ScopeProjectWrite), Selectors: []*gen.Selector{{ResourceKind: "project", ResourceID: "project-1"}, {ResourceKind: "project", ResourceID: "project-2"}}},
 			{Scope: string(authz.ScopeMCPConnect), Selectors: nil},
 		},
 		MemberIds: []string{"local_user_1", "local_user_2"},
@@ -306,7 +306,7 @@ func TestService_UpdateRole_AuditLog(t *testing.T) {
 		Description: &description,
 		Grants: []*gen.RoleGrant{{
 			Scope:     string(authz.ScopeProjectWrite),
-			Selectors: []map[string]string{{"resource_kind": "project", "resource_id": "project-1"}},
+			Selectors: []*gen.Selector{{ResourceKind: "project", ResourceID: "project-1"}},
 		}},
 	})
 	require.NoError(t, err)
@@ -339,7 +339,7 @@ func TestService_UpdateRole_AuditLog(t *testing.T) {
 	require.Len(t, beforeSelectors, 1)
 	beforeSel, ok := beforeSelectors[0].(map[string]any)
 	require.True(t, ok)
-	require.Equal(t, "project-old", beforeSel["resource_id"])
+	require.Equal(t, "project-old", beforeSel["ResourceID"])
 	afterGrants, ok := afterSnapshot["Grants"].([]any)
 	require.True(t, ok)
 	require.Len(t, afterGrants, 1)
@@ -351,7 +351,7 @@ func TestService_UpdateRole_AuditLog(t *testing.T) {
 	require.Len(t, afterSelectors, 1)
 	afterSel, ok := afterSelectors[0].(map[string]any)
 	require.True(t, ok)
-	require.Equal(t, "project-1", afterSel["resource_id"])
+	require.Equal(t, "project-1", afterSel["ResourceID"])
 
 	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionAccessRoleUpdate)
 	require.NoError(t, err)

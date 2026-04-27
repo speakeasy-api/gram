@@ -23959,10 +23959,8 @@ components:
         selectors:
           type: array
           items:
-            type: object
-            additionalProperties:
-              type: string
-          description: Selector constraints. Null means unrestricted. Each selector is a set of key-value conditions.
+            $ref: '#/components/schemas/Selector'
+          description: Selector constraints. Null means unrestricted.
         sub_scopes:
           type: array
           items:
@@ -26206,10 +26204,8 @@ components:
         selectors:
           type: array
           items:
-            type: object
-            additionalProperties:
-              type: string
-          description: Selector constraints. Null means unrestricted. Each selector is a set of key-value conditions (e.g. resource_kind, resource_id, disposition, tool).
+            $ref: '#/components/schemas/Selector'
+          description: Selector constraints. Null means unrestricted.
       required:
         - scope
     ScopeDefinition:
@@ -26608,6 +26604,35 @@ components:
         - in_placement
         - scheme
         - env_variables
+    Selector:
+      type: object
+      properties:
+        disposition:
+          type: string
+          description: Tool disposition filter (MCP scopes only).
+          enum:
+            - read_only
+            - destructive
+            - idempotent
+            - open_world
+        resource_id:
+          type: string
+          description: The resource identifier, or '*' for all resources of this kind.
+        resource_kind:
+          type: string
+          description: The kind of resource this selector targets.
+          enum:
+            - project
+            - mcp
+            - org
+            - '*'
+        tool:
+          type: string
+          description: Specific tool name filter (MCP scopes only).
+      description: A constraint that narrows which resources a grant applies to.
+      required:
+        - resource_kind
+        - resource_id
     SendInviteRequestBody:
       type: object
       properties:

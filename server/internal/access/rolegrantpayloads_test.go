@@ -13,8 +13,8 @@ func TestRoleGrantPayloadsPreservesNilAndNonNilSelectors(t *testing.T) {
 
 	grants := roleGrantPayloads([]*gen.RoleGrant{
 		{Scope: string(authz.ScopeProjectRead), Selectors: nil},
-		{Scope: string(authz.ScopeProjectWrite), Selectors: []map[string]string{
-			{"resource_kind": "project", "resource_id": "proj-1"},
+		{Scope: string(authz.ScopeProjectWrite), Selectors: []*gen.Selector{
+			{ResourceKind: "project", ResourceID: "proj-1"},
 		}},
 	})
 

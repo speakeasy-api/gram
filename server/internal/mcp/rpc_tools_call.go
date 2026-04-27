@@ -182,11 +182,12 @@ func handleToolsCall(
 		}
 	}
 
-	// Per-tool RBAC check: if the user is authenticated, verify they have
-	// mcp:connect for this specific tool (not just the server). The connection-
-	// level check only validates the server; this narrows to the tool and
-	// disposition dimensions.
-	if payload.authenticated && authzEngine != nil {
+	// Per-tool RBAC check: if the user is authenticated on a private MCP,
+	// verify they have mcp:connect for this specific tool (not just the server).
+	// The connection-level check only validates the server; this narrows to the
+	// tool and disposition dimensions. Public MCPs skip this — they're open to
+	// everyone, mirroring the connection-level guard in impl.go.
+	if payload.authenticated && authzEngine != nil && (toolset.McpIsPublic == nil || !*toolset.McpIsPublic) {
 		var disposition string
 		if tool != nil {
 			baseTool, err := conv.ToBaseTool(tool)

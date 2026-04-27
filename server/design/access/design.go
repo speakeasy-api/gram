@@ -314,6 +314,26 @@ var _ = Service("access", func() {
 
 })
 
+var SelectorModel = Type("Selector", func() {
+	Description("A constraint that narrows which resources a grant applies to.")
+	Required("resource_kind", "resource_id")
+
+	Attribute("resource_kind", String, func() {
+		Description("The kind of resource this selector targets.")
+		Enum("project", "mcp", "org", "*")
+	})
+	Attribute("resource_id", String, func() {
+		Description("The resource identifier, or '*' for all resources of this kind.")
+	})
+	Attribute("disposition", String, func() {
+		Description("Tool disposition filter (MCP scopes only).")
+		Enum("read_only", "destructive", "idempotent", "open_world")
+	})
+	Attribute("tool", String, func() {
+		Description("Specific tool name filter (MCP scopes only).")
+	})
+})
+
 var RoleGrantModel = Type("RoleGrant", func() {
 	Required("scope")
 
@@ -322,8 +342,8 @@ var RoleGrantModel = Type("RoleGrant", func() {
 		Enum("org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect")
 	})
 
-	Attribute("selectors", ArrayOf(MapOf(String, String)), func() {
-		Description("Selector constraints. Null means unrestricted. Each selector is a set of key-value conditions (e.g. resource_kind, resource_id, disposition, tool).")
+	Attribute("selectors", ArrayOf(SelectorModel), func() {
+		Description("Selector constraints. Null means unrestricted.")
 	})
 })
 
@@ -342,7 +362,9 @@ var ListRoleGrantModel = Type("ListRoleGrant", func() {
 		})
 	})
 
-	Attribute("selectors", ArrayOf(MapOf(String, String)), "Selector constraints. Null means unrestricted. Each selector is a set of key-value conditions.")
+	Attribute("selectors", ArrayOf(SelectorModel), func() {
+		Description("Selector constraints. Null means unrestricted.")
+	})
 })
 
 var RoleModel = Type("Role", func() {

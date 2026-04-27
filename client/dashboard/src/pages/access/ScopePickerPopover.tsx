@@ -108,7 +108,7 @@ function useMCPServers(enabled: boolean) {
         : `${baseUrl}/mcp/${project?.slug ?? ""}/${t.slug}/${t.defaultEnvironmentSlug ?? ""}`;
       const mcpUrl = fullUrl.replace(/^https?:\/\//, "");
       group.servers.push({
-        id: t.slug,
+        id: t.id,
         name: t.name,
         slug: mcpUrl,
         mcpSlug: t.mcpSlug ?? undefined,
@@ -169,24 +169,21 @@ export function ScopePickerPopover({
   const toggleResource = (id: string) => {
     if (selectors === null) return;
     const has = selectors.some(
-      (s) => s.resource_kind === resourceKind && s.resource_id === id,
+      (s) => s.resourceKind === resourceKind && s.resourceId === id,
     );
     if (has) {
       onChangeSelectors(
         selectors.filter(
-          (s) => !(s.resource_kind === resourceKind && s.resource_id === id),
+          (s) => !(s.resourceKind === resourceKind && s.resourceId === id),
         ),
       );
     } else {
-      onChangeSelectors([
-        ...selectors,
-        { resource_kind: resourceKind, resource_id: id },
-      ]);
+      onChangeSelectors([...selectors, { resourceKind, resourceId: id }]);
     }
   };
 
   const isResourceSelected = (id: string) =>
-    selectors?.some((s) => s.resource_id === id) ?? false;
+    selectors?.some((s) => s.resourceId === id) ?? false;
 
   const scopeOptions = (
     <div className="shrink-0 pb-1.5">
@@ -306,20 +303,20 @@ export function ScopePickerPopover({
           onToggleTool={(serverId, toolName) => {
             const sels = selectors ?? [];
             const exists = sels.some(
-              (s) => s.resource_id === serverId && s.tool === toolName,
+              (s) => s.resourceId === serverId && s.tool === toolName,
             );
             if (exists) {
               onChangeSelectors(
                 sels.filter(
-                  (s) => !(s.resource_id === serverId && s.tool === toolName),
+                  (s) => !(s.resourceId === serverId && s.tool === toolName),
                 ),
               );
             } else {
               onChangeSelectors([
                 ...sels,
                 {
-                  resource_kind: "mcp",
-                  resource_id: serverId,
+                  resourceKind: "mcp",
+                  resourceId: serverId,
                   tool: toolName,
                 },
               ]);
@@ -337,8 +334,8 @@ export function ScopePickerPopover({
           onChangeAnnotations={(newAnnotations) => {
             onChangeAnnotations?.(newAnnotations);
             const newSelectors = newAnnotations.map((hint) => ({
-              resource_kind: "mcp",
-              resource_id: "*",
+              resourceKind: "mcp" as const,
+              resourceId: "*",
               disposition: ANNOTATION_TO_DISPOSITION[hint],
             }));
             onChangeSelectors(newSelectors);
@@ -599,7 +596,7 @@ function ToolSelectionPanel({
                 const tool = filteredTools[virtualItem.index];
                 const isSelected = selectors.some(
                   (s) =>
-                    s.resource_id === selectedServerId && s.tool === tool.name,
+                    s.resourceId === selectedServerId && s.tool === tool.name,
                 );
                 return (
                   <div
@@ -843,8 +840,8 @@ function CollectionGroupPanel({
       {collectionGroups.map((group) => {
         const allToolSelectors: Selector[] = group.servers.flatMap((s) =>
           s.tools.map((t) => ({
-            resource_kind: "mcp",
-            resource_id: s.id,
+            resourceKind: "mcp" as const,
+            resourceId: s.id,
             tool: t.name,
           })),
         );
@@ -852,7 +849,7 @@ function CollectionGroupPanel({
           allToolSelectors.length > 0 &&
           allToolSelectors.every((ts) =>
             selectors.some(
-              (s) => s.resource_id === ts.resource_id && s.tool === ts.tool,
+              (s) => s.resourceId === ts.resourceId && s.tool === ts.tool,
             ),
           );
 
@@ -863,7 +860,7 @@ function CollectionGroupPanel({
                 (s) =>
                   !allToolSelectors.some(
                     (ts) =>
-                      s.resource_id === ts.resource_id && s.tool === ts.tool,
+                      s.resourceId === ts.resourceId && s.tool === ts.tool,
                   ),
               ),
             );
@@ -871,7 +868,7 @@ function CollectionGroupPanel({
             const toAdd = allToolSelectors.filter(
               (ts) =>
                 !selectors.some(
-                  (s) => s.resource_id === ts.resource_id && s.tool === ts.tool,
+                  (s) => s.resourceId === ts.resourceId && s.tool === ts.tool,
                 ),
             );
             onChangeSelectors([...selectors, ...toAdd]);

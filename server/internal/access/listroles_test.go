@@ -77,7 +77,7 @@ func TestService_ListRoles(t *testing.T) {
 	sels := grantsByScope[string(authz.ScopeProjectRead)].Selectors
 	ids := make([]string, len(sels))
 	for i, s := range sels {
-		ids[i] = s["resource_id"]
+		ids[i] = s.ResourceID
 	}
 	require.ElementsMatch(t, []string{"project-1", "project-2"}, ids)
 	require.Nil(t, grantsByScope[string(authz.ScopeMCPConnect)].Selectors)

@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"maps"
 	"regexp"
 	"strings"
 	"time"
@@ -889,9 +888,7 @@ func roleGrantPayloads(grants []*gen.RoleGrant) []*authz.RoleGrant {
 			if s == nil {
 				continue
 			}
-			sel := make(authz.Selector, len(s))
-			maps.Copy(sel, s)
-			selectors = append(selectors, sel)
+			selectors = append(selectors, genSelectorToAuthz(s))
 		}
 
 		out = append(out, &authz.RoleGrant{
@@ -901,6 +898,34 @@ func roleGrantPayloads(grants []*gen.RoleGrant) []*authz.RoleGrant {
 	}
 
 	return out
+}
+
+func genSelectorToAuthz(s *gen.Selector) authz.Selector {
+	sel := authz.Selector{
+		"resource_kind": s.ResourceKind,
+		"resource_id":   s.ResourceID,
+	}
+	if s.Disposition != nil {
+		sel["disposition"] = *s.Disposition
+	}
+	if s.Tool != nil {
+		sel["tool"] = *s.Tool
+	}
+	return sel
+}
+
+func authzSelectorToGen(sel authz.Selector) *gen.Selector {
+	s := &gen.Selector{
+		ResourceKind: sel["resource_kind"],
+		ResourceID:   sel["resource_id"],
+	}
+	if v, ok := sel["disposition"]; ok {
+		s.Disposition = &v
+	}
+	if v, ok := sel["tool"]; ok {
+		s.Tool = &v
+	}
+	return s
 }
 
 func formatUserName(user workos.User) string {
@@ -1035,9 +1060,9 @@ func buildRole(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, organ
 }
 
 func scopedGrantToGenRoleGrant(g *authz.ScopedGrant) *gen.RoleGrant {
-	var selectors []map[string]string
+	var selectors []*gen.Selector
 	for _, sel := range g.Selectors {
-		selectors = append(selectors, map[string]string(sel))
+		selectors = append(selectors, authzSelectorToGen(sel))
 	}
 	return &gen.RoleGrant{Scope: g.Scope, Selectors: selectors}
 }
@@ -1046,9 +1071,9 @@ func listRoleGrantsFromGrants(grants []authz.Grant) []*gen.ListRoleGrant {
 	scoped := authz.GrantsToScopedGrants(grants)
 	out := make([]*gen.ListRoleGrant, 0, len(scoped))
 	for _, g := range scoped {
-		var selectors []map[string]string
+		var selectors []*gen.Selector
 		for _, sel := range g.Selectors {
-			selectors = append(selectors, map[string]string(sel))
+			selectors = append(selectors, authzSelectorToGen(sel))
 		}
 		out = append(out, &gen.ListRoleGrant{Scope: g.Scope, SubScopes: g.SubScopes, Selectors: selectors})
 	}

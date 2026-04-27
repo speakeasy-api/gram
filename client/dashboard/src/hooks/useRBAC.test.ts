@@ -32,93 +32,93 @@ describe("resourceKindForScope", () => {
 
 describe("selectorMatches", () => {
   it("wildcard grant matches anything", () => {
-    const grant = { resource_id: "*" };
-    expect(selectorMatches(grant, { resource_id: "proj_123" })).toBe(true);
-    expect(selectorMatches(grant, { resource_id: "anything" })).toBe(true);
+    const grant = { resourceId: "*" };
+    expect(selectorMatches(grant, { resourceId: "proj_123" })).toBe(true);
+    expect(selectorMatches(grant, { resourceId: "anything" })).toBe(true);
   });
 
   it("empty grant matches anything", () => {
-    expect(selectorMatches({}, { resource_id: "proj_123" })).toBe(true);
+    expect(selectorMatches({}, { resourceId: "proj_123" })).toBe(true);
     expect(selectorMatches({}, {})).toBe(true);
   });
 
   it("exact key match", () => {
-    const grant = { resource_id: "proj_123" };
-    expect(selectorMatches(grant, { resource_id: "proj_123" })).toBe(true);
-    expect(selectorMatches(grant, { resource_id: "proj_456" })).toBe(false);
+    const grant = { resourceId: "proj_123" };
+    expect(selectorMatches(grant, { resourceId: "proj_123" })).toBe(true);
+    expect(selectorMatches(grant, { resourceId: "proj_456" })).toBe(false);
   });
 
   it("grant key absent from check is skipped", () => {
-    const grant = { resource_id: "proj_123" };
+    const grant = { resourceId: "proj_123" };
     expect(selectorMatches(grant, {})).toBe(true);
-    expect(selectorMatches(grant, { other_key: "val" })).toBe(true);
+    expect(selectorMatches(grant, { otherKey: "val" })).toBe(true);
   });
 
   it("multiple keys must all match", () => {
-    const grant = { resource_id: "proj_123", tool_id: "tool_abc" };
+    const grant = { resourceId: "proj_123", tool: "tool_abc" };
     expect(
-      selectorMatches(grant, { resource_id: "proj_123", tool_id: "tool_abc" }),
+      selectorMatches(grant, { resourceId: "proj_123", tool: "tool_abc" }),
     ).toBe(true);
     expect(
-      selectorMatches(grant, { resource_id: "proj_123", tool_id: "tool_xyz" }),
+      selectorMatches(grant, { resourceId: "proj_123", tool: "tool_xyz" }),
     ).toBe(false);
-    // check without tool_id — not constraining that dimension
-    expect(selectorMatches(grant, { resource_id: "proj_123" })).toBe(true);
+    // check without tool — not constraining that dimension
+    expect(selectorMatches(grant, { resourceId: "proj_123" })).toBe(true);
   });
 
-  it("resource_kind mismatch fails", () => {
-    const grant = { resource_kind: "project", resource_id: "proj_123" };
+  it("resourceKind mismatch fails", () => {
+    const grant = { resourceKind: "project", resourceId: "proj_123" };
     expect(
       selectorMatches(grant, {
-        resource_kind: "mcp",
-        resource_id: "proj_123",
+        resourceKind: "mcp",
+        resourceId: "proj_123",
       }),
     ).toBe(false);
   });
 
-  it("resource_kind wildcard matches any kind", () => {
-    const grant = { resource_kind: "*", resource_id: "*" };
+  it("resourceKind wildcard matches any kind", () => {
+    const grant = { resourceKind: "*", resourceId: "*" };
     expect(
       selectorMatches(grant, {
-        resource_kind: "project",
-        resource_id: "proj_123",
+        resourceKind: "project",
+        resourceId: "proj_123",
       }),
     ).toBe(true);
     expect(
       selectorMatches(grant, {
-        resource_kind: "mcp",
-        resource_id: "tool_a",
+        resourceKind: "mcp",
+        resourceId: "tool_a",
       }),
     ).toBe(true);
   });
 
   it("disposition grant matches connection check without disposition", () => {
     const grant = {
-      resource_kind: "mcp",
-      resource_id: "*",
+      resourceKind: "mcp",
+      resourceId: "*",
       disposition: "read_only",
     };
-    const check = { resource_kind: "mcp", resource_id: "toolsetA" };
+    const check = { resourceKind: "mcp", resourceId: "toolsetA" };
     expect(selectorMatches(grant, check)).toBe(true);
   });
 
   it("disposition grant denies wrong disposition", () => {
     const grant = {
-      resource_kind: "mcp",
-      resource_id: "*",
+      resourceKind: "mcp",
+      resourceId: "*",
       disposition: "read_only",
     };
     expect(
       selectorMatches(grant, {
-        resource_kind: "mcp",
-        resource_id: "toolsetA",
+        resourceKind: "mcp",
+        resourceId: "toolsetA",
         disposition: "read_only",
       }),
     ).toBe(true);
     expect(
       selectorMatches(grant, {
-        resource_kind: "mcp",
-        resource_id: "toolsetA",
+        resourceKind: "mcp",
+        resourceId: "toolsetA",
         disposition: "destructive",
       }),
     ).toBe(false);

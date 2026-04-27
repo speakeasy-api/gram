@@ -2824,15 +2824,30 @@ func unmarshalRoleGrantResponseBodyToAccessRoleGrant(v *RoleGrantResponseBody) *
 		Scope: *v.Scope,
 	}
 	if v.Selectors != nil {
-		res.Selectors = make([]map[string]string, len(v.Selectors))
+		res.Selectors = make([]*access.Selector, len(v.Selectors))
 		for i, val := range v.Selectors {
-			res.Selectors[i] = make(map[string]string, len(val))
-			for key, val := range val {
-				tk := key
-				tv := val
-				res.Selectors[i][tk] = tv
+			if val == nil {
+				res.Selectors[i] = nil
+				continue
 			}
+			res.Selectors[i] = unmarshalSelectorResponseBodyToAccessSelector(val)
 		}
+	}
+
+	return res
+}
+
+// unmarshalSelectorResponseBodyToAccessSelector builds a value of type
+// *access.Selector from a value of type *SelectorResponseBody.
+func unmarshalSelectorResponseBodyToAccessSelector(v *SelectorResponseBody) *access.Selector {
+	if v == nil {
+		return nil
+	}
+	res := &access.Selector{
+		ResourceKind: *v.ResourceKind,
+		ResourceID:   *v.ResourceID,
+		Disposition:  v.Disposition,
+		Tool:         v.Tool,
 	}
 
 	return res
@@ -2845,15 +2860,30 @@ func marshalAccessRoleGrantToRoleGrantRequestBody(v *access.RoleGrant) *RoleGran
 		Scope: v.Scope,
 	}
 	if v.Selectors != nil {
-		res.Selectors = make([]map[string]string, len(v.Selectors))
+		res.Selectors = make([]*SelectorRequestBody, len(v.Selectors))
 		for i, val := range v.Selectors {
-			res.Selectors[i] = make(map[string]string, len(val))
-			for key, val := range val {
-				tk := key
-				tv := val
-				res.Selectors[i][tk] = tv
+			if val == nil {
+				res.Selectors[i] = nil
+				continue
 			}
+			res.Selectors[i] = marshalAccessSelectorToSelectorRequestBody(val)
 		}
+	}
+
+	return res
+}
+
+// marshalAccessSelectorToSelectorRequestBody builds a value of type
+// *SelectorRequestBody from a value of type *access.Selector.
+func marshalAccessSelectorToSelectorRequestBody(v *access.Selector) *SelectorRequestBody {
+	if v == nil {
+		return nil
+	}
+	res := &SelectorRequestBody{
+		ResourceKind: v.ResourceKind,
+		ResourceID:   v.ResourceID,
+		Disposition:  v.Disposition,
+		Tool:         v.Tool,
 	}
 
 	return res
@@ -2866,15 +2896,30 @@ func marshalRoleGrantRequestBodyToAccessRoleGrant(v *RoleGrantRequestBody) *acce
 		Scope: v.Scope,
 	}
 	if v.Selectors != nil {
-		res.Selectors = make([]map[string]string, len(v.Selectors))
+		res.Selectors = make([]*access.Selector, len(v.Selectors))
 		for i, val := range v.Selectors {
-			res.Selectors[i] = make(map[string]string, len(val))
-			for key, val := range val {
-				tk := key
-				tv := val
-				res.Selectors[i][tk] = tv
+			if val == nil {
+				res.Selectors[i] = nil
+				continue
 			}
+			res.Selectors[i] = marshalSelectorRequestBodyToAccessSelector(val)
 		}
+	}
+
+	return res
+}
+
+// marshalSelectorRequestBodyToAccessSelector builds a value of type
+// *access.Selector from a value of type *SelectorRequestBody.
+func marshalSelectorRequestBodyToAccessSelector(v *SelectorRequestBody) *access.Selector {
+	if v == nil {
+		return nil
+	}
+	res := &access.Selector{
+		ResourceKind: v.ResourceKind,
+		ResourceID:   v.ResourceID,
+		Disposition:  v.Disposition,
+		Tool:         v.Tool,
 	}
 
 	return res
@@ -2921,14 +2966,13 @@ func unmarshalListRoleGrantResponseBodyToAccessListRoleGrant(v *ListRoleGrantRes
 		}
 	}
 	if v.Selectors != nil {
-		res.Selectors = make([]map[string]string, len(v.Selectors))
+		res.Selectors = make([]*access.Selector, len(v.Selectors))
 		for i, val := range v.Selectors {
-			res.Selectors[i] = make(map[string]string, len(val))
-			for key, val := range val {
-				tk := key
-				tv := val
-				res.Selectors[i][tk] = tv
+			if val == nil {
+				res.Selectors[i] = nil
+				continue
 			}
+			res.Selectors[i] = unmarshalSelectorResponseBodyToAccessSelector(val)
 		}
 	}
 
