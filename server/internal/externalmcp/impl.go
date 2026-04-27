@@ -319,13 +319,10 @@ func (s *Service) fetchServerDetails(ctx context.Context, registry repo.GetMCPRe
 	}
 	var serverResp struct {
 		Server struct {
-			Name        string `json:"name"`
-			Description string `json:"description"`
-			Version     string `json:"version"`
-			Remotes     []struct {
-				URL  string `json:"url"`
-				Type string `json:"type"`
-			} `json:"remotes"`
+			Name        string             `json:"name"`
+			Description string             `json:"description"`
+			Version     string             `json:"version"`
+			Remotes     []serverRemoteJSON `json:"remotes"`
 		} `json:"server"`
 		Meta struct {
 			Version struct {
@@ -349,6 +346,8 @@ func (s *Service) fetchServerDetails(ctx context.Context, registry repo.GetMCPRe
 		remotes = append(remotes, &types.ExternalMCPRemote{
 			URL:           r.URL,
 			TransportType: r.Type,
+			Headers:       toExternalMCPRemoteHeaders(r.Headers),
+			Variables:     toExternalMCPRemoteVariables(r.Variables),
 		})
 		// Prefer first streamable-http; fall back to first sse.
 		// Can't break early because we need all remotes in the slice.

@@ -127,13 +127,14 @@ type serverJSON struct {
 	Icons       []struct {
 		Src string `json:"src"`
 	} `json:"icons"`
-	Remotes []serverRemoteBasic `json:"remotes"`
+	Remotes []serverRemoteJSON `json:"remotes"`
 }
 
-type serverRemoteBasic struct {
-	URL     string         `json:"url"`
-	Type    string         `json:"type"`
-	Headers []RemoteHeader `json:"headers"`
+type serverRemoteJSON struct {
+	URL       string                    `json:"url"`
+	Type      string                    `json:"type"`
+	Headers   []RemoteHeader            `json:"headers"`
+	Variables map[string]RemoteVariable `json:"variables"`
 }
 
 // RemoteHeader represents a header requirement from the registry.
@@ -143,6 +144,15 @@ type RemoteHeader struct {
 	IsRequired  bool    `json:"isRequired"`
 	Description *string `json:"description,omitempty"`
 	Placeholder *string `json:"placeholder,omitempty"`
+}
+
+// RemoteVariable represents a URL template variable from the registry.
+type RemoteVariable struct {
+	Description *string  `json:"description,omitempty"`
+	IsSecret    bool     `json:"isSecret"`
+	IsRequired  bool     `json:"isRequired"`
+	Default     *string  `json:"default,omitempty"`
+	Choices     []string `json:"choices,omitempty"`
 }
 
 type serverRemoteMeta struct {
@@ -161,10 +171,10 @@ type serverDetailsEntry struct {
 }
 
 type serverDetailsJSON struct {
-	Name        string              `json:"name"`
-	Description string              `json:"description"`
-	Version     string              `json:"version"`
-	Remotes     []serverRemoteBasic `json:"remotes"`
+	Name        string             `json:"name"`
+	Description string             `json:"description"`
+	Version     string             `json:"version"`
+	Remotes     []serverRemoteJSON `json:"remotes"`
 }
 
 type serverTool struct {
@@ -276,6 +286,8 @@ func (c *RegistryClient) ListServers(ctx context.Context, registry Registry, par
 			remotes = append(remotes, &types.ExternalMCPRemote{
 				URL:           r.URL,
 				TransportType: r.Type,
+				Headers:       toExternalMCPRemoteHeaders(r.Headers),
+				Variables:     toExternalMCPRemoteVariables(r.Variables),
 			})
 		}
 
@@ -313,6 +325,47 @@ func (c *RegistryClient) ListServers(ctx context.Context, registry Registry, par
 	}
 
 	return servers, nil
+}
+
+func toExternalMCPRemoteHeaders(headers []RemoteHeader) []*types.ExternalMCPRemoteHeader {
+	if len(headers) == 0 {
+		return nil
+	}
+
+	result := make([]*types.ExternalMCPRemoteHeader, 0, len(headers))
+	for _, header := range headers {
+		result = append(result, &types.ExternalMCPRemoteHeader{
+			Name:        header.Name,
+			Description: header.Description,
+			IsSecret:    new(header.IsSecret),
+			IsRequired:  new(header.IsRequired),
+			Placeholder: header.Placeholder,
+		})
+	}
+	return result
+}
+
+func toExternalMCPRemoteVariables(variables map[string]RemoteVariable) map[string]*types.ExternalMCPRemoteVariable {
+	if len(variables) == 0 {
+		return nil
+	}
+
+	result := make(map[string]*types.ExternalMCPRemoteVariable, len(variables))
+	for name, variable := range variables {
+		result[name] = &types.ExternalMCPRemoteVariable{
+			Description: variable.Description,
+			IsSecret:    new(variable.IsSecret),
+			IsRequired:  new(variable.IsRequired),
+			Default:     variable.Default,
+			Choices:     variable.Choices,
+		}
+	}
+	return result
+}
+
+//go:fix inline
+func boolPtr(v bool) *bool {
+	return new(v)
 }
 
 // ClearCache removes all cached entries for the given registry URL.

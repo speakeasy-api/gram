@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 621a393c0dc5c473575f4c6f69de6c6c
+  docChecksum: 7dbd288d362ac8cd2a127aeeb1f1c42c
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -235,7 +235,11 @@ trackedFiles:
   docs/models/components/externalmcpheaderdefinition.md:
     last_write_checksum: sha1:da0a881710691ca1f0cc1c45d1f2bf3daad3c4e3
   docs/models/components/externalmcpremote.md:
-    last_write_checksum: sha1:b0f27d78c3a4213bf0b487ca3eed7d0a5d235015
+    last_write_checksum: sha1:6cf2b77b25cb637d50450bf178a4c30023b10dbd
+  docs/models/components/externalmcpremoteheader.md:
+    last_write_checksum: sha1:adbe8ae06645094a6ef2ee54cd62c2dc9a468d4a
+  docs/models/components/externalmcpremotevariable.md:
+    last_write_checksum: sha1:e033d008b63ce92099df1591b1e89c632459da34
   docs/models/components/externalmcpserver.md:
     last_write_checksum: sha1:2c24221b11f3c9ac7d273ef35ff2791e6ed88b87
   docs/models/components/externalmcptool.md:
@@ -3025,7 +3029,11 @@ trackedFiles:
   src/models/components/externalmcpheaderdefinition.ts:
     last_write_checksum: sha1:12572263ec71fa2fdc5fc5d17a333e356567f86c
   src/models/components/externalmcpremote.ts:
-    last_write_checksum: sha1:4d97b661fee50acb5578cb59c9be41eeb8b93a10
+    last_write_checksum: sha1:b728641aa2eae30c026960a6023ee25be648c1d7
+  src/models/components/externalmcpremoteheader.ts:
+    last_write_checksum: sha1:d9309f0dd59042a9f7a1465e6ada0d22026b685a
+  src/models/components/externalmcpremotevariable.ts:
+    last_write_checksum: sha1:ae7f119fd8c1b29805909e4db1a5526d9570d443
   src/models/components/externalmcpserver.ts:
     id: 17ea92ac12e8
     last_write_checksum: sha1:5d022a71305e904032b391cfa4b76b3011024b2e
@@ -3144,7 +3152,7 @@ trackedFiles:
     pristine_git_object: a6f415c341273d2f679cbaa39ea48eaede35f633
   src/models/components/index.ts:
     id: 0aa842dce54d
-    last_write_checksum: sha1:e5af6fccd914361047c0ef04f225162c80326c25
+    last_write_checksum: sha1:606cf5e921f926c818f52d0b98872e4d1a95d128
     pristine_git_object: 4c964f216a07beb3007a26774ce7bdaa48c9f74c
   src/models/components/inforesponsebody.ts:
     id: a1447891c5a4
