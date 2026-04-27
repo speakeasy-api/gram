@@ -20,6 +20,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contenttypes"
@@ -58,6 +59,7 @@ func handleToolsCall(
 	ctx context.Context,
 	logger *slog.Logger,
 	metrics *metrics,
+	authzEngine *authz.Engine,
 	guardianPolicy *guardian.Policy,
 	db *pgxpool.Pool,
 	env toolconfig.EnvironmentLoader,
@@ -177,6 +179,20 @@ func handleToolsCall(
 		plan, err = toolsetHelpers.GetToolCallPlanByURN(ctx, toolURN, uuid.UUID(projectID))
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed get tool call plan").Log(ctx, logger)
+		}
+	}
+
+	// Per-tool RBAC check: if the user is authenticated, verify they have
+	// mcp:connect for this specific tool (not just the server). The connection-
+	// level check only validates the server; this narrows to the tool dimension.
+	if payload.authenticated && authzEngine != nil {
+		if err := authzEngine.Require(ctx, authz.Check{
+			Scope:        authz.ScopeMCPConnect,
+			ResourceKind: "",
+			ResourceID:   toolset.ID,
+			Conditions:   map[string]string{"tool": params.Name},
+		}); err != nil {
+			return nil, err
 		}
 	}
 
