@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: c217e33807cbcfacfde092b3e4ff0ef5
+  docChecksum: 621a393c0dc5c473575f4c6f69de6c6c
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
-  releaseVersion: 0.33.6
-  configChecksum: 89ad316ff8020974749a9662e8728295
+  releaseVersion: 0.33.7
+  configChecksum: 9ba14fcf143cf0b894eeccc68c820028
 persistentEdits:
   generation_id: bb7e101e-7ad4-46ab-85f8-4945a377ddd8
   pristine_commit_hash: 8f637eb1797d8010346278d429048da266e99c54
@@ -81,7 +81,7 @@ trackedFiles:
   docs/models/components/addexternaloauthserverrequestbody.md:
     last_write_checksum: sha1:ec948ed2db5efd9e39cc838367ef4337d2b2f82e
   docs/models/components/addfunctionsform.md:
-    last_write_checksum: sha1:86862ee819b4aa7528a46833159fbfc899e835d6
+    last_write_checksum: sha1:3992bc766aec5397a43b9ef3e43273a0d85018df
   docs/models/components/addoauthproxyserverrequestbody.md:
     last_write_checksum: sha1:f18ade159662f0f0b08c87b56596158682f5b7f9
   docs/models/components/addopenapiv3deploymentassetform.md:
@@ -211,7 +211,7 @@ trackedFiles:
   docs/models/components/deploymentexternalmcp.md:
     last_write_checksum: sha1:4a237987688e6705c5405c4e53ebf0b89c71228f
   docs/models/components/deploymentfunctions.md:
-    last_write_checksum: sha1:3ef6be86744a2644a4c15b4228b0ae5784c751d8
+    last_write_checksum: sha1:2a9a48bf85b3d4f45a196ba67412447fe1f28a02
   docs/models/components/deploymentlogevent.md:
     last_write_checksum: sha1:996b7375863beb0e035e5273303ef351551a7bc6
   docs/models/components/deploymentpackage.md:
@@ -2112,11 +2112,11 @@ trackedFiles:
     pristine_git_object: bf1f7d6d396e43fdddcc27f74052233f952ed602
   jsr.json:
     id: 7f6ab7767282
-    last_write_checksum: sha1:762762f50f66016aa6f38eff24ecdf254c24f0f4
+    last_write_checksum: sha1:b10ba5a9be2e1cf6803cb233cc913f427c517865
     pristine_git_object: 37015b45d10dbc89a9a32f9f2230620a633c7af5
   package.json:
     id: 7030d0b2f71b
-    last_write_checksum: sha1:cdfaebd0b12a565d8bdc396323b10c234b114c29
+    last_write_checksum: sha1:77b71fd37a8acc2e1737ea879e27ae35283623b0
     pristine_git_object: efd88030fdaeb4cfabe39268b1f7e684dda63c7e
   src/core.ts:
     id: f431fdbcd144
@@ -2732,7 +2732,7 @@ trackedFiles:
     pristine_git_object: b9f82967e336f398ea542003dc4b7b2508bc4e76
   src/lib/config.ts:
     id: 320761608fb3
-    last_write_checksum: sha1:5190614487256d71a1834b873282cafb4806ded3
+    last_write_checksum: sha1:c958a00326a01e865582c7d93993f8b9e7bb1af2
     pristine_git_object: 582b9fc70b7ac2bf3e01969f3ea9b751959bbd2b
   src/lib/dlv.ts:
     id: b1988214835a
@@ -2806,7 +2806,7 @@ trackedFiles:
     pristine_git_object: f5195c3419871dee3045ff5781105d81fb9f0c0a
   src/models/components/addfunctionsform.ts:
     id: 3d81813d3245
-    last_write_checksum: sha1:53c390b20ff786a48a231fd9d6bdbc8af4a38069
+    last_write_checksum: sha1:dba5b13b7f428b4bd97daa5d5de40ebad5877a02
     pristine_git_object: ead76a62dfa817b58014060ca245d0b66676fab7
   src/models/components/addoauthproxyserverrequestbody.ts:
     id: c26e9237511a
@@ -2986,7 +2986,7 @@ trackedFiles:
     pristine_git_object: 665c46528235eb4966d4fc82f37d29210f8c273f
   src/models/components/deploymentfunctions.ts:
     id: 86e622c96f1b
-    last_write_checksum: sha1:fa16e6e037093ff4868dd06b5a6f4f908914918c
+    last_write_checksum: sha1:c887878961d9c1d99d77f74c7942c18593a7d7de
     pristine_git_object: 834ade04fe67698a5d317f036a06c956ab89e420
   src/models/components/deploymentlogevent.ts:
     id: 3f95c5e1e874
