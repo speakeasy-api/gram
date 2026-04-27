@@ -185,3 +185,47 @@ func TestGenerateMarketplaceManifest(t *testing.T) {
 	require.Equal(t, "./a-cursor", cursorManifest.Plugins[0].Source)
 	require.Equal(t, "./b-cursor", cursorManifest.Plugins[1].Source)
 }
+
+func TestRenderHookScriptClaudeUsesRPCEndpointAndOmitsProjectHeader(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+		ProjectSlug: "acme-prod",
+	}
+	script := string(renderHookScript(cfg, "claude"))
+
+	require.Contains(t, script, "https://app.getgram.ai/rpc/hooks.claude")
+	require.NotContains(t, script, "/hooks/claude", "must not use the legacy /hooks/<platform> path")
+	require.NotContains(t, script, "Gram-Project", "claude endpoint has no Security() block; header would be wasted")
+	require.Contains(t, script, "Bearer gram_local_secret_xyz")
+}
+
+func TestRenderHookScriptCursorIncludesProjectHeader(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+		ProjectSlug: "acme-prod",
+	}
+	script := string(renderHookScript(cfg, "cursor"))
+
+	require.Contains(t, script, "https://app.getgram.ai/rpc/hooks.cursor")
+	require.NotContains(t, script, "/hooks/cursor", "must not use the legacy /hooks/<platform> path")
+	require.Contains(t, script, `Gram-Project: acme-prod`, "cursor requires the project header per design")
+	require.Contains(t, script, "Bearer gram_local_secret_xyz")
+}
+
+func TestRenderHookScriptCursorOmitsProjectHeaderWhenSlugMissing(t *testing.T) {
+	t.Parallel()
+	// Defensive: if generateConfig is ever called without a slug, we should
+	// emit a script that's at least syntactically valid rather than embed an
+	// empty header.
+	cfg := GenerateConfig{
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+	}
+	script := string(renderHookScript(cfg, "cursor"))
+
+	require.NotContains(t, script, "Gram-Project")
+}

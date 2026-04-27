@@ -664,7 +664,11 @@ func (s *Service) DownloadPluginPackage(ctx context.Context, payload *gen.Downlo
 		}
 	}
 
-	cfg := s.generateConfig(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug)
+	projectSlug := ""
+	if ac.ProjectSlug != nil {
+		projectSlug = *ac.ProjectSlug
+	}
+	cfg := s.generateConfig(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug, projectSlug)
 
 	files, err := GenerateSinglePluginPackage(*pluginInfo, cfg, payload.Platform)
 	if err != nil {
@@ -778,7 +782,7 @@ func (s *Service) PublishPlugins(ctx context.Context, payload *gen.PublishPlugin
 		return nil, oops.E(oops.CodeUnexpected, err, "build plugin hooks api key").Log(ctx, s.logger)
 	}
 
-	cfg := s.generateConfig(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug)
+	cfg := s.generateConfig(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug, *ac.ProjectSlug)
 	cfg.APIKey = mcpCandidate.fullKey
 	cfg.HooksAPIKey = hooksCandidate.fullKey
 
@@ -1027,12 +1031,14 @@ func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID) (
 	return pluginInfos, nil
 }
 
-func (s *Service) generateConfig(ctx context.Context, orgID, orgSlug string) GenerateConfig {
+func (s *Service) generateConfig(ctx context.Context, orgID, orgSlug, projectSlug string) GenerateConfig {
 	cfg := GenerateConfig{
-		OrgName:   orgSlug,
-		OrgEmail:  "",
-		ServerURL: s.serverURL,
-		APIKey:    "",
+		OrgName:     orgSlug,
+		OrgEmail:    "",
+		ServerURL:   s.serverURL,
+		APIKey:      "",
+		HooksAPIKey: "",
+		ProjectSlug: projectSlug,
 	}
 	orgName, err := s.repo.GetOrganizationName(ctx, orgID)
 	switch {
