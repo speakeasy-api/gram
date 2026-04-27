@@ -116,10 +116,22 @@ var _ = Service("hooks", func() {
 	Method("claude", func() {
 		Description("Unified endpoint for all Claude Code hook events. Handles SessionStart, PreToolUse, PostToolUse, and PostToolUseFailure.")
 
-		Payload(ClaudeHookPayload)
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("hooks")
+		})
+
+		Payload(func() {
+			Extend(ClaudeHookPayload)
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
 		Result(ClaudeHookResult)
+
 		HTTP(func() {
 			POST("/rpc/hooks.claude")
+			security.ByKeyHeader()
+			security.ProjectHeader()
 		})
 	})
 

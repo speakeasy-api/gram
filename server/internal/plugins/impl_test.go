@@ -964,18 +964,15 @@ func TestPluginsService_PublishPlugins_BaseHookScriptContainsAPIKey(t *testing.T
 	require.NotEmpty(t, hooksKeyPrefix, "expected a plugins-hooks-* API key")
 
 	claudeBase, cursorBase := orgBaseSlugs(t, ctx, ti)
-	// Claude's endpoint has no Security() block, so the Claude script sends no
-	// auth header at all — assert the key is not embedded there. Cursor reads
-	// Gram-Key, so assert the embedded value lands in that header.
-	claudeScript := string(mock.lastPushedFiles[claudeBase+"/hook.sh"])
-	require.NotEmpty(t, claudeScript, "claude base hook.sh missing")
-	require.NotContains(t, claudeScript, hooksKeyPrefix, "claude script must not embed the hooks key (endpoint accepts no auth)")
-	require.NotContains(t, claudeScript, "plugins-mcp-")
-
-	cursorScript := string(mock.lastPushedFiles[cursorBase+"/hook.sh"])
-	require.NotEmpty(t, cursorScript, "cursor base hook.sh missing")
-	require.Contains(t, cursorScript, "Gram-Key: "+hooksKeyPrefix, "cursor script does not embed hooks key in Gram-Key header")
-	require.NotContains(t, cursorScript, "plugins-mcp-")
+	// Both endpoints now require Gram-Key + Gram-Project per
+	// server/design/hooks/design.go.
+	for _, path := range []string{claudeBase + "/hook.sh", cursorBase + "/hook.sh"} {
+		script := string(mock.lastPushedFiles[path])
+		require.NotEmpty(t, script, path+" missing")
+		require.Contains(t, script, "Gram-Key: "+hooksKeyPrefix, "%s does not embed hooks key in Gram-Key", path)
+		// Must NOT contain the MCP key — separate scope, separate concerns.
+		require.NotContains(t, script, "plugins-mcp-", "%s leaked the MCP key", path)
+	}
 }
 
 // The base plugin must appear FIRST in each platform's marketplace listing

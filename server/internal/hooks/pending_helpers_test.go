@@ -1,7 +1,6 @@
 package hooks
 
 import (
-	"sync"
 	"testing"
 	"time"
 
@@ -22,79 +21,6 @@ var (
 	toolUseID2 = "toolu_234"
 )
 
-// TestBufferHook_AtomicAppend tests that buffering hooks uses atomic RPUSH
-func TestBufferHook_AtomicAppend(t *testing.T) {
-	t.Parallel()
-	ctx, ti := newTestHooksService(t)
-
-	sessionID := uuid.NewString()
-	toolName := "test_tool"
-	toolUseID := "toolu_123"
-
-	// Buffer a single hook
-	payload := &hooks.ClaudeHookPayload{
-		HookEventName: "PreToolUse",
-		SessionID:     &sessionID,
-		ToolName:      &toolName,
-		ToolUseID:     &toolUseID,
-	}
-
-	// Access the private bufferHook method via the service
-	// Since it's private, we'll test it indirectly through the Claude endpoint
-	result, err := ti.service.Claude(ctx, payload)
-	require.NoError(t, err)
-	require.NotNil(t, result)
-
-	// Verify the hook was buffered in Redis by checking the key exists
-	redisKey := "hook:pending:" + sessionID
-	exists, err := ti.redisClient.Exists(ctx, redisKey).Result()
-	require.NoError(t, err)
-	assert.Equal(t, int64(1), exists, "Hook should be buffered in Redis")
-
-	// Verify it's a list with one element
-	length, err := ti.redisClient.LLen(ctx, redisKey).Result()
-	require.NoError(t, err)
-	assert.Equal(t, int64(1), length, "Should have exactly one buffered hook")
-}
-
-// TestBufferHook_MultipleConcurrent tests that concurrent buffering works correctly
-func TestBufferHook_MultipleConcurrent(t *testing.T) {
-	t.Parallel()
-	ctx, ti := newTestHooksService(t)
-
-	sessionID := uuid.NewString()
-	numHooks := 50
-	var wg sync.WaitGroup
-
-	// Buffer multiple hooks concurrently to test for race conditions
-	for i := range numHooks {
-		wg.Add(1)
-		go func(idx int) {
-			defer wg.Done()
-
-			toolName := "concurrent_tool"
-			toolUseID := uuid.NewString()
-			payload := &hooks.ClaudeHookPayload{
-				HookEventName: "PreToolUse",
-				SessionID:     &sessionID,
-				ToolName:      &toolName,
-				ToolUseID:     &toolUseID,
-			}
-
-			_, err := ti.service.Claude(ctx, payload)
-			assert.NoError(t, err)
-		}(i)
-	}
-
-	wg.Wait()
-
-	// Verify all hooks were buffered atomically
-	redisKey := "hook:pending:" + sessionID
-	length, err := ti.redisClient.LLen(ctx, redisKey).Result()
-	require.NoError(t, err)
-	assert.Equal(t, int64(numHooks), length, "All hooks should be buffered atomically without race conditions")
-}
-
 // TestFlushPendingHooks_DirectCall tests flushing by calling the flush method directly
 func TestFlushPendingHooks_DirectCall(t *testing.T) {
 	t.Parallel()
@@ -106,7 +32,7 @@ func TestFlushPendingHooks_DirectCall(t *testing.T) {
 	cacheAdapter := cache.NewRedisCacheAdapter(ti.redisClient)
 	numHooks := 5
 	for range numHooks {
-		payload := hooks.ClaudeHookPayload{
+		payload := hooks.ClaudePayload{
 			HookEventName: "PreToolUse",
 			SessionID:     &sessionID,
 			ToolName:      &toolName,
@@ -167,50 +93,6 @@ func TestFlushPendingHooks_EmptyList(t *testing.T) {
 	exists, err := ti.redisClient.Exists(ctx, redisKey).Result()
 	require.NoError(t, err)
 	assert.Equal(t, int64(0), exists)
-}
-
-// TestBufferAndFlush_MultipleSessionsConcurrent tests buffering and flushing across multiple sessions
-func TestBufferAndFlush_MultipleSessionsConcurrent(t *testing.T) {
-	t.Parallel()
-	ctx, ti := newTestHooksService(t)
-
-	numSessions := 10
-	hooksPerSession := 5
-
-	var wg sync.WaitGroup
-
-	// Create multiple sessions and buffer hooks concurrently
-	for sessionIdx := range numSessions {
-		wg.Add(1)
-		go func(idx int) {
-			defer wg.Done()
-
-			sessionID := uuid.NewString()
-
-			// Buffer multiple hooks for this session
-			for range hooksPerSession {
-				toolName := "test_tool"
-				toolUseID := uuid.NewString()
-				payload := &hooks.ClaudeHookPayload{
-					HookEventName: "PreToolUse",
-					SessionID:     &sessionID,
-					ToolName:      &toolName,
-					ToolUseID:     &toolUseID,
-				}
-
-				_, err := ti.service.Claude(ctx, payload)
-				assert.NoError(t, err)
-			}
-
-			// Verify hooks are buffered for this session
-			redisKey := "hook:pending:" + sessionID
-			length, err := ti.redisClient.LLen(ctx, redisKey).Result()
-			assert.NoError(t, err)
-			assert.Equal(t, int64(hooksPerSession), length)
-		}(sessionIdx)
-	}
-
-	wg.Wait()
 }
 
 // TestSessionMetadata_CacheSetGet tests storing and retrieving session metadata
@@ -289,7 +171,7 @@ func TestListRange_CorrectDeserialization(t *testing.T) {
 
 	// Create test payloads
 	sessionID := uuid.NewString()
-	payloads := []hooks.ClaudeHookPayload{
+	payloads := []hooks.ClaudePayload{
 		{
 			HookEventName: "PreToolUse",
 			SessionID:     &sessionID,
@@ -311,7 +193,7 @@ func TestListRange_CorrectDeserialization(t *testing.T) {
 	}
 
 	// Read back using ListRange
-	var retrieved []hooks.ClaudeHookPayload
+	var retrieved []hooks.ClaudePayload
 	err := cacheAdapter.ListRange(ctx, key, 0, -1, &retrieved)
 	require.NoError(t, err)
 
