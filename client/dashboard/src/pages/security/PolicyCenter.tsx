@@ -463,7 +463,7 @@ function PolicyCenterContent() {
               <Button
                 onClick={handleSave}
                 disabled={
-                  !formName.trim() ||
+                  (!formAutoName && !formName.trim()) ||
                   createMutation.isPending ||
                   updateMutation.isPending
                 }
