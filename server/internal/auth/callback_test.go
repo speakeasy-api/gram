@@ -119,10 +119,16 @@ func TestService_Callback(t *testing.T) {
 		t.Parallel()
 
 		userInfo := adminMockUserInfo()
+		userInfo.Organizations = append(userInfo.Organizations, MockOrganizationEntry{
+			ID:                 "customer-org-123",
+			Name:               "Customer Organization",
+			Slug:               "customer-org",
+			UserWorkspaceSlugs: []string{"customer-workspace"},
+		})
 		ctx, instance := newTestAuthService(t, userInfo)
 
 		// Set admin override in context
-		ctx = contextvalues.SetAdminOverrideInContext(ctx, "admin-org")
+		ctx = contextvalues.SetAdminOverrideInContext(ctx, "customer-org")
 		code := "mock_code"
 		payload := &gen.CallbackPayload{
 			Code: code,
@@ -139,7 +145,7 @@ func TestService_Callback(t *testing.T) {
 		require.NoError(t, err, "load session after callback")
 		authCtx, ok := contextvalues.GetAuthContext(ctx)
 		require.True(t, ok, "auth context should be set after callback")
-		require.Equal(t, "admin-org-123", authCtx.ActiveOrganizationID, "incorrect active organization id for admin override")
+		require.Equal(t, "customer-org-123", authCtx.ActiveOrganizationID, "incorrect active organization id for admin override")
 	})
 
 	t.Run("user with no organizations returns successful redirect", func(t *testing.T) {
