@@ -20,7 +20,7 @@ env:
 jobs:
   changes:
     name: Tag branch changes
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: blacksmith-8vcpu-ubuntu-2404
     permissions:
       contents: "read"
       pull-requests: read
@@ -125,7 +125,7 @@ jobs:
           echo "examples=$examples" >> $GITHUB_OUTPUT
 
   docker-build-server:
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: blacksmith-8vcpu-ubuntu-2404
     needs: [changes, server-build-lint]
     if: needs.changes.outputs.server == 'true'
     env:
@@ -186,7 +186,7 @@ jobs:
           docker run --rm ${{ steps.build.outputs.image-tag }} version
 
   assistant-runtime-image:
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: blacksmith-8vcpu-ubuntu-2404
     needs: [changes]
     if: needs.changes.outputs.server == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.user.login != 'dependabot[bot]')
     steps:
@@ -303,7 +303,7 @@ jobs:
 
   atlas-lint:
     name: Lint migrations with Atlas
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: blacksmith-8vcpu-ubuntu-2404
     needs: changes
     if: needs.changes.outputs.migrations == 'true' && github.event_name == 'pull_request'
     permissions:
@@ -357,7 +357,7 @@ jobs:
 
   atlas-push:
     name: Push migrations to Atlas Registry
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: blacksmith-8vcpu-ubuntu-2404
     needs: [changes, server-build-lint]
     if: needs.changes.outputs.server == 'true'
     permissions:
@@ -419,7 +419,7 @@ jobs:
           tag: ${{ steps.tag.outputs.tag }}
 
   server-build-lint:
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: blacksmith-8vcpu-ubuntu-2404
     needs: changes
     if: needs.changes.outputs.server == 'true'
     env:
@@ -506,7 +506,7 @@ jobs:
           mise run git:porcelain
 
   cli-build-lint:
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: blacksmith-8vcpu-ubuntu-2404
     needs: changes
     if: needs.changes.outputs.cli == 'true'
     env:
@@ -574,7 +574,7 @@ jobs:
         run: mise run git:porcelain
 
   plog-build-lint:
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: blacksmith-8vcpu-ubuntu-2404
     needs: changes
     if: needs.changes.outputs.plog == 'true'
     env:
@@ -627,7 +627,7 @@ jobs:
         run: mise run git:porcelain
 
   server-test:
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: blacksmith-8vcpu-ubuntu-2404
     needs: changes
     if: needs.changes.outputs.server == 'true'
     env:
@@ -664,7 +664,7 @@ jobs:
         run: mise run test:server
 
   docker-build-client:
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: blacksmith-8vcpu-ubuntu-2404
     needs: [changes, sdk-gen-check]
     # Build dashboard docker image when server OR client changes exist (needed for preview environments)
     if: |
@@ -752,7 +752,7 @@ jobs:
         run: pnpm store prune
 
   client-build-lint:
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: blacksmith-8vcpu-ubuntu-2404
     needs: [changes, sdk-gen-check]
     if: |
       !cancelled() &&
@@ -803,7 +803,7 @@ jobs:
 
   sdk-gen-check:
     name: Check SDK is up-to-date
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: blacksmith-8vcpu-ubuntu-2404
     needs: changes
     if: needs.changes.outputs.sdk-gen == 'true'
     env:
@@ -853,7 +853,7 @@ jobs:
     strategy:
       matrix:
         target: ["client/sdk"]
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: blacksmith-8vcpu-ubuntu-2404
     needs: [changes, sdk-gen-check]
     if: |
       !cancelled() &&
@@ -902,7 +902,7 @@ jobs:
         run: mise run git:porcelain
 
   functions-build-host:
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: blacksmith-8vcpu-ubuntu-2404
     needs: changes
     if: needs.changes.outputs.functions == 'true'
     steps:
@@ -995,7 +995,7 @@ jobs:
         run: pnpm store prune
 
   functions-image:
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: blacksmith-8vcpu-ubuntu-2404
     needs: [changes, functions-build-host]
     if: needs.changes.outputs.functions == 'true'
     strategy:
@@ -1142,7 +1142,7 @@ jobs:
         run: pnpm store prune
 
   ts-framework-test:
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: blacksmith-8vcpu-ubuntu-2404
     needs: [changes]
     if: needs.changes.outputs.tsframework == 'true'
     steps:
@@ -1183,7 +1183,7 @@ jobs:
         run: pnpm store prune
 
   elements-build-lint:
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: blacksmith-8vcpu-ubuntu-2404
     needs: changes
     if: needs.changes.outputs.elements == 'true'
     env:
@@ -1232,7 +1232,7 @@ jobs:
         run: pnpm store prune
 
   elements-test:
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: blacksmith-8vcpu-ubuntu-2404
     needs: changes
     if: needs.changes.outputs.elements == 'true'
     steps:
@@ -1271,7 +1271,7 @@ jobs:
         run: pnpm store prune
 
   elements-examples:
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: blacksmith-8vcpu-ubuntu-2404
     needs: changes
     if: needs.changes.outputs.elements == 'true'
     strategy:
@@ -1328,7 +1328,7 @@ jobs:
   # merge, since skipped jobs don't report a status to rulesets.
   ci-gate:
     name: CI Gate
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     if: always()
     needs:
       - changes
@@ -1372,7 +1372,7 @@ jobs:
           echo "✅ All CI checks passed or were skipped."
 
   dispatch-release:
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: blacksmith-8vcpu-ubuntu-2404
     needs: [docker-build-server, assistant-runtime-image]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
