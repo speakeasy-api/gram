@@ -45,6 +45,23 @@ export type AddOAuthProxyInput = {
 
 export type DeleteEnvironmentInput = { envSlug: string };
 
+export type RegisterClientInput = {
+  registrationEndpoint: string;
+  scopesSupported: string[];
+  tokenEndpointAuthMethodsSupported: string[];
+};
+
+export type RegisterClientOutput = {
+  clientId: string;
+  clientSecret: string;
+  tokenAuthMethod: string | null;
+};
+
+export type AuthedFetch = (
+  endpoint: string,
+  opts: RequestInit,
+) => Promise<Response>;
+
 export type WizardServices = {
   addExternalOAuth: ReturnType<typeof fromPromise<void, AddExternalOAuthInput>>;
   createEnvironment: ReturnType<
@@ -54,6 +71,9 @@ export type WizardServices = {
   deleteEnvironment: ReturnType<
     typeof fromPromise<void, DeleteEnvironmentInput>
   >;
+  registerClient: ReturnType<
+    typeof fromPromise<RegisterClientOutput, RegisterClientInput>
+  >;
 };
 
 export type GramClient = ReturnType<typeof useGramContext>;
@@ -61,6 +81,7 @@ export type GramClient = ReturnType<typeof useGramContext>;
 export function createWizardServices(
   client: GramClient,
   queryClient: QueryClient,
+  authedFetch: AuthedFetch,
 ): WizardServices {
   const addExternalOAuth = fromPromise<void, AddExternalOAuthInput>(
     async ({ input, signal }) => {
@@ -145,11 +166,48 @@ export function createWizardServices(
     },
   );
 
+  const registerClient = fromPromise<RegisterClientOutput, RegisterClientInput>(
+    async ({ input, signal }) => {
+      const response = await authedFetch("/oauth/proxy-register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          registration_endpoint: input.registrationEndpoint,
+          scopes_supported: input.scopesSupported,
+          token_endpoint_auth_methods_supported:
+            input.tokenEndpointAuthMethodsSupported,
+        }),
+        signal,
+      });
+
+      if (!response.ok) {
+        throw new Error(`Registration failed (HTTP ${response.status})`);
+      }
+
+      const result = (await response.json()) as {
+        client_id?: string;
+        client_secret?: string;
+        token_endpoint_auth_method?: string;
+      };
+
+      if (!result.client_id) {
+        throw new Error("Upstream did not return a client_id");
+      }
+
+      return {
+        clientId: result.client_id,
+        clientSecret: result.client_secret ?? "",
+        tokenAuthMethod: result.token_endpoint_auth_method ?? null,
+      };
+    },
+  );
+
   return {
     addExternalOAuth,
     createEnvironment,
     addOAuthProxy,
     deleteEnvironment,
+    registerClient,
   };
 }
 

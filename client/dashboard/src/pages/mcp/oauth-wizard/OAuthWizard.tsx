@@ -1,6 +1,7 @@
 import { FeatureRequestModal } from "@/components/FeatureRequestModal";
 import { Dialog } from "@/components/ui/dialog";
 import { useSession } from "@/contexts/Auth";
+import { useFetcher } from "@/contexts/Fetcher";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { Toolset } from "@/lib/toolTypes";
 import { getServerURL } from "@/lib/utils";
@@ -14,6 +15,7 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { Globe } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
 
 import { ExternalOAuthForm } from "./ExternalOAuthForm";
 import { FatalErrorStep } from "./FatalErrorStep";
@@ -87,13 +89,14 @@ function WizardBody({
   const queryClient = useQueryClient();
   const telemetry = useTelemetry();
   const session = useSession();
+  const { fetch: authedFetch } = useFetcher();
 
   const discovered = useDiscoveredOAuth(toolset);
 
   const provided = useMemo(
     () =>
       oauthWizardMachine.provide({
-        actors: createWizardServices(client, queryClient),
+        actors: createWizardServices(client, queryClient, authedFetch),
         actions: {
           invalidateOnExternalSuccess: () => invalidateAllToolset(queryClient),
           invalidateOnProxyCreate: () => {
@@ -111,9 +114,18 @@ function WizardBody({
               action: "oauth_proxy_configured",
               slug: toolsetSlug,
             }),
+          notifyAutoRegisterFailed: ({ event }) => {
+            const err = (event as { error?: unknown }).error;
+            const reason = err instanceof Error ? err.message : null;
+            toast.error(
+              reason
+                ? `Auto-registration failed: ${reason}. Enter credentials manually.`
+                : "Auto-registration failed. Enter credentials manually.",
+            );
+          },
         },
       }),
-    [client, queryClient, telemetry, toolsetSlug],
+    [client, queryClient, telemetry, toolsetSlug, authedFetch],
   );
 
   const input: Input = {
@@ -159,7 +171,8 @@ function WizardSteps({
         />
       )}
 
-      {state.matches({ proxy: "metadata" }) && <ProxyMetadataForm />}
+      {(state.matches({ proxy: "metadata" }) ||
+        state.matches({ proxy: "registering" })) && <ProxyMetadataForm />}
 
       {(state.matches({ proxy: "credentials" }) || isProxyCreating) && (
         <ProxyCredentialsForm />
