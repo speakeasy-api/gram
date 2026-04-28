@@ -248,7 +248,7 @@ func (s *Service) ListProjects(ctx context.Context, payload *gen.ListProjectsPay
 
 	checks := make([]authz.Check, len(projectIDs))
 	for i, id := range projectIDs {
-		checks[i] = authz.Check{Scope: authz.ScopeProjectRead, ResourceID: id}
+		checks[i] = authz.Check{Scope: authz.ScopeProjectRead, ResourceID: id, ResourceKind: "", Dimensions: nil}
 	}
 	allowedProjectIDs, err := s.authz.Filter(ctx, checks)
 	if err != nil {
