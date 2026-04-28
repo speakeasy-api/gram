@@ -220,6 +220,7 @@ function OAuthWizard({
     activeOrganizationId: session.activeOrganizationId,
     environments,
     proxyAudiencePrefilled: proxyAudiencePrefilledRef.current,
+    discoveredOAuth,
     addExternalOAuthMutation,
     addOAuthProxyMutation,
     updateOAuthProxyMutation,
@@ -265,6 +266,9 @@ function OAuthWizard({
             discoveredOAuth={discoveredOAuth}
             editMode={!!editMode}
             isEditPending={updateOAuthProxyMutation.isPending}
+            isNextPending={
+              actions.oauth_proxy_server_metadata_form.isNextPending
+            }
             onNext={actions.oauth_proxy_server_metadata_form.next}
             onEditSubmit={actions.oauth_proxy_server_metadata_form.editSubmit}
             onClose={onClose}

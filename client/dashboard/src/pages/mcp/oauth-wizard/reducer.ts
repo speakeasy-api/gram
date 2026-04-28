@@ -52,7 +52,7 @@ export function makeProxyState(
     tokenEndpoint: overrides?.tokenEndpoint ?? "",
     scopes: overrides?.scopes ?? "",
     audience: overrides?.audience ?? "",
-    tokenAuthMethod: overrides?.tokenAuthMethod ?? "client_secret_post",
+    tokenAuthMethod: overrides?.tokenAuthMethod ?? "client_secret_basic",
     environmentSlug: overrides?.environmentSlug ?? "",
     error: null,
     prefilled: overrides?.prefilled ?? false,
@@ -117,12 +117,16 @@ export function wizardReducer(
 
     case "PROXY_NEXT": {
       if (state.step !== "oauth_proxy_server_metadata_form") return state;
+      const proxyFormData = extractProxyFormData(state);
+      if (action.tokenAuthMethod) {
+        proxyFormData.tokenAuthMethod = action.tokenAuthMethod;
+      }
       return {
         step: "oauth_proxy_client_credentials_form",
         title: "OAuth Client Credentials",
-        proxyFormData: extractProxyFormData(state),
-        clientId: "",
-        clientSecret: "",
+        proxyFormData,
+        clientId: action.prefilledClientId ?? "",
+        clientSecret: action.prefilledClientSecret ?? "",
         error: null,
       };
     }

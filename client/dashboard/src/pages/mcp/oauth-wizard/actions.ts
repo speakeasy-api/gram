@@ -1,13 +1,20 @@
+import { useFetcher } from "@/contexts/Fetcher";
 import {
   useAddExternalOAuthServerMutation,
   useAddOAuthProxyServerMutation,
   useCreateEnvironmentMutation,
   useUpdateOAuthProxyServerMutation,
 } from "@gram/client/react-query";
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import { toast } from "sonner";
 
-import type { WizardDispatch, WizardState } from "./types";
+import { extractProxyFormData } from "./reducer";
+import type {
+  DiscoveredOAuth,
+  ProxyFormData,
+  WizardDispatch,
+  WizardState,
+} from "./types";
 
 // ---------------------------------------------------------------------------
 // Dependencies
@@ -21,6 +28,7 @@ interface StepActionDeps {
   activeOrganizationId: string;
   environments: Array<{ name: string }>;
   proxyAudiencePrefilled: string;
+  discoveredOAuth: DiscoveredOAuth | null;
   addExternalOAuthMutation: ReturnType<
     typeof useAddExternalOAuthServerMutation
   >;
@@ -42,6 +50,7 @@ export interface StepActions {
   oauth_proxy_server_metadata_form: {
     next: () => void;
     editSubmit: () => void;
+    isNextPending: boolean;
   };
   oauth_proxy_client_credentials_form: {
     submit: () => void;
@@ -62,11 +71,15 @@ export function useStepActions(deps: StepActionDeps): StepActions {
     activeOrganizationId,
     environments,
     proxyAudiencePrefilled,
+    discoveredOAuth,
     addExternalOAuthMutation,
     addOAuthProxyMutation,
     updateOAuthProxyMutation,
     createEnvironmentMutation,
   } = deps;
+
+  const { fetch: authedFetch } = useFetcher();
+  const [isProxyRegisterPending, setIsProxyRegisterPending] = useState(false);
 
   // --- external_oauth_server_metadata_form ---
 
@@ -157,10 +170,163 @@ export function useStepActions(deps: StepActionDeps): StepActions {
     return true;
   }, [state, dispatch]);
 
-  const proxyNext = useCallback(() => {
+  const createOAuthProxy = useCallback(
+    (proxyFormData: ProxyFormData, clientId: string, clientSecret: string) => {
+      const scopesArray = proxyFormData.scopes
+        .split(",")
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0);
+
+      const existingNames = new Set(environments.map((e) => e.name));
+      let envName = `${toolsetName} OAuth`;
+      if (existingNames.has(envName)) {
+        let suffix = 1;
+        while (existingNames.has(`${toolsetName} OAuth ${suffix}`)) {
+          suffix++;
+        }
+        envName = `${toolsetName} OAuth ${suffix}`;
+      }
+      createEnvironmentMutation.mutate(
+        {
+          request: {
+            createEnvironmentForm: {
+              name: envName,
+              organizationId: activeOrganizationId,
+              entries: [
+                { name: "CLIENT_ID", value: clientId },
+                { name: "CLIENT_SECRET", value: clientSecret },
+              ],
+            },
+          },
+        },
+        {
+          onSuccess: (env) => {
+            addOAuthProxyMutation.mutate({
+              request: {
+                slug: toolsetSlug,
+                addOAuthProxyServerRequestBody: {
+                  oauthProxyServer: {
+                    providerType: "custom",
+                    slug: proxyFormData.slug,
+                    audience: proxyFormData.audience || undefined,
+                    authorizationEndpoint: proxyFormData.authorizationEndpoint,
+                    tokenEndpoint: proxyFormData.tokenEndpoint,
+                    scopesSupported: scopesArray,
+                    tokenEndpointAuthMethodsSupported: [
+                      proxyFormData.tokenAuthMethod,
+                    ],
+                    environmentSlug: env.slug,
+                  },
+                },
+              },
+            });
+          },
+          onError: (error) => {
+            console.error("Failed to create environment:", error);
+            dispatch({
+              type: "SET_RESULT",
+              success: false,
+              message:
+                error instanceof Error
+                  ? error.message
+                  : "Failed to create environment for OAuth credentials",
+            });
+          },
+        },
+      );
+    },
+    [
+      toolsetName,
+      toolsetSlug,
+      activeOrganizationId,
+      environments,
+      dispatch,
+      createEnvironmentMutation,
+      addOAuthProxyMutation,
+    ],
+  );
+
+  const proxyNext = useCallback(async () => {
     if (!validateProxyForm()) return;
-    dispatch({ type: "PROXY_NEXT" });
-  }, [validateProxyForm, dispatch]);
+
+    const registrationEndpoint =
+      typeof discoveredOAuth?.metadata.registration_endpoint === "string"
+        ? discoveredOAuth.metadata.registration_endpoint
+        : null;
+
+    if (
+      !registrationEndpoint ||
+      state.step !== "oauth_proxy_server_metadata_form"
+    ) {
+      dispatch({ type: "PROXY_NEXT" });
+      return;
+    }
+
+    const scopesSupported = state.scopes
+      .split(",")
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+
+    const tokenAuthMethodsSupported = Array.isArray(
+      discoveredOAuth?.metadata.token_endpoint_auth_methods_supported,
+    )
+      ? (discoveredOAuth.metadata
+          .token_endpoint_auth_methods_supported as string[])
+      : [];
+
+    setIsProxyRegisterPending(true);
+    try {
+      const response = await authedFetch("/oauth/proxy-register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          registration_endpoint: registrationEndpoint,
+          scopes_supported: scopesSupported,
+          token_endpoint_auth_methods_supported: tokenAuthMethodsSupported,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Registration failed (HTTP ${response.status})`);
+      }
+
+      const result = (await response.json()) as {
+        client_id?: string;
+        client_secret?: string;
+        token_endpoint_auth_method?: string;
+      };
+
+      if (!result.client_id) {
+        throw new Error("Upstream did not return a client_id");
+      }
+
+      const proxyFormData = extractProxyFormData(state);
+      if (result.token_endpoint_auth_method) {
+        proxyFormData.tokenAuthMethod = result.token_endpoint_auth_method;
+      }
+      createOAuthProxy(
+        proxyFormData,
+        result.client_id,
+        result.client_secret ?? "",
+      );
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? `Auto-registration failed: ${error.message}. Enter credentials manually.`
+          : "Auto-registration failed. Enter credentials manually.",
+      );
+      dispatch({ type: "PROXY_NEXT" });
+    } finally {
+      setIsProxyRegisterPending(false);
+    }
+  }, [
+    validateProxyForm,
+    dispatch,
+    discoveredOAuth,
+    state,
+    authedFetch,
+    createOAuthProxy,
+  ]);
 
   const proxyEditSubmit = useCallback(() => {
     if (state.step !== "oauth_proxy_server_metadata_form") return;
@@ -210,79 +376,8 @@ export function useStepActions(deps: StepActionDeps): StepActions {
       return;
     }
 
-    const { proxyFormData } = state;
-    const scopesArray = proxyFormData.scopes
-      .split(",")
-      .map((s) => s.trim())
-      .filter((s) => s.length > 0);
-
-    const existingNames = new Set(environments.map((e) => e.name));
-    let envName = `${toolsetName} OAuth`;
-    if (existingNames.has(envName)) {
-      let suffix = 1;
-      while (existingNames.has(`${toolsetName} OAuth ${suffix}`)) {
-        suffix++;
-      }
-      envName = `${toolsetName} OAuth ${suffix}`;
-    }
-    createEnvironmentMutation.mutate(
-      {
-        request: {
-          createEnvironmentForm: {
-            name: envName,
-            organizationId: activeOrganizationId,
-            entries: [
-              { name: "CLIENT_ID", value: state.clientId },
-              { name: "CLIENT_SECRET", value: state.clientSecret },
-            ],
-          },
-        },
-      },
-      {
-        onSuccess: (env) => {
-          addOAuthProxyMutation.mutate({
-            request: {
-              slug: toolsetSlug,
-              addOAuthProxyServerRequestBody: {
-                oauthProxyServer: {
-                  providerType: "custom",
-                  slug: proxyFormData.slug,
-                  audience: proxyFormData.audience || undefined,
-                  authorizationEndpoint: proxyFormData.authorizationEndpoint,
-                  tokenEndpoint: proxyFormData.tokenEndpoint,
-                  scopesSupported: scopesArray,
-                  tokenEndpointAuthMethodsSupported: [
-                    proxyFormData.tokenAuthMethod,
-                  ],
-                  environmentSlug: env.slug,
-                },
-              },
-            },
-          });
-        },
-        onError: (error) => {
-          console.error("Failed to create environment:", error);
-          dispatch({
-            type: "SET_RESULT",
-            success: false,
-            message:
-              error instanceof Error
-                ? error.message
-                : "Failed to create environment for OAuth credentials",
-          });
-        },
-      },
-    );
-  }, [
-    state,
-    toolsetName,
-    toolsetSlug,
-    activeOrganizationId,
-    environments,
-    dispatch,
-    createEnvironmentMutation,
-    addOAuthProxyMutation,
-  ]);
+    createOAuthProxy(state.proxyFormData, state.clientId, state.clientSecret);
+  }, [state, dispatch, createOAuthProxy]);
 
   const isProxySubmitting =
     createEnvironmentMutation.isPending || addOAuthProxyMutation.isPending;
@@ -294,6 +389,7 @@ export function useStepActions(deps: StepActionDeps): StepActions {
     oauth_proxy_server_metadata_form: {
       next: proxyNext,
       editSubmit: proxyEditSubmit,
+      isNextPending: isProxyRegisterPending || isProxySubmitting,
     },
     oauth_proxy_client_credentials_form: {
       submit: proxyCreateSubmit,

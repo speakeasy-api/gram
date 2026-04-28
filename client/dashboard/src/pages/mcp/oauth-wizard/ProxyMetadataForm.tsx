@@ -12,6 +12,7 @@ export function ProxyMetadataForm({
   discoveredOAuth,
   editMode,
   isEditPending,
+  isNextPending,
   onNext,
   onEditSubmit,
   onClose,
@@ -21,6 +22,7 @@ export function ProxyMetadataForm({
   discoveredOAuth: DiscoveredOAuth | null;
   editMode: boolean;
   isEditPending: boolean;
+  isNextPending: boolean;
   onNext: () => void;
   onEditSubmit: () => void;
   onClose: () => void;
@@ -208,12 +210,19 @@ export function ProxyMetadataForm({
             onClick={editMode ? onEditSubmit : onNext}
             disabled={
               (editMode && isEditPending) ||
+              (!editMode && isNextPending) ||
               !state.slug.trim() ||
               !state.authorizationEndpoint.trim() ||
               !state.tokenEndpoint.trim()
             }
           >
-            {editMode ? (isEditPending ? "Saving..." : "Save changes") : "Next"}
+            {editMode
+              ? isEditPending
+                ? "Saving..."
+                : "Save changes"
+              : isNextPending
+                ? "Registering client..."
+                : "Next"}
           </Button>
         </div>
       </Dialog.Footer>

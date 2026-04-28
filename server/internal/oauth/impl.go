@@ -35,6 +35,7 @@ import (
 	customdomains_repo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oauth/providers"
 	"github.com/speakeasy-api/gram/server/internal/oauth/repo"
@@ -90,13 +91,14 @@ type Service struct {
 	gramProvider              *providers.GramProvider
 	customProvider            *providers.CustomProvider
 	upstreamPKCEStorage       cache.TypedCacheObject[UpstreamPKCEVerifier]
+	httpClient                *guardian.HTTPClient
 	successPageTmpl           *template.Template
 	failurePageTmpl           *template.Template
 	oauthStatusPageScriptHash string
 	oauthStatusPageScriptData []byte
 }
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, serverURL *url.URL, cacheImpl cache.Cache, enc *encryption.Client, env *environments.EnvironmentEntries, sessions *sessions.Manager) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, serverURL *url.URL, cacheImpl cache.Cache, enc *encryption.Client, env *environments.EnvironmentEntries, sessions *sessions.Manager, guardianPolicy *guardian.Policy) *Service {
 	logger = logger.With(attr.SlogComponent("oauth"))
 	tracer := tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/oauth")
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/oauth")
@@ -117,6 +119,11 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterP
 	// Calculate content hash for success script (for cache busting)
 	hash := sha256.Sum256(oauthSuccessScriptData)
 	scriptHash := hex.EncodeToString(hash[:])[:8] // Use first 8 chars like hosted page
+
+	var httpClient *guardian.HTTPClient
+	if guardianPolicy != nil {
+		httpClient = guardianPolicy.Client()
+	}
 
 	return &Service{
 		logger:            logger,
@@ -141,6 +148,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterP
 		gramProvider:        gramProvider,
 		customProvider:      customProvider,
 		upstreamPKCEStorage: cache.NewTypedObjectCache[UpstreamPKCEVerifier](logger.With(attr.SlogCacheNamespace("upstream_pkce")), cacheImpl, cache.SuffixNone),
+		httpClient:          httpClient,
 
 		// HTML templates
 		successPageTmpl: successPageTmpl,
@@ -171,6 +179,13 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	// OAuth 2.1 Token Endpoint
 	o11y.AttachHandler(mux, "POST", "/oauth/{mcpSlug}/token", func(w http.ResponseWriter, r *http.Request) {
 		oops.ErrHandle(service.logger, service.handleToken).ServeHTTP(w, r)
+	})
+
+	// OAuth Proxy DCR helper — performs Dynamic Client Registration against an
+	// upstream provider on behalf of the dashboard user, used by the OAuth Proxy
+	// wizard to pre-fill client credentials.
+	o11y.AttachHandler(mux, "POST", "/oauth/proxy-register", func(w http.ResponseWriter, r *http.Request) {
+		oops.ErrHandle(service.logger, service.handleProxyRegister).ServeHTTP(w, r)
 	})
 
 	// OAuth success page script (with cache busting hash)
@@ -845,4 +860,141 @@ func (s *Service) RefreshProxyToken(ctx context.Context, toolsetID uuid.UUID, to
 	}
 
 	return token, nil
+}
+
+type ProxyRegisterRequest struct {
+	RegistrationEndpoint              string   `json:"registration_endpoint"`
+	ScopesSupported                   []string `json:"scopes_supported,omitempty"`
+	TokenEndpointAuthMethodsSupported []string `json:"token_endpoint_auth_methods_supported,omitempty"`
+}
+
+type ProxyRegisterResponse struct {
+	ClientID                string `json:"client_id"`
+	ClientSecret            string `json:"client_secret,omitempty"`
+	TokenEndpointAuthMethod string `json:"token_endpoint_auth_method"`
+}
+
+// handleProxyRegister performs Dynamic Client Registration against an upstream
+// OAuth provider on behalf of the dashboard user so the OAuth Proxy wizard can
+// pre-fill client credentials. We perform this registration server side to avoid
+// CORS frustrations on the Client. We constrain the proxying behavior to be
+// limited to registration requests to avoid SSRF vulnerability to risk. Because
+// of this requirement we implement the business logic of determining client
+// properties in the server as well.
+// The goal behavior is that this registration will be performed entirely server
+// side without client orchestration as part of the remote MCP import flow and
+// this handler will be removed, but for the time being we leave it to the
+// client to orchestrate.
+func (s *Service) handleProxyRegister(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+
+	if _, err := s.sessions.AuthenticateWithCookie(ctx); err != nil {
+		return oops.E(oops.CodeUnauthorized, err, "authentication required").Log(ctx, s.logger)
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, requestMaxBodyBytes)
+	var req ProxyRegisterRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		return oops.E(oops.CodeBadRequest, err, "invalid JSON in request body").Log(ctx, s.logger)
+	}
+
+	endpoint, err := url.Parse(req.RegistrationEndpoint)
+	if err != nil || (endpoint.Scheme != "http" && endpoint.Scheme != "https") || endpoint.Host == "" {
+		return oops.E(oops.CodeBadRequest, err, "invalid registration_endpoint").Log(ctx, s.logger)
+	}
+
+	authMethod := pickProxyAuthMethod(req.TokenEndpointAuthMethodsSupported)
+	callbackURL := fmt.Sprintf("%s/oauth/callback", s.serverURL.String())
+
+	dcrReq := DCRRequest{
+		RedirectURIs:            []string{callbackURL},
+		TokenEndpointAuthMethod: authMethod,
+		GrantTypes:              []string{"authorization_code", "refresh_token"},
+		ResponseTypes:           []string{"code"},
+		ClientName:              "Gram",
+		ClientURI:               s.serverURL.String(),
+		Scope:                   strings.Join(req.ScopesSupported, " "),
+	}
+
+	body, err := json.Marshal(dcrReq)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to marshal DCR request").Log(ctx, s.logger)
+	}
+
+	upstreamCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	httpReq, err := http.NewRequestWithContext(upstreamCtx, http.MethodPost, endpoint.String(), bytes.NewReader(body))
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to create DCR request").Log(ctx, s.logger)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Accept", "application/json")
+
+	resp, err := s.httpClient.Do(httpReq)
+	if err != nil {
+		return oops.E(oops.CodeGatewayError, err, "failed to reach registration endpoint").Log(ctx, s.logger)
+	}
+	defer o11y.LogDefer(ctx, s.logger, func() error {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			return fmt.Errorf("close DCR response body: %w", closeErr)
+		}
+		return nil
+	})
+
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, requestMaxBodyBytes))
+	if err != nil {
+		return oops.E(oops.CodeGatewayError, err, "failed to read DCR response").Log(ctx, s.logger)
+	}
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		s.logger.ErrorContext(ctx, "DCR failed",
+			attr.SlogHTTPResponseStatusCode(resp.StatusCode),
+			attr.SlogHTTPRequestBody(string(respBody)))
+		return oops.E(oops.CodeGatewayError, nil, "registration endpoint returned %d", resp.StatusCode).Log(ctx, s.logger)
+	}
+
+	var dcrResp DCRResponse
+	if err := json.Unmarshal(respBody, &dcrResp); err != nil {
+		return oops.E(oops.CodeGatewayError, err, "invalid DCR response").Log(ctx, s.logger)
+	}
+	if dcrResp.ClientID == "" {
+		return oops.E(oops.CodeGatewayError, nil, "DCR response missing client_id").Log(ctx, s.logger)
+	}
+
+	respondedAuthMethod := dcrResp.TokenEndpointAuthMethod
+	if respondedAuthMethod == "" {
+		respondedAuthMethod = authMethod
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(ProxyRegisterResponse{
+		ClientID:                dcrResp.ClientID,
+		ClientSecret:            dcrResp.ClientSecret,
+		TokenEndpointAuthMethod: respondedAuthMethod,
+	}); err != nil {
+		s.logger.ErrorContext(ctx, "failed to encode proxyRegister response", attr.SlogError(err))
+	}
+	return nil
+}
+
+// pickProxyAuthMethod selects a token endpoint auth method from those advertised
+// by the upstream provider, preferring client_secret_basic > client_secret_post >
+// none. Falls back to the upstream's first advertised method, or
+// client_secret_basic when nothing is advertised.
+func pickProxyAuthMethod(supported []string) string {
+	advertised := make(map[string]struct{}, len(supported))
+	for _, m := range supported {
+		advertised[m] = struct{}{}
+	}
+	for _, m := range []string{"client_secret_basic", "client_secret_post", "none"} {
+		if _, ok := advertised[m]; ok {
+			return m
+		}
+	}
+	if len(supported) > 0 {
+		return supported[0]
+	}
+	return "client_secret_basic"
 }
