@@ -49,7 +49,7 @@ import { PromptsTabContent } from "@/pages/toolsets/PromptsTab";
 import { ResourcesTabContent } from "@/pages/toolsets/resources/ResourcesTab";
 import { ServerTabContent } from "@/pages/toolsets/ServerTab";
 import { useRoutes } from "@/routes";
-import { Confirm, ToolsetEntry } from "@gram/client/models/components";
+import { Confirm } from "@gram/client/models/components";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
 import {
   invalidateAllGetPeriodUsage,
@@ -1825,7 +1825,7 @@ export function MCPJson({
   fullWidth = false,
   className,
 }: {
-  toolset: ToolsetEntry;
+  toolset: Toolset;
   fullWidth?: boolean; // If true, the code block will take up the full width of the page even when there's only one
   className?: string;
 }) {

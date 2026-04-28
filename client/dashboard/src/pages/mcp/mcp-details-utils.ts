@@ -2,11 +2,10 @@ import { useSdkClient } from "@/contexts/Sdk";
 import { useListTools } from "@/hooks/toolTypes";
 import { useToolsetEnvVars } from "@/hooks/useToolsetEnvVars";
 import { useMcpUrl } from "@/hooks/useToolsetUrl";
-import { isHttpTool } from "@/lib/toolTypes";
-import { ToolsetEntry } from "@gram/client/models/components";
+import { isHttpTool, Toolset } from "@/lib/toolTypes";
 import { useEffect, useState } from "react";
 
-export const useMcpConfigs = (toolset: ToolsetEntry | undefined) => {
+export const useMcpConfigs = (toolset: Toolset | undefined) => {
   const { url: mcpUrl } = useMcpUrl(toolset);
   const { data: tools } = useListTools();
 
