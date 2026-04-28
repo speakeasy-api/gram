@@ -21,6 +21,7 @@ func disabledAllRulesPlugin() *plugin {
 				AuditEventTypedSnapshot:    auditEventTypedSnapshotSettings{Disabled: true},
 				AuditEventURNNaming:        auditEventURNNamingSettings{Disabled: true},
 				AuditEventURNTyping:        auditEventURNTypingSettings{Disabled: true},
+				NoDirectChatMessageInsert:  noDirectChatMessageInsertSettings{Disabled: true},
 			},
 		},
 	}
@@ -41,5 +42,5 @@ func TestBuildAnalyzersAllEnabled(t *testing.T) {
 	p := &plugin{}
 	analyzers, err := p.BuildAnalyzers()
 	require.NoError(t, err)
-	require.Len(t, analyzers, 9)
+	require.Len(t, analyzers, 10)
 }
