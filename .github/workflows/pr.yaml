@@ -357,7 +357,7 @@ jobs:
             name=$(basename "$file")
             ts="${name%%_*}"
             if [ "$ts" \< "$latest_ts" ] || [ "$ts" = "$latest_ts" ]; then
-              echo "::error file=${file}::Migration ${name} has timestamp ${ts} <= latest on main (${latest_ts}). Rename it with a newer timestamp and run 'mise db:hash'."
+              echo "::error file=${file}::Migration ${name} has timestamp ${ts} <= latest on main (${latest_ts}). Do NOT rename or hand-edit atlas.sum. Delete the migration, rebase main, then re-run 'mise db:diff <name>' so it is regenerated on top."
               failed=true
             fi
           done < <(git diff --diff-filter=A --name-only origin/main -- 'server/migrations/*.sql')

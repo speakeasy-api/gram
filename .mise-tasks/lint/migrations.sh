@@ -4,6 +4,7 @@
 
 #MISE flag "--git-base <base>" help="The git base to use for finding modified migrations"
 #USAGE flag "--file... <file>" help="The files to lint. This flag can be provided multiple times. If not provided, all modified migrations will be linted."
+#USAGE flag "--no-atlas" help="Skip the 'atlas migrate lint' step. Used for the static checks alone (no postgres dev DB required)."
 
 set -e
 
@@ -110,13 +111,24 @@ if [ -n "$latest_base_ts" ] && [ ${#added_files[@]} -gt 0 ]; then
 🚨 The latest migration on $base_ref has timestamp $latest_base_ts, but
 🚨 a new migration has a timestamp that is less than or equal to it.
 🚨
-🚨 Rename the migration file with a timestamp after $latest_base_ts,
-🚨 then run 'mise db:hash' to regenerate atlas.sum.
+🚨 Do NOT rename the file or hand-edit atlas.sum. Migration files and
+🚨 atlas.sum must only be produced by the Atlas CLI.
+🚨
+🚨 Fix:
+🚨   1. Delete the offending migration file(s) on this branch.
+🚨   2. Rebase or merge $base_ref into your branch.
+🚨   3. Re-run the migration diff (e.g. 'mise db:diff <name>') so the
+🚨      migration is regenerated on top with a fresh timestamp.
 "
     exit 1
   fi
 
   echo "✅ All new migrations are ordered correctly"
+fi
+
+if [ "${usage_no_atlas:-}" = "true" ]; then
+  echo -e "\nSkipping 'atlas migrate lint' (--no-atlas)"
+  exit 0
 fi
 
 # Run atlas migrate lint
