@@ -110,7 +110,7 @@ func Launch(ctx context.Context, opts LaunchOptions) (*Environment, func() error
 	}
 
 	if err := launchEg.Wait(); err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("start containers: %w", err)
 	}
 
 	if opts.Temporal {
