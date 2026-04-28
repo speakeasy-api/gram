@@ -1095,14 +1095,16 @@ func (s *Service) loadToolsetFromContextAndSlug(ctx context.Context, mcpSlug str
 	return &toolset, nil
 }
 
-// resolveSecurityMode determines the security mode based on toolset configuration
-// Prefers oauth > gram > public
+// resolveSecurityMode determines the security mode based on toolset configuration.
+// OAuth wins regardless of public/private: when an OAuth proxy or external OAuth
+// server is attached, identity auth is delegated to the OAuth flow and the
+// install instructions must not ask the user for an Authorization/GRAM_KEY header.
 func (s *Service) resolveSecurityMode(toolset *toolsets_repo.Toolset) securityMode {
-	if toolset.McpIsPublic {
-		if toolset.OauthProxyServerID.Valid || toolset.ExternalOauthServerID.Valid {
-			return securityModeOAuth
-		}
+	if toolset.OauthProxyServerID.Valid || toolset.ExternalOauthServerID.Valid {
+		return securityModeOAuth
+	}
 
+	if toolset.McpIsPublic {
 		return securityModePublic
 	}
 

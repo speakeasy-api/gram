@@ -42,6 +42,13 @@ export const useMcpConfigs = (toolset: ToolsetEntry | undefined) => {
     return envVar.replace(/_/g, "-");
   };
 
+  // OAuth (Gram or external) handles identity auth at the HTTP layer, so the
+  // install snippet must not ask the user for a GRAM_KEY Authorization header.
+  const hasOAuth = Boolean(
+    toolset.oauthProxyServer || toolset.externalOauthServer,
+  );
+  const requiresGramKey = !toolset.mcpIsPublic && !hasOAuth;
+
   // Build the args array for public MCP config
   const mcpJsonPublicArgs = [
     "mcp-remote@0.1.25",
@@ -52,7 +59,7 @@ export const useMcpConfigs = (toolset: ToolsetEntry | undefined) => {
     ]),
   ];
 
-  if (!toolset.mcpIsPublic) {
+  if (requiresGramKey) {
     mcpJsonPublicArgs.push("--header", "Authorization:${GRAM_KEY}");
   }
 
@@ -68,7 +75,7 @@ export const useMcpConfigs = (toolset: ToolsetEntry | undefined) => {
     "Gram${toolset.slug.replace(/-/g, "").replace(/^./, (c) => c.toUpperCase())}": {
       "command": "npx",
       "args": ${argsStringIndented}${
-        !toolset.mcpIsPublic
+        requiresGramKey
           ? `,
       "env": {
         "GRAM_KEY": "Bearer <your-key-here>"
