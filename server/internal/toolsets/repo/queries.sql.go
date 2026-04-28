@@ -286,16 +286,22 @@ func (q *Queries) DeleteToolset(ctx context.Context, arg DeleteToolsetParams) (D
 const getHTTPSecurityDefinitions = `-- name: GetHTTPSecurityDefinitions :many
 SELECT id, deployment_id, project_id, openapiv3_document_id, key, type, name, in_placement, scheme, bearer_format, oauth_types, oauth_flows, env_variables, created_at, updated_at, deleted_at, deleted
 FROM http_security
-WHERE key = ANY($1::TEXT[]) AND deployment_id = ANY($2::UUID[])
+WHERE key = ANY($1::TEXT[])
+  AND deployment_id = ANY($2::UUID[])
+  AND (
+    cardinality($3::UUID[]) = 0
+    OR openapiv3_document_id = ANY($3::UUID[])
+  )
 `
 
 type GetHTTPSecurityDefinitionsParams struct {
-	SecurityKeys  []string
-	DeploymentIds []uuid.UUID
+	SecurityKeys         []string
+	DeploymentIds        []uuid.UUID
+	Openapiv3DocumentIds []uuid.UUID
 }
 
 func (q *Queries) GetHTTPSecurityDefinitions(ctx context.Context, arg GetHTTPSecurityDefinitionsParams) ([]HttpSecurity, error) {
-	rows, err := q.db.Query(ctx, getHTTPSecurityDefinitions, arg.SecurityKeys, arg.DeploymentIds)
+	rows, err := q.db.Query(ctx, getHTTPSecurityDefinitions, arg.SecurityKeys, arg.DeploymentIds, arg.Openapiv3DocumentIds)
 	if err != nil {
 		return nil, err
 	}

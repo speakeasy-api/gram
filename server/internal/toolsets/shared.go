@@ -147,9 +147,15 @@ func (t *Toolsets) extractHTTPToolCallPlan(ctx context.Context, tool toolsRepo.H
 		securityKeysMap[key] = true
 	}
 
+	openapiv3DocumentIDs := make([]uuid.UUID, 0, 1)
+	if tool.Openapiv3DocumentID.Valid {
+		openapiv3DocumentIDs = append(openapiv3DocumentIDs, tool.Openapiv3DocumentID.UUID)
+	}
+
 	securityEntries, err := t.repo.GetHTTPSecurityDefinitions(ctx, repo.GetHTTPSecurityDefinitionsParams{
-		SecurityKeys:  slices.Collect(maps.Keys(securityKeysMap)),
-		DeploymentIds: []uuid.UUID{tool.DeploymentID},
+		SecurityKeys:         slices.Collect(maps.Keys(securityKeysMap)),
+		DeploymentIds:        []uuid.UUID{tool.DeploymentID},
+		Openapiv3DocumentIds: openapiv3DocumentIDs,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("get http security definitions: %w", err)
