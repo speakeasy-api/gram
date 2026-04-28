@@ -334,6 +334,10 @@ jobs:
         with:
           cloud-token: ${{ secrets.ATLAS_TOKEN }}
 
+      - name: Test lint:migrations script
+        shell: bash
+        run: bash .mise-tasks/test/lint-migrations.sh
+
       - name: Check migration ordering
         shell: bash
         run: |
