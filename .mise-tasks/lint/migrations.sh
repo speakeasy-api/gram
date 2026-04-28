@@ -71,64 +71,32 @@ if [ "$invalid_indexes" = true ]; then
   exit 1
 fi
 
-# Check for out-of-order migrations
+# Ordering only applies to newly-added migrations: edits and renames don't
+# move a file's timestamp, so they can't make the migration sequence out of order.
 echo -e "\n🔎 Checking for out-of-order migrations..."
 
-# Build a list of changed file basenames for filtering
-changed_basenames=()
-for file in "${files[@]}"; do
-  changed_basenames+=("$(basename "$file")")
-done
+if [ ${#added_files[@]} -eq 0 ]; then
+  echo "No newly added migrations, skipping ordering check"
+else
+  latest_base_name=$(git ls-tree --name-only "$base_ref" -- server/migrations/ | grep '\.sql$' | sort | tail -n 1)
+  latest_base_ts="${latest_base_name##*/}"
+  latest_base_ts="${latest_base_ts%%_*}"
 
-# Get the highest migration timestamp on the base ref, excluding changed files
-latest_base_ts=""
-while IFS= read -r migration; do
-  base_name="$(basename "$migration")"
-  # Skip files that are in our changed set
-  skip=false
-  for changed in "${changed_basenames[@]}"; do
-    if [ "$base_name" = "$changed" ]; then
-      skip=true
-      break
-    fi
-  done
-  if [ "$skip" = true ]; then
-    continue
-  fi
-  ts="${base_name%%_*}"
-  if [ -z "$latest_base_ts" ] || [ "$ts" \> "$latest_base_ts" ]; then
-    latest_base_ts="$ts"
-  fi
-done < <(git ls-tree --name-only "$base_ref" -- server/migrations/ | grep '\.sql$')
-
-if [ -n "$latest_base_ts" ] && [ ${#added_files[@]} -gt 0 ]; then
-  bad_files=()
+  out_of_order=false
   for file in "${added_files[@]}"; do
-    base_name="$(basename "$file")"
+    base_name="${file##*/}"
     ts="${base_name%%_*}"
-    if [ "$ts" \< "$latest_base_ts" ] || [ "$ts" = "$latest_base_ts" ]; then
-      bad_files+=("$file")
+    if [ -n "$latest_base_ts" ] && { [ "$ts" \< "$latest_base_ts" ] || [ "$ts" = "$latest_base_ts" ]; }; then
+      out_of_order=true
       echo "❌ $file (timestamp $ts <= latest on $base_ref: $latest_base_ts)"
       gh_error "$file" "Migration $base_name has timestamp $ts <= latest on $base_ref ($latest_base_ts). Do NOT rename or hand-edit atlas.sum. Delete the migration, rebase $base_ref, then re-run 'mise db:diff <name>' so it is regenerated on top."
     fi
   done
 
-  if [ ${#bad_files[@]} -gt 0 ]; then
+  if [ "$out_of_order" = true ]; then
     echo "
-🚨 The following migration file(s) were added out of order (timestamp <= $latest_base_ts on $base_ref):
-🚨"
-    for f in "${bad_files[@]}"; do
-      echo "🚨   - $f"
-    done
-    echo "🚨
-🚨 Do NOT rename the file(s) or hand-edit atlas.sum. Migration files
-🚨 and atlas.sum must only be produced by the Atlas CLI.
-🚨
-🚨 Fix:
-🚨   1. Delete the file(s) listed above on this branch.
-🚨   2. Rebase or merge $base_ref into your branch.
-🚨   3. Re-run the migration diff (e.g. 'mise db:diff <name>') so the
-🚨      migration is regenerated on top with a fresh timestamp.
+🚨 One or more migrations were added out of order (timestamp <= $latest_base_ts on $base_ref).
+🚨 See CLAUDE.md > Database Migrations for the fix.
 "
     exit 1
   fi
