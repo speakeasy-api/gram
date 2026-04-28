@@ -1,5 +1,14 @@
 # server
 
+## 0.44.1
+
+### Patch Changes
+
+- 506d221: Reduced per-batch concurrency against Polar /quantities
+- 745d0b2: feat(access): reassign members to the default role on role deletion and surface the affected members in the dashboard delete dialog
+- 7c3be05: Support for shadow mcp blocking (block unapproved MCP servers org-wide)
+- 506d221: reduce concurrency on polar meter requests
+
 ## 0.44.0
 
 ### Minor Changes
