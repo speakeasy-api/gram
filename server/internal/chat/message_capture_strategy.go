@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
@@ -28,7 +29,7 @@ type ChatMessageCaptureStrategy struct {
 	db           *pgxpool.Pool
 	repo         *repo.Queries
 	assetStorage assets.BlobStore
-	writer       *ChatMessageWriter
+	messageStore *MessageStore
 }
 
 var _ openrouter.MessageCaptureStrategy = (*ChatMessageCaptureStrategy)(nil)
@@ -50,14 +51,14 @@ func NewChatMessageCaptureStrategy(
 	logger *slog.Logger,
 	db *pgxpool.Pool,
 	assetStorage assets.BlobStore,
-	writer *ChatMessageWriter,
+	messageStore *MessageStore,
 ) *ChatMessageCaptureStrategy {
 	return &ChatMessageCaptureStrategy{
 		logger:       logger,
 		db:           db,
 		repo:         repo.New(db),
 		assetStorage: assetStorage,
-		writer:       writer,
+		messageStore: messageStore,
 	}
 }
 
@@ -130,7 +131,7 @@ func (s *ChatMessageCaptureStrategy) StartOrResumeChat(ctx context.Context, requ
 		}, nil
 	}
 
-	s.writer.notifyMessagesStored(ctx, projectID)
+	s.messageStore.NotifyMessagesStored(ctx, projectID)
 
 	return &chatCaptureSession{
 		generation:  generation,
@@ -304,10 +305,11 @@ func (s *ChatMessageCaptureStrategy) CaptureMessage(
 	assistantRows := buildAssistantRows(request, response, projectID, toolCallsJSON, origin, userAgent, ipAddress, session.parentHash, session.generation)
 
 	if len(session.pendingRows) == 0 {
-		if _, err := s.writer.Write(ctx, projectID, assistantRows); err != nil {
+		if _, err := s.repo.CreateChatMessage(ctx, assistantRows); err != nil {
 			s.logger.ErrorContext(ctx, "failed to store chat message", attr.SlogError(err))
 			return fmt.Errorf("store chat message: %w", err)
 		}
+		s.messageStore.NotifyMessagesStored(ctx, projectID)
 		return nil
 	}
 
@@ -315,9 +317,10 @@ func (s *ChatMessageCaptureStrategy) CaptureMessage(
 	// assistant row atomically so either the whole turn lands or none of it
 	// does. A partial write would orphan the assistant and force divergence
 	// detection to open a new generation on the next turn.
-	if err := s.flushTurnAtomically(ctx, projectID, session.pendingRows, assistantRows); err != nil {
+	if err := s.flushTurnAtomically(ctx, session.pendingRows, assistantRows); err != nil {
 		return err
 	}
+	s.messageStore.NotifyMessagesStored(ctx, projectID)
 	return nil
 }
 
@@ -441,21 +444,29 @@ func (s *ChatMessageCaptureStrategy) resolveSession(ctx context.Context, raw ope
 
 // flushTurnAtomically writes the pending user rows (via storeMessages, which
 // also handles asset-storage upload) and the assistant rows inside a single
-// Postgres transaction. Observer notification is handled by RunInTx after commit.
-func (s *ChatMessageCaptureStrategy) flushTurnAtomically(ctx context.Context, projectID uuid.UUID, pending []chatMessageRow, assistants []repo.CreateChatMessageParams) error {
-	return s.writer.RunInTx(ctx, projectID, func(tx pgx.Tx) error {
-		if err := storeMessages(ctx, s.logger, tx, s.assetStorage, pending); err != nil {
-			return fmt.Errorf("store pending chat messages: %w", err)
-		}
+// Postgres transaction.
+func (s *ChatMessageCaptureStrategy) flushTurnAtomically(ctx context.Context, pending []chatMessageRow, assistants []repo.CreateChatMessageParams) error {
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		s.logger.ErrorContext(ctx, "failed to begin transaction for catch-up flush", attr.SlogError(err))
+		return fmt.Errorf("begin transaction: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
-		txRepo := repo.New(tx)
-		if _, err := txRepo.CreateChatMessage(ctx, assistants); err != nil {
-			s.logger.ErrorContext(ctx, "failed to store assistant chat message", attr.SlogError(err))
-			return fmt.Errorf("store assistant chat message: %w", err)
-		}
+	if err := storeMessages(ctx, s.logger, dbtx, s.assetStorage, pending); err != nil {
+		return fmt.Errorf("store pending chat messages: %w", err)
+	}
 
-		return nil
-	})
+	txRepo := repo.New(dbtx)
+	if _, err := txRepo.CreateChatMessage(ctx, assistants); err != nil {
+		s.logger.ErrorContext(ctx, "failed to store assistant chat message", attr.SlogError(err))
+		return fmt.Errorf("store assistant chat message: %w", err)
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit catch-up transaction: %w", err)
+	}
+	return nil
 }
 
 // NoOpCaptureStrategy is a message capture strategy that does nothing.

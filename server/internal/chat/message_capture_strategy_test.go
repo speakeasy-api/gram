@@ -19,13 +19,13 @@ import (
 
 func newCaptureStrategy(t *testing.T, conn *pgxpool.Pool) *chat.ChatMessageCaptureStrategy {
 	t.Helper()
-	writer, writerShutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), conn)
-	t.Cleanup(func() { _ = writerShutdown(t.Context()) })
+	store, storeShutdown := chat.NewMessageStore(testenv.NewLogger(t))
+	t.Cleanup(func() { _ = storeShutdown(t.Context()) })
 	return chat.NewChatMessageCaptureStrategy(
 		testenv.NewLogger(t),
 		conn,
 		assetstest.NewTestBlobStore(t),
-		writer,
+		store,
 	)
 }
 

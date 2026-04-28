@@ -617,10 +617,10 @@ func newStartCommand() *cli.Command {
 				hooksCache = hooks.NewLocalSessionCache(hooksCache, db)
 			}
 
-			chatWriter, chatWriterShutdown := chat.NewChatMessageWriter(logger, db)
-			shutdownFuncs = append(shutdownFuncs, chatWriterShutdown)
+			messageStore, messageStoreShutdown := chat.NewMessageStore(logger)
+			shutdownFuncs = append(shutdownFuncs, messageStoreShutdown)
 
-			captureStrategy := chat.NewChatMessageCaptureStrategy(logger, db, assetStorage, chatWriter)
+			captureStrategy := chat.NewChatMessageCaptureStrategy(logger, db, assetStorage, messageStore)
 
 			completionsClient := openrouter.NewUnifiedClient(
 				logger,
@@ -728,7 +728,7 @@ func newStartCommand() *cli.Command {
 			about.Attach(mux, about.NewService(logger, tracerProvider))
 			access.Attach(mux, access.NewService(logger, tracerProvider, db, sessionManager, roleClient, authzEngine, productFeatures))
 			assistants.Attach(mux, assistantsSvc)
-			hooks.Attach(mux, hooks.NewService(logger, db, tracerProvider, telemLogger, sessionManager, hooksCache, chatClient, temporalEnv, authzEngine, productFeatures, &background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv}, risk.NewScanner(logger, db, nil, meterProvider), chatWriter))
+			hooks.Attach(mux, hooks.NewService(logger, db, tracerProvider, telemLogger, sessionManager, hooksCache, chatClient, temporalEnv, authzEngine, productFeatures, &background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv}, risk.NewScanner(logger, db, nil, meterProvider), messageStore))
 			audit.Attach(mux, audit.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
 			auth.Attach(mux, auth.NewService(
 				logger,
@@ -797,7 +797,7 @@ func newStartCommand() *cli.Command {
 			)
 			shutdownFuncs = append(shutdownFuncs, riskSignaler.Shutdown)
 			riskService := risk.NewService(logger, tracerProvider, db, sessionManager, authzEngine, riskSignaler, completionsClient)
-			chatWriter.AddObserver(riskService)
+			messageStore.AddObserver(riskService)
 			risk.Attach(mux, riskService)
 
 			slack.Attach(mux, slack.NewService(logger, tracerProvider, db, sessionManager, encryptionClient, redisClient, slackClient, temporalEnv, slack.Configurations{

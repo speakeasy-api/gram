@@ -463,10 +463,10 @@ func newWorkerCommand() *cli.Command {
 			 * BEGIN -- MCP service setup for agent client
 			 */
 
-			chatWriter, chatWriterShutdown := chat.NewChatMessageWriter(logger, db)
-			shutdownFuncs = append(shutdownFuncs, chatWriterShutdown)
+			messageStore, messageStoreShutdown := chat.NewMessageStore(logger)
+			shutdownFuncs = append(shutdownFuncs, messageStoreShutdown)
 
-			captureStrategy := chat.NewChatMessageCaptureStrategy(logger, db, assetStorage, chatWriter)
+			captureStrategy := chat.NewChatMessageCaptureStrategy(logger, db, assetStorage, messageStore)
 
 			riskSignaler := background.NewThrottledSignaler(
 				&background.TemporalRiskAnalysisSignaler{TemporalEnv: temporalEnv, Logger: logger},
@@ -474,7 +474,7 @@ func newWorkerCommand() *cli.Command {
 				logger,
 			)
 			shutdownFuncs = append(shutdownFuncs, riskSignaler.Shutdown)
-			chatWriter.AddObserver(risk.NewObserver(logger, db, riskSignaler))
+			messageStore.AddObserver(risk.NewObserver(logger, db, riskSignaler))
 
 			completionsClient := openrouter.NewUnifiedClient(
 				logger,
