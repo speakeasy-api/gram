@@ -1785,17 +1785,11 @@ COMMENT ON COLUMN principal_grants.drop_resource IS 'Deprecated. Formerly ''*'' 
 COMMENT ON COLUMN principal_grants.selectors IS 'Optional JSON selector constraints refining when the grant applies. NULL means the grant has no selector constraints.';
 
 CREATE UNIQUE INDEX IF NOT EXISTS principal_grants_org_principal_scope_selector_key
-ON principal_grants (organization_id, principal_urn, scope, selectors)
-WHERE selectors IS NOT NULL;
-
-CREATE UNIQUE INDEX IF NOT EXISTS principal_grants_org_principal_scope_unrestricted_key
-ON principal_grants (organization_id, principal_urn, scope, drop_resource)
-WHERE selectors IS NULL;
+ON principal_grants (organization_id, principal_urn, scope, selectors);
 
 CREATE INDEX IF NOT EXISTS principal_grants_selectors_idx
 ON principal_grants
-USING GIN (selectors)
-WHERE selectors IS NOT NULL;
+USING GIN (selectors);
 
 CREATE TABLE IF NOT EXISTS audit_logs (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
