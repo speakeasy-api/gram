@@ -31,7 +31,7 @@ import {
   Wrench,
   X,
 } from "lucide-react";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueries } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type {
@@ -149,6 +149,7 @@ export function ScopePickerPopover({
   const mcpServers = useMCPServers(resourceType === "mcp");
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  const [collectionCount, setCollectionCount] = useState(0);
   const customToolCount = useMemo(() => {
     if (!customMode && !collectionMode) return 0;
     return (selectors ?? []).length;
@@ -176,6 +177,7 @@ export function ScopePickerPopover({
     customMode,
     collectionMode,
     customToolCount,
+    collectionCount,
   );
 
   const resourceKind = resourceType === "project" ? "project" : "mcp";
@@ -390,6 +392,7 @@ export function ScopePickerPopover({
           selectors={selectors ?? []}
           onChangeSelectors={onChangeSelectors}
           onNavigate={() => setPopoverOpen(false)}
+          onSelectedCountChange={setCollectionCount}
         />
       </div>
     </div>
@@ -795,11 +798,13 @@ function CollectionGroupPanel({
   selectors,
   onChangeSelectors,
   onNavigate,
+  onSelectedCountChange,
 }: {
   mcpServers: ServerGroup[];
   selectors: Selector[];
   onChangeSelectors: (selectors: Selector[] | null) => void;
   onNavigate?: () => void;
+  onSelectedCountChange?: (count: number) => void;
 }) {
   const client = useSdkClient();
   const orgRoutes = useOrgRoutes();
@@ -862,6 +867,26 @@ function CollectionGroupPanel({
       })
       .filter((g) => g.servers.some((s) => s.tools.length > 0));
   }, [collections, serverQueries, mcpSlugToServer]);
+
+  const selectedCollectionCount = useMemo(() => {
+    return collectionGroups.filter((group) => {
+      const allToolSelectors = group.servers.flatMap((s) =>
+        s.tools.map((t) => ({ resourceId: s.id, tool: t.name })),
+      );
+      return (
+        allToolSelectors.length > 0 &&
+        allToolSelectors.every((ts) =>
+          selectors.some(
+            (s) => s.resourceId === ts.resourceId && s.tool === ts.tool,
+          ),
+        )
+      );
+    }).length;
+  }, [collectionGroups, selectors]);
+
+  useEffect(() => {
+    onSelectedCountChange?.(selectedCollectionCount);
+  }, [selectedCollectionCount, onSelectedCountChange]);
 
   const goToCreateCollection = () => {
     onNavigate?.();
@@ -1060,6 +1085,7 @@ function getLabel(
   customMode?: boolean,
   collectionMode?: boolean,
   customToolCount?: number,
+  collectionCount?: number,
 ): string {
   if (customMode) {
     const count = customToolCount ?? 0;
@@ -1069,9 +1095,9 @@ function getLabel(
     return `${count} ${noun}${count === 1 ? "" : "s"} selected`;
   }
   if (collectionMode) {
-    const count = (selectors ?? []).length;
+    const count = collectionCount ?? 0;
     if (count === 0) return "Select...";
-    return `${count} tool${count === 1 ? "" : "s"} selected`;
+    return `${count} collection${count === 1 ? "" : "s"} selected`;
   }
   if (selectors === null) {
     return resourceType === "project" ? "All projects" : "All servers";
