@@ -12,6 +12,7 @@ import path from "node:path";
 
 import { intro, log, outro } from "@clack/prompts";
 import { GramCore } from "@gram/client/core.js";
+import { WorkOS } from "@workos-inc/node";
 import { assetsUploadFunctions } from "@gram/client/funcs/assetsUploadFunctions.js";
 import { assetsUploadOpenAPIv3 } from "@gram/client/funcs/assetsUploadOpenAPIv3.js";
 import { authInfo } from "@gram/client/funcs/authInfo.js";
@@ -49,6 +50,9 @@ type Asset = {
 const PLAYGROUND_MCP_APP_SLUG = "playground-mcp-app";
 const PLAYGROUND_MCP_APP_TOOL_NAME = "show_dashboard";
 const PLAYGROUND_MCP_APP_RESOURCE_URI = `ui://${PLAYGROUND_MCP_APP_SLUG}/dashboard`;
+const DEFAULT_MOCK_IDP_USER_ID = "dev-user-1";
+const DEFAULT_MOCK_IDP_USER_EMAIL = "dev@example.com";
+const DEFAULT_MOCK_IDP_USER_DISPLAY_NAME = "Dev User";
 
 const SEED_PROJECTS: {
   name: string;
@@ -199,6 +203,279 @@ async function exchangeCodeWithServer(
   return sessionToken;
 }
 
+function getEnvBoolean(name: string, defaultValue: boolean): boolean {
+  const value = process.env[name]?.trim().toLowerCase();
+  if (!value) return defaultValue;
+  const truthy = new Set(["1", "true", "yes", "on"]);
+  const falsy = new Set(["0", "false", "no", "off"]);
+  if (truthy.has(value)) return true;
+  if (falsy.has(value)) return false;
+  return defaultValue;
+}
+
+function splitDisplayName(displayName: string): {
+  firstName?: string;
+  lastName?: string;
+} {
+  const trimmed = displayName.trim();
+  if (!trimmed) {
+    return {};
+  }
+
+  const [firstName, ...rest] = trimmed.split(/\s+/);
+  const lastName = rest.join(" ").trim();
+  return {
+    firstName: firstName || undefined,
+    lastName: lastName || undefined,
+  };
+}
+
+function sqlString(value: string): string {
+  return `'${value.replace(/'/g, "''")}'`;
+}
+
+async function executePostgresSQL(name: string, sql: string): Promise<void> {
+  const dbUser = process.env.DB_USER || "gram";
+  const dbName = process.env.DB_NAME || "gram";
+  const tmpFile = path.join(
+    process.cwd(),
+    `.${name}-${crypto.randomUUID()}.sql`,
+  );
+
+  await fs.writeFile(tmpFile, sql, "utf-8");
+
+  try {
+    await $`docker compose cp ${tmpFile} gram-db:/tmp/${name}.sql`.quiet();
+    await $`docker compose exec gram-db psql -v ON_ERROR_STOP=1 -U ${dbUser} -d ${dbName} -f /tmp/${name}.sql`.quiet();
+  } finally {
+    await fs.unlink(tmpFile).catch(() => {});
+  }
+}
+
+type WorkOSOrganizationSummary = {
+  id: string;
+  name: string;
+  createdAt: string;
+};
+
+function getTimestamp(value: string): number {
+  const timestamp = Date.parse(value);
+  return Number.isNaN(timestamp) ? 0 : timestamp;
+}
+
+function newestFirst<T extends { createdAt: string; id: string }>(
+  values: T[],
+): T[] {
+  return [...values].sort((a, b) => {
+    const createdAtDelta =
+      getTimestamp(b.createdAt) - getTimestamp(a.createdAt);
+    if (createdAtDelta !== 0) {
+      return createdAtDelta;
+    }
+
+    return a.id.localeCompare(b.id);
+  });
+}
+
+async function resolveDevelopmentWorkOSOrganization(
+  workos: WorkOS,
+  workosUserId: string,
+): Promise<WorkOSOrganizationSummary> {
+  const [organizationsList, membershipsList] = await Promise.all([
+    workos.organizations.listOrganizations(),
+    workos.userManagement.listOrganizationMemberships({
+      userId: workosUserId,
+    }),
+  ]);
+
+  const organizations = newestFirst(await organizationsList.autoPagination());
+  if (organizations.length === 0) {
+    throw new Error(
+      "No WorkOS organizations found in the test environment; create one before running `mise run seed`",
+    );
+  }
+
+  const memberships = await membershipsList.autoPagination();
+  const membershipOrganizationIDs = new Set(
+    memberships.map((membership) => membership.organizationId),
+  );
+
+  return (
+    organizations.find((organization) =>
+      membershipOrganizationIDs.has(organization.id),
+    ) ?? organizations[0]
+  );
+}
+
+async function ensureDevelopmentWorkOSLinkage(init: {
+  workosApiKey: string;
+  localOrganizationId: string;
+  localUserId: string;
+  localUserEmail: string;
+  localUserDisplayName: string;
+  localUserAdmin: boolean;
+}): Promise<{
+  workosOrganizationId: string;
+  workosOrganizationName: string;
+  workosUserId: string;
+  workosMembershipId: string;
+}> {
+  const {
+    workosApiKey,
+    localOrganizationId,
+    localUserId,
+    localUserEmail,
+    localUserDisplayName,
+    localUserAdmin,
+  } = init;
+
+  if (!workosApiKey.startsWith("sk_test_")) {
+    throw new Error(
+      "WORKOS_API_KEY must be a WorkOS test key before running `mise run seed`",
+    );
+  }
+
+  const workos = new WorkOS(workosApiKey);
+
+  const desiredRoleSlug = localUserAdmin ? "admin" : "member";
+  const { firstName, lastName } = splitDisplayName(localUserDisplayName);
+  const users = await workos.userManagement.listUsers({
+    email: localUserEmail,
+    limit: 1,
+  });
+
+  let workosUser = users.data[0];
+  if (!workosUser) {
+    workosUser = await workos.userManagement.createUser({
+      email: localUserEmail,
+      firstName,
+      lastName,
+      emailVerified: true,
+      externalId: localUserId,
+      metadata: {
+        seeded_by: "mise seed",
+        local_user_id: localUserId,
+      },
+    });
+    log.info(
+      `Created WorkOS user '${localUserEmail}' (${workosUser.id}) in the development environment`,
+    );
+  }
+
+  const organization = await resolveDevelopmentWorkOSOrganization(
+    workos,
+    workosUser.id,
+  );
+
+  const memberships = await workos.userManagement.listOrganizationMemberships({
+    organizationId: organization.id,
+    userId: workosUser.id,
+    limit: 1,
+  });
+
+  let membership = memberships.data[0];
+  if (!membership) {
+    membership = await workos.userManagement.createOrganizationMembership({
+      organizationId: organization.id,
+      userId: workosUser.id,
+      roleSlug: desiredRoleSlug,
+    });
+  } else {
+    if (membership.status === "inactive") {
+      membership = await workos.userManagement.reactivateOrganizationMembership(
+        membership.id,
+      );
+    }
+    if (membership.role.slug !== desiredRoleSlug) {
+      membership = await workos.userManagement.updateOrganizationMembership(
+        membership.id,
+        {
+          roleSlug: desiredRoleSlug,
+        },
+      );
+    }
+  }
+
+  await upsertDevelopmentWorkOSSeedState({
+    localOrganizationId,
+    localUserId,
+    workosOrganizationId: organization.id,
+    workosUserId: workosUser.id,
+    workosMembershipId: membership.id,
+  });
+
+  return {
+    workosOrganizationId: organization.id,
+    workosOrganizationName: organization.name,
+    workosUserId: workosUser.id,
+    workosMembershipId: membership.id,
+  };
+}
+
+async function upsertDevelopmentWorkOSSeedState(init: {
+  localOrganizationId: string;
+  localUserId: string;
+  workosOrganizationId: string;
+  workosUserId: string;
+  workosMembershipId: string;
+}): Promise<void> {
+  const {
+    localOrganizationId,
+    localUserId,
+    workosOrganizationId,
+    workosUserId,
+    workosMembershipId,
+  } = init;
+  const userPrincipal = `user:${localUserId}`;
+
+  await executePostgresSQL(
+    "development-workos-linkage",
+    `
+      BEGIN;
+
+      UPDATE organization_metadata
+      SET workos_id = ${sqlString(workosOrganizationId)},
+          updated_at = clock_timestamp()
+      WHERE id = ${sqlString(localOrganizationId)};
+
+      UPDATE users
+      SET workos_id = ${sqlString(workosUserId)},
+          updated_at = clock_timestamp()
+      WHERE id = ${sqlString(localUserId)};
+
+      INSERT INTO organization_user_relationships (
+          organization_id,
+          user_id,
+          workos_membership_id
+      ) VALUES (
+          ${sqlString(localOrganizationId)},
+          ${sqlString(localUserId)},
+          ${sqlString(workosMembershipId)}
+      )
+      ON CONFLICT (organization_id, user_id)
+      DO UPDATE SET
+          workos_membership_id = EXCLUDED.workos_membership_id,
+          deleted_at = NULL,
+          updated_at = clock_timestamp();
+
+      INSERT INTO principal_grants (
+          organization_id,
+          principal_urn,
+          scope,
+          resource
+      ) VALUES
+          (${sqlString(localOrganizationId)}, ${sqlString(userPrincipal)}, 'org:admin', '*'),
+          (${sqlString(localOrganizationId)}, ${sqlString(userPrincipal)}, 'build:write', '*'),
+          (${sqlString(localOrganizationId)}, ${sqlString(userPrincipal)}, 'mcp:write', '*')
+      ON CONFLICT (organization_id, principal_urn, scope, resource)
+      DO UPDATE SET
+          updated_at = clock_timestamp();
+
+      COMMIT;
+    `,
+  );
+}
+
 async function seed() {
   let success = false;
   intro("Seeding local development environment...");
@@ -249,6 +526,31 @@ async function seed() {
     abort("Active organization not found", sessionJSON);
   }
 
+  const workosApiKey = process.env["WORKOS_API_KEY"];
+  if (workosApiKey) {
+    const localUserId = sessionInfo.result.userId || DEFAULT_MOCK_IDP_USER_ID;
+    const localUserEmail =
+      sessionInfo.result.userEmail || DEFAULT_MOCK_IDP_USER_EMAIL;
+    const localUserDisplayName =
+      sessionInfo.result.userDisplayName || DEFAULT_MOCK_IDP_USER_DISPLAY_NAME;
+    const localUserAdmin =
+      sessionInfo.result.isAdmin ?? getEnvBoolean("MOCK_IDP_USER_ADMIN", true);
+
+    const workosLinkage = await ensureDevelopmentWorkOSLinkage({
+      workosApiKey,
+      localOrganizationId: activeOrgID,
+      localUserId,
+      localUserEmail,
+      localUserDisplayName,
+      localUserAdmin,
+    });
+    log.info(
+      `Linked local organization '${activeOrgID}' to WorkOS org '${workosLinkage.workosOrganizationName}' (${workosLinkage.workosOrganizationId}) with user '${localUserEmail}' (${workosLinkage.workosUserId})`,
+    );
+  } else {
+    log.info("Skipping WorkOS linkage (WORKOS_API_KEY not set)");
+  }
+
   const projects: Record<string, { slug: string; id: string }> = {};
   for (const p of org.projects) {
     const id = p.id;
@@ -258,9 +560,10 @@ async function seed() {
 
   // Seed the default MCP registry (Pulse)
   try {
-    const dbUser = process.env.DB_USER || "gram";
-    const dbName = process.env.DB_NAME || "gram";
-    await $`docker compose exec gram-db psql -U ${dbUser} -d ${dbName} -c "INSERT INTO mcp_registries (name, url) VALUES ('Gram Recommended', 'https://api.pulsemcp.com') ON CONFLICT (url) WHERE deleted IS FALSE DO NOTHING;"`.quiet();
+    await executePostgresSQL(
+      "mcp-registry-seed",
+      `INSERT INTO mcp_registries (name, url) VALUES ('Gram Recommended', 'https://api.pulsemcp.com') ON CONFLICT (url) WHERE deleted IS FALSE DO NOTHING;`,
+    );
     log.info("Seeded MCP registry 'Gram Recommended'");
   } catch (e: unknown) {
     const err = e as { stderr?: string; message?: string };
