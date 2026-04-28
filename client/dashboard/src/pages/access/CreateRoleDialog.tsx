@@ -194,6 +194,16 @@ export function CreateRoleDialog({
       const next = { ...prev };
       if (next[scope]) {
         delete next[scope];
+        setCustomScopes((s) => {
+          const n = new Set(s);
+          n.delete(scope);
+          return n;
+        });
+        setCollectionScopes((s) => {
+          const n = new Set(s);
+          n.delete(scope);
+          return n;
+        });
       } else {
         next[scope] = { scope, selectors: null };
       }
