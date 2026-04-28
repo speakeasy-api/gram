@@ -14,13 +14,18 @@ if [ -n "$usage_git_base" ]; then
 fi
 
 files=()
+added_files=()
 
 if [ -n "$usage_file" ]; then
   files=("${usage_file[@]}")
+  added_files=("${usage_file[@]}")
 else
   while IFS= read -r line; do
     files+=("$line")
   done < <(git diff --relative --diff-filter=d --name-only "$base_ref" -- 'server/migrations/*.sql')
+  while IFS= read -r line; do
+    added_files+=("$line")
+  done < <(git diff --relative --diff-filter=A --name-only "$base_ref" -- 'server/migrations/*.sql')
 fi
 
 if [ ${#files[@]} -eq 0 ]; then
@@ -87,9 +92,9 @@ while IFS= read -r migration; do
   fi
 done < <(git ls-tree --name-only "$base_ref" -- server/migrations/ | grep '\.sql$')
 
-if [ -n "$latest_base_ts" ]; then
+if [ -n "$latest_base_ts" ] && [ ${#added_files[@]} -gt 0 ]; then
   out_of_order=false
-  for file in "${files[@]}"; do
+  for file in "${added_files[@]}"; do
     base_name="$(basename "$file")"
     ts="${base_name%%_*}"
     if [ "$ts" \< "$latest_base_ts" ] || [ "$ts" = "$latest_base_ts" ]; then
