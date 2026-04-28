@@ -57,6 +57,63 @@ if [ "$invalid_indexes" = true ]; then
   exit 1
 fi
 
+# Check for out-of-order migrations
+echo -e "\n🔎 Checking for out-of-order migrations..."
+
+# Build a list of changed file basenames for filtering
+changed_basenames=()
+for file in "${files[@]}"; do
+  changed_basenames+=("$(basename "$file")")
+done
+
+# Get the highest migration timestamp on the base ref, excluding changed files
+latest_base_ts=""
+while IFS= read -r migration; do
+  base_name="$(basename "$migration")"
+  # Skip files that are in our changed set
+  skip=false
+  for changed in "${changed_basenames[@]}"; do
+    if [ "$base_name" = "$changed" ]; then
+      skip=true
+      break
+    fi
+  done
+  if [ "$skip" = true ]; then
+    continue
+  fi
+  ts="${base_name%%_*}"
+  if [ -z "$latest_base_ts" ] || [ "$ts" \> "$latest_base_ts" ]; then
+    latest_base_ts="$ts"
+  fi
+done < <(git ls-tree --name-only "$base_ref" -- server/migrations/ | grep '\.sql$')
+
+if [ -n "$latest_base_ts" ]; then
+  out_of_order=false
+  for file in "${files[@]}"; do
+    base_name="$(basename "$file")"
+    ts="${base_name%%_*}"
+    if [ "$ts" \< "$latest_base_ts" ] || [ "$ts" = "$latest_base_ts" ]; then
+      out_of_order=true
+      echo "❌ $file (timestamp $ts <= latest on $base_ref: $latest_base_ts)"
+    fi
+  done
+
+  if [ "$out_of_order" = true ]; then
+    echo "
+🚨 One or more migration files were added out of order.
+🚨
+🚨 The latest migration on $base_ref has timestamp $latest_base_ts, but
+🚨 a new migration has a timestamp that is less than or equal to it.
+🚨
+🚨 Rename the migration file with a timestamp after $latest_base_ts,
+🚨 then run 'mise db:hash' to regenerate atlas.sum.
+"
+    exit 1
+  fi
+
+  echo "✅ All new migrations are ordered correctly"
+fi
+
 # Run atlas migrate lint
 echo -e "\n🔎 Running atlas migrate lint..."
 atlas migrate lint \

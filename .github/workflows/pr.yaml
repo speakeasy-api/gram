@@ -334,6 +334,40 @@ jobs:
         with:
           cloud-token: ${{ secrets.ATLAS_TOKEN }}
 
+      - name: Check migration ordering
+        shell: bash
+        run: |
+          latest_ts=$(git ls-tree --name-only origin/main -- server/migrations/ \
+            | grep '\.sql$' \
+            | xargs -I{} basename {} \
+            | sed 's/_.*//' \
+            | sort -r \
+            | head -n1)
+
+          if [ -z "$latest_ts" ]; then
+            echo "No existing migrations on origin/main, skipping order check"
+            exit 0
+          fi
+
+          echo "Latest migration timestamp on origin/main: $latest_ts"
+
+          failed=false
+          while IFS= read -r file; do
+            [ -z "$file" ] && continue
+            name=$(basename "$file")
+            ts="${name%%_*}"
+            if [ "$ts" \< "$latest_ts" ] || [ "$ts" = "$latest_ts" ]; then
+              echo "::error file=${file}::Migration ${name} has timestamp ${ts} <= latest on main (${latest_ts}). Rename it with a newer timestamp and run 'mise db:hash'."
+              failed=true
+            fi
+          done < <(git diff --diff-filter=A --name-only origin/main -- 'server/migrations/*.sql')
+
+          if [ "$failed" = true ]; then
+            exit 1
+          fi
+
+          echo "All new migrations are ordered correctly"
+
       - name: Lint PostgreSQL migrations
         uses: ariga/atlas-action/migrate/lint@v1.14.5
         with:
