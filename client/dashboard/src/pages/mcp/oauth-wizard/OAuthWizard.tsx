@@ -15,8 +15,9 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { Globe } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { toast } from "sonner";
 
+import { AutoRegisterChoice } from "./AutoRegisterChoice";
+import { AutoRegisterFailedStep } from "./AutoRegisterFailedStep";
 import { ExternalOAuthForm } from "./ExternalOAuthForm";
 import { FatalErrorStep } from "./FatalErrorStep";
 import {
@@ -114,15 +115,6 @@ function WizardBody({
               action: "oauth_proxy_configured",
               slug: toolsetSlug,
             }),
-          notifyAutoRegisterFailed: ({ event }) => {
-            const err = (event as { error?: unknown }).error;
-            const reason = err instanceof Error ? err.message : null;
-            toast.error(
-              reason
-                ? `Auto-registration failed: ${reason}. Enter credentials manually.`
-                : "Auto-registration failed. Enter credentials manually.",
-            );
-          },
         },
       }),
     [client, queryClient, telemetry, toolsetSlug, authedFetch],
@@ -155,6 +147,7 @@ function WizardSteps({
   const hasMultipleOAuth2AuthCode = oauth2SecurityCount > 1;
 
   const isProxyCreating = state.matches({ proxy: "submitting" });
+  const isAutoRegistering = state.context.autoRegistering;
 
   return (
     <>
@@ -171,12 +164,18 @@ function WizardSteps({
         />
       )}
 
-      {(state.matches({ proxy: "metadata" }) ||
-        state.matches({ proxy: "registering" })) && <ProxyMetadataForm />}
+      {state.matches({ proxy: "metadata" }) && <ProxyMetadataForm />}
 
-      {(state.matches({ proxy: "credentials" }) || isProxyCreating) && (
-        <ProxyCredentialsForm />
+      {(state.matches({ proxy: "autoRegisterChoice" }) ||
+        state.matches({ proxy: "registering" }) ||
+        (isProxyCreating && isAutoRegistering)) && <AutoRegisterChoice />}
+
+      {state.matches({ proxy: "autoRegisterFailed" }) && (
+        <AutoRegisterFailedStep error={state.context.error} onClose={onClose} />
       )}
+
+      {(state.matches({ proxy: "credentials" }) ||
+        (isProxyCreating && !isAutoRegistering)) && <ProxyCredentialsForm />}
 
       {state.matches({ proxy: "fatalError" }) && (
         <FatalErrorStep error={state.context.error} onClose={onClose} />

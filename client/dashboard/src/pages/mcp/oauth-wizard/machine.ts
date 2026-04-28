@@ -40,6 +40,7 @@ function initialContext(input: Input): Context {
     proxy: initialProxy(),
     envSlug: null,
     error: null,
+    autoRegistering: false,
     result: null,
     toolsetSlug: input.toolsetSlug,
     toolsetName: input.toolsetName,
@@ -131,7 +132,6 @@ export const oauthWizardMachine = setup({
     invalidateOnProxyCreate: () => {},
     captureExternalSuccess: () => {},
     captureProxyCreateSuccess: () => {},
-    notifyAutoRegisterFailed: () => {},
   },
 }).createMachine({
   id: "oauthWizard",
@@ -293,7 +293,7 @@ export const oauthWizardMachine = setup({
             NEXT: [
               {
                 guard: "canAutoRegister",
-                target: "registering",
+                target: "autoRegisterChoice",
                 actions: assign({ error: () => null }),
               },
               {
@@ -311,6 +311,17 @@ export const oauthWizardMachine = setup({
               },
             ],
             BACK: "#oauthWizard.pathSelection",
+          },
+        },
+        autoRegisterChoice: {
+          meta: { title: "Configure OAuth Proxy" },
+          on: {
+            AUTO_REGISTER: {
+              target: "registering",
+              actions: assign({ autoRegistering: () => true }),
+            },
+            MANUAL_CREDENTIALS: "credentials",
+            BACK: "metadata",
           },
         },
         registering: {
@@ -343,13 +354,21 @@ export const oauthWizardMachine = setup({
               }),
             },
             onError: {
-              target: "credentials",
-              actions: ["notifyAutoRegisterFailed"],
+              target: "autoRegisterFailed",
+              actions: assign({
+                error: ({ event }) =>
+                  errorMessage(event.error, "Failed to fetch credentials"),
+              }),
             },
           },
         },
+        autoRegisterFailed: {
+          meta: { title: "Couldn't Fetch Credentials" },
+          type: "final",
+        },
         credentials: {
           meta: { title: "OAuth Client Credentials" },
+          entry: assign({ autoRegistering: () => false }),
           on: {
             FIELD_PROXY: {
               actions: assign({

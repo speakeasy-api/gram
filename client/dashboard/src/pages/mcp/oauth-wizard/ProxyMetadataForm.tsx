@@ -12,9 +12,6 @@ export function ProxyMetadataForm() {
   const proxy = WizardContext.useSelector((s) => s.context.proxy);
   const error = WizardContext.useSelector((s) => s.context.error);
   const discovered = WizardContext.useSelector((s) => s.context.discovered);
-  const isRegistering = WizardContext.useSelector((s) =>
-    s.matches({ proxy: "registering" }),
-  );
 
   const setField = (key: ProxyFormKey, value: string) =>
     send({ type: "FIELD_PROXY", key, value });
@@ -145,24 +142,19 @@ export function ProxyMetadataForm() {
       </div>
 
       <Dialog.Footer className="flex justify-between">
-        <Button
-          variant="secondary"
-          disabled={isRegistering}
-          onClick={() => send({ type: "BACK" })}
-        >
+        <Button variant="secondary" onClick={() => send({ type: "BACK" })}>
           Back
         </Button>
         <div className="ml-auto">
           <Button
             onClick={() => send({ type: "NEXT" })}
             disabled={
-              isRegistering ||
               !proxy.slug.trim() ||
               !proxy.authorizationEndpoint.trim() ||
               !proxy.tokenEndpoint.trim()
             }
           >
-            {isRegistering ? "Registering client..." : "Next"}
+            Next
           </Button>
         </div>
       </Dialog.Footer>
