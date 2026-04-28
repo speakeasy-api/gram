@@ -227,7 +227,7 @@ func (s *Service) GetMcpMetadata(ctx context.Context, payload *gen.GetMcpMetadat
 	record, err := s.repo.GetMetadataForToolset(ctx, toolset.ID)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return nil, oops.E(oops.CodeNotFound, err, "no MCP install page metadata for this toolset").Log(ctx, s.logger, attr.SlogToolsetID(toolset.ID.String()))
+		return nil, oops.E(oops.CodeNotFound, err, "no MCP install page metadata for this toolset")
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to fetch MCP install page metadata").Log(ctx, s.logger)
 	}
