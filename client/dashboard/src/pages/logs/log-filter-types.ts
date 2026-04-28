@@ -67,13 +67,13 @@ export function applyFilterEdit(
   id: string,
   next: { op: Op; value?: string },
 ): ActiveLogFilter[] {
+  const target = current.find((c) => c.id === id);
+  if (!target) return current;
   return current.flatMap((f) => {
     if (f.id === id) {
       return [{ ...f, op: next.op, value: next.value }];
     }
-    const target = current.find((c) => c.id === id);
     if (
-      target &&
       (next.op === Operator.Eq || next.op === Operator.In) &&
       f.path === target.path &&
       f.op === next.op
