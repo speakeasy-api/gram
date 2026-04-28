@@ -36,7 +36,7 @@ func (s *Service) UpdateOAuthProxyServer(ctx context.Context, payload *gen.Updat
 		return nil, err
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPWrite, ResourceID: toolsetDetails.ID}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPWrite, ResourceKind: "", ResourceID: toolsetDetails.ID, Dimensions: nil}); err != nil {
 		return nil, err
 	}
 

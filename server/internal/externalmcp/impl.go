@@ -151,7 +151,7 @@ func (s *Service) ListCatalog(ctx context.Context, payload *gen.ListCatalogPaylo
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceID: authCtx.ProjectID.String()}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
 		return nil, fmt.Errorf("require build read: %w", err)
 	}
 
@@ -231,7 +231,7 @@ func (s *Service) GetServerDetails(ctx context.Context, payload *gen.GetServerDe
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceID: authCtx.ProjectID.String()}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
 		return nil, fmt.Errorf("require build read: %w", err)
 	}
 
@@ -319,13 +319,10 @@ func (s *Service) fetchServerDetails(ctx context.Context, registry repo.GetMCPRe
 	}
 	var serverResp struct {
 		Server struct {
-			Name        string `json:"name"`
-			Description string `json:"description"`
-			Version     string `json:"version"`
-			Remotes     []struct {
-				URL  string `json:"url"`
-				Type string `json:"type"`
-			} `json:"remotes"`
+			Name        string             `json:"name"`
+			Description string             `json:"description"`
+			Version     string             `json:"version"`
+			Remotes     []serverRemoteJSON `json:"remotes"`
 		} `json:"server"`
 		Meta struct {
 			Version struct {
@@ -349,6 +346,8 @@ func (s *Service) fetchServerDetails(ctx context.Context, registry repo.GetMCPRe
 		remotes = append(remotes, &types.ExternalMCPRemote{
 			URL:           r.URL,
 			TransportType: r.Type,
+			Headers:       toExternalMCPRemoteHeaders(r.Headers),
+			Variables:     toExternalMCPRemoteVariables(r.Variables),
 		})
 		// Prefer first streamable-http; fall back to first sse.
 		// Can't break early because we need all remotes in the slice.

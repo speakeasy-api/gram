@@ -84,6 +84,15 @@ if ! $agent_mode; then
     "
 fi
 
+if ! $agent_mode && [[ "$(uname -s)" == "Darwin" ]]; then
+    if ! command -v limactl &> /dev/null; then
+        echo "⚠️  limactl not found. Assistant runtime (Lima + Firecracker) won't work locally."
+        echo "   Install from https://lima-vm.io/ or via Homebrew: brew install lima"
+        echo "   Skip this if you don't need to run the assistant runtime locally."
+        echo
+    fi
+fi
+
 if [ $onboarding_pass = "false" ]; then
     echo "❌ Onboarding checks failed. Please fix the issues above and rerun this script."
     exit 1
@@ -105,6 +114,26 @@ interactive_only mise run zero:melange
 interactive_only mise run zero:fly
 mise run zero:encryption
 mise run zero:tls
+assistant_runtime_provider="$(mise env GRAM_ASSISTANT_RUNTIME_PROVIDER 2>/dev/null | sed -n 's/^export GRAM_ASSISTANT_RUNTIME_PROVIDER=//p')"
+assistant_runtime_provider="${assistant_runtime_provider:-local}"
+if [[ "$assistant_runtime_provider" == "local" ]]; then
+    interactive_only mise run zero:assistants-runtime
+    if ! $agent_mode && [[ "$(uname -s)" == "Darwin" ]] && command -v limactl &> /dev/null; then
+        mise run zero:assistants-lima
+
+        assistant_arch="$(uname -m)"
+        assistant_arch="${assistant_arch/aarch64/aarch64}"
+        assistant_arch="${assistant_arch/arm64/aarch64}"
+        assistant_arch="${assistant_arch/x86_64/x86_64}"
+        assistant_artifact_dir="agents/runtime-artifacts/${assistant_arch}"
+        if [ ! -f "${assistant_artifact_dir}/firecracker" ] || [ ! -f "${assistant_artifact_dir}/vmlinux.bin" ] || [ ! -f "${assistant_artifact_dir}/assistant-rootfs.ext4" ]; then
+            echo -e "\n⏳ Building assistant runtime artifacts"
+            mise run build:assistants-local
+        fi
+    fi
+else
+    echo "ℹ️  Skipping local assistant runtime setup: GRAM_ASSISTANT_RUNTIME_PROVIDER=${assistant_runtime_provider}"
+fi
 
 echo -e "\n⏳ Building internal SDK"
 mise run build:internal-sdk

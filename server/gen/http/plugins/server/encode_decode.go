@@ -2029,8 +2029,8 @@ func DecodeDownloadPluginPackageRequest(mux goahttp.Muxer, decoder func(*http.Re
 		if platform == "" {
 			err = goa.MergeErrors(err, goa.MissingFieldError("platform", "query string"))
 		}
-		if !(platform == "claude" || platform == "cursor") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("platform", platform, []any{"claude", "cursor"}))
+		if !(platform == "claude" || platform == "cursor" || platform == "codex") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("platform", platform, []any{"claude", "cursor", "codex"}))
 		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {

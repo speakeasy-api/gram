@@ -389,8 +389,8 @@ func BuildDownloadPluginPackagePayload(pluginsDownloadPluginPackagePluginID stri
 	var platform string
 	{
 		platform = pluginsDownloadPluginPackagePlatform
-		if !(platform == "claude" || platform == "cursor") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("platform", platform, []any{"claude", "cursor"}))
+		if !(platform == "claude" || platform == "cursor" || platform == "codex") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("platform", platform, []any{"claude", "cursor", "codex"}))
 		}
 		if err != nil {
 			return nil, err

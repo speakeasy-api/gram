@@ -287,7 +287,7 @@ func (s *Service) HandleWellKnownOAuthServerMetadata(w http.ResponseWriter, r *h
 	}
 
 	if result == nil {
-		return oops.E(oops.CodeNotFound, nil, "no OAuth configuration found").Log(ctx, s.logger)
+		return oops.E(oops.CodeNotFound, nil, "no OAuth configuration found")
 	}
 
 	// Handle proxy case - reverse proxy to external MCP OAuth server
@@ -372,7 +372,7 @@ func (s *Service) HandleWellKnownOAuthProtectedResourceMetadata(w http.ResponseW
 	}
 
 	if metadata == nil {
-		return oops.E(oops.CodeNotFound, nil, "not found").Log(ctx, s.logger)
+		return oops.E(oops.CodeNotFound, nil, "not found")
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -580,7 +580,7 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 			if err != nil {
 				return oops.E(oops.CodeUnexpected, err, "failed to load access grants").Log(ctx, s.logger)
 			}
-			if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPConnect, ResourceID: toolset.ID.String()}); err != nil {
+			if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPConnect, ResourceKind: "", ResourceID: toolset.ID.String(), Dimensions: nil}); err != nil {
 				return err
 			}
 		}
@@ -614,7 +614,9 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	sessionID := parseMcpSessionID(r.Header)
-	w.Header().Set("Mcp-Session-Id", sessionID)
+	if req.Method == "initialize" {
+		w.Header().Set("Mcp-Session-Id", sessionID)
+	}
 
 	// Load header display names for remapping
 	headerDisplayNames := s.loadHeaderDisplayNames(ctx, toolset.ID)
@@ -883,9 +885,9 @@ func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *ra
 	case "notifications/initialized", "notifications/cancelled":
 		return nil, nil
 	case "tools/list":
-		return handleToolsList(ctx, s.logger, s.guardianPolicy, s.db, s.env, payload, req, s.posthog, &s.toolsetCache, s.vectorToolStore, s.temporal)
+		return handleToolsList(ctx, s.logger, s.guardianPolicy, s.db, s.env, payload, req, s.posthog, &s.toolsetCache, s.vectorToolStore, s.temporal, s.features)
 	case "tools/call":
-		return handleToolsCall(ctx, s.logger, s.metrics, s.guardianPolicy, s.db, s.env, payload, req, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache, s.telemLogger, s.vectorToolStore, s.temporal, s.mcpMetadataRepo)
+		return handleToolsCall(ctx, s.logger, s.metrics, s.authz, s.guardianPolicy, s.db, s.env, payload, req, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache, s.telemLogger, s.vectorToolStore, s.temporal, s.mcpMetadataRepo)
 	case "prompts/list":
 		return handlePromptsList(ctx, s.logger, s.db, payload, req, &s.toolsetCache)
 	case "prompts/get":
@@ -1057,6 +1059,7 @@ func (s *Service) HandleToolsList(
 		&s.toolsetCache,
 		s.vectorToolStore,
 		s.temporal,
+		s.features,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("handle tools list: %w", err)
@@ -1117,6 +1120,7 @@ func (s *Service) HandleToolsCall(
 		ctx,
 		s.logger,
 		s.metrics,
+		s.authz,
 		s.guardianPolicy,
 		s.db,
 		s.env,

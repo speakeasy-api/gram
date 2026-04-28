@@ -6,6 +6,73 @@ info:
 servers:
     - url: https://app.getgram.ai
 paths:
+    /admin/diagnostics.poke:
+        get:
+            tags:
+                - admin
+            summary: poke admin
+            operationId: admin#poke
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/PokeResponseBody'
+                "400":
+                    description: 'bad_request: request is invalid'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "401":
+                    description: 'unauthorized: unauthorized access'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "403":
+                    description: 'forbidden: permission denied'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "404":
+                    description: 'not_found: resource not found'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "409":
+                    description: 'conflict: resource already exists'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "415":
+                    description: 'unsupported_media: unsupported media type'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "422":
+                    description: 'invalid: request contains one or more invalidation fields'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "500":
+                    description: 'unexpected: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "502":
+                    description: 'gateway_error: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
     /rpc/access.createRole:
         post:
             description: Create a new custom role.
@@ -10755,6 +10822,7 @@ paths:
                     enum:
                         - claude
                         - cursor
+                        - codex
                     type: string
                 - allowEmptyValue: true
                   description: Session header
@@ -13892,6 +13960,16 @@ paths:
                     description: Cursor to fetch the next page of results.
                     type: string
                 - allowEmptyValue: true
+                  description: Maximum number of results to return per page.
+                  in: query
+                  name: limit
+                  schema:
+                    description: Maximum number of results to return per page.
+                    format: int64
+                    maximum: 200
+                    minimum: 1
+                    type: integer
+                - allowEmptyValue: true
                   description: API Key header
                   in: header
                   name: Gram-Key
@@ -14013,6 +14091,16 @@ paths:
                   schema:
                     description: Cursor to fetch the next page of results.
                     type: string
+                - allowEmptyValue: true
+                  description: Maximum number of results to return per page.
+                  in: query
+                  name: limit
+                  schema:
+                    description: Maximum number of results to return per page.
+                    format: int64
+                    maximum: 200
+                    minimum: 1
+                    type: integer
                 - allowEmptyValue: true
                   description: API Key header
                   in: header
@@ -20600,6 +20688,9 @@ components:
                 suppressOutput:
                     type: boolean
                     description: Whether to suppress the hook's output
+                systemMessage:
+                    type: string
+                    description: Warning message shown to the user in the terminal
             description: Unified result for all Claude Code hook events with proper response structure
         ConfigureSlackAppRequestBody:
             type: object
@@ -21036,6 +21127,11 @@ components:
                 name:
                     type: string
                     description: The policy name.
+                presidio_entities:
+                    type: array
+                    items:
+                        type: string
+                    description: Presidio entity types to detect.
                 sources:
                     type: array
                     items:
@@ -21921,6 +22017,11 @@ components:
         ExternalMCPRemote:
             type: object
             properties:
+                headers:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ExternalMCPRemoteHeader'
+                    description: HTTP headers the MCP client should collect and send when connecting to this remote
                 transport_type:
                     type: string
                     description: Transport type (sse or streamable-http)
@@ -21931,10 +22032,57 @@ components:
                     type: string
                     description: URL of the remote endpoint
                     format: uri
+                variables:
+                    type: object
+                    description: URL template variables for this remote endpoint
+                    additionalProperties:
+                        $ref: '#/components/schemas/ExternalMCPRemoteVariable'
             description: A remote endpoint for an MCP server
             required:
                 - url
                 - transport_type
+        ExternalMCPRemoteHeader:
+            type: object
+            properties:
+                description:
+                    type: string
+                    description: Description of the header
+                is_required:
+                    type: boolean
+                    description: Whether this header is required
+                is_secret:
+                    type: boolean
+                    description: Whether this header value should be treated as secret
+                name:
+                    type: string
+                    description: Header name
+                placeholder:
+                    type: string
+                    description: Placeholder value to show when collecting this header
+            description: A header requirement for a remote MCP server
+            required:
+                - name
+        ExternalMCPRemoteVariable:
+            type: object
+            properties:
+                choices:
+                    type: array
+                    items:
+                        type: string
+                    description: Allowed values for the variable
+                default:
+                    type: string
+                    description: Default value for the variable
+                description:
+                    type: string
+                    description: Description of the variable
+                is_required:
+                    type: boolean
+                    description: Whether this variable is required
+                is_secret:
+                    type: boolean
+                    description: Whether this variable value should be treated as secret
+            description: A URL template variable for a remote MCP server
         ExternalMCPServer:
             type: object
             properties:
@@ -22886,6 +23034,9 @@ components:
         GramProductFeatures:
             type: object
             properties:
+                block_shadow_mcp_enabled:
+                    type: boolean
+                    description: Whether shadow-MCP guarding is enabled (injects required toolset id and rejects unsigned tool calls)
                 logs_enabled:
                     type: boolean
                     description: Whether logging is enabled
@@ -22900,6 +23051,7 @@ components:
                 - logs_enabled
                 - tool_io_logs_enabled
                 - session_capture_enabled
+                - block_shadow_mcp_enabled
         HTTPToolDefinition:
             type: object
             properties:
@@ -23031,6 +23183,9 @@ components:
         HookTraceSummary:
             type: object
             properties:
+                block_reason:
+                    type: string
+                    description: Reason set when hook_status is 'blocked' (e.g. shadow-MCP guard rejection)
                 event_source:
                     type: string
                     description: Event source (from materialized column)
@@ -23047,6 +23202,7 @@ components:
                         - success
                         - failure
                         - pending
+                        - blocked
                 log_count:
                     type: integer
                     description: Total number of logs in this trace
@@ -23854,11 +24010,6 @@ components:
         ListRoleGrant:
             type: object
             properties:
-                resources:
-                    type: array
-                    items:
-                        type: string
-                    description: Resource allowlist. Null means unrestricted access. An array means only the listed resource IDs.
                 scope:
                     type: string
                     description: The scope slug this grant applies to.
@@ -23870,6 +24021,11 @@ components:
                         - mcp:read
                         - mcp:write
                         - mcp:connect
+                selectors:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/Selector'
+                    description: Selector constraints. Null means unrestricted.
                 sub_scopes:
                     type: array
                     items:
@@ -25229,6 +25385,13 @@ components:
                 - policy
                 - sort_order
                 - created_at
+        PokeResponseBody:
+            type: object
+            properties:
+                ok:
+                    type: boolean
+            required:
+                - ok
         Project:
             type: object
             properties:
@@ -25914,6 +26077,11 @@ components:
                     type: integer
                     description: Number of messages not yet analyzed at the current policy version.
                     format: int64
+                presidio_entities:
+                    type: array
+                    items:
+                        type: string
+                    description: Presidio entity types to scan for. When empty, scans all entities.
                 project_id:
                     type: string
                     description: The project ID.
@@ -26099,11 +26267,6 @@ components:
         RoleGrant:
             type: object
             properties:
-                resources:
-                    type: array
-                    items:
-                        type: string
-                    description: Resource allowlist. Null means unrestricted access. An array means only the listed resource IDs.
                 scope:
                     type: string
                     description: The scope slug this grant applies to.
@@ -26115,6 +26278,11 @@ components:
                         - mcp:read
                         - mcp:write
                         - mcp:connect
+                selectors:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/Selector'
+                    description: Selector constraints. Null means unrestricted.
             required:
                 - scope
         ScopeDefinition:
@@ -26513,6 +26681,35 @@ components:
                 - in_placement
                 - scheme
                 - env_variables
+        Selector:
+            type: object
+            properties:
+                disposition:
+                    type: string
+                    description: Tool disposition filter (MCP scopes only).
+                    enum:
+                        - read_only
+                        - destructive
+                        - idempotent
+                        - open_world
+                resource_id:
+                    type: string
+                    description: The resource identifier, or '*' for all resources of this kind.
+                resource_kind:
+                    type: string
+                    description: The kind of resource this selector targets.
+                    enum:
+                        - project
+                        - mcp
+                        - org
+                        - '*'
+                tool:
+                    type: string
+                    description: Specific tool name filter (MCP scopes only).
+            description: A constraint that narrows which resources a grant applies to.
+            required:
+                - resource_kind
+                - resource_id
         SendInviteRequestBody:
             type: object
             properties:
@@ -26791,6 +26988,7 @@ components:
                         - logs
                         - tool_io_logs
                         - session_capture
+                        - block_shadow_mcp
                     maxLength: 60
             required:
                 - feature_name
@@ -28194,6 +28392,11 @@ components:
                 name:
                     type: string
                     description: The policy name.
+                presidio_entities:
+                    type: array
+                    items:
+                        type: string
+                    description: Presidio entity types to detect.
                 sources:
                     type: array
                     items:
@@ -28807,6 +29010,8 @@ components:
 tags:
     - name: access
       description: Manage roles and team member access control.
+    - name: admin
+      description: Operational endpoints for administrative tasks.
     - name: assets
       description: Manages assets used by Gram projects.
     - name: assistants

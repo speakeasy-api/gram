@@ -34,6 +34,10 @@ export type ListRiskResultsRequest = {
    */
   cursor?: string | undefined;
   /**
+   * Maximum number of results to return per page.
+   */
+  limit?: number | undefined;
+  /**
    * API Key header
    */
   gramKey?: string | undefined;
@@ -153,6 +157,7 @@ export type ListRiskResultsRequest$Outbound = {
   policy_id?: string | undefined;
   chat_id?: string | undefined;
   cursor?: string | undefined;
+  limit?: number | undefined;
   "Gram-Key"?: string | undefined;
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
@@ -167,6 +172,7 @@ export const ListRiskResultsRequest$outboundSchema: z.ZodMiniType<
     policyId: z.optional(z.string()),
     chatId: z.optional(z.string()),
     cursor: z.optional(z.string()),
+    limit: z.optional(z.int()),
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),

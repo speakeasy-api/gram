@@ -3275,6 +3275,8 @@ type HookTraceSummaryResponseBody struct {
 	LogCount *uint64 `form:"log_count,omitempty" json:"log_count,omitempty" xml:"log_count,omitempty"`
 	// Hook execution status
 	HookStatus *string `form:"hook_status,omitempty" json:"hook_status,omitempty" xml:"hook_status,omitempty"`
+	// Reason set when hook_status is 'blocked' (e.g. shadow-MCP guard rejection)
+	BlockReason *string `form:"block_reason,omitempty" json:"block_reason,omitempty" xml:"block_reason,omitempty"`
 	// Gram URN associated with this hook trace
 	GramUrn *string `form:"gram_urn,omitempty" json:"gram_urn,omitempty" xml:"gram_urn,omitempty"`
 	// Tool name (from materialized column)
@@ -10007,8 +10009,8 @@ func ValidateHookTraceSummaryResponseBody(body *HookTraceSummaryResponseBody) (e
 		err = goa.MergeErrors(err, goa.ValidatePattern("body.trace_id", *body.TraceID, "^[a-f0-9]{32}$"))
 	}
 	if body.HookStatus != nil {
-		if !(*body.HookStatus == "success" || *body.HookStatus == "failure" || *body.HookStatus == "pending") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.hook_status", *body.HookStatus, []any{"success", "failure", "pending"}))
+		if !(*body.HookStatus == "success" || *body.HookStatus == "failure" || *body.HookStatus == "pending" || *body.HookStatus == "blocked") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.hook_status", *body.HookStatus, []any{"success", "failure", "pending", "blocked"}))
 		}
 	}
 	return

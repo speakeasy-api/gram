@@ -233,7 +233,7 @@ export default function Plugins() {
           <Page.Section.Description className={hasPlugins ? "w-3/4" : ""}>
             Create distributable plugin bundles that package MCP servers and
             hooks together. Assign plugins to roles and publish them to Claude
-            Code and Cursor marketplaces via GitHub.
+            Code, Cursor, and Codex marketplaces via GitHub.
           </Page.Section.Description>
           <Page.Section.CTA>
             {hasPlugins && (
@@ -283,7 +283,7 @@ export default function Plugins() {
                 </Type>
                 <Type small muted className="mb-4 max-w-md text-center">
                   Add your first plugin to start distributing MCP servers and
-                  hooks to Claude Code and Cursor.
+                  hooks to Claude Code, Cursor, and Codex.
                 </Type>
                 <Button onClick={() => setIsCreateDialogOpen(true)}>
                   <Button.LeftIcon>

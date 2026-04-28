@@ -114,7 +114,7 @@ func TestEngineRequireAny_mapsDeniedToForbidden(t *testing.T) {
 	t.Parallel()
 
 	engine := NewEngine(testinfra.NewLogger(t), nil, staticRBAC(true), workos.NewStubClient(), cache.NoopCache)
-	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{{Scope: ScopeMCPConnect, Resource: "tool_a"}})
+	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{NewGrant(ScopeMCPConnect, "tool_a")})
 
 	err := engine.RequireAny(ctx,
 		Check{Scope: ScopeMCPConnect, ResourceID: "tool_b"},
@@ -129,7 +129,7 @@ func TestEngineFilter_returnsAllowedSubset(t *testing.T) {
 	t.Parallel()
 
 	engine := NewEngine(testinfra.NewLogger(t), nil, staticRBAC(true), workos.NewStubClient(), cache.NoopCache)
-	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{{Scope: ScopeProjectRead, Resource: "proj_123"}})
+	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{NewGrant(ScopeProjectRead, "proj_123")})
 
 	resourceIDs, err := engine.Filter(ctx, ScopeProjectRead, []string{"proj_123", "proj_456"})
 	require.NoError(t, err)
@@ -140,7 +140,7 @@ func TestEngineRequire_rejectsInvalidCheck(t *testing.T) {
 	t.Parallel()
 
 	engine := NewEngine(testinfra.NewLogger(t), nil, staticRBAC(true), workos.NewStubClient(), cache.NoopCache)
-	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{{Scope: ScopeProjectRead, Resource: WildcardResource}})
+	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{NewGrant(ScopeProjectRead, WildcardResource)})
 
 	err := engine.Require(ctx, Check{Scope: ScopeProjectRead, ResourceID: ""})
 	var oopsErr *oops.ShareableError
@@ -153,7 +153,7 @@ func TestEngineRequire_requiresChecks(t *testing.T) {
 	t.Parallel()
 
 	engine := NewEngine(testinfra.NewLogger(t), nil, staticRBAC(true), workos.NewStubClient(), cache.NoopCache)
-	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{{Scope: ScopeProjectRead, Resource: WildcardResource}})
+	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{NewGrant(ScopeProjectRead, WildcardResource)})
 
 	err := engine.Require(ctx)
 	var oopsErr *oops.ShareableError

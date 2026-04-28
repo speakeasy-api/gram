@@ -101,6 +101,100 @@ func TestListServers_FiltersDeletedServers(t *testing.T) {
 	require.Equal(t, "another-active", result[1].RegistrySpecifier)
 }
 
+func TestListServers_PreservesRemoteHeadersAndVariables(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	logger := slog.New(slog.DiscardHandler)
+	tracerProvider := tracernoop.NewTracerProvider()
+	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+	require.NoError(t, err)
+
+	headerDescription := "API key for authentication"
+	headerPlaceholder := "Bearer token"
+	variableDescription := "Deployment region"
+	defaultRegion := "us-east-1"
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		response := listResponse{
+			Servers: []serverEntry{
+				{
+					Server: serverJSON{
+						Name:        "templated-server",
+						Description: "A server with remote metadata",
+						Version:     "1.0.0",
+						Remotes: []serverRemoteJSON{
+							{
+								URL:  "https://api.example.com/{region}/mcp",
+								Type: "streamable-http",
+								Headers: []RemoteHeader{
+									{
+										Name:        "Authorization",
+										IsSecret:    true,
+										IsRequired:  true,
+										Description: &headerDescription,
+										Placeholder: &headerPlaceholder,
+									},
+								},
+								Variables: map[string]RemoteVariable{
+									"region": {
+										Description: &variableDescription,
+										IsRequired:  true,
+										Default:     &defaultRegion,
+										Choices:     []string{"us-east-1", "eu-west-1"},
+									},
+								},
+							},
+						},
+					},
+					Meta: pulseMCPServerMeta{
+						Version: serverMetaVersion{
+							Status: "active",
+						},
+					},
+				},
+			},
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		err := json.NewEncoder(w).Encode(response)
+		assert.NoError(t, err)
+	}))
+	defer server.Close()
+
+	client := NewRegistryClient(logger, tracerProvider, guardianPolicy, &PassthroughBackend{}, nil)
+	client.httpClient = server.Client()
+	registry := Registry{
+		ID:  uuid.New(),
+		URL: server.URL,
+	}
+
+	result, err := client.ListServers(ctx, registry, ListServersParams{})
+
+	require.NoError(t, err)
+	require.Len(t, result, 1)
+	require.Len(t, result[0].Remotes, 1)
+
+	remote := result[0].Remotes[0]
+	require.Equal(t, "https://api.example.com/{region}/mcp", remote.URL)
+	require.Len(t, remote.Headers, 1)
+	require.Equal(t, "Authorization", remote.Headers[0].Name)
+	require.Equal(t, headerDescription, *remote.Headers[0].Description)
+	require.Equal(t, headerPlaceholder, *remote.Headers[0].Placeholder)
+	require.NotNil(t, remote.Headers[0].IsRequired)
+	require.True(t, *remote.Headers[0].IsRequired)
+	require.NotNil(t, remote.Headers[0].IsSecret)
+	require.True(t, *remote.Headers[0].IsSecret)
+
+	require.Contains(t, remote.Variables, "region")
+	region := remote.Variables["region"]
+	require.Equal(t, variableDescription, *region.Description)
+	require.Equal(t, defaultRegion, *region.Default)
+	require.Equal(t, []string{"us-east-1", "eu-west-1"}, region.Choices)
+	require.NotNil(t, region.IsRequired)
+	require.True(t, *region.IsRequired)
+}
+
 func TestGetServerDetails_OnlyStreamableHTTP(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -118,7 +212,7 @@ func TestGetServerDetails_OnlyStreamableHTTP(t *testing.T) {
 				Name:        "test-server",
 				Description: "Test server description",
 				Version:     "1.0.0",
-				Remotes: []serverRemoteBasic{
+				Remotes: []serverRemoteJSON{
 					{URL: "https://example.com/streamable", Type: "streamable-http"},
 				},
 			},
@@ -166,7 +260,7 @@ func TestGetServerDetails_OnlySSE(t *testing.T) {
 				Name:        "test-server",
 				Description: "Test server description",
 				Version:     "1.0.0",
-				Remotes: []serverRemoteBasic{
+				Remotes: []serverRemoteJSON{
 					{URL: "https://example.com/sse", Type: "sse"},
 				},
 			},
@@ -214,7 +308,7 @@ func TestGetServerDetails_PrefersStreamableHTTPOverSSE(t *testing.T) {
 				Name:        "test-server",
 				Description: "Test server description",
 				Version:     "1.0.0",
-				Remotes: []serverRemoteBasic{
+				Remotes: []serverRemoteJSON{
 					{URL: "https://example.com/sse", Type: "sse"},
 					{URL: "https://example.com/streamable", Type: "streamable-http"},
 				},
@@ -264,7 +358,7 @@ func TestGetServerDetails_SelectedRemotesFiltersToSSE(t *testing.T) {
 				Name:        "test-server",
 				Description: "Test server description",
 				Version:     "1.0.0",
-				Remotes: []serverRemoteBasic{
+				Remotes: []serverRemoteJSON{
 					{URL: "https://example.com/sse", Type: "sse"},
 					{URL: "https://example.com/streamable", Type: "streamable-http"},
 				},
@@ -315,7 +409,7 @@ func TestGetServerDetails_SelectedRemotesStillPrefersStreamableHTTP(t *testing.T
 				Name:        "test-server",
 				Description: "Test server description",
 				Version:     "1.0.0",
-				Remotes: []serverRemoteBasic{
+				Remotes: []serverRemoteJSON{
 					{URL: "https://example.com/sse", Type: "sse"},
 					{URL: "https://example.com/streamable", Type: "streamable-http"},
 				},

@@ -9,11 +9,26 @@ procs:
   worker:
     cmd: ["mise", "run", "start:worker"]
     stop: SIGTERM
+  admin:
+    cmd: ["mise", "run", "start:admin"]
+    stop: SIGTERM
   dashboard:
     cmd: ["mise", "run", "start:dashboard"]
     stop:
       send-keys: ["<C-c>"]
   elements:
     cmd: ["mise", "run", "start:elements"]
+    stop:
+      send-keys: ["<C-c>"]
+  otel:
+    cmd: ["mise", "run", "start:oteltui"]
+    stop:
+      send-keys: ["<C-c>"]
+  lima:
+    cmd: ["mise", "run", "start:lima"]
+    stop:
+      send-keys: ["<C-c>"]
+  assistant-runtime:
+    cmd: ["mise", "run", "start:assistant-runtime"]
     stop:
       send-keys: ["<C-c>"]

@@ -861,6 +861,41 @@ type ExternalMCPRemoteResponseBody struct {
 	URL *string `form:"url,omitempty" json:"url,omitempty" xml:"url,omitempty"`
 	// Transport type (sse or streamable-http)
 	TransportType *string `form:"transport_type,omitempty" json:"transport_type,omitempty" xml:"transport_type,omitempty"`
+	// HTTP headers the MCP client should collect and send when connecting to this
+	// remote
+	Headers []*ExternalMCPRemoteHeaderResponseBody `form:"headers,omitempty" json:"headers,omitempty" xml:"headers,omitempty"`
+	// URL template variables for this remote endpoint
+	Variables map[string]*ExternalMCPRemoteVariableResponseBody `form:"variables,omitempty" json:"variables,omitempty" xml:"variables,omitempty"`
+}
+
+// ExternalMCPRemoteHeaderResponseBody is used to define fields on response
+// body types.
+type ExternalMCPRemoteHeaderResponseBody struct {
+	// Header name
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Description of the header
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// Whether this header value should be treated as secret
+	IsSecret *bool `form:"is_secret,omitempty" json:"is_secret,omitempty" xml:"is_secret,omitempty"`
+	// Whether this header is required
+	IsRequired *bool `form:"is_required,omitempty" json:"is_required,omitempty" xml:"is_required,omitempty"`
+	// Placeholder value to show when collecting this header
+	Placeholder *string `form:"placeholder,omitempty" json:"placeholder,omitempty" xml:"placeholder,omitempty"`
+}
+
+// ExternalMCPRemoteVariableResponseBody is used to define fields on response
+// body types.
+type ExternalMCPRemoteVariableResponseBody struct {
+	// Description of the variable
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// Whether this variable is required
+	IsRequired *bool `form:"is_required,omitempty" json:"is_required,omitempty" xml:"is_required,omitempty"`
+	// Whether this variable value should be treated as secret
+	IsSecret *bool `form:"is_secret,omitempty" json:"is_secret,omitempty" xml:"is_secret,omitempty"`
+	// Default value for the variable
+	Default *string `form:"default,omitempty" json:"default,omitempty" xml:"default,omitempty"`
+	// Allowed values for the variable
+	Choices []string `form:"choices,omitempty" json:"choices,omitempty" xml:"choices,omitempty"`
 }
 
 // NewClearCacheUnauthorized builds a mcpRegistries service clearCache endpoint
@@ -2629,6 +2664,22 @@ func ValidateExternalMCPRemoteResponseBody(body *ExternalMCPRemoteResponseBody) 
 		if !(*body.TransportType == "sse" || *body.TransportType == "streamable-http") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.transport_type", *body.TransportType, []any{"sse", "streamable-http"}))
 		}
+	}
+	for _, e := range body.Headers {
+		if e != nil {
+			if err2 := ValidateExternalMCPRemoteHeaderResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateExternalMCPRemoteHeaderResponseBody runs the validations defined on
+// ExternalMCPRemoteHeaderResponseBody
+func ValidateExternalMCPRemoteHeaderResponseBody(body *ExternalMCPRemoteHeaderResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
 	return
 }

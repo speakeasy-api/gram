@@ -1759,16 +1759,13 @@ CREATE TABLE IF NOT EXISTS hooks_server_name_overrides (
 
 CREATE INDEX IF NOT EXISTS hooks_server_name_overrides_project_id_display_name_idx ON hooks_server_name_overrides(project_id, display_name);
 
--- The sentinel value '*' for resource means "all resources" (wildcard).
--- This avoids NULL semantics and enables pure index-only scans on the
--- unique B-tree index for permission checks:
 CREATE TABLE IF NOT EXISTS principal_grants (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   organization_id TEXT NOT NULL,
   principal_urn TEXT NOT NULL,
   principal_type TEXT NOT NULL GENERATED ALWAYS AS (split_part(principal_urn, ':', 1)) STORED,
   scope TEXT NOT NULL,
-  resource TEXT NOT NULL DEFAULT '*',
+  drop_resource TEXT,
   selectors JSONB,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -1779,26 +1776,20 @@ CREATE TABLE IF NOT EXISTS principal_grants (
   CONSTRAINT principal_grants_selectors_check CHECK (selectors IS NULL OR jsonb_typeof(selectors) = 'object')
 );
 
-COMMENT ON TABLE principal_grants IS 'RBAC grants. Normalized: one row per (org, principal, scope, resource). Resource=''*'' means unrestricted. Selectors can further constrain applicability.';
+COMMENT ON TABLE principal_grants IS 'RBAC grants. Normalized: one row per (org, principal, scope). Selectors can further constrain applicability.';
 COMMENT ON COLUMN principal_grants.organization_id IS 'The organization this grant belongs to. Grants are always org-scoped.';
 COMMENT ON COLUMN principal_grants.principal_urn IS 'URN identifying the principal, e.g. "user:user_abc", "role:admin". Format is type:id.';
 COMMENT ON COLUMN principal_grants.principal_type IS 'Derived from principal_urn. The type prefix, e.g. "user", "role".';
 COMMENT ON COLUMN principal_grants.scope IS 'The scope being granted, e.g. "build:read". Validated in application code, not via FK.';
-COMMENT ON COLUMN principal_grants.resource IS '''*'' = unrestricted (scope applies to all resources in the org). Any other value = a specific resource ID this scope is granted on.';
+COMMENT ON COLUMN principal_grants.drop_resource IS 'Deprecated. Formerly ''*'' = unrestricted. Nullable, scheduled for removal.';
 COMMENT ON COLUMN principal_grants.selectors IS 'Optional JSON selector constraints refining when the grant applies. NULL means the grant has no selector constraints.';
 
 CREATE UNIQUE INDEX IF NOT EXISTS principal_grants_org_principal_scope_selector_key
-ON principal_grants (organization_id, principal_urn, scope, selectors)
-WHERE selectors IS NOT NULL;
-
-CREATE UNIQUE INDEX IF NOT EXISTS principal_grants_org_principal_scope_unrestricted_key
-ON principal_grants (organization_id, principal_urn, scope, resource)
-WHERE selectors IS NULL;
+ON principal_grants (organization_id, principal_urn, scope, selectors);
 
 CREATE INDEX IF NOT EXISTS principal_grants_selectors_idx
 ON principal_grants
-USING GIN (selectors)
-WHERE selectors IS NOT NULL;
+USING GIN (selectors);
 
 CREATE TABLE IF NOT EXISTS audit_logs (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
@@ -2087,6 +2078,7 @@ CREATE TABLE IF NOT EXISTS risk_policies (
   enabled BOOLEAN NOT NULL DEFAULT TRUE,
   name TEXT NOT NULL,
   sources TEXT[] NOT NULL,
+  presidio_entities TEXT[],
   version BIGINT NOT NULL,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),

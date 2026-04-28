@@ -88,7 +88,7 @@ func TestServiceRequiresProjectGrants(t *testing.T) {
 
 	readCtx := authztest.WithExactGrants(t, ctx, authz.Grant{
 		Scope:    authz.ScopeProjectRead,
-		Resource: projectID.String(),
+		Selector: authz.NewSelector(authz.ScopeProjectRead, projectID.String()),
 	})
 	_, err := svc.ListAssistants(readCtx, &gen.ListAssistantsPayload{
 		SessionToken:     nil,
@@ -103,7 +103,7 @@ func TestServiceCreateAssistantMapsInvalidToolsetToBadRequest(t *testing.T) {
 	svc, ctx, projectID := newRBACService(t)
 	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
 		Scope:    authz.ScopeProjectWrite,
-		Resource: projectID.String(),
+		Selector: authz.NewSelector(authz.ScopeProjectWrite, projectID.String()),
 	})
 
 	_, err := svc.CreateAssistant(ctx, &gen.CreateAssistantPayload{

@@ -21,22 +21,22 @@ func InvalidCheck(scope Scope, resourceID string) error {
 	}
 }
 
-func Denied(scope Scope, resourceID string) error {
+func Denied(scope Scope, selector Selector) error {
 	return &DeniedError{
-		Scope:      scope,
-		ResourceID: resourceID,
-		cause:      ErrDenied,
+		Scope:    scope,
+		Selector: selector,
+		cause:    ErrDenied,
 	}
 }
 
 type DeniedError struct {
-	Scope      Scope
-	ResourceID string
-	cause      error
+	Scope    Scope
+	Selector Selector
+	cause    error
 }
 
 func (e *DeniedError) Error() string {
-	return fmt.Sprintf("authz denied for scope %q on resource %q", e.Scope, e.ResourceID)
+	return fmt.Sprintf("authz denied for scope %q on selector %v", e.Scope, map[string]string(e.Selector))
 }
 
 func (e *DeniedError) Unwrap() error {

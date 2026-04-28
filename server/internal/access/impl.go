@@ -111,7 +111,7 @@ func (s *Service) ListRoles(ctx context.Context, _ *gen.ListRolesPayload) (*gen.
 	if err != nil {
 		return nil, err
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceID: ac.ActiveOrganizationID}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
 		return nil, err
 	}
 	trace.SpanFromContext(ctx).SetAttributes(
@@ -152,7 +152,7 @@ func (s *Service) GetRole(ctx context.Context, payload *gen.GetRolePayload) (*ge
 	if err != nil {
 		return nil, err
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceID: ac.ActiveOrganizationID}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
 		return nil, err
 	}
 	trace.SpanFromContext(ctx).SetAttributes(
@@ -195,7 +195,7 @@ func (s *Service) CreateRole(ctx context.Context, payload *gen.CreateRolePayload
 	if err != nil {
 		return nil, err
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceID: ac.ActiveOrganizationID}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
 		return nil, err
 	}
 
@@ -334,7 +334,7 @@ func (s *Service) UpdateRole(ctx context.Context, payload *gen.UpdateRolePayload
 	if err != nil {
 		return nil, err
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceID: ac.ActiveOrganizationID}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
 		return nil, err
 	}
 	logger := s.logger.With(
@@ -474,7 +474,7 @@ func (s *Service) DeleteRole(ctx context.Context, payload *gen.DeleteRolePayload
 	if err != nil {
 		return err
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceID: ac.ActiveOrganizationID}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
 		return err
 	}
 	logger := s.logger.With(
@@ -505,6 +505,29 @@ func (s *Service) DeleteRole(ctx context.Context, payload *gen.DeleteRolePayload
 	)
 	if isSystemRole(currentRole.Slug) {
 		return oops.E(oops.CodeBadRequest, nil, "system roles cannot be deleted").Log(ctx, logger)
+	}
+
+	// WorkOS rejects deleting a role that still has members assigned, so move
+	// any assigned members to the default member role first.
+	members, err := s.roles.ListMembers(ctx, workosOrgID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "list members from workos").Log(ctx, logger)
+	}
+	reassigned := false
+	for _, m := range members {
+		if m.RoleSlug != currentRole.Slug {
+			continue
+		}
+		if _, err := s.roles.UpdateMemberRole(ctx, m.ID, authz.SystemRoleMember); err != nil {
+			if reassigned {
+				s.authz.InvalidateAllRoleCaches(ctx, ac.ActiveOrganizationID)
+			}
+			return oops.E(oops.CodeUnexpected, err, "reassign member to default role").Log(ctx, logger)
+		}
+		reassigned = true
+	}
+	if reassigned {
+		s.authz.InvalidateAllRoleCaches(ctx, ac.ActiveOrganizationID)
 	}
 
 	if _, err := repo.New(s.db).DeletePrincipalGrantsByPrincipal(ctx, repo.DeletePrincipalGrantsByPrincipalParams{
@@ -540,7 +563,7 @@ func (s *Service) ListScopes(ctx context.Context, _ *gen.ListScopesPayload) (*ge
 	if err != nil {
 		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").Log(ctx, s.logger)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceID: ac.ActiveOrganizationID}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
 		return nil, err
 	}
 	trace.SpanFromContext(ctx).SetAttributes(
@@ -567,7 +590,7 @@ func (s *Service) ListMembers(ctx context.Context, _ *gen.ListMembersPayload) (*
 	if err != nil {
 		return nil, err
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceID: ac.ActiveOrganizationID}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
 		return nil, err
 	}
 	trace.SpanFromContext(ctx).SetAttributes(
@@ -657,13 +680,13 @@ func (s *Service) ListGrants(ctx context.Context, _ *gen.ListGrantsPayload) (*ge
 	}
 	if !enforce {
 		return &gen.ListUserGrantsResult{Grants: []*gen.ListRoleGrant{
-			{Scope: string(authz.ScopeOrgRead), Resources: nil},
-			{Scope: string(authz.ScopeOrgAdmin), Resources: nil},
-			{Scope: string(authz.ScopeProjectRead), Resources: nil},
-			{Scope: string(authz.ScopeProjectWrite), Resources: nil},
-			{Scope: string(authz.ScopeMCPRead), Resources: nil},
-			{Scope: string(authz.ScopeMCPWrite), Resources: nil},
-			{Scope: string(authz.ScopeMCPConnect), Resources: nil},
+			{Scope: string(authz.ScopeOrgRead), Selectors: nil},
+			{Scope: string(authz.ScopeOrgAdmin), Selectors: nil},
+			{Scope: string(authz.ScopeProjectRead), Selectors: nil},
+			{Scope: string(authz.ScopeProjectWrite), Selectors: nil},
+			{Scope: string(authz.ScopeMCPRead), Selectors: nil},
+			{Scope: string(authz.ScopeMCPWrite), Selectors: nil},
+			{Scope: string(authz.ScopeMCPConnect), Selectors: nil},
 		}}, nil
 	}
 
@@ -718,7 +741,7 @@ func (s *Service) UpdateMemberRole(ctx context.Context, payload *gen.UpdateMembe
 	if err != nil {
 		return nil, err
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceID: ac.ActiveOrganizationID}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
 		return nil, err
 	}
 	logger := s.logger.With(
@@ -879,18 +902,55 @@ func roleGrantPayloads(grants []*gen.RoleGrant) []*authz.RoleGrant {
 		if grant == nil {
 			continue
 		}
-		var resources []string
-		if grant.Resources != nil {
-			resources = append([]string{}, grant.Resources...)
+
+		var selectors []authz.Selector
+		if grant.Selectors != nil {
+			selectors = make([]authz.Selector, 0, len(grant.Selectors))
+		}
+		for _, s := range grant.Selectors {
+			if s == nil {
+				continue
+			}
+			selectors = append(selectors, genSelectorToAuthz(s))
 		}
 
 		out = append(out, &authz.RoleGrant{
 			Scope:     grant.Scope,
-			Resources: resources,
+			Selectors: selectors,
 		})
 	}
 
 	return out
+}
+
+func genSelectorToAuthz(s *gen.Selector) authz.Selector {
+	sel := authz.Selector{
+		"resource_kind": s.ResourceKind,
+		"resource_id":   s.ResourceID,
+	}
+	if s.Disposition != nil {
+		sel["disposition"] = *s.Disposition
+	}
+	if s.Tool != nil {
+		sel["tool"] = *s.Tool
+	}
+	return sel
+}
+
+func authzSelectorToGen(sel authz.Selector) *gen.Selector {
+	s := &gen.Selector{
+		ResourceKind: sel["resource_kind"],
+		ResourceID:   sel["resource_id"],
+		Disposition:  nil,
+		Tool:         nil,
+	}
+	if v, ok := sel["disposition"]; ok {
+		s.Disposition = &v
+	}
+	if v, ok := sel["tool"]; ok {
+		s.Tool = &v
+	}
+	return s
 }
 
 func formatUserName(user workos.User) string {
@@ -1009,7 +1069,7 @@ func buildRole(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, organ
 	}
 	genGrants := make([]*gen.RoleGrant, 0, len(grants))
 	for _, g := range grants {
-		genGrants = append(genGrants, &gen.RoleGrant{Scope: g.Scope, Resources: g.Resources})
+		genGrants = append(genGrants, scopedGrantToGenRoleGrant(g))
 	}
 
 	return &gen.Role{
@@ -1024,11 +1084,23 @@ func buildRole(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, organ
 	}, nil
 }
 
+func scopedGrantToGenRoleGrant(g *authz.ScopedGrant) *gen.RoleGrant {
+	var selectors []*gen.Selector
+	for _, sel := range g.Selectors {
+		selectors = append(selectors, authzSelectorToGen(sel))
+	}
+	return &gen.RoleGrant{Scope: g.Scope, Selectors: selectors}
+}
+
 func listRoleGrantsFromGrants(grants []authz.Grant) []*gen.ListRoleGrant {
-	scoped := authz.GrantsFromRows(grants)
+	scoped := authz.GrantsToScopedGrants(grants)
 	out := make([]*gen.ListRoleGrant, 0, len(scoped))
 	for _, g := range scoped {
-		out = append(out, &gen.ListRoleGrant{Scope: g.Scope, SubScopes: g.SubScopes, Resources: g.Resources})
+		var selectors []*gen.Selector
+		for _, sel := range g.Selectors {
+			selectors = append(selectors, authzSelectorToGen(sel))
+		}
+		out = append(out, &gen.ListRoleGrant{Scope: g.Scope, SubScopes: g.SubScopes, Selectors: selectors})
 	}
 	return out
 }

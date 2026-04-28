@@ -110,11 +110,14 @@ func seedOrganization(t *testing.T, ctx context.Context, conn *pgxpool.Pool, org
 func seedGrant(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, principal urn.Principal, scope authz.Scope, resource string) {
 	t.Helper()
 
-	_, err := accessrepo.New(conn).InsertPrincipalGrant(ctx, accessrepo.InsertPrincipalGrantParams{
+	selectors, err := authz.NewSelector(scope, resource).MarshalJSON()
+	require.NoError(t, err)
+
+	_, err = accessrepo.New(conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{
 		OrganizationID: organizationID,
 		PrincipalUrn:   principal,
 		Scope:          string(scope),
-		Resource:       resource,
+		Selectors:      selectors,
 	})
 	require.NoError(t, err)
 }

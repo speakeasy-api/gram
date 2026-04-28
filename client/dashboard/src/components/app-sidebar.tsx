@@ -51,7 +51,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
 
   return (
-    <Sidebar collapsible="offcanvas" {...props}>
+    <Sidebar collapsible="icon" {...props}>
       <SidebarContent className="pt-2">
         <SidebarGroup>
           <SidebarGroupLabel>project</SidebarGroupLabel>
@@ -84,7 +84,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           <SidebarGroupLabel>build</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              <ScopeGatedNavItem item={routes.elements} scope="project:read" />
               <ScopeGatedNavItem
                 item={routes.mcp}
                 scope={["mcp:read", "mcp:write"]}
@@ -98,6 +97,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 item={routes.plugins}
                 scope={["project:read", "project:write"]}
               />
+              <ScopeGatedNavItem item={routes.elements} scope="project:read" />
               <ScopeGatedNavItem
                 item={routes.environments}
                 scope={["project:read", "project:write"]}
@@ -148,17 +148,20 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
-        <div className="mt-auto px-2 py-3">
+        <div className="mt-auto px-2 py-3 group-data-[collapsible=icon]:px-0">
           <Link
             to={`/${orgSlug}`}
-            className="text-muted-foreground hover:text-foreground flex items-center gap-1.5 px-2 py-1 text-sm transition-colors hover:no-underline"
+            title="Back to org"
+            className="text-muted-foreground hover:text-foreground flex items-center gap-1.5 px-2 py-1 text-sm transition-colors group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0 hover:no-underline"
           >
             <Undo2 className="h-3.5 w-3.5" />
-            <span>Back to org</span>
+            <span className="group-data-[collapsible=icon]:hidden">
+              Back to org
+            </span>
           </Link>
         </div>
       </SidebarContent>
-      <SidebarFooter>
+      <SidebarFooter className="group-data-[collapsible=icon]:hidden">
         <FreeTierExceededNotification />
       </SidebarFooter>
       <FeatureRequestModal

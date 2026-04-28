@@ -838,7 +838,7 @@ type PluginServer struct {
 	Deleted     bool
 }
 
-// RBAC grants. Normalized: one row per (org, principal, scope, resource). Resource='*' means unrestricted. Selectors can further constrain applicability.
+// RBAC grants. Normalized: one row per (org, principal, scope). Selectors can further constrain applicability.
 type PrincipalGrant struct {
 	ID uuid.UUID
 	// The organization this grant belongs to. Grants are always org-scoped.
@@ -849,8 +849,8 @@ type PrincipalGrant struct {
 	PrincipalType string
 	// The scope being granted, e.g. "build:read". Validated in application code, not via FK.
 	Scope string
-	// '*' = unrestricted (scope applies to all resources in the org). Any other value = a specific resource ID this scope is granted on.
-	Resource string
+	// Deprecated. Formerly '*' = unrestricted. Nullable, scheduled for removal.
+	DropResource pgtype.Text
 	// Optional JSON selector constraints refining when the grant applies. NULL means the grant has no selector constraints.
 	Selectors []byte
 	CreatedAt pgtype.Timestamptz
@@ -934,17 +934,18 @@ type RemoteMcpServerHeader struct {
 }
 
 type RiskPolicy struct {
-	ID             uuid.UUID
-	ProjectID      uuid.UUID
-	OrganizationID string
-	Enabled        bool
-	Name           string
-	Sources        []string
-	Version        int64
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-	DeletedAt      pgtype.Timestamptz
-	Deleted        bool
+	ID               uuid.UUID
+	ProjectID        uuid.UUID
+	OrganizationID   string
+	Enabled          bool
+	Name             string
+	Sources          []string
+	PresidioEntities []string
+	Version          int64
+	CreatedAt        pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
+	DeletedAt        pgtype.Timestamptz
+	Deleted          bool
 }
 
 type RiskResult struct {

@@ -947,7 +947,7 @@ function DeployingPhaseContent({
           {releaseState.deploymentLogs.map((log) => (
             <div
               key={log.id}
-              className={log.event.includes("error") ? "text-destructive" : ""}
+              className={`break-all ${log.event.includes("error") ? "text-destructive" : ""}`}
             >
               {log.message}
             </div>
@@ -1213,7 +1213,7 @@ function ErrorPhaseContent({
           {releaseState.deploymentLogs.map((log) => (
             <div
               key={log.id}
-              className={log.event.includes("error") ? "text-destructive" : ""}
+              className={`break-all ${log.event.includes("error") ? "text-destructive" : ""}`}
             >
               {log.message}
             </div>

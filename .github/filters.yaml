@@ -1,6 +1,7 @@
 server:
   - "go.mod"
   - "go.sum"
+  - "agents/**"
   - "server/**"
 
 client:

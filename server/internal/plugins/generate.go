@@ -80,12 +80,13 @@ var CursorBaseHookEvents = []string{
 }
 
 // GeneratePluginPackages produces the complete file map for a plugin distribution
-// repository containing both Claude Code and Cursor plugins. Used for GitHub push.
+// repository containing Claude Code, Cursor, and Codex plugins. Used for GitHub push.
 func GeneratePluginPackages(plugins []PluginInfo, cfg GenerateConfig) (map[string][]byte, error) {
 	files := make(map[string][]byte)
 
 	var claudePlugins []marketplaceEntry
 	var cursorPlugins []marketplaceEntry
+	var codexPlugins []codexMarketplaceEntry
 
 	// Base plugin (observability hooks) ships first in the marketplace so it's
 	// the first thing team admins see. Skipped when no hooks key is configured
@@ -118,6 +119,9 @@ func GeneratePluginPackages(plugins []PluginInfo, cfg GenerateConfig) (map[strin
 		if err := generateCursorPlugin(files, p, cfg); err != nil {
 			return nil, fmt.Errorf("generate cursor plugin %s: %w", p.Slug, err)
 		}
+		if err := generateCodexPlugin(files, p, cfg); err != nil {
+			return nil, fmt.Errorf("generate codex plugin %s: %w", p.Slug, err)
+		}
 		claudePlugins = append(claudePlugins, marketplaceEntry{
 			Name:        p.Slug,
 			Source:      "./" + p.Slug,
@@ -128,12 +132,24 @@ func GeneratePluginPackages(plugins []PluginInfo, cfg GenerateConfig) (map[strin
 			Source:      "./" + p.Slug + "-cursor",
 			Description: p.Description,
 		})
+		codexPlugins = append(codexPlugins, codexMarketplaceEntry{
+			Name: p.Slug + "-codex",
+			Source: codexMarketplaceSource{
+				Source: "local",
+				Path:   "./" + p.Slug + "-codex",
+			},
+			Policy: codexMarketplacePolicy{
+				Installation:   "AVAILABLE",
+				Authentication: codexAuthPolicy(p, cfg),
+			},
+		})
 	}
 
 	owner := marketplaceOwner{Name: cfg.OrgName, Email: cfg.OrgEmail}
+	marketplaceName := conv.ToSlug(cfg.OrgName) + "-gram"
 
 	claudeManifest, err := marshalJSON(marketplaceManifest{
-		Name:    conv.ToSlug(cfg.OrgName) + "-gram",
+		Name:    marketplaceName,
 		Owner:   owner,
 		Plugins: claudePlugins,
 	})
@@ -143,7 +159,7 @@ func GeneratePluginPackages(plugins []PluginInfo, cfg GenerateConfig) (map[strin
 	files[".claude-plugin/marketplace.json"] = claudeManifest
 
 	cursorManifest, err := marshalJSON(marketplaceManifest{
-		Name:    conv.ToSlug(cfg.OrgName) + "-gram",
+		Name:    marketplaceName,
 		Owner:   owner,
 		Plugins: cursorPlugins,
 	})
@@ -151,6 +167,16 @@ func GeneratePluginPackages(plugins []PluginInfo, cfg GenerateConfig) (map[strin
 		return nil, fmt.Errorf("marshal cursor marketplace.json: %w", err)
 	}
 	files[".cursor-plugin/marketplace.json"] = cursorManifest
+
+	codexManifest, err := marshalJSON(codexMarketplaceManifest{
+		Name:      marketplaceName,
+		Interface: codexInterface{DisplayName: cfg.OrgName + " Plugins", ShortDescription: ""},
+		Plugins:   codexPlugins,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("marshal codex marketplace.json: %w", err)
+	}
+	files[".agents/plugins/marketplace.json"] = codexManifest
 
 	files["README.md"] = generateReadme(plugins, cfg)
 
@@ -179,7 +205,7 @@ func generateReadme(plugins []PluginInfo, cfg GenerateConfig) []byte {
 
 	b.WriteString("# " + cfg.OrgName + " Plugins\n\n")
 	b.WriteString("This repository contains plugin packages managed by [Gram](https://getgram.ai). ")
-	b.WriteString("Each plugin bundles MCP servers for distribution via Claude Code and Cursor marketplaces.\n\n")
+	b.WriteString("Each plugin bundles MCP servers for distribution via Claude Code, Cursor, and Codex marketplaces.\n\n")
 	b.WriteString("## How this repo works\n\n")
 	b.WriteString("- **Read-only access.** Collaborators are granted pull permission only. You can clone and inspect the repository, but you cannot push to it.\n")
 	b.WriteString("- **Auto-managed by Gram.** Each publish from the Gram dashboard overwrites this repository's contents. Any manual edits, new branches, or local commits will be discarded on the next publish — make changes in Gram instead.\n\n")
@@ -240,6 +266,10 @@ func GenerateSinglePluginPackage(plugin PluginInfo, cfg GenerateConfig, platform
 		if err := generateCursorPluginFlat(files, plugin, cfg); err != nil {
 			return nil, fmt.Errorf("generate cursor plugin: %w", err)
 		}
+	case "codex":
+		if err := generateCodexPluginFlat(files, plugin, cfg); err != nil {
+			return nil, fmt.Errorf("generate codex plugin: %w", err)
+		}
 	default:
 		return nil, fmt.Errorf("unsupported platform: %s", platform)
 	}
@@ -255,12 +285,95 @@ func generateCursorPluginFlat(files map[string][]byte, p PluginInfo, cfg Generat
 	return generateCursorPluginInDir(files, "", p.Slug, p, cfg)
 }
 
+func generateCodexPluginFlat(files map[string][]byte, p PluginInfo, cfg GenerateConfig) error {
+	return generateCodexPluginInDir(files, "", p.Slug, p, cfg)
+}
+
 func generateClaudePlugin(files map[string][]byte, p PluginInfo, cfg GenerateConfig) error {
 	return generateClaudePluginInDir(files, p.Slug, p, cfg)
 }
 
 func generateCursorPlugin(files map[string][]byte, p PluginInfo, cfg GenerateConfig) error {
 	return generateCursorPluginInDir(files, p.Slug+"-cursor", p.Slug+"-cursor", p, cfg)
+}
+
+func generateCodexPlugin(files map[string][]byte, p PluginInfo, cfg GenerateConfig) error {
+	name := p.Slug + "-codex"
+	return generateCodexPluginInDir(files, name, name, p, cfg)
+}
+
+// codexAuthPolicy picks ON_INSTALL when the user will be prompted for a
+// secret (public server env vars or a Gram API key the published config
+// can't bake in) and ON_USE when nothing needs to be collected. A baked-in
+// APIKey plus all-public-no-env servers means the plugin is install-silent.
+func codexAuthPolicy(p PluginInfo, cfg GenerateConfig) string {
+	for _, s := range p.Servers {
+		if s.IsPublic {
+			if len(s.EnvConfigs) > 0 {
+				return "ON_INSTALL"
+			}
+			continue
+		}
+		if cfg.APIKey == "" {
+			return "ON_INSTALL"
+		}
+	}
+	return "ON_USE"
+}
+
+func generateCodexPluginInDir(files map[string][]byte, subdir, name string, p PluginInfo, cfg GenerateConfig) error {
+	pluginJSON, err := marshalJSON(codexPluginMeta{
+		Name:        name,
+		Version:     "0.1.0",
+		Description: p.Description,
+		MCPServers:  "./.mcp.json",
+		Interface: &codexInterface{
+			DisplayName:      p.Name,
+			ShortDescription: p.Description,
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("marshal plugin.json: %w", err)
+	}
+	files[path.Join(subdir, ".codex-plugin/plugin.json")] = pluginJSON
+
+	mcpServers := make(map[string]codexMCPServer)
+	for _, s := range p.Servers {
+		entry := codexMCPServer{
+			URL:               s.MCPURL,
+			BearerTokenEnvVar: "",
+			HTTPHeaders:       nil,
+			EnvHTTPHeaders:    nil,
+		}
+
+		if s.IsPublic {
+			// User provides each variable in their shell env; Codex
+			// substitutes the value into the named header at runtime.
+			if len(s.EnvConfigs) > 0 {
+				entry.EnvHTTPHeaders = make(map[string]string, len(s.EnvConfigs))
+				for _, ec := range s.EnvConfigs {
+					entry.EnvHTTPHeaders[ec.DisplayName] = ec.VariableName
+				}
+			}
+		} else if cfg.APIKey != "" {
+			// Private server: bake the Gram-issued key directly into the
+			// published config. Repo is private, so this matches the Cursor/Claude pattern.
+			entry.HTTPHeaders = map[string]string{"Authorization": "Bearer " + cfg.APIKey}
+		} else {
+			// Private server, no key available: ask Codex to read GRAM_API_KEY
+			// from the user's environment at startup.
+			entry.BearerTokenEnvVar = "GRAM_API_KEY"
+		}
+
+		mcpServers[s.DisplayName] = entry
+	}
+	mcpJSON, err := marshalJSON(codexMCPConfig{MCPServers: mcpServers})
+	if err != nil {
+		return fmt.Errorf("marshal .mcp.json: %w", err)
+	}
+	files[path.Join(subdir, ".mcp.json")] = mcpJSON
+
+	return nil
 }
 
 // ClaudeBaseSlug / CursorBaseSlug derive the base plugin's directory name
@@ -629,6 +742,60 @@ type cursorHooksConfig struct {
 
 type cursorHookCommand struct {
 	Command string `json:"command"`
+}
+
+// Codex types — schema verified against openai/codex @
+// f802f0a3911655ac0e2876fceedf8ad833431df3 (2026-04-24):
+//   codex-rs/core-plugins/src/manifest.rs  — plugin manifest (rename_all = "camelCase")
+//   codex-rs/core-plugins/src/loader.rs    — .mcp.json wrapper format
+//   codex-rs/config/src/mcp_types.rs       — server transport (untagged; url selects streamable_http)
+// Note: MCP server entry fields are snake_case; plugin manifest fields are camelCase.
+// Refresh this pin when Codex's plugin support moves out of preview.
+
+type codexPluginMeta struct {
+	Name        string          `json:"name"`
+	Version     string          `json:"version"`
+	Description string          `json:"description,omitempty"`
+	MCPServers  string          `json:"mcpServers"`
+	Interface   *codexInterface `json:"interface,omitempty"`
+}
+
+type codexInterface struct {
+	DisplayName      string `json:"displayName"`
+	ShortDescription string `json:"shortDescription,omitempty"`
+}
+
+type codexMCPConfig struct {
+	MCPServers map[string]codexMCPServer `json:"mcpServers"`
+}
+
+type codexMCPServer struct {
+	URL               string            `json:"url"`
+	BearerTokenEnvVar string            `json:"bearer_token_env_var,omitempty"`
+	HTTPHeaders       map[string]string `json:"http_headers,omitempty"`
+	EnvHTTPHeaders    map[string]string `json:"env_http_headers,omitempty"`
+}
+
+type codexMarketplaceManifest struct {
+	Name      string                  `json:"name"`
+	Interface codexInterface          `json:"interface"`
+	Plugins   []codexMarketplaceEntry `json:"plugins"`
+}
+
+type codexMarketplaceEntry struct {
+	Name   string                 `json:"name"`
+	Source codexMarketplaceSource `json:"source"`
+	Policy codexMarketplacePolicy `json:"policy"`
+}
+
+type codexMarketplaceSource struct {
+	Source string `json:"source"`
+	Path   string `json:"path"`
+}
+
+type codexMarketplacePolicy struct {
+	Installation   string `json:"installation"`
+	Authentication string `json:"authentication"`
 }
 
 func marshalJSON(v any) ([]byte, error) {

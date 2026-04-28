@@ -89,6 +89,7 @@ func NewActivities(
 	telemetryLogger *telemetry.Logger,
 	triggerApp *bgtriggers.App,
 	cacheAdapter cache.Cache,
+	piiScanner risk_analysis.PIIScanner,
 ) *Activities {
 	usageTrackingStrategy := chat.NewDefaultUsageTrackingStrategy(db, logger, openrouterProvisioner, billingTracker, nil)
 
@@ -120,7 +121,7 @@ func NewActivities(
 		analyzeSegment:                resolution_activities.NewAnalyzeSegment(logger, db, chatClient, telemetryLogger),
 		getUserFeedbackForChat:        resolution_activities.NewGetUserFeedbackForChat(db),
 		fetchUnanalyzedMessages:       risk_analysis.NewFetchUnanalyzed(logger, tracerProvider, db),
-		analyzeBatch:                  risk_analysis.NewAnalyzeBatch(logger, tracerProvider, meterProvider, db),
+		analyzeBatch:                  risk_analysis.NewAnalyzeBatch(logger, tracerProvider, meterProvider, db, piiScanner),
 	}
 }
 

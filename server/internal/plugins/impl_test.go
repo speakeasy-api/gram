@@ -1021,3 +1021,199 @@ func TestPluginsService_PublishPlugins_BaseListedFirstInMarketplace(t *testing.T
 		require.Equal(t, p.expectFirst, market.Plugins[0].Name, "base plugin must be first in %s", p.path)
 	}
 }
+func TestPluginsService_PublishPlugins_CodexPackageHappyPath(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockGitHubPublisher{}
+	ctx, ti := newTestPluginsServiceWithGitHub(t, mock)
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Codex Test"})
+	require.NoError(t, err)
+
+	toolset := createTestToolset(t, ctx, ti.conn, "codex-toolset")
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
+		PluginID:    plugin.ID,
+		ToolsetID:   toolset.ID.String(),
+		DisplayName: "Codex Server",
+		Policy:      "required",
+		SortOrder:   0,
+	})
+	require.NoError(t, err)
+
+	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
+	require.NoError(t, err)
+
+	// Per-plugin manifest exists at the expected path.
+	manifest := mock.lastPushedFiles["codex-test-codex/.codex-plugin/plugin.json"]
+	require.NotNil(t, manifest, "codex plugin.json missing")
+
+	var pluginManifest struct {
+		Name       string `json:"name"`
+		MCPServers string `json:"mcpServers"`
+		Interface  struct {
+			DisplayName string `json:"displayName"`
+		} `json:"interface"`
+	}
+	require.NoError(t, json.Unmarshal(manifest, &pluginManifest))
+	require.Equal(t, "codex-test-codex", pluginManifest.Name)
+	require.Equal(t, "./.mcp.json", pluginManifest.MCPServers)
+	require.Equal(t, "Codex Test", pluginManifest.Interface.DisplayName)
+
+	// Per-plugin .mcp.json has the server with a baked-in bearer token.
+	mcpFile := mock.lastPushedFiles["codex-test-codex/.mcp.json"]
+	require.NotNil(t, mcpFile, "codex .mcp.json missing")
+
+	var mcpConfig struct {
+		MCPServers map[string]struct {
+			URL         string            `json:"url"`
+			HTTPHeaders map[string]string `json:"http_headers"`
+		} `json:"mcpServers"`
+	}
+	require.NoError(t, json.Unmarshal(mcpFile, &mcpConfig))
+
+	server, ok := mcpConfig.MCPServers["Codex Server"]
+	require.True(t, ok)
+	require.Contains(t, server.URL, "/mcp/")
+	require.Contains(t, server.HTTPHeaders["Authorization"], "Bearer gram_local_")
+
+	// Repo-root marketplace lists the codex plugin.
+	mp := mock.lastPushedFiles[".agents/plugins/marketplace.json"]
+	require.NotNil(t, mp, "codex marketplace.json missing")
+
+	var market struct {
+		Plugins []struct {
+			Name   string `json:"name"`
+			Source struct {
+				Source string `json:"source"`
+				Path   string `json:"path"`
+			} `json:"source"`
+			Policy struct {
+				Installation   string `json:"installation"`
+				Authentication string `json:"authentication"`
+			} `json:"policy"`
+		} `json:"plugins"`
+	}
+	require.NoError(t, json.Unmarshal(mp, &market))
+	require.Len(t, market.Plugins, 1)
+	require.Equal(t, "codex-test-codex", market.Plugins[0].Name)
+	require.Equal(t, "local", market.Plugins[0].Source.Source)
+	require.Equal(t, "./codex-test-codex", market.Plugins[0].Source.Path)
+	require.Equal(t, "AVAILABLE", market.Plugins[0].Policy.Installation)
+	// Private server + baked API key: nothing to prompt for, so install-silent.
+	require.Equal(t, "ON_USE", market.Plugins[0].Policy.Authentication)
+}
+
+// Public servers map user-provided env configs to Codex's env_http_headers,
+// so the user's shell environment populates the header at runtime without
+// needing a separate prompt mechanism.
+func TestPluginsService_PublishPlugins_CodexPublicToolsetEnvHeaders(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockGitHubPublisher{}
+	ctx, ti := newTestPluginsServiceWithGitHub(t, mock)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Codex Public"})
+	require.NoError(t, err)
+
+	toolset := createTestToolset(t, ctx, ti.conn, "codex-public-toolset")
+	_, err = ti.conn.Exec(ctx, "UPDATE toolsets SET mcp_is_public = TRUE WHERE id = $1", toolset.ID)
+	require.NoError(t, err)
+
+	mcpRepo := mcpmetarepo.New(ti.conn)
+	metadata, err := mcpRepo.UpsertMetadata(ctx, mcpmetarepo.UpsertMetadataParams{
+		ToolsetID:                 toolset.ID,
+		ProjectID:                 *authCtx.ProjectID,
+		ExternalDocumentationUrl:  pgtype.Text{Valid: false},
+		ExternalDocumentationText: pgtype.Text{Valid: false},
+		LogoID:                    uuid.NullUUID{Valid: false},
+		Instructions:              pgtype.Text{Valid: false},
+		DefaultEnvironmentID:      uuid.NullUUID{Valid: false},
+		InstallationOverrideUrl:   pgtype.Text{Valid: false},
+	})
+	require.NoError(t, err)
+	_, err = mcpRepo.UpsertEnvironmentConfig(ctx, mcpmetarepo.UpsertEnvironmentConfigParams{
+		ProjectID:         *authCtx.ProjectID,
+		McpMetadataID:     metadata.ID,
+		VariableName:      "ANALYTICS_API_KEY",
+		HeaderDisplayName: pgtype.Text{String: "Authorization", Valid: true},
+		ProvidedBy:        "user",
+	})
+	require.NoError(t, err)
+
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
+		PluginID:    plugin.ID,
+		ToolsetID:   toolset.ID.String(),
+		DisplayName: "Public Codex Server",
+		Policy:      "required",
+		SortOrder:   0,
+	})
+	require.NoError(t, err)
+
+	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
+	require.NoError(t, err)
+
+	mcpFile := mock.lastPushedFiles["codex-public-codex/.mcp.json"]
+	require.NotNil(t, mcpFile)
+
+	var mcpConfig struct {
+		MCPServers map[string]struct {
+			URL            string            `json:"url"`
+			EnvHTTPHeaders map[string]string `json:"env_http_headers"`
+			HTTPHeaders    map[string]string `json:"http_headers"`
+		} `json:"mcpServers"`
+	}
+	require.NoError(t, json.Unmarshal(mcpFile, &mcpConfig))
+
+	server, ok := mcpConfig.MCPServers["Public Codex Server"]
+	require.True(t, ok)
+	// Codex resolves env_http_headers["Authorization"] = "ANALYTICS_API_KEY"
+	// by reading the ANALYTICS_API_KEY env var at runtime and using its
+	// value as the Authorization header. No baked-in bearer token.
+	require.Equal(t, "ANALYTICS_API_KEY", server.EnvHTTPHeaders["Authorization"])
+	require.Empty(t, server.HTTPHeaders, "public servers must not bake in static headers")
+}
+
+// Disabled MCP toolsets must be filtered from Codex output too — same
+// guarantee as Claude/Cursor since the underlying query is shared.
+func TestPluginsService_PublishPlugins_CodexSkipsDisabledMCPToolsets(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockGitHubPublisher{}
+	ctx, ti := newTestPluginsServiceWithGitHub(t, mock)
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Codex Mixed"})
+	require.NoError(t, err)
+
+	enabled := createTestToolset(t, ctx, ti.conn, "codex-enabled")
+	disabled := createTestToolset(t, ctx, ti.conn, "codex-disabled")
+
+	for _, ts := range []toolsetsrepo.Toolset{enabled, disabled} {
+		_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
+			PluginID:    plugin.ID,
+			ToolsetID:   ts.ID.String(),
+			DisplayName: "Server " + ts.Name,
+			Policy:      "required",
+			SortOrder:   0,
+		})
+		require.NoError(t, err)
+	}
+
+	_, err = ti.conn.Exec(ctx, "UPDATE toolsets SET mcp_enabled = FALSE WHERE id = $1", disabled.ID)
+	require.NoError(t, err)
+
+	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
+	require.NoError(t, err)
+
+	mcpFile := mock.lastPushedFiles["codex-mixed-codex/.mcp.json"]
+	require.NotNil(t, mcpFile)
+
+	var mcpConfig struct {
+		MCPServers map[string]json.RawMessage `json:"mcpServers"`
+	}
+	require.NoError(t, json.Unmarshal(mcpFile, &mcpConfig))
+
+	require.Contains(t, mcpConfig.MCPServers, "Server codex-enabled")
+	require.NotContains(t, mcpConfig.MCPServers, "Server codex-disabled")
+}

@@ -5,8 +5,10 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"log/slog"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -17,12 +19,15 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
+	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
+	tsr "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	srv "github.com/speakeasy-api/gram/server/gen/http/hooks/server"
@@ -36,6 +41,7 @@ type Service struct {
 	auth               *auth.Auth
 	authz              *authz.Engine
 	cache              cache.Cache
+	toolsetCache       cache.TypedCacheObject[mv.ToolsetBaseContents]
 	temporalEnv        *tenv.Environment
 	repo               *repo.Queries
 	productFeatures    ProductFeaturesClient
@@ -94,6 +100,7 @@ func NewService(
 		auth:               auth.New(logger, db, sessionsMgr, authz),
 		authz:              authz,
 		cache:              cacheAdapter,
+		toolsetCache:       cache.NewTypedObjectCache[mv.ToolsetBaseContents](logger.With(attr.SlogCacheNamespace("toolset")), cacheAdapter, cache.SuffixNone),
 		temporalEnv:        temporalEnv,
 		repo:               repo.New(db),
 		productFeatures:    pfClient,
@@ -136,4 +143,87 @@ func generateSpanID() string {
 	b := make([]byte, 8)
 	_, _ = rand.Read(b)
 	return hex.EncodeToString(b)
+}
+
+// blockShadowMCPEnabled reports whether the FeatureBlockShadowMCP gate is on
+// for the given org. A nil productFeatures client (test setups) or any lookup
+// failure returns false so hooks default to permissive behaviour.
+func (s *Service) blockShadowMCPEnabled(ctx context.Context, orgID string) bool {
+	if s.productFeatures == nil || orgID == "" {
+		return false
+	}
+	enabled, err := s.productFeatures.IsFeatureEnabled(ctx, orgID, productfeatures.FeatureBlockShadowMCP)
+	if err != nil {
+		s.logger.WarnContext(ctx, "failed to check block_shadow_mcp feature; defaulting to off",
+			attr.SlogError(err),
+		)
+		return false
+	}
+	return enabled
+}
+
+// validateGramToolsetCall enforces that a Gram-hosted tool call carries the
+// required "x-gram-toolset-id" property in its input, that the referenced
+// toolset exists in the calling organization, and that the toolset contains a
+// tool whose post-variation name matches toolName. Returns (reason, true) when
+// the call must be denied. The reason is wrapped with a user-facing prefix so
+// the underlying detail is preserved without leaking implementation jargon.
+func (s *Service) validateGramToolsetCall(
+	ctx context.Context,
+	toolInput any,
+	toolName string,
+	orgID string,
+) (string, bool) {
+	deny := func(detail string) (string, bool) {
+		return fmt.Sprintf("MCP server not managed through Speakeasy (%s)", detail), true
+	}
+
+	inputMap, ok := toolInput.(map[string]any)
+	if !ok {
+		return deny(fmt.Sprintf("missing required %q property in tool input", xGramToolsetIDField))
+	}
+	rawID, ok := inputMap[xGramToolsetIDField].(string)
+	if !ok || rawID == "" {
+		return deny(fmt.Sprintf("missing required %q property in tool input", xGramToolsetIDField))
+	}
+	toolsetID, err := uuid.Parse(rawID)
+	if err != nil {
+		return deny(fmt.Sprintf("invalid %q value: not a UUID", xGramToolsetIDField))
+	}
+
+	toolsetRow, err := tsr.New(s.db).GetToolsetByIDAndOrganization(ctx, tsr.GetToolsetByIDAndOrganizationParams{
+		ID:             toolsetID,
+		OrganizationID: orgID,
+	})
+	if err != nil {
+		return deny(fmt.Sprintf("toolset %s not found in this organization", toolsetID))
+	}
+
+	if toolName == "" {
+		return deny("tool call missing tool name")
+	}
+
+	described, err := mv.DescribeToolset(
+		ctx,
+		s.logger,
+		s.db,
+		mv.ProjectID(toolsetRow.ProjectID),
+		mv.ToolsetSlug(toolsetRow.Slug),
+		&s.toolsetCache,
+	)
+	if err != nil {
+		return deny(fmt.Sprintf("failed to load toolset %s", toolsetID))
+	}
+
+	for _, tool := range described.Tools {
+		base, err := conv.ToBaseTool(tool)
+		if err != nil {
+			continue
+		}
+		if base.Name == toolName {
+			return "", false
+		}
+	}
+
+	return deny(fmt.Sprintf("tool %q is not part of toolset %s", toolName, toolsetID))
 }

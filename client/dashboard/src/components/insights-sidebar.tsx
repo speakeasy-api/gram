@@ -187,7 +187,9 @@ Custom attributes: SDK users can attach arbitrary key-value attributes to their 
 When a user asks about logs for a specific user, tenant, customer, or entity:
 1. Always call listAttributeKeys first for the relevant time window to discover which @-prefixed attributes exist.
 2. Identify the most relevant attribute and filter on it (e.g. { path: "@user", operator: "eq", values: ["someone@example.com"] }).
-3. If no relevant @-prefixed attributes exist, tell the user and fall back to text search instead.`;
+3. If no relevant @-prefixed attributes exist, tell the user and fall back to text search instead.
+
+MCP server vs. client breakdowns: \`gram.hook.source\` and \`gram.tool_call.source\` are complementary dimensions, not aliases. \`gram.hook.source\` identifies the agent/client that invoked Gram (e.g. "claude-code", "cursor") — use this for adoption / "who's using us" questions. \`gram.tool_call.source\` identifies the downstream MCP server that handled the call (e.g. "datadog-mcp", "linear") — use this for "top servers" / per-MCP usage questions. When asked about MCP server-level breakdowns, query BOTH dimensions: a server can appear in one and not the other depending on whether you're slicing by caller or callee.`;
 
   const systemPrompt = contextInfo
     ? `${baseInstructions}
