@@ -89,6 +89,7 @@ CREATE TABLE IF NOT EXISTS workos_organization_syncs (
   last_event_id TEXT NOT NULL,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
   CONSTRAINT workos_organization_syncs_pkey PRIMARY KEY (id)
 );
@@ -1166,6 +1167,7 @@ ON users (email);
 CREATE UNIQUE INDEX IF NOT EXISTS users_workos_id_key
 ON users (workos_id);
 
+-- TODO: do we need this table? What will it give us?
 CREATE TABLE IF NOT EXISTS global_roles (
   id UUID NOT NULL DEFAULT generate_uuidv7(),
 
@@ -1189,7 +1191,8 @@ CREATE TABLE IF NOT EXISTS organization_roles (
   id UUID NOT NULL DEFAULT generate_uuidv7(),
   organization_id TEXT NOT NULL,
 
-  workos_slug TEXT NOT NULL,  
+  workos_id TEXT NOT NULL,
+  workos_slug TEXT NOT NULL,
   workos_name TEXT NOT NULL,
   workos_description TEXT,
   workos_created_at timestamptz NOT NULL,
@@ -1208,7 +1211,11 @@ CREATE TABLE IF NOT EXISTS organization_roles (
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS organization_roles_organization_id_workos_slug_key
-ON organization_roles (organization_id, workos_slug);
+ON organization_roles (organization_id, workos_slug)
+WHERE deleted IS FALSE AND workos_deleted IS FALSE;
+
+CREATE UNIQUE INDEX IF NOT EXISTS organization_roles_organization_id_workos_id_key
+ON organization_roles (organization_id, workos_id);
 
 CREATE TABLE IF NOT EXISTS deployment_tags (
   -- Column order optimized for alignment (PG110)
@@ -1275,10 +1282,13 @@ CREATE TABLE IF NOT EXISTS organization_user_roles (
 
   CONSTRAINT organization_user_roles_pkey PRIMARY KEY (id),
   CONSTRAINT organization_user_roles_organization_id_user_id_role_id_key UNIQUE (organization_id, user_id, role_id),
-  CONSTRAINT organization_user_roles_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE SET NULL,
-  CONSTRAINT organization_user_roles_user_id_fkey FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL,
-  CONSTRAINT organization_user_roles_role_id_fkey FOREIGN KEY (role_id) REFERENCES organization_roles (id) ON DELETE SET NULL
+  CONSTRAINT organization_user_roles_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT organization_user_roles_user_id_fkey FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
+  CONSTRAINT organization_user_roles_role_id_fkey FOREIGN KEY (role_id) REFERENCES organization_roles (id) ON DELETE CASCADE
 );
+
+CREATE INDEX IF NOT EXISTS organization_user_roles_organization_id_user_id_idx
+ON organization_user_roles (organization_id, user_id);
 
 
 CREATE TABLE IF NOT EXISTS oauth_proxy_client_info (

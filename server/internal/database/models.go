@@ -654,6 +654,7 @@ type OrganizationMetadatum struct {
 type OrganizationRole struct {
 	ID                uuid.UUID
 	OrganizationID    string
+	WorkosID          string
 	WorkosSlug        string
 	WorkosName        string
 	WorkosDescription pgtype.Text
@@ -683,7 +684,7 @@ type OrganizationUserRole struct {
 	ID             uuid.UUID
 	OrganizationID string
 	UserID         string
-	WorkosRoleSlug string
+	RoleID         uuid.UUID
 	CreatedAt      pgtype.Timestamptz
 	UpdatedAt      pgtype.Timestamptz
 }
@@ -1054,6 +1055,7 @@ type WorkosOrganizationSync struct {
 	WorkosOrganizationID string
 	LastEventID          string
 	CreatedAt            pgtype.Timestamptz
+	UpdatedAt            pgtype.Timestamptz
 }
 
 type WorkosUserSync struct {

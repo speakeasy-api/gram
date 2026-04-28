@@ -20,6 +20,7 @@ CREATE TABLE "workos_organization_syncs" (
   "workos_organization_id" text NOT NULL,
   "last_event_id" text NOT NULL,
   "created_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
+  "updated_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
   PRIMARY KEY ("id")
 );
 -- Create index "workos_organization_syncs_workos_organization_id_key" to table: "workos_organization_syncs"
@@ -37,6 +38,7 @@ CREATE INDEX "workos_user_syncs_last_event_id_desc_idx" ON "workos_user_syncs" (
 CREATE TABLE "organization_roles" (
   "id" uuid NOT NULL DEFAULT generate_uuidv7(),
   "organization_id" text NOT NULL,
+  "workos_id" text NOT NULL,
   "workos_slug" text NOT NULL,
   "workos_name" text NOT NULL,
   "workos_description" text NULL,
@@ -52,8 +54,10 @@ CREATE TABLE "organization_roles" (
   PRIMARY KEY ("id"),
   CONSTRAINT "organization_roles_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "organization_metadata" ("id") ON UPDATE NO ACTION ON DELETE CASCADE
 );
+-- Create index "organization_roles_organization_id_workos_id_key" to table: "organization_roles"
+CREATE UNIQUE INDEX "organization_roles_organization_id_workos_id_key" ON "organization_roles" ("organization_id", "workos_id");
 -- Create index "organization_roles_organization_id_workos_slug_key" to table: "organization_roles"
-CREATE UNIQUE INDEX "organization_roles_organization_id_workos_slug_key" ON "organization_roles" ("organization_id", "workos_slug");
+CREATE UNIQUE INDEX "organization_roles_organization_id_workos_slug_key" ON "organization_roles" ("organization_id", "workos_slug") WHERE ((deleted IS FALSE) AND (workos_deleted IS FALSE));
 -- Create "organization_user_roles" table
 CREATE TABLE "organization_user_roles" (
   "id" uuid NOT NULL DEFAULT generate_uuidv7(),
@@ -64,7 +68,9 @@ CREATE TABLE "organization_user_roles" (
   "updated_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
   PRIMARY KEY ("id"),
   CONSTRAINT "organization_user_roles_organization_id_user_id_role_id_key" UNIQUE ("organization_id", "user_id", "role_id"),
-  CONSTRAINT "organization_user_roles_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "organization_metadata" ("id") ON UPDATE NO ACTION ON DELETE SET NULL,
-  CONSTRAINT "organization_user_roles_role_id_fkey" FOREIGN KEY ("role_id") REFERENCES "organization_roles" ("id") ON UPDATE NO ACTION ON DELETE SET NULL,
-  CONSTRAINT "organization_user_roles_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users" ("id") ON UPDATE NO ACTION ON DELETE SET NULL
+  CONSTRAINT "organization_user_roles_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "organization_metadata" ("id") ON UPDATE NO ACTION ON DELETE CASCADE,
+  CONSTRAINT "organization_user_roles_role_id_fkey" FOREIGN KEY ("role_id") REFERENCES "organization_roles" ("id") ON UPDATE NO ACTION ON DELETE CASCADE,
+  CONSTRAINT "organization_user_roles_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users" ("id") ON UPDATE NO ACTION ON DELETE CASCADE
 );
+-- Create index "organization_user_roles_organization_id_user_id_idx" to table: "organization_user_roles"
+CREATE INDEX "organization_user_roles_organization_id_user_id_idx" ON "organization_user_roles" ("organization_id", "user_id");

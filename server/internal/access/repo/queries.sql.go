@@ -174,7 +174,7 @@ SET workos_deleted_at = $1,
     workos_last_event_id = $2,
     updated_at = clock_timestamp()
 WHERE organization_id = $3
-  AND workos_slug = $4
+  AND workos_id = $4
   AND (
     workos_deleted_at IS NULL
     OR workos_deleted_at < $1
@@ -185,7 +185,7 @@ type MarkRoleDeletedParams struct {
 	WorkosDeletedAt   pgtype.Timestamptz
 	WorkosLastEventID pgtype.Text
 	OrganizationID    string
-	WorkosSlug        string
+	WorkosID          string
 }
 
 func (q *Queries) MarkRoleDeleted(ctx context.Context, arg MarkRoleDeletedParams) (int64, error) {
@@ -193,7 +193,7 @@ func (q *Queries) MarkRoleDeleted(ctx context.Context, arg MarkRoleDeletedParams
 		arg.WorkosDeletedAt,
 		arg.WorkosLastEventID,
 		arg.OrganizationID,
-		arg.WorkosSlug,
+		arg.WorkosID,
 	)
 	if err != nil {
 		return 0, err
@@ -263,6 +263,7 @@ func (q *Queries) UpsertPrincipalGrant(ctx context.Context, arg UpsertPrincipalG
 const upsertRole = `-- name: UpsertRole :exec
 INSERT INTO organization_roles (
     organization_id,
+    workos_id,
     workos_slug,
     workos_name,
     workos_description,
@@ -277,10 +278,12 @@ VALUES (
     $4,
     $5,
     $6,
-    $7
+    $7,
+    $8
 )
-ON CONFLICT (organization_id, workos_slug)
+ON CONFLICT (organization_id, workos_id)
 DO UPDATE SET
+  workos_slug = EXCLUDED.workos_slug,
   workos_name = EXCLUDED.workos_name,
   workos_description = EXCLUDED.workos_description,
   workos_created_at = EXCLUDED.workos_created_at,
@@ -293,6 +296,7 @@ DO UPDATE SET
 
 type UpsertRoleParams struct {
 	OrganizationID    string
+	WorkosID          string
 	WorkosSlug        string
 	WorkosName        string
 	WorkosDescription pgtype.Text
@@ -304,6 +308,7 @@ type UpsertRoleParams struct {
 func (q *Queries) UpsertRole(ctx context.Context, arg UpsertRoleParams) error {
 	_, err := q.db.Exec(ctx, upsertRole,
 		arg.OrganizationID,
+		arg.WorkosID,
 		arg.WorkosSlug,
 		arg.WorkosName,
 		arg.WorkosDescription,

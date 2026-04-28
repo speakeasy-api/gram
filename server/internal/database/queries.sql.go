@@ -9,15 +9,6 @@ import (
 	"context"
 )
 
-const obtainExclusiveTxAdvisoryLock = `-- name: ObtainExclusiveTxAdvisoryLock :exec
-SELECT pg_advisory_xact_lock($1::bigint)
-`
-
-func (q *Queries) ObtainExclusiveTxAdvisoryLock(ctx context.Context, key int64) error {
-	_, err := q.db.Exec(ctx, obtainExclusiveTxAdvisoryLock, key)
-	return err
-}
-
 const stubQuery = `-- name: StubQuery :one
 select 1
 `
@@ -27,15 +18,4 @@ func (q *Queries) StubQuery(ctx context.Context) (int32, error) {
 	var column_1 int32
 	err := row.Scan(&column_1)
 	return column_1, err
-}
-
-const tryObtainExclusiveTxAdvisoryLock = `-- name: TryObtainExclusiveTxAdvisoryLock :one
-SELECT pg_try_advisory_xact_lock($1::bigint)
-`
-
-func (q *Queries) TryObtainExclusiveTxAdvisoryLock(ctx context.Context, key int64) (bool, error) {
-	row := q.db.QueryRow(ctx, tryObtainExclusiveTxAdvisoryLock, key)
-	var pg_try_advisory_xact_lock bool
-	err := row.Scan(&pg_try_advisory_xact_lock)
-	return pg_try_advisory_xact_lock, err
 }
