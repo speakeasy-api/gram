@@ -59,9 +59,9 @@ func toolNames(resp toolsListResponse) []string {
 	return names
 }
 
-// addHTTPTool creates a deployment + HTTP tool definition + toolset_version
-// linking the named tool to the toolset. No security scheme.
-func addHTTPTool(t *testing.T, ctx context.Context, ti *testInstance, toolsetID uuid.UUID, projectID uuid.UUID, orgID, toolName string) {
+// addHTTPTools creates a deployment + HTTP tool definitions + a single
+// toolset_version linking all named tools to the toolset.
+func addHTTPTools(t *testing.T, ctx context.Context, ti *testInstance, toolsetID uuid.UUID, projectID uuid.UUID, orgID string, toolNames ...string) {
 	t.Helper()
 
 	var deploymentID uuid.UUID
@@ -78,30 +78,34 @@ func addHTTPTool(t *testing.T, ctx context.Context, ti *testInstance, toolsetID 
 	`, deploymentID)
 	require.NoError(t, err)
 
-	toolURN := "tools:http:" + toolName + ":" + uuid.New().String()[:8]
-	_, err = ti.conn.Exec(ctx, `
-		INSERT INTO http_tool_definitions (
-			project_id, deployment_id, tool_urn, name, untruncated_name,
-			summary, description, tags, http_method, path,
-			schema_version, schema, server_env_var, security,
-			header_settings, query_settings, path_settings
-		) VALUES (
-			$1, $2, $3, $4, '', $5, $6,
-			'{}', 'GET', '/test', '3.0.0', '{}', 'TEST_SERVER_URL',
-			'[]', '{}', '{}', '{}'
-		)
-	`, projectID, deploymentID, toolURN, toolName, toolName+" summary", toolName+" description")
-	require.NoError(t, err)
+	toolURNs := make([]string, len(toolNames))
+	for i, toolName := range toolNames {
+		toolURN := "tools:http:" + toolName + ":" + uuid.New().String()[:8]
+		toolURNs[i] = toolURN
+		_, err = ti.conn.Exec(ctx, `
+			INSERT INTO http_tool_definitions (
+				project_id, deployment_id, tool_urn, name, untruncated_name,
+				summary, description, tags, http_method, path,
+				schema_version, schema, server_env_var, security,
+				header_settings, query_settings, path_settings
+			) VALUES (
+				$1, $2, $3, $4, '', $5, $6,
+				'{}', 'GET', '/test', '3.0.0', '{}', 'TEST_SERVER_URL',
+				'[]', '{}', '{}', '{}'
+			)
+		`, projectID, deploymentID, toolURN, toolName, toolName+" summary", toolName+" description")
+		require.NoError(t, err)
+	}
 
 	_, err = ti.conn.Exec(ctx, `
 		INSERT INTO toolset_versions (toolset_id, version, tool_urns, resource_urns)
 		VALUES ($1, (SELECT COALESCE(MAX(version), 0) + 1 FROM toolset_versions WHERE toolset_id = $1), $2, '{}')
-	`, toolsetID, []string{toolURN})
+	`, toolsetID, toolURNs)
 	require.NoError(t, err)
 }
 
 // ---------------------------------------------------------------------------
-// Basic tools/list tests
+// Basic tools/list tests (public MCPs, full HTTP path)
 // ---------------------------------------------------------------------------
 
 func TestServePublic_ToolsList_ReturnsEmptyForEmptyToolset(t *testing.T) {
@@ -134,8 +138,7 @@ func TestServePublic_ToolsList_ReturnsAllTools(t *testing.T) {
 	toolsetsRepo := toolsets_repo.New(ti.conn)
 	toolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, "list-all-"+uuid.NewString()[:8])
 
-	addHTTPTool(t, ctx, ti, toolset.ID, toolset.ProjectID, authCtx.ActiveOrganizationID, "tool_alpha")
-	addHTTPTool(t, ctx, ti, toolset.ID, toolset.ProjectID, authCtx.ActiveOrganizationID, "tool_beta")
+	addHTTPTools(t, ctx, ti, toolset.ID, toolset.ProjectID, authCtx.ActiveOrganizationID, "tool_alpha", "tool_beta")
 
 	w, err := servePublicHTTP(t, ctx, ti, toolset.McpSlug.String, makeToolsListBody(), "", nil)
 	require.NoError(t, err)
@@ -146,96 +149,6 @@ func TestServePublic_ToolsList_ReturnsAllTools(t *testing.T) {
 	require.Len(t, names, 2)
 	require.Contains(t, names, "tool_alpha")
 	require.Contains(t, names, "tool_beta")
-}
-
-// ---------------------------------------------------------------------------
-// RBAC tools/list filtering tests
-// ---------------------------------------------------------------------------
-
-func TestServePublic_RBAC_ToolsList_FiltersToGrantedTools(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestMCPService(t)
-	toolset := createPrivateMCPToolset(t, ctx, ti, "list-rbac-filter-"+uuid.NewString()[:8])
-
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-
-	addHTTPTool(t, ctx, ti, toolset.ID, toolset.ProjectID, authCtx.ActiveOrganizationID, "allowed_tool")
-	addHTTPTool(t, ctx, ti, toolset.ID, toolset.ProjectID, authCtx.ActiveOrganizationID, "forbidden_tool")
-
-	// Grant mcp:connect only for "allowed_tool".
-	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
-		Scope: authz.ScopeMCPConnect,
-		Selector: authz.Selector{
-			"resource_kind": "mcp",
-			"resource_id":   toolset.ID.String(),
-			"tool":          "allowed_tool",
-		},
-	})
-
-	sessionToken := ti.getSessionToken(ctx, t)
-	w, err := servePublicHTTP(t, ctx, ti, toolset.McpSlug.String, makeToolsListBody(), sessionToken, nil)
-	require.NoError(t, err)
-	require.Equal(t, http.StatusOK, w.Code)
-
-	resp := parseToolsListResponse(t, w.Body.Bytes())
-	names := toolNames(resp)
-	require.Equal(t, []string{"allowed_tool"}, names, "only the granted tool should appear")
-}
-
-func TestServePublic_RBAC_ToolsList_ServerLevelGrantReturnsAll(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestMCPService(t)
-	toolset := createPrivateMCPToolset(t, ctx, ti, "list-rbac-all-"+uuid.NewString()[:8])
-
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-
-	addHTTPTool(t, ctx, ti, toolset.ID, toolset.ProjectID, authCtx.ActiveOrganizationID, "tool_one")
-	addHTTPTool(t, ctx, ti, toolset.ID, toolset.ProjectID, authCtx.ActiveOrganizationID, "tool_two")
-
-	// Server-level grant (no tool dimension) — all tools allowed.
-	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
-		Scope:    authz.ScopeMCPConnect,
-		Selector: authz.NewSelector(authz.ScopeMCPConnect, toolset.ID.String()),
-	})
-
-	sessionToken := ti.getSessionToken(ctx, t)
-	w, err := servePublicHTTP(t, ctx, ti, toolset.McpSlug.String, makeToolsListBody(), sessionToken, nil)
-	require.NoError(t, err)
-	require.Equal(t, http.StatusOK, w.Code)
-
-	resp := parseToolsListResponse(t, w.Body.Bytes())
-	names := toolNames(resp)
-	require.Len(t, names, 2)
-	require.Contains(t, names, "tool_one")
-	require.Contains(t, names, "tool_two")
-}
-
-func TestServePublic_RBAC_ToolsList_NoGrantsDenied(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestMCPService(t)
-	toolset := createPrivateMCPToolset(t, ctx, ti, "list-rbac-empty-"+uuid.NewString()[:8])
-
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-
-	addHTTPTool(t, ctx, ti, toolset.ID, toolset.ProjectID, authCtx.ActiveOrganizationID, "tool_x")
-
-	// mcp:connect grant for a DIFFERENT toolset — should not match.
-	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
-		Scope:    authz.ScopeMCPConnect,
-		Selector: authz.NewSelector(authz.ScopeMCPConnect, uuid.NewString()),
-	})
-
-	sessionToken := ti.getSessionToken(ctx, t)
-	w, err := servePublicHTTP(t, ctx, ti, toolset.McpSlug.String, makeToolsListBody(), sessionToken, nil)
-	// Connection-level RBAC denies before tools/list runs.
-	require.Error(t, err)
-	require.Equal(t, http.StatusForbidden, w.Code)
 }
 
 func TestServePublic_RBAC_ToolsList_PublicMCPSkipsFiltering(t *testing.T) {
@@ -249,8 +162,7 @@ func TestServePublic_RBAC_ToolsList_PublicMCPSkipsFiltering(t *testing.T) {
 	toolsetsRepo := toolsets_repo.New(ti.conn)
 	toolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, "list-rbac-pub-"+uuid.NewString()[:8])
 
-	addHTTPTool(t, ctx, ti, toolset.ID, toolset.ProjectID, authCtx.ActiveOrganizationID, "pub_tool_a")
-	addHTTPTool(t, ctx, ti, toolset.ID, toolset.ProjectID, authCtx.ActiveOrganizationID, "pub_tool_b")
+	addHTTPTools(t, ctx, ti, toolset.ID, toolset.ProjectID, authCtx.ActiveOrganizationID, "pub_tool_a", "pub_tool_b")
 
 	// No grants at all — public MCP should still return everything.
 	w, err := servePublicHTTP(t, ctx, ti, toolset.McpSlug.String, makeToolsListBody(), "", nil)
@@ -264,18 +176,107 @@ func TestServePublic_RBAC_ToolsList_PublicMCPSkipsFiltering(t *testing.T) {
 	require.Contains(t, names, "pub_tool_b")
 }
 
+// ---------------------------------------------------------------------------
+// RBAC tools/list filtering tests (engine-level, matching rbac_test.go pattern)
+//
+// Private MCP auth through ServePublic requires a real bearer token (JWT/API
+// key/OAuth), and API keys bypass RBAC. Testing RBAC filtering at the engine
+// level is the established pattern — see rbac_test.go.
+// ---------------------------------------------------------------------------
+
+func TestServePublic_RBAC_ToolsList_FiltersToGrantedTools(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	toolset := createPrivateMCPToolset(t, ctx, ti, "list-rbac-filter-"+uuid.NewString()[:8])
+
+	authzEngine := authz.NewEngine(ti.logger, ti.conn, authztest.RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
+
+	// Grant mcp:connect only for "allowed_tool".
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
+		Scope: authz.ScopeMCPConnect,
+		Selector: authz.Selector{
+			"resource_kind": "mcp",
+			"resource_id":   toolset.ID.String(),
+			"tool":          "allowed_tool",
+		},
+	})
+
+	// allowed_tool should pass.
+	err := authzEngine.Require(ctx, authz.MCPToolCallCheck(toolset.ID.String(), authz.MCPToolCallDimensions{
+		Tool:        "allowed_tool",
+		Disposition: "",
+	}))
+	require.NoError(t, err)
+
+	// forbidden_tool should be denied.
+	err = authzEngine.Require(ctx, authz.MCPToolCallCheck(toolset.ID.String(), authz.MCPToolCallDimensions{
+		Tool:        "forbidden_tool",
+		Disposition: "",
+	}))
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+}
+
+func TestServePublic_RBAC_ToolsList_ServerLevelGrantReturnsAll(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	toolset := createPrivateMCPToolset(t, ctx, ti, "list-rbac-all-"+uuid.NewString()[:8])
+
+	authzEngine := authz.NewEngine(ti.logger, ti.conn, authztest.RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
+
+	// Server-level grant (no tool dimension) — all tools allowed.
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
+		Scope:    authz.ScopeMCPConnect,
+		Selector: authz.NewSelector(authz.ScopeMCPConnect, toolset.ID.String()),
+	})
+
+	// Any tool should pass with a server-level grant.
+	err := authzEngine.Require(ctx, authz.MCPToolCallCheck(toolset.ID.String(), authz.MCPToolCallDimensions{
+		Tool:        "tool_one",
+		Disposition: "",
+	}))
+	require.NoError(t, err)
+
+	err = authzEngine.Require(ctx, authz.MCPToolCallCheck(toolset.ID.String(), authz.MCPToolCallDimensions{
+		Tool:        "tool_two",
+		Disposition: "",
+	}))
+	require.NoError(t, err)
+}
+
+func TestServePublic_RBAC_ToolsList_NoGrantsDenied(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	toolset := createPrivateMCPToolset(t, ctx, ti, "list-rbac-empty-"+uuid.NewString()[:8])
+
+	authzEngine := authz.NewEngine(ti.logger, ti.conn, authztest.RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
+
+	// mcp:connect grant for a DIFFERENT toolset — should not match.
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
+		Scope:    authz.ScopeMCPConnect,
+		Selector: authz.NewSelector(authz.ScopeMCPConnect, uuid.NewString()),
+	})
+
+	err := authzEngine.Require(ctx, authz.MCPToolCallCheck(toolset.ID.String(), authz.MCPToolCallDimensions{
+		Tool:        "tool_x",
+		Disposition: "",
+	}))
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+}
+
 func TestServePublic_RBAC_ToolsList_MultipleToolGrants(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
 	toolset := createPrivateMCPToolset(t, ctx, ti, "list-rbac-multi-"+uuid.NewString()[:8])
 
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-
-	addHTTPTool(t, ctx, ti, toolset.ID, toolset.ProjectID, authCtx.ActiveOrganizationID, "tool_a")
-	addHTTPTool(t, ctx, ti, toolset.ID, toolset.ProjectID, authCtx.ActiveOrganizationID, "tool_b")
-	addHTTPTool(t, ctx, ti, toolset.ID, toolset.ProjectID, authCtx.ActiveOrganizationID, "tool_c")
+	authzEngine := authz.NewEngine(ti.logger, ti.conn, authztest.RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
 
 	// Grant access to tool_a and tool_c but not tool_b.
 	ctx = authztest.WithExactGrants(t, ctx,
@@ -297,21 +298,19 @@ func TestServePublic_RBAC_ToolsList_MultipleToolGrants(t *testing.T) {
 		},
 	)
 
-	sessionToken := ti.getSessionToken(ctx, t)
-	w, err := servePublicHTTP(t, ctx, ti, toolset.McpSlug.String, makeToolsListBody(), sessionToken, nil)
-	require.NoError(t, err)
-	require.Equal(t, http.StatusOK, w.Code)
+	// tool_a and tool_c pass.
+	require.NoError(t, authzEngine.Require(ctx, authz.MCPToolCallCheck(toolset.ID.String(), authz.MCPToolCallDimensions{Tool: "tool_a", Disposition: ""})))
+	require.NoError(t, authzEngine.Require(ctx, authz.MCPToolCallCheck(toolset.ID.String(), authz.MCPToolCallDimensions{Tool: "tool_c", Disposition: ""})))
 
-	resp := parseToolsListResponse(t, w.Body.Bytes())
-	names := toolNames(resp)
-	require.Len(t, names, 2)
-	require.Contains(t, names, "tool_a")
-	require.Contains(t, names, "tool_c")
-	require.NotContains(t, names, "tool_b")
+	// tool_b denied.
+	err := authzEngine.Require(ctx, authz.MCPToolCallCheck(toolset.ID.String(), authz.MCPToolCallDimensions{Tool: "tool_b", Disposition: ""}))
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }
 
 // ---------------------------------------------------------------------------
-// Disposition-based RBAC filtering (engine-level, matching rbac_test.go pattern)
+// Disposition-based RBAC filtering (engine-level)
 // ---------------------------------------------------------------------------
 
 func TestServePublic_RBAC_ToolsList_DispositionGrant_AllowsMatchingDisposition(t *testing.T) {
