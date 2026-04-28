@@ -9,6 +9,7 @@ import (
 	"go.temporal.io/sdk/testsuite"
 
 	risk_analysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
@@ -42,10 +43,14 @@ func TestAnalyzeBatch_GracefulDegradationWhenPresidioDown(t *testing.T) {
 	require.NoError(t, err)
 
 	// PresidioClient pointed at a dead URL simulates Presidio being down
+	guardianPolicy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
+	require.NoError(t, err)
+
 	deadClient := risk_analysis.NewPresidioClient(
 		"http://127.0.0.1:1",
 		testenv.NewTracerProvider(t),
 		testenv.NewMeterProvider(t),
+		guardianPolicy,
 		testenv.NewLogger(t),
 	)
 

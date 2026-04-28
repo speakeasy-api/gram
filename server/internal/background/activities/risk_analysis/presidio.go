@@ -51,9 +51,6 @@ type presidioResult struct {
 const presidioMaxWorkers = 100
 
 // PresidioClient calls the Presidio Analyzer HTTP API.
-// Presidio is a trusted cluster-internal service, so the client uses an
-// unsafe guardian policy with an empty blocklist. The default policy blocks
-// RFC 1918 private ranges (10.0.0.0/8) which Kubernetes ClusterIPs fall into.
 type PresidioClient struct {
 	baseURL         string
 	httpClient      *guardian.HTTPClient
@@ -65,7 +62,7 @@ type PresidioClient struct {
 }
 
 // NewPresidioClient creates a client pointing at the given base URL.
-func NewPresidioClient(baseURL string, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, logger *slog.Logger) *PresidioClient {
+func NewPresidioClient(baseURL string, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, guardianPolicy *guardian.Policy, logger *slog.Logger) *PresidioClient {
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis/presidio")
 
 	requestDuration, _ := meter.Float64Histogram(
@@ -81,9 +78,7 @@ func NewPresidioClient(baseURL string, tracerProvider trace.TracerProvider, mete
 		metric.WithUnit("{request}"),
 	)
 
-	// Empty blocklist allows connections to private IPs (Kubernetes ClusterIPs).
-	unsafePolicy, _ := guardian.NewUnsafePolicy(tracerProvider, []string{})
-	httpClient := unsafePolicy.PooledClient()
+	httpClient := guardianPolicy.PooledClient()
 
 	return &PresidioClient{
 		baseURL:         strings.TrimRight(baseURL, "/"),
@@ -98,8 +93,8 @@ func NewPresidioClient(baseURL string, tracerProvider trace.TracerProvider, mete
 
 // NewPresidioClientWithWorkers is like NewPresidioClient but allows overriding
 // the concurrency limit. Used for benchmarking.
-func NewPresidioClientWithWorkers(baseURL string, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, logger *slog.Logger, maxWorkers int) *PresidioClient {
-	c := NewPresidioClient(baseURL, tracerProvider, meterProvider, logger)
+func NewPresidioClientWithWorkers(baseURL string, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, guardianPolicy *guardian.Policy, logger *slog.Logger, maxWorkers int) *PresidioClient {
+	c := NewPresidioClient(baseURL, tracerProvider, meterProvider, guardianPolicy, logger)
 	c.maxWorkers = maxWorkers
 	return c
 }

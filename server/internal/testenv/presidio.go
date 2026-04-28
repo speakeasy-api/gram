@@ -7,6 +7,7 @@ import (
 	"time"
 
 	risk_analysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 )
@@ -45,11 +46,16 @@ func newPresidioClientFunc(container testcontainers.Container) PresidioClientFun
 		}
 
 		baseURL := fmt.Sprintf("http://%s:%s", host, port.Port())
+		guardianPolicy, err := guardian.NewUnsafePolicy(NewTracerProvider(t), []string{})
+		if err != nil {
+			t.Fatalf("create unsafe guardian policy: %v", err)
+		}
 
 		return risk_analysis.NewPresidioClient(
 			baseURL,
 			NewTracerProvider(t),
 			NewMeterProvider(t),
+			guardianPolicy,
 			NewLogger(t),
 		)
 	}
