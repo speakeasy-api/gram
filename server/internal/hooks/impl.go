@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
@@ -46,6 +47,7 @@ type Service struct {
 	repo               *repo.Queries
 	productFeatures    ProductFeaturesClient
 	chatTitleGenerator ChatTitleGenerator
+	writer             *chat.ChatMessageWriter
 }
 
 // SessionMetadata contains validated session information from the Logs endpoint
@@ -91,6 +93,7 @@ func NewService(
 	authz *authz.Engine,
 	pfClient ProductFeaturesClient,
 	chatTitleGenerator ChatTitleGenerator,
+	writer *chat.ChatMessageWriter,
 ) *Service {
 	return &Service{
 		tracer:             tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/hooks"),
@@ -105,6 +108,7 @@ func NewService(
 		repo:               repo.New(db),
 		productFeatures:    pfClient,
 		chatTitleGenerator: chatTitleGenerator,
+		writer:             writer,
 	}
 }
 
