@@ -9,11 +9,8 @@ export function ProxyCredentialsForm() {
   const send = WizardContext.useActorRef().send;
   const proxy = WizardContext.useSelector((s) => s.context.proxy);
   const error = WizardContext.useSelector((s) => s.context.error);
-  const submitting = WizardContext.useSelector(
-    (s) =>
-      s.matches({ proxy: "creatingEnvironment" }) ||
-      s.matches({ proxy: "creatingProxy" }) ||
-      s.matches({ proxy: "rollingBackEnv" }),
+  const submitting = WizardContext.useSelector((s) =>
+    s.matches({ proxy: "submitting" }),
   );
 
   return (

@@ -128,17 +128,18 @@ oauthWizard
 │   │     BACK    → #pathSelection
 │   ├── credentials
 │   │   on:
-│   │     SUBMIT  → creatingEnvironment  (guard: validCreds)
+│   │     SUBMIT  → submitting           (guard: validCreds)
 │   │     BACK    → metadata
-│   ├── creatingEnvironment              (invoke createEnvironment)
-│   │     onDone  → creatingProxy        (assign envSlug)
-│   │     onError → credentials (assign error)
-│   ├── creatingProxy                    (invoke addOAuthProxy)
-│   │     onDone  → #result.success
-│   │     onError → rollingBackEnv       (preserve error)
-│   ├── rollingBackEnv                   (invoke deleteEnvironment, envSlug)
-│   │     onDone  → credentials (assign error from creatingProxy)
-│   │     onError → fatalError  (compound error: proxy failed AND env rollback failed)
+│   ├── submitting                       (compound; initial: creatingEnvironment)
+│   │   ├── creatingEnvironment          (invoke createEnvironment)
+│   │   │     onDone  → creatingProxy    (assign envSlug)
+│   │   │     onError → #proxy.credentials (assign error)
+│   │   ├── creatingProxy                (invoke addOAuthProxy)
+│   │   │     onDone  → #result.success
+│   │   │     onError → rollingBackEnv   (preserve error)
+│   │   └── rollingBackEnv               (invoke deleteEnvironment, envSlug)
+│   │         onDone  → #proxy.credentials (assign error from creatingProxy)
+│   │         onError → #proxy.fatalError (compound error: proxy failed AND env rollback failed)
 │   ├── fatalError                       (terminal — orphaned env exists)
 │   │     no transitions; user must close modal & clean up env manually
 │
@@ -282,12 +283,12 @@ Several states in §4 have no user input — they exist to invoke an actor
 and route on its outcome. They are first-class members of the machine,
 not booleans threaded through props:
 
-| State                       | Region   | Service invoked     | onDone                                 | onError                             |
-| --------------------------- | -------- | ------------------- | -------------------------------------- | ----------------------------------- |
-| `external.submitting`       | external | `addExternalOAuth`  | `#result.success`                      | `external.editing`                  |
-| `proxy.creatingEnvironment` | proxy    | `createEnvironment` | `proxy.creatingProxy` (assign envSlug) | `proxy.credentials`                 |
-| `proxy.creatingProxy`       | proxy    | `addOAuthProxy`     | `#result.success`                      | `proxy.rollingBackEnv`              |
-| `proxy.rollingBackEnv`      | proxy    | `deleteEnvironment` | `proxy.credentials` (assign error)     | `proxy.fatalError` (compound error) |
+| State                                  | Region           | Service invoked     | onDone                                            | onError                             |
+| -------------------------------------- | ---------------- | ------------------- | ------------------------------------------------- | ----------------------------------- |
+| `external.submitting`                  | external         | `addExternalOAuth`  | `#result.success`                                 | `external.editing`                  |
+| `proxy.submitting.creatingEnvironment` | proxy.submitting | `createEnvironment` | `proxy.submitting.creatingProxy` (assign envSlug) | `proxy.credentials`                 |
+| `proxy.submitting.creatingProxy`       | proxy.submitting | `addOAuthProxy`     | `#result.success`                                 | `proxy.submitting.rollingBackEnv`   |
+| `proxy.submitting.rollingBackEnv`      | proxy.submitting | `deleteEnvironment` | `proxy.credentials` (assign error)                | `proxy.fatalError` (compound error) |
 
 The view layer reads these via `state.matches(...)`. There is **no**
 `isPending` boolean anywhere in the React tree — pendingness is a state.

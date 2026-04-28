@@ -150,10 +150,7 @@ function WizardSteps({
     toolset.oauthEnablementMetadata?.oauth2SecurityCount ?? 0;
   const hasMultipleOAuth2AuthCode = oauth2SecurityCount > 1;
 
-  const isProxyCreating =
-    state.matches({ proxy: "creatingEnvironment" }) ||
-    state.matches({ proxy: "creatingProxy" }) ||
-    state.matches({ proxy: "rollingBackEnv" });
+  const isProxyCreating = state.matches({ proxy: "submitting" });
 
   return (
     <>

@@ -304,7 +304,7 @@ export const oauthWizardMachine = setup({
             SUBMIT: [
               {
                 guard: "validCreds",
-                target: "creatingEnvironment",
+                target: "submitting",
                 actions: assign({ error: () => null }),
               },
               {
@@ -319,94 +319,103 @@ export const oauthWizardMachine = setup({
             BACK: "metadata",
           },
         },
-        creatingEnvironment: {
+        submitting: {
           meta: { title: "OAuth Client Credentials" },
-          invoke: {
-            src: "createEnvironment",
-            input: ({ context }): CreateEnvironmentInput => ({
-              organizationId: context.activeOrganizationId,
-              name: nextEnvironmentName(
-                context.toolsetName,
-                context.existingEnvNames,
-              ),
-              clientId: context.proxy.clientId,
-              clientSecret: context.proxy.clientSecret,
-            }),
-            onDone: {
-              target: "creatingProxy",
-              actions: assign({
-                envSlug: ({ event }) => event.output.envSlug,
-              }),
-            },
-            onError: {
-              target: "credentials",
-              actions: assign({
-                error: ({ event }) =>
-                  errorMessage(
-                    event.error,
-                    "Failed to create environment for OAuth credentials",
+          initial: "creatingEnvironment",
+          states: {
+            creatingEnvironment: {
+              invoke: {
+                src: "createEnvironment",
+                input: ({ context }): CreateEnvironmentInput => ({
+                  organizationId: context.activeOrganizationId,
+                  name: nextEnvironmentName(
+                    context.toolsetName,
+                    context.existingEnvNames,
                   ),
-              }),
-            },
-          },
-        },
-        creatingProxy: {
-          meta: { title: "OAuth Client Credentials" },
-          invoke: {
-            src: "addOAuthProxy",
-            input: ({ context }): AddOAuthProxyInput => ({
-              toolsetSlug: context.toolsetSlug,
-              slug: context.proxy.slug,
-              audience: context.proxy.audience,
-              authorizationEndpoint: context.proxy.authorizationEndpoint,
-              tokenEndpoint: context.proxy.tokenEndpoint,
-              scopes: context.proxy.scopes,
-              tokenAuthMethod: context.proxy.tokenAuthMethod,
-              environmentSlug: context.envSlug ?? "",
-            }),
-            onDone: {
-              target: "#oauthWizard.result.success",
-              actions: [
-                assign({
-                  result: () => ({
-                    success: true,
-                    message:
-                      "Your OAuth proxy has been configured successfully. Client credentials have been stored in a new environment.",
-                  }),
+                  clientId: context.proxy.clientId,
+                  clientSecret: context.proxy.clientSecret,
                 }),
-                "captureProxyCreateSuccess",
-                "invalidateOnProxyCreate",
-              ],
-            },
-            onError: {
-              target: "rollingBackEnv",
-              actions: assign({
-                error: ({ event }) =>
-                  errorMessage(event.error, "Failed to configure OAuth proxy"),
-              }),
-            },
-          },
-        },
-        rollingBackEnv: {
-          meta: { title: "OAuth Client Credentials" },
-          invoke: {
-            src: "deleteEnvironment",
-            input: ({ context }): DeleteEnvironmentInput => ({
-              envSlug: context.envSlug ?? "",
-            }),
-            onDone: {
-              target: "credentials",
-              actions: assign({ envSlug: () => null }),
-            },
-            onError: {
-              target: "fatalError",
-              actions: assign({
-                error: ({ context, event }) => {
-                  const proxyErr = context.error ?? "Proxy creation failed";
-                  const cleanupErr = errorMessage(event.error, "unknown error");
-                  return `${proxyErr}. Environment cleanup also failed: ${cleanupErr}. The orphaned environment must be deleted manually.`;
+                onDone: {
+                  target: "creatingProxy",
+                  actions: assign({
+                    envSlug: ({ event }) => event.output.envSlug,
+                  }),
                 },
-              }),
+                onError: {
+                  target: "#oauthWizard.proxy.credentials",
+                  actions: assign({
+                    error: ({ event }) =>
+                      errorMessage(
+                        event.error,
+                        "Failed to create environment for OAuth credentials",
+                      ),
+                  }),
+                },
+              },
+            },
+            creatingProxy: {
+              invoke: {
+                src: "addOAuthProxy",
+                input: ({ context }): AddOAuthProxyInput => ({
+                  toolsetSlug: context.toolsetSlug,
+                  slug: context.proxy.slug,
+                  audience: context.proxy.audience,
+                  authorizationEndpoint: context.proxy.authorizationEndpoint,
+                  tokenEndpoint: context.proxy.tokenEndpoint,
+                  scopes: context.proxy.scopes,
+                  tokenAuthMethod: context.proxy.tokenAuthMethod,
+                  environmentSlug: context.envSlug ?? "",
+                }),
+                onDone: {
+                  target: "#oauthWizard.result.success",
+                  actions: [
+                    assign({
+                      result: () => ({
+                        success: true,
+                        message:
+                          "Your OAuth proxy has been configured successfully. Client credentials have been stored in a new environment.",
+                      }),
+                    }),
+                    "captureProxyCreateSuccess",
+                    "invalidateOnProxyCreate",
+                  ],
+                },
+                onError: {
+                  target: "rollingBackEnv",
+                  actions: assign({
+                    error: ({ event }) =>
+                      errorMessage(
+                        event.error,
+                        "Failed to configure OAuth proxy",
+                      ),
+                  }),
+                },
+              },
+            },
+            rollingBackEnv: {
+              invoke: {
+                src: "deleteEnvironment",
+                input: ({ context }): DeleteEnvironmentInput => ({
+                  envSlug: context.envSlug ?? "",
+                }),
+                onDone: {
+                  target: "#oauthWizard.proxy.credentials",
+                  actions: assign({ envSlug: () => null }),
+                },
+                onError: {
+                  target: "#oauthWizard.proxy.fatalError",
+                  actions: assign({
+                    error: ({ context, event }) => {
+                      const proxyErr = context.error ?? "Proxy creation failed";
+                      const cleanupErr = errorMessage(
+                        event.error,
+                        "unknown error",
+                      );
+                      return `${proxyErr}. Environment cleanup also failed: ${cleanupErr}. The orphaned environment must be deleted manually.`;
+                    },
+                  }),
+                },
+              },
             },
           },
         },
