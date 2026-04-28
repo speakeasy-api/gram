@@ -20,7 +20,7 @@ env:
 jobs:
   changes:
     name: Tag branch changes
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     permissions:
       contents: "read"
       pull-requests: read
@@ -48,71 +48,72 @@ jobs:
         name: Set outputs
         env:
           HAS_PREVIEW_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'preview') }}
+          HAS_FULL_CI_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'ci:full') }}
         run: |
-          if [[ "${{ steps.filter.outputs.server }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "$HAS_PREVIEW_LABEL" == "true" ]]; then
+          if [[ "${{ steps.filter.outputs.server }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "$HAS_PREVIEW_LABEL" == "true" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
             echo "server=true" >> $GITHUB_OUTPUT
             echo "Server jobs will run."
           else
             echo "Server jobs will be skipped."
           fi
 
-          if [[ "${{ steps.filter.outputs.client }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "$HAS_PREVIEW_LABEL" == "true" ]]; then
+          if [[ "${{ steps.filter.outputs.client }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "$HAS_PREVIEW_LABEL" == "true" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
             echo "client=true" >> $GITHUB_OUTPUT
             echo "Client jobs will run."
           else
             echo "Client jobs will be skipped."
           fi
 
-          if [[ "${{ steps.filter.outputs.cli }}" == "true" || "${{ github.ref }}" ==  "refs/heads/main" ]]; then
+          if [[ "${{ steps.filter.outputs.cli }}" == "true" || "${{ github.ref }}" ==  "refs/heads/main" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
             echo "cli=true" >> $GITHUB_OUTPUT
             echo "CLI jobs will run."
           else
             echo "CLI jobs will be skipped."
           fi
 
-          if [[ "${{ steps.filter.outputs.functions }}" == "true" || "${{ github.ref }}" ==  "refs/heads/main" ]]; then
+          if [[ "${{ steps.filter.outputs.functions }}" == "true" || "${{ github.ref }}" ==  "refs/heads/main" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
             echo "functions=true" >> $GITHUB_OUTPUT
             echo "Functions jobs will run."
           else
             echo "Functions jobs will be skipped."
           fi
 
-          if [[ "${{ steps.filter.outputs.tsframework }}" == "true" || "${{ github.ref }}" ==  "refs/heads/main" ]]; then
+          if [[ "${{ steps.filter.outputs.tsframework }}" == "true" || "${{ github.ref }}" ==  "refs/heads/main" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
             echo "tsframework=true" >> $GITHUB_OUTPUT
             echo "TypeScript framework jobs will run."
           else
             echo "TypeScript framework jobs will be skipped."
           fi
 
-          if [[ "${{ steps.filter.outputs.elements }}" == "true" || "${{ github.ref }}" ==  "refs/heads/main" ]]; then
+          if [[ "${{ steps.filter.outputs.elements }}" == "true" || "${{ github.ref }}" ==  "refs/heads/main" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
             echo "elements=true" >> $GITHUB_OUTPUT
             echo "Elements jobs will run."
           else
             echo "Elements jobs will be skipped."
           fi
 
-          if [[ "${{ steps.filter.outputs.migrations }}" == "true" ]]; then
+          if [[ "${{ steps.filter.outputs.migrations }}" == "true" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
             echo "migrations=true" >> $GITHUB_OUTPUT
             echo "Migrations jobs will run."
           else
             echo "Migrations jobs will be skipped."
           fi
 
-          if [[ "${{ steps.filter.outputs.plog }}" == "true" || "${{ github.ref }}" == "refs/heads/main" ]]; then
+          if [[ "${{ steps.filter.outputs.plog }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
             echo "plog=true" >> $GITHUB_OUTPUT
             echo "Plog jobs will run."
           else
             echo "Plog jobs will be skipped."
           fi
 
-          if [[ "${{ steps.filter.outputs.sdk }}" == "true" || "${{ github.ref }}" == "refs/heads/main" ]]; then
+          if [[ "${{ steps.filter.outputs.sdk }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
             echo "sdk=true" >> $GITHUB_OUTPUT
             echo "SDK jobs will run."
           else
             echo "SDK jobs will be skipped."
           fi
 
-          if [[ "${{ steps.filter.outputs.sdk-gen }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "$HAS_PREVIEW_LABEL" == "true" ]]; then
+          if [[ "${{ steps.filter.outputs.sdk-gen }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "$HAS_PREVIEW_LABEL" == "true" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
             echo "sdk-gen=true" >> $GITHUB_OUTPUT
             echo "SDK generation check will run."
           else
@@ -125,7 +126,7 @@ jobs:
           echo "examples=$examples" >> $GITHUB_OUTPUT
 
   docker-build-server:
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: [changes, server-build-lint]
     if: needs.changes.outputs.server == 'true'
     env:
@@ -303,7 +304,7 @@ jobs:
 
   atlas-lint:
     name: Lint migrations with Atlas
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: changes
     if: needs.changes.outputs.migrations == 'true' && github.event_name == 'pull_request'
     permissions:
@@ -357,7 +358,7 @@ jobs:
 
   atlas-push:
     name: Push migrations to Atlas Registry
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: [changes, server-build-lint]
     if: needs.changes.outputs.server == 'true'
     permissions:
@@ -423,7 +424,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.server == 'true'
     env:
-      GOMAXPROCS: 4
+      GOMAXPROCS: 8
     services:
       postgres:
         image: pgvector/pgvector:pg17
@@ -506,7 +507,7 @@ jobs:
           mise run git:porcelain
 
   cli-build-lint:
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: changes
     if: needs.changes.outputs.cli == 'true'
     env:
@@ -574,7 +575,7 @@ jobs:
         run: mise run git:porcelain
 
   plog-build-lint:
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: changes
     if: needs.changes.outputs.plog == 'true'
     env:
@@ -631,7 +632,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.server == 'true'
     env:
-      GOMAXPROCS: 4
+      GOMAXPROCS: 8
     steps:
       - name: Checkout
         uses: actions/checkout@ff7abcd0c3c05ccf6adc123a8cd1fd4fb30fb493 # v5.0.0
@@ -803,7 +804,7 @@ jobs:
 
   sdk-gen-check:
     name: Check SDK is up-to-date
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: changes
     if: needs.changes.outputs.sdk-gen == 'true'
     env:
@@ -853,7 +854,7 @@ jobs:
     strategy:
       matrix:
         target: ["client/sdk"]
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: [changes, sdk-gen-check]
     if: |
       !cancelled() &&
@@ -902,7 +903,7 @@ jobs:
         run: mise run git:porcelain
 
   functions-build-host:
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: changes
     if: needs.changes.outputs.functions == 'true'
     steps:
@@ -995,7 +996,7 @@ jobs:
         run: pnpm store prune
 
   functions-image:
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: [changes, functions-build-host]
     if: needs.changes.outputs.functions == 'true'
     strategy:
@@ -1142,7 +1143,7 @@ jobs:
         run: pnpm store prune
 
   ts-framework-test:
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: [changes]
     if: needs.changes.outputs.tsframework == 'true'
     steps:
@@ -1183,7 +1184,7 @@ jobs:
         run: pnpm store prune
 
   elements-build-lint:
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: changes
     if: needs.changes.outputs.elements == 'true'
     env:
@@ -1232,7 +1233,7 @@ jobs:
         run: pnpm store prune
 
   elements-test:
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: changes
     if: needs.changes.outputs.elements == 'true'
     steps:
@@ -1271,7 +1272,7 @@ jobs:
         run: pnpm store prune
 
   elements-examples:
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: changes
     if: needs.changes.outputs.elements == 'true'
     strategy:
@@ -1328,7 +1329,7 @@ jobs:
   # merge, since skipped jobs don't report a status to rulesets.
   ci-gate:
     name: CI Gate
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     if: always()
     needs:
       - changes
@@ -1372,7 +1373,7 @@ jobs:
           echo "✅ All CI checks passed or were skipped."
 
   dispatch-release:
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: [docker-build-server, assistant-runtime-image]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
