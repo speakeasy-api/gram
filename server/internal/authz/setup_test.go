@@ -97,12 +97,10 @@ func seedGrantWithSelector(t *testing.T, ctx context.Context, conn *pgxpool.Pool
 	selectors, err := sel.MarshalJSON()
 	require.NoError(t, err)
 
-	resource := sel["resource_id"]
 	_, err = accessrepo.New(conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{
 		OrganizationID: organizationID,
 		PrincipalUrn:   principal,
 		Scope:          string(scope),
-		Resource:       resource,
 		Selectors:      selectors,
 	})
 	require.NoError(t, err)
