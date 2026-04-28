@@ -57,6 +57,34 @@ export function applyFilterAdd(
 }
 
 /**
+ * Edit an existing filter in place, preserving its position and id while
+ * applying the same dedup rules as `applyFilterAdd` against the rest of
+ * the list. If the edited filter would collide with another eq/in filter
+ * on the same path+op, the colliding one is removed.
+ */
+export function applyFilterEdit(
+  current: ActiveLogFilter[],
+  id: string,
+  next: { op: Op; value?: string },
+): ActiveLogFilter[] {
+  return current.flatMap((f) => {
+    if (f.id === id) {
+      return [{ ...f, op: next.op, value: next.value }];
+    }
+    const target = current.find((c) => c.id === id);
+    if (
+      target &&
+      (next.op === Operator.Eq || next.op === Operator.In) &&
+      f.path === target.path &&
+      f.op === next.op
+    ) {
+      return [];
+    }
+    return [f];
+  });
+}
+
+/**
  * Try to parse a freeform filter expression like `http.response.status_code != 200`.
  * Returns an `{ key, op, value }` triple on success, or `null` when the input
  * doesn't look like a filter expression (so the caller can fall through to
