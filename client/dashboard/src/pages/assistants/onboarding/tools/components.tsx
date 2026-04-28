@@ -39,18 +39,18 @@ function ToolCard({
   return (
     <div
       className={cn(
-        "border-border bg-card my-2 rounded-lg border shadow-sm",
+        "border-border bg-card my-3 max-w-2xl rounded-lg border shadow-sm",
         tone === "success" && "border-emerald-300/40 bg-emerald-50/30",
         tone === "info" && "border-sky-300/40 bg-sky-50/30",
       )}
     >
-      <div className="border-border flex items-center gap-2 border-b px-4 py-2">
+      <div className="border-border flex items-center gap-2 border-b px-5 py-3">
         {icon}
         <Type variant="body" className="font-medium">
           {title}
         </Type>
       </div>
-      <div className="px-4 py-3">{children}</div>
+      <div className="px-5 py-4">{children}</div>
     </div>
   );
 }
@@ -318,51 +318,60 @@ export function ShowSlackAppGuideComponent({ args }: ToolCallMessagePartProps) {
     <ToolCard
       title="Create the Slack App"
       tone="info"
-      icon={<Icon name="slack" className="text-muted-foreground h-4 w-4" />}
+      icon={<Icon name="bot" className="text-muted-foreground h-4 w-4" />}
     >
-      <Type small muted className="mb-3">
+      <p className="text-muted-foreground mb-4 text-sm leading-relaxed">
         This link opens Slack with a manifest pre-filled — name, bot scopes
         {webhookLive ? ", and webhook URL" : ""}. You'll still need to install
         it to your workspace and copy two secrets back here.
-      </Type>
+      </p>
 
-      <ol className="ml-5 list-decimal space-y-2 text-sm">
-        <li>
-          Click <strong>Open Slack</strong>. Pick your workspace, review the
-          manifest, click <strong>Create</strong>.
-          {webhookLive ? (
-            <Type small muted className="mt-0.5">
-              Slack will verify the webhook URL immediately. If it says the URL
-              didn't respond, click Retry — our endpoint is already live.
-            </Type>
-          ) : null}
-        </li>
-        <li>
-          On the app page, click <strong>Install to Workspace</strong> (green
-          banner or <em>OAuth &amp; Permissions</em> sidebar) and approve. This
-          is a separate step from Create — without it you won't have a bot
-          token.
-        </li>
-        <li>
-          Copy the <strong>Bot User OAuth Token</strong> from{" "}
-          <em>OAuth &amp; Permissions</em>. It starts with <code>xoxb-</code>.
-          Not <code>xoxp-</code>; not the Client Secret.
-        </li>
-        <li>
-          Copy the <strong>Signing Secret</strong> from{" "}
-          <em>Basic Information → App Credentials</em>. Not the Verification
-          Token (deprecated) and not the Client Secret.
-        </li>
-        <li>Paste both into the form that appears next.</li>
+      <ol className="space-y-3 text-sm leading-relaxed">
+        {[
+          <>
+            Click <strong>Open Slack</strong>. Pick your workspace, review the
+            manifest, click <strong>Create</strong>.
+            {webhookLive ? (
+              <span className="text-muted-foreground mt-1.5 block text-xs leading-relaxed">
+                Slack will verify the webhook URL immediately. If it says the
+                URL didn't respond, click Retry — our endpoint is already live.
+              </span>
+            ) : null}
+          </>,
+          <>
+            On the app page, click <strong>Install to Workspace</strong> (green
+            banner or <em>OAuth &amp; Permissions</em> sidebar) and approve.
+            This is a separate step from Create — without it you won't have a
+            bot token.
+          </>,
+          <>
+            Copy the <strong>Bot User OAuth Token</strong> from{" "}
+            <em>OAuth &amp; Permissions</em>. It starts with <code>xoxb-</code>.
+            Not <code>xoxp-</code>; not the Client Secret.
+          </>,
+          <>
+            Copy the <strong>Signing Secret</strong> from{" "}
+            <em>Basic Information → App Credentials</em>. Not the Verification
+            Token (deprecated) and not the Client Secret.
+          </>,
+          <>Paste both into the form that appears next.</>,
+        ].map((step, i) => (
+          <li key={i} className="flex gap-3">
+            <span className="text-muted-foreground shrink-0 tabular-nums">
+              {i + 1}.
+            </span>
+            <div className="flex-1">{step}</div>
+          </li>
+        ))}
       </ol>
 
-      <Type small muted className="mt-3">
+      <p className="text-muted-foreground mt-4 text-xs leading-relaxed">
         Heads up: if you need to add a bot scope later, Slack requires a
         re-install to grant it. We've included every scope this assistant needs
         upfront.
-      </Type>
+      </p>
 
-      <div className="mt-3 flex gap-2">
+      <div className="mt-4 flex gap-2">
         <Button asChild>
           <a href={deepLink} target="_blank" rel="noopener noreferrer">
             <ExternalLink className="mr-2 h-4 w-4" />

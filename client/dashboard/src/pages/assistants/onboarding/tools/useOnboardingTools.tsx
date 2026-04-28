@@ -26,13 +26,23 @@ type ToolResult<T extends Record<string, unknown> = Record<string, unknown>> =
   | ({ ok: true } & T)
   | { ok: false; error: string; [k: string]: unknown };
 
+// AI SDK's modelMessageSchema rejects nested `undefined` values inside a
+// tool-result's JSON output (jsonValueSchema = null|string|number|boolean|
+// record|array — no undefined). Tool returns here spread optional SDK fields
+// like `description`, `webhook_url`, etc. that are often undefined; those
+// survive into convertToModelMessages and break standardizePrompt on the
+// resumed turn. Round-trip through JSON to strip them at the boundary.
+const stripUndefined = <T,>(value: T): T =>
+  JSON.parse(JSON.stringify(value)) as T;
+
 const okResult = <T extends Record<string, unknown>>(data: T): ToolResult<T> =>
-  ({ ok: true, ...data }) as ToolResult<T>;
+  stripUndefined({ ok: true, ...data }) as ToolResult<T>;
 
 const errResult = (
   message: string,
   extra?: Record<string, unknown>,
-): ToolResult => ({ ok: false, error: message, ...(extra ?? {}) });
+): ToolResult =>
+  stripUndefined({ ok: false, error: message, ...(extra ?? {}) }) as ToolResult;
 
 function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
   return new Promise<T>((resolve, reject) => {

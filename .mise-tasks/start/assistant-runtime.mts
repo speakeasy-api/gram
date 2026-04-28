@@ -34,10 +34,16 @@ const workdirRoot =
 const flyAccessToken =
   process.env["GRAM_ASSISTANT_RUNTIME_FLYCTL_LOGS_TOKEN"] ||
   process.env["GRAM_ASSISTANT_RUNTIME_FLYIO_API_TOKEN"] ||
-  process.env["GRAM_FUNCTIONS_FLYIO_API_TOKEN"] ||
   "";
 const flyAppNamePrefix =
   process.env["GRAM_ASSISTANT_RUNTIME_FLYIO_APP_NAME_PREFIX"] || "gram-asst";
+const configuredProvider = (() => {
+  const raw = (process.env["GRAM_ASSISTANT_RUNTIME_PROVIDER"] || "").trim();
+  if (raw === "" || raw === "firecracker") {
+    return "local";
+  }
+  return raw;
+})();
 const databaseURL = process.env["GRAM_DATABASE_URL"];
 
 if (!databaseURL) {
@@ -310,7 +316,11 @@ FROM runtimes;
 }
 
 async function reconcileOnce() {
-  const runtimes = await loadRuntimes();
+  const runtimes = (await loadRuntimes()).filter((runtime) => {
+    const backend =
+      runtime.backend === "firecracker" ? "local" : runtime.backend;
+    return backend === configuredProvider;
+  });
   desiredRuntimes.clear();
   for (const runtime of runtimes) {
     desiredRuntimes.set(runtime.runtime_id, runtime);

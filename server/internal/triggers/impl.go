@@ -388,13 +388,19 @@ func buildDefinitionView(definition bgtriggers.Definition) *types.TriggerDefinit
 
 func toTriggerError(ctx context.Context, logger *slog.Logger, err error, message string) error {
 	code := oops.CodeUnexpected
+	public := message
 	switch {
 	case errors.Is(err, bgtriggers.ErrBadRequest):
 		code = oops.CodeBadRequest
+		// Surface the validation detail (e.g. JSON schema mismatch on
+		// trigger config) so callers — especially LLM-driven ones — can
+		// self-correct. The chain is already user-actionable: it's only
+		// reached when the input fails validation.
+		public = fmt.Sprintf("%s: %s", message, err.Error())
 	case errors.Is(err, sql.ErrNoRows):
 		code = oops.CodeNotFound
 	}
-	return oops.E(code, err, "%s", message).Log(ctx, logger)
+	return oops.E(code, err, "%s", public).Log(ctx, logger)
 }
 
 func nullUUIDToUUID(value uuid.NullUUID) uuid.UUID {

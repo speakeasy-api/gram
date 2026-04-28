@@ -278,6 +278,7 @@ func newWorkerCommand() *cli.Command {
 	flags = append(flags, clickHouseFlags...)
 	flags = append(flags, functionsFlags...)
 	flags = append(flags, pulseMCPFlags...)
+	flags = append(flags, assistantRuntimeFlags...)
 
 	return &cli.Command{
 		Name:  "worker",
@@ -556,6 +557,8 @@ func newWorkerCommand() *cli.Command {
 				return err
 			}
 			assistantsCore := assistants.NewServiceCore(logger, db, assistantRuntime, slackClient, assistantTokenManager, serverURL, telemetryLogger)
+			assistantsSvc := assistants.NewService(logger, tracerProvider, db, sessionManager, authzEngine, assistantsCore, &background.AssistantWorkflowSignaler{TemporalEnv: temporalEnv})
+			triggerApp.RegisterDispatcher(assistantsSvc)
 
 			/**
 			 * END -- Agent client

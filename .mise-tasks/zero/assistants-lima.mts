@@ -9,6 +9,14 @@ if (process.platform !== "darwin") {
   process.exit(0);
 }
 
+const provider = process.env["GRAM_ASSISTANT_RUNTIME_PROVIDER"] || "local";
+if (provider !== "local") {
+  console.log(
+    `Skipping Lima setup: GRAM_ASSISTANT_RUNTIME_PROVIDER=${provider}.`,
+  );
+  process.exit(0);
+}
+
 const instance =
   process.env["GRAM_ASSISTANT_RUNTIME_LIMA_INSTANCE"] || "gram-firecracker";
 const cpus = process.env["GRAM_ASSISTANT_RUNTIME_LIMA_CPUS"] || "4";

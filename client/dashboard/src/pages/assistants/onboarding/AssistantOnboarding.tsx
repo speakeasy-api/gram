@@ -1,5 +1,7 @@
 import { Page } from "@/components/page-layout";
 import { useProject, useSession } from "@/contexts/Auth";
+import { useToolset } from "@/hooks/toolTypes";
+import { useInternalMcpUrl } from "@/hooks/useToolsetUrl";
 import { getServerURL } from "@/lib/utils";
 import { Chat, GramElementsProvider, type Model } from "@gram-ai/elements";
 import { useChatSessionsCreateMutation } from "@gram/client/react-query/chatSessionsCreate.js";
@@ -98,6 +100,13 @@ function ChatPane({ mode }: { mode: "create" | "edit" }) {
 
   const onboarding = useOnboardingTools();
 
+  const firstToolset = draft.assistant?.toolsets[0];
+  const { data: firstToolsetData } = useToolset(firstToolset?.toolsetSlug);
+  const mcpUrl = useInternalMcpUrl(firstToolsetData);
+  const gramEnvironment = firstToolset
+    ? (firstToolset.environmentSlug ?? draft.assistantEnv?.slug)
+    : undefined;
+
   const { data: triggersData } = useTriggers(undefined, undefined, {
     retry: false,
     throwOnError: false,
@@ -174,6 +183,8 @@ function ChatPane({ mode }: { mode: "create" | "edit" }) {
           },
           variant: "standalone",
           systemPrompt,
+          mcp: mcpUrl,
+          gramEnvironment,
           model: {
             defaultModel: "anthropic/claude-sonnet-4.6" as Model,
             showModelPicker: false,
