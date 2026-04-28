@@ -47,3 +47,7 @@ ON principal_grants USING GIN (selectors);
 -- PR #2357 was the expand (added selectors, stopped reading/writing resource).
 -- atlas:nolint DS103
 ALTER TABLE principal_grants DROP COLUMN resource;
+
+-- Update comments to reflect the new schema (selectors is now the sole mechanism).
+COMMENT ON TABLE principal_grants IS 'RBAC grants. One row per (org, principal, scope, selectors). Selectors define resource constraints.';
+COMMENT ON COLUMN principal_grants.selectors IS 'JSON selector constraints defining what the grant applies to, e.g. {"resource_kind":"project","resource_id":"proj_123"}.';
