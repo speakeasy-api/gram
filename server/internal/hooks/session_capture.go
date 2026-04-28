@@ -161,6 +161,7 @@ func (s *Service) insertMessageWithFallbackUpsert(
 		}
 	}
 
+	s.messageStore.NotifyMessagesStored(ctx, projectID)
 	return nil
 }
 
