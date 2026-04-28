@@ -1,9 +1,7 @@
 package risk_analysis_test
 
 import (
-	"net/http"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -46,7 +44,6 @@ func TestAnalyzeBatch_GracefulDegradationWhenPresidioDown(t *testing.T) {
 	// PresidioClient pointed at a dead URL simulates Presidio being down
 	deadClient := risk_analysis.NewPresidioClient(
 		"http://127.0.0.1:1",
-		&http.Client{Timeout: 1 * time.Second},
 		testenv.NewTracerProvider(t),
 		testenv.NewMeterProvider(t),
 		testenv.NewLogger(t),
