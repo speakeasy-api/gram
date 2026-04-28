@@ -1,3 +1,5 @@
+-- atlas:txmode none
+
 -- Soft-deprecate the resource column: make nullable, drop default, rename with
 -- drop_ prefix to signal it is scheduled for removal.
 
