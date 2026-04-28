@@ -1,3 +1,4 @@
+import { Eye, EyeOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -182,6 +183,7 @@ function MessageItem({
 }) {
   const hasRisk = riskResults && riskResults.length > 0;
   const [expanded, setExpanded] = useState(false);
+  const [contentRevealed, setContentRevealed] = useState(false);
   const isCollapsed = collapseNonRisk && !hasRisk && !expanded;
 
   const parsedToolCalls: ToolCall[] | null = useMemo(() => {
@@ -260,26 +262,30 @@ function MessageItem({
                   <RiskBadgePopover results={riskResults} />
                 )}
               </div>
-              <div className="bg-background overflow-hidden rounded-lg border text-sm">
-                <div className="bg-muted/30 border-b p-3">
-                  <div className="flex items-center gap-2">
-                    <Icon name="zap" className="text-primary size-4" />
-                    <span className="font-semibold">
-                      {tc.function?.name || tc.name || "Tool Call"}
-                    </span>
+              {hasRisk && !contentRevealed ? (
+                <MaskedContent onReveal={() => setContentRevealed(true)} />
+              ) : (
+                <div className="bg-background overflow-hidden rounded-lg border text-sm">
+                  <div className="bg-muted/30 border-b p-3">
+                    <div className="flex items-center gap-2">
+                      <Icon name="zap" className="text-primary size-4" />
+                      <span className="font-semibold">
+                        {tc.function?.name || tc.name || "Tool Call"}
+                      </span>
+                    </div>
                   </div>
+                  {tc.function?.arguments && (
+                    <CodeBlock
+                      content={
+                        typeof tc.function.arguments === "string"
+                          ? tc.function.arguments
+                          : JSON.stringify(tc.function.arguments, null, 2)
+                      }
+                      maxHeight={300}
+                    />
+                  )}
                 </div>
-                {tc.function?.arguments && (
-                  <CodeBlock
-                    content={
-                      typeof tc.function.arguments === "string"
-                        ? tc.function.arguments
-                        : JSON.stringify(tc.function.arguments, null, 2)
-                    }
-                    maxHeight={300}
-                  />
-                )}
-              </div>
+              )}
             </div>
           </div>
         ))
@@ -328,7 +334,9 @@ function MessageItem({
                 <RiskBadgePopover results={riskResults} />
               )}
             </div>
-            {message.role === "system" ? (
+            {hasRisk && !contentRevealed ? (
+              <MaskedContent onReveal={() => setContentRevealed(true)} />
+            ) : message.role === "system" ? (
               <details className="bg-muted/30 group overflow-hidden rounded-lg border text-sm">
                 <summary className="text-muted-foreground hover:bg-muted/50 flex cursor-pointer list-none items-center gap-2 px-3 py-2 text-xs select-none">
                   <Icon
@@ -566,6 +574,56 @@ function ToolCallsTab({
   );
 }
 
+function MaskedContent({ onReveal }: { onReveal: () => void }) {
+  return (
+    <div className="bg-muted/30 flex items-center gap-2 rounded-lg border border-dashed p-3">
+      <EyeOff className="text-muted-foreground h-4 w-4 shrink-0" />
+      <span className="text-muted-foreground text-sm">
+        This message contains sensitive data.
+      </span>
+      <button
+        type="button"
+        className="hover:text-foreground text-sm font-medium underline underline-offset-2"
+        onClick={onReveal}
+      >
+        Click to reveal
+      </button>
+    </div>
+  );
+}
+
+function MaskedMatchInline({ value }: { value: string }) {
+  const [revealed, setRevealed] = useState(false);
+
+  if (!revealed) {
+    return (
+      <button
+        type="button"
+        className="text-muted-foreground hover:text-foreground mt-1 inline-flex items-center gap-1 text-xs"
+        onClick={() => setRevealed(true)}
+      >
+        <EyeOff className="h-3 w-3" />
+        <span>Click to reveal</span>
+      </button>
+    );
+  }
+
+  return (
+    <span className="mt-1 inline-flex items-center gap-1">
+      <code className="bg-destructive/10 text-destructive inline-block rounded px-1.5 py-0.5 font-mono text-xs break-all">
+        {value}
+      </code>
+      <button
+        type="button"
+        className="text-muted-foreground hover:text-foreground"
+        onClick={() => setRevealed(false)}
+      >
+        <Eye className="h-3 w-3" />
+      </button>
+    </span>
+  );
+}
+
 function RiskBadgePopover({ results }: { results: RiskResult[] }) {
   return (
     <Popover>
@@ -601,11 +659,7 @@ function RiskBadgePopover({ results }: { results: RiskResult[] }) {
                     {r.description}
                   </p>
                 )}
-                {r.match && (
-                  <code className="bg-destructive/10 text-destructive mt-1 inline-block rounded px-1.5 py-0.5 font-mono text-xs break-all">
-                    {r.match}
-                  </code>
-                )}
+                {r.match && <MaskedMatchInline value={r.match} />}
                 {r.tags && r.tags.length > 0 && (
                   <div className="mt-1 flex flex-wrap gap-1">
                     {r.tags.map((tag) => (
