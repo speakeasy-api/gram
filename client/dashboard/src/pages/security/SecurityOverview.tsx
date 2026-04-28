@@ -10,9 +10,9 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useRoutes } from "@/routes";
-import { Shield } from "lucide-react";
+import { Eye, EyeOff, Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useSearchParams } from "react-router";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { useRiskListPolicies } from "@gram/client/react-query/index.js";
@@ -43,6 +43,48 @@ export default function SecurityOverview() {
     <RequireScope scope="org:admin" level="page">
       <SecurityOverviewContent />
     </RequireScope>
+  );
+}
+
+function MaskedMatch({ value }: { value: string | undefined }) {
+  const [revealed, setRevealed] = useState(false);
+
+  if (!value) return <span>-</span>;
+
+  if (!revealed) {
+    return (
+      <button
+        type="button"
+        className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-xs"
+        onClick={(e) => {
+          e.stopPropagation();
+          setRevealed(true);
+        }}
+      >
+        <EyeOff className="h-3 w-3" />
+        <span>Click to reveal</span>
+      </button>
+    );
+  }
+
+  return (
+    <span className="inline-flex items-center gap-1">
+      <span className="font-mono text-xs">
+        {value.length > 40
+          ? `${value.slice(0, 20)}...${value.slice(-10)}`
+          : value}
+      </span>
+      <button
+        type="button"
+        className="text-muted-foreground hover:text-foreground"
+        onClick={(e) => {
+          e.stopPropagation();
+          setRevealed(false);
+        }}
+      >
+        <Eye className="h-3 w-3" />
+      </button>
+    </span>
   );
 }
 
@@ -257,7 +299,7 @@ function SecurityOverviewContent() {
                         <TableHead>Rule</TableHead>
                         <TableHead>Chat</TableHead>
                         <TableHead>User</TableHead>
-                        <TableHead>Match</TableHead>
+                        <TableHead className="w-[200px]">Match</TableHead>
                         <TableHead>Detected</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -290,12 +332,8 @@ function SecurityOverviewContent() {
                           <TableCell className="text-muted-foreground text-xs">
                             {result.userId ?? "-"}
                           </TableCell>
-                          <TableCell className="max-w-xs truncate font-mono text-xs">
-                            {result.match
-                              ? result.match.length > 40
-                                ? `${result.match.slice(0, 20)}...${result.match.slice(-10)}`
-                                : result.match
-                              : "-"}
+                          <TableCell className="w-[200px] max-w-[200px] truncate">
+                            <MaskedMatch value={result.match} />
                           </TableCell>
                           <TableCell className="text-muted-foreground text-xs">
                             {result.createdAt
