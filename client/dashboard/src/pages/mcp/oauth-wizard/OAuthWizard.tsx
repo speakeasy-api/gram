@@ -105,7 +105,7 @@ function OAuthWizard({
         scopes: (provider?.scopesSupported ?? []).join(", "),
         tokenAuthMethod:
           provider?.tokenEndpointAuthMethodsSupported?.[0] ??
-          "client_secret_post",
+          "client_secret_basic",
         environmentSlug: provider?.environmentSlug ?? "",
       },
     });

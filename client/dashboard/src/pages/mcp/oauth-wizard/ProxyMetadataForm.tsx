@@ -183,8 +183,8 @@ export function ProxyMetadataForm({
                   })
                 }
               >
-                <option value="client_secret_post">client_secret_post</option>
                 <option value="client_secret_basic">client_secret_basic</option>
+                <option value="client_secret_post">client_secret_post</option>
                 <option value="none">none</option>
               </select>
             </div>
@@ -195,6 +195,7 @@ export function ProxyMetadataForm({
       <Dialog.Footer className="flex justify-between">
         <Button
           variant="secondary"
+          disabled={!editMode && isNextPending}
           onClick={() => {
             if (editMode) {
               onClose();

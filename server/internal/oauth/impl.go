@@ -91,7 +91,7 @@ type Service struct {
 	gramProvider              *providers.GramProvider
 	customProvider            *providers.CustomProvider
 	upstreamPKCEStorage       cache.TypedCacheObject[UpstreamPKCEVerifier]
-	httpClient                *guardian.HTTPClient
+	guardianPolicy            *guardian.Policy
 	successPageTmpl           *template.Template
 	failurePageTmpl           *template.Template
 	oauthStatusPageScriptHash string
@@ -120,11 +120,6 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterP
 	hash := sha256.Sum256(oauthSuccessScriptData)
 	scriptHash := hex.EncodeToString(hash[:])[:8] // Use first 8 chars like hosted page
 
-	var httpClient *guardian.HTTPClient
-	if guardianPolicy != nil {
-		httpClient = guardianPolicy.Client()
-	}
-
 	return &Service{
 		logger:            logger,
 		tracer:            tracer,
@@ -148,7 +143,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterP
 		gramProvider:        gramProvider,
 		customProvider:      customProvider,
 		upstreamPKCEStorage: cache.NewTypedObjectCache[UpstreamPKCEVerifier](logger.With(attr.SlogCacheNamespace("upstream_pkce")), cacheImpl, cache.SuffixNone),
-		httpClient:          httpClient,
+		guardianPolicy:      guardianPolicy,
 
 		// HTML templates
 		successPageTmpl: successPageTmpl,
@@ -892,6 +887,10 @@ func (s *Service) handleProxyRegister(w http.ResponseWriter, r *http.Request) er
 		return oops.E(oops.CodeUnauthorized, err, "authentication required").Log(ctx, s.logger)
 	}
 
+	if s.guardianPolicy == nil {
+		return oops.E(oops.CodeUnexpected, nil, "proxy register handler is not configured").Log(ctx, s.logger)
+	}
+
 	r.Body = http.MaxBytesReader(w, r.Body, requestMaxBodyBytes)
 	var req ProxyRegisterRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -931,7 +930,7 @@ func (s *Service) handleProxyRegister(w http.ResponseWriter, r *http.Request) er
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Accept", "application/json")
 
-	resp, err := s.httpClient.Do(httpReq)
+	resp, err := s.guardianPolicy.Client().Do(httpReq)
 	if err != nil {
 		return oops.E(oops.CodeGatewayError, err, "failed to reach registration endpoint").Log(ctx, s.logger)
 	}
