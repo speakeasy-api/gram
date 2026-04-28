@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -43,6 +44,7 @@ type toolListEntry struct {
 func handleToolsList(
 	ctx context.Context,
 	logger *slog.Logger,
+	authzEngine *authz.Engine,
 	guardianPolicy *guardian.Policy,
 	db *pgxpool.Pool,
 	env toolconfig.EnvironmentLoader,
@@ -90,6 +92,16 @@ func handleToolsList(
 		fallthrough
 	default:
 		tools, err = buildToolListEntries(ctx, logger, guardianPolicy, db, env, payload, toolset)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// Filter tools by RBAC grants. Private authenticated MCPs enforce
+	// per-tool mcp:connect checks — the same dimensions used by tools/call.
+	// Public MCPs skip this (open to everyone, matching the connection guard).
+	if payload.authenticated && authzEngine != nil && (toolset.McpIsPublic == nil || !*toolset.McpIsPublic) {
+		tools, err = filterToolsByAuthz(ctx, logger, authzEngine, toolset.ID, tools)
 		if err != nil {
 			return nil, err
 		}
@@ -214,6 +226,25 @@ func toolToListEntry(tool *types.Tool) *toolListEntry {
 		Annotations: convertConvAnnotations(toolEntry.Annotations),
 		Meta:        toolEntry.Meta,
 	}
+}
+
+// filterToolsByAuthz removes tools the caller is not authorized to invoke.
+// Each tool is checked against mcp:connect with a tool-name dimension, matching
+// the per-tool RBAC check performed by tools/call.
+func filterToolsByAuthz(ctx context.Context, logger *slog.Logger, engine *authz.Engine, toolsetID string, tools []*toolListEntry) ([]*toolListEntry, error) {
+	allowed := make([]*toolListEntry, 0, len(tools))
+	for _, t := range tools {
+		ok, err := engine.IsAllowed(ctx, authz.MCPToolCallCheck(toolsetID, authz.MCPToolCallDimensions{
+			Tool: t.Name,
+		}))
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "check tool-level authz for tools/list").Log(ctx, logger)
+		}
+		if ok {
+			allowed = append(allowed, t)
+		}
+	}
+	return allowed, nil
 }
 
 // convertConvAnnotations converts conv.ToolAnnotations to externalmcp.ToolAnnotations.

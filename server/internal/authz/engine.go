@@ -300,6 +300,31 @@ func (e *Engine) RequireAny(ctx context.Context, checks ...Check) error {
 	return e.mapError(ctx, Denied(checks[0].Scope, checks[0].selector()))
 }
 
+// IsAllowed reports whether the given check is satisfied by the current
+// context's grants. Returns true when RBAC is not enforced (non-enterprise,
+// feature flag off, API key auth, etc.). Unlike Require it never returns an
+// authorization error — only infrastructure errors bubble up.
+func (e *Engine) IsAllowed(ctx context.Context, check Check) (bool, error) {
+	enforce, err := e.ShouldEnforce(ctx)
+	if err != nil {
+		return false, err
+	}
+	if !enforce {
+		return true, nil
+	}
+
+	grants, ok := GrantsFromContext(ctx)
+	if !ok {
+		return false, e.mapError(ctx, ErrMissingGrants)
+	}
+
+	if err := validateInput(check); err != nil {
+		return false, e.mapError(ctx, err)
+	}
+
+	return grantsSatisfy(grants, check.expand()), nil
+}
+
 func (e *Engine) Filter(ctx context.Context, scope Scope, resourceIDs []string) ([]string, error) {
 	enforce, err := e.ShouldEnforce(ctx)
 	if err != nil {

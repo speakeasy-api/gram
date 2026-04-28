@@ -358,3 +358,58 @@ func TestCanUseOverride_prodPlusNonAdmin(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, enforce)
 }
+
+func TestEngineIsAllowed_returnsTrueWhenNotEnforced(t *testing.T) {
+	t.Parallel()
+
+	engine := NewEngine(testinfra.NewLogger(t), nil, staticRBAC(false), workos.NewStubClient(), cache.NoopCache)
+
+	ok, err := engine.IsAllowed(enterpriseSessionCtx(t), Check{Scope: ScopeProjectRead, ResourceID: "proj_123"})
+	require.NoError(t, err)
+	require.True(t, ok)
+}
+
+func TestEngineIsAllowed_returnsFalseWhenDenied(t *testing.T) {
+	t.Parallel()
+
+	engine := NewEngine(testinfra.NewLogger(t), nil, staticRBAC(true), workos.NewStubClient(), cache.NoopCache)
+	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{NewGrant(ScopeMCPConnect, "toolset_a")})
+
+	ok, err := engine.IsAllowed(ctx, Check{Scope: ScopeMCPConnect, ResourceID: "toolset_b"})
+	require.NoError(t, err)
+	require.False(t, ok)
+}
+
+func TestEngineIsAllowed_returnsTrueWhenGranted(t *testing.T) {
+	t.Parallel()
+
+	engine := NewEngine(testinfra.NewLogger(t), nil, staticRBAC(true), workos.NewStubClient(), cache.NoopCache)
+	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{NewGrant(ScopeMCPConnect, "toolset_a")})
+
+	ok, err := engine.IsAllowed(ctx, Check{Scope: ScopeMCPConnect, ResourceID: "toolset_a"})
+	require.NoError(t, err)
+	require.True(t, ok)
+}
+
+func TestEngineIsAllowed_dimensionFiltering(t *testing.T) {
+	t.Parallel()
+
+	engine := NewEngine(testinfra.NewLogger(t), nil, staticRBAC(true), workos.NewStubClient(), cache.NoopCache)
+
+	// Grant for specific tool only.
+	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{
+		NewGrantWithSelector(ScopeMCPConnect, Selector{
+			"resource_kind": "mcp",
+			"resource_id":   "toolset_1",
+			"tool":          "allowed_tool",
+		}),
+	})
+
+	ok, err := engine.IsAllowed(ctx, MCPToolCallCheck("toolset_1", MCPToolCallDimensions{Tool: "allowed_tool"}))
+	require.NoError(t, err)
+	require.True(t, ok, "matching tool name should be allowed")
+
+	ok, err = engine.IsAllowed(ctx, MCPToolCallCheck("toolset_1", MCPToolCallDimensions{Tool: "other_tool"}))
+	require.NoError(t, err)
+	require.False(t, ok, "non-matching tool name should be denied")
+}
