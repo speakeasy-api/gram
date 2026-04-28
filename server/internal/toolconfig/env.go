@@ -98,6 +98,12 @@ func (c *CaseInsensitiveEnv) Get(key string) string {
 	return c.data[strings.ToLower(key)]
 }
 
+// Has reports whether a key is declared (case-insensitive), regardless of value.
+func (c *CaseInsensitiveEnv) Has(key string) bool {
+	_, ok := c.data[strings.ToLower(key)]
+	return ok
+}
+
 // Set stores a value by key (case-insensitive).
 func (c *CaseInsensitiveEnv) Set(key, value string) {
 	c.data[strings.ToLower(key)] = value

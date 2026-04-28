@@ -1043,10 +1043,9 @@ type chatMessageRow struct {
 	model        string
 	content      or.ChatMessages
 	finishReason *string
-	// toolCalls is the canonical JSONB blob written to chat_messages.tool_calls.
-	// nil means "no tool calls"; the bytes must match the format produced by
-	// assistantToolCallsJSON / buildAssistantRows so chain hashes line up
-	// across capture paths.
+	// toolCalls is the replay JSONB blob written to chat_messages.tool_calls.
+	// The content hash is computed from a typed projection instead of these raw
+	// bytes so equivalent tool calls can arrive through different wire shapes.
 	toolCalls        []byte
 	promptTokens     int64
 	completionTokens int64

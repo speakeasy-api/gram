@@ -459,11 +459,16 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
           // Mark as connected when stream starts successfully
           connectionStatus?.markConnected();
 
-          // This weird construction is necessary to get errors to propagate properly to assistant-ui
+          // This weird construction is necessary to get errors to propagate properly to assistant-ui.
+          // `originalMessages` is required: without it, `handleUIMessageStreamFinish` injects a
+          // fresh random messageId into every `start` chunk. On auto-resume that mismatches the
+          // prior assistant message's id, so useChat pushes a new UIMessage carrying the snapshot
+          // of the prior turn's parts — duplicating text and tool_calls into storage.
           return createUIMessageStream({
             execute: ({ writer }) => {
               writer.merge(result.toUIMessageStream());
             },
+            originalMessages: messages,
           });
         } catch (error) {
           console.error("Error creating stream:", error);

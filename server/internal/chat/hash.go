@@ -4,6 +4,8 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"hash"
+	"sort"
 
 	or "github.com/OpenRouterTeam/go-sdk/models/components"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -18,13 +20,21 @@ const (
 )
 
 // chainMessageHash derives a message's content hash from its parent hash and
-// the canonical fields (role, textual content, tool call id, tool calls JSON).
-// parentHash is nil for the first message in a chain. toolCallsJSON is the
-// canonical JSONB blob persisted on the row (nil for messages without tool
-// calls). It must be byte-identical to whatever buildAssistantRows /
-// buildPendingRows wrote to the row's tool_calls column, otherwise replay vs.
-// initial-capture hashing will diverge spuriously.
-func chainMessageHash(parentHash []byte, role, content, toolCallID string, toolCallsJSON []byte) []byte {
+// the durable identity of the message. Identity differs by role:
+//
+//   - tool result rows: role + tool_call_id only. The result body is opaque
+//     and non-deterministic across providers/replay paths (JSON
+//     re-serialization, key ordering, whitespace), so hashing it forces a new
+//     generation every time the client round-trips a tool result through
+//     parse → re-stringify.
+//   - assistant rows that issue tool calls: role + the sorted set of
+//     tool_call IDs. Per the storage rule, these rows carry no text content.
+//   - user / system / assistant text rows: role + content. No tool IDs apply.
+//
+// parentHash is nil for the first message in a chain. Function names and
+// arguments are deliberately excluded — tool_call IDs are already unique per
+// call, so any later mutation of args/name still refers to the same call.
+func chainMessageHash(parentHash []byte, role, content, toolCallID string, toolCallIDs []string) []byte {
 	h := sha256.New()
 	if len(parentHash) > 0 {
 		h.Write(parentHash)
@@ -32,11 +42,13 @@ func chainMessageHash(parentHash []byte, role, content, toolCallID string, toolC
 	}
 	h.Write([]byte(role))
 	h.Write([]byte(fieldSep))
-	h.Write([]byte(content))
+	if toolCallID == "" && len(toolCallIDs) == 0 {
+		h.Write([]byte(content))
+	}
 	h.Write([]byte(fieldSep))
 	h.Write([]byte(toolCallID))
 	h.Write([]byte(fieldSep))
-	h.Write(toolCallsJSON)
+	writeToolCallIDs(h, toolCallIDs)
 	return h.Sum(nil)
 }
 
@@ -45,24 +57,88 @@ func hashIncomingMessage(parentHash []byte, msg or.ChatMessages) []byte {
 	if tc := openrouter.GetToolCallID(msg); tc != nil {
 		toolCallID = *tc
 	}
-	tcJSON, _ := assistantToolCallsJSON(msg)
-	return chainMessageHash(parentHash, openrouter.GetRole(msg), openrouter.GetText(msg), toolCallID, tcJSON)
+	return chainMessageHash(parentHash, openrouter.GetRole(msg), openrouter.GetText(msg), toolCallID, toolCallIDsFromIncoming(msg))
 }
 
-func hashAssistantResponse(parentHash []byte, content string, toolCallsJSON []byte) []byte {
-	return chainMessageHash(parentHash, "assistant", content, "", toolCallsJSON)
+func hashStoredMessage(parentHash []byte, role, content, toolCallID string, toolCallsJSON []byte) []byte {
+	return chainMessageHash(parentHash, role, content, toolCallID, toolCallIDsFromStoredJSON(toolCallsJSON))
 }
 
-// assistantToolCallsJSON returns the canonical JSON bytes for an assistant
-// message's tool_calls (the same shape persisted to chat_messages.tool_calls
-// and replayed to runners by loadChatHistory). For non-assistant messages or
-// assistant messages without tool calls it returns nil.
-//
-// Both initial capture (via /chat/completions request bodies passing through
-// buildPendingRows) and the model-response path (buildAssistantRows) must
-// store identical bytes here, otherwise the chain hash diverges between
-// turns. We round-trip through openrouter.ToolCall to share serialization
-// with the response path.
+func hashAssistantResponse(parentHash []byte, content string, toolCalls []openrouter.ToolCall) []byte {
+	return chainMessageHash(parentHash, "assistant", content, "", toolCallIDsFromResponse(toolCalls))
+}
+
+func toolCallIDsFromIncoming(msg or.ChatMessages) []string {
+	if msg.Type != or.ChatMessagesTypeAssistant {
+		return nil
+	}
+	calls := msg.ChatAssistantMessage.GetToolCalls()
+	if len(calls) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(calls))
+	for _, c := range calls {
+		if c.ID == "" {
+			continue
+		}
+		out = append(out, c.ID)
+	}
+	return out
+}
+
+func toolCallIDsFromResponse(calls []openrouter.ToolCall) []string {
+	if len(calls) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(calls))
+	for _, c := range calls {
+		if c.ID == "" {
+			continue
+		}
+		out = append(out, c.ID)
+	}
+	return out
+}
+
+func toolCallIDsFromStoredJSON(toolCallsJSON []byte) []string {
+	if len(toolCallsJSON) == 0 {
+		return nil
+	}
+	var calls []struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(toolCallsJSON, &calls); err != nil {
+		return nil
+	}
+	out := make([]string, 0, len(calls))
+	for _, c := range calls {
+		if c.ID == "" {
+			continue
+		}
+		out = append(out, c.ID)
+	}
+	return out
+}
+
+// writeToolCallIDs writes a sorted, length-delimited rendering of the IDs into
+// h. Sorting makes the hash invariant to map-iteration order from streaming
+// capture; length-prefixing each ID prevents `["ab","c"]` colliding with
+// `["a","bc"]`.
+func writeToolCallIDs(h hash.Hash, ids []string) {
+	if len(ids) == 0 {
+		return
+	}
+	sorted := append([]string(nil), ids...)
+	sort.Strings(sorted)
+	for _, id := range sorted {
+		_, _ = fmt.Fprintf(h, "%d:%s%s", len(id), id, fieldSep)
+	}
+}
+
+// assistantToolCallsJSON returns replay JSON for an assistant message's
+// tool_calls. Storage bytes are deliberately decoupled from the chain hash —
+// hashing uses tool_call IDs only, so capture and replay do not need
+// byte-identical JSON serialization.
 func assistantToolCallsJSON(msg or.ChatMessages) ([]byte, error) {
 	if msg.Type != or.ChatMessagesTypeAssistant {
 		return nil, nil

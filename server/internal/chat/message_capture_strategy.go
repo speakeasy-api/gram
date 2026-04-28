@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
 	"slices"
@@ -13,7 +12,6 @@ import (
 
 	or "github.com/OpenRouterTeam/go-sdk/models/components"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -213,11 +211,12 @@ func (s *ChatMessageCaptureStrategy) matchIncomingAgainstStored(ctx context.Cont
 			diverged = true
 			break
 		}
-		storedHash := row.ContentHash
-		if len(storedHash) == 0 {
-			// Lazy backfill: historical rows have no hash. Compute from stored
-			// fields and persist so subsequent turns skip this path.
-			storedHash = chainMessageHash(parentHash, row.Role, row.Content, row.ToolCallID.String, row.ToolCalls)
+		// Recompute every walk: hash format may evolve across deploys, so the
+		// persisted column is treated as a cache, not the source of truth.
+		// Persist the recomputed value when the row was never hashed (historical
+		// rows) so generation lookups can use a single-row read elsewhere.
+		storedHash := hashStoredMessage(parentHash, row.Role, row.Content, row.ToolCallID.String, row.ToolCalls)
+		if len(row.ContentHash) == 0 {
 			if err := s.repo.BackfillChatMessageHash(ctx, repo.BackfillChatMessageHashParams{
 				ID:          row.ID,
 				ContentHash: storedHash,
@@ -440,7 +439,7 @@ func buildAssistantRows(
 		tools.PromptTokens = promptTokens
 		tools.CompletionTokens = completionTokens
 		tools.TotalTokens = totalTokens
-		tools.ContentHash = hashAssistantResponse(text.ContentHash, "", toolCallsJSON)
+		tools.ContentHash = hashAssistantResponse(text.ContentHash, "", response.ToolCalls)
 
 		return []repo.CreateChatMessageParams{text, tools}
 	}
@@ -452,7 +451,7 @@ func buildAssistantRows(
 	only.PromptTokens = promptTokens
 	only.CompletionTokens = completionTokens
 	only.TotalTokens = totalTokens
-	only.ContentHash = hashAssistantResponse(parentHash, content, toolCallsJSON)
+	only.ContentHash = hashAssistantResponse(parentHash, content, response.ToolCalls)
 
 	return []repo.CreateChatMessageParams{only}
 }
@@ -470,24 +469,37 @@ func (s *ChatMessageCaptureStrategy) resolveSession(ctx context.Context, raw ope
 		return sess, nil
 	}
 
-	tip, err := s.repo.GetChatChainTip(ctx, request.ChatID)
-	switch {
-	case err == nil:
-		return &chatCaptureSession{
-			generation:  tip.Generation,
-			parentHash:  tip.ContentHash,
-			pendingRows: nil,
-		}, nil
-	case errors.Is(err, pgx.ErrNoRows):
-		return &chatCaptureSession{
-			generation:  0,
-			parentHash:  nil,
-			pendingRows: nil,
-		}, nil
-	default:
+	generation, parentHash, err := s.currentChainTip(ctx, request.ChatID)
+	if err != nil {
 		s.logger.ErrorContext(ctx, "failed to get chat chain tip", attr.SlogError(err))
 		return nil, fmt.Errorf("get chat chain tip: %w", err)
 	}
+	return &chatCaptureSession{
+		generation:  generation,
+		parentHash:  parentHash,
+		pendingRows: nil,
+	}, nil
+}
+
+func (s *ChatMessageCaptureStrategy) currentChainTip(ctx context.Context, chatID uuid.UUID) (int32, []byte, error) {
+	currentGen, err := s.repo.GetMaxGenerationForChat(ctx, chatID)
+	if err != nil {
+		return 0, nil, fmt.Errorf("get max generation for chat: %w", err)
+	}
+
+	stored, err := s.repo.ListChatMessagesForMatch(ctx, repo.ListChatMessagesForMatchParams{
+		ChatID:     chatID,
+		Generation: currentGen,
+	})
+	if err != nil {
+		return 0, nil, fmt.Errorf("list chat messages for match: %w", err)
+	}
+
+	var parentHash []byte
+	for _, row := range stored {
+		parentHash = hashStoredMessage(parentHash, row.Role, row.Content, row.ToolCallID.String, row.ToolCalls)
+	}
+	return currentGen, parentHash, nil
 }
 
 // flushTurnAtomically writes the pending user rows (via storeMessages, which

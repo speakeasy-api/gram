@@ -227,6 +227,7 @@ function ChatPane({ mode }: { mode: "create" | "edit" }) {
             frontendTools: onboarding.frontendTools,
             components: onboarding.components,
             toolsRequiringApproval: onboarding.toolsRequiringApproval,
+            maxOutputBytes: 50_000,
           },
         }}
       >
