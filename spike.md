@@ -145,9 +145,6 @@ This RFC does not require finishing the MCP runtime's migration off the legacy `
 
 Canonical SDL lives in `/schemas/` (Postgres in `.sql`, Redis JSON in Go SDL, JWT in Go SDL). This section is the index and rationale; precise column types and indexes are in those files.
 
-> Conventions: no CHECK constraints (enforce at app level); soft-delete via `deleted_at` + generated `deleted` column matching the existing pattern; UUID primary keys via `generate_uuidv7()`; `_encrypted` suffix where the application layer ciphers the value before persisting.
-> [COME ON] there is no way this is relevant for enhancing understanding of this RFC. These are table stakes
-
 ### 4.1 Postgres — new tables
 
 #### `client_session_issuers`
@@ -155,7 +152,8 @@ Canonical SDL lives in `/schemas/` (Postgres in `.sql`, Redis JSON in Go SDL, JW
 The Gram-side AS configuration. One per logical "thing that issues client sessions for a toolset."
 
 Open Questions:
-* Should the issuer be able to force authentication? Or should it always defer to the policy set by the MCP Frontend? Will attempt implementing the latter and fix if it falls over
+
+- Should the issuer be able to force authentication? Or should it always defer to the policy set by the MCP Frontend? Will attempt implementing the latter and fix if it falls over
 
 | Column           | Type   | Notes                                               |
 | ---------------- | ------ | --------------------------------------------------- |
@@ -170,9 +168,9 @@ Open Questions:
 An upstream Authorization Server's identity record. Successor to `oauth_proxy_provider` (per §2b: behavioural diff from `external_oauth_server_metadata` collapses onto the `passthrough` flag).
 
 | Column                                  | Type     | Notes                                                                                                                   |
-| --------------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------- |
+| --------------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------- | --- |
 | `id`                                    | `uuid`   | PK                                                                                                                      |
-| `project_id`                            | `uuid`   | FK → `projects`; should ultimately not be project scoped and be able to share working configurations across remotes     |                                                   |
+| `project_id`                            | `uuid`   | FK → `projects`; should ultimately not be project scoped and be able to share working configurations across remotes     |     |
 | `slug`                                  | `text`   | unique per project                                                                                                      |
 | `issuer`                                | `text`   | issuer URL, matches `iss` claim                                                                                         |
 | `authorization_endpoint`                | `text`   |                                                                                                                         |
@@ -196,14 +194,12 @@ The credentials Gram presents when transacting against a `remote_oauth_issuer`. 
 | `id`                       | `uuid`        | PK                                    |
 | `project_id`               | `uuid`        | FK → `projects`                       |
 | `remote_oauth_issuer_id`   | `uuid`        | FK                                    |
-| `client_session_issuer_id` | `uuid`        | FK; the issuer this client maps to;    |
+| `client_session_issuer_id` | `uuid`        | FK; the issuer this client maps to;   |
 | `client_id`                | `text`        |                                       |
 | `client_secret_encrypted`  | `text`        | nullable for PKCE-only public clients |
 | `client_id_issued_at`      | `timestamptz` |                                       |
 | `client_secret_expires_at` | `timestamptz` | nullable for non-expiring secrets     |
-| `redirect_uris`            | `text[]`      |                                       |
 | timestamps                 |               |                                       |
-> [Q] We should remove redirect_uris, right? This is just denormalized state that won't affect the remote
 
 #### `client_session_consents`
 
@@ -217,9 +213,6 @@ Persistent consent record per (user, `client_session_issuer`).
 | `remote_set_hash`          | `text`        | SHA-256 of the sorted list of `remote_oauth_issuer_id`s on the issuer at consent time   |
 | `consented_at`             | `timestamptz` |                                                                                         |
 | timestamps                 |               |                                                                                         |
-
-> [TBD] consent shape — see §3.4 footnote. The `remote_set_hash` column is how we satisfy "consent is bound to the full set" today; if we end up needing per-remote granularity, this shape changes.
-> [NOTE] I like this structure
 
 #### Toolset link
 
@@ -250,18 +243,22 @@ Each removal becomes a ticket in `project.md`.
 
 ### 4.3 Redis — new types
 
-All implement `cache.CacheableObject[T]`; values JSON-serialised by `cache.TypedCacheObject[T]`. Encrypted fields use `encryption.Client` before serialisation.
+All implement `cache.CacheableObject[T]`; values JSON-serialised by `cache.TypedCacheObject[T]`. Encrypted fields use `encryption.Client` before serialisation. Where a key segment shows `{principalURN}`, the URN is `user:<id>` | `apikey:<uuid>` | `anonymous:<mcp-session-id>`.
 
-| Type                                 | Cache key                                                                 | Holds                                                                                                           | TTL                                                                  |
-| ------------------------------------ | ------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
-| `ClientSessionRefresh`               | `clientSession:{sessionID}:{clientSessionIssuerID}`                       | refresh-token hash, principal URN, refresh expiry                                                               | `time.Until(RefreshExpiresAt)`                                       |
-> [NOTE] we need a mechanism for querying this thing by refresh token - it should almost certainly be keyed by refresh token rather than sessionId - I think we should still do a second document that _is_ keyed by session for bookkeeping purposes. ALso shouldn't session ID be principalURN here?
-| `RemoteSession`                      | `remoteSession:{sessionID}:{clientSessionIssuerID}:{remoteOAuthIssuerID}` | access token (enc), refresh token (enc), **separate** access/refresh expiries, scopes, `remote_oauth_client_id` | `time.Until(RefreshExpiresAt)` (access expiry is held independently) |
-> [NOTE] the sessionId should be a principal URN here, right?
-| `ClientSessionGrant`                 | `clientSessionGrant:{clientSessionIssuerID}:{code}`                       | client_id, redirect_uri, scope, state, PKCE challenge, principal URN                                            | ~10 min                                                              |
-| `RemoteSessionAuthState`             | `remoteSessionAuthState:{stateID}`                                        | session_id, issuer id, client id, code verifier, redirect                                                       | ~10 min                                                              |
-| `RemoteSessionPKCE`                  | `remoteSessionPKCE:{nonce}`                                               | verifier                                                                                                        | 10 min fixed                                                         |
-| `RevokedToken` _(unchanged, reused)_ | `chat_session_revoked:{jti}`                                              | jti, revoked_at                                                                                                 | 24h                                                                  |
+| Type                                 | Cache key                                                                    | Holds                                                                                                               | TTL                            |
+| ------------------------------------ | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
+| `ClientSession`                      | `clientSession:{refreshTokenHash}`                                           | principal URN, `client_session_issuer_id`, jti, refresh expiry                                                      | `time.Until(RefreshExpiresAt)` |
+| `ClientSessionIndex`                 | `clientSessionByPrincipal:{principalURN}:{clientSessionIssuerID}`            | bookkeeping; list of active refresh-token hashes for this principal at this issuer (revoke-all, "who's logged in?") | `time.Until(RefreshExpiresAt)` |
+| `RemoteSession`                      | `remoteSession:{principalURN}:{clientSessionIssuerID}:{remoteOAuthIssuerID}` | access token (enc), refresh token (enc), **separate** access/refresh expiries, scopes, `remote_oauth_client_id`     | `time.Until(RefreshExpiresAt)` |
+| `ClientSessionGrant`                 | `clientSessionGrant:{clientSessionIssuerID}:{code}`                          | `client_id`, redirect_uri, scope, state, PKCE challenge, principal URN                                              | ~10 min                        |
+| `RemoteSessionAuthState`             | `remoteSessionAuthState:{stateID}`                                           | principal URN, issuer id, client id, code verifier, redirect                                                        | ~10 min                        |
+| `RemoteSessionPKCE`                  | `remoteSessionPKCE:{nonce}`                                                  | verifier                                                                                                            | 10 min fixed                   |
+| `RevokedToken` _(unchanged, reused)_ | `chat_session_revoked:{jti}`                                                 | jti, revoked_at                                                                                                     | 24h                            |
+
+Two design notes informing this shape:
+
+- **`ClientSession` is keyed by the refresh-token hash.** That's what `/token` queries when exchanging a refresh token; it's the hot path. We don't key by session id because the operation that needs the lookup is "give me the session for this presented refresh token".
+- **`ClientSessionIndex` is the bookkeeping reverse-index.** It answers "what active sessions does this principal have at this issuer?" — needed for revoke-all, listing, and operational queries. Keyed on `principalURN` rather than a separate session-id concept; for anonymous principals the `anonymous:<mcp-session-id>` URN itself encodes the session id, so no separate id is required. Authenticated principals (`user:<id>`, `apikey:<uuid>`) are looked up directly by URN.
 
 ### 4.4 Redis — removed
 
@@ -307,13 +304,13 @@ Notes:
 
 ### 4.6 SDL artifacts
 
-The schemas above are the rationale; the canonical artifacts live in `/schemas/` (to be created):
+The schemas above are the rationale; the canonical artifacts live in `/schemas/`:
 
 - `/schemas/postgres.sql` — DDL for the new tables and the toolset alteration.
 - `/schemas/redis.go` — Go-SDL definitions for each Redis type.
-- `/schemas/jwt.go` — `SessionClaims` plus URN helpers.
+- `/schemas/jwt.go` — `SessionClaims` and the valid `sub` URN shapes.
 
-The worktree-root files (`oauth-schema.sql`, `redis-oauth-schema.go`, `jwt-schema.go`) describe the **legacy** state and should be retired into `gram-legacy-oauth` skill content once `/schemas/` is populated.
+The legacy state (the `oauth_proxy_*` / `external_oauth_server_metadata` / legacy-`Token` shape) is captured for reference in the `gram-legacy-oauth` skill draft.
 
 ---
 
