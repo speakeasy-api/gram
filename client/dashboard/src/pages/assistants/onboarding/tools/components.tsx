@@ -6,6 +6,10 @@ import { TextArea } from "@/components/ui/textarea";
 import { Type } from "@/components/ui/type";
 import { cn } from "@/lib/utils";
 import { ToolCallMessagePartProps } from "@assistant-ui/react";
+import {
+  useListToolsets,
+  useTriggers,
+} from "@gram/client/react-query/index.js";
 import { Icon } from "@speakeasy-api/moonshine";
 import {
   Check,
@@ -18,6 +22,7 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import { useAssistantDraft } from "../AssistantDraftContext";
 import { PERSONALITIES, getPersonality } from "../personalities";
+import { buildSlackManifest, deriveSlackContext } from "../slackManifest";
 
 type Status = ToolCallMessagePartProps["status"];
 
@@ -278,41 +283,74 @@ export function ShowWebhookUrlComponent({ args }: ToolCallMessagePartProps) {
 type SlackAppArgs = {
   app_name?: string;
   workspace_hint?: string;
-  bot_scopes: string[];
-  bot_events: string[];
+  bot_scopes?: string[];
+  bot_events?: string[];
   webhook_url?: string;
 };
 
 export function ShowSlackAppGuideComponent({ args }: ToolCallMessagePartProps) {
   const a = (args ?? {}) as Partial<SlackAppArgs>;
-  const displayName = (a.app_name ?? "Gram Assistant").slice(0, 35);
-  const manifest = useMemo(() => {
-    const payload: Record<string, unknown> = {
-      _metadata: { major_version: 1, minor_version: 1 },
-      display_information: { name: displayName },
-      features: {
-        bot_user: {
-          display_name: displayName,
-          always_online: true,
-        },
-      },
-      oauth_config: {
-        scopes: { bot: a.bot_scopes ?? [] },
-      },
-    };
-    if (a.webhook_url) {
-      payload.settings = {
-        event_subscriptions: {
-          request_url: a.webhook_url,
-          bot_events: a.bot_events ?? [],
-        },
-      };
-    }
-    return JSON.stringify(payload);
-  }, [displayName, a.bot_scopes, a.bot_events, a.webhook_url]);
+  const draft = useAssistantDraft();
+  const assistantName = draft.assistant?.name;
+  const assistantId = draft.assistantId;
+  const attachedToolsetSlugs = useMemo(
+    () => (draft.assistant?.toolsets ?? []).map((t) => t.toolsetSlug),
+    [draft.assistant?.toolsets],
+  );
 
-  const deepLink = `https://api.slack.com/apps?new_app=1&manifest_json=${encodeURIComponent(manifest)}`;
+  const { data: toolsetsData } = useListToolsets(undefined, undefined, {
+    retry: false,
+    throwOnError: false,
+  });
+  const { data: triggersData } = useTriggers(undefined, undefined, {
+    retry: false,
+    throwOnError: false,
+    enabled: !!assistantId,
+  });
+
+  const toolsetsBySlug = useMemo(() => {
+    const map = new Map<string, { toolUrns: readonly string[] }>();
+    for (const ts of toolsetsData?.toolsets ?? []) {
+      map.set(ts.slug, { toolUrns: ts.toolUrns ?? [] });
+    }
+    return map;
+  }, [toolsetsData?.toolsets]);
+
+  const derived = useMemo(
+    () =>
+      deriveSlackContext({
+        attachedToolsetSlugs,
+        toolsetsBySlug,
+        triggers: triggersData?.triggers ?? [],
+        assistantId,
+      }),
+    [attachedToolsetSlugs, toolsetsBySlug, triggersData?.triggers, assistantId],
+  );
+
+  const manifestResult = useMemo(
+    () =>
+      buildSlackManifest({
+        appName: a.app_name ?? assistantName ?? "Gram Assistant",
+        toolUrns: derived.toolUrns,
+        eventTypes: derived.eventTypes,
+        webhookUrl: a.webhook_url,
+        extraScopes: a.bot_scopes,
+        extraBotEvents: a.bot_events,
+      }),
+    [
+      a.app_name,
+      a.webhook_url,
+      a.bot_scopes,
+      a.bot_events,
+      assistantName,
+      derived.toolUrns,
+      derived.eventTypes,
+    ],
+  );
+
   const webhookLive = !!a.webhook_url;
+  const { deepLink, scopes, botEvents, searchToolNeedsUserToken } =
+    manifestResult;
 
   return (
     <ToolCard
@@ -321,7 +359,8 @@ export function ShowSlackAppGuideComponent({ args }: ToolCallMessagePartProps) {
       icon={<Icon name="bot" className="text-muted-foreground h-4 w-4" />}
     >
       <p className="text-muted-foreground mb-4 text-sm leading-relaxed">
-        This link opens Slack with a manifest pre-filled — name, bot scopes
+        This link opens Slack with a manifest pre-filled — name
+        {scopes.length > 0 ? ", bot scopes" : ""}
         {webhookLive ? ", and webhook URL" : ""}. You'll still need to install
         it to your workspace and copy two secrets back here.
       </p>
@@ -365,11 +404,41 @@ export function ShowSlackAppGuideComponent({ args }: ToolCallMessagePartProps) {
         ))}
       </ol>
 
+      {(scopes.length > 0 || botEvents.length > 0) && (
+        <div className="border-border bg-muted/30 mt-4 rounded-md border p-3 text-xs">
+          <Type small muted className="mb-1.5 font-medium">
+            Pre-filled in the manifest
+          </Type>
+          {scopes.length > 0 && (
+            <div className="mb-1.5">
+              <span className="text-muted-foreground">Bot scopes: </span>
+              <span className="font-mono">{scopes.join(", ")}</span>
+            </div>
+          )}
+          {botEvents.length > 0 && (
+            <div>
+              <span className="text-muted-foreground">Bot events: </span>
+              <span className="font-mono">{botEvents.join(", ")}</span>
+            </div>
+          )}
+        </div>
+      )}
+
       <p className="text-muted-foreground mt-4 text-xs leading-relaxed">
         Heads up: if you need to add a bot scope later, Slack requires a
         re-install to grant it. We've included every scope this assistant needs
         upfront.
       </p>
+
+      {searchToolNeedsUserToken && (
+        <p className="text-muted-foreground mt-2 text-xs leading-relaxed">
+          The message-and-file search tool needs a Slack <em>user</em> token (
+          <code>search:read</code>), which Slack only grants on user tokens —
+          not bot tokens. After install, generate a user token from{" "}
+          <em>OAuth &amp; Permissions → User Token Scopes → search:read</em> and
+          store it as <code>SLACK_USER_TOKEN</code>.
+        </p>
+      )}
 
       <div className="mt-4 flex gap-2">
         <Button asChild>

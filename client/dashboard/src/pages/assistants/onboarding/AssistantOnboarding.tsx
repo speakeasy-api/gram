@@ -5,9 +5,9 @@ import { useInternalMcpUrl } from "@/hooks/useToolsetUrl";
 import { getServerURL } from "@/lib/utils";
 import { Chat, GramElementsProvider, type Model } from "@gram-ai/elements";
 import { useChatSessionsCreateMutation } from "@gram/client/react-query/chatSessionsCreate.js";
-import { useTriggers } from "@gram/client/react-query/index.js";
 import { ResizablePanel, useMoonshineConfig } from "@speakeasy-api/moonshine";
-import { useCallback, useMemo } from "react";
+import { Loader2 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useSearchParams } from "react-router";
 import { toast } from "sonner";
 import {
@@ -15,7 +15,11 @@ import {
   useAssistantDraft,
 } from "./AssistantDraftContext";
 import { AssistantDraftPanel } from "./AssistantDraftPanel";
-import { buildSystemPrompt, buildWelcome } from "./systemPrompt";
+import {
+  buildSystemPrompt,
+  buildWelcome,
+  type AssistantSnapshot,
+} from "./systemPrompt";
 import { useOnboardingTools } from "./tools/useOnboardingTools";
 
 export function NewAssistantOnboarding() {
@@ -107,12 +111,6 @@ function ChatPane({ mode }: { mode: "create" | "edit" }) {
     ? (firstToolset.environmentSlug ?? draft.assistantEnv?.slug)
     : undefined;
 
-  const { data: triggersData } = useTriggers(undefined, undefined, {
-    retry: false,
-    throwOnError: false,
-    enabled: !!draft.assistantId,
-  });
-
   const getSession = useCallback(async () => {
     try {
       const result = await createSessionMutation.mutateAsync({
@@ -144,24 +142,47 @@ function ChatPane({ mode }: { mode: "create" | "edit" }) {
     session.user.id,
   ]);
 
-  const systemPrompt = useMemo(
-    () =>
-      buildSystemPrompt({
-        mode,
-        assistant: draft.assistant,
-        triggers: triggersData?.triggers,
-      }),
-    [mode, draft.assistant, triggersData?.triggers],
-  );
+  const [snapshot, setSnapshot] = useState<AssistantSnapshot | null>(null);
+
+  useEffect(() => {
+    if (mode !== "edit") return;
+    if (snapshot) return;
+    if (!draft.assistant) return;
+    setSnapshot({
+      name: draft.assistant.name,
+      model: draft.assistant.model,
+      status: draft.assistant.status,
+      instructions: draft.assistant.instructions,
+      toolsets: draft.assistant.toolsets.map((t) => ({
+        slug: t.toolsetSlug,
+        environmentSlug: t.environmentSlug ?? null,
+      })),
+    });
+  }, [mode, draft.assistant, snapshot]);
+
+  const ready = mode === "create" || snapshot !== null;
+
+  const systemPrompt = useMemo(() => {
+    if (!ready) return null;
+    return buildSystemPrompt({ mode, snapshot: snapshot ?? undefined });
+  }, [mode, ready, snapshot]);
 
   const welcome = useMemo(
     () =>
       buildWelcome({
         mode,
-        assistantName: draft.assistant?.name,
+        assistantName: snapshot?.name ?? draft.assistant?.name,
       }),
-    [mode, draft.assistant?.name],
+    [mode, snapshot?.name, draft.assistant?.name],
   );
+
+  if (!systemPrompt) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <Loader2 className="text-muted-foreground h-5 w-5 animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-full flex-col">

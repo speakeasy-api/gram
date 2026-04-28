@@ -6,7 +6,9 @@ import { ToolCallMessagePartComponent } from "@assistant-ui/react";
 import { useMemo } from "react";
 import { z } from "zod";
 import { useAssistantDraft } from "../AssistantDraftContext";
+import { computeBehaviorSection } from "../behaviors";
 import { getIntegrationDoc, listIntegrationDocs } from "../docs";
+import { setSection } from "../sections";
 import {
   ProposeIdentityComponent,
   RequestEnvironmentSecretsComponent,
@@ -211,6 +213,45 @@ async function ensureAssistant(
   return created;
 }
 
+type AssistantForBehavior = {
+  id: string;
+  instructions: string;
+  toolsets: { toolsetSlug: string }[];
+};
+
+async function recomputeBehaviorSection(
+  deps: ToolDeps,
+  assistant?: AssistantForBehavior,
+): Promise<void> {
+  const { sdk, draft } = deps;
+  const a = assistant ?? draft.assistant;
+  if (!a) return;
+  let urns: string[] = [];
+  if (a.toolsets.length > 0) {
+    const list = await sdk.toolsets.list().catch(() => null);
+    const summaries = list?.toolsets ?? [];
+    const bySlug = new Map(summaries.map((t) => [t.slug, t]));
+    const set = new Set<string>();
+    for (const ref of a.toolsets) {
+      const ts = bySlug.get(ref.toolsetSlug);
+      if (!ts) continue;
+      for (const t of ts.tools) set.add(t.toolUrn);
+    }
+    urns = [...set];
+  }
+  const behaviorBody = computeBehaviorSection(urns);
+  const nextInstructions = setSection(a.instructions, "Behavior", behaviorBody);
+  if (nextInstructions === a.instructions) return;
+  const updated = await sdk.assistants.update({
+    updateAssistantForm: {
+      id: a.id,
+      instructions: nextInstructions,
+    },
+  });
+  draft.setAssistant(updated);
+  draft.invalidateAll();
+}
+
 async function currentEnvEntryNames(
   deps: ToolDeps,
   envSlug: string,
@@ -246,10 +287,11 @@ async function upsertEnvEntries(
 
 type UpdateAssistantArgs = {
   name?: string;
-  instructions?: string;
   model?: string;
   status?: "active" | "paused";
 };
+type SetPersonalityArgs = { instructions: string };
+type SetTasksArgs = { tasks: string };
 type AttachToolsetArgs = {
   toolset_slug: string;
   environment_slug?: string;
@@ -298,8 +340,8 @@ type ShowWebhookArgs = {
 type ShowSlackGuideArgs = {
   app_name?: string;
   workspace_hint?: string;
-  bot_scopes: string[];
-  bot_events: string[];
+  bot_scopes?: string[];
+  bot_events?: string[];
   webhook_url?: string;
 };
 type ListIntegrationsArgs = { keywords?: string[] };
@@ -380,47 +422,65 @@ function buildAssistantTools(deps: ToolDeps) {
 
         const p = userInput.personality;
         const name = userInput.name;
-        if (p.kind === "prebuilt") {
-          const hasInstructions = p.prebuilt.instructions.trim().length > 0;
+        try {
+          if (p.kind === "prebuilt") {
+            const hasInstructions = p.prebuilt.instructions.trim().length > 0;
+            const current = draft.assistant?.instructions ?? "";
+            const next = hasInstructions
+              ? setSection(current, "Personality", p.prebuilt.instructions)
+              : current;
+            const a = await ensureAssistant(
+              deps,
+              hasInstructions ? { name, instructions: next } : { name },
+            );
+            await recomputeBehaviorSection(deps, a);
+            return okResult({
+              name,
+              personality: {
+                kind: "prebuilt" as const,
+                slug: p.prebuilt.slug,
+                title: p.prebuilt.title,
+                summary: p.prebuilt.summary,
+                body_set: hasInstructions,
+              },
+              note: hasInstructions
+                ? `Saved name "${name}" and the "${p.prebuilt.title}" personality verbatim under # Personality. Now describe what this assistant does — call set_tasks with role-specific guidance derived from the user's stated goal. Do not call set_personality unless the user explicitly asks to change it.`
+                : `Saved name "${name}". The "${p.prebuilt.title}" preset has no body — synthesize personality content (voice, tone, formatting habits, uncertainty handling) matching the title "${p.prebuilt.title}" and summary "${p.prebuilt.summary}", then call set_personality with the result. Then call set_tasks with role-specific guidance.`,
+            });
+          }
+          if (p.kind === "custom_text") {
+            const current = draft.assistant?.instructions ?? "";
+            const next = setSection(current, "Personality", p.custom_text);
+            const a = await ensureAssistant(deps, { name, instructions: next });
+            await recomputeBehaviorSection(deps, a);
+            return okResult({
+              name,
+              personality: { kind: "custom_text" as const },
+              note: `Saved name "${name}" and the user's pasted personality verbatim under # Personality. Now call set_tasks with role-specific guidance. Do not modify # Personality.`,
+            });
+          }
+          if (p.kind === "generate") {
+            const a = await ensureAssistant(deps, { name });
+            await recomputeBehaviorSection(deps, a);
+            return okResult({
+              name,
+              personality: {
+                kind: "generate" as const,
+                description: p.describe,
+              },
+              note: `Saved name "${name}". The user described their desired personality: "${p.describe}". Expand that into a full personality (voice, tone, formatting habits, uncertainty handling) and call set_personality with the expanded text. Then call set_tasks with role-specific guidance.`,
+            });
+          }
+          const a = await ensureAssistant(deps, { name });
+          await recomputeBehaviorSection(deps, a);
           return okResult({
             name,
-            personality: {
-              kind: "prebuilt" as const,
-              slug: p.prebuilt.slug,
-              title: p.prebuilt.title,
-              summary: p.prebuilt.summary,
-              instructions: hasInstructions ? p.prebuilt.instructions : null,
-            },
-            note: hasInstructions
-              ? `User chose the "${p.prebuilt.title}" preset. Use the returned instructions verbatim as the base of the assistant's system prompt, then layer on role/goal-specific guidance so the assistant actually knows what job it does. Call update_assistant with name and full instructions.`
-              : `User chose the "${p.prebuilt.title}" preset (title: "${p.prebuilt.title}", summary: "${p.prebuilt.summary}"). The preset body isn't filled in yet — synthesize a full system prompt matching that title and summary, blended with the user's goal. Call update_assistant.`,
+            personality: { kind: "random" as const },
+            note: `Saved name "${name}". Invent a distinctive personality from scratch (voice, formatting habits, sign-off, uncertainty handling). Keep it professional-compatible. Call set_personality with the result, then set_tasks with role-specific guidance.`,
           });
+        } catch (e) {
+          return errResult(e instanceof Error ? e.message : "save failed");
         }
-        if (p.kind === "custom_text") {
-          return okResult({
-            name,
-            personality: {
-              kind: "custom_text" as const,
-              instructions: p.custom_text,
-            },
-            note: "User pasted full instructions. Call update_assistant with name and these instructions unchanged.",
-          });
-        }
-        if (p.kind === "generate") {
-          return okResult({
-            name,
-            personality: {
-              kind: "generate" as const,
-              description: p.describe,
-            },
-            note: "User gave a short description. Expand it into a complete system prompt in the Assistant's own voice — tone, address, formatting preferences, how to handle uncertainty, role fit — then call update_assistant with name and the expanded instructions.",
-          });
-        }
-        return okResult({
-          name,
-          personality: { kind: "random" as const },
-          note: "User asked for a random personality. Invent a distinctive voice from scratch: tone, quirks, how it greets and signs off, formatting habits. Keep it professional-compatible. Write the full system prompt and call update_assistant.",
-        });
       },
     },
     "propose_identity",
@@ -429,7 +489,7 @@ function buildAssistantTools(deps: ToolDeps) {
   const update_assistant = defineFrontendTool<UpdateAssistantArgs, ToolResult>(
     {
       description:
-        "Create or update the assistant being configured. Use this to set its name, system instructions, model, or status. If no assistant exists yet (creation flow), the first call to this tool creates it. Subsequent calls update it. Always pass the full intended value for any field you want to set.",
+        "Update the assistant's name, model, or status. The system prompt is split into three managed sections — # Personality (set via set_personality), # Behavior (managed automatically based on attached tools), # Tasks (set via set_tasks) — and is NOT writable through this tool. The first call also creates the assistant if none exists yet (creation flow).",
       parameters: z.object({
         name: z
           .string()
@@ -437,12 +497,6 @@ function buildAssistantTools(deps: ToolDeps) {
           .max(128)
           .optional()
           .describe("Display name for the assistant."),
-        instructions: z
-          .string()
-          .optional()
-          .describe(
-            "Full system prompt for the assistant. This is what controls its behavior at runtime.",
-          ),
         model: z
           .string()
           .optional()
@@ -477,6 +531,74 @@ function buildAssistantTools(deps: ToolDeps) {
       },
     },
     "update_assistant",
+  );
+
+  const set_personality = defineFrontendTool<SetPersonalityArgs, ToolResult>(
+    {
+      description:
+        "Replace the assistant's # Personality section — voice, tone, addressing style, formatting habits, uncertainty handling. Personality is voice-only: do not include role-specific guidance about what the assistant does (use set_tasks) and do not include behavior bullets (managed automatically based on attached tools). Pass the body WITHOUT a leading '# Personality' heading. Do not use any H1 (`# Foo`) inside the body — use H2 (`##`) or lower for sub-structure.",
+      parameters: z.object({
+        instructions: z
+          .string()
+          .min(1)
+          .describe(
+            "Personality body. No leading '# Personality' heading. No H1 sub-headings — use H2 or lower.",
+          ),
+      }),
+      execute: async (args) => {
+        const { instructions } = args as SetPersonalityArgs;
+        try {
+          const current = draft.assistant?.instructions ?? "";
+          const next = setSection(current, "Personality", instructions);
+          const updated = await ensureAssistant(deps, { instructions: next });
+          return okResult({
+            assistant: {
+              id: updated.id,
+              name: updated.name,
+              instructions: updated.instructions,
+            },
+          });
+        } catch (e) {
+          return errResult(
+            e instanceof Error ? e.message : "set personality failed",
+          );
+        }
+      },
+    },
+    "set_personality",
+  );
+
+  const set_tasks = defineFrontendTool<SetTasksArgs, ToolResult>(
+    {
+      description:
+        "Replace the assistant's # Tasks section — what it actually does on each run: how it interprets incoming events, which tools it tends to use, what its output looks like, when to stay silent. This is the role/goal-specific guidance derived from the user's stated goal. Do not include personality (use set_personality) or behavior (managed automatically). Pass the body WITHOUT a leading '# Tasks' heading. Do not use any H1 (`# Foo`) inside the body — use H2 (`##`) or lower for sub-structure.",
+      parameters: z.object({
+        tasks: z
+          .string()
+          .min(1)
+          .describe(
+            "Tasks/role body. The job description for this assistant. No leading '# Tasks' heading. No H1 sub-headings — use H2 or lower.",
+          ),
+      }),
+      execute: async (args) => {
+        const { tasks } = args as SetTasksArgs;
+        try {
+          const current = draft.assistant?.instructions ?? "";
+          const next = setSection(current, "Tasks", tasks);
+          const updated = await ensureAssistant(deps, { instructions: next });
+          return okResult({
+            assistant: {
+              id: updated.id,
+              name: updated.name,
+              instructions: updated.instructions,
+            },
+          });
+        } catch (e) {
+          return errResult(e instanceof Error ? e.message : "set tasks failed");
+        }
+      },
+    },
+    "set_tasks",
   );
 
   const attach_toolset = defineFrontendTool<AttachToolsetArgs, ToolResult>(
@@ -516,6 +638,7 @@ function buildAssistantTools(deps: ToolDeps) {
           });
           draft.setAssistant(updated);
           draft.invalidateAll();
+          await recomputeBehaviorSection(deps, updated);
           return okResult({
             toolsets: updated.toolsets,
             environment_slug: boundSlug,
@@ -548,6 +671,7 @@ function buildAssistantTools(deps: ToolDeps) {
           });
           draft.setAssistant(updated);
           draft.invalidateAll();
+          await recomputeBehaviorSection(deps, updated);
           return okResult({ toolsets: updated.toolsets });
         } catch (e) {
           return errResult(e instanceof Error ? e.message : "detach failed");
@@ -641,6 +765,7 @@ function buildAssistantTools(deps: ToolDeps) {
             updateToolsetRequestBody: { toolUrns: merged },
           });
           draft.invalidateAll();
+          await recomputeBehaviorSection(deps);
           return okResult({
             slug: updated.slug,
             tool_count: updated.tools.length,
@@ -705,7 +830,7 @@ function buildAssistantTools(deps: ToolDeps) {
   >(
     {
       description:
-        "List all environments in the project. Returns id, slug, name, description, and entry names (without values). Use the id when attaching an environment to a trigger.",
+        "List all environments in the project. Returns id, slug, name, description, entry names, and which entries have populated values (vs empty stubs). Use populated_entry_names to gate downstream prompts — e.g. skip show_slack_app_guide once SLACK_BOT_TOKEN is populated. Use the id when attaching an environment to a trigger.",
       parameters: z.object({}),
       execute: async () => {
         try {
@@ -717,6 +842,9 @@ function buildAssistantTools(deps: ToolDeps) {
               name: e.name,
               description: e.description,
               entry_names: e.entries.map((entry) => entry.name),
+              populated_entry_names: e.entries
+                .filter((entry) => entry.value !== "<EMPTY>")
+                .map((entry) => entry.name),
             })),
           });
         } catch (e) {
@@ -1014,7 +1142,7 @@ function buildAssistantTools(deps: ToolDeps) {
   const create_trigger = defineFrontendTool<CreateTriggerArgs, ToolResult>(
     {
       description:
-        "Create a trigger instance pointed at the current assistant. The assistant must already exist (call update_assistant first if needed). The trigger is bound to the assistant's shared environment by default — omit environment_id in almost all cases. For Slack triggers the env can be empty at creation time (Gram's webhook answers Slack's url_verification challenge without a signing secret), but SLACK_BOT_TOKEN and SLACK_SIGNING_SECRET must be populated before real events fire. For cron triggers the config must include a 5-field cron string in 'schedule'. After creation, surface the webhook_url to the user via show_webhook_url OR pass it straight into show_slack_app_guide so the Slack manifest can pre-fill event_subscriptions.request_url.",
+        "Create a trigger instance pointed at the current assistant. The assistant must already exist (call update_assistant first if needed). The trigger is bound to the assistant's shared environment by default — omit environment_id in almost all cases. For Slack triggers the env can be empty at creation time (Gram's webhook answers Slack's url_verification challenge without a signing secret), but SLACK_BOT_TOKEN and SLACK_SIGNING_SECRET must be populated before real events fire. For cron triggers the config must include a 5-field cron string in 'schedule'. After creation: if SLACK_BOT_TOKEN is NOT yet populated on the assistant's env (check via list_environments → populated_entry_names), pass webhook_url to show_slack_app_guide so the manifest pre-fills event_subscriptions.request_url. Otherwise the bot already exists — skip the guide and use show_webhook_url (or nothing, if the trigger is just being reconfigured).",
       parameters: z.object({
         name: z.string().min(1),
         definition_slug: z.string().describe("e.g. 'slack' or 'cron'."),
@@ -1178,17 +1306,32 @@ function buildAssistantTools(deps: ToolDeps) {
   >(
     {
       description:
-        "Display a Slack app creation guide with a deep link that pre-fills the Slack app manifest. Use this when the user needs to create a brand-new Slack app for this assistant. Pass the assistant's display name as app_name, the bot_scopes and bot_events the assistant will need, and — strongly preferred — the webhook_url from a Slack trigger you already created. When webhook_url is included, Slack verifies the URL the moment the manifest is applied, so the user doesn't paste it later. The component walks the user through Create → Install-to-Workspace → copying the xoxb- bot token and signing secret. Pure UI — no return value the model needs to act on.",
+        "Display a Slack app creation guide with a deep link that pre-fills the Slack app manifest. Use this ONLY when the user needs to create a brand-new Slack app for this assistant — i.e. SLACK_BOT_TOKEN is not yet populated on the assistant's env (check list_environments → populated_entry_names). If the bot token is already populated, the app already exists and was already installed; do not call this tool. The component derives the manifest automatically: name from the assistant's name, bot scopes from the slack platform tools attached to the assistant, and bot_events from the assistant's slack triggers. Pass the webhook_url from the Slack trigger you already created so Slack verifies it on Create. Only pass app_name / bot_scopes / bot_events to override the derived defaults. The component walks the user through Create → Install-to-Workspace → copying the xoxb- bot token and signing secret. Pure UI — no return value the model needs to act on.",
       parameters: z.object({
-        app_name: z.string().optional(),
+        app_name: z
+          .string()
+          .optional()
+          .describe(
+            "Override the Slack app display name. Defaults to the assistant's name.",
+          ),
         workspace_hint: z.string().optional(),
-        bot_scopes: z.array(z.string()),
-        bot_events: z.array(z.string()),
+        bot_scopes: z
+          .array(z.string())
+          .optional()
+          .describe(
+            "Extra bot scopes to add on top of the ones derived from attached slack tools. Omit unless you know a tool needs a scope the catalog doesn't cover.",
+          ),
+        bot_events: z
+          .array(z.string())
+          .optional()
+          .describe(
+            "Extra Slack manifest bot_events (dotted form, e.g. 'message.channels') to add on top of those derived from the assistant's slack triggers. Omit in the normal flow.",
+          ),
         webhook_url: z
           .string()
           .optional()
           .describe(
-            "Optional: webhook URL of the Slack trigger to pre-fill in the manifest's request_url.",
+            "Webhook URL of the slack trigger to pre-fill in the manifest's request_url so Slack verifies it on Create.",
           ),
       }),
       execute: async () => okResult({ shown: true }),
@@ -1304,6 +1447,8 @@ function buildAssistantTools(deps: ToolDeps) {
   return {
     propose_identity,
     update_assistant,
+    set_personality,
+    set_tasks,
     attach_toolset,
     detach_toolset,
     list_toolsets,
