@@ -119,6 +119,7 @@ export const oauthWizardMachine = setup({
   initial: "pathSelection",
   states: {
     pathSelection: {
+      meta: { title: "Connect OAuth" },
       on: {
         SELECT_EXTERNAL: {
           target: "external.editing",
@@ -149,6 +150,7 @@ export const oauthWizardMachine = setup({
       initial: "editing",
       states: {
         editing: {
+          meta: { title: "Configure External OAuth" },
           on: {
             FIELD_EXTERNAL: {
               actions: assign({
@@ -198,6 +200,7 @@ export const oauthWizardMachine = setup({
           },
         },
         submitting: {
+          meta: { title: "Configure External OAuth" },
           invoke: {
             src: "addExternalOAuth",
             input: ({ context }): AddExternalOAuthInput => ({
@@ -243,6 +246,7 @@ export const oauthWizardMachine = setup({
       initial: "metadata",
       states: {
         metadata: {
+          meta: { title: "Configure OAuth Proxy" },
           on: {
             FIELD_PROXY: {
               actions: assign({
@@ -285,6 +289,7 @@ export const oauthWizardMachine = setup({
           },
         },
         credentials: {
+          meta: { title: "OAuth Client Credentials" },
           on: {
             FIELD_PROXY: {
               actions: assign({
@@ -314,6 +319,7 @@ export const oauthWizardMachine = setup({
           },
         },
         creatingEnvironment: {
+          meta: { title: "OAuth Client Credentials" },
           invoke: {
             src: "createEnvironment",
             input: ({ context }): CreateEnvironmentInput => ({
@@ -344,6 +350,7 @@ export const oauthWizardMachine = setup({
           },
         },
         creatingProxy: {
+          meta: { title: "OAuth Client Credentials" },
           invoke: {
             src: "addOAuthProxy",
             input: ({ context }): AddOAuthProxyInput => ({
@@ -380,6 +387,7 @@ export const oauthWizardMachine = setup({
           },
         },
         rollingBackEnv: {
+          meta: { title: "OAuth Client Credentials" },
           invoke: {
             src: "deleteEnvironment",
             input: ({ context }): DeleteEnvironmentInput => ({
@@ -402,6 +410,7 @@ export const oauthWizardMachine = setup({
           },
         },
         fatalError: {
+          meta: { title: "Configuration Failed" },
           type: "final",
         },
       },
@@ -410,7 +419,9 @@ export const oauthWizardMachine = setup({
     result: {
       initial: "success",
       states: {
-        success: {},
+        success: {
+          meta: { title: "OAuth Configured" },
+        },
       },
       on: {
         RESET: "#oauthWizard.pathSelection",
@@ -422,3 +433,11 @@ export const oauthWizardMachine = setup({
 export type OAuthWizardMachine = typeof oauthWizardMachine;
 export type WizardSnapshot = SnapshotFrom<typeof oauthWizardMachine>;
 export type WizardSend = (event: WizardEvent) => void;
+
+export function selectWizardTitle(state: WizardSnapshot): string {
+  for (const m of Object.values(state.getMeta())) {
+    const title = (m as { title?: unknown } | undefined)?.title;
+    if (typeof title === "string") return title;
+  }
+  return "Connect OAuth";
+}

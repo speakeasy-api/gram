@@ -19,7 +19,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { ExternalOAuthForm } from "./ExternalOAuthForm";
 import { FatalErrorStep } from "./FatalErrorStep";
-import { oauthWizardMachine, type WizardSnapshot } from "./machine";
+import { oauthWizardMachine, selectWizardTitle } from "./machine";
 import type { DiscoveredOAuth, Input } from "./machine-types";
 import { PathSelection } from "./PathSelection";
 import { ProxyCredentialsForm } from "./ProxyCredentialsForm";
@@ -142,7 +142,7 @@ function WizardBody({
   return (
     <>
       <Dialog.Header>
-        <Dialog.Title>{wizardTitle(state)}</Dialog.Title>
+        <Dialog.Title>{selectWizardTitle(state)}</Dialog.Title>
       </Dialog.Header>
 
       {state.matches("pathSelection") && (
@@ -194,22 +194,6 @@ function WizardBody({
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function wizardTitle(state: WizardSnapshot): string {
-  if (state.matches("pathSelection")) return "Connect OAuth";
-  if (state.matches("external")) return "Configure External OAuth";
-  if (state.matches({ proxy: "metadata" })) return "Configure OAuth Proxy";
-  if (
-    state.matches({ proxy: "credentials" }) ||
-    state.matches({ proxy: "creatingEnvironment" }) ||
-    state.matches({ proxy: "creatingProxy" }) ||
-    state.matches({ proxy: "rollingBackEnv" })
-  )
-    return "OAuth Client Credentials";
-  if (state.matches({ proxy: "fatalError" })) return "Configuration Failed";
-  if (state.matches("result")) return "OAuth Configured";
-  return "Connect OAuth";
-}
 
 function useDiscoveredOAuth(toolset: Toolset): DiscoveredOAuth | null {
   return useMemo<DiscoveredOAuth | null>(() => {
