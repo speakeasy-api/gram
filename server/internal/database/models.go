@@ -838,7 +838,7 @@ type PluginServer struct {
 	Deleted     bool
 }
 
-// RBAC grants. One row per (org, principal, scope, selectors). Selectors define resource constraints.
+// RBAC grants. Normalized: one row per (org, principal, scope). Selectors can further constrain applicability.
 type PrincipalGrant struct {
 	ID uuid.UUID
 	// The organization this grant belongs to. Grants are always org-scoped.
@@ -849,7 +849,9 @@ type PrincipalGrant struct {
 	PrincipalType string
 	// The scope being granted, e.g. "build:read". Validated in application code, not via FK.
 	Scope string
-	// JSON selector constraints defining what the grant applies to, e.g. {"resource_kind":"project","resource_id":"proj_123"}.
+	// Deprecated. Formerly '*' = unrestricted. Nullable, scheduled for removal.
+	DropResource pgtype.Text
+	// Optional JSON selector constraints refining when the grant applies. NULL means the grant has no selector constraints.
 	Selectors []byte
 	CreatedAt pgtype.Timestamptz
 	UpdatedAt pgtype.Timestamptz
