@@ -1,0 +1,12 @@
+{
+  "name": "gram-sandbox",
+  "private": true,
+  "dependencies": {
+    "@mozilla/readability": "0.6.0",
+    "jsdom": "29.0.2",
+    "playwright-core": "1.49.0",
+    "turndown": "7.2.4",
+    "turndown-plugin-gfm": "1.0.2",
+    "ws": "8.18.0"
+  }
+}

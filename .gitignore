@@ -28,6 +28,8 @@ scratch/
 /local/ssl
 /local/keys
 /local/functions
+/agents/runner/target
+/agents/runtime-artifacts
 .speakeasy/temp
 mprocs.log
 .madprocs.port
