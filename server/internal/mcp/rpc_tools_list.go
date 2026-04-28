@@ -102,10 +102,22 @@ func handleToolsList(
 	// per-tool mcp:connect checks — the same dimensions used by tools/call.
 	// Public MCPs skip this (open to everyone, matching the connection guard).
 	if payload.authenticated && authzEngine != nil && (toolset.McpIsPublic == nil || !*toolset.McpIsPublic) {
-		tools, err = filterToolsByAuthz(ctx, logger, authzEngine, toolset.ID, tools)
-		if err != nil {
-			return nil, err
+		allowed := make([]*toolListEntry, 0, len(tools))
+		for _, t := range tools {
+			disposition := dispositionFromAnnotations(t.Annotations)
+			if err := authzEngine.Require(ctx, authz.MCPToolCallCheck(toolset.ID, authz.MCPToolCallDimensions{
+				Tool:        t.Name,
+				Disposition: disposition,
+			})); err != nil {
+				var oopsErr *oops.ShareableError
+				if errors.As(err, &oopsErr) && oopsErr.Code == oops.CodeForbidden {
+					continue
+				}
+				return nil, oops.E(oops.CodeUnexpected, err, "check tool-level authz for tools/list").Log(ctx, logger)
+			}
+			allowed = append(allowed, t)
 		}
+		tools = allowed
 	}
 
 	if blockShadowMCPEnabled(ctx, logger, features, toolset.OrganizationID) {
@@ -229,27 +241,6 @@ func toolToListEntry(tool *types.Tool) *toolListEntry {
 	}
 }
 
-// filterToolsByAuthz removes tools the caller is not authorized to invoke.
-// Each tool is checked against mcp:connect with a tool-name dimension, matching
-// the per-tool RBAC check performed by tools/call.
-func filterToolsByAuthz(ctx context.Context, logger *slog.Logger, engine *authz.Engine, toolsetID string, tools []*toolListEntry) ([]*toolListEntry, error) {
-	allowed := make([]*toolListEntry, 0, len(tools))
-	for _, t := range tools {
-		err := engine.Require(ctx, authz.MCPToolCallCheck(toolsetID, authz.MCPToolCallDimensions{
-			Tool: t.Name,
-		}))
-		if err != nil {
-			var oopsErr *oops.ShareableError
-			if errors.As(err, &oopsErr) && oopsErr.Code == oops.CodeForbidden {
-				continue
-			}
-			return nil, oops.E(oops.CodeUnexpected, err, "check tool-level authz for tools/list").Log(ctx, logger)
-		}
-		allowed = append(allowed, t)
-	}
-	return allowed, nil
-}
-
 // convertConvAnnotations converts conv.ToolAnnotations to externalmcp.ToolAnnotations.
 func convertConvAnnotations(c *conv.ToolAnnotations) *externalmcp.ToolAnnotations {
 	if c == nil {
@@ -261,5 +252,24 @@ func convertConvAnnotations(c *conv.ToolAnnotations) *externalmcp.ToolAnnotation
 		DestructiveHint: c.DestructiveHint,
 		IdempotentHint:  c.IdempotentHint,
 		OpenWorldHint:   c.OpenWorldHint,
+	}
+}
+
+// dispositionFromAnnotations derives a disposition string from tool annotations.
+func dispositionFromAnnotations(a *externalmcp.ToolAnnotations) string {
+	if a == nil {
+		return ""
+	}
+	switch {
+	case a.ReadOnlyHint != nil && *a.ReadOnlyHint:
+		return "read_only"
+	case a.DestructiveHint != nil && *a.DestructiveHint:
+		return "destructive"
+	case a.IdempotentHint != nil && *a.IdempotentHint:
+		return "idempotent"
+	case a.OpenWorldHint != nil && *a.OpenWorldHint:
+		return "open_world"
+	default:
+		return ""
 	}
 }

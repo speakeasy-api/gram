@@ -131,9 +131,71 @@ func TestEngineFilter_returnsAllowedSubset(t *testing.T) {
 	engine := NewEngine(testinfra.NewLogger(t), nil, staticRBAC(true), workos.NewStubClient(), cache.NoopCache)
 	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{NewGrant(ScopeProjectRead, "proj_123")})
 
-	resourceIDs, err := engine.Filter(ctx, ScopeProjectRead, []string{"proj_123", "proj_456"})
+	resourceIDs, err := engine.Filter(ctx, []Check{
+		{Scope: ScopeProjectRead, ResourceID: "proj_123"},
+		{Scope: ScopeProjectRead, ResourceID: "proj_456"},
+	})
 	require.NoError(t, err)
 	require.Equal(t, []string{"proj_123"}, resourceIDs)
+}
+
+func TestEngineFilter_withDimensions(t *testing.T) {
+	t.Parallel()
+
+	engine := NewEngine(testinfra.NewLogger(t), nil, staticRBAC(true), workos.NewStubClient(), cache.NoopCache)
+	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{
+		{Scope: ScopeMCPConnect, Selector: Selector{
+			"resource_kind": "mcp",
+			"resource_id":   "toolsetA",
+			"tool":          "tool_1",
+		}},
+	})
+
+	// Only tool_1 matches the grant — one resource ID returned.
+	results, err := engine.Filter(ctx, []Check{
+		MCPToolCallCheck("toolsetA", MCPToolCallDimensions{Tool: "tool_1", Disposition: ""}),
+		MCPToolCallCheck("toolsetA", MCPToolCallDimensions{Tool: "tool_2", Disposition: ""}),
+	})
+	require.NoError(t, err)
+	require.Equal(t, []string{"toolsetA"}, results)
+}
+
+func TestEngineFilter_withDisposition(t *testing.T) {
+	t.Parallel()
+
+	engine := NewEngine(testinfra.NewLogger(t), nil, staticRBAC(true), workos.NewStubClient(), cache.NoopCache)
+	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{
+		{Scope: ScopeMCPConnect, Selector: Selector{
+			"resource_kind": "mcp",
+			"resource_id":   "toolsetA",
+			"disposition":   "read_only",
+		}},
+	})
+
+	// read_only disposition matches, destructive does not.
+	results, err := engine.Filter(ctx, []Check{
+		MCPToolCallCheck("toolsetA", MCPToolCallDimensions{Tool: "safe_tool", Disposition: "read_only"}),
+		MCPToolCallCheck("toolsetA", MCPToolCallDimensions{Tool: "risky_tool", Disposition: "destructive"}),
+	})
+	require.NoError(t, err)
+	require.Equal(t, []string{"toolsetA"}, results)
+}
+
+func TestEngineFilter_serverLevelGrantAllowsAllDimensions(t *testing.T) {
+	t.Parallel()
+
+	engine := NewEngine(testinfra.NewLogger(t), nil, staticRBAC(true), workos.NewStubClient(), cache.NoopCache)
+	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{
+		NewGrant(ScopeMCPConnect, "toolsetA"),
+	})
+
+	// Server-level grant (no tool/disposition keys) allows everything.
+	results, err := engine.Filter(ctx, []Check{
+		MCPToolCallCheck("toolsetA", MCPToolCallDimensions{Tool: "any_tool", Disposition: "destructive"}),
+		MCPToolCallCheck("toolsetA", MCPToolCallDimensions{Tool: "other_tool", Disposition: "read_only"}),
+	})
+	require.NoError(t, err)
+	require.Len(t, results, 2)
 }
 
 func TestEngineRequire_rejectsInvalidCheck(t *testing.T) {
@@ -208,7 +270,10 @@ func TestEngineFilter_skipsForNonEnterpriseAccount(t *testing.T) {
 		APIKeyScopes:          nil,
 	})
 
-	resourceIDs, err := engine.Filter(ctx, ScopeProjectRead, []string{"proj_123", "proj_456"})
+	resourceIDs, err := engine.Filter(ctx, []Check{
+		{Scope: ScopeProjectRead, ResourceID: "proj_123"},
+		{Scope: ScopeProjectRead, ResourceID: "proj_456"},
+	})
 	require.NoError(t, err)
 	require.Equal(t, []string{"proj_123", "proj_456"}, resourceIDs)
 }

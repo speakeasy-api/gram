@@ -11,7 +11,10 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
@@ -305,4 +308,64 @@ func TestServePublic_RBAC_ToolsList_MultipleToolGrants(t *testing.T) {
 	require.Contains(t, names, "tool_a")
 	require.Contains(t, names, "tool_c")
 	require.NotContains(t, names, "tool_b")
+}
+
+// ---------------------------------------------------------------------------
+// Disposition-based RBAC filtering (engine-level, matching rbac_test.go pattern)
+// ---------------------------------------------------------------------------
+
+func TestServePublic_RBAC_ToolsList_DispositionGrant_AllowsMatchingDisposition(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	toolset := createPrivateMCPToolset(t, ctx, ti, "rbac-disp-allow-"+uuid.NewString()[:8])
+
+	authzEngine := authz.NewEngine(ti.logger, ti.conn, authztest.RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
+
+	// Grant mcp:connect scoped to read_only disposition only.
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
+		Scope: authz.ScopeMCPConnect,
+		Selector: authz.Selector{
+			"resource_kind": "mcp",
+			"resource_id":   toolset.ID.String(),
+			"disposition":   "read_only",
+		},
+	})
+
+	// read_only tool should pass.
+	err := authzEngine.Require(ctx, authz.MCPToolCallCheck(toolset.ID.String(), authz.MCPToolCallDimensions{
+		Tool:        "safe_tool",
+		Disposition: "read_only",
+	}))
+	require.NoError(t, err)
+
+	// destructive tool should be denied.
+	err = authzEngine.Require(ctx, authz.MCPToolCallCheck(toolset.ID.String(), authz.MCPToolCallDimensions{
+		Tool:        "dangerous_tool",
+		Disposition: "destructive",
+	}))
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+}
+
+func TestServePublic_RBAC_ToolsList_DispositionGrant_ServerLevelAllowsAll(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	toolset := createPrivateMCPToolset(t, ctx, ti, "rbac-disp-server-"+uuid.NewString()[:8])
+
+	authzEngine := authz.NewEngine(ti.logger, ti.conn, authztest.RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
+
+	// Server-level grant (no disposition key) — all dispositions allowed.
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
+		Scope:    authz.ScopeMCPConnect,
+		Selector: authz.NewSelector(authz.ScopeMCPConnect, toolset.ID.String()),
+	})
+
+	err := authzEngine.Require(ctx, authz.MCPToolCallCheck(toolset.ID.String(), authz.MCPToolCallDimensions{
+		Tool:        "any_tool",
+		Disposition: "destructive",
+	}))
+	require.NoError(t, err)
 }

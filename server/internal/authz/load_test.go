@@ -90,7 +90,9 @@ func TestLoadGrants_returnsEmptyGrantSetWhenNoRowsMatch(t *testing.T) {
 
 	ctx = GrantsToContext(ctx, grants)
 	engine := NewEngine(testinfra.NewLogger(t), conn, rbacAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
-	projectIDs, err := engine.Filter(ctx, ScopeProjectRead, []string{"proj:123"})
+	projectIDs, err := engine.Filter(ctx, []Check{
+		{Scope: ScopeProjectRead, ResourceID: "proj:123"},
+	})
 	require.NoError(t, err)
 	require.Empty(t, projectIDs)
 }
