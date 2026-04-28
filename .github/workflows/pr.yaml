@@ -334,6 +334,13 @@ jobs:
         with:
           cloud-token: ${{ secrets.ATLAS_TOKEN }}
 
+      - name: Run gram migration static checks
+        shell: bash
+        env:
+          usage_git_base: origin/main
+          usage_no_atlas: "true"
+        run: bash .mise-tasks/lint/migrations.sh
+
       - name: Lint PostgreSQL migrations
         uses: ariga/atlas-action/migrate/lint@v1.14.5
         with:
