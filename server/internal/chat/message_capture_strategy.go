@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strings"
 	"time"
 
@@ -121,7 +122,13 @@ func (s *ChatMessageCaptureStrategy) StartOrResumeChat(ctx context.Context, requ
 		return nil, oops.E(oops.CodeUnexpected, err, "create chat")
 	}
 
-	matchResult, err := s.matchIncomingAgainstStored(ctx, chatID, request.Messages)
+	// Normalize incoming to the same canonical (text-row, tools-row) shape
+	// buildAssistantRows uses for stored rows. Without this, a single combined
+	// assistant message from the runner hashes differently than the two stored
+	// rows it splits into, forcing a new generation on every multi-step turn.
+	normalized := slices.Collect(openrouter.NormalizeAssistantMessages(request.Messages))
+
+	matchResult, err := s.matchIncomingAgainstStored(ctx, chatID, normalized)
 	if err != nil {
 		return nil, err
 	}
@@ -137,7 +144,7 @@ func (s *ChatMessageCaptureStrategy) StartOrResumeChat(ctx context.Context, requ
 		matchedPrefix = 0
 	}
 
-	newMessages := request.Messages[matchedPrefix:]
+	newMessages := normalized[matchedPrefix:]
 	if len(newMessages) == 0 {
 		return &chatCaptureSession{
 			generation:  generation,
@@ -210,7 +217,7 @@ func (s *ChatMessageCaptureStrategy) matchIncomingAgainstStored(ctx context.Cont
 		if len(storedHash) == 0 {
 			// Lazy backfill: historical rows have no hash. Compute from stored
 			// fields and persist so subsequent turns skip this path.
-			storedHash = chainMessageHash(parentHash, row.Role, row.Content, row.ToolCallID.String)
+			storedHash = chainMessageHash(parentHash, row.Role, row.Content, row.ToolCallID.String, row.ToolCalls)
 			if err := s.repo.BackfillChatMessageHash(ctx, repo.BackfillChatMessageHashParams{
 				ID:          row.ID,
 				ContentHash: storedHash,
@@ -253,6 +260,16 @@ func buildPendingRows(
 			toolCallID = *tc
 		}
 
+		// Persist assistant tool_use blocks alongside the row so the replay
+		// path (loadChatHistory → runner normalize_history) reconstructs the
+		// tool_use that pairs with the following tool_result. Dropping these
+		// produces orphaned tool_results which Anthropic rejects with
+		// "tool_use_id has no corresponding tool_use block".
+		toolCallsJSON, err := assistantToolCallsJSON(msg)
+		if err != nil {
+			toolCallsJSON = nil
+		}
+
 		metadata := httpMetadata{
 			Source:    string(request.UsageSource),
 			Origin:    "",
@@ -279,7 +296,7 @@ func buildPendingRows(
 			content:          msg,
 			metadata:         metadata,
 			finishReason:     nil,
-			toolCalls:        nil,
+			toolCalls:        toolCallsJSON,
 			promptTokens:     0,
 			completionTokens: 0,
 			totalTokens:      0,
@@ -415,7 +432,7 @@ func buildAssistantRows(
 	if hasText && hasTools {
 		text := base
 		text.Content = content
-		text.ContentHash = hashAssistantResponse(parentHash, content)
+		text.ContentHash = hashAssistantResponse(parentHash, content, nil)
 
 		tools := base
 		tools.ToolCalls = toolCallsJSON
@@ -423,7 +440,7 @@ func buildAssistantRows(
 		tools.PromptTokens = promptTokens
 		tools.CompletionTokens = completionTokens
 		tools.TotalTokens = totalTokens
-		tools.ContentHash = hashAssistantResponse(text.ContentHash, "")
+		tools.ContentHash = hashAssistantResponse(text.ContentHash, "", toolCallsJSON)
 
 		return []repo.CreateChatMessageParams{text, tools}
 	}
@@ -435,7 +452,7 @@ func buildAssistantRows(
 	only.PromptTokens = promptTokens
 	only.CompletionTokens = completionTokens
 	only.TotalTokens = totalTokens
-	only.ContentHash = hashAssistantResponse(parentHash, content)
+	only.ContentHash = hashAssistantResponse(parentHash, content, toolCallsJSON)
 
 	return []repo.CreateChatMessageParams{only}
 }

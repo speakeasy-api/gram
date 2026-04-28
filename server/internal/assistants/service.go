@@ -1177,6 +1177,29 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 				}, nil
 			}
 
+			// Upstream completion provider rejected the request (Anthropic 400
+			// on a malformed message, OpenRouter rate limit, etc). The runtime
+			// is fine — replaying the same input would just produce the same
+			// failure, so terminally fail the event and keep the VM warm for
+			// subsequent ones rather than churning Fly on every retry.
+			if errors.Is(runErr, ErrCompletionFailed) {
+				s.emitAssistantTelemetry(turnCtx, assistant, thread, &runtimeRecord, &event, "event_terminal", "assistant event failed at completion provider", "ERROR", runErr)
+				if err := s.failEvent(ctx, thread.ProjectID, event.ID, runErr); err != nil {
+					return ProcessThreadEventsResult{}, err
+				}
+				warmUntil := time.Now().UTC().Add(time.Duration(assistant.WarmTTLSeconds) * time.Second)
+				if err := s.setRuntimeActive(ctx, thread.ProjectID, runtimeRecord.ID, warmUntil); err != nil {
+					return ProcessThreadEventsResult{}, err
+				}
+				return ProcessThreadEventsResult{
+					AssistantID:       assistant.ID,
+					WarmUntil:         warmUntil,
+					RuntimeActive:     true,
+					RetryAdmission:    false,
+					ProcessedAnyEvent: processedAny,
+				}, nil
+			}
+
 			// Terminal failure after maxEventAttempts — stop retrying this
 			// event. The warm runtime stays up for subsequent events.
 			if event.Attempts >= maxEventAttempts {

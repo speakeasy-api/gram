@@ -315,6 +315,13 @@ func NewRuntimeManager(logger *slog.Logger, httpPolicy *guardian.Policy, config 
 // hammer a dead VM with duplicate deliveries.
 var ErrRuntimeUnhealthy = errors.New("assistant runtime unhealthy")
 
+// ErrCompletionFailed signals that a turn failed because the upstream
+// completion provider (OpenRouter/Anthropic/etc) refused the request or
+// returned a non-retryable error. The runtime itself is healthy — replaying
+// the same input would just produce the same failure, so callers terminally
+// fail the event and leave the VM warm to handle subsequent events.
+var ErrCompletionFailed = errors.New("assistant completion failed")
+
 func (m *RuntimeManager) Backend() string {
 	return runtimeBackendLocal
 }

@@ -1039,11 +1039,15 @@ type chatMessageRow struct {
 	messageID      string
 	toolCallID     string
 
-	role             string
-	model            string
-	content          or.ChatMessages
-	finishReason     *string
-	toolCalls        []string
+	role         string
+	model        string
+	content      or.ChatMessages
+	finishReason *string
+	// toolCalls is the canonical JSONB blob written to chat_messages.tool_calls.
+	// nil means "no tool calls"; the bytes must match the format produced by
+	// assistantToolCallsJSON / buildAssistantRows so chain hashes line up
+	// across capture paths.
+	toolCalls        []byte
 	promptTokens     int64
 	completionTokens int64
 	totalTokens      int64
@@ -1091,6 +1095,19 @@ func storeMessages(ctx context.Context, logger *slog.Logger, tx repo.DBTX, asset
 			if err != nil {
 				results[i] = uploadResult{assetURL: "", jsonData: nil, err: fmt.Errorf("marshal message content: %w", err)}
 				return nil // Don't abort other uploads
+			}
+
+			// Tool-only assistant messages legitimately carry no content
+			// payload (NormalizeAssistantMessages splits combined text+tools
+			// responses into a text row followed by a tools row whose Content
+			// is null OptionalNullable). Persisting the bytes "null" into
+			// content_raw would surface as JSON null on /chat.load and break
+			// the dashboard's string-typed schema. Match buildAssistantRows'
+			// behavior: leave content_raw empty and let loadMessageContent
+			// fall back to "" via the plain Content column.
+			if bytes.Equal(bytes.TrimSpace(jsonData), []byte("null")) {
+				results[i] = uploadResult{assetURL: "", jsonData: nil, err: nil}
+				return nil
 			}
 
 			// Compute SHA256 hash for the content-addressable path.
@@ -1151,12 +1168,6 @@ func storeMessages(ctx context.Context, logger *slog.Logger, tx repo.DBTX, asset
 			contentRaw = res.jsonData
 		}
 
-		// Marshal tool calls to JSON if present.
-		var toolCallsJSON []byte
-		if len(row.toolCalls) > 0 {
-			toolCallsJSON, _ = json.Marshal(row.toolCalls)
-		}
-
 		dbrows[i] = repo.CreateChatMessageParams{
 			ChatID:           row.chatID,
 			ProjectID:        row.projectID,
@@ -1171,7 +1182,7 @@ func storeMessages(ctx context.Context, logger *slog.Logger, tx repo.DBTX, asset
 			UserID:           conv.ToPGText(row.userID),
 			ExternalUserID:   conv.ToPGText(row.externalUserID),
 			FinishReason:     conv.PtrToPGText(row.finishReason),
-			ToolCalls:        toolCallsJSON,
+			ToolCalls:        row.toolCalls,
 			PromptTokens:     row.promptTokens,
 			CompletionTokens: row.completionTokens,
 			TotalTokens:      row.totalTokens,

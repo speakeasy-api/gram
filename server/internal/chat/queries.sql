@@ -162,7 +162,7 @@ WHERE chat_id = @chat_id AND (project_id IS NULL OR project_id = @project_id::uu
 SELECT COALESCE(MAX(generation), 0)::integer AS generation FROM chat_messages WHERE chat_id = @chat_id;
 
 -- name: ListChatMessagesForMatch :many
-SELECT id, role, content, tool_call_id, content_hash
+SELECT id, role, content, tool_call_id, tool_calls, content_hash
 FROM chat_messages
 WHERE chat_id = @chat_id AND generation = @generation
 ORDER BY seq ASC;
