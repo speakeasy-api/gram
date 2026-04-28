@@ -348,6 +348,25 @@ func TestServePublic_RBAC_ToolsList_DispositionGrant_AllowsMatchingDisposition(t
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }
 
+func TestServePublic_RBAC_ToolsList_DisabledRBACAllowsAll(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	toolset := createPrivateMCPToolset(t, ctx, ti, "list-rbac-off-"+uuid.NewString()[:8])
+
+	// Engine with RBAC disabled — simulates org without RBAC feature flag.
+	authzEngine := authz.NewEngine(ti.logger, ti.conn, authztest.RBACAlwaysDisabled, workos.NewStubClient(), cache.NoopCache)
+
+	// No grants in context at all. With RBAC disabled, every tool should pass.
+	for _, tool := range []string{"tool_one", "tool_two", "tool_three"} {
+		err := authzEngine.Require(ctx, authz.MCPToolCallCheck(toolset.ID.String(), authz.MCPToolCallDimensions{
+			Tool:        tool,
+			Disposition: "",
+		}))
+		require.NoError(t, err, "tool %q should be allowed when RBAC is disabled", tool)
+	}
+}
+
 func TestServePublic_RBAC_ToolsList_DispositionGrant_ServerLevelAllowsAll(t *testing.T) {
 	t.Parallel()
 
