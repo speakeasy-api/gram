@@ -82,21 +82,37 @@ else
   latest_base_ts="${latest_base_name##*/}"
   latest_base_ts="${latest_base_ts%%_*}"
 
-  out_of_order=false
+  bad_files=()
   for file in "${added_files[@]}"; do
     base_name="${file##*/}"
     ts="${base_name%%_*}"
     if [ -n "$latest_base_ts" ] && { [ "$ts" \< "$latest_base_ts" ] || [ "$ts" = "$latest_base_ts" ]; }; then
-      out_of_order=true
+      bad_files+=("$file")
       echo "❌ $file (timestamp $ts <= latest on $base_ref: $latest_base_ts)"
-      gh_error "$file" "Migration $base_name has timestamp $ts <= latest on $base_ref ($latest_base_ts). Do NOT rename or hand-edit atlas.sum. Delete the migration, rebase $base_ref, then re-run 'mise db:diff <name>' so it is regenerated on top."
+      gh_error "$file" "Migration $base_name has timestamp $ts <= latest on $base_ref ($latest_base_ts). Do NOT rename or hand-edit atlas.sum. Delete this file, rebase $base_ref, then re-run 'mise db:diff <name>' so it is regenerated on top."
     fi
   done
 
-  if [ "$out_of_order" = true ]; then
+  if [ ${#bad_files[@]} -gt 0 ]; then
     echo "
-🚨 One or more migrations were added out of order (timestamp <= $latest_base_ts on $base_ref).
-🚨 See CLAUDE.md > Database Migrations for the fix.
+🚨 The following migration(s) were added out of order (timestamp <= $latest_base_ts on $base_ref):
+🚨"
+    for f in "${bad_files[@]}"; do
+      echo "🚨   - $f"
+    done
+    echo "🚨
+🚨 Do NOT rename the file(s) or hand-edit atlas.sum. Migration files
+🚨 and atlas.sum must only be produced by the Atlas CLI.
+🚨
+🚨 To fix:
+🚨   1. Delete the file(s) listed above on this branch:
+🚨"
+    for f in "${bad_files[@]}"; do
+      echo "🚨        rm $f"
+    done
+    echo "🚨   2. Rebase or merge $base_ref into your branch.
+🚨   3. Re-run the migration diff (e.g. 'mise db:diff <name>') so the
+🚨      migration is regenerated on top with a fresh timestamp.
 "
     exit 1
   fi
