@@ -30,6 +30,9 @@ type GramProductFeaturesView struct {
 	SessionCaptureEnabled *bool
 	// Whether skills capture and registry features are enabled
 	SkillsCaptureEnabled *bool
+	// Whether shadow-MCP guarding is enabled (injects required toolset id and
+	// rejects unsigned tool calls)
+	BlockShadowMcpEnabled *bool
 }
 
 var (
@@ -41,6 +44,7 @@ var (
 			"tool_io_logs_enabled",
 			"session_capture_enabled",
 			"skills_capture_enabled",
+			"block_shadow_mcp_enabled",
 		},
 	}
 )
@@ -71,6 +75,9 @@ func ValidateGramProductFeaturesView(result *GramProductFeaturesView) (err error
 	}
 	if result.SkillsCaptureEnabled == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("skills_capture_enabled", "result"))
+	}
+	if result.BlockShadowMcpEnabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("block_shadow_mcp_enabled", "result"))
 	}
 	return
 }

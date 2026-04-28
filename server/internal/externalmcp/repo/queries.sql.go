@@ -211,6 +211,72 @@ func (q *Queries) CreateExternalMCPToolDefinition(ctx context.Context, arg Creat
 	return i, err
 }
 
+const findExternalMCPToolEntriesForProjects = `-- name: FindExternalMCPToolEntriesForProjects :many
+WITH project_deployments AS (
+    SELECT DISTINCT ON (d.project_id) d.project_id, d.id as deployment_id
+    FROM deployments d
+    JOIN deployment_statuses ds ON d.id = ds.deployment_id
+    WHERE d.project_id = ANY($1::uuid[])
+      AND ds.status = 'completed'
+    ORDER BY d.project_id, d.seq DESC
+)
+SELECT
+  pd.project_id,
+  t.id,
+  t.tool_urn,
+  e.slug,
+  t.read_only_hint,
+  t.destructive_hint,
+  t.idempotent_hint,
+  t.open_world_hint
+FROM external_mcp_tool_definitions t
+JOIN external_mcp_attachments e ON t.external_mcp_attachment_id = e.id
+JOIN project_deployments pd ON e.deployment_id = pd.deployment_id
+WHERE t.deleted IS FALSE
+  AND e.deleted IS FALSE
+`
+
+type FindExternalMCPToolEntriesForProjectsRow struct {
+	ProjectID       uuid.UUID
+	ID              uuid.UUID
+	ToolUrn         string
+	Slug            string
+	ReadOnlyHint    pgtype.Bool
+	DestructiveHint pgtype.Bool
+	IdempotentHint  pgtype.Bool
+	OpenWorldHint   pgtype.Bool
+}
+
+// Batch-resolves external MCP tool entries across multiple projects.
+func (q *Queries) FindExternalMCPToolEntriesForProjects(ctx context.Context, projectIds []uuid.UUID) ([]FindExternalMCPToolEntriesForProjectsRow, error) {
+	rows, err := q.db.Query(ctx, findExternalMCPToolEntriesForProjects, projectIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []FindExternalMCPToolEntriesForProjectsRow
+	for rows.Next() {
+		var i FindExternalMCPToolEntriesForProjectsRow
+		if err := rows.Scan(
+			&i.ProjectID,
+			&i.ID,
+			&i.ToolUrn,
+			&i.Slug,
+			&i.ReadOnlyHint,
+			&i.DestructiveHint,
+			&i.IdempotentHint,
+			&i.OpenWorldHint,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getExternalMCPToolDefinitionByURN = `-- name: GetExternalMCPToolDefinitionByURN :one
 WITH deployment AS (
     SELECT d.id
@@ -328,6 +394,75 @@ func (q *Queries) GetExternalMCPToolDefinitionByURN(ctx context.Context, arg Get
 		&i.RegistryServerSpecifier,
 	)
 	return i, err
+}
+
+const getExternalMCPToolDefinitionsByURNs = `-- name: GetExternalMCPToolDefinitionsByURNs :many
+WITH deployment AS (
+    SELECT d.id
+    FROM deployments d
+    JOIN deployment_statuses ds ON d.id = ds.deployment_id
+    WHERE d.project_id = $2
+    AND ds.status = 'completed'
+    ORDER BY d.seq DESC
+    LIMIT 1
+)
+SELECT
+  t.id,
+  t.tool_urn,
+  e.slug,
+  t.read_only_hint,
+  t.destructive_hint,
+  t.idempotent_hint,
+  t.open_world_hint
+FROM external_mcp_tool_definitions t
+JOIN external_mcp_attachments e ON t.external_mcp_attachment_id = e.id
+WHERE t.tool_urn = ANY($1::text[])
+  AND e.deployment_id = (SELECT id FROM deployment)
+  AND t.deleted IS FALSE
+  AND e.deleted IS FALSE
+`
+
+type GetExternalMCPToolDefinitionsByURNsParams struct {
+	ToolUrns  []string
+	ProjectID uuid.UUID
+}
+
+type GetExternalMCPToolDefinitionsByURNsRow struct {
+	ID              uuid.UUID
+	ToolUrn         string
+	Slug            string
+	ReadOnlyHint    pgtype.Bool
+	DestructiveHint pgtype.Bool
+	IdempotentHint  pgtype.Bool
+	OpenWorldHint   pgtype.Bool
+}
+
+func (q *Queries) GetExternalMCPToolDefinitionsByURNs(ctx context.Context, arg GetExternalMCPToolDefinitionsByURNsParams) ([]GetExternalMCPToolDefinitionsByURNsRow, error) {
+	rows, err := q.db.Query(ctx, getExternalMCPToolDefinitionsByURNs, arg.ToolUrns, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetExternalMCPToolDefinitionsByURNsRow
+	for rows.Next() {
+		var i GetExternalMCPToolDefinitionsByURNsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ToolUrn,
+			&i.Slug,
+			&i.ReadOnlyHint,
+			&i.DestructiveHint,
+			&i.IdempotentHint,
+			&i.OpenWorldHint,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getExternalMCPToolsRequiringOAuth = `-- name: GetExternalMCPToolsRequiringOAuth :many

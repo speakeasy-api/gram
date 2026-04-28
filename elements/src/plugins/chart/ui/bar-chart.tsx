@@ -58,6 +58,14 @@ export const BarChart: FC<BarChartProps> = ({
 }) => {
   const isHorizontal = layout === "horizontal";
 
+  // Estimate YAxis width from longest label to prevent clipping
+  const yAxisWidth = isHorizontal
+    ? Math.max(
+        80,
+        Math.min(200, Math.max(...data.map((d) => d.label.length)) * 7 + 16),
+      )
+    : undefined;
+
   return (
     <div className={cn("flex flex-col gap-2", className)}>
       {title && (
@@ -87,7 +95,7 @@ export const BarChart: FC<BarChartProps> = ({
                 <YAxis
                   dataKey="label"
                   type="category"
-                  width={80}
+                  width={yAxisWidth}
                   tick={{ fill: "var(--foreground)", fontSize: 12 }}
                   axisLine={{ stroke: "var(--border)" }}
                   tickLine={{ stroke: "var(--border)" }}

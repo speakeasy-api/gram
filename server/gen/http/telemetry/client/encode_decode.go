@@ -3800,6 +3800,32 @@ func unmarshalHooksTimeSeriesPointResponseBodyToTelemetryHooksTimeSeriesPoint(v 
 	return res
 }
 
+// unmarshalSkillTimeSeriesPointResponseBodyToTelemetrySkillTimeSeriesPoint
+// builds a value of type *telemetry.SkillTimeSeriesPoint from a value of type
+// *SkillTimeSeriesPointResponseBody.
+func unmarshalSkillTimeSeriesPointResponseBodyToTelemetrySkillTimeSeriesPoint(v *SkillTimeSeriesPointResponseBody) *telemetry.SkillTimeSeriesPoint {
+	res := &telemetry.SkillTimeSeriesPoint{
+		BucketStartNs: *v.BucketStartNs,
+		SkillName:     *v.SkillName,
+		EventCount:    *v.EventCount,
+	}
+
+	return res
+}
+
+// unmarshalSkillBreakdownRowResponseBodyToTelemetrySkillBreakdownRow builds a
+// value of type *telemetry.SkillBreakdownRow from a value of type
+// *SkillBreakdownRowResponseBody.
+func unmarshalSkillBreakdownRowResponseBodyToTelemetrySkillBreakdownRow(v *SkillBreakdownRowResponseBody) *telemetry.SkillBreakdownRow {
+	res := &telemetry.SkillBreakdownRow{
+		SkillName: *v.SkillName,
+		UserEmail: *v.UserEmail,
+		UseCount:  *v.UseCount,
+	}
+
+	return res
+}
+
 // unmarshalHookTraceSummaryResponseBodyToTelemetryHookTraceSummary builds a
 // value of type *telemetry.HookTraceSummary from a value of type
 // *HookTraceSummaryResponseBody.
@@ -3809,6 +3835,7 @@ func unmarshalHookTraceSummaryResponseBodyToTelemetryHookTraceSummary(v *HookTra
 		StartTimeUnixNano:     *v.StartTimeUnixNano,
 		LogCount:              *v.LogCount,
 		HookStatus:            v.HookStatus,
+		BlockReason:           v.BlockReason,
 		GramUrn:               *v.GramUrn,
 		ToolName:              v.ToolName,
 		ToolSource:            v.ToolSource,

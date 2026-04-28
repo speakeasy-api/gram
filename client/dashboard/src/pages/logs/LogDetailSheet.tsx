@@ -9,6 +9,7 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  Icon,
 } from "@speakeasy-api/moonshine";
 import { ChevronDown, Copy } from "lucide-react";
 import { useState } from "react";
@@ -44,6 +45,8 @@ const TOOL_IO_ATTR_KEYS = {
   input: "gen_ai.tool.call.arguments",
   output: "gen_ai.tool.call.result",
 } as const;
+
+const HOOK_BLOCK_REASON_KEY = "gram.hook.block_reason";
 
 /**
  * Extract a deeply nested value from an object using a dot-separated path.
@@ -109,8 +112,11 @@ function LogDetailContent({
   const toolOutput = attrs
     ? getNestedValue(attrs, TOOL_IO_ATTR_KEYS.output)
     : undefined;
+  const blockReason = attrs
+    ? getNestedValue(attrs, HOOK_BLOCK_REASON_KEY)
+    : undefined;
 
-  // Remove tool I/O keys from attributes to avoid duplication in the generic section
+  // Remove surfaced keys from attributes to avoid duplication in the generic section
   let filteredAttrs = attrs;
   if (filteredAttrs && toolInput) {
     filteredAttrs = removeNestedKey(filteredAttrs, TOOL_IO_ATTR_KEYS.input);
@@ -118,21 +124,48 @@ function LogDetailContent({
   if (filteredAttrs && toolOutput) {
     filteredAttrs = removeNestedKey(filteredAttrs, TOOL_IO_ATTR_KEYS.output);
   }
+  if (filteredAttrs && blockReason) {
+    filteredAttrs = removeNestedKey(filteredAttrs, HOOK_BLOCK_REASON_KEY);
+  }
 
   return (
     <div className="flex flex-col gap-6 px-5 pt-6 pb-6">
       {/* Header with span info */}
       <div className="flex flex-col gap-4">
         <div className="flex items-center gap-3">
-          <div
-            className={`rounded px-2 py-1 text-xs font-semibold uppercase ${severityClass} bg-muted`}
-          >
-            {log.severityText || "INFO"}
-          </div>
+          {blockReason ? (
+            <div className="inline-flex items-center gap-1.5 rounded bg-amber-500/10 px-2 py-1 text-xs font-semibold text-amber-700 uppercase dark:text-amber-300">
+              <Icon name="shield-alert" className="size-3" />
+              Blocked
+            </div>
+          ) : (
+            <div
+              className={`rounded px-2 py-1 text-xs font-semibold uppercase ${severityClass} bg-muted`}
+            >
+              {log.severityText || "INFO"}
+            </div>
+          )}
           <SheetTitle className="text-base font-medium tracking-tight">
             {log.body?.slice(0, 80) || "(no message)"}
           </SheetTitle>
         </div>
+
+        {blockReason && (
+          <div className="flex items-start gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3">
+            <Icon
+              name="shield-alert"
+              className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400"
+            />
+            <div className="flex min-w-0 flex-1 flex-col gap-1">
+              <div className="text-xs font-semibold tracking-wide text-amber-700 uppercase dark:text-amber-300">
+                Block Reason
+              </div>
+              <div className="text-foreground text-sm break-words">
+                {blockReason}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Metadata badges */}
         <div className="flex flex-wrap gap-2">

@@ -25,13 +25,17 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/collections/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
+	mcpmetadataRepo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	toolsetsRepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
@@ -52,7 +56,7 @@ const defaultCollectionSlug = "registry"
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, accessLoader auth.AccessLoader, serverURL *url.URL) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, authzEngine *authz.Engine, serverURL *url.URL) *Service {
 	logger = logger.With(attr.SlogComponent("collections"))
 
 	return &Service{
@@ -62,7 +66,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		repo:      repo.New(db),
 		toolsets:  toolsetsRepo.New(db),
 		orgRepo:   orgRepo.New(db),
-		auth:      auth.New(logger, db, sessions, accessLoader),
+		auth:      auth.New(logger, db, sessions, authzEngine),
 		sessions:  sessions,
 		serverURL: serverURL,
 	}
@@ -392,6 +396,7 @@ func (s *Service) ListServers(ctx context.Context, payload *gen.ListServersPaylo
 	}
 
 	collectionRegistryIDStr := registry.ID.String()
+	mcpMetaRepo := mcpmetadataRepo.New(s.db)
 
 	servers := make([]*types.ExternalMCPServer, 0, len(toolsets))
 	for _, t := range toolsets {
@@ -400,6 +405,10 @@ func (s *Service) ListServers(ctx context.Context, payload *gen.ListServersPaylo
 		}
 
 		remoteURL := s.serverURL.JoinPath("mcp", t.McpSlug.String).String()
+		remoteHeaders, err := s.collectionRemoteHeaders(ctx, mcpMetaRepo, t)
+		if err != nil {
+			return nil, err
+		}
 		desc := ""
 		if t.Description.Valid {
 			desc = t.Description.String
@@ -423,11 +432,71 @@ func (s *Service) ListServers(ctx context.Context, payload *gen.ListServersPaylo
 			Remotes: []*types.ExternalMCPRemote{{
 				URL:           remoteURL,
 				TransportType: "streamable-http",
+				Headers:       remoteHeaders,
 			}},
 		})
 	}
 
 	return &gen.ListServersResult{Servers: servers}, nil
+}
+
+func (s *Service) collectionRemoteHeaders(ctx context.Context, mcpMetaRepo *mcpmetadataRepo.Queries, toolset repo.Toolset) ([]*types.ExternalMCPRemoteHeader, error) {
+	headers := make([]*types.ExternalMCPRemoteHeader, 0)
+
+	if !toolset.McpIsPublic {
+		headers = append(headers,
+			collectionRemoteHeader("gram_environment", "gram-environment", false),
+			collectionRemoteHeader("authorization", "gram-key", true),
+		)
+	}
+
+	metadataRecord, err := mcpMetaRepo.GetMetadataForToolset(ctx, toolset.ID)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return headers, nil
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "load mcp metadata for collection server").Log(ctx, s.logger)
+	}
+
+	metadata, err := mcpmetadata.ToMCPMetadata(ctx, mcpMetaRepo, metadataRecord)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "convert mcp metadata for collection server").Log(ctx, s.logger)
+	}
+
+	for _, config := range metadata.EnvironmentConfigs {
+		if config.ProvidedBy != "user" {
+			continue
+		}
+
+		displayName := fmt.Sprintf("MCP-%s", strings.ReplaceAll(config.VariableName, "_", "-"))
+		if config.HeaderDisplayName != nil {
+			if customDisplayName := strings.TrimSpace(*config.HeaderDisplayName); customDisplayName != "" {
+				displayName = customDisplayName
+			}
+		}
+
+		headers = append(headers, collectionRemoteHeader(fmt.Sprintf("MCP-%s", config.VariableName), displayName, true))
+	}
+
+	return headers, nil
+}
+
+func collectionRemoteHeader(systemName, displayName string, sensitive bool) *types.ExternalMCPRemoteHeader {
+	placeholderName := toolconfig.ToPosixName(displayName)
+	description := fmt.Sprintf("Set from %s", placeholderName)
+	placeholder := fmt.Sprintf("${%s}", placeholderName)
+	var isSecret *bool
+	if sensitive {
+		isSecret = conv.PtrEmpty(true)
+	}
+
+	return &types.ExternalMCPRemoteHeader{
+		Name:        toolconfig.ToHTTPHeader(systemName),
+		Description: &description,
+		IsSecret:    isSecret,
+		IsRequired:  conv.PtrEmpty(true),
+		Placeholder: &placeholder,
+	}
 }
 
 func (s *Service) attachServerToCollection(ctx context.Context, queries *repo.Queries, collectionID, toolsetID uuid.UUID, organizationID, userID string) error {

@@ -31,8 +31,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
+	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/constants"
@@ -64,6 +66,7 @@ type Service struct {
 	logger           *slog.Logger
 	sessions         *sessions.Manager
 	chatSessions     *chatsessions.Manager
+	assistantTokens  *assistanttokens.Manager
 	assetStorage     assets.BlobStore
 	posthog          *posthog.Posthog
 	telemetryService *telemetry.Service
@@ -80,15 +83,17 @@ func NewService(
 	posthog *posthog.Posthog,
 	telemetryService *telemetry.Service,
 	assetStorage assets.BlobStore,
-	accessLoader auth.AccessLoader,
+	authzEngine *authz.Engine,
+	assistantTokens *assistanttokens.Manager,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("chat"))
 
 	return &Service{
-		auth:             auth.New(logger, db, sessions, accessLoader),
+		auth:             auth.New(logger, db, sessions, authzEngine),
 		db:               db,
 		sessions:         sessions,
 		chatSessions:     chatSessions,
+		assistantTokens:  assistantTokens,
 		logger:           logger,
 		repo:             repo.New(db),
 		tracer:           tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/chat"),
@@ -123,6 +128,17 @@ func (s *Service) JWTAuth(ctx context.Context, token string, schema *security.JW
 // It tries session auth first, then API key auth, then chat session token as fallback.
 // It also validates the project header and ensures ProjectID is present.
 func (s *Service) directAuthorize(ctx context.Context, r *http.Request) (context.Context, *contextvalues.AuthContext, error) {
+	if token := r.Header.Get("Authorization"); token != "" {
+		authorizedCtx, _, err := s.assistantTokens.Authorize(ctx, token)
+		if err == nil {
+			authCtx, ok := contextvalues.GetAuthContext(authorizedCtx)
+			if !ok || authCtx == nil || authCtx.ProjectID == nil {
+				return authorizedCtx, nil, oops.C(oops.CodeUnauthorized)
+			}
+			return authorizedCtx, authCtx, nil
+		}
+	}
+
 	// Try session auth first
 	sc := security.APIKeyScheme{
 		Name:           constants.SessionSecurityScheme,
@@ -350,13 +366,13 @@ func (s *Service) ListChatsWithResolutions(ctx context.Context, payload *gen.Lis
 	if payload.From != nil {
 		t, err := time.Parse(time.RFC3339, *payload.From)
 		if err == nil {
-			fromTime = pgtype.Timestamptz{Time: t, Valid: true, InfinityModifier: pgtype.Finite}
+			fromTime = conv.ToPGTimestamptz(t)
 		}
 	}
 	if payload.To != nil {
 		t, err := time.Parse(time.RFC3339, *payload.To)
 		if err == nil {
-			toTime = pgtype.Timestamptz{Time: t, Valid: true, InfinityModifier: pgtype.Finite}
+			toTime = conv.ToPGTimestamptz(t)
 		}
 	}
 
@@ -713,6 +729,18 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 		schema := chatRequest.ResponseFormat.ChatFormatJSONSchemaConfig.GetJSONSchema()
 		jsonSchema = &schema
 	}
+
+	toolNames := make([]string, 0, len(chatRequest.Tools))
+	for _, t := range chatRequest.Tools {
+		if t.Function != nil {
+			toolNames = append(toolNames, t.Function.Name)
+		}
+	}
+	s.logger.DebugContext(ctx, "chat completions tools forwarded",
+		attr.SlogChatModel(chatRequest.Model),
+		attr.SlogChatToolCount(len(toolNames)),
+		attr.SlogChatToolNames(toolNames),
+	)
 
 	completionReq := openrouter.CompletionRequest{
 		OrgID:          orgID,

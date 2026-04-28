@@ -155,8 +155,8 @@ type ListToolsetsResponseBody struct {
 // ListToolsetsForOrgResponseBody is the type of the "toolsets" service
 // "listToolsetsForOrg" endpoint HTTP response body.
 type ListToolsetsForOrgResponseBody struct {
-	// The list of toolsets
-	Toolsets []*ToolsetEntryResponseBody `form:"toolsets,omitempty" json:"toolsets,omitempty" xml:"toolsets,omitempty"`
+	// The list of toolset summaries
+	Toolsets []*ToolsetSummaryResponseBody `form:"toolsets,omitempty" json:"toolsets,omitempty" xml:"toolsets,omitempty"`
 }
 
 // UpdateToolsetResponseBody is the type of the "toolsets" service
@@ -3475,6 +3475,36 @@ type PromptTemplateEntryResponseBody struct {
 	Kind *string `form:"kind,omitempty" json:"kind,omitempty" xml:"kind,omitempty"`
 }
 
+// ToolsetSummaryResponseBody is used to define fields on response body types.
+type ToolsetSummaryResponseBody struct {
+	// The ID of the toolset
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The project ID this toolset belongs to
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// The organization ID this toolset belongs to
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	// The name of the toolset
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// The slug of the toolset
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+	// The slug of the environment to use as the default for the toolset
+	DefaultEnvironmentSlug *string `form:"default_environment_slug,omitempty" json:"default_environment_slug,omitempty" xml:"default_environment_slug,omitempty"`
+	// The slug of the MCP to use for the toolset
+	McpSlug *string `form:"mcp_slug,omitempty" json:"mcp_slug,omitempty" xml:"mcp_slug,omitempty"`
+	// Whether the toolset is enabled for MCP
+	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
+	// Whether the toolset is public in MCP
+	McpIsPublic *bool `form:"mcp_is_public,omitempty" json:"mcp_is_public,omitempty" xml:"mcp_is_public,omitempty"`
+	// The mode to use for tool selection
+	ToolSelectionMode *string `form:"tool_selection_mode,omitempty" json:"tool_selection_mode,omitempty" xml:"tool_selection_mode,omitempty"`
+	// The tools in this toolset
+	Tools []*ToolEntryResponseBody `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
+	// When the toolset was created.
+	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	// When the toolset was last updated.
+	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
 // ExternalOAuthServerFormRequestBody is used to define fields on request body
 // types.
 type ExternalOAuthServerFormRequestBody struct {
@@ -4050,17 +4080,17 @@ func NewListToolsetsGatewayError(body *ListToolsetsGatewayErrorResponseBody) *go
 	return v
 }
 
-// NewListToolsetsForOrgListToolsetsResultOK builds a "toolsets" service
-// "listToolsetsForOrg" endpoint result from a HTTP "OK" response.
-func NewListToolsetsForOrgListToolsetsResultOK(body *ListToolsetsForOrgResponseBody) *toolsets.ListToolsetsResult {
-	v := &toolsets.ListToolsetsResult{}
-	v.Toolsets = make([]*types.ToolsetEntry, len(body.Toolsets))
+// NewListToolsetsForOrgListToolsetSummariesResultOK builds a "toolsets"
+// service "listToolsetsForOrg" endpoint result from a HTTP "OK" response.
+func NewListToolsetsForOrgListToolsetSummariesResultOK(body *ListToolsetsForOrgResponseBody) *toolsets.ListToolsetSummariesResult {
+	v := &toolsets.ListToolsetSummariesResult{}
+	v.Toolsets = make([]*types.ToolsetSummary, len(body.Toolsets))
 	for i, val := range body.Toolsets {
 		if val == nil {
 			v.Toolsets[i] = nil
 			continue
 		}
-		v.Toolsets[i] = unmarshalToolsetEntryResponseBodyToTypesToolsetEntry(val)
+		v.Toolsets[i] = unmarshalToolsetSummaryResponseBodyToTypesToolsetSummary(val)
 	}
 
 	return v
@@ -6534,7 +6564,7 @@ func ValidateListToolsetsForOrgResponseBody(body *ListToolsetsForOrgResponseBody
 	}
 	for _, e := range body.Toolsets {
 		if e != nil {
-			if err2 := ValidateToolsetEntryResponseBody(e); err2 != nil {
+			if err2 := ValidateToolsetSummaryResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -11392,6 +11422,76 @@ func ValidatePromptTemplateEntryResponseBody(body *PromptTemplateEntryResponseBo
 		if utf8.RuneCountInString(*body.Name) > 40 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", *body.Name, utf8.RuneCountInString(*body.Name), 40, false))
 		}
+	}
+	return
+}
+
+// ValidateToolsetSummaryResponseBody runs the validations defined on
+// ToolsetSummaryResponseBody
+func ValidateToolsetSummaryResponseBody(body *ToolsetSummaryResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.ProjectID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
+	}
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Slug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
+	}
+	if body.ToolSelectionMode == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tool_selection_mode", "body"))
+	}
+	if body.Tools == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tools", "body"))
+	}
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.UpdatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.Slug != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", *body.Slug, "^[a-z0-9_-]{1,128}$"))
+	}
+	if body.Slug != nil {
+		if utf8.RuneCountInString(*body.Slug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.slug", *body.Slug, utf8.RuneCountInString(*body.Slug), 40, false))
+		}
+	}
+	if body.DefaultEnvironmentSlug != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.default_environment_slug", *body.DefaultEnvironmentSlug, "^[a-z0-9_-]{1,128}$"))
+	}
+	if body.DefaultEnvironmentSlug != nil {
+		if utf8.RuneCountInString(*body.DefaultEnvironmentSlug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.default_environment_slug", *body.DefaultEnvironmentSlug, utf8.RuneCountInString(*body.DefaultEnvironmentSlug), 40, false))
+		}
+	}
+	if body.McpSlug != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.mcp_slug", *body.McpSlug, "^[a-z0-9_-]{1,128}$"))
+	}
+	if body.McpSlug != nil {
+		if utf8.RuneCountInString(*body.McpSlug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.mcp_slug", *body.McpSlug, utf8.RuneCountInString(*body.McpSlug), 40, false))
+		}
+	}
+	for _, e := range body.Tools {
+		if e != nil {
+			if err2 := ValidateToolEntryResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.UpdatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
 	}
 	return
 }

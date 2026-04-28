@@ -7,9 +7,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/projects"
-	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
@@ -21,7 +21,7 @@ func TestProjectsService_CreateProject_CreatesAuditLog(t *testing.T) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
-	ctx = withAccessGrants(t, ctx, ti.conn, access.Grant{Scope: access.ScopeOrgAdmin, Resource: authCtx.ActiveOrganizationID})
+	ctx = withAccessGrants(t, ctx, ti.conn, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)})
 
 	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionProjectCreate)
 	require.NoError(t, err)
@@ -72,7 +72,7 @@ func TestProjectsService_CreateProject_ForbiddenWithoutOrgAdminGrant(t *testing.
 	t.Parallel()
 
 	ctx, ti := newTestProjectsService(t, true)
-	ctx = access.GrantsToContext(ctx, nil)
+	ctx = authz.GrantsToContext(ctx, nil)
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -95,7 +95,7 @@ func TestProjectsService_CreateProject_SkipsRBACWhenDisabled(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestProjectsService(t, false)
-	ctx = access.GrantsToContext(ctx, nil)
+	ctx = authz.GrantsToContext(ctx, nil)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
@@ -115,7 +115,7 @@ func TestProjectsService_CreateProject_AuditLogRecord(t *testing.T) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
-	ctx = withAccessGrants(t, ctx, ti.conn, access.Grant{Scope: access.ScopeOrgAdmin, Resource: authCtx.ActiveOrganizationID})
+	ctx = withAccessGrants(t, ctx, ti.conn, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)})
 
 	name := "audit-create-project-record-" + uuid.NewString()[:8]
 	result, err := ti.service.CreateProject(ctx, &gen.CreateProjectPayload{

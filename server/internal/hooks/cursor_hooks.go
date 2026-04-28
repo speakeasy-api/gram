@@ -2,9 +2,12 @@ package hooks
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"maps"
+	"net/url"
 	"strings"
 	"time"
 
@@ -19,6 +22,16 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 )
+
+// xGramToolsetIDField is the JSON-schema property injected into every Gram-hosted
+// tool's input schema (see mcp.injectToolsetIDConstant). Tool callers must echo
+// this UUID back so the hook can validate the call against its toolset.
+const xGramToolsetIDField = "x-gram-toolset-id"
+
+// gramToolsetDenyUserMessage is the message rendered in the Cursor / Claude UI
+// when a Gram-hosted tool call fails admin-approval validation. The
+// fine-grained validation reason is logged separately for operators.
+const gramToolsetDenyUserMessage = "This MCP server has not been approved by your administrator. Please contact them to get it approved."
 
 // Cursor is the endpoint for Cursor hook events
 func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.CursorHookResult, error) {
@@ -38,26 +51,61 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.
 	orgID := authCtx.ActiveOrganizationID
 	projectID := authCtx.ProjectID.String()
 
-	// Record the hook (will route to ClickHouse for tool calls, PG for all events)
-	s.recordCursorHook(ctx, payload, orgID, projectID)
-
 	result := &gen.CursorHookResult{
 		Permission:        nil,
 		UserMessage:       nil,
 		AdditionalContext: nil,
+		AgentMessage:      nil,
 	}
 
+	// blockReason is empty unless this call is denied by the shadow-MCP guard.
+	// It propagates into the ClickHouse log entry as gram.hook.block_reason so
+	// the trace renders as "blocked" in dashboards.
+	var blockReason string
+
 	switch payload.HookEventName {
+	case "beforeMCPExecution":
+		// beforeMCPExecution only fires for MCP-routed (non-local) tool calls,
+		// so Gram-hosted tool validation runs here. Cursor's generic preToolUse
+		// also fires for native local tools (read_file, edit_file, etc.) and
+		// is left as allow.
+		if !s.blockShadowMCPEnabled(ctx, orgID) {
+			result.Permission = new("allow")
+			break
+		}
+		toolName := strings.TrimPrefix(conv.PtrValOr(payload.ToolName, ""), "MCP:")
+		if reason, denied := s.validateGramToolsetCall(ctx, payload.ToolInput, toolName, orgID); denied {
+			s.logger.InfoContext(ctx, "denying cursor tool call: failed gram toolset validation",
+				attr.SlogEvent("cursor_hook_denied"),
+				attr.SlogValueAny(map[string]any{
+					"hookEventName": payload.HookEventName,
+					"toolName":      conv.PtrValOr(payload.ToolName, ""),
+					"reason":        reason,
+				}),
+			)
+			blockReason = reason
+			userMsg := gramToolsetDenyUserMessage
+			result.Permission = new("deny")
+			result.UserMessage = &userMsg
+			result.AgentMessage = &userMsg
+		} else {
+			result.Permission = new("allow")
+		}
 	case "preToolUse":
 		result.Permission = new("allow")
 	default:
 		// nothing to do
 	}
 
+	// Record the hook (will route to ClickHouse for tool calls, PG for all events).
+	// Runs after the deny decision so the ClickHouse entry can carry the
+	// block reason as an attribute.
+	s.recordCursorHook(ctx, payload, orgID, projectID, blockReason)
+
 	return result, nil
 }
 
-func (s *Service) recordCursorHook(ctx context.Context, payload *gen.CursorPayload, orgID string, projectID string) {
+func (s *Service) recordCursorHook(ctx context.Context, payload *gen.CursorPayload, orgID string, projectID string, blockReason string) {
 	if payload.ConversationID == nil || *payload.ConversationID == "" {
 		s.logger.WarnContext(ctx, "Cursor event called without conversation ID")
 		return
@@ -72,10 +120,10 @@ func (s *Service) recordCursorHook(ctx context.Context, payload *gen.CursorPaylo
 		ProjectID:   projectID,
 	}
 
-	s.persistCursorHook(ctx, payload, metadata)
+	s.persistCursorHook(ctx, payload, metadata, blockReason)
 }
 
-func (s *Service) persistCursorHook(ctx context.Context, payload *gen.CursorPayload, metadata *SessionMetadata) {
+func (s *Service) persistCursorHook(ctx context.Context, payload *gen.CursorPayload, metadata *SessionMetadata, blockReason string) {
 	if isCursorConversationEvent(payload.HookEventName) {
 		// Conversation events: PG only (user prompts and agent responses)
 		var err error
@@ -84,28 +132,30 @@ func (s *Service) persistCursorHook(ctx context.Context, payload *gen.CursorPayl
 			err = s.persistCursorUserPrompt(ctx, payload, metadata)
 		case "afterAgentResponse":
 			err = s.persistCursorAgentResponse(ctx, payload, metadata)
+			// afterAgentResponse also carries token usage — record a metrics entry in ClickHouse
+			s.writeCursorMetricsToClickHouse(ctx, payload, metadata.GramOrgID, metadata.ProjectID)
 		}
 		if err != nil {
 			s.logger.ErrorContext(ctx, "Failed to persist Cursor conversation event", attr.SlogError(err))
 		}
 	} else {
 		// Tool call events: ClickHouse + PG
-		if err := s.persistCursorToolCallEvent(ctx, payload, metadata); err != nil {
+		if err := s.persistCursorToolCallEvent(ctx, payload, metadata, blockReason); err != nil {
 			s.logger.ErrorContext(ctx, "Failed to persist Cursor tool call event", attr.SlogError(err))
 		}
 	}
 }
 
 // persistCursorToolCallEvent writes tool call events to both ClickHouse and PostgreSQL
-func (s *Service) persistCursorToolCallEvent(ctx context.Context, payload *gen.CursorPayload, metadata *SessionMetadata) error {
+func (s *Service) persistCursorToolCallEvent(ctx context.Context, payload *gen.CursorPayload, metadata *SessionMetadata, blockReason string) error {
 	// Write to ClickHouse for telemetry
-	s.writeCursorHookToClickHouse(ctx, payload, metadata.GramOrgID, metadata.ProjectID)
+	s.writeCursorHookToClickHouse(ctx, payload, metadata.GramOrgID, metadata.ProjectID, blockReason)
 
 	// Write to PostgreSQL for chat history
 	switch payload.HookEventName {
-	case "preToolUse":
+	case "preToolUse", "beforeMCPExecution":
 		return s.writeCursorToolCallRequestToPG(ctx, payload, metadata)
-	case "postToolUse", "postToolUseFailure":
+	case "postToolUse", "postToolUseFailure", "afterMCPExecution":
 		return s.writeCursorToolCallResultToPG(ctx, payload, metadata)
 	}
 	return nil
@@ -124,8 +174,11 @@ func isCursorConversationEvent(eventName string) bool {
 // writeCursorHookToClickHouse writes a Cursor hook event directly to ClickHouse
 // Unlike Claude hooks, Cursor payloads are already authenticated and include user_email,
 // so no Redis buffering is needed.
-func (s *Service) writeCursorHookToClickHouse(ctx context.Context, payload *gen.CursorPayload, orgID string, projectID string) {
+func (s *Service) writeCursorHookToClickHouse(ctx context.Context, payload *gen.CursorPayload, orgID string, projectID string, blockReason string) {
 	attrs := s.buildCursorTelemetryAttributes(ctx, payload, orgID, projectID)
+	if blockReason != "" {
+		attrs[attr.HookBlockReasonKey] = blockReason
+	}
 	toolName, _ := attrs[attr.ToolNameKey].(string)
 
 	parsedProjectID, err := uuid.Parse(projectID)
@@ -157,6 +210,89 @@ func (s *Service) writeCursorHookToClickHouse(ctx context.Context, payload *gen.
 	}
 }
 
+// writeCursorMetricsToClickHouse writes Cursor token-usage metrics to ClickHouse
+// telemetry_logs. Mirrors writeMetricsToClickHouse for Claude Code: a separate
+// log entry with a `cursor:usage:metrics` URN so usage can be aggregated
+// independently of tool-call events.
+func (s *Service) writeCursorMetricsToClickHouse(ctx context.Context, payload *gen.CursorPayload, orgID string, projectID string) {
+	if s.telemetryLogger == nil {
+		return
+	}
+
+	hasTokens := (payload.InputTokens != nil && *payload.InputTokens > 0) ||
+		(payload.OutputTokens != nil && *payload.OutputTokens > 0) ||
+		(payload.CacheReadTokens != nil && *payload.CacheReadTokens > 0) ||
+		(payload.CacheWriteTokens != nil && *payload.CacheWriteTokens > 0)
+	if !hasTokens {
+		return
+	}
+
+	parsedProjectID, err := uuid.Parse(projectID)
+	if err != nil {
+		s.logger.ErrorContext(ctx, "Invalid project ID for Cursor metrics", attr.SlogError(err))
+		return
+	}
+
+	urn := "cursor:usage:metrics"
+
+	attrs := map[attr.Key]any{
+		attr.EventSourceKey:    string(telemetry.EventSourceHook),
+		attr.LogBodyKey:        "Cursor usage metrics",
+		attr.ProjectIDKey:      projectID,
+		attr.OrganizationIDKey: orgID,
+		attr.ResourceURNKey:    urn,
+		attr.HookSourceKey:     "cursor",
+		attr.HookEventKey:      "AfterAgentResponse",
+		attr.SpanIDKey:         generateSpanID(),
+		attr.TraceIDKey:        generateTraceID(),
+	}
+
+	if payload.InputTokens != nil && *payload.InputTokens > 0 {
+		attrs[attr.GenAIUsageInputTokensKey] = *payload.InputTokens
+	}
+	if payload.OutputTokens != nil && *payload.OutputTokens > 0 {
+		attrs[attr.GenAIUsageOutputTokensKey] = *payload.OutputTokens
+	}
+	if payload.CacheReadTokens != nil && *payload.CacheReadTokens > 0 {
+		attrs[attr.GenAIUsageCacheReadInputTokensKey] = *payload.CacheReadTokens
+	}
+	if payload.CacheWriteTokens != nil && *payload.CacheWriteTokens > 0 {
+		attrs[attr.GenAIUsageCacheCreationInputTokensKey] = *payload.CacheWriteTokens
+	}
+	if payload.Model != nil && *payload.Model != "" {
+		attrs[attr.GenAIResponseModelKey] = *payload.Model
+	}
+	if payload.UserEmail != nil && *payload.UserEmail != "" {
+		attrs[attr.UserEmailKey] = *payload.UserEmail
+	}
+	switch {
+	case payload.ConversationID != nil && *payload.ConversationID != "":
+		attrs[attr.GenAIConversationIDKey] = *payload.ConversationID
+	case payload.SessionID != nil && *payload.SessionID != "":
+		attrs[attr.GenAIConversationIDKey] = *payload.SessionID
+	}
+
+	toolInfo := telemetry.ToolInfo{
+		Name:           "cursor",
+		OrganizationID: orgID,
+		ProjectID:      parsedProjectID.String(),
+		ID:             "",
+		URN:            urn,
+		DeploymentID:   "",
+		FunctionID:     nil,
+	}
+
+	s.telemetryLogger.Log(ctx, telemetry.LogParams{
+		Timestamp:  time.Now(),
+		ToolInfo:   toolInfo,
+		Attributes: attrs,
+	})
+
+	s.logger.DebugContext(ctx, "Wrote Cursor metrics to ClickHouse",
+		attr.SlogEvent("cursor_metrics_written"),
+	)
+}
+
 // buildCursorTelemetryAttributes creates attributes for a Cursor hook event
 func (s *Service) buildCursorTelemetryAttributes(ctx context.Context, payload *gen.CursorPayload, orgID string, projectID string) map[attr.Key]any {
 	toolName := ""
@@ -182,6 +318,10 @@ func (s *Service) buildCursorTelemetryAttributes(ctx context.Context, payload *g
 		hookEvent = "BeforeSubmitPrompt"
 	case "afterAgentResponse":
 		hookEvent = "AfterAgentResponse"
+	case "beforeMCPExecution":
+		hookEvent = "BeforeMCPExecution"
+	case "afterMCPExecution":
+		hookEvent = "AfterMCPExecution"
 	case "stop":
 		hookEvent = "Stop"
 	}
@@ -216,14 +356,27 @@ func (s *Service) buildCursorTelemetryAttributes(ctx context.Context, payload *g
 		}
 	}
 
-	if payload.ToolUseID != nil && *payload.ToolUseID != "" {
-		attrs[attr.TraceIDKey] = hashToolCallIDToTraceID(*payload.ToolUseID)
+	// beforeMCPExecution / afterMCPExecution: derive tool_source from the MCP
+	// server URL (or command for stdio servers), which the generic
+	// preToolUse/postToolUse events do not expose.
+	if payload.HookEventName == "beforeMCPExecution" || payload.HookEventName == "afterMCPExecution" {
+		if source := cursorMCPToolSource(payload); source != "" {
+			attrs[attr.ToolCallSourceKey] = source
+		}
+		// Tool names for MCP events may arrive with a "MCP:" prefix (the same
+		// string used in Cursor hook matchers). Strip it so the stored name
+		// matches the bare tool name.
+		if stripped, ok := strings.CutPrefix(toolName, "MCP:"); ok {
+			attrs[attr.ToolNameKey] = stripped
+		}
+	}
+
+	if correlationID := cursorToolCorrelationID(payload); correlationID != "" {
+		attrs[attr.TraceIDKey] = hashToolCallIDToTraceID(correlationID)
+		attrs[attr.GenAIToolCallIDKey] = correlationID
 	}
 	if payload.ConversationID != nil {
 		attrs[attr.GenAIConversationIDKey] = *payload.ConversationID
-	}
-	if payload.ToolUseID != nil {
-		attrs[attr.GenAIToolCallIDKey] = *payload.ToolUseID
 	}
 
 	// Store prompt text as log body for beforeSubmitPrompt events only
@@ -255,10 +408,82 @@ func (s *Service) buildCursorTelemetryAttributes(ctx context.Context, payload *g
 		}
 	}
 
+	// afterMCPExecution sends the tool response pre-stringified as result_json.
+	// Cursor doesn't emit a separate failure event for MCP — instead the result
+	// body's MCP-protocol "isError" flag indicates failure. Surface that as
+	// gram.hook.error so trace_summaries.has_error fires the same way it would
+	// for an explicit failure event.
+	if payload.ResultJSON != nil && *payload.ResultJSON != "" {
+		attrs[attr.GenAIToolCallResultKey] = *payload.ResultJSON
+		var parsed struct {
+			IsError bool `json:"isError"`
+		}
+		if err := json.Unmarshal([]byte(*payload.ResultJSON), &parsed); err == nil && parsed.IsError {
+			attrs[attr.HookErrorKey] = *payload.ResultJSON
+		}
+	}
+
 	skillAttrs := s.extractSkillTelemetryAttributes(ctx, payload.AdditionalData)
 	maps.Copy(attrs, skillAttrs)
 
 	return attrs
+}
+
+// cursorToolCorrelationID returns a stable identifier that links a tool call's
+// request and result events together. Cursor's beforeMCPExecution /
+// afterMCPExecution payloads do not include a tool_use_id, and even
+// preToolUse / postToolUse can omit one. We derive a deterministic ID from
+// (conversation_id, generation_id, tool_name, tool_input) — which is identical
+// for the request and result of the same call. A real tool_use_id is preferred
+// when present.
+//
+// Limitation: an agent that issues the *same* tool with *identical* inputs
+// twice within a single generation will collide into one correlation ID. If
+// that becomes a problem we can switch to a Redis-backed FIFO of correlation
+// IDs keyed by the same tuple.
+func cursorToolCorrelationID(payload *gen.CursorPayload) string {
+	if payload.ToolUseID != nil && *payload.ToolUseID != "" {
+		return *payload.ToolUseID
+	}
+
+	convID := conv.PtrValOr(payload.ConversationID, "")
+	genID := conv.PtrValOr(payload.GenerationID, "")
+	toolName := strings.TrimPrefix(conv.PtrValOr(payload.ToolName, ""), "MCP:")
+	if convID == "" && genID == "" && toolName == "" && payload.ToolInput == nil {
+		return ""
+	}
+
+	var b strings.Builder
+	b.WriteString(convID)
+	b.WriteByte('|')
+	b.WriteString(genID)
+	b.WriteByte('|')
+	b.WriteString(toolName)
+	b.WriteByte('|')
+	if payload.ToolInput != nil {
+		if jsonBytes, err := json.Marshal(payload.ToolInput); err == nil {
+			b.Write(jsonBytes)
+		}
+	}
+
+	sum := sha256.Sum256([]byte(b.String()))
+	return "cursor_synth_" + hex.EncodeToString(sum[:8])
+}
+
+// cursorMCPToolSource derives a tool_source string for beforeMCPExecution /
+// afterMCPExecution events. URL-based servers use the URL host; command-based
+// servers fall back to the command string.
+func cursorMCPToolSource(payload *gen.CursorPayload) string {
+	if payload.URL != nil && *payload.URL != "" {
+		if u, err := url.Parse(*payload.URL); err == nil && u.Host != "" {
+			return u.Host
+		}
+		return *payload.URL
+	}
+	if payload.Command != nil && *payload.Command != "" {
+		return *payload.Command
+	}
+	return ""
 }
 
 // writeCursorToolCallRequestToPG writes a Cursor tool call request (preToolUse) to PostgreSQL.
@@ -275,7 +500,7 @@ func (s *Service) writeCursorToolCallRequestToPG(ctx context.Context, payload *g
 	chatID := sessionIDToUUID(*payload.ConversationID)
 
 	toolCalls := []map[string]any{{
-		"id":   conv.PtrValOr(payload.ToolUseID, ""),
+		"id":   cursorToolCorrelationID(payload),
 		"type": "function",
 		"function": map[string]any{
 			"name":      conv.PtrValOr(payload.ToolName, ""),
@@ -331,11 +556,22 @@ func (s *Service) writeCursorToolCallResultToPG(ctx context.Context, payload *ge
 	chatID := sessionIDToUUID(*payload.ConversationID)
 
 	var content string
-	if payload.HookEventName == "postToolUse" && payload.ToolResponse != nil {
+	switch {
+	case payload.HookEventName == "postToolUse" && payload.ToolResponse != nil:
 		content = marshalToJSON(payload.ToolResponse)
-	} else if payload.HookEventName == "postToolUseFailure" && payload.Error != nil {
+	case payload.HookEventName == "postToolUseFailure" && payload.Error != nil:
 		content = marshalToJSON(payload.Error)
-	} else {
+	case payload.HookEventName == "afterMCPExecution":
+		// afterMCPExecution delivers the response as an already-stringified JSON
+		// payload; fall back to ToolResponse if a client sends the structured form.
+		if payload.ResultJSON != nil && *payload.ResultJSON != "" {
+			content = *payload.ResultJSON
+		} else if payload.ToolResponse != nil {
+			content = marshalToJSON(payload.ToolResponse)
+		} else {
+			return nil
+		}
+	default:
 		return nil
 	}
 
@@ -346,7 +582,7 @@ func (s *Service) writeCursorToolCallResultToPG(ctx context.Context, payload *ge
 		Content:          content,
 		UserID:           conv.ToPGTextEmpty(""),
 		Source:           conv.ToPGText("Cursor"),
-		ToolCallID:       conv.ToPGTextEmpty(conv.PtrValOr(payload.ToolUseID, "")),
+		ToolCallID:       conv.ToPGTextEmpty(cursorToolCorrelationID(payload)),
 		PromptTokens:     0,
 		CompletionTokens: 0,
 		TotalTokens:      0,

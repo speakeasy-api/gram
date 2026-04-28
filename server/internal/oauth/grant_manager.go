@@ -161,7 +161,12 @@ func (gm *GrantManager) ValidateAuthorizationRequest(ctx context.Context, req *A
 
 	// Validate scope (basic validation)
 	if req.Scope != "" {
-		if err := gm.validateScope(req.Scope, client); err != nil {
+		reqScope, err := url.QueryUnescape(req.Scope)
+		if err != nil {
+			return fmt.Errorf("failed to decode request scopes: %w", err)
+		}
+
+		if err := gm.validateScope(reqScope, client); err != nil {
 			return fmt.Errorf("invalid scope: %w", err)
 		}
 	}

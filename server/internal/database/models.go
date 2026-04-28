@@ -57,19 +57,20 @@ type Asset struct {
 }
 
 type Assistant struct {
-	ID             uuid.UUID
-	ProjectID      uuid.UUID
-	OrganizationID string
-	Name           string
-	Model          string
-	Instructions   string
-	WarmTtlSeconds int64
-	MaxConcurrency int64
-	Status         string
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-	DeletedAt      pgtype.Timestamptz
-	Deleted        bool
+	ID              uuid.UUID
+	ProjectID       uuid.UUID
+	OrganizationID  string
+	CreatedByUserID pgtype.Text
+	Name            string
+	Model           string
+	Instructions    string
+	WarmTtlSeconds  int64
+	MaxConcurrency  int64
+	Status          string
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+	Deleted         bool
 }
 
 type AssistantRuntime struct {
@@ -307,6 +308,8 @@ type DeploymentsFunction struct {
 	Slug          string
 	Runtime       string
 	RunnerVersion pgtype.Text
+	MemoryMib     pgtype.Int4
+	Scale         pgtype.Int4
 }
 
 type DeploymentsOpenapiv3Asset struct {
@@ -812,6 +815,16 @@ type PluginAssignment struct {
 	UpdatedAt      pgtype.Timestamptz
 }
 
+type PluginGithubConnection struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	InstallationID int64
+	RepoOwner      string
+	RepoName       string
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
 type PluginServer struct {
 	ID          uuid.UUID
 	PluginID    uuid.UUID
@@ -825,7 +838,7 @@ type PluginServer struct {
 	Deleted     bool
 }
 
-// RBAC grants. Normalized: one row per (org, principal, scope, resource). Resource='*' means unrestricted. Selectors can further constrain applicability.
+// RBAC grants. One row per (org, principal, scope, selectors). Selectors define resource constraints.
 type PrincipalGrant struct {
 	ID uuid.UUID
 	// The organization this grant belongs to. Grants are always org-scoped.
@@ -836,9 +849,7 @@ type PrincipalGrant struct {
 	PrincipalType string
 	// The scope being granted, e.g. "build:read". Validated in application code, not via FK.
 	Scope string
-	// '*' = unrestricted (scope applies to all resources in the org). Any other value = a specific resource ID this scope is granted on.
-	Resource string
-	// Optional JSON selector constraints refining when the grant applies. NULL means the grant has no selector constraints.
+	// JSON selector constraints defining what the grant applies to, e.g. {"resource_kind":"project","resource_id":"proj_123"}.
 	Selectors []byte
 	CreatedAt pgtype.Timestamptz
 	UpdatedAt pgtype.Timestamptz
@@ -921,17 +932,18 @@ type RemoteMcpServerHeader struct {
 }
 
 type RiskPolicy struct {
-	ID             uuid.UUID
-	ProjectID      uuid.UUID
-	OrganizationID string
-	Enabled        bool
-	Name           string
-	Sources        []string
-	Version        int64
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-	DeletedAt      pgtype.Timestamptz
-	Deleted        bool
+	ID               uuid.UUID
+	ProjectID        uuid.UUID
+	OrganizationID   string
+	Enabled          bool
+	Name             string
+	Sources          []string
+	PresidioEntities []string
+	Version          int64
+	CreatedAt        pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
+	DeletedAt        pgtype.Timestamptz
+	Deleted          bool
 }
 
 type RiskResult struct {

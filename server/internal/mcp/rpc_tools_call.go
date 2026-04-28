@@ -20,6 +20,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contenttypes"
@@ -58,6 +59,7 @@ func handleToolsCall(
 	ctx context.Context,
 	logger *slog.Logger,
 	metrics *metrics,
+	authzEngine *authz.Engine,
 	guardianPolicy *guardian.Policy,
 	db *pgxpool.Pool,
 	env toolconfig.EnvironmentLoader,
@@ -105,6 +107,16 @@ func handleToolsCall(
 			params.Arguments = proxyArgs
 		}
 	}
+
+	// Strip the x-gram-toolset-id property the agent echoed back from the
+	// tool's input schema (see injectToolsetIDConstant in rpc_tools_list.go).
+	// It is not part of the underlying tool's real schema, so passing it
+	// through would cause the executor to reject the call.
+	stripped, err := stripGramToolsetIDProperty(params.Arguments)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "failed to parse tool arguments").Log(ctx, logger)
+	}
+	params.Arguments = stripped
 
 	var mcpURL string
 	if requestContext, _ := contextvalues.GetRequestContext(ctx); requestContext != nil {
@@ -177,6 +189,27 @@ func handleToolsCall(
 		plan, err = toolsetHelpers.GetToolCallPlanByURN(ctx, toolURN, uuid.UUID(projectID))
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed get tool call plan").Log(ctx, logger)
+		}
+	}
+
+	// Per-tool RBAC check: if the user is authenticated on a private MCP,
+	// verify they have mcp:connect for this specific tool (not just the server).
+	// The connection-level check only validates the server; this narrows to the
+	// tool and disposition dimensions. Public MCPs skip this — they're open to
+	// everyone, mirroring the connection-level guard in impl.go.
+	if payload.authenticated && authzEngine != nil && (toolset.McpIsPublic == nil || !*toolset.McpIsPublic) {
+		var disposition string
+		if tool != nil {
+			baseTool, err := conv.ToBaseTool(tool)
+			if err == nil {
+				disposition = conv.DispositionFromAnnotations(baseTool.Annotations)
+			}
+		}
+		if err := authzEngine.Require(ctx, authz.MCPToolCallCheck(toolset.ID, authz.MCPToolCallDimensions{
+			Tool:        params.Name,
+			Disposition: disposition,
+		})); err != nil {
+			return nil, err
 		}
 	}
 

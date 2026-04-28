@@ -18,6 +18,8 @@ type Finding struct {
 	StartPos    int // Byte position in string
 	EndPos      int // Byte position in string
 	Tags        []string
+	Source      string  // Detection source (e.g. "gitleaks", "presidio")
+	Confidence  float64 // 0.0-1.0 confidence score
 }
 
 // detectorInitMu serializes gitleaks detector creation process-wide.
@@ -119,6 +121,8 @@ func convertFindings(content string, raw []report.Finding) []Finding {
 			StartPos:    startPos,
 			EndPos:      endPos,
 			Tags:        tags,
+			Source:      "gitleaks",
+			Confidence:  1.0,
 		})
 	}
 	return out

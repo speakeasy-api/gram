@@ -303,6 +303,10 @@ type GetHooksSummaryResponseBody struct {
 	Breakdown []*HooksBreakdownRowResponseBody `form:"breakdown" json:"breakdown" xml:"breakdown"`
 	// Time-bucketed event counts by server and user
 	TimeSeries []*HooksTimeSeriesPointResponseBody `form:"time_series" json:"time_series" xml:"time_series"`
+	// Time-bucketed event counts by skill
+	SkillTimeSeries []*SkillTimeSeriesPointResponseBody `form:"skill_time_series" json:"skill_time_series" xml:"skill_time_series"`
+	// Per-user skill breakdown
+	SkillBreakdown []*SkillBreakdownRowResponseBody `form:"skill_breakdown" json:"skill_breakdown" xml:"skill_breakdown"`
 }
 
 // ListHooksTracesResponseBody is the type of the "telemetry" service
@@ -3147,6 +3151,28 @@ type HooksTimeSeriesPointResponseBody struct {
 	FailureCount int64 `form:"failure_count" json:"failure_count" xml:"failure_count"`
 }
 
+// SkillTimeSeriesPointResponseBody is used to define fields on response body
+// types.
+type SkillTimeSeriesPointResponseBody struct {
+	// Bucket start time in Unix nanoseconds (string for JS int64 precision)
+	BucketStartNs string `form:"bucket_start_ns" json:"bucket_start_ns" xml:"bucket_start_ns"`
+	// Skill name
+	SkillName string `form:"skill_name" json:"skill_name" xml:"skill_name"`
+	// Number of skill use events in this bucket
+	EventCount int64 `form:"event_count" json:"event_count" xml:"event_count"`
+}
+
+// SkillBreakdownRowResponseBody is used to define fields on response body
+// types.
+type SkillBreakdownRowResponseBody struct {
+	// Skill name
+	SkillName string `form:"skill_name" json:"skill_name" xml:"skill_name"`
+	// User email address
+	UserEmail string `form:"user_email" json:"user_email" xml:"user_email"`
+	// Use count for this skill/user combination
+	UseCount int64 `form:"use_count" json:"use_count" xml:"use_count"`
+}
+
 // HookTraceSummaryResponseBody is used to define fields on response body types.
 type HookTraceSummaryResponseBody struct {
 	// Trace ID (32 hex characters)
@@ -3157,6 +3183,8 @@ type HookTraceSummaryResponseBody struct {
 	LogCount uint64 `form:"log_count" json:"log_count" xml:"log_count"`
 	// Hook execution status
 	HookStatus *string `form:"hook_status,omitempty" json:"hook_status,omitempty" xml:"hook_status,omitempty"`
+	// Reason set when hook_status is 'blocked' (e.g. shadow-MCP guard rejection)
+	BlockReason *string `form:"block_reason,omitempty" json:"block_reason,omitempty" xml:"block_reason,omitempty"`
 	// Gram URN associated with this hook trace
 	GramUrn string `form:"gram_urn" json:"gram_urn" xml:"gram_urn"`
 	// Tool name (from materialized column)
@@ -3558,6 +3586,30 @@ func NewGetHooksSummaryResponseBody(res *telemetry.GetHooksSummaryResult) *GetHo
 		}
 	} else {
 		body.TimeSeries = []*HooksTimeSeriesPointResponseBody{}
+	}
+	if res.SkillTimeSeries != nil {
+		body.SkillTimeSeries = make([]*SkillTimeSeriesPointResponseBody, len(res.SkillTimeSeries))
+		for i, val := range res.SkillTimeSeries {
+			if val == nil {
+				body.SkillTimeSeries[i] = nil
+				continue
+			}
+			body.SkillTimeSeries[i] = marshalTelemetrySkillTimeSeriesPointToSkillTimeSeriesPointResponseBody(val)
+		}
+	} else {
+		body.SkillTimeSeries = []*SkillTimeSeriesPointResponseBody{}
+	}
+	if res.SkillBreakdown != nil {
+		body.SkillBreakdown = make([]*SkillBreakdownRowResponseBody, len(res.SkillBreakdown))
+		for i, val := range res.SkillBreakdown {
+			if val == nil {
+				body.SkillBreakdown[i] = nil
+				continue
+			}
+			body.SkillBreakdown[i] = marshalTelemetrySkillBreakdownRowToSkillBreakdownRowResponseBody(val)
+		}
+	} else {
+		body.SkillBreakdown = []*SkillBreakdownRowResponseBody{}
 	}
 	return body
 }

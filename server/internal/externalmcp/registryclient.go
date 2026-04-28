@@ -89,11 +89,11 @@ type listResponse struct {
 }
 
 type serverEntry struct {
-	Server serverJSON `json:"server"`
-	Meta   serverMeta `json:"_meta"`
+	Server serverJSON         `json:"server"`
+	Meta   pulseMCPServerMeta `json:"_meta"`
 }
 
-type serverMeta struct {
+type pulseMCPServerMeta struct {
 	Server  serverMetaServer  `json:"com.pulsemcp/server"`
 	Version serverMetaVersion `json:"com.pulsemcp/server-version"`
 }
@@ -127,13 +127,14 @@ type serverJSON struct {
 	Icons       []struct {
 		Src string `json:"src"`
 	} `json:"icons"`
-	Remotes []serverRemoteBasic `json:"remotes"`
+	Remotes []serverRemoteJSON `json:"remotes"`
 }
 
-type serverRemoteBasic struct {
-	URL     string         `json:"url"`
-	Type    string         `json:"type"`
-	Headers []RemoteHeader `json:"headers"`
+type serverRemoteJSON struct {
+	URL       string                    `json:"url"`
+	Type      string                    `json:"type"`
+	Headers   []RemoteHeader            `json:"headers"`
+	Variables map[string]RemoteVariable `json:"variables"`
 }
 
 // RemoteHeader represents a header requirement from the registry.
@@ -145,22 +146,35 @@ type RemoteHeader struct {
 	Placeholder *string `json:"placeholder,omitempty"`
 }
 
+// RemoteVariable represents a URL template variable from the registry.
+type RemoteVariable struct {
+	Description *string  `json:"description,omitempty"`
+	IsSecret    bool     `json:"isSecret"`
+	IsRequired  bool     `json:"isRequired"`
+	Default     *string  `json:"default,omitempty"`
+	Choices     []string `json:"choices,omitempty"`
+}
+
 type serverRemoteMeta struct {
-	Auth  any          `json:"auth"`
-	Tools []serverTool `json:"tools"`
+	AuthOptions []serverRemoteMetaAuthOptions `json:"authOptions"`
+	Tools       []serverTool                  `json:"tools"`
+}
+
+type serverRemoteMetaAuthOptions struct {
+	Type string `json:"type"`
 }
 
 // serverDetailsEntry represents the response from the server details endpoint
 type serverDetailsEntry struct {
-	Server serverDetailsJSON `json:"server"`
-	Meta   serverMeta        `json:"_meta"`
+	Server serverDetailsJSON  `json:"server"`
+	Meta   pulseMCPServerMeta `json:"_meta"`
 }
 
 type serverDetailsJSON struct {
-	Name        string              `json:"name"`
-	Description string              `json:"description"`
-	Version     string              `json:"version"`
-	Remotes     []serverRemoteBasic `json:"remotes"`
+	Name        string             `json:"name"`
+	Description string             `json:"description"`
+	Version     string             `json:"version"`
+	Remotes     []serverRemoteJSON `json:"remotes"`
 }
 
 type serverTool struct {
@@ -168,6 +182,25 @@ type serverTool struct {
 	Description string          `json:"description"`
 	InputSchema json.RawMessage `json:"inputSchema"`
 	Annotations map[string]any  `json:"annotations"`
+}
+
+// toCacheSafeAny round-trips v through JSON so the resulting value is built
+// from plain Go types (map[string]any, []any, primitives). This is required
+// because the cache serializes with msgpack: concrete struct types stored in
+// an `any` field lose their type on decode, and raw []byte-like values
+// (json.RawMessage) come back as []byte which JSON-encodes as base64. Plain
+// maps/slices round-trip through msgpack cleanly and re-marshal to identical
+// JSON on both cache-miss and cache-hit paths.
+func toCacheSafeAny(v any) (any, error) {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return nil, fmt.Errorf("marshal: %w", err)
+	}
+	var out any
+	if err := json.Unmarshal(b, &out); err != nil {
+		return nil, fmt.Errorf("unmarshal: %w", err)
+	}
+	return out, nil
 }
 
 // ListServers fetches servers from the given registry.
@@ -228,6 +261,7 @@ func (c *RegistryClient) ListServers(ctx context.Context, registry Registry, par
 	registryID := registry.ID.String()
 	servers := make([]*types.ExternalMCPServer, 0, len(listResp.Servers))
 	for _, s := range listResp.Servers {
+
 		if s.Meta.Version.Status == "deleted" {
 			continue
 		}
@@ -252,7 +286,14 @@ func (c *RegistryClient) ListServers(ctx context.Context, registry Registry, par
 			remotes = append(remotes, &types.ExternalMCPRemote{
 				URL:           r.URL,
 				TransportType: r.Type,
+				Headers:       toExternalMCPRemoteHeaders(r.Headers),
+				Variables:     toExternalMCPRemoteVariables(r.Variables),
 			})
+		}
+
+		meta, err := toCacheSafeAny(&s.Meta)
+		if err != nil {
+			return nil, fmt.Errorf("convert meta: %w", err)
 		}
 
 		server := &types.ExternalMCPServer{
@@ -264,7 +305,7 @@ func (c *RegistryClient) ListServers(ctx context.Context, registry Registry, par
 			OrganizationMcpCollectionRegistryID: nil,
 			Title:                               s.Server.Title,
 			IconURL:                             iconURL,
-			Meta:                                s.Meta,
+			Meta:                                meta,
 			Tools:                               tools,
 			Remotes:                             remotes,
 		}
@@ -284,6 +325,42 @@ func (c *RegistryClient) ListServers(ctx context.Context, registry Registry, par
 	}
 
 	return servers, nil
+}
+
+func toExternalMCPRemoteHeaders(headers []RemoteHeader) []*types.ExternalMCPRemoteHeader {
+	if len(headers) == 0 {
+		return nil
+	}
+
+	result := make([]*types.ExternalMCPRemoteHeader, 0, len(headers))
+	for _, header := range headers {
+		result = append(result, &types.ExternalMCPRemoteHeader{
+			Name:        header.Name,
+			Description: header.Description,
+			IsSecret:    new(header.IsSecret),
+			IsRequired:  new(header.IsRequired),
+			Placeholder: header.Placeholder,
+		})
+	}
+	return result
+}
+
+func toExternalMCPRemoteVariables(variables map[string]RemoteVariable) map[string]*types.ExternalMCPRemoteVariable {
+	if len(variables) == 0 {
+		return nil
+	}
+
+	result := make(map[string]*types.ExternalMCPRemoteVariable, len(variables))
+	for name, variable := range variables {
+		result[name] = &types.ExternalMCPRemoteVariable{
+			Description: variable.Description,
+			IsSecret:    new(variable.IsSecret),
+			IsRequired:  new(variable.IsRequired),
+			Default:     variable.Default,
+			Choices:     variable.Choices,
+		}
+	}
+	return result
 }
 
 // ClearCache removes all cached entries for the given registry URL.

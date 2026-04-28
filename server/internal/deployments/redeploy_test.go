@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
@@ -597,4 +598,122 @@ func TestDeploymentsService_Redeploy_ComplexDeployment(t *testing.T) {
 	require.Equal(t, initial.Deployment.GithubSha, redeployed.Deployment.GithubSha, "github sha should be cloned")
 	require.Equal(t, initial.Deployment.ExternalID, redeployed.Deployment.ExternalID, "external id should be cloned")
 	require.Equal(t, initial.Deployment.ExternalURL, redeployed.Deployment.ExternalURL, "external url should be cloned")
+}
+
+func TestDeploymentsService_Redeploy_ClonesMemoryAndScale(t *testing.T) {
+	t.Parallel()
+
+	assetStorage := assetstest.NewTestBlobStore(t)
+	ctx, ti := newTestDeploymentService(t, assetStorage)
+
+	fres := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "nodejs:24")
+
+	// Create initial deployment with memory and scale set
+	initial, err := ti.service.CreateDeployment(ctx, &gen.CreateDeploymentPayload{
+		IdempotencyKey:  "test-redeploy-mem-scale",
+		Openapiv3Assets: []*gen.AddOpenAPIv3DeploymentAssetForm{},
+		Functions: []*gen.AddFunctionsForm{
+			{
+				AssetID:   fres.Asset.ID,
+				Name:      "my-functions",
+				Slug:      "my-functions",
+				Runtime:   "nodejs:24",
+				MemoryMib: new(uint(2048)),
+				Scale:     new(uint(3)),
+			},
+		},
+		Packages:         []*gen.AddDeploymentPackageForm{},
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		GithubRepo:       nil,
+		GithubPr:         nil,
+		GithubSha:        nil,
+		ExternalID:       nil,
+		ExternalURL:      nil,
+	})
+	require.NoError(t, err, "create initial deployment")
+	require.Equal(t, "completed", initial.Deployment.Status)
+	require.Len(t, initial.Deployment.FunctionsAssets, 1)
+	require.NotNil(t, initial.Deployment.FunctionsAssets[0].MemoryMib)
+	require.Equal(t, int32(2048), *initial.Deployment.FunctionsAssets[0].MemoryMib)
+	require.NotNil(t, initial.Deployment.FunctionsAssets[0].Scale)
+	require.Equal(t, int32(3), *initial.Deployment.FunctionsAssets[0].Scale)
+
+	// Redeploy
+	redeployed, err := ti.service.Redeploy(ctx, &gen.RedeployPayload{
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		DeploymentID:     initial.Deployment.ID,
+	})
+	require.NoError(t, err, "redeploy deployment")
+	require.Equal(t, "completed", redeployed.Deployment.Status)
+	require.NotEqual(t, initial.Deployment.ID, redeployed.Deployment.ID)
+
+	// Verify cloned deployment has the same memory and scale
+	require.Len(t, redeployed.Deployment.FunctionsAssets, 1)
+	require.NotNil(t, redeployed.Deployment.FunctionsAssets[0].MemoryMib)
+	require.Equal(t, int32(2048), *redeployed.Deployment.FunctionsAssets[0].MemoryMib)
+	require.NotNil(t, redeployed.Deployment.FunctionsAssets[0].Scale)
+	require.Equal(t, int32(3), *redeployed.Deployment.FunctionsAssets[0].Scale)
+}
+
+func TestDeploymentsService_Redeploy_DefaultsNullMemoryAndScale(t *testing.T) {
+	t.Parallel()
+
+	assetStorage := assetstest.NewTestBlobStore(t)
+	ctx, ti := newTestDeploymentService(t, assetStorage)
+
+	fres := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "nodejs:24")
+
+	// Create a deployment with explicit memory/scale values
+	initial, err := ti.service.CreateDeployment(ctx, &gen.CreateDeploymentPayload{
+		IdempotencyKey:  "test-redeploy-null-mem-scale",
+		Openapiv3Assets: []*gen.AddOpenAPIv3DeploymentAssetForm{},
+		Functions: []*gen.AddFunctionsForm{
+			{
+				AssetID:   fres.Asset.ID,
+				Name:      "my-functions",
+				Slug:      "my-functions",
+				Runtime:   "nodejs:24",
+				MemoryMib: new(uint(1024)),
+				Scale:     new(uint(2)),
+			},
+		},
+		Packages:         []*gen.AddDeploymentPackageForm{},
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		GithubRepo:       nil,
+		GithubPr:         nil,
+		GithubSha:        nil,
+		ExternalID:       nil,
+		ExternalURL:      nil,
+	})
+	require.NoError(t, err, "create initial deployment")
+	require.Equal(t, "completed", initial.Deployment.Status)
+
+	initialDeploymentID, err := uuid.Parse(initial.Deployment.ID)
+	require.NoError(t, err, "parse initial deployment id")
+
+	err = testrepo.New(ti.conn).ScrubDeploymentFunctionMachineSpecs(ctx, initialDeploymentID)
+	require.NoError(t, err, "null out memory_mib and scale")
+
+	// Redeploy — the clone query should COALESCE NULLs to the configured defaults
+	redeployed, err := ti.service.Redeploy(ctx, &gen.RedeployPayload{
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		DeploymentID:     initial.Deployment.ID,
+	})
+	require.NoError(t, err, "redeploy deployment with null memory/scale")
+	require.Equal(t, "completed", redeployed.Deployment.Status)
+	require.NotEqual(t, initial.Deployment.ID, redeployed.Deployment.ID)
+
+	require.Len(t, redeployed.Deployment.FunctionsAssets, 1)
+	require.NotNil(t, redeployed.Deployment.FunctionsAssets[0].MemoryMib)
+	require.Equal(t, int32(constants.DefaultFunctionMemoryMiB), *redeployed.Deployment.FunctionsAssets[0].MemoryMib)
+	require.NotNil(t, redeployed.Deployment.FunctionsAssets[0].Scale)
+	require.Equal(t, int32(constants.DefaultFunctionScale), *redeployed.Deployment.FunctionsAssets[0].Scale)
 }

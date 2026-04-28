@@ -1,4 +1,5 @@
 import { Page } from "@/components/page-layout";
+import { RequireScope } from "@/components/require-scope";
 import { Heading } from "@/components/ui/heading";
 import { Switch } from "@/components/ui/switch";
 import { Type } from "@/components/ui/type";
@@ -6,9 +7,8 @@ import { FeatureName } from "@gram/client/models/components";
 import { useFeaturesGet } from "@gram/client/react-query/featuresGet";
 import { useFeaturesSetMutation } from "@gram/client/react-query/featuresSet";
 import { Stack } from "@speakeasy-api/moonshine";
-import { Eye, FileText, Monitor } from "lucide-react";
+import { Eye, FileText, Monitor, ShieldOff } from "lucide-react";
 import { useState } from "react";
-import { RequireScope } from "@/components/require-scope";
 
 export default function OrgLogs() {
   return (
@@ -34,6 +34,9 @@ export function OrgLogsInner() {
   const [sessionCaptureEnabled, setSessionCaptureEnabled] = useState<
     boolean | null
   >(null);
+  const [blockShadowMcpEnabled, setBlockShadowMcpEnabled] = useState<
+    boolean | null
+  >(null);
 
   const effectiveLogsEnabled =
     logsEnabled ?? featuresData?.logsEnabled ?? false;
@@ -41,6 +44,8 @@ export function OrgLogsInner() {
     toolIoLogsEnabled ?? featuresData?.toolIoLogsEnabled ?? false;
   const effectiveSessionCaptureEnabled =
     sessionCaptureEnabled ?? featuresData?.sessionCaptureEnabled ?? false;
+  const effectiveBlockShadowMcpEnabled =
+    blockShadowMcpEnabled ?? featuresData?.blockShadowMcpEnabled ?? false;
 
   const { mutate: setLogsFeature, status: logsMutationStatus } =
     useFeaturesSetMutation({
@@ -53,6 +58,8 @@ export function OrgLogsInner() {
           setToolIoLogsEnabled(enabled);
         } else if (featureName === FeatureName.SessionCapture) {
           setSessionCaptureEnabled(enabled);
+        } else if (featureName === FeatureName.BlockShadowMcp) {
+          setBlockShadowMcpEnabled(enabled);
         }
       },
     });
@@ -97,6 +104,17 @@ export function OrgLogsInner() {
       request: {
         setProductFeatureRequestBody: {
           featureName: FeatureName.SessionCapture,
+          enabled,
+        },
+      },
+    });
+  };
+
+  const handleSetBlockShadowMcp = (enabled: boolean) => {
+    setLogsFeature({
+      request: {
+        setProductFeatureRequestBody: {
+          featureName: FeatureName.BlockShadowMcp,
           enabled,
         },
       },
@@ -178,15 +196,16 @@ export function OrgLogsInner() {
               <Stack direction="horizontal" align="center" gap={2}>
                 <Monitor className="text-muted-foreground h-4 w-4" />
                 <Type variant="body" className="font-medium">
-                  Claude Code Session Capture
+                  Agent Session Capture
                 </Type>
               </Stack>
               <Type
                 variant="body"
                 className="text-muted-foreground ml-6 text-sm"
               >
-                Capture user prompts and assistant responses from Claude Code
-                sessions. Sessions appear in the Agent Sessions tab.
+                Capture user prompts and assistant responses from agents like
+                Cursor, Claude Code, and more. Sessions appear in the Agent
+                Sessions tab.
               </Type>
             </Stack>
             {!featuresLoading && (
@@ -196,6 +215,37 @@ export function OrgLogsInner() {
                   onCheckedChange={handleSetSessionCapture}
                   disabled={isMutatingLogs || !effectiveLogsEnabled}
                   aria-label="Enable Claude Code session capture"
+                />
+              </RequireScope>
+            )}
+          </Stack>
+
+          <div className="border-border border-t" />
+
+          <Stack direction="horizontal" justify="space-between" align="center">
+            <Stack gap={1}>
+              <Stack direction="horizontal" align="center" gap={2}>
+                <ShieldOff className="text-muted-foreground h-4 w-4" />
+                <Type variant="body" className="font-medium">
+                  Block Shadow MCP
+                </Type>
+              </Stack>
+              <Type
+                variant="body"
+                className="text-muted-foreground ml-6 text-sm"
+              >
+                Reject tool calls in Cursor and Claude Code that don't come from
+                a Speakeasy-issued MCP server. Requires Speakeasy hooks to be
+                installed on the agent.
+              </Type>
+            </Stack>
+            {!featuresLoading && (
+              <RequireScope scope="org:admin" level="component">
+                <Switch
+                  checked={effectiveBlockShadowMcpEnabled}
+                  onCheckedChange={handleSetBlockShadowMcp}
+                  disabled={isMutatingLogs}
+                  aria-label="Block tool calls from non-approved MCP servers"
                 />
               </RequireScope>
             )}

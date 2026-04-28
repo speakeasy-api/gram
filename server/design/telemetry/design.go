@@ -1268,8 +1268,10 @@ var GetHooksSummaryResult = Type("GetHooksSummaryResult", func() {
 	Attribute("total_sessions", Int64, "Total number of unique sessions")
 	Attribute("breakdown", ArrayOf(HooksBreakdownRowType), "Cross-dimensional pivot: (user, server, source, tool) x counts")
 	Attribute("time_series", ArrayOf(HooksTimeSeriesPointType), "Time-bucketed event counts by server and user")
+	Attribute("skill_time_series", ArrayOf(SkillTimeSeriesPointType), "Time-bucketed event counts by skill")
+	Attribute("skill_breakdown", ArrayOf(SkillBreakdownRowType), "Per-user skill breakdown")
 
-	Required("servers", "users", "skills", "total_events", "total_sessions", "breakdown", "time_series")
+	Required("servers", "users", "skills", "total_events", "total_sessions", "breakdown", "time_series", "skill_time_series", "skill_breakdown")
 })
 
 var HooksBreakdownRowType = Type("HooksBreakdownRow", func() {
@@ -1297,6 +1299,16 @@ var HooksTimeSeriesPointType = Type("HooksTimeSeriesPoint", func() {
 	Required("bucket_start_ns", "server_name", "user_email", "event_count", "failure_count")
 })
 
+var SkillTimeSeriesPointType = Type("SkillTimeSeriesPoint", func() {
+	Description("A single time-series bucket for skill usage activity")
+
+	Attribute("bucket_start_ns", String, "Bucket start time in Unix nanoseconds (string for JS int64 precision)")
+	Attribute("skill_name", String, "Skill name")
+	Attribute("event_count", Int64, "Number of skill use events in this bucket")
+
+	Required("bucket_start_ns", "skill_name", "event_count")
+})
+
 var SkillSummaryType = Type("SkillSummary", func() {
 	Description("Aggregated skills metrics for a single skill")
 
@@ -1305,6 +1317,16 @@ var SkillSummaryType = Type("SkillSummary", func() {
 	Attribute("unique_users", Int64, "Number of unique users who used this skill")
 
 	Required("skill_name", "use_count", "unique_users")
+})
+
+var SkillBreakdownRowType = Type("SkillBreakdownRow", func() {
+	Description("Per-(skill, user) aggregated counts")
+
+	Attribute("skill_name", String, "Skill name")
+	Attribute("user_email", String, "User email address")
+	Attribute("use_count", Int64, "Use count for this skill/user combination")
+
+	Required("skill_name", "user_email", "use_count")
 })
 
 var HooksServerSummaryType = Type("HooksServerSummary", func() {
@@ -1385,8 +1407,9 @@ var HookTraceSummary = Type("HookTraceSummary", func() {
 	Attribute("start_time_unix_nano", String, "Earliest log timestamp in Unix nanoseconds (string for JS int64 precision)")
 	Attribute("log_count", UInt64, "Total number of logs in this trace")
 	Attribute("hook_status", String, "Hook execution status", func() {
-		Enum("success", "failure", "pending")
+		Enum("success", "failure", "pending", "blocked")
 	})
+	Attribute("block_reason", String, "Reason set when hook_status is 'blocked' (e.g. shadow-MCP guard rejection)")
 	Attribute("gram_urn", String, "Gram URN associated with this hook trace")
 	Attribute("tool_name", String, "Tool name (from materialized column)")
 	Attribute("tool_source", String, "Tool call source (from materialized column)")

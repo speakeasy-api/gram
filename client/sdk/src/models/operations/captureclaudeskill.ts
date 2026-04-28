@@ -62,6 +62,7 @@ export type CaptureClaudeSkillRequest = {
   xGramSkillId?: string | undefined;
   xGramSkillVersionId?: string | undefined;
   contentLength: number;
+  requestBody: ReadableStream<Uint8Array> | Blob | ArrayBuffer | Uint8Array;
 };
 
 /** @internal */
@@ -102,6 +103,7 @@ export type CaptureClaudeSkillRequest$Outbound = {
   "X-Gram-Skill-Id"?: string | undefined;
   "X-Gram-Skill-Version-Id"?: string | undefined;
   "Content-Length": number;
+  RequestBody: ReadableStream<Uint8Array> | Blob | ArrayBuffer | Uint8Array;
 };
 
 /** @internal */
@@ -121,6 +123,12 @@ export const CaptureClaudeSkillRequest$outboundSchema: z.ZodMiniType<
     xGramSkillId: z.optional(z.string()),
     xGramSkillVersionId: z.optional(z.string()),
     contentLength: z.int(),
+    requestBody: z.union([
+      z.custom<ReadableStream<Uint8Array>>(x => x instanceof ReadableStream),
+      z.custom<Blob>(x => x instanceof Blob),
+      z.custom<ArrayBuffer>(x => x instanceof ArrayBuffer),
+      z.custom<Uint8Array>(x => x instanceof Uint8Array),
+    ]),
   }),
   z.transform((v) => {
     return remap$(v, {
@@ -135,6 +143,7 @@ export const CaptureClaudeSkillRequest$outboundSchema: z.ZodMiniType<
       xGramSkillId: "X-Gram-Skill-Id",
       xGramSkillVersionId: "X-Gram-Skill-Version-Id",
       contentLength: "Content-Length",
+      requestBody: "RequestBody",
     });
   }),
 );

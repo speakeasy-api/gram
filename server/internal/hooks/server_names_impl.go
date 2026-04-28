@@ -6,8 +6,8 @@ import (
 	"github.com/google/uuid"
 	goahttp "goa.design/goa/v3/http"
 
-	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
@@ -36,7 +36,7 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) ([]*gen.Se
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeProjectRead, ResourceID: authCtx.ProjectID.String()}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
 		return nil, err
 	}
 
@@ -72,7 +72,7 @@ func (s *Service) Upsert(ctx context.Context, payload *gen.UpsertPayload) (*gen.
 		return nil, oops.E(oops.CodeBadRequest, nil, "project_id required")
 	}
 
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeProjectWrite, ResourceID: authCtx.ProjectID.String()}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
 		return nil, err
 	}
 
@@ -115,7 +115,7 @@ func (s *Service) Delete(ctx context.Context, payload *gen.DeletePayload) error 
 		return oops.E(oops.CodeBadRequest, nil, "project_id required")
 	}
 
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeProjectWrite, ResourceID: authCtx.ProjectID.String()}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
 		return err
 	}
 

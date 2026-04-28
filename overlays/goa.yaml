@@ -11,7 +11,7 @@ actions:
   - target: $.components.schemas.Error
     update:
       x-speakeasy-name-override: ServiceError
-  - target: $.paths.*[?(@.operationId=='uploadOpenAPIv3Asset' || @.operationId=='uploadFunctions' || @.operationId=='uploadImage')]
+  - target: $.paths.*[?(@.operationId=='uploadOpenAPIv3Asset' || @.operationId=='uploadFunctions' || @.operationId=='uploadImage' || @.operationId=='captureSkill' || @.operationId=='captureClaudeSkill' || @.operationId=='uploadManualSkill')]
     update:
       requestBody:
         required: true
@@ -23,3 +23,9 @@ actions:
   - target: $.paths..security
     update:
       - {}
+  - target: $.paths.*[?count(@.tags[?@=='admin'])>0]
+    remove: true
+  - target: $.paths[?length(@)==0]
+    remove: true
+  - target: $.paths[?match(@~, "^/admin.*")]
+    remove: true

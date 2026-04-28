@@ -104,7 +104,7 @@ linters:
           - glint
         text: enforceo11yconventions
       # Not interesting to enforce this in tests
-      - path: _test\.go|internal/testenv/
+      - path: _test\.go|internal/testenv/|internal/testinfra/
         linters:
           - forbidigo
         text: GG001|GG002
@@ -123,6 +123,12 @@ linters:
               disabled: true
             no-repo-fields-in-service:
               disabled: true
+            audit-event-typed-snapshot:
+              disabled: false
+            audit-event-urn-naming:
+              disabled: false
+            audit-event-urn-typing:
+              disabled: false
     gosec:
       excludes:
         # Temporarily ignore this lint rule because it needs to be a separate
@@ -198,6 +204,8 @@ linters:
         - '^github.com/urfave/cli/v2\..*Flag$'
         - '^gopkg.in/yaml.v3\.Node$'
         - '^github.com/redis/go-redis/v9\.Options$'
+        - '^github.com/testcontainers/testcontainers-go\.GenericContainerRequest$'
+        - '^github.com/testcontainers/testcontainers-go\.ContainerRequest$'
         - '^github.com/go-redis/cache/v9\.Options$'
         - '^github.com/go-redis/cache/v9\.Item$'
         - '^github.com/gomarkdown/markdown/html\.RendererOptions$'
@@ -277,6 +285,10 @@ linters:
         - "(*github.com/speakeasy-api/gram/server/internal/access.Manager).RequireAny("
         - "(*github.com/speakeasy-api/gram/server/internal/access.Manager).Filter("
         - "(*github.com/speakeasy-api/gram/server/internal/access.Manager).PrepareContext("
+        - "(*github.com/speakeasy-api/gram/server/internal/authz.Engine).Require("
+        - "(*github.com/speakeasy-api/gram/server/internal/authz.Engine).Filter("
+        - "(*github.com/speakeasy-api/gram/server/internal/authz.Engine).ShouldEnforce("
+        - "github.com/speakeasy-api/gram/server/internal/authz.GrantsForRole("
         - "(*github.com/speakeasy-api/gram/server/internal/auth.Auth).Authorize("
         - "(*github.com/speakeasy-api/gram/server/internal/auth/chatsessions.Manager).Authorize("
         - "(*github.com/speakeasy-api/gram/server/internal/auth.Auth).CheckProjectAccess("

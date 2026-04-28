@@ -37,7 +37,9 @@ func NewRefreshBillingUsage(logger *slog.Logger, db *pgxpool.Pool, billingRepo b
 // Send usage data to posthog for tracking purposes
 
 func (r *RefreshBillingUsage) Do(ctx context.Context, orgIDs []string) error {
-	workers := pool.New().WithErrors().WithMaxGoroutines(25)
+	// Polar's /quantities endpoint serializes work per-meter, so high client-side
+	// concurrency just queues requests and runs them into the activity timeout.
+	workers := pool.New().WithErrors().WithMaxGoroutines(5)
 
 	for _, orgID := range orgIDs {
 		workers.Go(func() error {

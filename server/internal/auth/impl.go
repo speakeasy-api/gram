@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	envRepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
@@ -49,24 +50,18 @@ type AuthConfigurations struct {
 	Environment            string
 }
 
-// ProjectFilterFunc filters a list of project IDs down to those the current
-// user is allowed to see. It is injected to avoid an import cycle with the
-// access package. A nil value disables filtering (all projects are returned).
-type ProjectFilterFunc func(ctx context.Context, projectIDs []string) ([]string, error)
-
 // Service for gram dashboard authentication endpoints
 
 type Service struct {
-	tracer         trace.Tracer
-	logger         *slog.Logger
-	db             *pgxpool.Pool
-	sessions       *sessions.Manager
-	cfg            AuthConfigurations
-	accessLoader   AccessLoader
-	filterProjects ProjectFilterFunc
-	projectsRepo   *projectsRepo.Queries
-	envRepo        *envRepo.Queries
-	orgRepo        *orgRepo.Queries
+	tracer       trace.Tracer
+	logger       *slog.Logger
+	db           *pgxpool.Pool
+	sessions     *sessions.Manager
+	cfg          AuthConfigurations
+	authz        *authz.Engine
+	projectsRepo *projectsRepo.Queries
+	envRepo      *envRepo.Queries
+	orgRepo      *orgRepo.Queries
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -77,22 +72,20 @@ func NewService(
 	db *pgxpool.Pool,
 	sessions *sessions.Manager,
 	cfg AuthConfigurations,
-	accessLoader AccessLoader,
-	filterProjects ProjectFilterFunc,
+	authzEngine *authz.Engine,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("auth"))
 
 	return &Service{
-		tracer:         tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/auth"),
-		logger:         logger,
-		db:             db,
-		sessions:       sessions,
-		cfg:            cfg,
-		accessLoader:   accessLoader,
-		filterProjects: filterProjects,
-		projectsRepo:   projectsRepo.New(db),
-		envRepo:        envRepo.New(db),
-		orgRepo:        orgRepo.New(db),
+		tracer:       tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/auth"),
+		logger:       logger,
+		db:           db,
+		sessions:     sessions,
+		cfg:          cfg,
+		authz:        authzEngine,
+		projectsRepo: projectsRepo.New(db),
+		envRepo:      envRepo.New(db),
+		orgRepo:      orgRepo.New(db),
 	}
 }
 
@@ -115,11 +108,9 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 	if err != nil {
 		return ctx, err
 	}
-	if s.accessLoader != nil {
-		ctx, err = s.accessLoader.PrepareContext(ctx)
-		if err != nil {
-			return ctx, oops.E(oops.CodeUnexpected, err, "load access grants").Log(ctx, s.logger)
-		}
+	ctx, err = s.authz.PrepareContext(ctx)
+	if err != nil {
+		return ctx, oops.E(oops.CodeUnexpected, err, "load access grants").Log(ctx, s.logger)
 	}
 	return ctx, nil
 }
@@ -175,20 +166,20 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 	}
 
 	activeOrg := userInfo.Organizations[0]
+	selectedActiveOrgFromState := false
+	if org, ok := activeOrganizationFromState(payload, userInfo.Organizations); ok {
+		activeOrg = org
+		selectedActiveOrgFromState = true
+	}
 
-	// For speakeasy users and admins we default speakeasy-team being the active organization if present
-	// For admins we allow you to override the active organization returned by header if present
-	if strings.HasSuffix(userInfo.Email, "@speakeasy.com") || strings.HasSuffix(userInfo.Email, "@speakeasyapi.dev") || userInfo.Admin {
-		override := "speakeasy-team"
-		if userInfo.Admin {
-			if adminOverride, _ := contextvalues.GetAdminOverrideFromContext(ctx); adminOverride != "" {
-				override = adminOverride
-			}
-		}
-		for _, org := range userInfo.Organizations {
-			if org.Slug == override {
-				activeOrg = org
-				break
+	// For admins we allow you to override the active organization returned by header if present.
+	if !selectedActiveOrgFromState && userInfo.Admin {
+		if adminOverride, _ := contextvalues.GetAdminOverrideFromContext(ctx); adminOverride != "" {
+			for _, org := range userInfo.Organizations {
+				if org.Slug == adminOverride {
+					activeOrg = org
+					break
+				}
 			}
 		}
 	}
@@ -245,6 +236,48 @@ func (s *Service) Login(ctx context.Context, payload *gen.LoginPayload) (res *ge
 	return &gen.LoginResult{
 		Location: location,
 	}, nil
+}
+
+func activeOrganizationFromState(payload *gen.CallbackPayload, organizations []sessions.Organization) (sessions.Organization, bool) {
+	var empty sessions.Organization
+
+	state := decodeStateParam(payload)
+	if state == nil {
+		return empty, false
+	}
+
+	orgSlug := organizationSlugFromDestinationURL(state.FinalDestinationURL)
+	if orgSlug == "" {
+		return empty, false
+	}
+
+	for _, org := range organizations {
+		if org.Slug == orgSlug {
+			return org, true
+		}
+	}
+
+	return empty, false
+}
+
+func organizationSlugFromDestinationURL(destinationURL string) string {
+	location := relativeURL(destinationURL)
+	if location == "" {
+		return ""
+	}
+
+	parsed, err := url.Parse(location)
+	if err != nil {
+		return ""
+	}
+
+	path := strings.Trim(parsed.Path, "/")
+	if path == "" {
+		return ""
+	}
+
+	orgSlug, _, _ := strings.Cut(path, "/")
+	return orgSlug
 }
 
 func (s *Service) SwitchScopes(ctx context.Context, payload *gen.SwitchScopesPayload) (res *gen.SwitchScopesResult, err error) {
@@ -384,8 +417,8 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 		}
 
 		allowedIDs := projectIDs
-		if s.filterProjects != nil && len(projectIDs) > 0 && org.ID == authCtx.ActiveOrganizationID {
-			allowedIDs, err = s.filterProjects(ctx, projectIDs)
+		if len(projectIDs) > 0 && org.ID == authCtx.ActiveOrganizationID {
+			allowedIDs, err = s.authz.Filter(ctx, authz.ScopeProjectRead, projectIDs)
 			if err != nil {
 				return nil, err
 			}

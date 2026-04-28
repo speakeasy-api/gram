@@ -167,6 +167,10 @@ type GetHooksSummaryResult struct {
 	Breakdown []*HooksBreakdownRow
 	// Time-bucketed event counts by server and user
 	TimeSeries []*HooksTimeSeriesPoint
+	// Time-bucketed event counts by skill
+	SkillTimeSeries []*SkillTimeSeriesPoint
+	// Per-user skill breakdown
+	SkillBreakdown []*SkillBreakdownRow
 }
 
 // GetMetricsSummaryResult is the result type of the telemetry service
@@ -281,6 +285,8 @@ type HookTraceSummary struct {
 	LogCount uint64
 	// Hook execution status
 	HookStatus *string
+	// Reason set when hook_status is 'blocked' (e.g. shadow-MCP guard rejection)
+	BlockReason *string
 	// Gram URN associated with this hook trace
 	GramUrn string
 	// Tool name (from materialized column)
@@ -782,6 +788,16 @@ type ServiceInfo struct {
 	Version *string
 }
 
+// Per-(skill, user) aggregated counts
+type SkillBreakdownRow struct {
+	// Skill name
+	SkillName string
+	// User email address
+	UserEmail string
+	// Use count for this skill/user combination
+	UseCount int64
+}
+
 // Aggregated skills metrics for a single skill
 type SkillSummary struct {
 	// Skill name (extracted from tool name)
@@ -790,6 +806,16 @@ type SkillSummary struct {
 	UseCount int64
 	// Number of unique users who used this skill
 	UniqueUsers int64
+}
+
+// A single time-series bucket for skill usage activity
+type SkillTimeSeriesPoint struct {
+	// Bucket start time in Unix nanoseconds (string for JS int64 precision)
+	BucketStartNs string
+	// Skill name
+	SkillName string
+	// Number of skill use events in this bucket
+	EventCount int64
 }
 
 // OpenTelemetry log record

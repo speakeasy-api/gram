@@ -33,7 +33,7 @@ import {
   useLatestDeployment,
   useListToolsets,
 } from "@gram/client/react-query";
-import type { Server } from "@/pages/catalog/hooks";
+import type { PulseMCPServer } from "@/pages/catalog/hooks";
 import {
   generateSlug,
   useExternalMcpReleaseWorkflow,
@@ -44,7 +44,7 @@ const mockDeployment = vi.mocked(useDeployment);
 const mockLogs = vi.mocked(useDeploymentLogs);
 const mockListToolsets = vi.mocked(useListToolsets);
 
-function makeServer(overrides: Partial<Server> = {}): Server {
+function makeServer(overrides: Partial<PulseMCPServer> = {}): PulseMCPServer {
   return {
     description: "A test server",
     registryId: "reg-1",
@@ -52,13 +52,13 @@ function makeServer(overrides: Partial<Server> = {}): Server {
     version: "1.0.0",
     meta: {},
     ...overrides,
-  } as Server;
+  } as PulseMCPServer;
 }
 
 // IMPORTANT: The hook has `useEffect([servers])` which means the servers array
 // must be a stable reference across renders. Inline `[]` literals in the
 // renderHook callback create a new array each render → infinite loop → OOM.
-const EMPTY_SERVERS: Server[] = [];
+const EMPTY_SERVERS: PulseMCPServer[] = [];
 
 // ---------------------------------------------------------------------------
 // generateSlug
@@ -152,7 +152,10 @@ describe("useExternalMcpReleaseWorkflow", () => {
 
   it("initializes serverConfigs from servers using title", () => {
     const servers = [
-      makeServer({ title: "My Server", registrySpecifier: "org/my-server" }),
+      makeServer({
+        title: "My Server",
+        registrySpecifier: "org/my-server",
+      }),
     ];
     const { result } = renderHook(() =>
       useExternalMcpReleaseWorkflow({ servers }),
@@ -485,7 +488,10 @@ describe("useExternalMcpReleaseWorkflow", () => {
 
       const servers = [makeServer({ title: "S" })];
       const { result } = renderHook(() =>
-        useExternalMcpReleaseWorkflow({ servers, projectSlug: "my-proj" }),
+        useExternalMcpReleaseWorkflow({
+          servers,
+          projectSlug: "my-proj",
+        }),
       );
       await act(async () => {
         const state = result.current;
@@ -785,7 +791,9 @@ describe("useExternalMcpReleaseWorkflow", () => {
       mockEvolveDeployment.mockResolvedValue({});
       mockToolsetsCreate.mockResolvedValue({ slug: "my-server" });
       mockToolsetsUpdateBySlug.mockResolvedValue({});
-      mockToolsetsGetBySlug.mockResolvedValue({ mcpSlug: "mcp-my-server" });
+      mockToolsetsGetBySlug.mockResolvedValue({
+        mcpSlug: "mcp-my-server",
+      });
 
       const servers = [
         makeServer({
@@ -826,7 +834,10 @@ describe("useExternalMcpReleaseWorkflow", () => {
       expect(mockToolsetsUpdateBySlug).toHaveBeenCalledWith(
         {
           slug: "my-server",
-          updateToolsetRequestBody: { mcpEnabled: true, mcpIsPublic: true },
+          updateToolsetRequestBody: {
+            mcpEnabled: true,
+            mcpIsPublic: true,
+          },
         },
         undefined,
         undefined,
@@ -933,7 +944,7 @@ describe("useExternalMcpReleaseWorkflow", () => {
           title: "My Server",
           registrySpecifier: "org/my-server",
           tools: [{ name: "listPets" }, { name: "getPet" }],
-        } as Partial<Server>),
+        } as Partial<PulseMCPServer>),
       ];
 
       const { result } = renderHook(() =>
@@ -1001,7 +1012,10 @@ describe("useExternalMcpReleaseWorkflow", () => {
 
       const servers = [makeServer({ title: "S" })];
       const { result } = renderHook(() =>
-        useExternalMcpReleaseWorkflow({ servers, projectSlug: "proj-1" }),
+        useExternalMcpReleaseWorkflow({
+          servers,
+          projectSlug: "proj-1",
+        }),
       );
       await act(async () => {
         const state = result.current;

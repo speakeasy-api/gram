@@ -27,6 +27,10 @@ export type ClaudeHookResult = {
    * Whether to suppress the hook's output
    */
   suppressOutput?: boolean | undefined;
+  /**
+   * Warning message shown to the user in the terminal
+   */
+  systemMessage?: string | undefined;
 };
 
 /** @internal */
@@ -38,6 +42,7 @@ export const ClaudeHookResult$inboundSchema: z.ZodMiniType<
   hookSpecificOutput: z.optional(z.any()),
   stopReason: z.optional(z.string()),
   suppressOutput: z.optional(z.boolean()),
+  systemMessage: z.optional(z.string()),
 });
 
 export function claudeHookResultFromJSON(

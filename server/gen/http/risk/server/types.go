@@ -20,6 +20,8 @@ type CreateRiskPolicyRequestBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// Detection sources to enable.
 	Sources []string `form:"sources,omitempty" json:"sources,omitempty" xml:"sources,omitempty"`
+	// Presidio entity types to detect.
+	PresidioEntities []string `form:"presidio_entities,omitempty" json:"presidio_entities,omitempty" xml:"presidio_entities,omitempty"`
 	// Whether the policy is active.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 }
@@ -33,6 +35,8 @@ type UpdateRiskPolicyRequestBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// Detection sources to enable.
 	Sources []string `form:"sources,omitempty" json:"sources,omitempty" xml:"sources,omitempty"`
+	// Presidio entity types to detect.
+	PresidioEntities []string `form:"presidio_entities,omitempty" json:"presidio_entities,omitempty" xml:"presidio_entities,omitempty"`
 	// Whether the policy is active.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 }
@@ -55,6 +59,8 @@ type CreateRiskPolicyResponseBody struct {
 	Name string `form:"name" json:"name" xml:"name"`
 	// Detection sources enabled for this policy.
 	Sources []string `form:"sources" json:"sources" xml:"sources"`
+	// Presidio entity types to scan for. When empty, scans all entities.
+	PresidioEntities []string `form:"presidio_entities,omitempty" json:"presidio_entities,omitempty" xml:"presidio_entities,omitempty"`
 	// Whether the policy is active.
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 	// Policy version, incremented on each update.
@@ -87,6 +93,8 @@ type GetRiskPolicyResponseBody struct {
 	Name string `form:"name" json:"name" xml:"name"`
 	// Detection sources enabled for this policy.
 	Sources []string `form:"sources" json:"sources" xml:"sources"`
+	// Presidio entity types to scan for. When empty, scans all entities.
+	PresidioEntities []string `form:"presidio_entities,omitempty" json:"presidio_entities,omitempty" xml:"presidio_entities,omitempty"`
 	// Whether the policy is active.
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 	// Policy version, incremented on each update.
@@ -112,6 +120,8 @@ type UpdateRiskPolicyResponseBody struct {
 	Name string `form:"name" json:"name" xml:"name"`
 	// Detection sources enabled for this policy.
 	Sources []string `form:"sources" json:"sources" xml:"sources"`
+	// Presidio entity types to scan for. When empty, scans all entities.
+	PresidioEntities []string `form:"presidio_entities,omitempty" json:"presidio_entities,omitempty" xml:"presidio_entities,omitempty"`
 	// Whether the policy is active.
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 	// Policy version, incremented on each update.
@@ -1825,6 +1835,8 @@ type RiskPolicyResponseBody struct {
 	Name string `form:"name" json:"name" xml:"name"`
 	// Detection sources enabled for this policy.
 	Sources []string `form:"sources" json:"sources" xml:"sources"`
+	// Presidio entity types to scan for. When empty, scans all entities.
+	PresidioEntities []string `form:"presidio_entities,omitempty" json:"presidio_entities,omitempty" xml:"presidio_entities,omitempty"`
 	// Whether the policy is active.
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 	// Policy version, incremented on each update.
@@ -1911,6 +1923,12 @@ func NewCreateRiskPolicyResponseBody(res *types.RiskPolicy) *CreateRiskPolicyRes
 	} else {
 		body.Sources = []string{}
 	}
+	if res.PresidioEntities != nil {
+		body.PresidioEntities = make([]string, len(res.PresidioEntities))
+		for i, val := range res.PresidioEntities {
+			body.PresidioEntities[i] = val
+		}
+	}
 	return body
 }
 
@@ -1955,6 +1973,12 @@ func NewGetRiskPolicyResponseBody(res *types.RiskPolicy) *GetRiskPolicyResponseB
 	} else {
 		body.Sources = []string{}
 	}
+	if res.PresidioEntities != nil {
+		body.PresidioEntities = make([]string, len(res.PresidioEntities))
+		for i, val := range res.PresidioEntities {
+			body.PresidioEntities[i] = val
+		}
+	}
 	return body
 }
 
@@ -1979,6 +2003,12 @@ func NewUpdateRiskPolicyResponseBody(res *types.RiskPolicy) *UpdateRiskPolicyRes
 		}
 	} else {
 		body.Sources = []string{}
+	}
+	if res.PresidioEntities != nil {
+		body.PresidioEntities = make([]string, len(res.PresidioEntities))
+		for i, val := range res.PresidioEntities {
+			body.PresidioEntities[i] = val
+		}
 	}
 	return body
 }
@@ -3336,6 +3366,12 @@ func NewCreateRiskPolicyPayload(body *CreateRiskPolicyRequestBody, apikeyToken *
 			v.Sources[i] = val
 		}
 	}
+	if body.PresidioEntities != nil {
+		v.PresidioEntities = make([]string, len(body.PresidioEntities))
+		for i, val := range body.PresidioEntities {
+			v.PresidioEntities[i] = val
+		}
+	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
@@ -3379,6 +3415,12 @@ func NewUpdateRiskPolicyPayload(body *UpdateRiskPolicyRequestBody, apikeyToken *
 			v.Sources[i] = val
 		}
 	}
+	if body.PresidioEntities != nil {
+		v.PresidioEntities = make([]string, len(body.PresidioEntities))
+		for i, val := range body.PresidioEntities {
+			v.PresidioEntities[i] = val
+		}
+	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
@@ -3400,11 +3442,12 @@ func NewDeleteRiskPolicyPayload(id string, apikeyToken *string, sessionToken *st
 
 // NewListRiskResultsPayload builds a risk service listRiskResults endpoint
 // payload.
-func NewListRiskResultsPayload(policyID *string, chatID *string, cursor *string, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.ListRiskResultsPayload {
+func NewListRiskResultsPayload(policyID *string, chatID *string, cursor *string, limit *int, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.ListRiskResultsPayload {
 	v := &risk.ListRiskResultsPayload{}
 	v.PolicyID = policyID
 	v.ChatID = chatID
 	v.Cursor = cursor
+	v.Limit = limit
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
@@ -3414,9 +3457,10 @@ func NewListRiskResultsPayload(policyID *string, chatID *string, cursor *string,
 
 // NewListRiskResultsByChatPayload builds a risk service listRiskResultsByChat
 // endpoint payload.
-func NewListRiskResultsByChatPayload(cursor *string, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.ListRiskResultsByChatPayload {
+func NewListRiskResultsByChatPayload(cursor *string, limit *int, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.ListRiskResultsByChatPayload {
 	v := &risk.ListRiskResultsByChatPayload{}
 	v.Cursor = cursor
+	v.Limit = limit
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput

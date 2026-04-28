@@ -3,7 +3,7 @@ import { Label } from "@/components/ui/label";
 import { Type } from "@/components/ui/type";
 import { useSdkClient } from "@/contexts/Sdk";
 import { cn, getServerURL } from "@/lib/utils";
-import type { Server } from "@/pages/catalog/hooks";
+import type { PulseMCPServer } from "@/pages/catalog/hooks";
 import { useRoutes } from "@/routes";
 import type { ExternalMCPRemote } from "@gram/client/models/components";
 import { Button, Dialog, Input, Stack } from "@speakeasy-api/moonshine";
@@ -184,7 +184,7 @@ function getRemoteDisplayInfo(url: string): {
 }
 
 export interface AddServerDialogProps {
-  servers: Server[];
+  servers: PulseMCPServer[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onServersAdded?: () => void;
@@ -195,9 +195,9 @@ export interface AddServerDialogProps {
  * Hook to fetch server details (including remotes) for all servers.
  * This enriches the server objects with remote endpoint data from the registry.
  */
-function useEnrichedServers(servers: Server[], open: boolean) {
+function useEnrichedServers(servers: PulseMCPServer[], open: boolean) {
   const client = useSdkClient();
-  const [enrichedServers, setEnrichedServers] = useState<Server[]>([]);
+  const [enrichedServers, setEnrichedServers] = useState<PulseMCPServer[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -631,7 +631,9 @@ function SelectRemotesPhaseContent({
             }
             value={currentConfig.name}
             onChange={(e) =>
-              releaseState.updateCurrentConfig({ name: e.target.value })
+              releaseState.updateCurrentConfig({
+                name: e.target.value,
+              })
             }
           />
         </div>
@@ -945,7 +947,7 @@ function DeployingPhaseContent({
           {releaseState.deploymentLogs.map((log) => (
             <div
               key={log.id}
-              className={log.event.includes("error") ? "text-destructive" : ""}
+              className={`break-all ${log.event.includes("error") ? "text-destructive" : ""}`}
             >
               {log.message}
             </div>
@@ -1211,7 +1213,7 @@ function ErrorPhaseContent({
           {releaseState.deploymentLogs.map((log) => (
             <div
               key={log.id}
-              className={log.event.includes("error") ? "text-destructive" : ""}
+              className={`break-all ${log.event.includes("error") ? "text-destructive" : ""}`}
             >
               {log.message}
             </div>

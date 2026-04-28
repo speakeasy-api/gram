@@ -10,6 +10,7 @@ import { Type } from "@/components/ui/type";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import type { Role } from "@gram/client/models/components/role.js";
 import type { Tool, Toolset } from "@/lib/toolTypes";
+import { resourceKindForScope, selectorMatches } from "@/hooks/useRBAC";
 import { useOrgRoutes } from "@/routes";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useRoles } from "@gram/client/react-query/roles.js";
@@ -47,30 +48,43 @@ function getAccessLevel(
 ): AccessLevel {
   const grant = role.grants.find((g) => g.scope === scope);
   if (!grant) return "none";
-  // resources undefined/null = unrestricted
-  if (grant.resources === undefined || grant.resources === null) return "full";
-  if (grant.resources.length === 0) return "none";
-  // Check if this toolset's slug is in the resources
-  const hasServer = grant.resources.includes(toolsetSlug);
-  // Check if any tool-level compound IDs match (serverSlug:toolId)
-  const hasTools = grant.resources.some((r) => r.startsWith(`${toolsetSlug}:`));
+  // selectors undefined/null = unrestricted
+  if (grant.selectors === undefined || grant.selectors === null) return "full";
+  if (grant.selectors.length === 0) return "none";
+
+  const check: Record<string, string> = {
+    resourceKind: resourceKindForScope(scope),
+    resourceId: toolsetSlug,
+  };
+
+  // Check if any selector matches this server (without tool constraint)
+  const hasServer = grant.selectors.some(
+    (s) => selectorMatches(s, check) && !s.tool,
+  );
+  // Check if any selector matches with a specific tool on this server
+  const hasTools = grant.selectors.some(
+    (s) => selectorMatches(s, check) && !!s.tool,
+  );
   if (hasServer) return "server";
   if (hasTools) return "tools";
   return "none";
 }
 
-/** Extract tool identifiers from compound resource IDs for this server */
+/** Extract tool names from selectors for this server */
 function getToolIdsForScope(
   role: Role,
   scope: string,
   toolsetSlug: string,
 ): string[] {
   const grant = role.grants.find((g) => g.scope === scope);
-  if (!grant?.resources) return [];
-  const prefix = `${toolsetSlug}:`;
-  return grant.resources
-    .filter((r) => r.startsWith(prefix))
-    .map((r) => r.slice(prefix.length));
+  if (!grant?.selectors) return [];
+  const check: Record<string, string> = {
+    resourceKind: resourceKindForScope(scope),
+    resourceId: toolsetSlug,
+  };
+  return grant.selectors
+    .filter((s) => selectorMatches(s, check) && s.tool)
+    .map((s) => s.tool!);
 }
 
 /** Match tool identifiers against toolset tools (by id or name) */
@@ -206,9 +220,9 @@ export function MCPTeamAccessTab({ toolset }: { toolset: Toolset }) {
         const role = roleMap.get(member.roleId);
         if (!role) return null;
         const scopes = {
-          read: getAccessLevel(role, "mcp:read", toolset.slug),
-          write: getAccessLevel(role, "mcp:write", toolset.slug),
-          connect: getAccessLevel(role, "mcp:connect", toolset.slug),
+          read: getAccessLevel(role, "mcp:read", toolset.id),
+          write: getAccessLevel(role, "mcp:write", toolset.id),
+          connect: getAccessLevel(role, "mcp:connect", toolset.id),
         };
         return { member, role, scopes };
       })
@@ -220,14 +234,14 @@ export function MCPTeamAccessTab({ toolset }: { toolset: Toolset }) {
           m.scopes.connect !== "none",
       )
       .sort((a, b) => a.member.name.localeCompare(b.member.name));
-  }, [membersData?.members, rolesData?.roles, toolset.slug]);
+  }, [membersData?.members, rolesData?.roles, toolset.id]);
 
   const openToolSheet = (
     row: MemberAccess,
     scope: string,
     scopeLabel: string,
   ) => {
-    const toolIds = getToolIdsForScope(row.role, scope, toolset.slug);
+    const toolIds = getToolIdsForScope(row.role, scope, toolset.id);
     const matched = resolveTools(toolIds, toolset.tools);
     setSheetData({
       member: row.member,

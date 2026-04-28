@@ -15,10 +15,10 @@ import (
 	srv "github.com/speakeasy-api/gram/server/gen/http/resources/server"
 	gen "github.com/speakeasy-api/gram/server/gen/resources"
 	"github.com/speakeasy-api/gram/server/gen/types"
-	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
@@ -32,12 +32,12 @@ type Service struct {
 	db     *pgxpool.Pool
 	repo   *repo.Queries
 	auth   *auth.Auth
-	access *access.Manager
+	authz  *authz.Engine
 }
 
 var _ gen.Service = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, accessManager *access.Manager) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, authzEngine *authz.Engine) *Service {
 	logger = logger.With(attr.SlogComponent("resources"))
 
 	return &Service{
@@ -45,8 +45,8 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		logger: logger,
 		db:     db,
 		repo:   repo.New(db),
-		auth:   auth.New(logger, db, sessions, accessManager),
-		access: accessManager,
+		auth:   auth.New(logger, db, sessions, authzEngine),
+		authz:  authzEngine,
 	}
 }
 
@@ -66,7 +66,7 @@ func (s *Service) ListResources(ctx context.Context, payload *gen.ListResourcesP
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeProjectRead, ResourceID: authCtx.ProjectID.String()}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
 		return nil, err
 	}
 

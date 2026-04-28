@@ -120,6 +120,12 @@ var DeploymentFunctions = Type("DeploymentFunctions", func() {
 	Attribute("runtime", String, func() {
 		Description("The runtime to use when executing functions.")
 	})
+	Attribute("scale", Int32, func() {
+		Description("The number of instances to run for the function.")
+	})
+	Attribute("memory_mib", Int32, func() {
+		Description("The memory limit in MiB of function runner machines.")
+	})
 
 	Meta("struct:pkg:path", "types")
 })

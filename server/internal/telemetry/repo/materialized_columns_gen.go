@@ -21,6 +21,7 @@ var materializedColumns = map[string]string{
 	"gram.toolset.slug":             "toolset_slug",
 	"user.email":                    "user_email",
 	"gram.hook.source":              "hook_source",
+	"gram.hook.block_reason":        "hook_block_reason",
 	"gram.skill.scope":              "skill_scope",
 	"gram.skill.discovery_root":     "skill_discovery_root",
 	"gram.skill.source_type":        "skill_source_type",

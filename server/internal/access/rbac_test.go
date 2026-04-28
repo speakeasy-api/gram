@@ -2,13 +2,15 @@ package access
 
 import (
 	"context"
-	mockidp "github.com/speakeasy-api/gram/mock-speakeasy-idp"
 	"testing"
+
+	mockidp "github.com/speakeasy-api/gram/mock-speakeasy-idp"
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/access"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	thirdpartyworkos "github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -31,7 +33,7 @@ func TestService_ListRoles_AllowsOrgReadGrant(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
-	ctx = withRBACGrants(t, ctx, Grant{Scope: ScopeOrgRead, Resource: testAccessAuthContext(t, ctx).ActiveOrganizationID})
+	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgRead, Selector: authz.NewSelector(authz.ScopeOrgRead, testAccessAuthContext(t, ctx).ActiveOrganizationID)})
 
 	ti.roles.On("ListRoles", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Role{
 		mockSystemRole("role_admin", "Admin", "admin"),
@@ -62,7 +64,7 @@ func TestService_GetRole_AllowsOrgReadGrant(t *testing.T) {
 
 	ctx, ti := newTestAccessService(t)
 	authCtx := testAccessAuthContext(t, ctx)
-	ctx = withRBACGrants(t, ctx, Grant{Scope: ScopeOrgRead, Resource: authCtx.ActiveOrganizationID})
+	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgRead, Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID)})
 
 	ti.roles.On("ListRoles", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Role{
 		mockRole("role_custom", "Custom Builder", "custom-builder", "Can build selected resources"),
@@ -70,7 +72,7 @@ func TestService_GetRole_AllowsOrgReadGrant(t *testing.T) {
 	ti.roles.On("ListMembers", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Member{
 		mockMember(mockidp.MockOrgID, "membership_1", "user_1", "custom-builder"),
 	}, nil).Once()
-	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), ScopeProjectRead, "project-1")
+	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), authz.ScopeProjectRead, "project-1")
 
 	role, err := ti.service.GetRole(ctx, &gen.GetRolePayload{ID: "role_custom"})
 	require.NoError(t, err)
@@ -93,7 +95,7 @@ func TestService_ListScopes_AllowsOrgReadGrant(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
-	ctx = withRBACGrants(t, ctx, Grant{Scope: ScopeOrgRead, Resource: testAccessAuthContext(t, ctx).ActiveOrganizationID})
+	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgRead, Selector: authz.NewSelector(authz.ScopeOrgRead, testAccessAuthContext(t, ctx).ActiveOrganizationID)})
 
 	result, err := ti.service.ListScopes(ctx, &gen.ListScopesPayload{})
 	require.NoError(t, err)
@@ -117,7 +119,7 @@ func TestService_ListMembers_AllowsOrgReadGrant(t *testing.T) {
 
 	ctx, ti := newTestAccessService(t)
 	authCtx := testAccessAuthContext(t, ctx)
-	ctx = withRBACGrants(t, ctx, Grant{Scope: ScopeOrgRead, Resource: authCtx.ActiveOrganizationID})
+	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgRead, Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID)})
 
 	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_1", "ada@example.com", "Ada Lovelace", "user_1", "membership_1")
 
@@ -152,7 +154,7 @@ func TestService_CreateRole_AllowsOrgAdminGrant(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
-	ctx = withRBACGrants(t, ctx, Grant{Scope: ScopeOrgAdmin, Resource: testAccessAuthContext(t, ctx).ActiveOrganizationID})
+	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, testAccessAuthContext(t, ctx).ActiveOrganizationID)})
 
 	ti.roles.On("CreateRole", mock.Anything, mockidp.MockOrgID, thirdpartyworkos.CreateRoleOpts{
 		Name:        "Allowed",
@@ -189,7 +191,7 @@ func TestService_UpdateRole_AllowsOrgAdminGrant(t *testing.T) {
 
 	ctx, ti := newTestAccessService(t)
 	authCtx := testAccessAuthContext(t, ctx)
-	ctx = withRBACGrants(t, ctx, Grant{Scope: ScopeOrgAdmin, Resource: authCtx.ActiveOrganizationID})
+	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)})
 	name := "Updated"
 
 	ti.roles.On("ListRoles", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Role{
@@ -228,13 +230,14 @@ func TestService_DeleteRole_AllowsOrgAdminGrant(t *testing.T) {
 
 	ctx, ti := newTestAccessService(t)
 	authCtx := testAccessAuthContext(t, ctx)
-	ctx = withRBACGrants(t, ctx, Grant{Scope: ScopeOrgAdmin, Resource: authCtx.ActiveOrganizationID})
+	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)})
 
 	ti.roles.On("ListRoles", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Role{
 		mockRole("role_custom", "Custom Builder", "custom-builder", "Old description"),
 	}, nil).Once()
+	ti.roles.On("ListMembers", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Member{}, nil).Once()
 	ti.roles.On("DeleteRole", mock.Anything, mockidp.MockOrgID, "custom-builder").Return(nil).Once()
-	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), ScopeProjectRead, "project-1")
+	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), authz.ScopeProjectRead, "project-1")
 
 	err := ti.service.DeleteRole(ctx, &gen.DeleteRolePayload{ID: "role_custom"})
 	require.NoError(t, err)
@@ -257,7 +260,7 @@ func TestService_UpdateMemberRole_AllowsOrgAdminGrant(t *testing.T) {
 
 	ctx, ti := newTestAccessService(t)
 	authCtx := testAccessAuthContext(t, ctx)
-	ctx = withRBACGrants(t, ctx, Grant{Scope: ScopeOrgAdmin, Resource: authCtx.ActiveOrganizationID})
+	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)})
 
 	ti.roles.On("ListRoles", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Role{
 		mockRole("role_builder", "Builder", "custom-builder", ""),
@@ -282,7 +285,7 @@ func TestService_UpdateMemberRole_AllowsOrgAdminGrant(t *testing.T) {
 	require.Equal(t, "role_builder", member.RoleID)
 }
 
-func withRBACGrants(t *testing.T, ctx context.Context, grants ...Grant) context.Context {
+func withRBACGrants(t *testing.T, ctx context.Context, grants ...authz.Grant) context.Context {
 	t.Helper()
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -290,7 +293,7 @@ func withRBACGrants(t *testing.T, ctx context.Context, grants ...Grant) context.
 	authCtx.AccountType = "enterprise"
 	ctx = contextvalues.SetAuthContext(ctx, authCtx)
 
-	return GrantsToContext(ctx, grants)
+	return authz.GrantsToContext(ctx, grants)
 }
 
 func testAccessAuthContext(t *testing.T, ctx context.Context) *contextvalues.AuthContext {

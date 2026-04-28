@@ -29,12 +29,12 @@ import (
 
 	"github.com/speakeasy-api/gram/server/gen/http/skills/server"
 	gen "github.com/speakeasy-api/gram/server/gen/skills"
-	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	assetsrepo "github.com/speakeasy-api/gram/server/internal/assets/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -75,7 +75,7 @@ type Service struct {
 	tracer     trace.Tracer
 	logger     *slog.Logger
 	auth       *auth.Auth
-	access     *access.Manager
+	authz      *authz.Engine
 	cache      cache.Cache
 	db         *pgxpool.Pool
 	storage    assets.BlobStore
@@ -94,14 +94,14 @@ func NewService(
 	sessionsMgr *sessions.Manager,
 	cacheAdapter cache.Cache,
 	storage assets.BlobStore,
-	accessManager *access.Manager,
+	authzEngine *authz.Engine,
 	features *productfeatures.Client,
 ) *Service {
 	return &Service{
 		tracer:     tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/skills"),
 		logger:     logger.With(attr.SlogComponent("skills")),
-		auth:       auth.New(logger, db, sessionsMgr, accessManager),
-		access:     accessManager,
+		auth:       auth.New(logger, db, sessionsMgr, authzEngine),
+		authz:      authzEngine,
 		cache:      cacheAdapter,
 		db:         db,
 		storage:    storage,
@@ -265,7 +265,7 @@ func (s *Service) Get(ctx context.Context, payload *gen.GetPayload) (*gen.Skill,
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeProjectRead, ResourceID: authCtx.ProjectID.String()}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
 		return nil, err
 	}
 	if err := s.requireSkillsCaptureEnabled(ctx, authCtx.ActiveOrganizationID); err != nil {
@@ -293,7 +293,7 @@ func (s *Service) List(ctx context.Context, _ *gen.ListPayload) (*gen.ListSkills
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeProjectRead, ResourceID: authCtx.ProjectID.String()}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
 		return nil, err
 	}
 	if err := s.requireSkillsCaptureEnabled(ctx, authCtx.ActiveOrganizationID); err != nil {
@@ -321,7 +321,7 @@ func (s *Service) GetSettings(ctx context.Context, _ *gen.GetSettingsPayload) (*
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeProjectRead, ResourceID: authCtx.ProjectID.String()}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
 		return nil, err
 	}
 	if err := s.requireSkillsCaptureEnabled(ctx, authCtx.ActiveOrganizationID); err != nil {
@@ -342,7 +342,7 @@ func (s *Service) SetSettings(ctx context.Context, payload *gen.SetSettingsPaylo
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeProjectWrite, ResourceID: authCtx.ProjectID.String()}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
 		return nil, err
 	}
 	if err := s.requireSkillsCaptureEnabled(ctx, authCtx.ActiveOrganizationID); err != nil {
@@ -395,7 +395,7 @@ func (s *Service) ListVersions(ctx context.Context, payload *gen.ListVersionsPay
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeProjectRead, ResourceID: authCtx.ProjectID.String()}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
 		return nil, err
 	}
 	if err := s.requireSkillsCaptureEnabled(ctx, authCtx.ActiveOrganizationID); err != nil {
@@ -427,7 +427,7 @@ func (s *Service) ListPending(ctx context.Context, _ *gen.ListPendingPayload) (*
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeProjectRead, ResourceID: authCtx.ProjectID.String()}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
 		return nil, err
 	}
 	if err := s.requireSkillsCaptureEnabled(ctx, authCtx.ActiveOrganizationID); err != nil {
@@ -467,7 +467,7 @@ func (s *Service) ApproveVersion(ctx context.Context, payload *gen.ApproveVersio
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeProjectWrite, ResourceID: authCtx.ProjectID.String()}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
 		return nil, err
 	}
 	if err := s.requireSkillsCaptureEnabled(ctx, authCtx.ActiveOrganizationID); err != nil {
@@ -552,7 +552,7 @@ func (s *Service) SupersedeVersion(ctx context.Context, payload *gen.SupersedeVe
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeProjectWrite, ResourceID: authCtx.ProjectID.String()}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
 		return nil, err
 	}
 	if err := s.requireSkillsCaptureEnabled(ctx, authCtx.ActiveOrganizationID); err != nil {
@@ -622,7 +622,7 @@ func (s *Service) RejectVersion(ctx context.Context, payload *gen.RejectVersionP
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeProjectWrite, ResourceID: authCtx.ProjectID.String()}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
 		return nil, err
 	}
 	if err := s.requireSkillsCaptureEnabled(ctx, authCtx.ActiveOrganizationID); err != nil {
@@ -688,7 +688,7 @@ func (s *Service) Archive(ctx context.Context, payload *gen.ArchivePayload) (*ge
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeProjectWrite, ResourceID: authCtx.ProjectID.String()}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
 		return nil, err
 	}
 	if err := s.requireSkillsCaptureEnabled(ctx, authCtx.ActiveOrganizationID); err != nil {
@@ -1076,7 +1076,7 @@ func (s *Service) UploadManual(ctx context.Context, payload *gen.UploadManualPay
 		})
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeProjectWrite, ResourceID: authCtx.ProjectID.String()}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
 		return nil, err
 	}
 

@@ -17,11 +17,11 @@ import (
 	srv "github.com/speakeasy-api/gram/server/gen/http/risk/server"
 	gen "github.com/speakeasy-api/gram/server/gen/risk"
 	"github.com/speakeasy-api/gram/server/gen/types"
-	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/background"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -47,7 +47,7 @@ type Service struct {
 	db       *pgxpool.Pool
 	repo     *repo.Queries
 	auth     *auth.Auth
-	access   *access.Manager
+	authz    *authz.Engine
 	signaler RiskAnalysisSignaler
 }
 
@@ -63,7 +63,7 @@ func NewObserver(logger *slog.Logger, db *pgxpool.Pool, signaler RiskAnalysisSig
 		db:       db,
 		repo:     repo.New(db),
 		auth:     nil,
-		access:   nil,
+		authz:    nil,
 		signaler: signaler,
 	}
 }
@@ -73,7 +73,7 @@ func NewService(
 	tracerProvider trace.TracerProvider,
 	db *pgxpool.Pool,
 	sessions *sessions.Manager,
-	accessManager *access.Manager,
+	authzEngine *authz.Engine,
 	signaler RiskAnalysisSignaler,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("risk"))
@@ -83,8 +83,8 @@ func NewService(
 		logger:   logger,
 		db:       db,
 		repo:     repo.New(db),
-		auth:     auth.New(logger, db, sessions, accessManager),
-		access:   accessManager,
+		auth:     auth.New(logger, db, sessions, authzEngine),
+		authz:    authzEngine,
 		signaler: signaler,
 	}
 }
@@ -113,6 +113,11 @@ func (s *Service) OnMessagesStored(ctx context.Context, projectID uuid.UUID) {
 		return
 	}
 
+	s.logger.DebugContext(ctx, "risk observer signaling policies",
+		attr.SlogProjectID(projectID.String()),
+		attr.SlogRiskPolicyCount(len(policies)),
+	)
+
 	for _, p := range policies {
 		if err := s.signaler.SignalNewMessages(ctx, background.DrainRiskAnalysisParams{
 			ProjectID:    p.ProjectID,
@@ -129,7 +134,7 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgAdmin, ResourceID: authCtx.ActiveOrganizationID}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
 		return nil, err
 	}
 
@@ -138,7 +143,7 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 	}
 
 	sources := payload.Sources
-	if len(sources) == 0 {
+	if sources == nil {
 		sources = []string{"gitleaks"}
 	}
 
@@ -159,12 +164,13 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	row, err := repo.New(dbtx).CreateRiskPolicy(ctx, repo.CreateRiskPolicyParams{
-		ID:             id,
-		ProjectID:      *authCtx.ProjectID,
-		OrganizationID: authCtx.ActiveOrganizationID,
-		Name:           payload.Name,
-		Sources:        sources,
-		Enabled:        enabled,
+		ID:               id,
+		ProjectID:        *authCtx.ProjectID,
+		OrganizationID:   authCtx.ActiveOrganizationID,
+		Name:             payload.Name,
+		Sources:          sources,
+		PresidioEntities: payload.PresidioEntities,
+		Enabled:          enabled,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "create risk policy").Log(ctx, s.logger)
@@ -203,7 +209,7 @@ func (s *Service) ListRiskPolicies(ctx context.Context, payload *gen.ListRiskPol
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgAdmin, ResourceID: authCtx.ActiveOrganizationID}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
 		return nil, err
 	}
 
@@ -230,7 +236,7 @@ func (s *Service) GetRiskPolicy(ctx context.Context, payload *gen.GetRiskPolicyP
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgAdmin, ResourceID: authCtx.ActiveOrganizationID}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
 		return nil, err
 	}
 
@@ -256,7 +262,7 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgAdmin, ResourceID: authCtx.ActiveOrganizationID}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
 		return nil, err
 	}
 
@@ -279,8 +285,13 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 	}
 
 	sources := current.Sources
-	if len(payload.Sources) > 0 {
+	if payload.Sources != nil {
 		sources = payload.Sources
+	}
+
+	presidioEntities := current.PresidioEntities
+	if payload.PresidioEntities != nil {
+		presidioEntities = payload.PresidioEntities
 	}
 
 	enabled := current.Enabled
@@ -297,11 +308,12 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	row, err := repo.New(dbtx).UpdateRiskPolicy(ctx, repo.UpdateRiskPolicyParams{
-		ID:        id,
-		ProjectID: *authCtx.ProjectID,
-		Name:      payload.Name,
-		Sources:   sources,
-		Enabled:   enabled,
+		ID:               id,
+		ProjectID:        *authCtx.ProjectID,
+		Name:             payload.Name,
+		Sources:          sources,
+		PresidioEntities: presidioEntities,
+		Enabled:          enabled,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "update risk policy").Log(ctx, s.logger)
@@ -341,7 +353,7 @@ func (s *Service) DeleteRiskPolicy(ctx context.Context, payload *gen.DeleteRiskP
 		return oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgAdmin, ResourceID: authCtx.ActiveOrganizationID}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
 		return err
 	}
 
@@ -393,7 +405,17 @@ func (s *Service) DeleteRiskPolicy(ctx context.Context, payload *gen.DeleteRiskP
 	return nil
 }
 
-const riskPageSize = 50
+const riskDefaultPageSize = 50
+
+func resolvePageSize(limit *int) int {
+	if limit == nil || *limit <= 0 {
+		return riskDefaultPageSize
+	}
+	if *limit > 200 {
+		return 200
+	}
+	return *limit
+}
 
 func (s *Service) ListRiskResults(ctx context.Context, payload *gen.ListRiskResultsPayload) (*gen.ListRiskResultsResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -401,7 +423,7 @@ func (s *Service) ListRiskResults(ctx context.Context, payload *gen.ListRiskResu
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgAdmin, ResourceID: authCtx.ActiveOrganizationID}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
 		return nil, err
 	}
 
@@ -410,18 +432,20 @@ func (s *Service) ListRiskResults(ctx context.Context, payload *gen.ListRiskResu
 		return nil, oops.E(oops.CodeInvalid, err, "invalid cursor").Log(ctx, s.logger)
 	}
 
+	pageSize := resolvePageSize(payload.Limit)
+
 	totalCount, err := s.repo.CountAllFindings(ctx, *authCtx.ProjectID)
 	if err != nil {
 		totalCount = 0
 	}
 
 	if payload.ChatID != nil && *payload.ChatID != "" {
-		return s.listResultsByChat(ctx, *authCtx.ProjectID, *payload.ChatID, cursor, totalCount)
+		return s.listResultsByChat(ctx, *authCtx.ProjectID, *payload.ChatID, cursor, pageSize, totalCount)
 	}
 	if payload.PolicyID != nil && *payload.PolicyID != "" {
-		return s.listResultsByPolicy(ctx, *authCtx.ProjectID, *payload.PolicyID, cursor, totalCount)
+		return s.listResultsByPolicy(ctx, *authCtx.ProjectID, *payload.PolicyID, cursor, pageSize, totalCount)
 	}
-	return s.listResultsByProject(ctx, *authCtx.ProjectID, cursor, totalCount)
+	return s.listResultsByProject(ctx, *authCtx.ProjectID, cursor, pageSize, totalCount)
 }
 
 func (s *Service) ListRiskResultsByChat(ctx context.Context, payload *gen.ListRiskResultsByChatPayload) (*gen.ListRiskResultsByChatResult, error) {
@@ -430,7 +454,7 @@ func (s *Service) ListRiskResultsByChat(ctx context.Context, payload *gen.ListRi
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgAdmin, ResourceID: authCtx.ActiveOrganizationID}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
 		return nil, err
 	}
 
@@ -439,9 +463,12 @@ func (s *Service) ListRiskResultsByChat(ctx context.Context, payload *gen.ListRi
 		return nil, oops.E(oops.CodeInvalid, err, "invalid cursor").Log(ctx, s.logger)
 	}
 
+	pageSize := resolvePageSize(payload.Limit)
+
 	rows, err := s.repo.ListRiskResultsGroupedByChat(ctx, repo.ListRiskResultsGroupedByChatParams{
 		ProjectID: *authCtx.ProjectID,
 		Cursor:    cursor,
+		PageLimit: conv.SafeInt32(pageSize + 1),
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list risk results by chat").Log(ctx, s.logger)
@@ -459,24 +486,24 @@ func (s *Service) ListRiskResultsByChat(ctx context.Context, payload *gen.ListRi
 	}
 
 	var nextCursor *string
-	if len(chats) >= riskPageSize+1 {
-		nextCursor = &chats[riskPageSize].ChatID
-		chats = chats[:riskPageSize]
+	if len(chats) > pageSize {
+		nextCursor = &chats[pageSize].ChatID
+		chats = chats[:pageSize]
 	}
 
 	return &gen.ListRiskResultsByChatResult{Chats: chats, NextCursor: nextCursor}, nil
 }
 
-func (s *Service) paginateResults(results []*types.RiskResult, totalCount int64) *gen.ListRiskResultsResult {
+func (s *Service) paginateResults(results []*types.RiskResult, pageSize int, totalCount int64) *gen.ListRiskResultsResult {
 	var nextCursor *string
-	if len(results) >= riskPageSize+1 {
-		nextCursor = &results[riskPageSize].ID
-		results = results[:riskPageSize]
+	if len(results) > pageSize {
+		nextCursor = &results[pageSize].ID
+		results = results[:pageSize]
 	}
 	return &gen.ListRiskResultsResult{Results: results, TotalCount: totalCount, NextCursor: nextCursor}
 }
 
-func (s *Service) listResultsByChat(ctx context.Context, projectID uuid.UUID, rawChatID string, cursor uuid.NullUUID, totalCount int64) (*gen.ListRiskResultsResult, error) {
+func (s *Service) listResultsByChat(ctx context.Context, projectID uuid.UUID, rawChatID string, cursor uuid.NullUUID, pageSize int, totalCount int64) (*gen.ListRiskResultsResult, error) {
 	chatID, err := uuid.Parse(rawChatID)
 	if err != nil {
 		return nil, oops.C(oops.CodeInvalid)
@@ -485,6 +512,7 @@ func (s *Service) listResultsByChat(ctx context.Context, projectID uuid.UUID, ra
 		ChatID:    chatID,
 		ProjectID: projectID,
 		Cursor:    cursor,
+		PageLimit: conv.SafeInt32(pageSize + 1),
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list risk results by chat").Log(ctx, s.logger)
@@ -494,10 +522,10 @@ func (s *Service) listResultsByChat(ctx context.Context, projectID uuid.UUID, ra
 		cid := row.ChatID.String()
 		results = append(results, foundRowToResult(row.ID, row.RiskPolicyID, row.RiskPolicyVersion, row.ChatMessageID, &cid, row.ChatTitle, row.ChatUserID, row.Source, row.RuleID, row.Description, row.Match, row.StartPos, row.EndPos, row.Confidence, row.Tags, row.CreatedAt))
 	}
-	return s.paginateResults(results, totalCount), nil
+	return s.paginateResults(results, pageSize, totalCount), nil
 }
 
-func (s *Service) listResultsByPolicy(ctx context.Context, projectID uuid.UUID, rawPolicyID string, cursor uuid.NullUUID, totalCount int64) (*gen.ListRiskResultsResult, error) {
+func (s *Service) listResultsByPolicy(ctx context.Context, projectID uuid.UUID, rawPolicyID string, cursor uuid.NullUUID, pageSize int, totalCount int64) (*gen.ListRiskResultsResult, error) {
 	policyID, err := uuid.Parse(rawPolicyID)
 	if err != nil {
 		return nil, oops.C(oops.CodeInvalid)
@@ -506,6 +534,7 @@ func (s *Service) listResultsByPolicy(ctx context.Context, projectID uuid.UUID, 
 		ProjectID:    projectID,
 		RiskPolicyID: policyID,
 		Cursor:       cursor,
+		PageLimit:    conv.SafeInt32(pageSize + 1),
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list risk results by policy").Log(ctx, s.logger)
@@ -515,13 +544,14 @@ func (s *Service) listResultsByPolicy(ctx context.Context, projectID uuid.UUID, 
 		chatID := row.ChatID.String()
 		results = append(results, foundRowToResult(row.ID, row.RiskPolicyID, row.RiskPolicyVersion, row.ChatMessageID, &chatID, row.ChatTitle, row.ChatUserID, row.Source, row.RuleID, row.Description, row.Match, row.StartPos, row.EndPos, row.Confidence, row.Tags, row.CreatedAt))
 	}
-	return s.paginateResults(results, totalCount), nil
+	return s.paginateResults(results, pageSize, totalCount), nil
 }
 
-func (s *Service) listResultsByProject(ctx context.Context, projectID uuid.UUID, cursor uuid.NullUUID, totalCount int64) (*gen.ListRiskResultsResult, error) {
+func (s *Service) listResultsByProject(ctx context.Context, projectID uuid.UUID, cursor uuid.NullUUID, pageSize int, totalCount int64) (*gen.ListRiskResultsResult, error) {
 	rows, err := s.repo.ListRiskResultsByProjectFound(ctx, repo.ListRiskResultsByProjectFoundParams{
 		ProjectID: projectID,
 		Cursor:    cursor,
+		PageLimit: conv.SafeInt32(pageSize + 1),
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list risk results").Log(ctx, s.logger)
@@ -531,7 +561,7 @@ func (s *Service) listResultsByProject(ctx context.Context, projectID uuid.UUID,
 		chatID := row.ChatID.String()
 		results = append(results, foundRowToResult(row.ID, row.RiskPolicyID, row.RiskPolicyVersion, row.ChatMessageID, &chatID, row.ChatTitle, row.ChatUserID, row.Source, row.RuleID, row.Description, row.Match, row.StartPos, row.EndPos, row.Confidence, row.Tags, row.CreatedAt))
 	}
-	return s.paginateResults(results, totalCount), nil
+	return s.paginateResults(results, pageSize, totalCount), nil
 }
 
 func (s *Service) GetRiskPolicyStatus(ctx context.Context, payload *gen.GetRiskPolicyStatusPayload) (*types.RiskPolicyStatus, error) {
@@ -540,7 +570,7 @@ func (s *Service) GetRiskPolicyStatus(ctx context.Context, payload *gen.GetRiskP
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgAdmin, ResourceID: authCtx.ActiveOrganizationID}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
 		return nil, err
 	}
 
@@ -607,7 +637,7 @@ func (s *Service) TriggerRiskAnalysis(ctx context.Context, payload *gen.TriggerR
 		return oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgAdmin, ResourceID: authCtx.ActiveOrganizationID}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
 		return err
 	}
 
@@ -664,16 +694,17 @@ func (s *Service) policyToType(ctx context.Context, row repo.RiskPolicy) (*types
 	pendingMessages := max(totalMessages-analyzedMessages, 0)
 
 	return &types.RiskPolicy{
-		ID:              row.ID.String(),
-		ProjectID:       row.ProjectID.String(),
-		Name:            row.Name,
-		Sources:         row.Sources,
-		Enabled:         row.Enabled,
-		Version:         row.Version,
-		CreatedAt:       row.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:       row.UpdatedAt.Time.Format(time.RFC3339),
-		PendingMessages: pendingMessages,
-		TotalMessages:   totalMessages,
+		ID:               row.ID.String(),
+		ProjectID:        row.ProjectID.String(),
+		Name:             row.Name,
+		Sources:          row.Sources,
+		PresidioEntities: row.PresidioEntities,
+		Enabled:          row.Enabled,
+		Version:          row.Version,
+		CreatedAt:        row.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:        row.UpdatedAt.Time.Format(time.RFC3339),
+		PendingMessages:  pendingMessages,
+		TotalMessages:    totalMessages,
 	}, nil
 }
 
@@ -683,16 +714,17 @@ func (s *Service) policyToType(ctx context.Context, row repo.RiskPolicy) (*types
 // they were not computed.
 func policyRowSnapshot(row repo.RiskPolicy) *types.RiskPolicy {
 	return &types.RiskPolicy{
-		ID:              row.ID.String(),
-		ProjectID:       row.ProjectID.String(),
-		Name:            row.Name,
-		Sources:         row.Sources,
-		Enabled:         row.Enabled,
-		Version:         row.Version,
-		CreatedAt:       row.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:       row.UpdatedAt.Time.Format(time.RFC3339),
-		PendingMessages: -1,
-		TotalMessages:   -1,
+		ID:               row.ID.String(),
+		ProjectID:        row.ProjectID.String(),
+		Name:             row.Name,
+		Sources:          row.Sources,
+		PresidioEntities: row.PresidioEntities,
+		Enabled:          row.Enabled,
+		Version:          row.Version,
+		CreatedAt:        row.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:        row.UpdatedAt.Time.Format(time.RFC3339),
+		PendingMessages:  -1,
+		TotalMessages:    -1,
 	}
 }
 
@@ -724,8 +756,8 @@ func foundRowToResult(
 		RuleID:        conv.FromPGText[string](ruleID),
 		Description:   conv.FromPGText[string](description),
 		Match:         conv.FromPGText[string](match),
-		StartPos:      conv.FromPGInt4(startPos),
-		EndPos:        conv.FromPGInt4(endPos),
+		StartPos:      conv.PtrInt32ToInt(conv.FromPGInt4(startPos)),
+		EndPos:        conv.PtrInt32ToInt(conv.FromPGInt4(endPos)),
 		Confidence:    conv.FromPGFloat8(confidence),
 		Tags:          tags,
 		CreatedAt:     createdAt.Time.Format(time.RFC3339),

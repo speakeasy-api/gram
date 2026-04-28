@@ -578,7 +578,7 @@ func DecodeListToolsetsForOrgResponse(decoder func(*http.Response) goahttp.Decod
 			if err != nil {
 				return nil, goahttp.ErrValidationError("toolsets", "listToolsetsForOrg", err)
 			}
-			res := NewListToolsetsForOrgListToolsetsResultOK(&body)
+			res := NewListToolsetsForOrgListToolsetSummariesResultOK(&body)
 			return res, nil
 		case http.StatusUnauthorized:
 			var (
@@ -3668,6 +3668,41 @@ func unmarshalPromptTemplateEntryResponseBodyToTypesPromptTemplateEntry(v *Promp
 		ID:   *v.ID,
 		Name: types.Slug(*v.Name),
 		Kind: v.Kind,
+	}
+
+	return res
+}
+
+// unmarshalToolsetSummaryResponseBodyToTypesToolsetSummary builds a value of
+// type *types.ToolsetSummary from a value of type *ToolsetSummaryResponseBody.
+func unmarshalToolsetSummaryResponseBodyToTypesToolsetSummary(v *ToolsetSummaryResponseBody) *types.ToolsetSummary {
+	res := &types.ToolsetSummary{
+		ID:                *v.ID,
+		ProjectID:         *v.ProjectID,
+		OrganizationID:    *v.OrganizationID,
+		Name:              *v.Name,
+		Slug:              types.Slug(*v.Slug),
+		McpEnabled:        v.McpEnabled,
+		McpIsPublic:       v.McpIsPublic,
+		ToolSelectionMode: *v.ToolSelectionMode,
+		CreatedAt:         *v.CreatedAt,
+		UpdatedAt:         *v.UpdatedAt,
+	}
+	if v.DefaultEnvironmentSlug != nil {
+		defaultEnvironmentSlug := types.Slug(*v.DefaultEnvironmentSlug)
+		res.DefaultEnvironmentSlug = &defaultEnvironmentSlug
+	}
+	if v.McpSlug != nil {
+		mcpSlug := types.Slug(*v.McpSlug)
+		res.McpSlug = &mcpSlug
+	}
+	res.Tools = make([]*types.ToolEntry, len(v.Tools))
+	for i, val := range v.Tools {
+		if val == nil {
+			res.Tools[i] = nil
+			continue
+		}
+		res.Tools[i] = unmarshalToolEntryResponseBodyToTypesToolEntry(val)
 	}
 
 	return res

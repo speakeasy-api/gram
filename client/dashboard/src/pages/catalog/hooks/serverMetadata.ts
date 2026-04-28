@@ -1,4 +1,5 @@
-import type { Server } from "../hooks";
+import { ExternalMCPServer } from "@gram/client/models/components";
+import type { PulseMCPServer } from "../hooks";
 import type { FilterState } from "./useFilterState";
 
 interface ToolAnnotations {
@@ -42,19 +43,27 @@ export interface ParsedServerMetadata {
   updatedAt?: Date;
 }
 
+export function isPulseMcpServer(
+  server: ExternalMCPServer,
+): server is PulseMCPServer {
+  return !!server.meta;
+}
+
+export type PulseMcpAuthType = "none" | "apikey" | "oauth" | "other";
+
 /**
  * Extract the authentication type from server metadata.
  */
-function extractAuthType(server: Server): string {
-  const versionMeta = server.meta["com.pulsemcp/server-version"];
+export function extractAuthType(server: PulseMCPServer): PulseMcpAuthType {
+  const versionMeta = server.meta?.["com.pulsemcp/server-version"];
   const remote = versionMeta?.["remotes[0]"];
-  const authInfo = remote?.auth;
+  const authOptions = remote?.authOptions?.[0];
 
-  if (!authInfo || !authInfo.type) {
+  if (!authOptions || !authOptions.type) {
     return "none";
   }
 
-  const authTypeLower = authInfo.type.toLowerCase();
+  const authTypeLower = authOptions.type.toLowerCase();
 
   if (authTypeLower === "none" || authTypeLower === "") {
     return "none";
@@ -87,11 +96,11 @@ function getAuthTypeDisplay(authType: string): string {
 /**
  * Extract tool-related metadata.
  */
-function extractToolMetadata(server: Server): {
+function extractToolMetadata(server: PulseMCPServer): {
   toolCount: number;
   isReadOnly: boolean;
 } {
-  const versionMeta = server.meta["com.pulsemcp/server-version"];
+  const versionMeta = server.meta?.["com.pulsemcp/server-version"];
   const remote = versionMeta?.["remotes[0]"];
   const metaTools = remote?.tools ?? [];
   const serverTools: ToolInfo[] = (server.tools ?? []) as ToolInfo[];
@@ -136,9 +145,11 @@ function estimateWeeklyData(
 /**
  * Parse all relevant metadata from a server.
  */
-export function parseServerMetadata(server: Server): ParsedServerMetadata {
-  const serverMeta = server.meta["com.pulsemcp/server"];
-  const versionMeta = server.meta["com.pulsemcp/server-version"];
+export function parseServerMetadata(
+  server: PulseMCPServer,
+): ParsedServerMetadata {
+  const serverMeta = server.meta?.["com.pulsemcp/server"];
+  const versionMeta = server.meta?.["com.pulsemcp/server-version"];
 
   const visitorsWeek = serverMeta?.visitorsEstimateMostRecentWeek ?? 0;
   const visitorsMonth = serverMeta?.visitorsEstimateLastFourWeeks ?? 0;
@@ -195,10 +206,10 @@ function isWithinRange(date: Date | undefined, range: string): boolean {
  * Optionally applies a search query for client-side filtering.
  */
 export function filterAndSortServers(
-  servers: Server[],
+  servers: PulseMCPServer[],
   filterState: FilterState,
   searchQuery?: string,
-): Server[] {
+): PulseMCPServer[] {
   // Parse metadata for all servers
   const serversWithMeta = servers.map((server) => ({
     server,
@@ -311,7 +322,7 @@ export function filterAndSortServers(
  * Count servers matching each category for display badges.
  */
 export function countByCategory(
-  servers: Server[],
+  servers: PulseMCPServer[],
 ): Record<"all" | "popular", number> {
   const serversWithMeta = servers.map((server) => parseServerMetadata(server));
 

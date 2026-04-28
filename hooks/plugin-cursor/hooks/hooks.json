@@ -1,38 +1,54 @@
 {
+  "version": 1,
   "hooks": {
     "beforeSubmitPrompt": [
       {
-        "command": "./hooks/send_hook.sh",
+        "command": "bash \"$CURSOR_PLUGIN_ROOT/hooks/send_hook.sh\"",
         "timeout": 10
       }
     ],
     "afterAgentResponse": [
       {
-        "command": "./hooks/send_hook.sh",
+        "command": "bash \"$CURSOR_PLUGIN_ROOT/hooks/send_hook.sh\"",
         "timeout": 10
       }
     ],
     "afterAgentThought": [
       {
-        "command": "./hooks/send_hook.sh",
+        "command": "bash \"$CURSOR_PLUGIN_ROOT/hooks/send_hook.sh\"",
         "timeout": 10
       }
     ],
     "preToolUse": [
       {
-        "command": "./hooks/send_hook.sh",
+        "command": "bash \"$CURSOR_PLUGIN_ROOT/hooks/send_hook.sh\"",
+        "matcher": "^(?!MCP:)",
         "timeout": 10
       }
     ],
     "postToolUse": [
       {
-        "command": "./hooks/send_hook.sh",
+        "command": "bash \"$CURSOR_PLUGIN_ROOT/hooks/send_hook.sh\"",
+        "matcher": "^(?!MCP:)",
         "timeout": 10
       }
     ],
     "postToolUseFailure": [
       {
-        "command": "./hooks/send_hook.sh",
+        "command": "bash \"$CURSOR_PLUGIN_ROOT/hooks/send_hook.sh\"",
+        "matcher": "^(?!MCP:)",
+        "timeout": 10
+      }
+    ],
+    "beforeMCPExecution": [
+      {
+        "command": "bash \"$CURSOR_PLUGIN_ROOT/hooks/send_hook.sh\"",
+        "timeout": 10
+      }
+    ],
+    "afterMCPExecution": [
+      {
+        "command": "bash \"$CURSOR_PLUGIN_ROOT/hooks/send_hook.sh\"",
         "timeout": 10
       }
     ]

@@ -3,3 +3,26 @@
 //   sqlc v1.29.0
 
 package repo
+
+import (
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/speakeasy-api/gram/server/internal/urn"
+)
+
+// RBAC grants. One row per (org, principal, scope, selectors). Selectors define resource constraints.
+type PrincipalGrant struct {
+	ID uuid.UUID
+	// The organization this grant belongs to. Grants are always org-scoped.
+	OrganizationID string
+	// URN identifying the principal, e.g. "user:user_abc", "role:admin". Format is type:id.
+	PrincipalUrn urn.Principal
+	// Derived from principal_urn. The type prefix, e.g. "user", "role".
+	PrincipalType string
+	// The scope being granted, e.g. "build:read". Validated in application code, not via FK.
+	Scope string
+	// JSON selector constraints defining what the grant applies to, e.g. {"resource_kind":"project","resource_id":"proj_123"}.
+	Selectors []byte
+	CreatedAt pgtype.Timestamptz
+	UpdatedAt pgtype.Timestamptz
+}

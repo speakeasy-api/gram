@@ -185,6 +185,122 @@ jobs:
           echo "Running image..."
           docker run --rm ${{ steps.build.outputs.image-tag }} version
 
+  assistant-runtime-image:
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    needs: [changes]
+    if: needs.changes.outputs.server == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.user.login != 'dependabot[bot]')
+    steps:
+      - name: Checkout
+        uses: actions/checkout@ff7abcd0c3c05ccf6adc123a8cd1fd4fb30fb493 # v5.0.0
+
+      - name: Setup Mise
+        uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
+        with:
+          install: true
+          cache: true
+          env: false
+
+      - name: Prepare GitHub Actions environment
+        run: mise run github
+
+      - name: Generate preview tag
+        id: assistant-preview-tag
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" == "pull_request" ]; then
+            SHORT_SHA=$(echo "${{ github.event.pull_request.head.sha }}" | cut -c1-8)
+            echo "tag=pr-${{ github.event.pull_request.number }}-${SHORT_SHA}" >> $GITHUB_OUTPUT
+            echo "enabled=true" >> $GITHUB_OUTPUT
+          else
+            echo "tag=" >> $GITHUB_OUTPUT
+            echo "enabled=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: "[DEV] Create fly app"
+        id: assistantFlyCreateDev
+        shell: bash
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_DEV }}
+          FLY_IMAGE: ${{ vars.FLY_ASSISTANT_IMAGE_DEV }}
+        run: |
+          mise run fly:init-runner \
+            --org ${{ secrets.FLY_ORG_DEV }} \
+            --image $FLY_IMAGE \
+            --force
+
+      - name: "[PROD] Create fly app"
+        id: assistantFlyCreateProd
+        shell: bash
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_PROD }}
+          FLY_IMAGE: ${{ vars.FLY_ASSISTANT_IMAGE_PROD }}
+        run: |
+          mise run fly:init-runner \
+            --org ${{ secrets.FLY_ORG_PROD }} \
+            --image $FLY_IMAGE \
+            --force
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
+
+      - name: "[DEV] Login to Fly registry"
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_DEV }}
+        run: fly auth docker
+
+      - name: "[DEV] Extract assistant runtime metadata"
+        id: assistantMetaDev
+        uses: docker/metadata-action@030e881283bb7a6894de51c315a6bfe6a94e05cf # v6.0.0
+        with:
+          images: ${{ steps.assistantFlyCreateDev.outputs.flyAppRegistry }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=tag
+            type=ref,event=pr
+            type=raw,value=${{ steps.assistant-preview-tag.outputs.tag }},enable=${{ steps.assistant-preview-tag.outputs.enabled }}
+            type=schedule,pattern=nightly
+            type=sha
+            type=sha,format=long
+
+      - name: "[DEV] Build and push assistant runtime image"
+        uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294 # v7.0.0
+        with:
+          context: .
+          file: ./agents/runtime-image/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.assistantMetaDev.outputs.tags }}
+          labels: ${{ steps.assistantMetaDev.outputs.labels }}
+
+      - name: "[PROD] Login to Fly registry"
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_PROD }}
+        run: fly auth docker
+
+      - name: "[PROD] Extract assistant runtime metadata"
+        id: assistantMetaProd
+        uses: docker/metadata-action@030e881283bb7a6894de51c315a6bfe6a94e05cf # v6.0.0
+        with:
+          images: ${{ steps.assistantFlyCreateProd.outputs.flyAppRegistry }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=tag
+            type=ref,event=pr
+            type=raw,value=${{ steps.assistant-preview-tag.outputs.tag }},enable=${{ steps.assistant-preview-tag.outputs.enabled }}
+            type=schedule,pattern=nightly
+            type=sha
+            type=sha,format=long
+
+      - name: "[PROD] Build and push assistant runtime image"
+        uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294 # v7.0.0
+        with:
+          context: .
+          file: ./agents/runtime-image/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.assistantMetaProd.outputs.tags }}
+          labels: ${{ steps.assistantMetaProd.outputs.labels }}
+
   atlas-lint:
     name: Lint migrations with Atlas
     runs-on: blacksmith-4vcpu-ubuntu-2404
@@ -720,7 +836,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Regenerate SDK
-        run: mise run gen:sdk --skip-versioning --skip-upload-spec
+        run: mise run gen:sdk --skip-upload-spec
 
       # Prevent perpetual failure for code samples digest.
       - name: Restore .speakeasy/workflow.lock
@@ -1227,6 +1343,7 @@ jobs:
       - plog-build-lint
       - functions-build-host
       - functions-image
+      - assistant-runtime-image
       - ts-framework-test
       - elements-build-lint
       - elements-test
@@ -1256,7 +1373,7 @@ jobs:
 
   dispatch-release:
     runs-on: blacksmith-4vcpu-ubuntu-2404
-    needs: [docker-build-server]
+    needs: [docker-build-server, assistant-runtime-image]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
       - name: Generate GitHub App Token

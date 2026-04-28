@@ -15,6 +15,11 @@ const (
 	FeatureRBAC           Feature = "rbac"
 	FeatureSessionCapture Feature = "session_capture"
 	FeatureSkillsCapture  Feature = "skills_capture"
+	// FeatureBlockShadowMCP gates the shadow-MCP guard: when enabled, every
+	// Gram-hosted tool's input schema includes a required x-gram-toolset-id
+	// constant, and the Cursor/Claude hooks deny tool calls that do not echo
+	// a valid toolset id back. Disabled by default.
+	FeatureBlockShadowMCP Feature = "block_shadow_mcp"
 )
 
 type FeatureCache struct {

@@ -1,14 +1,13 @@
-import { Chat, GramElementsProvider } from "@gram-ai/elements";
-import { ChevronRight, Sparkles, Terminal, Wand2 } from "lucide-react";
-import { InsightsContext, useInsightsState } from "./insights-context";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-
-import type { ElementsConfig } from "@gram-ai/elements";
-import type { InsightsConfigOptions } from "./insights-context";
-import { cn } from "@/lib/utils";
 import { devObservabilityMcpMissing } from "@/hooks/useObservabilityMcpConfig";
+import { cn } from "@/lib/utils";
 import { useAssistantRuntime } from "@assistant-ui/react";
+import type { ElementsConfig } from "@gram-ai/elements";
+import { Chat, GramElementsProvider } from "@gram-ai/elements";
 import { useMoonshineConfig } from "@speakeasy-api/moonshine";
+import { ChevronRight, Sparkles, Terminal, Wand2 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { InsightsConfigOptions } from "./insights-context";
+import { InsightsContext, useInsightsState } from "./insights-context";
 
 // Types-only re-export (erased at compile time, won't break Fast Refresh)
 export type { InsightsConfigOptions } from "./insights-context";
@@ -158,6 +157,12 @@ export function InsightsProvider({
     text: string;
     nonce: number;
   } | null>(null);
+  // Used as React `key` on <GramElementsProvider>; bumped from
+  // handleSendPrompt so each "Explore with AI" click gets a fresh assistant
+  // runtime. Avoids an assistant-ui race where rapid switchToNewThread()
+  // calls in a long-lived runtime throw `tapLookupResources: Resource not
+  // found for lookup: __LOCALID_…` during render.
+  const [sessionKey, setSessionKey] = useState(0);
   const { theme } = useMoonshineConfig();
 
   // Resolve effective values: per-page override wins, fall back to defaults.
@@ -182,7 +187,9 @@ Custom attributes: SDK users can attach arbitrary key-value attributes to their 
 When a user asks about logs for a specific user, tenant, customer, or entity:
 1. Always call listAttributeKeys first for the relevant time window to discover which @-prefixed attributes exist.
 2. Identify the most relevant attribute and filter on it (e.g. { path: "@user", operator: "eq", values: ["someone@example.com"] }).
-3. If no relevant @-prefixed attributes exist, tell the user and fall back to text search instead.`;
+3. If no relevant @-prefixed attributes exist, tell the user and fall back to text search instead.
+
+MCP server vs. client breakdowns: \`gram.hook.source\` and \`gram.tool_call.source\` are complementary dimensions, not aliases. \`gram.hook.source\` identifies the agent/client that invoked Gram (e.g. "claude-code", "cursor") — use this for adoption / "who's using us" questions. \`gram.tool_call.source\` identifies the downstream MCP server that handled the call (e.g. "datadog-mcp", "linear") — use this for "top servers" / per-MCP usage questions. When asked about MCP server-level breakdowns, query BOTH dimensions: a server can appear in one and not the other depending on whether you're slicing by caller or callee.`;
 
   const systemPrompt = contextInfo
     ? `${baseInstructions}
@@ -193,13 +200,6 @@ ${contextInfo}
 When the user asks about "current period", "selected period", "this timeframe", or similar, use the date range from the context above. Do not ask the user to specify a date range if it's already provided in the context.`
     : baseInstructions;
 
-  // New config identity on every override change is intentional: clicking
-  // "Explore with AI" on a different chart should drop the user into a fresh,
-  // focused conversation with the new contextInfo, not splice a new system
-  // prompt into an in-flight thread from a different chart. If we ever want
-  // to preserve threads across Explore clicks, split transport config
-  // (mcpConfig/model/theme) from presentation config (systemPrompt/welcome)
-  // inside GramElementsProvider so only the transport piece is stable.
   const elementsConfig = useMemo<ElementsConfig>(
     () => ({
       ...mcpConfig,
@@ -207,6 +207,13 @@ When the user asks about "current period", "selected period", "this timeframe", 
       systemPrompt,
       model: {
         defaultModel: "anthropic/claude-sonnet-4.6",
+      },
+      api: {
+        ...mcpConfig.api,
+        headers: {
+          ...mcpConfig.api?.headers,
+          "X-Gram-Source": "dashboard-ai-insights",
+        },
       },
       tools: {
         ...mcpConfig.tools,
@@ -234,15 +241,22 @@ When the user asks about "current period", "selected period", "this timeframe", 
     [mcpConfig, title, subtitle, suggestions, theme, systemPrompt],
   );
 
+  // Page-level <InsightsConfig> calls this on every parent re-render and on
+  // page navigation; deliberately does NOT bump sessionKey, so navigating
+  // between pages preserves any in-flight chat.
   const handleSetOverride = useCallback(
-    (next: InsightsConfigOptions | null) => setOverride(next),
+    (next: InsightsConfigOptions | null) => {
+      setOverride(next);
+    },
     [],
   );
 
+  // Only "Explore with AI" clicks call this — bump sessionKey here (not in
+  // setOverride) so a fresh runtime is mounted before the prompt lands.
+  // Nonce defeats reference-equality skipping when the same chart is clicked
+  // twice in a row.
   const handleSendPrompt = useCallback((text: string) => {
-    // Nonce lets the bridge detect repeat clicks on the same prompt (same
-    // chart twice in a row); reference-equal objects would otherwise be
-    // skipped by the bridge's useEffect.
+    setSessionKey((k) => k + 1);
     setPendingPrompt({ text, nonce: Date.now() });
   }, []);
 
@@ -322,7 +336,7 @@ When the user asks about "current period", "selected period", "this timeframe", 
 
           {/* Chat content */}
           <div className="flex-1 overflow-hidden">
-            <GramElementsProvider config={elementsConfig}>
+            <GramElementsProvider key={sessionKey} config={elementsConfig}>
               <PendingPromptBridge
                 pending={pendingPrompt}
                 onConsume={consumePendingPrompt}
@@ -366,21 +380,14 @@ function PendingPromptBridge({
     firedNonceRef.current = pending.nonce;
 
     const { text } = pending;
-    // Switch to a brand-new thread before appending. This sidesteps the
-    // assistant-ui MessageRepository id-collision error
-    // ("A message with the same id already exists in the parent tree")
-    // that triggers when a second Explore click tries to append into a
-    // thread that still holds messages from the previous chart's
-    // conversation. It also matches the intended product UX: each Explore
-    // CTA starts a fresh focused chat with the new contextInfo.
-    assistantRuntime.threads
-      .switchToNewThread()
-      .then(() => {
-        assistantRuntime.thread.append(text);
-      })
-      .catch((err: unknown) => {
-        console.error("Failed to send Explore prompt:", err);
-      });
+    // The fresh runtime (mounted by sessionKey bump in handleSendPrompt)
+    // already starts on a new thread, so just append.
+    try {
+      assistantRuntime.thread.append(text);
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error("Failed to send Explore prompt:", err);
+    }
 
     onConsume();
   }, [pending, assistantRuntime, onConsume]);

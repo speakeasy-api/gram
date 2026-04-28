@@ -483,6 +483,7 @@ CREATE TABLE IF NOT EXISTS http_tool_definitions (
 
 CREATE INDEX IF NOT EXISTS http_tool_definitions_name_idx ON http_tool_definitions (name);
 CREATE INDEX IF NOT EXISTS http_tool_definitions_deployment_deleted_id_idx ON http_tool_definitions(deployment_id, deleted, id DESC) WHERE deleted IS FALSE;
+CREATE INDEX IF NOT EXISTS http_tool_definitions_deployment_tool_urn_idx ON http_tool_definitions (deployment_id, tool_urn) WHERE deleted IS FALSE;
 
 CREATE TABLE IF NOT EXISTS deployments_functions (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
@@ -492,6 +493,9 @@ CREATE TABLE IF NOT EXISTS deployments_functions (
   slug TEXT NOT NULL CHECK (slug <> '' AND CHAR_LENGTH(slug) <= 60),
   runtime TEXT NOT NULL, -- nodejs:22, python:3.12, ...
   runner_version TEXT,
+
+  memory_mib INT,
+  scale INT,
 
   CONSTRAINT deployments_functions_pkey PRIMARY KEY (id),
   CONSTRAINT deployments_functions_deployment_id_fkey FOREIGN KEY (deployment_id) REFERENCES deployments (id) ON DELETE CASCADE,
@@ -971,6 +975,7 @@ CREATE TABLE IF NOT EXISTS assistants (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   project_id uuid NOT NULL,
   organization_id TEXT NOT NULL,
+  created_by_user_id TEXT,
   name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 120),
   model TEXT NOT NULL CHECK (model <> '' AND CHAR_LENGTH(model) <= 200),
   instructions TEXT NOT NULL,
@@ -1370,6 +1375,10 @@ WHERE deleted IS FALSE;
 
 CREATE INDEX IF NOT EXISTS prompt_templates_latest_revision
 ON prompt_templates (project_id, history_id, id DESC)
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS prompt_templates_project_id_tool_urn_idx
+ON prompt_templates (project_id, tool_urn)
 WHERE deleted IS FALSE;
 
 CREATE TABLE IF NOT EXISTS toolset_prompts (
@@ -1787,6 +1796,10 @@ CREATE INDEX IF NOT EXISTS external_mcp_tool_definitions_external_mcp_attachment
 ON external_mcp_tool_definitions (external_mcp_attachment_id)
 WHERE deleted IS FALSE;
 
+CREATE INDEX IF NOT EXISTS external_mcp_tool_definitions_tool_urn_idx
+ON external_mcp_tool_definitions (tool_urn)
+WHERE deleted IS FALSE;
+
 -- Allowed origins, primarily used for Elements
 CREATE TABLE IF NOT EXISTS project_allowed_origins (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
@@ -1902,39 +1915,35 @@ CREATE TABLE IF NOT EXISTS hooks_server_name_overrides (
 
 CREATE INDEX IF NOT EXISTS hooks_server_name_overrides_project_id_display_name_idx ON hooks_server_name_overrides(project_id, display_name);
 
--- The sentinel value '*' for resource means "all resources" (wildcard).
--- This avoids NULL semantics and enables pure index-only scans on the
--- unique B-tree index for permission checks:
 CREATE TABLE IF NOT EXISTS principal_grants (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   organization_id TEXT NOT NULL,
   principal_urn TEXT NOT NULL,
   principal_type TEXT NOT NULL GENERATED ALWAYS AS (split_part(principal_urn, ':', 1)) STORED,
   scope TEXT NOT NULL,
-  resource TEXT NOT NULL DEFAULT '*',
-  selectors JSONB,
+  selectors JSONB NOT NULL,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
   CONSTRAINT principal_grants_pkey PRIMARY KEY (id),
   CONSTRAINT principal_grants_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
-  CONSTRAINT principal_grants_selectors_check CHECK (selectors IS NULL OR jsonb_typeof(selectors) = 'object'),
-  CONSTRAINT principal_grants_org_principal_scope_resource_key UNIQUE (organization_id, principal_urn, scope, resource)
+  CONSTRAINT principal_grants_selectors_check CHECK (jsonb_typeof(selectors) = 'object' AND selectors != '{}')
 );
 
-COMMENT ON TABLE principal_grants IS 'RBAC grants. Normalized: one row per (org, principal, scope, resource). Resource=''*'' means unrestricted. Selectors can further constrain applicability.';
+COMMENT ON TABLE principal_grants IS 'RBAC grants. One row per (org, principal, scope, selectors). Selectors define resource constraints.';
 COMMENT ON COLUMN principal_grants.organization_id IS 'The organization this grant belongs to. Grants are always org-scoped.';
 COMMENT ON COLUMN principal_grants.principal_urn IS 'URN identifying the principal, e.g. "user:user_abc", "role:admin". Format is type:id.';
 COMMENT ON COLUMN principal_grants.principal_type IS 'Derived from principal_urn. The type prefix, e.g. "user", "role".';
 COMMENT ON COLUMN principal_grants.scope IS 'The scope being granted, e.g. "build:read". Validated in application code, not via FK.';
-COMMENT ON COLUMN principal_grants.resource IS '''*'' = unrestricted (scope applies to all resources in the org). Any other value = a specific resource ID this scope is granted on.';
-COMMENT ON COLUMN principal_grants.selectors IS 'Optional JSON selector constraints refining when the grant applies. NULL means the grant has no selector constraints.';
+COMMENT ON COLUMN principal_grants.selectors IS 'JSON selector constraints defining what the grant applies to, e.g. {"resource_kind":"project","resource_id":"proj_123"}.';
+
+CREATE UNIQUE INDEX IF NOT EXISTS principal_grants_org_principal_scope_selector_key
+ON principal_grants (organization_id, principal_urn, scope, selectors);
 
 CREATE INDEX IF NOT EXISTS principal_grants_selectors_idx
 ON principal_grants
-USING GIN (selectors)
-WHERE selectors IS NOT NULL;
+USING GIN (selectors);
 
 CREATE TABLE IF NOT EXISTS audit_logs (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
@@ -2187,6 +2196,32 @@ CREATE TABLE IF NOT EXISTS plugin_assignments (
 CREATE UNIQUE INDEX IF NOT EXISTS plugin_assignments_plugin_id_principal_urn_key
   ON plugin_assignments (plugin_id, principal_urn);
 
+-- Tracks the GitHub repository where plugin packages are published for a project.
+CREATE TABLE IF NOT EXISTS plugin_github_connections (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  installation_id BIGINT NOT NULL,
+  repo_owner TEXT NOT NULL CHECK (repo_owner <> ''),
+  repo_name TEXT NOT NULL CHECK (repo_name <> ''),
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT plugin_github_connections_pkey PRIMARY KEY (id),
+  CONSTRAINT plugin_github_connections_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS plugin_github_connections_project_id_key
+  ON plugin_github_connections (project_id);
+
+-- Prevent two projects from writing to the same GitHub repo under the same
+-- App installation. Two distinct installations could in theory point at the
+-- same external repo path; that's permitted and harmless. The LOWER()
+-- expressions match GitHub's case-insensitive owner/name semantics so
+-- "Octocat/Hello-World" and "octocat/hello-world" collide as expected.
+CREATE UNIQUE INDEX IF NOT EXISTS plugin_github_connections_installation_repo_key
+  ON plugin_github_connections (installation_id, LOWER(repo_owner), LOWER(repo_name));
+
 -- Risk analysis policies for scanning chat messages against configurable rules.
 -- One workflow per policy drains unanalyzed messages and produces risk_results.
 CREATE TABLE IF NOT EXISTS risk_policies (
@@ -2197,6 +2232,7 @@ CREATE TABLE IF NOT EXISTS risk_policies (
   enabled BOOLEAN NOT NULL DEFAULT TRUE,
   name TEXT NOT NULL,
   sources TEXT[] NOT NULL,
+  presidio_entities TEXT[],
   version BIGINT NOT NULL,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),

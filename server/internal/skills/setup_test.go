@@ -10,12 +10,12 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/skills"
-	"github.com/speakeasy-api/gram/server/internal/access"
-	"github.com/speakeasy-api/gram/server/internal/access/accesstest"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
 	assetsrepo "github.com/speakeasy-api/gram/server/internal/assets/repo"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -102,9 +102,9 @@ func newTestSkillsServiceWithCaptureModeAndFeature(t *testing.T, mode *string, f
 	require.NoError(t, err)
 
 	storage := assetstest.NewTestBlobStore(t)
-	accessManager := access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}, workos.NewStubClient(), cache.NoopCache)
+	authzEngine := authz.NewEngine(logger, conn, authztest.RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
 	featuresClient := productfeatures.NewClient(logger, tracerProvider, conn, featureRedisClient)
-	svc := skills.NewService(logger, tracerProvider, conn, sessionManager, cache.NoopCache, storage, accessManager, featuresClient)
+	svc := skills.NewService(logger, tracerProvider, conn, sessionManager, cache.NoopCache, storage, authzEngine, featuresClient)
 
 	ti := &testInstance{
 		service:        svc,

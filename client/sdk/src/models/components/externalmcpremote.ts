@@ -8,6 +8,14 @@ import { safeParse } from "../../lib/schemas.js";
 import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+import {
+  ExternalMCPRemoteHeader,
+  ExternalMCPRemoteHeader$inboundSchema,
+} from "./externalmcpremoteheader.js";
+import {
+  ExternalMCPRemoteVariable,
+  ExternalMCPRemoteVariable$inboundSchema,
+} from "./externalmcpremotevariable.js";
 
 /**
  * Transport type (sse or streamable-http)
@@ -26,6 +34,10 @@ export type TransportType = ClosedEnum<typeof TransportType>;
  */
 export type ExternalMCPRemote = {
   /**
+   * HTTP headers the MCP client should collect and send when connecting to this remote
+   */
+  headers?: Array<ExternalMCPRemoteHeader> | undefined;
+  /**
    * Transport type (sse or streamable-http)
    */
   transportType: TransportType;
@@ -33,6 +45,10 @@ export type ExternalMCPRemote = {
    * URL of the remote endpoint
    */
   url: string;
+  /**
+   * URL template variables for this remote endpoint
+   */
+  variables?: { [k: string]: ExternalMCPRemoteVariable } | undefined;
 };
 
 /** @internal */
@@ -45,8 +61,12 @@ export const ExternalMCPRemote$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    headers: z.optional(z.array(ExternalMCPRemoteHeader$inboundSchema)),
     transport_type: TransportType$inboundSchema,
     url: z.string(),
+    variables: z.optional(
+      z.record(z.string(), ExternalMCPRemoteVariable$inboundSchema),
+    ),
   }),
   z.transform((v) => {
     return remap$(v, {

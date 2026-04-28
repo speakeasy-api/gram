@@ -35,6 +35,9 @@ type GetProductFeaturesResponseBody struct {
 	SessionCaptureEnabled bool `form:"session_capture_enabled" json:"session_capture_enabled" xml:"session_capture_enabled"`
 	// Whether skills capture and registry features are enabled
 	SkillsCaptureEnabled bool `form:"skills_capture_enabled" json:"skills_capture_enabled" xml:"skills_capture_enabled"`
+	// Whether shadow-MCP guarding is enabled (injects required toolset id and
+	// rejects unsigned tool calls)
+	BlockShadowMcpEnabled bool `form:"block_shadow_mcp_enabled" json:"block_shadow_mcp_enabled" xml:"block_shadow_mcp_enabled"`
 }
 
 // GetProductFeaturesUnauthorizedResponseBody is the type of the "features"
@@ -418,6 +421,7 @@ func NewGetProductFeaturesResponseBody(res *featuresviews.GramProductFeaturesVie
 		ToolIoLogsEnabled:     *res.ToolIoLogsEnabled,
 		SessionCaptureEnabled: *res.SessionCaptureEnabled,
 		SkillsCaptureEnabled:  *res.SkillsCaptureEnabled,
+		BlockShadowMcpEnabled: *res.BlockShadowMcpEnabled,
 	}
 	return body
 }
@@ -746,8 +750,8 @@ func ValidateSetProductFeatureRequestBody(body *SetProductFeatureRequestBody) (e
 		err = goa.MergeErrors(err, goa.MissingFieldError("enabled", "body"))
 	}
 	if body.FeatureName != nil {
-		if !(*body.FeatureName == "logs" || *body.FeatureName == "tool_io_logs" || *body.FeatureName == "session_capture" || *body.FeatureName == "skills_capture") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.feature_name", *body.FeatureName, []any{"logs", "tool_io_logs", "session_capture", "skills_capture"}))
+		if !(*body.FeatureName == "logs" || *body.FeatureName == "tool_io_logs" || *body.FeatureName == "session_capture" || *body.FeatureName == "skills_capture" || *body.FeatureName == "block_shadow_mcp") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.feature_name", *body.FeatureName, []any{"logs", "tool_io_logs", "session_capture", "skills_capture", "block_shadow_mcp"}))
 		}
 	}
 	if body.FeatureName != nil {

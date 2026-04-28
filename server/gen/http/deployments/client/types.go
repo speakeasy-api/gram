@@ -1702,6 +1702,10 @@ type DeploymentFunctionsResponseBody struct {
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// The runtime to use when executing functions.
 	Runtime *string `form:"runtime,omitempty" json:"runtime,omitempty" xml:"runtime,omitempty"`
+	// The number of instances to run for the function.
+	Scale *int32 `form:"scale,omitempty" json:"scale,omitempty" xml:"scale,omitempty"`
+	// The memory limit in MiB of function runner machines.
+	MemoryMib *int32 `form:"memory_mib,omitempty" json:"memory_mib,omitempty" xml:"memory_mib,omitempty"`
 }
 
 // DeploymentPackageResponseBody is used to define fields on response body
@@ -1803,6 +1807,11 @@ type AddFunctionsFormRequestBody struct {
 	// The runtime to use when executing functions. Allowed values are: nodejs:22,
 	// nodejs:24, python:3.12.
 	Runtime string `form:"runtime" json:"runtime" xml:"runtime"`
+	// The amount of memory in MiB to allocate for the function (1 MiB = 1024 *
+	// 1024 bytes).
+	MemoryMib *uint `form:"memory_mib,omitempty" json:"memory_mib,omitempty" xml:"memory_mib,omitempty"`
+	// The number of instances to scale the function to.
+	Scale *uint `form:"scale,omitempty" json:"scale,omitempty" xml:"scale,omitempty"`
 }
 
 // AddDeploymentPackageFormRequestBody is used to define fields on request body
@@ -5633,6 +5642,26 @@ func ValidateAddFunctionsFormRequestBody(body *AddFunctionsFormRequestBody) (err
 	err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", body.Slug, "^[a-z0-9_-]{1,128}$"))
 	if utf8.RuneCountInString(body.Slug) > 40 {
 		err = goa.MergeErrors(err, goa.InvalidLengthError("body.slug", body.Slug, utf8.RuneCountInString(body.Slug), 40, false))
+	}
+	if body.MemoryMib != nil {
+		if *body.MemoryMib < 0 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.memory_mib", *body.MemoryMib, 0, true))
+		}
+	}
+	if body.MemoryMib != nil {
+		if *body.MemoryMib > 4096 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.memory_mib", *body.MemoryMib, 4096, false))
+		}
+	}
+	if body.Scale != nil {
+		if *body.Scale < 0 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.scale", *body.Scale, 0, true))
+		}
+	}
+	if body.Scale != nil {
+		if *body.Scale > 5 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.scale", *body.Scale, 5, false))
+		}
 	}
 	return
 }

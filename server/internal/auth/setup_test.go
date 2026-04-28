@@ -15,6 +15,8 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -24,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/pylon"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	usersRepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
@@ -78,6 +81,7 @@ type MockOrganizationEntry struct {
 // createMockAuthServer creates an httptest.Server that serves mock auth responses
 func createMockAuthServer(userInfo *MockUserInfo) *httptest.Server {
 	mux := http.NewServeMux()
+	idToken := fmt.Sprintf("mock_id_token_%p", userInfo)
 
 	// Mock the validate endpoint that sessions.GetUserInfoFromSpeakeasy calls
 	mux.HandleFunc("/v1/speakeasy_provider/validate", func(w http.ResponseWriter, r *http.Request) {
@@ -249,7 +253,7 @@ func createMockAuthServer(userInfo *MockUserInfo) *httptest.Server {
 		tokenResp := struct {
 			IDToken string `json:"id_token"`
 		}{
-			IDToken: "mock_id_token",
+			IDToken: idToken,
 		}
 
 		if err := json.NewEncoder(w).Encode(tokenResp); err != nil {
@@ -307,12 +311,13 @@ func newTestAuthService(t *testing.T, userInfo *MockUserInfo) (context.Context, 
 		Environment:            "test",
 	}
 
-	svc := auth.NewService(logger, tracerProvider, conn, sessionManager, authConfigs, nil, nil)
+	authzEngine := authz.NewEngine(logger, conn, authztest.RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
+	svc := auth.NewService(logger, tracerProvider, conn, sessionManager, authConfigs, authzEngine)
 
 	return ctx, newTestAuthServiceResult(t, svc, conn, sessionManager, mockServer, authConfigs)
 }
 
-func newTestAuthServiceWithFilter(t *testing.T, userInfo *MockUserInfo, filterProjects auth.ProjectFilterFunc) (context.Context, *testInstance) {
+func newTestAuthServiceWithAuthz(t *testing.T, userInfo *MockUserInfo) (context.Context, *testInstance) {
 	t.Helper()
 
 	ctx := t.Context()
@@ -346,7 +351,8 @@ func newTestAuthServiceWithFilter(t *testing.T, userInfo *MockUserInfo, filterPr
 		Environment:            "test",
 	}
 
-	svc := auth.NewService(logger, tracerProvider, conn, sessionManager, authConfigs, nil, filterProjects)
+	authzEngine := authz.NewEngine(logger, conn, authztest.RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
+	svc := auth.NewService(logger, tracerProvider, conn, sessionManager, authConfigs, authzEngine)
 
 	return ctx, newTestAuthServiceResult(t, svc, conn, sessionManager, mockServer, authConfigs)
 }

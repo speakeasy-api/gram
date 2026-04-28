@@ -145,10 +145,12 @@ func (s *Workflow) UploadAssets(
 			newOpenAPIAssets = append(newOpenAPIAssets, form)
 		case deploy.SourceTypeFunction:
 			form := &deployments.AddFunctionsForm{
-				AssetID: asset.AssetID,
-				Name:    asset.Name,
-				Slug:    asset.Slug,
-				Runtime: asset.Runtime,
+				AssetID:   asset.AssetID,
+				Name:      asset.Name,
+				Slug:      asset.Slug,
+				Runtime:   asset.Runtime,
+				Scale:     asset.Scale,
+				MemoryMib: asset.MemoryMiB,
 			}
 			newFunctionAssets = append(newFunctionAssets, form)
 		}

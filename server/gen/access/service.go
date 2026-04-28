@@ -158,9 +158,8 @@ type ListRoleGrant struct {
 	Scope string
 	// The inherited scopes the primary scope grants.
 	SubScopes []string
-	// Resource allowlist. Null means unrestricted access. An array means only the
-	// listed resource IDs.
-	Resources []string
+	// Selector constraints. Null means unrestricted.
+	Selectors []*Selector
 }
 
 // ListRolesPayload is the payload type of the access service listRoles method.
@@ -222,9 +221,8 @@ type Role struct {
 type RoleGrant struct {
 	// The scope slug this grant applies to.
 	Scope string
-	// Resource allowlist. Null means unrestricted access. An array means only the
-	// listed resource IDs.
-	Resources []string
+	// Selector constraints. Null means unrestricted.
+	Selectors []*Selector
 }
 
 type ScopeDefinition struct {
@@ -234,6 +232,18 @@ type ScopeDefinition struct {
 	Description string
 	// The type of resource this scope applies to.
 	ResourceType string
+}
+
+// A constraint that narrows which resources a grant applies to.
+type Selector struct {
+	// The kind of resource this selector targets.
+	ResourceKind string
+	// The resource identifier, or '*' for all resources of this kind.
+	ResourceID string
+	// Tool disposition filter (MCP scopes only).
+	Disposition *string
+	// Specific tool name filter (MCP scopes only).
+	Tool *string
 }
 
 // UpdateMemberRolePayload is the payload type of the access service

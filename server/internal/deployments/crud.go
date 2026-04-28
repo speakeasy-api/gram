@@ -7,10 +7,12 @@ import (
 	"log/slog"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -27,10 +29,12 @@ type upsertOpenAPIv3 struct {
 }
 
 type upsertFunctions struct {
-	assetID uuid.UUID
-	name    string
-	slug    string
-	runtime string
+	assetID   uuid.UUID
+	name      string
+	slug      string
+	runtime   string
+	memoryMiB *uint
+	scale     *uint
 }
 
 type upsertPackage struct {
@@ -204,6 +208,8 @@ func cloneDeployment(
 		OriginalDeploymentID: srcDepID,
 		CloneDeploymentID:    newID,
 		ExcludedIds:          functionsToExclude,
+		DefaultScale:         constants.DefaultFunctionScale,
+		DefaultMemoryMib:     constants.DefaultFunctionMemoryMiB,
 	})
 	if err != nil {
 		return uuid.Nil, oops.E(oops.CodeUnexpected, err, "error cloning deployment functions assets").Log(ctx, logger)
@@ -262,12 +268,26 @@ func amendDeployment(
 	}
 
 	for _, a := range functionsToUpsert {
+		var mem pgtype.Int4
+		if a.memoryMiB != nil {
+			v, _ := conv.ClampedUintToInt32(*a.memoryMiB)
+			mem = pgtype.Int4{Int32: max(0, v), Valid: true}
+		}
+
+		var scale pgtype.Int4
+		if a.scale != nil {
+			v, _ := conv.ClampedUintToInt32(*a.scale)
+			scale = pgtype.Int4{Int32: max(0, v), Valid: true}
+		}
+
 		_, err := depRepo.UpsertDeploymentFunctionsAsset(ctx, repo.UpsertDeploymentFunctionsAssetParams{
 			DeploymentID: id,
 			AssetID:      a.assetID,
 			Name:         a.name,
 			Slug:         a.slug,
 			Runtime:      a.runtime,
+			MemoryMib:    mem,
+			Scale:        scale,
 		})
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return oops.E(oops.CodeUnexpected, err, "error adding deployment functions asset").Log(ctx, logger)

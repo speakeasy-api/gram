@@ -75,12 +75,23 @@ func DescribeDeployment(ctx context.Context, logger *slog.Logger, depRepo *repo.
 				return nil, oops.E(oops.CodeInvariantViolation, err, "invalid state for deployment functions").Log(ctx, logger)
 			}
 
+			scale := new(r.DeploymentsFunctionsScale.Int32)
+			if !r.DeploymentsFunctionsScale.Valid {
+				scale = nil
+			}
+			mem := new(r.DeploymentsFunctionsMemoryMib.Int32)
+			if !r.DeploymentsFunctionsMemoryMib.Valid {
+				mem = nil
+			}
+
 			attachedFunctionsAssets = append(attachedFunctionsAssets, &types.DeploymentFunctions{
-				ID:      functionsID.String(),
-				AssetID: r.DeploymentsFunctionsAssetID.UUID.String(),
-				Name:    r.DeploymentsFunctionsName.String,
-				Slug:    types.Slug(r.DeploymentsFunctionsSlug.String),
-				Runtime: r.DeploymentsFunctionsRuntime.String,
+				ID:        functionsID.String(),
+				AssetID:   r.DeploymentsFunctionsAssetID.UUID.String(),
+				Name:      r.DeploymentsFunctionsName.String,
+				Slug:      types.Slug(r.DeploymentsFunctionsSlug.String),
+				Runtime:   r.DeploymentsFunctionsRuntime.String,
+				Scale:     scale,
+				MemoryMib: mem,
 			})
 			seenFunctions[functionsID] = true
 		}

@@ -7,7 +7,9 @@ import { pluginsCreatePlugin } from "../funcs/pluginsCreatePlugin.js";
 import { pluginsDeletePlugin } from "../funcs/pluginsDeletePlugin.js";
 import { pluginsDownloadPluginPackage } from "../funcs/pluginsDownloadPluginPackage.js";
 import { pluginsGetPlugin } from "../funcs/pluginsGetPlugin.js";
+import { pluginsGetPublishStatus } from "../funcs/pluginsGetPublishStatus.js";
 import { pluginsListPlugins } from "../funcs/pluginsListPlugins.js";
+import { pluginsPublishPlugins } from "../funcs/pluginsPublishPlugins.js";
 import { pluginsRemovePluginServer } from "../funcs/pluginsRemovePluginServer.js";
 import { pluginsSetPluginAssignments } from "../funcs/pluginsSetPluginAssignments.js";
 import { pluginsUpdatePlugin } from "../funcs/pluginsUpdatePlugin.js";
@@ -114,6 +116,25 @@ export class Plugins extends ClientSDK {
   }
 
   /**
+   * getPublishStatus plugins
+   *
+   * @remarks
+   * Check whether GitHub publishing is configured and connected for this project.
+   */
+  async getPublishStatus(
+    request?: operations.GetPublishStatusRequest | undefined,
+    security?: operations.GetPublishStatusSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.PublishStatusResult> {
+    return unwrapAsync(pluginsGetPublishStatus(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * listPlugins plugins
    *
    * @remarks
@@ -125,6 +146,25 @@ export class Plugins extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.ListPluginsResult> {
     return unwrapAsync(pluginsListPlugins(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * publishPlugins plugins
+   *
+   * @remarks
+   * Generate and publish all plugin packages to a GitHub repository.
+   */
+  async publishPlugins(
+    request: operations.PublishPluginsRequest,
+    security?: operations.PublishPluginsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.PublishPluginsResult> {
+    return unwrapAsync(pluginsPublishPlugins(
       this,
       request,
       security,

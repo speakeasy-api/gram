@@ -13,6 +13,7 @@ junit-report.xml
 !.vscode/extensions.json
 *.code-workspace
 .idea
+.run
 /posting
 /gram.posting.yaml
 /posting.env
@@ -27,6 +28,8 @@ scratch/
 /local/ssl
 /local/keys
 /local/functions
+/agents/runner/target
+/agents/runtime-artifacts
 .speakeasy/temp
 mprocs.log
 .madprocs.port
@@ -55,9 +58,11 @@ poetry-installer-error-*.log
 package-lock.json
 /examples/*/pnpm-lock.yaml
 .worktrees
+.claude/worktrees/
 .granary/
 .claude/hooks/*
 .agentlink/
 /plans
 .mcp.json
+**/.claude/scheduled_tasks.lock
 flagged-chats.jsonl

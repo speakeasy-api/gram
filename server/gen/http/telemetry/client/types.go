@@ -303,6 +303,10 @@ type GetHooksSummaryResponseBody struct {
 	Breakdown []*HooksBreakdownRowResponseBody `form:"breakdown,omitempty" json:"breakdown,omitempty" xml:"breakdown,omitempty"`
 	// Time-bucketed event counts by server and user
 	TimeSeries []*HooksTimeSeriesPointResponseBody `form:"time_series,omitempty" json:"time_series,omitempty" xml:"time_series,omitempty"`
+	// Time-bucketed event counts by skill
+	SkillTimeSeries []*SkillTimeSeriesPointResponseBody `form:"skill_time_series,omitempty" json:"skill_time_series,omitempty" xml:"skill_time_series,omitempty"`
+	// Per-user skill breakdown
+	SkillBreakdown []*SkillBreakdownRowResponseBody `form:"skill_breakdown,omitempty" json:"skill_breakdown,omitempty" xml:"skill_breakdown,omitempty"`
 }
 
 // ListHooksTracesResponseBody is the type of the "telemetry" service
@@ -3239,6 +3243,28 @@ type HooksTimeSeriesPointResponseBody struct {
 	FailureCount *int64 `form:"failure_count,omitempty" json:"failure_count,omitempty" xml:"failure_count,omitempty"`
 }
 
+// SkillTimeSeriesPointResponseBody is used to define fields on response body
+// types.
+type SkillTimeSeriesPointResponseBody struct {
+	// Bucket start time in Unix nanoseconds (string for JS int64 precision)
+	BucketStartNs *string `form:"bucket_start_ns,omitempty" json:"bucket_start_ns,omitempty" xml:"bucket_start_ns,omitempty"`
+	// Skill name
+	SkillName *string `form:"skill_name,omitempty" json:"skill_name,omitempty" xml:"skill_name,omitempty"`
+	// Number of skill use events in this bucket
+	EventCount *int64 `form:"event_count,omitempty" json:"event_count,omitempty" xml:"event_count,omitempty"`
+}
+
+// SkillBreakdownRowResponseBody is used to define fields on response body
+// types.
+type SkillBreakdownRowResponseBody struct {
+	// Skill name
+	SkillName *string `form:"skill_name,omitempty" json:"skill_name,omitempty" xml:"skill_name,omitempty"`
+	// User email address
+	UserEmail *string `form:"user_email,omitempty" json:"user_email,omitempty" xml:"user_email,omitempty"`
+	// Use count for this skill/user combination
+	UseCount *int64 `form:"use_count,omitempty" json:"use_count,omitempty" xml:"use_count,omitempty"`
+}
+
 // HookTraceSummaryResponseBody is used to define fields on response body types.
 type HookTraceSummaryResponseBody struct {
 	// Trace ID (32 hex characters)
@@ -3249,6 +3275,8 @@ type HookTraceSummaryResponseBody struct {
 	LogCount *uint64 `form:"log_count,omitempty" json:"log_count,omitempty" xml:"log_count,omitempty"`
 	// Hook execution status
 	HookStatus *string `form:"hook_status,omitempty" json:"hook_status,omitempty" xml:"hook_status,omitempty"`
+	// Reason set when hook_status is 'blocked' (e.g. shadow-MCP guard rejection)
+	BlockReason *string `form:"block_reason,omitempty" json:"block_reason,omitempty" xml:"block_reason,omitempty"`
 	// Gram URN associated with this hook trace
 	GramUrn *string `form:"gram_urn,omitempty" json:"gram_urn,omitempty" xml:"gram_urn,omitempty"`
 	// Tool name (from materialized column)
@@ -5427,6 +5455,22 @@ func NewGetHooksSummaryResultOK(body *GetHooksSummaryResponseBody) *telemetry.Ge
 		}
 		v.TimeSeries[i] = unmarshalHooksTimeSeriesPointResponseBodyToTelemetryHooksTimeSeriesPoint(val)
 	}
+	v.SkillTimeSeries = make([]*telemetry.SkillTimeSeriesPoint, len(body.SkillTimeSeries))
+	for i, val := range body.SkillTimeSeries {
+		if val == nil {
+			v.SkillTimeSeries[i] = nil
+			continue
+		}
+		v.SkillTimeSeries[i] = unmarshalSkillTimeSeriesPointResponseBodyToTelemetrySkillTimeSeriesPoint(val)
+	}
+	v.SkillBreakdown = make([]*telemetry.SkillBreakdownRow, len(body.SkillBreakdown))
+	for i, val := range body.SkillBreakdown {
+		if val == nil {
+			v.SkillBreakdown[i] = nil
+			continue
+		}
+		v.SkillBreakdown[i] = unmarshalSkillBreakdownRowResponseBodyToTelemetrySkillBreakdownRow(val)
+	}
 
 	return v
 }
@@ -5984,6 +6028,12 @@ func ValidateGetHooksSummaryResponseBody(body *GetHooksSummaryResponseBody) (err
 	if body.TimeSeries == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("time_series", "body"))
 	}
+	if body.SkillTimeSeries == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("skill_time_series", "body"))
+	}
+	if body.SkillBreakdown == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("skill_breakdown", "body"))
+	}
 	for _, e := range body.Servers {
 		if e != nil {
 			if err2 := ValidateHooksServerSummaryResponseBody(e); err2 != nil {
@@ -6015,6 +6065,20 @@ func ValidateGetHooksSummaryResponseBody(body *GetHooksSummaryResponseBody) (err
 	for _, e := range body.TimeSeries {
 		if e != nil {
 			if err2 := ValidateHooksTimeSeriesPointResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.SkillTimeSeries {
+		if e != nil {
+			if err2 := ValidateSkillTimeSeriesPointResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.SkillBreakdown {
+		if e != nil {
+			if err2 := ValidateSkillBreakdownRowResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -9908,6 +9972,36 @@ func ValidateHooksTimeSeriesPointResponseBody(body *HooksTimeSeriesPointResponse
 	return
 }
 
+// ValidateSkillTimeSeriesPointResponseBody runs the validations defined on
+// SkillTimeSeriesPointResponseBody
+func ValidateSkillTimeSeriesPointResponseBody(body *SkillTimeSeriesPointResponseBody) (err error) {
+	if body.BucketStartNs == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("bucket_start_ns", "body"))
+	}
+	if body.SkillName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("skill_name", "body"))
+	}
+	if body.EventCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("event_count", "body"))
+	}
+	return
+}
+
+// ValidateSkillBreakdownRowResponseBody runs the validations defined on
+// SkillBreakdownRowResponseBody
+func ValidateSkillBreakdownRowResponseBody(body *SkillBreakdownRowResponseBody) (err error) {
+	if body.SkillName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("skill_name", "body"))
+	}
+	if body.UserEmail == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("user_email", "body"))
+	}
+	if body.UseCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("use_count", "body"))
+	}
+	return
+}
+
 // ValidateHookTraceSummaryResponseBody runs the validations defined on
 // HookTraceSummaryResponseBody
 func ValidateHookTraceSummaryResponseBody(body *HookTraceSummaryResponseBody) (err error) {
@@ -9927,8 +10021,8 @@ func ValidateHookTraceSummaryResponseBody(body *HookTraceSummaryResponseBody) (e
 		err = goa.MergeErrors(err, goa.ValidatePattern("body.trace_id", *body.TraceID, "^[a-f0-9]{32}$"))
 	}
 	if body.HookStatus != nil {
-		if !(*body.HookStatus == "success" || *body.HookStatus == "failure" || *body.HookStatus == "pending") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.hook_status", *body.HookStatus, []any{"success", "failure", "pending"}))
+		if !(*body.HookStatus == "success" || *body.HookStatus == "failure" || *body.HookStatus == "pending" || *body.HookStatus == "blocked") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.hook_status", *body.HookStatus, []any{"success", "failure", "pending", "blocked"}))
 		}
 	}
 	return

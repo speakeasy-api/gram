@@ -2,6 +2,7 @@ package plugins
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -108,6 +109,49 @@ func TestGenerateCursorMCPConfigUsesEnvSyntax(t *testing.T) {
 	require.Equal(t, "Bearer ${env:GRAM_API_KEY}", gramServer.Headers["Authorization"])
 }
 
+func TestGenerateReadmeEscapesMarkdownInTableCells(t *testing.T) {
+	t.Parallel()
+	plugins := []PluginInfo{
+		{
+			Name:        "Name | with pipe",
+			Slug:        "evil-plugin",
+			Description: "line one\nline two | still line two",
+		},
+	}
+
+	files, err := GeneratePluginPackages(plugins, GenerateConfig{
+		OrgName:   "Acme",
+		OrgEmail:  "",
+		ServerURL: "https://app.getgram.ai",
+	})
+	require.NoError(t, err)
+
+	readme := string(files["README.md"])
+
+	var row string
+	for line := range strings.SplitSeq(readme, "\n") {
+		if strings.HasPrefix(line, "| Name") || strings.HasPrefix(line, "| evil") {
+			row = line
+			break
+		}
+	}
+	require.NotEmpty(t, row, "plugin row not found in README:\n%s", readme)
+
+	unescapedPipes := strings.Count(strings.ReplaceAll(row, `\|`, ""), "|")
+	require.Equal(t, 4, unescapedPipes, "row should have exactly 4 unescaped pipes (3 separators + trailing)")
+	require.Contains(t, row, `Name \| with pipe`)
+	require.Contains(t, row, `line one line two \| still line two`)
+	require.NotContains(t, row, "\nline two")
+}
+
+func TestEscapeMarkdownCellTruncatesLongValues(t *testing.T) {
+	t.Parallel()
+	long := strings.Repeat("a", 500)
+	got := escapeMarkdownCell(long)
+	require.True(t, strings.HasSuffix(got, "…"))
+	require.Less(t, len(got), len(long))
+}
+
 func TestGenerateMarketplaceManifest(t *testing.T) {
 	t.Parallel()
 	plugins := []PluginInfo{
@@ -126,7 +170,7 @@ func TestGenerateMarketplaceManifest(t *testing.T) {
 	err = json.Unmarshal(files[".claude-plugin/marketplace.json"], &claudeManifest)
 	require.NoError(t, err)
 
-	require.Equal(t, "Acme-gram", claudeManifest.Name)
+	require.Equal(t, "acme-gram", claudeManifest.Name)
 	require.Equal(t, "Acme", claudeManifest.Owner.Name)
 	require.Len(t, claudeManifest.Plugins, 2)
 	require.Equal(t, "./a", claudeManifest.Plugins[0].Source)
@@ -136,7 +180,7 @@ func TestGenerateMarketplaceManifest(t *testing.T) {
 	err = json.Unmarshal(files[".cursor-plugin/marketplace.json"], &cursorManifest)
 	require.NoError(t, err)
 
-	require.Equal(t, "Acme-gram", cursorManifest.Name)
+	require.Equal(t, "acme-gram", cursorManifest.Name)
 	require.Len(t, cursorManifest.Plugins, 2)
 	require.Equal(t, "./a-cursor", cursorManifest.Plugins[0].Source)
 	require.Equal(t, "./b-cursor", cursorManifest.Plugins[1].Source)

@@ -8,9 +8,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/projects"
-	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
@@ -23,7 +23,7 @@ func TestProjectsService_DeleteProject_CreatesAuditLog(t *testing.T) {
 	project := createProjectForDeletion(t, ctx, ti, "audit-delete-project-"+uuid.NewString()[:8])
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-	ctx = withAccessGrants(t, ctx, ti.conn, access.Grant{Scope: access.ScopeOrgAdmin, Resource: authCtx.ActiveOrganizationID})
+	ctx = withAccessGrants(t, ctx, ti.conn, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)})
 
 	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionProjectDelete)
 	require.NoError(t, err)
@@ -74,7 +74,7 @@ func TestProjectsService_DeleteProject_ForbiddenWithoutOrgAdminGrant(t *testing.
 
 	ctx, ti := newTestProjectsService(t, true)
 	project := createProjectForDeletion(t, ctx, ti, "no-wildcard-"+uuid.NewString()[:8])
-	ctx = withExactAccessGrants(t, ctx, ti.conn, access.Grant{Scope: access.ScopeProjectWrite, Resource: project.ID.String()})
+	ctx = withExactAccessGrants(t, ctx, ti.conn, authz.Grant{Scope: authz.ScopeProjectWrite, Selector: authz.NewSelector(authz.ScopeProjectWrite, project.ID.String())})
 
 	err := ti.service.DeleteProject(ctx, &gen.DeleteProjectPayload{
 		ID:           project.ID.String(),
@@ -93,7 +93,7 @@ func TestProjectsService_DeleteProject_SkipsRBACWhenDisabled(t *testing.T) {
 
 	ctx, ti := newTestProjectsService(t, false)
 	project := createProjectForDeletion(t, ctx, ti, "rbac-disabled-"+uuid.NewString()[:8])
-	ctx = access.GrantsToContext(ctx, nil)
+	ctx = authz.GrantsToContext(ctx, nil)
 
 	err := ti.service.DeleteProject(ctx, &gen.DeleteProjectPayload{
 		ID: project.ID.String(),
@@ -162,7 +162,7 @@ func TestProjectsService_DeleteProject(t *testing.T) {
 		nonExistentProjectID := uuid.New()
 		authCtx, ok := contextvalues.GetAuthContext(ctx)
 		require.True(t, ok)
-		ctx = withAccessGrants(t, ctx, ti.conn, access.Grant{Scope: access.ScopeOrgAdmin, Resource: authCtx.ActiveOrganizationID})
+		ctx = withAccessGrants(t, ctx, ti.conn, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)})
 
 		err := ti.service.DeleteProject(ctx, &gen.DeleteProjectPayload{
 			ID: nonExistentProjectID.String(),
