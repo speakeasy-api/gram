@@ -5,21 +5,26 @@
 
 set -e
 
+if [[ "${GRAM_ASSISTANT_RUNTIME_PROVIDER:-local}" != "local" ]]; then
+  echo "GRAM_ASSISTANT_RUNTIME_PROVIDER=${GRAM_ASSISTANT_RUNTIME_PROVIDER}; skipping lima log tail" >&2
+  exec tail -f /dev/null
+fi
+
 INSTANCE="${GRAM_ASSISTANT_RUNTIME_LIMA_INSTANCE:-${GRAM_ASSISTANT_LIMA_INSTANCE:-gram-firecracker}}"
 
 if ! command -v limactl >/dev/null 2>&1; then
   echo "limactl not found; skipping lima log tail" >&2
-  exec sleep infinity
+  exec tail -f /dev/null
 fi
 
 if ! limactl list --quiet 2>/dev/null | grep -qx "$INSTANCE"; then
   echo "lima instance '$INSTANCE' not found; skipping log tail" >&2
-  exec sleep infinity
+  exec tail -f /dev/null
 fi
 
 if [[ "$(limactl list --format '{{.Status}}' "$INSTANCE" 2>/dev/null)" != "Running" ]]; then
   echo "lima instance '$INSTANCE' is not running; start it with: limactl start $INSTANCE" >&2
-  exec sleep infinity
+  exec tail -f /dev/null
 fi
 
 echo "Streaming lima journal for $INSTANCE (tap/firecracker activity shows up here)"

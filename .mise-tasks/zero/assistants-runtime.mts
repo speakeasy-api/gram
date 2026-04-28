@@ -5,6 +5,16 @@
 import { $, chalk } from "zx";
 import { mkdirSync } from "node:fs";
 
+const provider = process.env["GRAM_ASSISTANT_RUNTIME_PROVIDER"] || "local";
+if (provider !== "local") {
+  console.log(
+    chalk.yellow(
+      `Skipping local assistant runtime config: GRAM_ASSISTANT_RUNTIME_PROVIDER=${provider}.`,
+    ),
+  );
+  process.exit(0);
+}
+
 const platform = process.platform;
 const arch = process.arch === "arm64" ? "aarch64" : "x86_64";
 const localEnv = (name: string, fallback: string) =>

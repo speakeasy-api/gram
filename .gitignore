@@ -27,6 +27,8 @@ scratch/
 /local/ssl
 /local/keys
 /local/functions
+/agents/runner/target
+/agents/runtime-artifacts
 .speakeasy/temp
 mprocs.log
 .madprocs.port
@@ -56,6 +58,6 @@ package-lock.json
 /examples/*/pnpm-lock.yaml
 .worktrees
 .granary/
-/agents/runner/target
 .claude/hooks/*
+**/.claude/scheduled_tasks.lock
 flagged-chats.jsonl
