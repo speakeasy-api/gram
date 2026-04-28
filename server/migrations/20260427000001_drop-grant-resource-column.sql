@@ -3,24 +3,8 @@
 -- Drop the legacy `resource` column from principal_grants.
 -- All grants now use the `selectors` JSONB column exclusively.
 
--- Backfill any rows that still have NULL selectors (created before the selectors
--- column was populated by application code). Derive resource_kind from the scope
--- prefix and use the existing resource column as resource_id.
-UPDATE principal_grants
-SET selectors = jsonb_build_object(
-  'resource_kind', CASE
-    WHEN scope LIKE 'project:%' THEN 'project'
-    WHEN scope LIKE 'build:%' THEN 'project'
-    WHEN scope LIKE 'mcp:%' THEN 'mcp'
-    WHEN scope LIKE 'remote-mcp:%' THEN 'mcp'
-    WHEN scope LIKE 'org:%' THEN 'org'
-    ELSE '*'
-  END,
-  'resource_id', COALESCE(resource, '*')
-)
-WHERE selectors IS NULL;
-
 -- Make selectors NOT NULL (table is small — full scan acceptable).
+-- All rows already have selectors populated by PR #2357's migration.
 -- atlas:nolint PG303
 ALTER TABLE principal_grants ALTER COLUMN selectors SET NOT NULL;
 
