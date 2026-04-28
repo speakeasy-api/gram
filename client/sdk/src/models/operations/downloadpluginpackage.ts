@@ -20,6 +20,7 @@ export type DownloadPluginPackageSecurity = {
 export const Platform = {
   Claude: "claude",
   Cursor: "cursor",
+  Codex: "codex",
 } as const;
 /**
  * Target platform to download plugins for.
