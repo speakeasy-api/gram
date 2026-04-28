@@ -46,6 +46,10 @@ type Client struct {
 	// serveFunction endpoint.
 	ServeFunctionDoer goahttp.Doer
 
+	// ServeSkill Doer is the HTTP client used to make requests to the serveSkill
+	// endpoint.
+	ServeSkillDoer goahttp.Doer
+
 	// ListAssets Doer is the HTTP client used to make requests to the listAssets
 	// endpoint.
 	ListAssetsDoer goahttp.Doer
@@ -93,6 +97,7 @@ func NewClient(
 		FetchOpenAPIv3FromURLDoer:         doer,
 		ServeOpenAPIv3Doer:                doer,
 		ServeFunctionDoer:                 doer,
+		ServeSkillDoer:                    doer,
 		ListAssetsDoer:                    doer,
 		UploadChatAttachmentDoer:          doer,
 		ServeChatAttachmentDoer:           doer,
@@ -286,6 +291,35 @@ func (c *Client) ServeFunction() goa.Endpoint {
 			return nil, err
 		}
 		return &assets.ServeFunctionResponseData{Result: res.(*assets.ServeFunctionResult), Body: resp.Body}, nil
+	}
+}
+
+// ServeSkill returns an endpoint that makes HTTP requests to the assets
+// service serveSkill server.
+func (c *Client) ServeSkill() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeServeSkillRequest(c.encoder)
+		decodeResponse = DecodeServeSkillResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildServeSkillRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ServeSkillDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("assets", "serveSkill", err)
+		}
+		res, err := decodeResponse(resp)
+		if err != nil {
+			resp.Body.Close()
+			return nil, err
+		}
+		return &assets.ServeSkillResponseData{Result: res.(*assets.ServeSkillResult), Body: resp.Body}, nil
 	}
 }
 

@@ -35,6 +35,7 @@ func TestService_List_ReturnsSkillsWithActiveVersion(t *testing.T) {
 		contentSHA256: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 		authorName:    "Ada",
 		firstSeenAt:   pgtype.Timestamptz{Time: firstSkill.CreatedAt.Time, Valid: true},
+		state:         "active",
 	})
 	_, err := ti.skillsRepo.SetSkillActiveVersion(ctx, skillsrepo.SetSkillActiveVersionParams{
 		ProjectID: *authCtx.ProjectID,
@@ -155,7 +156,7 @@ func seedSkillVersion(
 
 	state := params.state
 	if state == "" {
-		state = "active"
+		state = "pending_review"
 	}
 
 	version, err := ti.skillsRepo.CreateSkillVersion(ctx, skillsrepo.CreateSkillVersionParams{
@@ -167,6 +168,9 @@ func seedSkillVersion(
 		State:              state,
 		CapturedByUserID:   userID,
 		AuthorName:         pgtype.Text{String: params.authorName, Valid: params.authorName != ""},
+		RejectedByUserID:   pgtype.Text{},
+		RejectedReason:     pgtype.Text{},
+		RejectedAt:         pgtype.Timestamptz{},
 		FirstSeenTraceID:   pgtype.Text{},
 		FirstSeenSessionID: pgtype.Text{},
 		FirstSeenAt:        params.firstSeenAt,

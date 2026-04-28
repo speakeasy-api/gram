@@ -39,6 +39,10 @@ type Client struct {
 	// captureClaude endpoint.
 	CaptureClaudeDoer goahttp.Doer
 
+	// UploadManual Doer is the HTTP client used to make requests to the
+	// uploadManual endpoint.
+	UploadManualDoer goahttp.Doer
+
 	// ListVersions Doer is the HTTP client used to make requests to the
 	// listVersions endpoint.
 	ListVersionsDoer goahttp.Doer
@@ -54,6 +58,14 @@ type Client struct {
 	// SupersedeVersion Doer is the HTTP client used to make requests to the
 	// supersedeVersion endpoint.
 	SupersedeVersionDoer goahttp.Doer
+
+	// RejectVersion Doer is the HTTP client used to make requests to the
+	// rejectVersion endpoint.
+	RejectVersionDoer goahttp.Doer
+
+	// Archive Doer is the HTTP client used to make requests to the archive
+	// endpoint.
+	ArchiveDoer goahttp.Doer
 
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
@@ -81,10 +93,13 @@ func NewClient(
 		SetSettingsDoer:      doer,
 		CaptureDoer:          doer,
 		CaptureClaudeDoer:    doer,
+		UploadManualDoer:     doer,
 		ListVersionsDoer:     doer,
 		ListPendingDoer:      doer,
 		ApproveVersionDoer:   doer,
 		SupersedeVersionDoer: doer,
+		RejectVersionDoer:    doer,
+		ArchiveDoer:          doer,
 		RestoreResponseBody:  restoreBody,
 		scheme:               scheme,
 		host:                 host,
@@ -237,6 +252,30 @@ func (c *Client) CaptureClaude() goa.Endpoint {
 	}
 }
 
+// UploadManual returns an endpoint that makes HTTP requests to the skills
+// service uploadManual server.
+func (c *Client) UploadManual() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeUploadManualRequest(c.encoder)
+		decodeResponse = DecodeUploadManualResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildUploadManualRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.UploadManualDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("skills", "uploadManual", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
 // ListVersions returns an endpoint that makes HTTP requests to the skills
 // service listVersions server.
 func (c *Client) ListVersions() goa.Endpoint {
@@ -328,6 +367,54 @@ func (c *Client) SupersedeVersion() goa.Endpoint {
 		resp, err := c.SupersedeVersionDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("skills", "supersedeVersion", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// RejectVersion returns an endpoint that makes HTTP requests to the skills
+// service rejectVersion server.
+func (c *Client) RejectVersion() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeRejectVersionRequest(c.encoder)
+		decodeResponse = DecodeRejectVersionResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildRejectVersionRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.RejectVersionDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("skills", "rejectVersion", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// Archive returns an endpoint that makes HTTP requests to the skills service
+// archive server.
+func (c *Client) Archive() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeArchiveRequest(c.encoder)
+		decodeResponse = DecodeArchiveResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildArchiveRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ArchiveDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("skills", "archive", err)
 		}
 		return decodeResponse(resp)
 	}

@@ -19,7 +19,7 @@ export type ServeFunctionRequest = {
    */
   id: string;
   /**
-   * The procect ID that the asset belongs to
+   * The project ID that the asset belongs to
    */
   projectId: string;
   /**

@@ -118,6 +118,9 @@ INSERT INTO skill_versions (
   , state
   , captured_by_user_id
   , author_name
+  , rejected_by_user_id
+  , rejected_reason
+  , rejected_at
   , first_seen_trace_id
   , first_seen_session_id
   , first_seen_at
@@ -132,6 +135,9 @@ SELECT
   , @state
   , @captured_by_user_id
   , sqlc.narg(author_name)
+  , sqlc.narg(rejected_by_user_id)
+  , sqlc.narg(rejected_reason)
+  , sqlc.narg(rejected_at)
   , sqlc.narg(first_seen_trace_id)
   , sqlc.narg(first_seen_session_id)
   , sqlc.narg(first_seen_at)
@@ -181,6 +187,21 @@ FROM skills s
 WHERE sv.id = @id
   AND s.id = sv.skill_id
   AND s.project_id = @project_id
+RETURNING sv.*;
+
+-- name: RejectSkillVersion :one
+UPDATE skill_versions sv
+SET
+    state = 'rejected'
+  , rejected_by_user_id = @rejected_by_user_id
+  , rejected_reason = sqlc.narg(rejected_reason)
+  , rejected_at = clock_timestamp()
+  , updated_at = clock_timestamp()
+FROM skills s
+WHERE sv.id = @id
+  AND s.id = sv.skill_id
+  AND s.project_id = @project_id
+  AND sv.state = 'pending_review'
 RETURNING sv.*;
 
 -- name: SetSkillActiveVersion :one

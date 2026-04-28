@@ -13,6 +13,7 @@ export const SkillVersionState = {
   PendingReview: "pending_review",
   Active: "active",
   Superseded: "superseded",
+  Rejected: "rejected",
 } as const;
 export type SkillVersionState = ClosedEnum<typeof SkillVersionState>;
 
@@ -27,6 +28,9 @@ export type SkillVersion = {
   firstSeenSessionId?: string | undefined;
   firstSeenTraceId?: string | undefined;
   id: string;
+  rejectedAt?: Date | undefined;
+  rejectedByUserId?: string | undefined;
+  rejectedReason?: string | undefined;
   sizeBytes: number;
   skillBytes?: number | undefined;
   skillId: string;
@@ -58,6 +62,11 @@ export const SkillVersion$inboundSchema: z.ZodMiniType<SkillVersion, unknown> =
       first_seen_session_id: z.optional(z.string()),
       first_seen_trace_id: z.optional(z.string()),
       id: z.string(),
+      rejected_at: z.optional(
+        z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+      ),
+      rejected_by_user_id: z.optional(z.string()),
+      rejected_reason: z.optional(z.string()),
       size_bytes: z.int(),
       skill_bytes: z.optional(z.int()),
       skill_id: z.string(),
@@ -78,6 +87,9 @@ export const SkillVersion$inboundSchema: z.ZodMiniType<SkillVersion, unknown> =
         "first_seen_at": "firstSeenAt",
         "first_seen_session_id": "firstSeenSessionId",
         "first_seen_trace_id": "firstSeenTraceId",
+        "rejected_at": "rejectedAt",
+        "rejected_by_user_id": "rejectedByUserId",
+        "rejected_reason": "rejectedReason",
         "size_bytes": "sizeBytes",
         "skill_bytes": "skillBytes",
         "skill_id": "skillId",

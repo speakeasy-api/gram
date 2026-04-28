@@ -155,8 +155,8 @@ const createSkillVersion = `-- name: CreateSkillVersion :one
 WITH skill_lookup AS (
   SELECT skills.id AS skill_id
   FROM skills
-  WHERE skills.id = $12
-    AND skills.project_id = $13
+  WHERE skills.id = $15
+    AND skills.project_id = $16
     AND skills.deleted IS FALSE
 )
 INSERT INTO skill_versions (
@@ -169,6 +169,9 @@ INSERT INTO skill_versions (
   , state
   , captured_by_user_id
   , author_name
+  , rejected_by_user_id
+  , rejected_reason
+  , rejected_at
   , first_seen_trace_id
   , first_seen_session_id
   , first_seen_at
@@ -186,8 +189,11 @@ SELECT
   , $9
   , $10
   , $11
+  , $12
+  , $13
+  , $14
 FROM skill_lookup
-RETURNING size_bytes, updated_at, created_at, first_seen_at, skill_bytes, content_sha256, asset_format, state, captured_by_user_id, author_name, first_seen_trace_id, first_seen_session_id, id, asset_id, skill_id
+RETURNING size_bytes, updated_at, created_at, first_seen_at, skill_bytes, content_sha256, asset_format, state, captured_by_user_id, author_name, rejected_by_user_id, rejected_reason, rejected_at, first_seen_trace_id, first_seen_session_id, id, asset_id, skill_id
 `
 
 type CreateSkillVersionParams struct {
@@ -199,6 +205,9 @@ type CreateSkillVersionParams struct {
 	State              string
 	CapturedByUserID   string
 	AuthorName         pgtype.Text
+	RejectedByUserID   pgtype.Text
+	RejectedReason     pgtype.Text
+	RejectedAt         pgtype.Timestamptz
 	FirstSeenTraceID   pgtype.Text
 	FirstSeenSessionID pgtype.Text
 	FirstSeenAt        pgtype.Timestamptz
@@ -216,6 +225,9 @@ func (q *Queries) CreateSkillVersion(ctx context.Context, arg CreateSkillVersion
 		arg.State,
 		arg.CapturedByUserID,
 		arg.AuthorName,
+		arg.RejectedByUserID,
+		arg.RejectedReason,
+		arg.RejectedAt,
 		arg.FirstSeenTraceID,
 		arg.FirstSeenSessionID,
 		arg.FirstSeenAt,
@@ -234,6 +246,9 @@ func (q *Queries) CreateSkillVersion(ctx context.Context, arg CreateSkillVersion
 		&i.State,
 		&i.CapturedByUserID,
 		&i.AuthorName,
+		&i.RejectedByUserID,
+		&i.RejectedReason,
+		&i.RejectedAt,
 		&i.FirstSeenTraceID,
 		&i.FirstSeenSessionID,
 		&i.ID,
@@ -570,7 +585,7 @@ func (q *Queries) GetSkillBySlug(ctx context.Context, arg GetSkillBySlugParams) 
 }
 
 const getSkillVersion = `-- name: GetSkillVersion :one
-SELECT sv.size_bytes, sv.updated_at, sv.created_at, sv.first_seen_at, sv.skill_bytes, sv.content_sha256, sv.asset_format, sv.state, sv.captured_by_user_id, sv.author_name, sv.first_seen_trace_id, sv.first_seen_session_id, sv.id, sv.asset_id, sv.skill_id
+SELECT sv.size_bytes, sv.updated_at, sv.created_at, sv.first_seen_at, sv.skill_bytes, sv.content_sha256, sv.asset_format, sv.state, sv.captured_by_user_id, sv.author_name, sv.rejected_by_user_id, sv.rejected_reason, sv.rejected_at, sv.first_seen_trace_id, sv.first_seen_session_id, sv.id, sv.asset_id, sv.skill_id
 FROM skill_versions sv
 INNER JOIN skills s ON s.id = sv.skill_id
 WHERE s.project_id = $1
@@ -596,6 +611,9 @@ func (q *Queries) GetSkillVersion(ctx context.Context, arg GetSkillVersionParams
 		&i.State,
 		&i.CapturedByUserID,
 		&i.AuthorName,
+		&i.RejectedByUserID,
+		&i.RejectedReason,
+		&i.RejectedAt,
 		&i.FirstSeenTraceID,
 		&i.FirstSeenSessionID,
 		&i.ID,
@@ -606,7 +624,7 @@ func (q *Queries) GetSkillVersion(ctx context.Context, arg GetSkillVersionParams
 }
 
 const getSkillVersionByHash = `-- name: GetSkillVersionByHash :one
-SELECT sv.size_bytes, sv.updated_at, sv.created_at, sv.first_seen_at, sv.skill_bytes, sv.content_sha256, sv.asset_format, sv.state, sv.captured_by_user_id, sv.author_name, sv.first_seen_trace_id, sv.first_seen_session_id, sv.id, sv.asset_id, sv.skill_id
+SELECT sv.size_bytes, sv.updated_at, sv.created_at, sv.first_seen_at, sv.skill_bytes, sv.content_sha256, sv.asset_format, sv.state, sv.captured_by_user_id, sv.author_name, sv.rejected_by_user_id, sv.rejected_reason, sv.rejected_at, sv.first_seen_trace_id, sv.first_seen_session_id, sv.id, sv.asset_id, sv.skill_id
 FROM skill_versions sv
 INNER JOIN skills s ON s.id = sv.skill_id
 WHERE sv.skill_id = $1
@@ -634,6 +652,9 @@ func (q *Queries) GetSkillVersionByHash(ctx context.Context, arg GetSkillVersion
 		&i.State,
 		&i.CapturedByUserID,
 		&i.AuthorName,
+		&i.RejectedByUserID,
+		&i.RejectedReason,
+		&i.RejectedAt,
 		&i.FirstSeenTraceID,
 		&i.FirstSeenSessionID,
 		&i.ID,
@@ -646,7 +667,7 @@ func (q *Queries) GetSkillVersionByHash(ctx context.Context, arg GetSkillVersion
 const listPendingSkillVersions = `-- name: ListPendingSkillVersions :many
 SELECT
   s.created_at, s.deleted_at, s.updated_at, s.skill_uuid, s.slug, s.description, s.created_by_user_id, s.name, s.organization_id, s.id, s.active_version_id, s.project_id, s.deleted,
-  sv.size_bytes, sv.updated_at, sv.created_at, sv.first_seen_at, sv.skill_bytes, sv.content_sha256, sv.asset_format, sv.state, sv.captured_by_user_id, sv.author_name, sv.first_seen_trace_id, sv.first_seen_session_id, sv.id, sv.asset_id, sv.skill_id
+  sv.size_bytes, sv.updated_at, sv.created_at, sv.first_seen_at, sv.skill_bytes, sv.content_sha256, sv.asset_format, sv.state, sv.captured_by_user_id, sv.author_name, sv.rejected_by_user_id, sv.rejected_reason, sv.rejected_at, sv.first_seen_trace_id, sv.first_seen_session_id, sv.id, sv.asset_id, sv.skill_id
 FROM skill_versions sv
 INNER JOIN skills s ON s.id = sv.skill_id
 WHERE s.project_id = $1
@@ -693,6 +714,9 @@ func (q *Queries) ListPendingSkillVersions(ctx context.Context, projectID uuid.U
 			&i.SkillVersion.State,
 			&i.SkillVersion.CapturedByUserID,
 			&i.SkillVersion.AuthorName,
+			&i.SkillVersion.RejectedByUserID,
+			&i.SkillVersion.RejectedReason,
+			&i.SkillVersion.RejectedAt,
 			&i.SkillVersion.FirstSeenTraceID,
 			&i.SkillVersion.FirstSeenSessionID,
 			&i.SkillVersion.ID,
@@ -710,7 +734,7 @@ func (q *Queries) ListPendingSkillVersions(ctx context.Context, projectID uuid.U
 }
 
 const listSkillVersions = `-- name: ListSkillVersions :many
-SELECT sv.size_bytes, sv.updated_at, sv.created_at, sv.first_seen_at, sv.skill_bytes, sv.content_sha256, sv.asset_format, sv.state, sv.captured_by_user_id, sv.author_name, sv.first_seen_trace_id, sv.first_seen_session_id, sv.id, sv.asset_id, sv.skill_id
+SELECT sv.size_bytes, sv.updated_at, sv.created_at, sv.first_seen_at, sv.skill_bytes, sv.content_sha256, sv.asset_format, sv.state, sv.captured_by_user_id, sv.author_name, sv.rejected_by_user_id, sv.rejected_reason, sv.rejected_at, sv.first_seen_trace_id, sv.first_seen_session_id, sv.id, sv.asset_id, sv.skill_id
 FROM skill_versions sv
 INNER JOIN skills s ON s.id = sv.skill_id
 WHERE s.project_id = $1
@@ -743,6 +767,9 @@ func (q *Queries) ListSkillVersions(ctx context.Context, arg ListSkillVersionsPa
 			&i.State,
 			&i.CapturedByUserID,
 			&i.AuthorName,
+			&i.RejectedByUserID,
+			&i.RejectedReason,
+			&i.RejectedAt,
 			&i.FirstSeenTraceID,
 			&i.FirstSeenSessionID,
 			&i.ID,
@@ -991,6 +1018,60 @@ func (q *Queries) ListSkillsWithActiveVersion(ctx context.Context, projectID uui
 	return items, nil
 }
 
+const rejectSkillVersion = `-- name: RejectSkillVersion :one
+UPDATE skill_versions sv
+SET
+    state = 'rejected'
+  , rejected_by_user_id = $1
+  , rejected_reason = $2
+  , rejected_at = clock_timestamp()
+  , updated_at = clock_timestamp()
+FROM skills s
+WHERE sv.id = $3
+  AND s.id = sv.skill_id
+  AND s.project_id = $4
+  AND sv.state = 'pending_review'
+RETURNING sv.size_bytes, sv.updated_at, sv.created_at, sv.first_seen_at, sv.skill_bytes, sv.content_sha256, sv.asset_format, sv.state, sv.captured_by_user_id, sv.author_name, sv.rejected_by_user_id, sv.rejected_reason, sv.rejected_at, sv.first_seen_trace_id, sv.first_seen_session_id, sv.id, sv.asset_id, sv.skill_id
+`
+
+type RejectSkillVersionParams struct {
+	RejectedByUserID pgtype.Text
+	RejectedReason   pgtype.Text
+	ID               uuid.UUID
+	ProjectID        uuid.UUID
+}
+
+func (q *Queries) RejectSkillVersion(ctx context.Context, arg RejectSkillVersionParams) (SkillVersion, error) {
+	row := q.db.QueryRow(ctx, rejectSkillVersion,
+		arg.RejectedByUserID,
+		arg.RejectedReason,
+		arg.ID,
+		arg.ProjectID,
+	)
+	var i SkillVersion
+	err := row.Scan(
+		&i.SizeBytes,
+		&i.UpdatedAt,
+		&i.CreatedAt,
+		&i.FirstSeenAt,
+		&i.SkillBytes,
+		&i.ContentSha256,
+		&i.AssetFormat,
+		&i.State,
+		&i.CapturedByUserID,
+		&i.AuthorName,
+		&i.RejectedByUserID,
+		&i.RejectedReason,
+		&i.RejectedAt,
+		&i.FirstSeenTraceID,
+		&i.FirstSeenSessionID,
+		&i.ID,
+		&i.AssetID,
+		&i.SkillID,
+	)
+	return i, err
+}
+
 const setSkillActiveVersion = `-- name: SetSkillActiveVersion :one
 UPDATE skills
 SET
@@ -1143,7 +1224,7 @@ FROM skills s
 WHERE sv.id = $2
   AND s.id = sv.skill_id
   AND s.project_id = $3
-RETURNING sv.size_bytes, sv.updated_at, sv.created_at, sv.first_seen_at, sv.skill_bytes, sv.content_sha256, sv.asset_format, sv.state, sv.captured_by_user_id, sv.author_name, sv.first_seen_trace_id, sv.first_seen_session_id, sv.id, sv.asset_id, sv.skill_id
+RETURNING sv.size_bytes, sv.updated_at, sv.created_at, sv.first_seen_at, sv.skill_bytes, sv.content_sha256, sv.asset_format, sv.state, sv.captured_by_user_id, sv.author_name, sv.rejected_by_user_id, sv.rejected_reason, sv.rejected_at, sv.first_seen_trace_id, sv.first_seen_session_id, sv.id, sv.asset_id, sv.skill_id
 `
 
 type UpdateSkillVersionStateParams struct {
@@ -1166,6 +1247,9 @@ func (q *Queries) UpdateSkillVersionState(ctx context.Context, arg UpdateSkillVe
 		&i.State,
 		&i.CapturedByUserID,
 		&i.AuthorName,
+		&i.RejectedByUserID,
+		&i.RejectedReason,
+		&i.RejectedAt,
 		&i.FirstSeenTraceID,
 		&i.FirstSeenSessionID,
 		&i.ID,

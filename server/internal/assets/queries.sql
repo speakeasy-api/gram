@@ -45,6 +45,13 @@ WHERE
   id = @id AND kind = 'functions'
   AND project_id = @project_id;
 
+-- name: GetSkillAssetURL :one
+SELECT url, content_type, content_length, updated_at
+FROM assets
+WHERE
+  id = @id AND kind = 'skill'
+  AND project_id = @project_id;
+
 -- name: GetChatAttachmentAssetURL :one
 SELECT url, content_type, content_length, updated_at
 FROM assets

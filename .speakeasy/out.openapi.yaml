@@ -1637,12 +1637,12 @@ paths:
             description: The ID of the asset to serve
             type: string
         - allowEmptyValue: true
-          description: The procect ID that the asset belongs to
+          description: The project ID that the asset belongs to
           in: query
           name: project_id
           required: true
           schema:
-            description: The procect ID that the asset belongs to
+            description: The project ID that the asset belongs to
             type: string
         - allowEmptyValue: true
           description: API Key header
@@ -1850,12 +1850,12 @@ paths:
             description: The ID of the asset to serve
             type: string
         - allowEmptyValue: true
-          description: The procect ID that the asset belongs to
+          description: The project ID that the asset belongs to
           in: query
           name: project_id
           required: true
           schema:
-            description: The procect ID that the asset belongs to
+            description: The project ID that the asset belongs to
             type: string
         - allowEmptyValue: true
           description: API Key header
@@ -1954,6 +1954,124 @@ paths:
       x-speakeasy-name-override: serveOpenAPIv3
       x-speakeasy-react-hook:
         name: serveOpenAPIv3
+  /rpc/assets.serveSkill:
+    get:
+      description: Serve a skill asset from Gram.
+      operationId: serveSkill
+      parameters:
+        - allowEmptyValue: true
+          description: The ID of the asset to serve
+          in: query
+          name: id
+          required: true
+          schema:
+            description: The ID of the asset to serve
+            type: string
+        - allowEmptyValue: true
+          description: The project ID that the asset belongs to
+          in: query
+          name: project_id
+          required: true
+          schema:
+            description: The project ID that the asset belongs to
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                format: binary
+                type: string
+          description: OK response.
+          headers:
+            Content-Length:
+              schema:
+                format: int64
+                type: integer
+            Content-Type:
+              schema:
+                type: string
+            Last-Modified:
+              schema:
+                type: string
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+        - session_header_Gram-Session: []
+        - {}
+      summary: serveSkill assets
+      tags:
+        - assets
+      x-speakeasy-name-override: serveSkill
+      x-speakeasy-react-hook:
+        name: serveSkill
   /rpc/assets.uploadChatAttachment:
     post:
       description: Upload a chat attachment to Gram.
@@ -13586,6 +13704,100 @@ paths:
       tags:
         - skills
       x-speakeasy-name-override: approveVersion
+  /rpc/skills.archive:
+    post:
+      description: Archive a skill lineage.
+      operationId: archiveSkill
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ArchiveRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Skill'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: archive skills
+      tags:
+        - skills
+      x-speakeasy-name-override: archive
   /rpc/skills.capture:
     post:
       description: Capture a skill artifact and associated metadata via producer authentication.
@@ -13634,6 +13846,7 @@ paths:
               - user_agents
               - user_claude
               - user_cursor
+              - manual_upload
             type: string
         - allowEmptyValue: true
           in: header
@@ -13642,6 +13855,7 @@ paths:
           schema:
             enum:
               - local_filesystem
+              - manual_upload
             type: string
         - allowEmptyValue: true
           in: header
@@ -13801,6 +14015,7 @@ paths:
               - user_agents
               - user_claude
               - user_cursor
+              - manual_upload
             type: string
         - allowEmptyValue: true
           in: header
@@ -13809,6 +14024,7 @@ paths:
           schema:
             enum:
               - local_filesystem
+              - manual_upload
             type: string
         - allowEmptyValue: true
           in: header
@@ -14292,6 +14508,100 @@ paths:
       tags:
         - skills
       x-speakeasy-name-override: listPending
+  /rpc/skills.rejectVersion:
+    post:
+      description: Reject a captured skill version.
+      operationId: rejectSkillVersion
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RejectVersionRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SkillVersion'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: rejectVersion skills
+      tags:
+        - skills
+      x-speakeasy-name-override: rejectVersion
   /rpc/skills.setSettings:
     post:
       description: Update capture settings for a project.
@@ -14482,6 +14792,185 @@ paths:
       tags:
         - skills
       x-speakeasy-name-override: supersedeVersion
+  /rpc/skills.uploadManual:
+    post:
+      description: Upload a skill artifact manually using session authentication. Always ingests as pending review.
+      operationId: uploadManualSkill
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+        - allowEmptyValue: true
+          in: header
+          name: X-Gram-Skill-Name
+          required: true
+          schema:
+            maxLength: 100
+            minLength: 1
+            type: string
+        - allowEmptyValue: true
+          in: header
+          name: X-Gram-Skill-Scope
+          required: true
+          schema:
+            enum:
+              - project
+              - user
+            type: string
+        - allowEmptyValue: true
+          in: header
+          name: X-Gram-Skill-Discovery-Root
+          required: true
+          schema:
+            enum:
+              - project_agents
+              - project_claude
+              - project_cursor
+              - user_agents
+              - user_claude
+              - user_cursor
+              - manual_upload
+            type: string
+        - allowEmptyValue: true
+          in: header
+          name: X-Gram-Skill-Source-Type
+          required: true
+          schema:
+            enum:
+              - local_filesystem
+              - manual_upload
+            type: string
+        - allowEmptyValue: true
+          in: header
+          name: X-Gram-Skill-Content-Sha256
+          required: true
+          schema:
+            pattern: ^[a-fA-F0-9]{64}$
+            type: string
+        - allowEmptyValue: true
+          in: header
+          name: X-Gram-Skill-Asset-Format
+          required: true
+          schema:
+            enum:
+              - zip
+            type: string
+        - allowEmptyValue: true
+          in: header
+          name: X-Gram-Skill-Resolution-Status
+          required: true
+          schema:
+            enum:
+              - resolved
+              - unresolved_name_only
+              - invalid_skill_root
+              - skipped_by_author
+            type: string
+        - allowEmptyValue: true
+          in: header
+          name: X-Gram-Skill-Id
+          schema:
+            type: string
+        - allowEmptyValue: true
+          in: header
+          name: X-Gram-Skill-Version-Id
+          schema:
+            type: string
+        - allowEmptyValue: true
+          in: header
+          name: Content-Type
+          required: true
+          schema:
+            type: string
+        - allowEmptyValue: true
+          in: header
+          name: Content-Length
+          required: true
+          schema:
+            format: int64
+            type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CaptureSkillResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: uploadManual skills
+      tags:
+        - skills
+      x-speakeasy-name-override: uploadManual
+      x-speakeasy-react-hook:
+        name: SkillsUploadManual
   /rpc/skills.versions:
     get:
       description: List captured versions for a skill.
@@ -20347,6 +20836,13 @@ components:
           type: string
       required:
         - version_id
+    ArchiveRequestBody:
+      type: object
+      properties:
+        skill_id:
+          type: string
+      required:
+        - skill_id
     Asset:
       type: object
       properties:
@@ -20370,6 +20866,7 @@ components:
             - openapiv3
             - image
             - functions
+            - skill
             - chat_attachment
             - unknown
         sha256:
@@ -20680,6 +21177,7 @@ components:
             - user_agents
             - user_claude
             - user_cursor
+            - manual_upload
         name:
           type: string
           minLength: 1
@@ -20704,6 +21202,7 @@ components:
           type: string
           enum:
             - local_filesystem
+            - manual_upload
       required:
         - name
         - scope
@@ -20738,6 +21237,7 @@ components:
             - user_agents
             - user_claude
             - user_cursor
+            - manual_upload
         name:
           type: string
           minLength: 1
@@ -20762,6 +21262,7 @@ components:
           type: string
           enum:
             - local_filesystem
+            - manual_upload
       required:
         - name
         - scope
@@ -20798,6 +21299,7 @@ components:
             - user_agents
             - user_claude
             - user_cursor
+            - manual_upload
         name:
           type: string
           minLength: 1
@@ -20824,6 +21326,7 @@ components:
           type: string
           enum:
             - local_filesystem
+            - manual_upload
       required:
         - name
         - scope
@@ -26289,6 +26792,17 @@ components:
           description: The name of the org to register
       required:
         - org_name
+    RejectVersionRequestBody:
+      type: object
+      properties:
+        reason:
+          type: string
+          maxLength: 2000
+        version_id:
+          type: string
+      required:
+        - version_id
+        - reason
     RemoteMcpServer:
       type: object
       properties:
@@ -27187,7 +27701,7 @@ components:
           description: The ID of the asset to serve
         project_id:
           type: string
-          description: The procect ID that the asset belongs to
+          description: The project ID that the asset belongs to
         session_token:
           type: string
       required:
@@ -27241,13 +27755,43 @@ components:
           description: The ID of the asset to serve
         project_id:
           type: string
-          description: The procect ID that the asset belongs to
+          description: The project ID that the asset belongs to
         session_token:
           type: string
       required:
         - id
         - project_id
     ServeOpenAPIv3Result:
+      type: object
+      properties:
+        content_length:
+          type: integer
+          format: int64
+        content_type:
+          type: string
+        last_modified:
+          type: string
+      required:
+        - content_type
+        - content_length
+        - last_modified
+    ServeSkillForm:
+      type: object
+      properties:
+        apikey_token:
+          type: string
+        id:
+          type: string
+          description: The ID of the asset to serve
+        project_id:
+          type: string
+          description: The project ID that the asset belongs to
+        session_token:
+          type: string
+      required:
+        - id
+        - project_id
+    ServeSkillResult:
       type: object
       properties:
         content_length:
@@ -27595,6 +28139,13 @@ components:
           type: string
         id:
           type: string
+        rejected_at:
+          type: string
+          format: date-time
+        rejected_by_user_id:
+          type: string
+        rejected_reason:
+          type: string
         size_bytes:
           type: integer
           format: int64
@@ -27609,6 +28160,7 @@ components:
             - pending_review
             - active
             - superseded
+            - rejected
         updated_at:
           type: string
           format: date-time
@@ -27647,6 +28199,7 @@ components:
             - pending_review
             - active
             - superseded
+            - rejected
       required:
         - id
         - content_sha256

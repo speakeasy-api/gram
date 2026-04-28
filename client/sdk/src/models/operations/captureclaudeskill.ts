@@ -19,6 +19,7 @@ export const HeaderXGramSkillDiscoveryRoot = {
   UserAgents: "user_agents",
   UserClaude: "user_claude",
   UserCursor: "user_cursor",
+  ManualUpload: "manual_upload",
 } as const;
 export type HeaderXGramSkillDiscoveryRoot = ClosedEnum<
   typeof HeaderXGramSkillDiscoveryRoot
@@ -26,6 +27,7 @@ export type HeaderXGramSkillDiscoveryRoot = ClosedEnum<
 
 export const HeaderXGramSkillSourceType = {
   LocalFilesystem: "local_filesystem",
+  ManualUpload: "manual_upload",
 } as const;
 export type HeaderXGramSkillSourceType = ClosedEnum<
   typeof HeaderXGramSkillSourceType
