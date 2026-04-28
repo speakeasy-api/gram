@@ -2375,6 +2375,248 @@ func DecodeDownloadPluginPackageResponse(decoder func(*http.Response) goahttp.De
 	}
 }
 
+// BuildDownloadBasePluginRequest instantiates a HTTP request object with
+// method and path set to call the "plugins" service "downloadBasePlugin"
+// endpoint
+func (c *Client) BuildDownloadBasePluginRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: DownloadBasePluginPluginsPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("plugins", "downloadBasePlugin", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeDownloadBasePluginRequest returns an encoder for requests sent to the
+// plugins downloadBasePlugin server.
+func EncodeDownloadBasePluginRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*plugins.DownloadBasePluginPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("plugins", "downloadBasePlugin", "*plugins.DownloadBasePluginPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		values.Add("platform", p.Platform)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeDownloadBasePluginResponse returns a decoder for responses returned by
+// the plugins downloadBasePlugin endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeDownloadBasePluginResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeDownloadBasePluginResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				contentType        string
+				contentDisposition string
+				err                error
+			)
+			contentTypeRaw := resp.Header.Get("Content-Type")
+			if contentTypeRaw == "" {
+				err = goa.MergeErrors(err, goa.MissingFieldError("content_type", "header"))
+			}
+			contentType = contentTypeRaw
+			contentDispositionRaw := resp.Header.Get("Content-Disposition")
+			if contentDispositionRaw == "" {
+				err = goa.MergeErrors(err, goa.MissingFieldError("content_disposition", "header"))
+			}
+			contentDisposition = contentDispositionRaw
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "downloadBasePlugin", err)
+			}
+			res := NewDownloadBasePluginResultOK(contentType, contentDisposition)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body DownloadBasePluginUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "downloadBasePlugin", err)
+			}
+			err = ValidateDownloadBasePluginUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "downloadBasePlugin", err)
+			}
+			return nil, NewDownloadBasePluginUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body DownloadBasePluginForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "downloadBasePlugin", err)
+			}
+			err = ValidateDownloadBasePluginForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "downloadBasePlugin", err)
+			}
+			return nil, NewDownloadBasePluginForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body DownloadBasePluginBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "downloadBasePlugin", err)
+			}
+			err = ValidateDownloadBasePluginBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "downloadBasePlugin", err)
+			}
+			return nil, NewDownloadBasePluginBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body DownloadBasePluginNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "downloadBasePlugin", err)
+			}
+			err = ValidateDownloadBasePluginNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "downloadBasePlugin", err)
+			}
+			return nil, NewDownloadBasePluginNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body DownloadBasePluginConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "downloadBasePlugin", err)
+			}
+			err = ValidateDownloadBasePluginConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "downloadBasePlugin", err)
+			}
+			return nil, NewDownloadBasePluginConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body DownloadBasePluginUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "downloadBasePlugin", err)
+			}
+			err = ValidateDownloadBasePluginUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "downloadBasePlugin", err)
+			}
+			return nil, NewDownloadBasePluginUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body DownloadBasePluginInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "downloadBasePlugin", err)
+			}
+			err = ValidateDownloadBasePluginInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "downloadBasePlugin", err)
+			}
+			return nil, NewDownloadBasePluginInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body DownloadBasePluginInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("plugins", "downloadBasePlugin", err)
+				}
+				err = ValidateDownloadBasePluginInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("plugins", "downloadBasePlugin", err)
+				}
+				return nil, NewDownloadBasePluginInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body DownloadBasePluginUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("plugins", "downloadBasePlugin", err)
+				}
+				err = ValidateDownloadBasePluginUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("plugins", "downloadBasePlugin", err)
+				}
+				return nil, NewDownloadBasePluginUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("plugins", "downloadBasePlugin", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body DownloadBasePluginGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "downloadBasePlugin", err)
+			}
+			err = ValidateDownloadBasePluginGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "downloadBasePlugin", err)
+			}
+			return nil, NewDownloadBasePluginGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("plugins", "downloadBasePlugin", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildGetPublishStatusRequest instantiates a HTTP request object with method
 // and path set to call the "plugins" service "getPublishStatus" endpoint
 func (c *Client) BuildGetPublishStatusRequest(ctx context.Context, v any) (*http.Request, error) {

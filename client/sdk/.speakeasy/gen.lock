@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 621a393c0dc5c473575f4c6f69de6c6c
+  docChecksum: d3f5ce73b6c5a400fa23d8d79f2a0900
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -1132,8 +1132,14 @@ trackedFiles:
     last_write_checksum: sha1:79cca57aa0f56e268aeb59f192d42c67136fa35f
   docs/models/operations/disablerbacsecurity.md:
     last_write_checksum: sha1:008299956482613d350579e2cf1b4077227720d4
+  docs/models/operations/downloadbasepluginrequest.md:
+    last_write_checksum: sha1:faa1966fbf031cf40d3ae5c507aac5c16f5d6a81
+  docs/models/operations/downloadbasepluginresponse.md:
+    last_write_checksum: sha1:996bc86068b074674445b1305f3c00de269922d8
+  docs/models/operations/downloadbasepluginsecurity.md:
+    last_write_checksum: sha1:e2db2d2d62906fc738f35b1175095513940ceee8
   docs/models/operations/downloadpluginpackagerequest.md:
-    last_write_checksum: sha1:c4e96c965b7297d2d28eb0a5567d780f446600c6
+    last_write_checksum: sha1:ce8d7351909fdd9becb8d4a1ad269dfc2e0ecc54
   docs/models/operations/downloadpluginpackageresponse.md:
     last_write_checksum: sha1:a00b1d59435e267a5fd98494cdeda52b79850e54
   docs/models/operations/downloadpluginpackagesecurity.md:
@@ -1370,6 +1376,8 @@ trackedFiles:
     last_write_checksum: sha1:d4dc1f5cd35b48ee47957f682f1ad657f0cdcad1
   docs/models/operations/getusermetricssummarysecurityoption2.md:
     last_write_checksum: sha1:b15a0cb73ae463e5e0a6d861957fc2874cd1c855
+  docs/models/operations/hooksnumberclauderequest.md:
+    last_write_checksum: sha1:94e1eb49f5dd5c57ec490d1cf4d9f076e8c0f33b
   docs/models/operations/hooksnumbercursorrequest.md:
     last_write_checksum: sha1:2566d56a8fe47f8c625cbbec942123d26181b866
   docs/models/operations/hooksnumbercursorsecurity.md:
@@ -1655,7 +1663,7 @@ trackedFiles:
   docs/models/operations/pausetriggerinstancesecurity.md:
     last_write_checksum: sha1:b303abbc876cefd140c36cc1fb7f614a8cfcc343
   docs/models/operations/platform.md:
-    last_write_checksum: sha1:03342bd97b8f3862cd01d096fcdb0c3cb39b718a
+    last_write_checksum: sha1:e8895a6ad97e2e8bdc1601b40f9a47d92ebd0f2b
   docs/models/operations/publishpluginsrequest.md:
     last_write_checksum: sha1:9349d4a871784c310cdc46eedc2b2f52ec0f03b4
   docs/models/operations/publishpluginssecurity.md:
@@ -1668,6 +1676,8 @@ trackedFiles:
     last_write_checksum: sha1:123446ba255ecf6cf4d573ba4f4d36a2bf4dcce5
   docs/models/operations/publishsecurityoption2.md:
     last_write_checksum: sha1:99fc3a632307c5b6bb964e192ce37cbfffd25316
+  docs/models/operations/queryparamplatform.md:
+    last_write_checksum: sha1:30936ac3c6621a278b41cdb64b8331058b1bca31
   docs/models/operations/queryparamsourcekind.md:
     last_write_checksum: sha1:943bad3fe8f90d7fad1f3f5dccc44247877fa663
   docs/models/operations/redeploydeploymentrequest.md:
@@ -2047,7 +2057,7 @@ trackedFiles:
   docs/sdks/features/README.md:
     last_write_checksum: sha1:79ab0259791f46a8d2ecd959a4ee69dd4551bea5
   docs/sdks/hooks/README.md:
-    last_write_checksum: sha1:39246f7e0acf4b5e92d4c736dd99b5ba4aeb95a3
+    last_write_checksum: sha1:27ec130a5ea9ad7798a7adee2aad91bc2d699a00
   docs/sdks/hooksservernames/README.md:
     last_write_checksum: sha1:45d591f573a20bd161851708bab634f303d27fda
   docs/sdks/instances/README.md:
@@ -2065,7 +2075,7 @@ trackedFiles:
   docs/sdks/packages/README.md:
     last_write_checksum: sha1:630727b17ae78739629705da27f894236bba7ad0
   docs/sdks/plugins/README.md:
-    last_write_checksum: sha1:145d582c415c6685031e8245ad2f047b479cda05
+    last_write_checksum: sha1:35587d03aeda7c20eafdc25f36904998b8ed0e8f
   docs/sdks/policies/README.md:
     last_write_checksum: sha1:0dd358f042ee2b57f15bba45c841c718c201abbb
   docs/sdks/projects/README.md:
@@ -2367,7 +2377,7 @@ trackedFiles:
     last_write_checksum: sha1:e7e9879ac653fabe88e32a86fdec4a034365ca33
     pristine_git_object: 680533ea7917230ef71927dfe370d54d02598082
   src/funcs/hooksHooksNumberClaude.ts:
-    last_write_checksum: sha1:d2a72cb590c74f9878eee245be17ec020f991dd2
+    last_write_checksum: sha1:45b55fb10a84657bd02bd1ec7a42dbb497174e04
   src/funcs/hooksHooksNumberCursor.ts:
     last_write_checksum: sha1:e305824851d260e26f74611d4f0bb62849d8dfd3
   src/funcs/hooksHooksNumberLogs.ts:
@@ -2466,6 +2476,8 @@ trackedFiles:
     last_write_checksum: sha1:d2f679d50b01fa675534c4d5abb9c208ede77820
   src/funcs/pluginsDeletePlugin.ts:
     last_write_checksum: sha1:0fae47acd6c4ad0caba1d676be5e8fea03ea3386
+  src/funcs/pluginsDownloadBasePlugin.ts:
+    last_write_checksum: sha1:3e4c5f8ed1767c7ee0b5c76d2a94b5cbff3d4822
   src/funcs/pluginsDownloadPluginPackage.ts:
     last_write_checksum: sha1:64386446d72149052a3b66b96f8f3563bf819a86
   src/funcs/pluginsGetPlugin.ts:
@@ -3934,8 +3946,10 @@ trackedFiles:
     last_write_checksum: sha1:29e7c1687257271fa46352024364eeeb5216bdbb
   src/models/operations/disablerbac.ts:
     last_write_checksum: sha1:0d557ade2a9e135cf1c14c6f97b1e55a7d0347e5
+  src/models/operations/downloadbaseplugin.ts:
+    last_write_checksum: sha1:fba93071d7bb16426e325ca62701c560f33a4604
   src/models/operations/downloadpluginpackage.ts:
-    last_write_checksum: sha1:d9a479d9667d3f92f563cdb77a46600c19d95776
+    last_write_checksum: sha1:26b13880e9b1b9591607d801d7ace33dbbdb5767
   src/models/operations/enablerbac.ts:
     last_write_checksum: sha1:8ecdbe0fff94b4827671b8f8806feaebe6d9441d
   src/models/operations/evolvedeployment.ts:
@@ -4040,6 +4054,8 @@ trackedFiles:
     last_write_checksum: sha1:b35ed8191e46725b0f9e96ca64390c5de010299e
   src/models/operations/getusermetricssummary.ts:
     last_write_checksum: sha1:ce121229f9e0be0fe1eeba1361ab61bf384d3785
+  src/models/operations/hooksnumberclaude.ts:
+    last_write_checksum: sha1:b7b533ef69575b0818e86bf54f6bf7df948c26f6
   src/models/operations/hooksnumbercursor.ts:
     last_write_checksum: sha1:16bd35acfd65f1e23d0bf088ecab54fd8758a057
   src/models/operations/hooksnumberlogs.ts:
@@ -4048,7 +4064,7 @@ trackedFiles:
     last_write_checksum: sha1:68a17ba4375c98a861ba8ea4838401238e9caf7e
   src/models/operations/index.ts:
     id: 0d9ffaf774d2
-    last_write_checksum: sha1:0568d3c086b514a0a0e81496a234c66f3ff21e2a
+    last_write_checksum: sha1:7a5f4a6b0b96cfaab4fc5c998df3edbd39486b9d
     pristine_git_object: dfbbde8a33b65de59f2ddc44b5a1200061eeacb0
   src/models/operations/integrationsnumberget.ts:
     id: 0417380c9c27
@@ -4687,7 +4703,7 @@ trackedFiles:
   src/react-query/grants.ts:
     last_write_checksum: sha1:54554f52c76c61d0a419c65e3532b08283ec009b
   src/react-query/hooksHooksNumberClaude.ts:
-    last_write_checksum: sha1:65daa7cbd33c503edad39c7ca638137b35727049
+    last_write_checksum: sha1:681f433a2aad9e76d6b4f11cee811377b2e36c6c
   src/react-query/hooksHooksNumberCursor.ts:
     last_write_checksum: sha1:458ee03a59cea99af357fedc9aa9153775ce2604
   src/react-query/hooksHooksNumberLogs.ts:
@@ -4704,7 +4720,7 @@ trackedFiles:
     last_write_checksum: sha1:4aa2ad3f103ef14ea31e605c1d9430e7ec3de3f1
   src/react-query/index.ts:
     id: 9e975471aa65
-    last_write_checksum: sha1:c5541932f38d34e0fe3e7c0ddffc8e0c34d1af4e
+    last_write_checksum: sha1:17c6318a8940dfc3cd9424205476eb06fc05b12c
     pristine_git_object: ee9cacb2ccb4e0631e0e1fcf4e467454534d2b35
   src/react-query/instance.core.ts:
     id: b18e0a042b11
@@ -4922,10 +4938,14 @@ trackedFiles:
     last_write_checksum: sha1:c9faae26b39dc1cbdaacdc130c2f63d42cfd953a
   src/react-query/plugins.ts:
     last_write_checksum: sha1:cd1f955c7779887ad892c037f871e6a4b3e5f4f0
+  src/react-query/pluginsDownloadBasePlugin.core.ts:
+    last_write_checksum: sha1:d8ffa6bc84e9fed0d9b86746f0ea7b85bf8f56f6
+  src/react-query/pluginsDownloadBasePlugin.ts:
+    last_write_checksum: sha1:4cf9076b0a2e00fe26f5740f90219f062f2e4367
   src/react-query/pluginsDownloadPluginPackage.core.ts:
-    last_write_checksum: sha1:db1740a11e317d5aa2d50c24b2f3630b4f00d299
+    last_write_checksum: sha1:ac252459de2faad04c01ef3919b8a48f6b9358a4
   src/react-query/pluginsDownloadPluginPackage.ts:
-    last_write_checksum: sha1:b0bb5df09e95b0b635df0b52f0d73ba82756516c
+    last_write_checksum: sha1:60630da17b8cac01cf2d9aba68361416f00b4ab0
   src/react-query/project.core.ts:
     id: 4a361f9f6939
     last_write_checksum: sha1:51f138b1e1b38011471634ec2f99d786a836ca96
@@ -5263,7 +5283,7 @@ trackedFiles:
     last_write_checksum: sha1:f9453df020a022530a0fb97a2e7099343c930b13
     pristine_git_object: 3b4e49a565f809818b5f48673f81835a7d83f884
   src/sdk/hooks.ts:
-    last_write_checksum: sha1:7b96db78fa93494f45d4efd772533dcd11fffc70
+    last_write_checksum: sha1:771b4b5089126a0acc240f095b283002628235a7
   src/sdk/hooksservernames.ts:
     last_write_checksum: sha1:46e1603a1bda6de118b0cfbf7ce1590e01a38c42
   src/sdk/index.ts:
@@ -5297,7 +5317,7 @@ trackedFiles:
     last_write_checksum: sha1:cd45c1746ab2a619fb53b913e0398d80731df1dc
     pristine_git_object: 4f4b87d5502ff940f4b04c82bd1907cf070e0f1c
   src/sdk/plugins.ts:
-    last_write_checksum: sha1:92a9830e6aa3f3522c2546bc08c389de8dea207a
+    last_write_checksum: sha1:59083c5dafb9d691997e2eddb9f67c2cd52fefb8
   src/sdk/policies.ts:
     last_write_checksum: sha1:bf3c4e4a212f66d947d76cf149b309aa94397d00
   src/sdk/projects.ts:
@@ -7776,6 +7796,18 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  downloadBasePlugin:
+    speakeasy-default-download-base-plugin:
+      parameters:
+        query:
+          platform: "claude"
+      responses:
+        "200":
+          application/json: "x-file: example.file"
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
 examplesVersion: 1.0.2
 generatedTests: {}
 generatedFiles:

@@ -128,6 +128,7 @@ export * from "./members.js";
 export * from "./pauseTrigger.js";
 export * from "./plugin.js";
 export * from "./plugins.js";
+export * from "./pluginsDownloadBasePlugin.js";
 export * from "./pluginsDownloadPluginPackage.js";
 export * from "./project.js";
 export * from "./projectsSetOrganizationWhitelist.js";

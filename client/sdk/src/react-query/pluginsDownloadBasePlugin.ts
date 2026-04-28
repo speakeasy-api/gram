@@ -29,19 +29,19 @@ import {
   TupleToPrefixes,
 } from "./_types.js";
 import {
-  buildPluginsDownloadPluginPackageQuery,
-  PluginsDownloadPluginPackageQueryData,
-  prefetchPluginsDownloadPluginPackage,
-  queryKeyPluginsDownloadPluginPackage,
-} from "./pluginsDownloadPluginPackage.core.js";
+  buildPluginsDownloadBasePluginQuery,
+  PluginsDownloadBasePluginQueryData,
+  prefetchPluginsDownloadBasePlugin,
+  queryKeyPluginsDownloadBasePlugin,
+} from "./pluginsDownloadBasePlugin.core.js";
 export {
-  buildPluginsDownloadPluginPackageQuery,
-  type PluginsDownloadPluginPackageQueryData,
-  prefetchPluginsDownloadPluginPackage,
-  queryKeyPluginsDownloadPluginPackage,
+  buildPluginsDownloadBasePluginQuery,
+  type PluginsDownloadBasePluginQueryData,
+  prefetchPluginsDownloadBasePlugin,
+  queryKeyPluginsDownloadBasePlugin,
 };
 
-export type PluginsDownloadPluginPackageQueryError =
+export type PluginsDownloadBasePluginQueryError =
   | errors.ServiceError
   | GramError
   | ResponseValidationError
@@ -53,25 +53,25 @@ export type PluginsDownloadPluginPackageQueryError =
   | SDKValidationError;
 
 /**
- * downloadPluginPackage plugins
+ * downloadBasePlugin plugins
  *
  * @remarks
- * Download a ZIP of a single plugin package for direct installation.
+ * Download a ZIP of the per-org base plugin (observability hooks). Mints a fresh hooks-scoped API key on each download and embeds it in the plugin's hook script.
  */
-export function usePluginsDownloadPluginPackage(
-  request: operations.DownloadPluginPackageRequest,
-  security?: operations.DownloadPluginPackageSecurity | undefined,
+export function usePluginsDownloadBasePlugin(
+  request: operations.DownloadBasePluginRequest,
+  security?: operations.DownloadBasePluginSecurity | undefined,
   options?: QueryHookOptions<
-    PluginsDownloadPluginPackageQueryData,
-    PluginsDownloadPluginPackageQueryError
+    PluginsDownloadBasePluginQueryData,
+    PluginsDownloadBasePluginQueryError
   >,
 ): UseQueryResult<
-  PluginsDownloadPluginPackageQueryData,
-  PluginsDownloadPluginPackageQueryError
+  PluginsDownloadBasePluginQueryData,
+  PluginsDownloadBasePluginQueryError
 > {
   const client = useGramContext();
   return useQuery({
-    ...buildPluginsDownloadPluginPackageQuery(
+    ...buildPluginsDownloadBasePluginQuery(
       client,
       request,
       security,
@@ -82,25 +82,25 @@ export function usePluginsDownloadPluginPackage(
 }
 
 /**
- * downloadPluginPackage plugins
+ * downloadBasePlugin plugins
  *
  * @remarks
- * Download a ZIP of a single plugin package for direct installation.
+ * Download a ZIP of the per-org base plugin (observability hooks). Mints a fresh hooks-scoped API key on each download and embeds it in the plugin's hook script.
  */
-export function usePluginsDownloadPluginPackageSuspense(
-  request: operations.DownloadPluginPackageRequest,
-  security?: operations.DownloadPluginPackageSecurity | undefined,
+export function usePluginsDownloadBasePluginSuspense(
+  request: operations.DownloadBasePluginRequest,
+  security?: operations.DownloadBasePluginSecurity | undefined,
   options?: SuspenseQueryHookOptions<
-    PluginsDownloadPluginPackageQueryData,
-    PluginsDownloadPluginPackageQueryError
+    PluginsDownloadBasePluginQueryData,
+    PluginsDownloadBasePluginQueryError
   >,
 ): UseSuspenseQueryResult<
-  PluginsDownloadPluginPackageQueryData,
-  PluginsDownloadPluginPackageQueryError
+  PluginsDownloadBasePluginQueryData,
+  PluginsDownloadBasePluginQueryError
 > {
   const client = useGramContext();
   return useSuspenseQuery({
-    ...buildPluginsDownloadPluginPackageQuery(
+    ...buildPluginsDownloadBasePluginQuery(
       client,
       request,
       security,
@@ -110,29 +110,27 @@ export function usePluginsDownloadPluginPackageSuspense(
   });
 }
 
-export function setPluginsDownloadPluginPackageData(
+export function setPluginsDownloadBasePluginData(
   client: QueryClient,
   queryKeyBase: [
     parameters: {
-      pluginId: string;
-      platform: operations.QueryParamPlatform;
+      platform: operations.Platform;
       gramSession?: string | undefined;
       gramProject?: string | undefined;
     },
   ],
-  data: PluginsDownloadPluginPackageQueryData,
-): PluginsDownloadPluginPackageQueryData | undefined {
-  const key = queryKeyPluginsDownloadPluginPackage(...queryKeyBase);
+  data: PluginsDownloadBasePluginQueryData,
+): PluginsDownloadBasePluginQueryData | undefined {
+  const key = queryKeyPluginsDownloadBasePlugin(...queryKeyBase);
 
-  return client.setQueryData<PluginsDownloadPluginPackageQueryData>(key, data);
+  return client.setQueryData<PluginsDownloadBasePluginQueryData>(key, data);
 }
 
-export function invalidatePluginsDownloadPluginPackage(
+export function invalidatePluginsDownloadBasePlugin(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
     [parameters: {
-      pluginId: string;
-      platform: operations.QueryParamPlatform;
+      platform: operations.Platform;
       gramSession?: string | undefined;
       gramProject?: string | undefined;
     }]
@@ -144,18 +142,18 @@ export function invalidatePluginsDownloadPluginPackage(
     queryKey: [
       "@gram/client",
       "plugins",
-      "downloadPluginPackage",
+      "downloadBasePlugin",
       ...queryKeyBase,
     ],
   });
 }
 
-export function invalidateAllPluginsDownloadPluginPackage(
+export function invalidateAllPluginsDownloadBasePlugin(
   client: QueryClient,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: ["@gram/client", "plugins", "downloadPluginPackage"],
+    queryKey: ["@gram/client", "plugins", "downloadBasePlugin"],
   });
 }

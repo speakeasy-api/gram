@@ -8,23 +8,23 @@ import {
   QueryKey,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { pluginsDownloadPluginPackage } from "../funcs/pluginsDownloadPluginPackage.js";
+import { pluginsDownloadBasePlugin } from "../funcs/pluginsDownloadBasePlugin.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import * as operations from "../models/operations/index.js";
 import { unwrapAsync } from "../types/fp.js";
-export type PluginsDownloadPluginPackageQueryData =
-  operations.DownloadPluginPackageResponse;
+export type PluginsDownloadBasePluginQueryData =
+  operations.DownloadBasePluginResponse;
 
-export function prefetchPluginsDownloadPluginPackage(
+export function prefetchPluginsDownloadBasePlugin(
   queryClient: QueryClient,
   client$: GramCore,
-  request: operations.DownloadPluginPackageRequest,
-  security?: operations.DownloadPluginPackageSecurity | undefined,
+  request: operations.DownloadBasePluginRequest,
+  security?: operations.DownloadBasePluginSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
-    ...buildPluginsDownloadPluginPackageQuery(
+    ...buildPluginsDownloadBasePluginQuery(
       client$,
       request,
       security,
@@ -33,27 +33,26 @@ export function prefetchPluginsDownloadPluginPackage(
   });
 }
 
-export function buildPluginsDownloadPluginPackageQuery(
+export function buildPluginsDownloadBasePluginQuery(
   client$: GramCore,
-  request: operations.DownloadPluginPackageRequest,
-  security?: operations.DownloadPluginPackageSecurity | undefined,
+  request: operations.DownloadBasePluginRequest,
+  security?: operations.DownloadBasePluginSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
   queryFn: (
     context: QueryFunctionContext,
-  ) => Promise<PluginsDownloadPluginPackageQueryData>;
+  ) => Promise<PluginsDownloadBasePluginQueryData>;
 } {
   return {
-    queryKey: queryKeyPluginsDownloadPluginPackage({
-      pluginId: request.pluginId,
+    queryKey: queryKeyPluginsDownloadBasePlugin({
       platform: request.platform,
       gramSession: request.gramSession,
       gramProject: request.gramProject,
     }),
-    queryFn: async function pluginsDownloadPluginPackageQueryFn(
+    queryFn: async function pluginsDownloadBasePluginQueryFn(
       ctx,
-    ): Promise<PluginsDownloadPluginPackageQueryData> {
+    ): Promise<PluginsDownloadBasePluginQueryData> {
       const sig = combineSignals(
         ctx.signal,
         options?.signal,
@@ -65,7 +64,7 @@ export function buildPluginsDownloadPluginPackageQuery(
         signal: sig,
       };
 
-      return unwrapAsync(pluginsDownloadPluginPackage(
+      return unwrapAsync(pluginsDownloadBasePlugin(
         client$,
         request,
         security,
@@ -75,13 +74,12 @@ export function buildPluginsDownloadPluginPackageQuery(
   };
 }
 
-export function queryKeyPluginsDownloadPluginPackage(
+export function queryKeyPluginsDownloadBasePlugin(
   parameters: {
-    pluginId: string;
-    platform: operations.QueryParamPlatform;
+    platform: operations.Platform;
     gramSession?: string | undefined;
     gramProject?: string | undefined;
   },
 ): QueryKey {
-  return ["@gram/client", "plugins", "downloadPluginPackage", parameters];
+  return ["@gram/client", "plugins", "downloadBasePlugin", parameters];
 }

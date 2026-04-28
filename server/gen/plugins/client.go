@@ -26,12 +26,13 @@ type Client struct {
 	RemovePluginServerEndpoint    goa.Endpoint
 	SetPluginAssignmentsEndpoint  goa.Endpoint
 	DownloadPluginPackageEndpoint goa.Endpoint
+	DownloadBasePluginEndpoint    goa.Endpoint
 	GetPublishStatusEndpoint      goa.Endpoint
 	PublishPluginsEndpoint        goa.Endpoint
 }
 
 // NewClient initializes a "plugins" service client given the endpoints.
-func NewClient(listPlugins, getPlugin, createPlugin, updatePlugin, deletePlugin, addPluginServer, updatePluginServer, removePluginServer, setPluginAssignments, downloadPluginPackage, getPublishStatus, publishPlugins goa.Endpoint) *Client {
+func NewClient(listPlugins, getPlugin, createPlugin, updatePlugin, deletePlugin, addPluginServer, updatePluginServer, removePluginServer, setPluginAssignments, downloadPluginPackage, downloadBasePlugin, getPublishStatus, publishPlugins goa.Endpoint) *Client {
 	return &Client{
 		ListPluginsEndpoint:           listPlugins,
 		GetPluginEndpoint:             getPlugin,
@@ -43,6 +44,7 @@ func NewClient(listPlugins, getPlugin, createPlugin, updatePlugin, deletePlugin,
 		RemovePluginServerEndpoint:    removePluginServer,
 		SetPluginAssignmentsEndpoint:  setPluginAssignments,
 		DownloadPluginPackageEndpoint: downloadPluginPackage,
+		DownloadBasePluginEndpoint:    downloadBasePlugin,
 		GetPublishStatusEndpoint:      getPublishStatus,
 		PublishPluginsEndpoint:        publishPlugins,
 	}
@@ -263,6 +265,30 @@ func (c *Client) DownloadPluginPackage(ctx context.Context, p *DownloadPluginPac
 		return
 	}
 	o := ires.(*DownloadPluginPackageResponseData)
+	return o.Result, o.Body, nil
+}
+
+// DownloadBasePlugin calls the "downloadBasePlugin" endpoint of the "plugins"
+// service.
+// DownloadBasePlugin may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) DownloadBasePlugin(ctx context.Context, p *DownloadBasePluginPayload) (res *DownloadBasePluginResult, resp io.ReadCloser, err error) {
+	var ires any
+	ires, err = c.DownloadBasePluginEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	o := ires.(*DownloadBasePluginResponseData)
 	return o.Result, o.Body, nil
 }
 

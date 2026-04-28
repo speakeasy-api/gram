@@ -276,6 +276,41 @@ var _ = Service("plugins", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "downloadPluginPackage")
 	})
 
+	Method("downloadBasePlugin", func() {
+		Description("Download a ZIP of the per-org base plugin (observability hooks). Mints a fresh hooks-scoped API key on each download and embeds it in the plugin's hook script.")
+
+		Payload(func() {
+			Attribute("platform", String, func() {
+				Description("Target platform.")
+				Enum("claude", "cursor")
+			})
+			Required("platform")
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(func() {
+			Attribute("content_type", String)
+			Attribute("content_disposition", String)
+			Required("content_type", "content_disposition")
+		})
+
+		HTTP(func() {
+			GET("/rpc/plugins.downloadBasePlugin")
+			Param("platform")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK, func() {
+				Header("content_type:Content-Type")
+				Header("content_disposition:Content-Disposition")
+			})
+			SkipResponseBodyEncodeDecode()
+		})
+
+		Meta("openapi:operationId", "downloadBasePlugin")
+		Meta("openapi:extension:x-speakeasy-name-override", "downloadBasePlugin")
+	})
+
 	Method("getPublishStatus", func() {
 		Description("Check whether GitHub publishing is configured and connected for this project.")
 

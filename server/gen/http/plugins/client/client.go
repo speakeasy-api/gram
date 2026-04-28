@@ -58,6 +58,10 @@ type Client struct {
 	// downloadPluginPackage endpoint.
 	DownloadPluginPackageDoer goahttp.Doer
 
+	// DownloadBasePlugin Doer is the HTTP client used to make requests to the
+	// downloadBasePlugin endpoint.
+	DownloadBasePluginDoer goahttp.Doer
+
 	// GetPublishStatus Doer is the HTTP client used to make requests to the
 	// getPublishStatus endpoint.
 	GetPublishStatusDoer goahttp.Doer
@@ -96,6 +100,7 @@ func NewClient(
 		RemovePluginServerDoer:    doer,
 		SetPluginAssignmentsDoer:  doer,
 		DownloadPluginPackageDoer: doer,
+		DownloadBasePluginDoer:    doer,
 		GetPublishStatusDoer:      doer,
 		PublishPluginsDoer:        doer,
 		RestoreResponseBody:       restoreBody,
@@ -348,6 +353,35 @@ func (c *Client) DownloadPluginPackage() goa.Endpoint {
 			return nil, err
 		}
 		return &plugins.DownloadPluginPackageResponseData{Result: res.(*plugins.DownloadPluginPackageResult), Body: resp.Body}, nil
+	}
+}
+
+// DownloadBasePlugin returns an endpoint that makes HTTP requests to the
+// plugins service downloadBasePlugin server.
+func (c *Client) DownloadBasePlugin() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeDownloadBasePluginRequest(c.encoder)
+		decodeResponse = DecodeDownloadBasePluginResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildDownloadBasePluginRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.DownloadBasePluginDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("plugins", "downloadBasePlugin", err)
+		}
+		res, err := decodeResponse(resp)
+		if err != nil {
+			resp.Body.Close()
+			return nil, err
+		}
+		return &plugins.DownloadBasePluginResponseData{Result: res.(*plugins.DownloadBasePluginResult), Body: resp.Body}, nil
 	}
 }
 

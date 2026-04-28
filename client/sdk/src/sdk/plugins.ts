@@ -5,6 +5,7 @@
 import { pluginsAddPluginServer } from "../funcs/pluginsAddPluginServer.js";
 import { pluginsCreatePlugin } from "../funcs/pluginsCreatePlugin.js";
 import { pluginsDeletePlugin } from "../funcs/pluginsDeletePlugin.js";
+import { pluginsDownloadBasePlugin } from "../funcs/pluginsDownloadBasePlugin.js";
 import { pluginsDownloadPluginPackage } from "../funcs/pluginsDownloadPluginPackage.js";
 import { pluginsGetPlugin } from "../funcs/pluginsGetPlugin.js";
 import { pluginsGetPublishStatus } from "../funcs/pluginsGetPublishStatus.js";
@@ -70,6 +71,25 @@ export class Plugins extends ClientSDK {
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(pluginsDeletePlugin(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * downloadBasePlugin plugins
+   *
+   * @remarks
+   * Download a ZIP of the per-org base plugin (observability hooks). Mints a fresh hooks-scoped API key on each download and embeds it in the plugin's hook script.
+   */
+  async downloadBasePlugin(
+    request: operations.DownloadBasePluginRequest,
+    security?: operations.DownloadBasePluginSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<operations.DownloadBasePluginResponse> {
+    return unwrapAsync(pluginsDownloadBasePlugin(
       this,
       request,
       security,

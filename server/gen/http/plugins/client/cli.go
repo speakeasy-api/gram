@@ -417,6 +417,40 @@ func BuildDownloadPluginPackagePayload(pluginsDownloadPluginPackagePluginID stri
 	return v, nil
 }
 
+// BuildDownloadBasePluginPayload builds the payload for the plugins
+// downloadBasePlugin endpoint from CLI flags.
+func BuildDownloadBasePluginPayload(pluginsDownloadBasePluginPlatform string, pluginsDownloadBasePluginSessionToken string, pluginsDownloadBasePluginProjectSlugInput string) (*plugins.DownloadBasePluginPayload, error) {
+	var err error
+	var platform string
+	{
+		platform = pluginsDownloadBasePluginPlatform
+		if !(platform == "claude" || platform == "cursor") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("platform", platform, []any{"claude", "cursor"}))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if pluginsDownloadBasePluginSessionToken != "" {
+			sessionToken = &pluginsDownloadBasePluginSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if pluginsDownloadBasePluginProjectSlugInput != "" {
+			projectSlugInput = &pluginsDownloadBasePluginProjectSlugInput
+		}
+	}
+	v := &plugins.DownloadBasePluginPayload{}
+	v.Platform = platform
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildGetPublishStatusPayload builds the payload for the plugins
 // getPublishStatus endpoint from CLI flags.
 func BuildGetPublishStatusPayload(pluginsGetPublishStatusSessionToken string, pluginsGetPublishStatusProjectSlugInput string) (*plugins.GetPublishStatusPayload, error) {

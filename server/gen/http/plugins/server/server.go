@@ -31,6 +31,7 @@ type Server struct {
 	RemovePluginServer    http.Handler
 	SetPluginAssignments  http.Handler
 	DownloadPluginPackage http.Handler
+	DownloadBasePlugin    http.Handler
 	GetPublishStatus      http.Handler
 	PublishPlugins        http.Handler
 }
@@ -72,6 +73,7 @@ func New(
 			{"RemovePluginServer", "DELETE", "/rpc/plugins.removePluginServer"},
 			{"SetPluginAssignments", "PUT", "/rpc/plugins.setPluginAssignments"},
 			{"DownloadPluginPackage", "GET", "/rpc/plugins.downloadPluginPackage"},
+			{"DownloadBasePlugin", "GET", "/rpc/plugins.downloadBasePlugin"},
 			{"GetPublishStatus", "GET", "/rpc/plugins.getPublishStatus"},
 			{"PublishPlugins", "POST", "/rpc/plugins.publishPlugins"},
 		},
@@ -85,6 +87,7 @@ func New(
 		RemovePluginServer:    NewRemovePluginServerHandler(e.RemovePluginServer, mux, decoder, encoder, errhandler, formatter),
 		SetPluginAssignments:  NewSetPluginAssignmentsHandler(e.SetPluginAssignments, mux, decoder, encoder, errhandler, formatter),
 		DownloadPluginPackage: NewDownloadPluginPackageHandler(e.DownloadPluginPackage, mux, decoder, encoder, errhandler, formatter),
+		DownloadBasePlugin:    NewDownloadBasePluginHandler(e.DownloadBasePlugin, mux, decoder, encoder, errhandler, formatter),
 		GetPublishStatus:      NewGetPublishStatusHandler(e.GetPublishStatus, mux, decoder, encoder, errhandler, formatter),
 		PublishPlugins:        NewPublishPluginsHandler(e.PublishPlugins, mux, decoder, encoder, errhandler, formatter),
 	}
@@ -105,6 +108,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.RemovePluginServer = m(s.RemovePluginServer)
 	s.SetPluginAssignments = m(s.SetPluginAssignments)
 	s.DownloadPluginPackage = m(s.DownloadPluginPackage)
+	s.DownloadBasePlugin = m(s.DownloadBasePlugin)
 	s.GetPublishStatus = m(s.GetPublishStatus)
 	s.PublishPlugins = m(s.PublishPlugins)
 }
@@ -124,6 +128,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountRemovePluginServerHandler(mux, h.RemovePluginServer)
 	MountSetPluginAssignmentsHandler(mux, h.SetPluginAssignments)
 	MountDownloadPluginPackageHandler(mux, h.DownloadPluginPackage)
+	MountDownloadBasePluginHandler(mux, h.DownloadBasePlugin)
 	MountGetPublishStatusHandler(mux, h.GetPublishStatus)
 	MountPublishPluginsHandler(mux, h.PublishPlugins)
 }
@@ -656,6 +661,94 @@ func NewDownloadPluginPackageHandler(
 			return
 		}
 		o := res.(*plugins.DownloadPluginPackageResponseData)
+		defer o.Body.Close()
+		if wt, ok := o.Body.(io.WriterTo); ok {
+			if err := encodeResponse(ctx, w, o.Result); err != nil {
+				if errhandler != nil {
+					errhandler(ctx, w, err)
+				}
+				return
+			}
+			n, err := wt.WriteTo(w)
+			if err != nil {
+				if n == 0 {
+					if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+						errhandler(ctx, w, err)
+					}
+				} else {
+					http.NewResponseController(w).Flush()
+					panic(http.ErrAbortHandler) // too late to write an error
+				}
+			}
+			return
+		}
+		// handle immediate read error like a returned error
+		buf := bufio.NewReader(o.Body)
+		if _, err := buf.Peek(1); err != nil && err != io.EOF {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, o.Result); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if _, err := io.Copy(w, buf); err != nil {
+			http.NewResponseController(w).Flush()
+			panic(http.ErrAbortHandler) // too late to write an error
+		}
+	})
+}
+
+// MountDownloadBasePluginHandler configures the mux to serve the "plugins"
+// service "downloadBasePlugin" endpoint.
+func MountDownloadBasePluginHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/plugins.downloadBasePlugin", f)
+}
+
+// NewDownloadBasePluginHandler creates a HTTP handler which loads the HTTP
+// request and calls the "plugins" service "downloadBasePlugin" endpoint.
+func NewDownloadBasePluginHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeDownloadBasePluginRequest(mux, decoder)
+		encodeResponse = EncodeDownloadBasePluginResponse(encoder)
+		encodeError    = EncodeDownloadBasePluginError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "downloadBasePlugin")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "plugins")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		o := res.(*plugins.DownloadBasePluginResponseData)
 		defer o.Body.Close()
 		if wt, ok := o.Body.(io.WriterTo); ok {
 			if err := encodeResponse(ctx, w, o.Result); err != nil {

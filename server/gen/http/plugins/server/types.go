@@ -2049,6 +2049,192 @@ type DownloadPluginPackageGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// DownloadBasePluginUnauthorizedResponseBody is the type of the "plugins"
+// service "downloadBasePlugin" endpoint HTTP response body for the
+// "unauthorized" error.
+type DownloadBasePluginUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DownloadBasePluginForbiddenResponseBody is the type of the "plugins" service
+// "downloadBasePlugin" endpoint HTTP response body for the "forbidden" error.
+type DownloadBasePluginForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DownloadBasePluginBadRequestResponseBody is the type of the "plugins"
+// service "downloadBasePlugin" endpoint HTTP response body for the
+// "bad_request" error.
+type DownloadBasePluginBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DownloadBasePluginNotFoundResponseBody is the type of the "plugins" service
+// "downloadBasePlugin" endpoint HTTP response body for the "not_found" error.
+type DownloadBasePluginNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DownloadBasePluginConflictResponseBody is the type of the "plugins" service
+// "downloadBasePlugin" endpoint HTTP response body for the "conflict" error.
+type DownloadBasePluginConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DownloadBasePluginUnsupportedMediaResponseBody is the type of the "plugins"
+// service "downloadBasePlugin" endpoint HTTP response body for the
+// "unsupported_media" error.
+type DownloadBasePluginUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DownloadBasePluginInvalidResponseBody is the type of the "plugins" service
+// "downloadBasePlugin" endpoint HTTP response body for the "invalid" error.
+type DownloadBasePluginInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DownloadBasePluginInvariantViolationResponseBody is the type of the
+// "plugins" service "downloadBasePlugin" endpoint HTTP response body for the
+// "invariant_violation" error.
+type DownloadBasePluginInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DownloadBasePluginUnexpectedResponseBody is the type of the "plugins"
+// service "downloadBasePlugin" endpoint HTTP response body for the
+// "unexpected" error.
+type DownloadBasePluginUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DownloadBasePluginGatewayErrorResponseBody is the type of the "plugins"
+// service "downloadBasePlugin" endpoint HTTP response body for the
+// "gateway_error" error.
+type DownloadBasePluginGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // GetPublishStatusUnauthorizedResponseBody is the type of the "plugins"
 // service "getPublishStatus" endpoint HTTP response body for the
 // "unauthorized" error.
@@ -4092,6 +4278,153 @@ func NewDownloadPluginPackageGatewayErrorResponseBody(res *goa.ServiceError) *Do
 	return body
 }
 
+// NewDownloadBasePluginUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "downloadBasePlugin" endpoint of the "plugins"
+// service.
+func NewDownloadBasePluginUnauthorizedResponseBody(res *goa.ServiceError) *DownloadBasePluginUnauthorizedResponseBody {
+	body := &DownloadBasePluginUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDownloadBasePluginForbiddenResponseBody builds the HTTP response body
+// from the result of the "downloadBasePlugin" endpoint of the "plugins"
+// service.
+func NewDownloadBasePluginForbiddenResponseBody(res *goa.ServiceError) *DownloadBasePluginForbiddenResponseBody {
+	body := &DownloadBasePluginForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDownloadBasePluginBadRequestResponseBody builds the HTTP response body
+// from the result of the "downloadBasePlugin" endpoint of the "plugins"
+// service.
+func NewDownloadBasePluginBadRequestResponseBody(res *goa.ServiceError) *DownloadBasePluginBadRequestResponseBody {
+	body := &DownloadBasePluginBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDownloadBasePluginNotFoundResponseBody builds the HTTP response body from
+// the result of the "downloadBasePlugin" endpoint of the "plugins" service.
+func NewDownloadBasePluginNotFoundResponseBody(res *goa.ServiceError) *DownloadBasePluginNotFoundResponseBody {
+	body := &DownloadBasePluginNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDownloadBasePluginConflictResponseBody builds the HTTP response body from
+// the result of the "downloadBasePlugin" endpoint of the "plugins" service.
+func NewDownloadBasePluginConflictResponseBody(res *goa.ServiceError) *DownloadBasePluginConflictResponseBody {
+	body := &DownloadBasePluginConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDownloadBasePluginUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "downloadBasePlugin" endpoint of the "plugins"
+// service.
+func NewDownloadBasePluginUnsupportedMediaResponseBody(res *goa.ServiceError) *DownloadBasePluginUnsupportedMediaResponseBody {
+	body := &DownloadBasePluginUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDownloadBasePluginInvalidResponseBody builds the HTTP response body from
+// the result of the "downloadBasePlugin" endpoint of the "plugins" service.
+func NewDownloadBasePluginInvalidResponseBody(res *goa.ServiceError) *DownloadBasePluginInvalidResponseBody {
+	body := &DownloadBasePluginInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDownloadBasePluginInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "downloadBasePlugin" endpoint of the "plugins"
+// service.
+func NewDownloadBasePluginInvariantViolationResponseBody(res *goa.ServiceError) *DownloadBasePluginInvariantViolationResponseBody {
+	body := &DownloadBasePluginInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDownloadBasePluginUnexpectedResponseBody builds the HTTP response body
+// from the result of the "downloadBasePlugin" endpoint of the "plugins"
+// service.
+func NewDownloadBasePluginUnexpectedResponseBody(res *goa.ServiceError) *DownloadBasePluginUnexpectedResponseBody {
+	body := &DownloadBasePluginUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDownloadBasePluginGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "downloadBasePlugin" endpoint of the "plugins"
+// service.
+func NewDownloadBasePluginGatewayErrorResponseBody(res *goa.ServiceError) *DownloadBasePluginGatewayErrorResponseBody {
+	body := &DownloadBasePluginGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewGetPublishStatusUnauthorizedResponseBody builds the HTTP response body
 // from the result of the "getPublishStatus" endpoint of the "plugins" service.
 func NewGetPublishStatusUnauthorizedResponseBody(res *goa.ServiceError) *GetPublishStatusUnauthorizedResponseBody {
@@ -4519,6 +4852,17 @@ func NewSetPluginAssignmentsPayload(body *SetPluginAssignmentsRequestBody, sessi
 func NewDownloadPluginPackagePayload(pluginID string, platform string, sessionToken *string, projectSlugInput *string) *plugins.DownloadPluginPackagePayload {
 	v := &plugins.DownloadPluginPackagePayload{}
 	v.PluginID = pluginID
+	v.Platform = platform
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewDownloadBasePluginPayload builds a plugins service downloadBasePlugin
+// endpoint payload.
+func NewDownloadBasePluginPayload(platform string, sessionToken *string, projectSlugInput *string) *plugins.DownloadBasePluginPayload {
+	v := &plugins.DownloadBasePluginPayload{}
 	v.Platform = platform
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput

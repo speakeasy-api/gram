@@ -27,6 +27,7 @@ type Endpoints struct {
 	RemovePluginServer    goa.Endpoint
 	SetPluginAssignments  goa.Endpoint
 	DownloadPluginPackage goa.Endpoint
+	DownloadBasePlugin    goa.Endpoint
 	GetPublishStatus      goa.Endpoint
 	PublishPlugins        goa.Endpoint
 }
@@ -36,6 +37,15 @@ type Endpoints struct {
 type DownloadPluginPackageResponseData struct {
 	// Result is the method result.
 	Result *DownloadPluginPackageResult
+	// Body streams the HTTP response body.
+	Body io.ReadCloser
+}
+
+// DownloadBasePluginResponseData holds both the result and the HTTP response
+// body reader of the "downloadBasePlugin" method.
+type DownloadBasePluginResponseData struct {
+	// Result is the method result.
+	Result *DownloadBasePluginResult
 	// Body streams the HTTP response body.
 	Body io.ReadCloser
 }
@@ -55,6 +65,7 @@ func NewEndpoints(s Service) *Endpoints {
 		RemovePluginServer:    NewRemovePluginServerEndpoint(s, a.APIKeyAuth),
 		SetPluginAssignments:  NewSetPluginAssignmentsEndpoint(s, a.APIKeyAuth),
 		DownloadPluginPackage: NewDownloadPluginPackageEndpoint(s, a.APIKeyAuth),
+		DownloadBasePlugin:    NewDownloadBasePluginEndpoint(s, a.APIKeyAuth),
 		GetPublishStatus:      NewGetPublishStatusEndpoint(s, a.APIKeyAuth),
 		PublishPlugins:        NewPublishPluginsEndpoint(s, a.APIKeyAuth),
 	}
@@ -72,6 +83,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.RemovePluginServer = m(e.RemovePluginServer)
 	e.SetPluginAssignments = m(e.SetPluginAssignments)
 	e.DownloadPluginPackage = m(e.DownloadPluginPackage)
+	e.DownloadBasePlugin = m(e.DownloadBasePlugin)
 	e.GetPublishStatus = m(e.GetPublishStatus)
 	e.PublishPlugins = m(e.PublishPlugins)
 }
@@ -427,6 +439,45 @@ func NewDownloadPluginPackageEndpoint(s Service, authAPIKeyFn security.AuthAPIKe
 			return nil, err
 		}
 		return &DownloadPluginPackageResponseData{Result: res, Body: body}, nil
+	}
+}
+
+// NewDownloadBasePluginEndpoint returns an endpoint function that calls the
+// method "downloadBasePlugin" of service "plugins".
+func NewDownloadBasePluginEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*DownloadBasePluginPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		res, body, err := s.DownloadBasePlugin(ctx, p)
+		if err != nil {
+			return nil, err
+		}
+		return &DownloadBasePluginResponseData{Result: res, Body: body}, nil
 	}
 }
 

@@ -703,6 +703,117 @@ func (s *Service) DownloadPluginPackage(ctx context.Context, payload *gen.Downlo
 	}, io.NopCloser(bytes.NewReader(buf.Bytes())), nil
 }
 
+// DownloadBasePlugin returns a ZIP of the per-org base (observability) plugin
+// for direct installation. Mints a fresh hooks-scoped API key per download
+// and embeds it in the script — the org's API Keys page will accumulate one
+// row per download, which admins can audit and revoke independently of the
+// publish-bundled key. The plugin contents are otherwise identical to what
+// PublishPlugins ships in the GitHub marketplace.
+func (s *Service) DownloadBasePlugin(ctx context.Context, payload *gen.DownloadBasePluginPayload) (*gen.DownloadBasePluginResult, io.ReadCloser, error) {
+	ac, err := s.authContext(ctx)
+	if err != nil {
+		return nil, nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceID: ac.ActiveOrganizationID}); err != nil {
+		return nil, nil, err
+	}
+
+	if ac.ProjectSlug == nil {
+		return nil, nil, oops.E(oops.CodeUnauthorized, nil, "base plugin download requires a session-authenticated context")
+	}
+
+	candidate, err := s.buildPluginAPIKeyCandidate(auth.APIKeyScopeHooks, "hooks-download")
+	if err != nil {
+		return nil, nil, oops.E(oops.CodeUnexpected, err, "build hooks api key").Log(ctx, s.logger)
+	}
+
+	if err := s.persistDownloadAPIKey(ctx, ac, candidate); err != nil {
+		return nil, nil, oops.E(oops.CodeUnexpected, err, "persist hooks api key").Log(ctx, s.logger)
+	}
+
+	cfg := s.generateConfig(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug, *ac.ProjectSlug)
+	cfg.HooksAPIKey = candidate.fullKey
+
+	files, err := GenerateBasePluginPackage(cfg, payload.Platform)
+	if err != nil {
+		return nil, nil, oops.E(oops.CodeUnexpected, err, "generate base plugin package").Log(ctx, s.logger)
+	}
+
+	var buf bytes.Buffer
+	w := zip.NewWriter(&buf)
+	paths := make([]string, 0, len(files))
+	for p := range files {
+		paths = append(paths, p)
+	}
+	sort.Strings(paths)
+	for _, p := range paths {
+		f, err := w.Create(p)
+		if err != nil {
+			return nil, nil, oops.E(oops.CodeUnexpected, err, "create zip entry").Log(ctx, s.logger)
+		}
+		if _, err := f.Write(files[p]); err != nil {
+			return nil, nil, oops.E(oops.CodeUnexpected, err, "write zip entry").Log(ctx, s.logger)
+		}
+	}
+	if err := w.Close(); err != nil {
+		return nil, nil, oops.E(oops.CodeUnexpected, err, "close zip writer").Log(ctx, s.logger)
+	}
+
+	filename := "base"
+	if payload.Platform == "cursor" {
+		filename = "base-cursor"
+	}
+	return &gen.DownloadBasePluginResult{
+		ContentType:        "application/zip",
+		ContentDisposition: fmt.Sprintf(`attachment; filename="%s.zip"`, filename),
+	}, io.NopCloser(bytes.NewReader(buf.Bytes())), nil
+}
+
+// persistDownloadAPIKey writes a single hooks-scoped key + its audit log
+// in one transaction. Distinct from persistPluginAPIKeys because it does
+// not touch the GitHub connection record.
+func (s *Service) persistDownloadAPIKey(ctx context.Context, ac *contextvalues.AuthContext, candidate pluginAPIKeyCandidate) error {
+	projectID := uuid.NullUUID{UUID: *ac.ProjectID, Valid: true}
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin transaction: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+
+	scopes := []string{candidate.scope.String()}
+	createdKey, err := keysrepo.New(tx).CreateAPIKey(ctx, keysrepo.CreateAPIKeyParams{
+		OrganizationID:  ac.ActiveOrganizationID,
+		Name:            candidate.keyName,
+		KeyHash:         candidate.keyHash,
+		KeyPrefix:       candidate.keyPrefix,
+		Scopes:          scopes,
+		CreatedByUserID: ac.UserID,
+		ProjectID:       projectID,
+	})
+	if err != nil {
+		return fmt.Errorf("create api key: %w", err)
+	}
+
+	if err := audit.LogKeyCreate(ctx, tx, audit.LogKeyCreateEvent{
+		OrganizationID:   ac.ActiveOrganizationID,
+		ProjectID:        projectID,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
+		ActorDisplayName: ac.Email,
+		ActorSlug:        nil,
+		KeyURN:           urn.NewAPIKey(createdKey.ID),
+		KeyName:          candidate.keyName,
+		Scopes:           scopes,
+	}); err != nil {
+		return fmt.Errorf("audit log key creation: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit transaction: %w", err)
+	}
+	return nil
+}
+
 // --- Publish & Distribution ---
 
 func (s *Service) GetPublishStatus(ctx context.Context, payload *gen.GetPublishStatusPayload) (*gen.PublishStatusResult, error) {

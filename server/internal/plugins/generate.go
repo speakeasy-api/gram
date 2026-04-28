@@ -276,9 +276,22 @@ func CursorBaseSlug(cfg GenerateConfig) string {
 // observability hooks for Claude Code. The hook script bakes in the org's
 // hooks-scoped API key so no per-machine credential setup is required.
 func generateClaudeBasePlugin(files map[string][]byte, cfg GenerateConfig) error {
-	subdir := ClaudeBaseSlug(cfg)
+	return generateClaudeBasePluginInDir(files, ClaudeBaseSlug(cfg), cfg)
+}
+
+// generateClaudeBasePluginFlat emits the same files at the root (no subdir)
+// for direct ZIP installation via `claude --plugin-dir`.
+func generateClaudeBasePluginFlat(files map[string][]byte, cfg GenerateConfig) error {
+	return generateClaudeBasePluginInDir(files, "", cfg)
+}
+
+func generateClaudeBasePluginInDir(files map[string][]byte, subdir string, cfg GenerateConfig) error {
+	name := subdir
+	if name == "" {
+		name = ClaudeBaseSlug(cfg)
+	}
 	pluginJSON, err := marshalJSON(claudePluginMeta{
-		Name:        subdir,
+		Name:        name,
 		Description: "Gram observability hooks for " + cfg.OrgName + ". Install this plugin to forward tool events to your team's Gram dashboard.",
 		Version:     "0.1.0",
 		Author:      pluginAuthor{Name: cfg.OrgName, URL: "https://getgram.ai"},
@@ -312,9 +325,22 @@ func generateClaudeBasePlugin(files map[string][]byte, cfg GenerateConfig) error
 // shape as the Claude variant but uses Cursor's hook event names + script
 // destination URL.
 func generateCursorBasePlugin(files map[string][]byte, cfg GenerateConfig) error {
-	subdir := CursorBaseSlug(cfg)
+	return generateCursorBasePluginInDir(files, CursorBaseSlug(cfg), cfg)
+}
+
+// generateCursorBasePluginFlat emits the same files at the root (no subdir)
+// for direct ZIP installation.
+func generateCursorBasePluginFlat(files map[string][]byte, cfg GenerateConfig) error {
+	return generateCursorBasePluginInDir(files, "", cfg)
+}
+
+func generateCursorBasePluginInDir(files map[string][]byte, subdir string, cfg GenerateConfig) error {
+	name := subdir
+	if name == "" {
+		name = CursorBaseSlug(cfg)
+	}
 	pluginJSON, err := marshalJSON(cursorPluginMeta{
-		Name:        subdir,
+		Name:        name,
 		DisplayName: "Base (Cursor)",
 		Description: "Gram observability hooks for " + cfg.OrgName + ". Install this plugin to forward tool events to your team's Gram dashboard.",
 		Version:     "0.1.0",
@@ -339,6 +365,26 @@ func generateCursorBasePlugin(files map[string][]byte, cfg GenerateConfig) error
 	files[path.Join(subdir, "hook.sh")] = renderHookScript(cfg, "cursor")
 
 	return nil
+}
+
+// GenerateBasePluginPackage produces the file map for a single base plugin
+// for direct ZIP installation (no <org>-base/ subdir). Mints fresh hooks key
+// is the caller's responsibility — this just renders files using cfg.HooksAPIKey.
+func GenerateBasePluginPackage(cfg GenerateConfig, platform string) (map[string][]byte, error) {
+	files := make(map[string][]byte)
+	switch platform {
+	case "claude":
+		if err := generateClaudeBasePluginFlat(files, cfg); err != nil {
+			return nil, fmt.Errorf("generate claude base plugin: %w", err)
+		}
+	case "cursor":
+		if err := generateCursorBasePluginFlat(files, cfg); err != nil {
+			return nil, fmt.Errorf("generate cursor base plugin: %w", err)
+		}
+	default:
+		return nil, fmt.Errorf("unsupported platform: %s", platform)
+	}
+	return files, nil
 }
 
 // renderHookScript produces the bash wrapper that forwards hook event JSON
