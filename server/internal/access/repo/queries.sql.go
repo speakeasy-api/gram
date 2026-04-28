@@ -9,6 +9,7 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -106,18 +107,29 @@ type ListPrincipalGrantsByOrgParams struct {
 	PrincipalUrn   string
 }
 
+type ListPrincipalGrantsByOrgRow struct {
+	ID             uuid.UUID
+	OrganizationID string
+	PrincipalUrn   urn.Principal
+	PrincipalType  string
+	Scope          string
+	Selectors      []byte
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
 // Queries for managing principal grants (RBAC).
 // principal_grants is org-scoped (no project_id); every query is scoped to organization_id.
 // Returns all grant rows for an organization, optionally filtered by principal URN.
-func (q *Queries) ListPrincipalGrantsByOrg(ctx context.Context, arg ListPrincipalGrantsByOrgParams) ([]PrincipalGrant, error) {
+func (q *Queries) ListPrincipalGrantsByOrg(ctx context.Context, arg ListPrincipalGrantsByOrgParams) ([]ListPrincipalGrantsByOrgRow, error) {
 	rows, err := q.db.Query(ctx, listPrincipalGrantsByOrg, arg.OrganizationID, arg.PrincipalUrn)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []PrincipalGrant
+	var items []ListPrincipalGrantsByOrgRow
 	for rows.Next() {
-		var i PrincipalGrant
+		var i ListPrincipalGrantsByOrgRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.OrganizationID,
@@ -153,16 +165,27 @@ type UpsertPrincipalGrantParams struct {
 	Selectors      []byte
 }
 
+type UpsertPrincipalGrantRow struct {
+	ID             uuid.UUID
+	OrganizationID string
+	PrincipalUrn   urn.Principal
+	PrincipalType  string
+	Scope          string
+	Selectors      []byte
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
 // Creates or updates a single grant row. On conflict (same org/principal/scope/selectors),
 // the updated_at is refreshed.
-func (q *Queries) UpsertPrincipalGrant(ctx context.Context, arg UpsertPrincipalGrantParams) (PrincipalGrant, error) {
+func (q *Queries) UpsertPrincipalGrant(ctx context.Context, arg UpsertPrincipalGrantParams) (UpsertPrincipalGrantRow, error) {
 	row := q.db.QueryRow(ctx, upsertPrincipalGrant,
 		arg.OrganizationID,
 		arg.PrincipalUrn,
 		arg.Scope,
 		arg.Selectors,
 	)
-	var i PrincipalGrant
+	var i UpsertPrincipalGrantRow
 	err := row.Scan(
 		&i.ID,
 		&i.OrganizationID,
