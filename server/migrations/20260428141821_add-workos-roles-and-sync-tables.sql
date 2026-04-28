@@ -53,7 +53,7 @@ CREATE TABLE "organization_roles" (
   PRIMARY KEY ("id"),
   CONSTRAINT "organization_roles_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "organization_metadata" ("id") ON UPDATE NO ACTION ON DELETE CASCADE
 );
--- Slug is immutable in WorkOS ("Can't be edited after creation"), making it a safe unique key.
+-- Create index "organization_roles_organization_id_workos_slug_key" to table: "organization_roles"
 CREATE UNIQUE INDEX "organization_roles_organization_id_workos_slug_key" ON "organization_roles" ("organization_id", "workos_slug");
 -- Create "organization_user_roles" table
 CREATE TABLE "organization_user_roles" (
