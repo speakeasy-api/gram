@@ -4,20 +4,19 @@ import { Globe, LockIcon } from "lucide-react";
 
 import { Badge } from "@speakeasy-api/moonshine";
 import { ReactNode } from "react";
-import type { DiscoveredOAuth, WizardDispatch } from "./types";
+import type { WizardSend } from "./machine";
+import type { DiscoveredOAuth } from "./machine-types";
 
 export function PathSelection({
-  discoveredOAuth,
-  dispatch,
+  discovered,
+  send,
 }: {
-  discoveredOAuth: DiscoveredOAuth | null;
-  dispatch: WizardDispatch;
+  discovered: DiscoveredOAuth | null;
+  send: WizardSend;
 }) {
   return (
     <div className="space-y-4">
-      {discoveredOAuth && (
-        <OAuthDetectedCallout discoveredOAuth={discoveredOAuth} />
-      )}
+      {discovered && <OAuthDetectedCallout discovered={discovered} />}
 
       <Type muted small>
         Choose how you want to configure OAuth for this MCP server.
@@ -30,7 +29,7 @@ export function PathSelection({
             "border-border flex flex-col items-start gap-2 rounded-lg border p-6 text-left transition-colors",
             "hover:border-primary hover:bg-muted/50",
           )}
-          onClick={() => dispatch({ type: "SELECT_PROXY", discoveredOAuth })}
+          onClick={() => send({ type: "SELECT_PROXY" })}
         >
           <LockIcon className="text-muted-foreground h-6 w-6" />
           <Type className="font-medium">OAuth Proxy</Type>
@@ -46,13 +45,7 @@ export function PathSelection({
             "border-border flex flex-col items-start gap-2 rounded-lg border p-6 text-left transition-colors",
             "hover:border-primary hover:bg-muted/50",
           )}
-          onClick={() =>
-            dispatch({
-              type: "SELECT_EXTERNAL",
-              discoveredOAuth:
-                discoveredOAuth?.version === "2.1" ? discoveredOAuth : null,
-            })
-          }
+          onClick={() => send({ type: "SELECT_EXTERNAL" })}
         >
           <Globe className="text-muted-foreground h-6 w-6" />
           <Type className="font-medium">External OAuth</Type>
@@ -67,11 +60,11 @@ export function PathSelection({
 }
 
 const OAuthDetectedCallout = ({
-  discoveredOAuth,
+  discovered,
 }: {
-  discoveredOAuth: DiscoveredOAuth;
+  discovered: DiscoveredOAuth;
 }) => {
-  const { name, version } = discoveredOAuth;
+  const { name, version } = discovered;
 
   let description: ReactNode = (
     <Type muted small className="mt-1">

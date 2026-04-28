@@ -9,28 +9,29 @@ import {
   invalidateAllGetMcpMetadata,
   invalidateAllListEnvironments,
   invalidateAllToolset,
-  useAddExternalOAuthServerMutation,
-  useAddOAuthProxyServerMutation,
-  useUpdateOAuthProxyServerMutation,
-  useCreateEnvironmentMutation,
+  useGramContext,
   useListEnvironments,
 } from "@gram/client/react-query";
 import { useQueryClient } from "@tanstack/react-query";
+import { useMachine } from "@xstate/react";
 import { Globe } from "lucide-react";
-import { useEffect, useMemo, useReducer, useRef } from "react";
+import { useEffect, useMemo, useState } from "react";
 
-import { useStepActions } from "./actions";
 import { ExternalOAuthForm } from "./ExternalOAuthForm";
+import { FatalErrorStep } from "./FatalErrorStep";
+import { oauthWizardMachine, type WizardSnapshot } from "./machine";
+import type { DiscoveredOAuth, Input, ProxyDefaults } from "./machine-types";
 import { PathSelection } from "./PathSelection";
 import { ProxyCredentialsForm } from "./ProxyCredentialsForm";
 import { ProxyMetadataForm } from "./ProxyMetadataForm";
 import { ResultStep } from "./ResultStep";
-import { INITIAL_STATE, wizardReducer } from "./reducer";
-import type { DiscoveredOAuth } from "./types";
+import { createWizardServices } from "./services";
 
 // ---------------------------------------------------------------------------
 // Container
 // ---------------------------------------------------------------------------
+
+type EditMode = { proxyServer: NonNullable<Toolset["oauthProxyServer"]> };
 
 function OAuthWizard({
   isOpen,
@@ -43,9 +44,215 @@ function OAuthWizard({
   onClose: () => void;
   toolsetSlug: string;
   toolset: Toolset;
-  editMode?: { proxyServer: NonNullable<Toolset["oauthProxyServer"]> };
+  editMode?: EditMode;
 }) {
-  const discoveredOAuth = useMemo<DiscoveredOAuth | null>(() => {
+  // Force the inner machine to remount after the modal close animation
+  // finishes (200ms). This replaces the old `dispatch RESET` pattern: it
+  // resets all wizard state without flashing the path-selection step
+  // mid-animation, and re-derives input from props on next open.
+  const [resetKey, setResetKey] = useState(0);
+  useEffect(() => {
+    if (isOpen) return;
+    const id = setTimeout(() => setResetKey((k) => k + 1), 200);
+    return () => clearTimeout(id);
+  }, [isOpen]);
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <Dialog.Content className="max-h-[90vh] max-w-6xl overflow-hidden">
+        <WizardBody
+          key={resetKey}
+          onClose={onClose}
+          toolsetSlug={toolsetSlug}
+          toolset={toolset}
+          editMode={editMode}
+        />
+      </Dialog.Content>
+    </Dialog>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// WizardBody — owns the machine instance. Remounted on close-and-reopen via
+// the resetKey above so each new modal session starts fresh from input.
+// ---------------------------------------------------------------------------
+
+function WizardBody({
+  onClose,
+  toolsetSlug,
+  toolset,
+  editMode,
+}: {
+  onClose: () => void;
+  toolsetSlug: string;
+  toolset: Toolset;
+  editMode?: EditMode;
+}) {
+  const client = useGramContext();
+  const queryClient = useQueryClient();
+  const telemetry = useTelemetry();
+  const session = useSession();
+  const { data: environmentsData } = useListEnvironments();
+
+  const discovered = useDiscoveredOAuth(toolset);
+  const externalDiscovered = discovered?.version === "2.1" ? discovered : null;
+  const hasMultipleOAuth2AuthCode =
+    toolset.oauthEnablementMetadata?.oauth2SecurityCount > 1;
+
+  const existingEnvNames = useMemo(
+    () => (environmentsData?.environments ?? []).map((e) => e.name),
+    [environmentsData],
+  );
+
+  const editProxyDefaults = useMemo<ProxyDefaults | null>(() => {
+    const proxy = editMode?.proxyServer;
+    if (!proxy) return null;
+    const provider = proxy.oauthProxyProviders?.[0];
+    return {
+      slug: proxy.slug ?? "",
+      audience: proxy.audience ?? "",
+      authorizationEndpoint: provider?.authorizationEndpoint ?? "",
+      tokenEndpoint: provider?.tokenEndpoint ?? "",
+      scopes: (provider?.scopesSupported ?? []).join(", "),
+      tokenAuthMethod:
+        provider?.tokenEndpointAuthMethodsSupported?.[0] ??
+        "client_secret_post",
+      environmentSlug: provider?.environmentSlug ?? "",
+    };
+  }, [editMode]);
+
+  const provided = useMemo(
+    () =>
+      oauthWizardMachine.provide({
+        actors: createWizardServices(client),
+        actions: {
+          invalidateOnExternalSuccess: () => invalidateAllToolset(queryClient),
+          invalidateOnProxyCreate: () => {
+            invalidateAllToolset(queryClient);
+            invalidateAllGetMcpMetadata(queryClient);
+            invalidateAllListEnvironments(queryClient);
+          },
+          invalidateOnProxyUpdate: () => invalidateAllToolset(queryClient),
+          captureExternalSuccess: () =>
+            telemetry.capture("mcp_event", {
+              action: "external_oauth_configured",
+              slug: toolsetSlug,
+            }),
+          captureProxyCreateSuccess: () =>
+            telemetry.capture("mcp_event", {
+              action: "oauth_proxy_configured",
+              slug: toolsetSlug,
+            }),
+          captureProxyUpdateSuccess: () =>
+            telemetry.capture("mcp_event", {
+              action: "oauth_proxy_updated",
+              slug: toolsetSlug,
+            }),
+        },
+      }),
+    [client, queryClient, telemetry, toolsetSlug],
+  );
+
+  const input: Input = {
+    mode: editMode ? "edit" : "create",
+    discovered,
+    toolsetSlug,
+    toolsetName: toolset.name,
+    activeOrganizationId: session.activeOrganizationId,
+    existingEnvNames,
+    editProxyDefaults,
+  };
+
+  const [state, send] = useMachine(provided, { input });
+  const ctx = state.context;
+
+  const isProxyCreating =
+    state.matches({ proxy: "creatingEnvironment" }) ||
+    state.matches({ proxy: "creatingProxy" }) ||
+    state.matches({ proxy: "rollingBackEnv" });
+
+  return (
+    <>
+      <Dialog.Header>
+        <Dialog.Title>{wizardTitle(state, !!editMode)}</Dialog.Title>
+      </Dialog.Header>
+
+      {state.matches("pathSelection") && (
+        <PathSelection discovered={discovered} send={send} />
+      )}
+
+      {state.matches("external") && (
+        <ExternalOAuthForm
+          external={ctx.external}
+          submitting={state.matches({ external: "submitting" })}
+          discovered={externalDiscovered}
+          hasMultipleOAuth2AuthCode={hasMultipleOAuth2AuthCode}
+          oauth2SecurityCount={
+            toolset.oauthEnablementMetadata?.oauth2SecurityCount ?? 0
+          }
+          send={send}
+        />
+      )}
+
+      {(state.matches({ proxy: "metadata" }) ||
+        state.matches({ proxy: "updating" })) && (
+        <ProxyMetadataForm
+          proxy={ctx.proxy}
+          error={ctx.error}
+          editPending={state.matches({ proxy: "updating" })}
+          discovered={discovered}
+          editMode={!!editMode}
+          send={send}
+          onClose={onClose}
+        />
+      )}
+
+      {(state.matches({ proxy: "credentials" }) || isProxyCreating) && (
+        <ProxyCredentialsForm
+          proxy={ctx.proxy}
+          error={ctx.error}
+          submitting={isProxyCreating}
+          send={send}
+        />
+      )}
+
+      {state.matches({ proxy: "fatalError" }) && (
+        <FatalErrorStep error={ctx.error} onClose={onClose} />
+      )}
+
+      {state.matches("result") && ctx.result && (
+        <ResultStep message={ctx.result.message} onClose={onClose} />
+      )}
+    </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function wizardTitle(state: WizardSnapshot, editMode: boolean): string {
+  if (state.matches("pathSelection")) return "Connect OAuth";
+  if (state.matches("external")) return "Configure External OAuth";
+  if (
+    state.matches({ proxy: "metadata" }) ||
+    state.matches({ proxy: "updating" })
+  )
+    return editMode ? "Edit OAuth Proxy" : "Configure OAuth Proxy";
+  if (
+    state.matches({ proxy: "credentials" }) ||
+    state.matches({ proxy: "creatingEnvironment" }) ||
+    state.matches({ proxy: "creatingProxy" }) ||
+    state.matches({ proxy: "rollingBackEnv" })
+  )
+    return "OAuth Client Credentials";
+  if (state.matches({ proxy: "fatalError" })) return "Configuration Failed";
+  if (state.matches("result")) return "OAuth Configured";
+  return "Connect OAuth";
+}
+
+function useDiscoveredOAuth(toolset: Toolset): DiscoveredOAuth | null {
+  return useMemo<DiscoveredOAuth | null>(() => {
     const baseURL = getServerURL();
     const mcpSlug = toolset.mcpSlug;
     for (const tool of toolset.rawTools) {
@@ -77,217 +284,6 @@ function OAuthWizard({
     }
     return null;
   }, [toolset.rawTools, toolset.mcpSlug]);
-
-  const [state, dispatch] = useReducer(wizardReducer, INITIAL_STATE);
-
-  // Snapshot the prefilled audience so we can detect whether the user actually
-  // changed it on submit. Without this, opening the edit modal on a proxy
-  // whose audience is NULL would silently submit `audience: ""` (because the
-  // form prefills empty-string for null DB values), mutating NULL → "" on the
-  // server.
-  const proxyAudiencePrefilledRef = useRef<string>("");
-
-  // Pre-fill from editMode whenever the underlying proxy server data changes.
-  const editProxyServer = editMode?.proxyServer;
-  useEffect(() => {
-    if (!editProxyServer) return;
-    const provider = editProxyServer.oauthProxyProviders?.[0];
-    const initialAudience = editProxyServer.audience ?? "";
-    proxyAudiencePrefilledRef.current = initialAudience;
-    dispatch({
-      type: "SELECT_PROXY",
-      title: "Edit OAuth Proxy",
-      defaults: {
-        slug: editProxyServer.slug ?? "",
-        audience: initialAudience,
-        authorizationEndpoint: provider?.authorizationEndpoint ?? "",
-        tokenEndpoint: provider?.tokenEndpoint ?? "",
-        scopes: (provider?.scopesSupported ?? []).join(", "),
-        tokenAuthMethod:
-          provider?.tokenEndpointAuthMethodsSupported?.[0] ??
-          "client_secret_post",
-        environmentSlug: provider?.environmentSlug ?? "",
-      },
-    });
-  }, [editProxyServer]);
-
-  // Reset wizard state after the modal close animation finishes.
-  useEffect(() => {
-    if (isOpen) return;
-    const id = setTimeout(() => dispatch({ type: "RESET" }), 200);
-    return () => clearTimeout(id);
-  }, [isOpen]);
-
-  const telemetry = useTelemetry();
-  const queryClient = useQueryClient();
-  const session = useSession();
-
-  const hasMultipleOAuth2AuthCode =
-    toolset.oauthEnablementMetadata?.oauth2SecurityCount > 1;
-
-  // --- Mutations ---
-
-  const addExternalOAuthMutation = useAddExternalOAuthServerMutation({
-    onSuccess: () => {
-      invalidateAllToolset(queryClient);
-      telemetry.capture("mcp_event", {
-        action: "external_oauth_configured",
-        slug: toolsetSlug,
-      });
-      dispatch({
-        type: "SET_RESULT",
-        success: true,
-        message: "Your external OAuth server has been configured successfully.",
-      });
-    },
-    onError: (error) => {
-      console.error("Failed to configure external OAuth:", error);
-      dispatch({
-        type: "SET_RESULT",
-        success: false,
-        message:
-          error instanceof Error ? error.message : "Failed to configure OAuth",
-      });
-    },
-  });
-
-  const addOAuthProxyMutation = useAddOAuthProxyServerMutation({
-    onSuccess: () => {
-      invalidateAllToolset(queryClient);
-      invalidateAllGetMcpMetadata(queryClient);
-      invalidateAllListEnvironments(queryClient);
-      telemetry.capture("mcp_event", {
-        action: "oauth_proxy_configured",
-        slug: toolsetSlug,
-      });
-      dispatch({
-        type: "SET_RESULT",
-        success: true,
-        message:
-          "Your OAuth proxy has been configured successfully. Client credentials have been stored in a new environment.",
-      });
-    },
-    onError: (error) => {
-      console.error("Failed to configure OAuth proxy:", error);
-      dispatch({
-        type: "SET_RESULT",
-        success: false,
-        message:
-          error instanceof Error
-            ? error.message
-            : "Failed to configure OAuth proxy",
-      });
-    },
-  });
-
-  const updateOAuthProxyMutation = useUpdateOAuthProxyServerMutation({
-    onSuccess: () => {
-      invalidateAllToolset(queryClient);
-      telemetry.capture("mcp_event", {
-        action: "oauth_proxy_updated",
-        slug: toolsetSlug,
-      });
-      dispatch({
-        type: "SET_RESULT",
-        success: true,
-        message: "Your OAuth proxy server has been updated successfully.",
-      });
-    },
-    onError: (error) => {
-      console.error("Failed to update OAuth proxy:", error);
-      dispatch({
-        type: "SET_RESULT",
-        success: false,
-        message:
-          error instanceof Error
-            ? error.message
-            : "Failed to update OAuth proxy",
-      });
-    },
-  });
-
-  const createEnvironmentMutation = useCreateEnvironmentMutation();
-  const { data: environmentsData } = useListEnvironments();
-  const environments = environmentsData?.environments ?? [];
-
-  // --- Step actions ---
-
-  const actions = useStepActions({
-    state,
-    dispatch,
-    toolsetSlug,
-    toolsetName: toolset.name,
-    activeOrganizationId: session.activeOrganizationId,
-    environments,
-    proxyAudiencePrefilled: proxyAudiencePrefilledRef.current,
-    addExternalOAuthMutation,
-    addOAuthProxyMutation,
-    updateOAuthProxyMutation,
-    createEnvironmentMutation,
-  });
-
-  const wizardTitle = state.title;
-
-  return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <Dialog.Content className="max-h-[90vh] max-w-6xl overflow-hidden">
-        <Dialog.Header>
-          <Dialog.Title>{wizardTitle}</Dialog.Title>
-        </Dialog.Header>
-
-        {state.step === "path_selection" && (
-          <PathSelection
-            discoveredOAuth={discoveredOAuth}
-            dispatch={dispatch}
-          />
-        )}
-
-        {state.step === "external_oauth_server_metadata_form" && (
-          <ExternalOAuthForm
-            state={state}
-            dispatch={dispatch}
-            discoveredOAuth={
-              discoveredOAuth?.version === "2.1" ? discoveredOAuth : null
-            }
-            hasMultipleOAuth2AuthCode={hasMultipleOAuth2AuthCode}
-            oauth2SecurityCount={
-              toolset.oauthEnablementMetadata?.oauth2SecurityCount
-            }
-            isPending={addExternalOAuthMutation.isPending}
-            onSubmit={actions.external_oauth_server_metadata_form.submit}
-          />
-        )}
-
-        {state.step === "oauth_proxy_server_metadata_form" && (
-          <ProxyMetadataForm
-            state={state}
-            dispatch={dispatch}
-            discoveredOAuth={discoveredOAuth}
-            editMode={!!editMode}
-            isEditPending={updateOAuthProxyMutation.isPending}
-            onNext={actions.oauth_proxy_server_metadata_form.next}
-            onEditSubmit={actions.oauth_proxy_server_metadata_form.editSubmit}
-            onClose={onClose}
-          />
-        )}
-
-        {state.step === "oauth_proxy_client_credentials_form" && (
-          <ProxyCredentialsForm
-            state={state}
-            dispatch={dispatch}
-            isSubmitting={
-              actions.oauth_proxy_client_credentials_form.isSubmitting
-            }
-            onSubmit={actions.oauth_proxy_client_credentials_form.submit}
-          />
-        )}
-
-        {state.step === "result" && (
-          <ResultStep state={state} onClose={onClose} />
-        )}
-      </Dialog.Content>
-    </Dialog>
-  );
 }
 
 // ---------------------------------------------------------------------------
@@ -305,7 +301,7 @@ export function ConnectOAuthModal({
   onClose: () => void;
   toolsetSlug: string;
   toolset: Toolset;
-  editMode?: { proxyServer: NonNullable<Toolset["oauthProxyServer"]> };
+  editMode?: EditMode;
 }) {
   const productTier = useProductTier();
   const isAccountUpgrade = productTier.includes("base");

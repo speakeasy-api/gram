@@ -1,8 +1,20 @@
 # OAuth Wizard — FSM Redesign
 
-Status: **Approach decided — ready to scope implementation PR**
+Status: **Phase 2 in progress — container swap + cleanup**
 Author: walker
 Date: 2026-04-28
+
+## Progress
+
+- [x] **Phase 1 — scaffold the machine alongside the reducer.** Commit
+      `2f464abd1`. Adds `machine.ts`, `machine-types.ts`, `guards.ts`,
+      `services.ts`, `machine.test.ts`. xstate 5.30 + @xstate/react 6.1.
+      Production code unchanged; 50 unit tests pass.
+- [ ] **Phase 2 — container swap + cleanup.** Rewrite `OAuthWizard.tsx`
+      onto `useMachine`; adapt step components to read from xstate state
+      and call `send`; add `FatalErrorStep`; delete `reducer.ts`,
+      `actions.ts`, `types.ts`, `state-machine-type.ts`; add RTL
+      integration tests.
 
 ## 1. Background
 

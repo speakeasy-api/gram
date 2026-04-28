@@ -1,4 +1,4 @@
-import { assign, fromPromise, setup } from "xstate";
+import { assign, fromPromise, setup, type SnapshotFrom } from "xstate";
 
 import { checkExternal, checkProxyMeta, checkCreds } from "./guards";
 import {
@@ -115,6 +115,7 @@ export const oauthWizardMachine = setup({
     validExternal: ({ context }) => checkExternal(context).ok,
     validProxyMeta: ({ context }) => checkProxyMeta(context).ok,
     validCreds: ({ context }) => checkCreds(context).ok,
+    isEditMode: ({ context }) => context.mode === "edit",
   },
   actions: {
     invalidateOnExternalSuccess: () => {},
@@ -130,6 +131,9 @@ export const oauthWizardMachine = setup({
   initial: "pathSelection",
   states: {
     pathSelection: {
+      // Edit mode opens straight on the proxy metadata form — pathSelection
+      // exists only for the create flow.
+      always: { guard: "isEditMode", target: "proxy.metadata" },
       on: {
         SELECT_EXTERNAL: {
           target: "external.editing",
@@ -482,3 +486,5 @@ export const oauthWizardMachine = setup({
 });
 
 export type OAuthWizardMachine = typeof oauthWizardMachine;
+export type WizardSnapshot = SnapshotFrom<typeof oauthWizardMachine>;
+export type WizardSend = (event: WizardEvent) => void;

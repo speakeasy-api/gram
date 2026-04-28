@@ -3,18 +3,19 @@ import { Input } from "@/components/ui/input";
 import { Type } from "@/components/ui/type";
 import { Button, Stack } from "@speakeasy-api/moonshine";
 
-import type { WizardDispatch, WizardState } from "./types";
+import type { WizardSend } from "./machine";
+import type { Context } from "./machine-types";
 
 export function ProxyCredentialsForm({
-  state,
-  dispatch,
-  isSubmitting,
-  onSubmit,
+  proxy,
+  error,
+  submitting,
+  send,
 }: {
-  state: Extract<WizardState, { step: "oauth_proxy_client_credentials_form" }>;
-  dispatch: WizardDispatch;
-  isSubmitting: boolean;
-  onSubmit: () => void;
+  proxy: Context["proxy"];
+  error: string | null;
+  submitting: boolean;
+  send: WizardSend;
 }) {
   return (
     <>
@@ -25,22 +26,16 @@ export function ProxyCredentialsForm({
             stored securely in a new environment created for this proxy.
           </Type>
 
-          {state.error && (
-            <Type className="mb-4 text-sm text-red-500!">{state.error}</Type>
-          )}
+          {error && <Type className="mb-4 text-sm text-red-500!">{error}</Type>}
 
           <Stack gap={4}>
             <div>
               <Type className="mb-2 font-medium">Client ID</Type>
               <Input
                 placeholder="your-client-id"
-                value={state.clientId}
-                onChange={(v: string) =>
-                  dispatch({
-                    type: "UPDATE_FIELD",
-                    field: "clientId",
-                    value: v,
-                  })
+                value={proxy.clientId}
+                onChange={(value: string) =>
+                  send({ type: "FIELD_PROXY", key: "clientId", value })
                 }
               />
             </div>
@@ -49,13 +44,9 @@ export function ProxyCredentialsForm({
               <Type className="mb-2 font-medium">Client Secret</Type>
               <Input
                 placeholder="your-client-secret"
-                value={state.clientSecret}
-                onChange={(v: string) =>
-                  dispatch({
-                    type: "UPDATE_FIELD",
-                    field: "clientSecret",
-                    value: v,
-                  })
+                value={proxy.clientSecret}
+                onChange={(value: string) =>
+                  send({ type: "FIELD_PROXY", key: "clientSecret", value })
                 }
                 type="password"
               />
@@ -65,19 +56,17 @@ export function ProxyCredentialsForm({
       </div>
 
       <Dialog.Footer className="flex justify-between">
-        <Button variant="secondary" onClick={() => dispatch({ type: "BACK" })}>
+        <Button variant="secondary" onClick={() => send({ type: "BACK" })}>
           Back
         </Button>
         <div className="ml-auto">
           <Button
-            onClick={onSubmit}
+            onClick={() => send({ type: "SUBMIT" })}
             disabled={
-              isSubmitting ||
-              !state.clientId.trim() ||
-              !state.clientSecret.trim()
+              submitting || !proxy.clientId.trim() || !proxy.clientSecret.trim()
             }
           >
-            {isSubmitting ? "Configuring..." : "Configure OAuth Proxy"}
+            {submitting ? "Configuring..." : "Configure OAuth Proxy"}
           </Button>
         </div>
       </Dialog.Footer>
