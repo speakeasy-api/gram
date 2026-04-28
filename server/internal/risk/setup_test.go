@@ -117,7 +117,6 @@ func withExactAccessGrants(t *testing.T, ctx context.Context, conn *pgxpool.Pool
 			OrganizationID: authCtx.ActiveOrganizationID,
 			PrincipalUrn:   principal,
 			Scope:          string(grant.Scope),
-			Resource:       grant.Selector.ResourceID(),
 			Selectors:      selectors,
 		})
 		require.NoError(t, err)
