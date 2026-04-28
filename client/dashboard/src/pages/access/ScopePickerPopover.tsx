@@ -26,7 +26,6 @@ import {
   Plus,
   Repeat,
   Shield,
-  Loader2,
   Tag,
   Wrench,
   X,
@@ -35,12 +34,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueries } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type {
+  ActivePanel,
   AnnotationHint,
   CustomTab,
   ResourceType,
   Selector,
 } from "./types";
 import { ANNOTATION_TO_DISPOSITION } from "./types";
+import { computePanelState, type CollectionGroup } from "./computePanelState";
 
 interface ScopePickerPopoverProps {
   /** The resource type determines which resource list to show */
@@ -50,12 +51,6 @@ interface ScopePickerPopoverProps {
   /** null = unrestricted; Selector[] = constrained */
   selectors: Selector[] | null;
   onChangeSelectors: (selectors: Selector[] | null) => void;
-  /** Whether "Custom" mode is active (MCP scopes only) */
-  customMode?: boolean;
-  onCustomModeChange?: (custom: boolean) => void;
-  /** Whether "Specific collections" mode is active (MCP scopes only) */
-  collectionMode?: boolean;
-  onCollectionModeChange?: (mode: boolean) => void;
   /** Selected annotation hints for auto-group matching */
   annotations?: AnnotationHint[];
   onChangeAnnotations?: (annotations: AnnotationHint[]) => void;
@@ -136,10 +131,6 @@ export function ScopePickerPopover({
   scope,
   selectors,
   onChangeSelectors,
-  customMode,
-  onCustomModeChange,
-  collectionMode,
-  onCollectionModeChange,
   annotations,
   onChangeAnnotations,
   customTab,
@@ -149,11 +140,31 @@ export function ScopePickerPopover({
   const mcpServers = useMCPServers(resourceType === "mcp");
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [expanded, setExpanded] = useState(false);
-  const [collectionCount, setCollectionCount] = useState(0);
-  const customToolCount = useMemo(() => {
-    if (!customMode && !collectionMode) return 0;
-    return (selectors ?? []).length;
-  }, [customMode, collectionMode, selectors]);
+  // Override for when user clicks a mode but selectors are still empty
+  const [panelOverride, setPanelOverride] = useState<ActivePanel | null>(null);
+
+  const isMcpConnect = scope === "mcp:connect";
+  const collectionGroups = useCollectionGroups(mcpServers, isMcpConnect);
+
+  const panelState = computePanelState(
+    selectors,
+    collectionGroups,
+    resourceType,
+    customTab,
+  );
+  // Use override only when selectors are empty (user just switched mode)
+  const activePanel =
+    selectors !== null && selectors.length === 0 && panelOverride
+      ? panelOverride
+      : panelState.activePanel;
+  const label = panelState.label;
+
+  // Clear override once selectors have content (user made a selection)
+  useEffect(() => {
+    if (selectors !== null && selectors.length > 0) {
+      setPanelOverride(null);
+    }
+  }, [selectors]);
 
   // Org-scoped permissions have no resource picker — they're always org-wide
   if (resourceType === "org") {
@@ -164,21 +175,10 @@ export function ScopePickerPopover({
     );
   }
 
-  const isUnrestricted = selectors === null;
-  const isMcpConnect = scope === "mcp:connect";
   const projectList = organization.projects.map((p) => ({
     id: p.id,
     name: p.name,
   }));
-
-  const label = getLabel(
-    resourceType,
-    selectors,
-    customMode,
-    collectionMode,
-    customToolCount,
-    collectionCount,
-  );
 
   const resourceKind = resourceType === "project" ? "project" : "mcp";
 
@@ -201,6 +201,18 @@ export function ScopePickerPopover({
   const isResourceSelected = (id: string) =>
     selectors?.some((s) => s.resourceId === id) ?? false;
 
+  const switchPanel = (panel: ActivePanel) => {
+    setPanelOverride(panel);
+    if (panel === "all") {
+      onChangeSelectors(null);
+    } else {
+      onChangeSelectors([]);
+    }
+    if (panel !== "tools") {
+      onChangeAnnotations?.([]);
+    }
+  };
+
   const renderScopeOptions = ({
     includeCollection,
   }: {
@@ -209,70 +221,34 @@ export function ScopePickerPopover({
     <div className="shrink-0 pb-1.5">
       <ScopeOption
         label={resourceType === "project" ? "All projects" : "All servers"}
-        selected={isUnrestricted && !customMode && !collectionMode}
-        onClick={() => {
-          if (customMode) {
-            onCustomModeChange?.(false);
-            onChangeAnnotations?.([]);
-          }
-          if (collectionMode) {
-            onCollectionModeChange?.(false);
-          }
-          onChangeSelectors(null);
-        }}
+        selected={activePanel === "all"}
+        onClick={() => switchPanel("all")}
       />
       <ScopeOption
         label={
           resourceType === "project" ? "Specific projects" : "Specific servers"
         }
-        selected={!isUnrestricted && !customMode && !collectionMode}
-        onClick={() => {
-          if (customMode) {
-            onCustomModeChange?.(false);
-            onChangeSelectors([]);
-            onChangeAnnotations?.([]);
-          } else if (collectionMode) {
-            onCollectionModeChange?.(false);
-            onChangeSelectors([]);
-          } else if (isUnrestricted) {
-            onChangeSelectors([]);
-          }
-        }}
+        selected={activePanel === "servers"}
+        onClick={() => switchPanel("servers")}
       />
       {isMcpConnect && (
         <ScopeOption
           label="Specific tools"
-          selected={!!customMode}
-          onClick={() => {
-            if (!customMode) {
-              if (collectionMode) onCollectionModeChange?.(false);
-              onCustomModeChange?.(true);
-              onChangeSelectors([]);
-              onChangeAnnotations?.([]);
-            }
-          }}
+          selected={activePanel === "tools"}
+          onClick={() => switchPanel("tools")}
         />
       )}
       {isMcpConnect && includeCollection && (
         <ScopeOption
           label="Specific collections"
-          selected={!!collectionMode}
-          onClick={() => {
-            if (!collectionMode) {
-              if (customMode) {
-                onCustomModeChange?.(false);
-                onChangeAnnotations?.([]);
-              }
-              onCollectionModeChange?.(true);
-              onChangeSelectors([]);
-            }
-          }}
+          selected={activePanel === "collection"}
+          onClick={() => switchPanel("collection")}
         />
       )}
     </div>
   );
 
-  const resourceList = !isUnrestricted && !customMode && !collectionMode && (
+  const resourceList = activePanel === "servers" && (
     <>
       <div className="bg-border my-1 h-px" />
       {resourceType === "project"
@@ -388,11 +364,10 @@ export function ScopePickerPopover({
     <div className="-mx-1.5 -mb-1.5 flex max-h-[min(420px,60vh)] flex-col overflow-hidden">
       <div className="border-border flex min-h-0 flex-1 flex-col overflow-y-auto border-y px-2 py-1">
         <CollectionGroupPanel
-          mcpServers={mcpServers}
+          collectionGroups={collectionGroups}
           selectors={selectors ?? []}
           onChangeSelectors={onChangeSelectors}
           onNavigate={() => setPopoverOpen(false)}
-          onSelectedCountChange={setCollectionCount}
         />
       </div>
     </div>
@@ -415,9 +390,9 @@ export function ScopePickerPopover({
           sideOffset={8}
           className={cn(
             "p-1.5 transition-[width] duration-500",
-            customMode
+            activePanel === "tools"
               ? "w-[620px]"
-              : collectionMode
+              : activePanel === "collection"
                 ? "w-[360px]"
                 : "max-h-[300px] w-44 overflow-y-auto",
           )}
@@ -427,7 +402,7 @@ export function ScopePickerPopover({
         >
           {renderScopeOptions({ includeCollection: true })}
           {resourceList}
-          {customMode && (
+          {activePanel === "tools" && (
             <div className="-mx-1.5 -mb-1.5 flex max-h-[min(420px,60vh)] flex-col">
               {customTabs("max-h-[min(340px,50vh)]")}
               {(customTab ?? "select") === "select" && (
@@ -447,7 +422,7 @@ export function ScopePickerPopover({
               )}
             </div>
           )}
-          {collectionMode && collectionPanel}
+          {activePanel === "collection" && collectionPanel}
         </PopoverContent>
       </Popover>
 
@@ -793,63 +768,43 @@ function AnnotationGroupPanel({
   );
 }
 
-function CollectionGroupPanel({
-  mcpServers,
-  selectors,
-  onChangeSelectors,
-  onNavigate,
-  onSelectedCountChange,
-}: {
-  mcpServers: ServerGroup[];
-  selectors: Selector[];
-  onChangeSelectors: (selectors: Selector[] | null) => void;
-  onNavigate?: () => void;
-  onSelectedCountChange?: (count: number) => void;
-}) {
+/** Fetches collection groups with resolved server/tool data. */
+function useCollectionGroups(
+  mcpServers: ServerGroup[],
+  enabled: boolean,
+): CollectionGroup[] {
   const client = useSdkClient();
-  const orgRoutes = useOrgRoutes();
-
-  // Fetch org-level collections
-  const { data: collectionsData, isLoading: collectionsLoading } =
-    useListCollections({}, undefined);
+  const { data: collectionsData } = useListCollections({}, undefined, {
+    enabled,
+  });
   const collections = useMemo(
     () => collectionsData?.collections ?? [],
     [collectionsData?.collections],
   );
 
-  // Fetch servers for each collection in parallel
   const serverQueries = useQueries({
     queries: collections.map((c) => ({
       queryKey: ["collections", "listServers", c.slug],
       queryFn: () =>
-        client.collections.listServers({
-          collectionSlug: c.slug!,
-        }),
-      enabled: !!c.slug,
+        client.collections.listServers({ collectionSlug: c.slug! }),
+      enabled: enabled && !!c.slug,
     })),
   });
 
-  // Build mcpSlug → Server lookup from the already-loaded toolset data
   const mcpSlugToServer = useMemo(() => {
     const map = new Map<string, Server>();
     for (const group of mcpServers) {
       for (const server of group.servers) {
-        if (server.mcpSlug) {
-          map.set(server.mcpSlug, server);
-        }
+        if (server.mcpSlug) map.set(server.mcpSlug, server);
       }
     }
     return map;
   }, [mcpServers]);
 
-  // Resolve each collection's servers to internal toolset servers with tools.
-  // Filter out collections that have no tools (no matched servers or all empty).
-  const collectionGroups = useMemo(() => {
+  return useMemo(() => {
     return collections
       .map((c, i) => {
-        const serversResponse = serverQueries[i]?.data;
-        const externalServers = serversResponse?.servers ?? [];
-
+        const externalServers = serverQueries[i]?.data?.servers ?? [];
         const matchedServers: Server[] = [];
         for (const es of externalServers) {
           const parts = es.registrySpecifier.split("/");
@@ -857,51 +812,36 @@ function CollectionGroupPanel({
           const server = mcpSlugToServer.get(mcpSlug);
           if (server) matchedServers.push(server);
         }
-
         return {
-          id: c.id,
-          name: c.name,
+          id: c.id!,
+          name: c.name!,
           slug: c.slug,
           servers: matchedServers,
         };
       })
       .filter((g) => g.servers.some((s) => s.tools.length > 0));
   }, [collections, serverQueries, mcpSlugToServer]);
+}
 
-  const selectedCollectionCount = useMemo(() => {
-    return collectionGroups.filter((group) => {
-      const allToolSelectors = group.servers.flatMap((s) =>
-        s.tools.map((t) => ({ resourceId: s.id, tool: t.name })),
-      );
-      return (
-        allToolSelectors.length > 0 &&
-        allToolSelectors.every((ts) =>
-          selectors.some(
-            (s) => s.resourceId === ts.resourceId && s.tool === ts.tool,
-          ),
-        )
-      );
-    }).length;
-  }, [collectionGroups, selectors]);
-
-  useEffect(() => {
-    onSelectedCountChange?.(selectedCollectionCount);
-  }, [selectedCollectionCount, onSelectedCountChange]);
+function CollectionGroupPanel({
+  collectionGroups,
+  selectors,
+  onChangeSelectors,
+  onNavigate,
+}: {
+  collectionGroups: CollectionGroup[];
+  selectors: Selector[];
+  onChangeSelectors: (selectors: Selector[] | null) => void;
+  onNavigate?: () => void;
+}) {
+  const orgRoutes = useOrgRoutes();
 
   const goToCreateCollection = () => {
     onNavigate?.();
     orgRoutes.collections.create.goTo();
   };
 
-  if (collectionsLoading) {
-    return (
-      <div className="flex items-center justify-center py-6">
-        <Loader2 className="text-muted-foreground h-5 w-5 animate-spin" />
-      </div>
-    );
-  }
-
-  if (collections.length === 0 || collectionGroups.length === 0) {
+  if (collectionGroups.length === 0) {
     return (
       <div className="flex flex-col items-center px-4 py-5 text-center">
         <div className="bg-muted mb-3 flex h-8 w-8 items-center justify-center rounded-full">
@@ -1077,32 +1017,4 @@ function ScopeOption({
       <span>{label}</span>
     </button>
   );
-}
-
-function getLabel(
-  resourceType: ResourceType,
-  selectors: Selector[] | null,
-  customMode?: boolean,
-  collectionMode?: boolean,
-  customToolCount?: number,
-  collectionCount?: number,
-): string {
-  if (customMode) {
-    const count = customToolCount ?? 0;
-    if (count === 0) return "Select...";
-    const hasTools = (selectors ?? []).some((s) => s.tool);
-    const noun = hasTools ? "tool" : "rule";
-    return `${count} ${noun}${count === 1 ? "" : "s"} selected`;
-  }
-  if (collectionMode) {
-    const count = collectionCount ?? 0;
-    if (count === 0) return "Select...";
-    return `${count} collection${count === 1 ? "" : "s"} selected`;
-  }
-  if (selectors === null) {
-    return resourceType === "project" ? "All projects" : "All servers";
-  }
-  if (selectors.length === 0) return "Select...";
-  const noun = resourceType === "project" ? "project" : "server";
-  return `${selectors.length} ${noun}${selectors.length === 1 ? "" : "s"} selected`;
 }

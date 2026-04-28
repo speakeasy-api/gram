@@ -21,6 +21,9 @@ export type AnnotationHint =
 /** The tool-selection tabs in custom mode. */
 export type CustomTab = "select" | "auto-groups";
 
+/** Which panel the scope picker is displaying. Derived from selectors. */
+export type ActivePanel = "all" | "servers" | "tools" | "collection";
+
 /** A single grant within a role: a scope + optional selector constraints. */
 export interface RoleGrant {
   scope: Scope;

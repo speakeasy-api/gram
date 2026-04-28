@@ -94,12 +94,6 @@ export function CreateRoleDialog({
   const [showMembers, setShowMembers] = useState(false);
   const [showPermissions, setShowPermissions] = useState(true);
   const [initialized, setInitialized] = useState(false);
-  // Track which MCP scopes have "Custom" mode selected (UI-only state)
-  const [customScopes, setCustomScopes] = useState<Set<string>>(new Set());
-  // Track which MCP scopes have "Specific collections" mode selected (UI-only state)
-  const [collectionScopes, setCollectionScopes] = useState<Set<string>>(
-    new Set(),
-  );
 
   const queryClient = useQueryClient();
   const { data: membersData } = useMembers();
@@ -136,14 +130,12 @@ export function CreateRoleDialog({
         .map((g) => g.label),
     );
     setExpandedGroups(autoExpanded);
-    // Restore custom mode and active tab for MCP scopes with tool/disposition selectors
-    const restoredCustom = new Set<string>();
+    // Restore custom tab hints for MCP scopes with tool/disposition selectors
     for (const [scope, grant] of Object.entries(roleGrants)) {
       if (!scope.startsWith("mcp:")) continue;
       const hasCustomSelectors =
         grant.selectors?.some((s) => s.tool || s.disposition) ?? false;
       if (!hasCustomSelectors) continue;
-      restoredCustom.add(scope);
       const detected = inferCustomTab(grant.selectors ?? []);
       roleGrants[scope] = {
         ...grant,
@@ -152,7 +144,6 @@ export function CreateRoleDialog({
       };
     }
     setGrants(roleGrants);
-    setCustomScopes(restoredCustom);
     const assignedIds = new Set(
       members.filter((m) => m.roleId === editingRole.id).map((m) => m.id),
     );
@@ -194,16 +185,6 @@ export function CreateRoleDialog({
       const next = { ...prev };
       if (next[scope]) {
         delete next[scope];
-        setCustomScopes((s) => {
-          const n = new Set(s);
-          n.delete(scope);
-          return n;
-        });
-        setCollectionScopes((s) => {
-          const n = new Set(s);
-          n.delete(scope);
-          return n;
-        });
       } else {
         next[scope] = { scope, selectors: null };
       }
@@ -318,8 +299,6 @@ export function CreateRoleDialog({
     setSelectedMembers(new Set());
     setShowMembers(false);
     setShowPermissions(true);
-    setCustomScopes(new Set());
-    setCollectionScopes(new Set());
     setInitialized(false);
     onOpenChange(false);
   };
@@ -494,34 +473,6 @@ export function CreateRoleDialog({
                                           scopeDef.slug,
                                           selectors,
                                         )
-                                      }
-                                      customMode={customScopes.has(
-                                        scopeDef.slug,
-                                      )}
-                                      onCustomModeChange={(custom) =>
-                                        setCustomScopes((prev) => {
-                                          const next = new Set(prev);
-                                          if (custom) {
-                                            next.add(scopeDef.slug);
-                                          } else {
-                                            next.delete(scopeDef.slug);
-                                          }
-                                          return next;
-                                        })
-                                      }
-                                      collectionMode={collectionScopes.has(
-                                        scopeDef.slug,
-                                      )}
-                                      onCollectionModeChange={(mode) =>
-                                        setCollectionScopes((prev) => {
-                                          const next = new Set(prev);
-                                          if (mode) {
-                                            next.add(scopeDef.slug);
-                                          } else {
-                                            next.delete(scopeDef.slug);
-                                          }
-                                          return next;
-                                        })
                                       }
                                       annotations={grant.annotations}
                                       onChangeAnnotations={(annotations) =>
