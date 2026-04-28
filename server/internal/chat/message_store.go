@@ -16,8 +16,9 @@ import (
 )
 
 // ChatMessageWriter is the only sanctioned way to persist chat messages.
-// It wraps repo.CreateChatMessage and ensures observers are always notified
-// after a successful write. External packages must use Write or RunInTx.
+// It wraps repo.CreateChatMessage and notifies observers after a successful
+// write that stored at least one message. External packages must use Write
+// or RunInTx.
 type ChatMessageWriter struct {
 	db           *pgxpool.Pool
 	logger       *slog.Logger
@@ -28,11 +29,12 @@ type ChatMessageWriter struct {
 }
 
 func NewChatMessageWriter(logger *slog.Logger, db *pgxpool.Pool, assetStorage assets.BlobStore) (w *ChatMessageWriter, shutdown func(context.Context) error) {
-	ctx, cancel := context.WithCancel(context.Background()) //nolint:contextcheck,gosec
+	ctx, cancel := context.WithCancel(context.Background()) //nolint:contextcheck,gosec // shutdown context must outlive any single request
 	w = &ChatMessageWriter{
 		db:           db,
 		logger:       logger,
 		assetStorage: assetStorage,
+		observers:    nil,
 		shutdownCtx:  ctx,
 		cancel:       cancel,
 	}
@@ -51,23 +53,27 @@ func (w *ChatMessageWriter) AddObserver(obs MessageObserver) {
 func (w *ChatMessageWriter) Write(ctx context.Context, projectID uuid.UUID, params []repo.CreateChatMessageParams) (int64, error) {
 	n, err := repo.New(w.db).CreateChatMessage(ctx, params)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("create chat messages: %w", err)
 	}
-	w.notifyMessagesStored(ctx, projectID)
+	if n > 0 {
+		w.notifyMessagesStored(ctx, projectID)
+	}
 	return n, nil
 }
 
-// RunInTx runs fn inside a transaction. If fn succeeds and the transaction
-// commits, observers are notified. The caller cannot forget notification
-// because it is handled by RunInTx itself.
-func (w *ChatMessageWriter) RunInTx(ctx context.Context, projectID uuid.UUID, fn func(tx pgx.Tx) error) error {
+// RunInTx runs fn inside a transaction. fn returns the number of messages it
+// stored; if that count is positive and the transaction commits, observers are
+// notified. The caller cannot forget notification because it is handled by
+// RunInTx itself.
+func (w *ChatMessageWriter) RunInTx(ctx context.Context, projectID uuid.UUID, fn func(tx pgx.Tx) (int64, error)) error {
 	tx, err := w.db.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	if err := fn(tx); err != nil {
+	stored, err := fn(tx)
+	if err != nil {
 		return err
 	}
 
@@ -75,7 +81,9 @@ func (w *ChatMessageWriter) RunInTx(ctx context.Context, projectID uuid.UUID, fn
 		return fmt.Errorf("commit transaction: %w", err)
 	}
 
-	w.notifyMessagesStored(ctx, projectID)
+	if stored > 0 {
+		w.notifyMessagesStored(ctx, projectID)
+	}
 	return nil
 }
 
@@ -84,6 +92,9 @@ func (w *ChatMessageWriter) RunInTx(ctx context.Context, projectID uuid.UUID, fn
 // full pipeline for the OpenRouter proxy path where messages carry rich
 // content that needs asset storage.
 func (w *ChatMessageWriter) WriteWithAssets(ctx context.Context, projectID uuid.UUID, rows []chatMessageRow) error {
+	if len(rows) == 0 {
+		return nil
+	}
 	if err := w.storeMessages(ctx, w.db, rows); err != nil {
 		return err
 	}

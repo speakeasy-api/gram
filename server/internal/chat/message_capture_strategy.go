@@ -437,18 +437,19 @@ func (s *ChatMessageCaptureStrategy) resolveSession(ctx context.Context, raw ope
 // also handles asset-storage upload) and the assistant rows inside a single
 // Postgres transaction. Observer notification is handled by RunInTx after commit.
 func (s *ChatMessageCaptureStrategy) flushTurnAtomically(ctx context.Context, projectID uuid.UUID, pending []chatMessageRow, assistants []repo.CreateChatMessageParams) error {
-	return s.writer.RunInTx(ctx, projectID, func(tx pgx.Tx) error {
+	return s.writer.RunInTx(ctx, projectID, func(tx pgx.Tx) (int64, error) {
 		if err := s.writer.storeMessages(ctx, tx, pending); err != nil {
-			return fmt.Errorf("store pending chat messages: %w", err)
+			return 0, fmt.Errorf("store pending chat messages: %w", err)
 		}
 
 		txRepo := repo.New(tx)
-		if _, err := txRepo.CreateChatMessage(ctx, assistants); err != nil {
+		n, err := txRepo.CreateChatMessage(ctx, assistants)
+		if err != nil {
 			s.logger.ErrorContext(ctx, "failed to store assistant chat message", attr.SlogError(err))
-			return fmt.Errorf("store assistant chat message: %w", err)
+			return 0, fmt.Errorf("store assistant chat message: %w", err)
 		}
 
-		return nil
+		return int64(len(pending)) + n, nil
 	})
 }
 
