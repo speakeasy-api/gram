@@ -191,11 +191,11 @@ func (s *Service) validateGramToolsetCall(
 		return deny(fmt.Sprintf("invalid %q value: not a UUID", xGramToolsetIDField))
 	}
 
-	toolsetRow, err := tsr.New(s.db).GetToolsetByID(ctx, toolsetID)
+	toolsetRow, err := tsr.New(s.db).GetToolsetByIDAndOrganization(ctx, tsr.GetToolsetByIDAndOrganizationParams{
+		ID:             toolsetID,
+		OrganizationID: orgID,
+	})
 	if err != nil {
-		return deny(fmt.Sprintf("toolset %s not found in this organization", toolsetID))
-	}
-	if toolsetRow.OrganizationID != orgID {
 		return deny(fmt.Sprintf("toolset %s not found in this organization", toolsetID))
 	}
 
