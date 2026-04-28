@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 
 	"github.com/google/uuid"
@@ -234,15 +235,17 @@ func toolToListEntry(tool *types.Tool) *toolListEntry {
 func filterToolsByAuthz(ctx context.Context, logger *slog.Logger, engine *authz.Engine, toolsetID string, tools []*toolListEntry) ([]*toolListEntry, error) {
 	allowed := make([]*toolListEntry, 0, len(tools))
 	for _, t := range tools {
-		ok, err := engine.IsAllowed(ctx, authz.MCPToolCallCheck(toolsetID, authz.MCPToolCallDimensions{
+		err := engine.Require(ctx, authz.MCPToolCallCheck(toolsetID, authz.MCPToolCallDimensions{
 			Tool: t.Name,
 		}))
 		if err != nil {
+			var oopsErr *oops.ShareableError
+			if errors.As(err, &oopsErr) && oopsErr.Code == oops.CodeForbidden {
+				continue
+			}
 			return nil, oops.E(oops.CodeUnexpected, err, "check tool-level authz for tools/list").Log(ctx, logger)
 		}
-		if ok {
-			allowed = append(allowed, t)
-		}
+		allowed = append(allowed, t)
 	}
 	return allowed, nil
 }
