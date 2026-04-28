@@ -2232,4 +2232,4 @@ export function GramOAuthProxyModal({
   );
 }
 
-export { ConnectOAuthModal } from "./oauth-wizard";
+export { ConnectOAuthModal, EditOAuthProxyModal } from "./oauth-wizard";
