@@ -57,7 +57,6 @@ WHERE organization_id = @organization_id
 -- name: UpsertRole :exec
 INSERT INTO organization_roles (
     organization_id,
-    workos_id,
     workos_slug,
     workos_name,
     workos_description,
@@ -67,7 +66,6 @@ INSERT INTO organization_roles (
 )
 VALUES (
     @organization_id,
-    @workos_id,
     @workos_slug,
     @workos_name,
     @workos_description,
@@ -75,9 +73,8 @@ VALUES (
     @workos_updated_at,
     @workos_last_event_id
 )
-ON CONFLICT (organization_id, workos_id)
+ON CONFLICT (organization_id, workos_slug)
 DO UPDATE SET
-  workos_slug = EXCLUDED.workos_slug,
   workos_name = EXCLUDED.workos_name,
   workos_description = EXCLUDED.workos_description,
   workos_created_at = EXCLUDED.workos_created_at,
@@ -93,7 +90,7 @@ SET workos_deleted_at = @workos_deleted_at,
     workos_last_event_id = @workos_last_event_id,
     updated_at = clock_timestamp()
 WHERE organization_id = @organization_id
-  AND workos_id = @workos_id
+  AND workos_slug = @workos_slug
   AND (
     workos_deleted_at IS NULL
     OR workos_deleted_at < @workos_deleted_at

@@ -166,6 +166,7 @@ WITH input_roles AS (
     WHERE organization_id = @organization_id
       AND workos_slug = ANY(@workos_role_slugs::text[])
       AND deleted IS FALSE
+      AND workos_deleted IS FALSE
 ),
 upserted AS (
     INSERT INTO organization_user_roles (organization_id, user_id, role_id)
@@ -179,6 +180,14 @@ DELETE FROM organization_user_roles
 WHERE organization_id = @organization_id::text
   AND user_id = @user_id::text
   AND role_id NOT IN (SELECT role_id FROM input_roles);
+
+-- name: GetOrganizationUserRoles :many
+SELECT our.id, our.organization_id, our.user_id, our.role_id,
+       r.workos_slug, r.workos_name
+FROM organization_user_roles our
+JOIN organization_roles r ON r.id = our.role_id
+WHERE our.organization_id = @organization_id
+  AND our.user_id = @user_id;
 
 -- name: SetUserWorkOSMemberships :exec
 -- Declaratively set all WorkOS memberships for a user. Takes WorkOS org IDs

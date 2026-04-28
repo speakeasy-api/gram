@@ -38,7 +38,6 @@ CREATE INDEX "workos_user_syncs_last_event_id_desc_idx" ON "workos_user_syncs" (
 CREATE TABLE "organization_roles" (
   "id" uuid NOT NULL DEFAULT generate_uuidv7(),
   "organization_id" text NOT NULL,
-  "workos_id" text NOT NULL,
   "workos_slug" text NOT NULL,
   "workos_name" text NOT NULL,
   "workos_description" text NULL,
@@ -54,10 +53,8 @@ CREATE TABLE "organization_roles" (
   PRIMARY KEY ("id"),
   CONSTRAINT "organization_roles_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "organization_metadata" ("id") ON UPDATE NO ACTION ON DELETE CASCADE
 );
--- Create index "organization_roles_organization_id_workos_id_key" to table: "organization_roles"
-CREATE UNIQUE INDEX "organization_roles_organization_id_workos_id_key" ON "organization_roles" ("organization_id", "workos_id");
--- Create index "organization_roles_organization_id_workos_slug_key" to table: "organization_roles"
-CREATE UNIQUE INDEX "organization_roles_organization_id_workos_slug_key" ON "organization_roles" ("organization_id", "workos_slug") WHERE ((deleted IS FALSE) AND (workos_deleted IS FALSE));
+-- Slug is immutable in WorkOS ("Can't be edited after creation"), making it a safe unique key.
+CREATE UNIQUE INDEX "organization_roles_organization_id_workos_slug_key" ON "organization_roles" ("organization_id", "workos_slug");
 -- Create "organization_user_roles" table
 CREATE TABLE "organization_user_roles" (
   "id" uuid NOT NULL DEFAULT generate_uuidv7(),

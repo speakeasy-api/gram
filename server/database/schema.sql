@@ -1191,7 +1191,6 @@ CREATE TABLE IF NOT EXISTS organization_roles (
   id UUID NOT NULL DEFAULT generate_uuidv7(),
   organization_id TEXT NOT NULL,
 
-  workos_id TEXT NOT NULL,
   workos_slug TEXT NOT NULL,
   workos_name TEXT NOT NULL,
   workos_description TEXT,
@@ -1210,12 +1209,9 @@ CREATE TABLE IF NOT EXISTS organization_roles (
   CONSTRAINT organization_roles_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
 );
 
+-- Slug is immutable in WorkOS ("Can't be edited after creation"), making it a safe unique key.
 CREATE UNIQUE INDEX IF NOT EXISTS organization_roles_organization_id_workos_slug_key
-ON organization_roles (organization_id, workos_slug)
-WHERE deleted IS FALSE AND workos_deleted IS FALSE;
-
-CREATE UNIQUE INDEX IF NOT EXISTS organization_roles_organization_id_workos_id_key
-ON organization_roles (organization_id, workos_id);
+ON organization_roles (organization_id, workos_slug);
 
 CREATE TABLE IF NOT EXISTS deployment_tags (
   -- Column order optimized for alignment (PG110)
