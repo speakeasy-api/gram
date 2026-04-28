@@ -136,6 +136,13 @@ GRAM_SSL_KEY_FILE = "{{config_root}}/local/ssl/keys/local-key.pem"
 # GRAM_PLUGINS_GITHUB_ORG = ""
 # GRAM_PLUGINS_GITHUB_INSTALLATION_ID = ""
 
+############
+## WorkOS ##
+############
+WORKOS_API_KEY = ""
+## The webhook secret below is found on the WorkOS dashboard for production.
+WORKOS_WEBHOOK_SECRET = ""
+
 ##########################
 ## Observability config ##
 ##########################

@@ -8,16 +8,17 @@ import (
 )
 
 // Member represents an active organization membership.
-// RoleSlug is the slug of the member's assigned role.
 type Member struct {
 	ID             string
 	UserID         string
 	OrganizationID string
 	Organization   string
-	RoleSlug       string
-	Status         string
-	CreatedAt      string
-	UpdatedAt      string
+	// RoleSlug is the primary role (WorkOS "priority role" when multiple are assigned).
+	RoleSlug  string
+	RoleSlugs []string
+	Status    string
+	CreatedAt string
+	UpdatedAt string
 }
 
 // User represents a WorkOS user with the fields used by Gram.

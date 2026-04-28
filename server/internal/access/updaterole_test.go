@@ -3,6 +3,7 @@ package access
 import (
 	"errors"
 	"testing"
+	"time"
 
 	mockidp "github.com/speakeasy-api/gram/mock-speakeasy-idp"
 
@@ -52,14 +53,14 @@ func TestService_UpdateRole(t *testing.T) {
 		UserID:         "user_1",
 		OrganizationID: mockidp.MockOrgID,
 		RoleSlug:       "custom-builder",
-		CreatedAt:      mockMembershipTimestamp,
+		CreatedAt:      mockMembershipTimestamp.Format(time.RFC3339),
 	}, nil).Once()
 	ti.roles.On("UpdateMemberRole", mock.Anything, "membership_2", "custom-builder").Return(&thirdpartyworkos.Member{
 		ID:             "membership_2",
 		UserID:         "user_2",
 		OrganizationID: mockidp.MockOrgID,
 		RoleSlug:       "custom-builder",
-		CreatedAt:      mockMembershipTimestamp,
+		CreatedAt:      mockMembershipTimestamp.Format(time.RFC3339),
 	}, nil).Once()
 	ti.roles.On("ListMembers", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Member{
 		mockMember(mockidp.MockOrgID, "membership_1", "user_1", "custom-builder"),
@@ -89,8 +90,8 @@ func TestService_UpdateRole(t *testing.T) {
 	require.Equal(t, description, role.Description)
 	require.False(t, role.IsSystem)
 	require.Equal(t, 3, role.MemberCount)
-	require.Equal(t, mockRoleTimestamp, role.CreatedAt)
-	require.Equal(t, mockRoleTimestamp, role.UpdatedAt)
+	require.Equal(t, mockRoleTimestamp.Format(time.RFC3339), role.CreatedAt)
+	require.Equal(t, mockRoleTimestamp.Format(time.RFC3339), role.UpdatedAt)
 	require.Len(t, role.Grants, 2)
 
 	grants := listPrincipalGrants(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"))
@@ -118,7 +119,7 @@ func TestService_UpdateRole_SystemRole_MemberAssignment(t *testing.T) {
 		UserID:         "user_1",
 		OrganizationID: mockidp.MockOrgID,
 		RoleSlug:       "admin",
-		CreatedAt:      mockMembershipTimestamp,
+		CreatedAt:      mockMembershipTimestamp.Format(time.RFC3339),
 	}, nil).Once()
 	ti.roles.On("ListMembers", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Member{
 		mockMember(mockidp.MockOrgID, "membership_1", "user_1", "admin"),
@@ -211,7 +212,7 @@ func TestService_UpdateRole_SystemRole_AuditLog(t *testing.T) {
 		UserID:         "user_1",
 		OrganizationID: mockidp.MockOrgID,
 		RoleSlug:       "admin",
-		CreatedAt:      mockMembershipTimestamp,
+		CreatedAt:      mockMembershipTimestamp.Format(time.RFC3339),
 	}, nil).Once()
 	ti.roles.On("ListMembers", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Member{
 		mockMember(mockidp.MockOrgID, "membership_1", "user_1", "admin"),

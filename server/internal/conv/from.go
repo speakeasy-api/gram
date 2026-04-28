@@ -148,21 +148,6 @@ func PtrToPGTextEmpty(t *string) pgtype.Text {
 	return pgtype.Text{String: *t, Valid: *t != ""}
 }
 
-// ToPGTimestamptz converts a time.Time to a pgtype.Timestamptz with Valid set
-// to true and InfinityModifier set to Finite.
-func ToPGTimestamptz(t time.Time) pgtype.Timestamptz {
-	return pgtype.Timestamptz{Time: t, Valid: true, InfinityModifier: pgtype.Finite}
-}
-
-// PtrToPGTimestamptz converts a *time.Time to a pgtype.Timestamptz. If the
-// pointer is nil, the result has Valid set to false.
-func PtrToPGTimestamptz(t *time.Time) pgtype.Timestamptz {
-	if t == nil {
-		return pgtype.Timestamptz{Time: time.Time{}, Valid: false, InfinityModifier: pgtype.Finite}
-	}
-	return pgtype.Timestamptz{Time: *t, Valid: true, InfinityModifier: pgtype.Finite}
-}
-
 // PtrToPGInt8 converts an int pointer to a pgtype.Int8. If the pointer is nil,
 // the result has Valid set to false.
 func PtrToPGInt8(v *int) pgtype.Int8 {
@@ -180,6 +165,39 @@ func PtrToPGBool(b *bool) pgtype.Bool {
 	}
 
 	return pgtype.Bool{Bool: *b, Valid: true}
+}
+
+// ToPGTimestamptz converts a time to a valid pgtype.Timestamptz.
+func ToPGTimestamptz(t time.Time) pgtype.Timestamptz {
+	return pgtype.Timestamptz{
+		Time:             t,
+		InfinityModifier: pgtype.Finite,
+		Valid:            true,
+	}
+}
+
+// ToPGTimestamptzEmpty converts a time to a pgtype.Timestamptz that is only
+// valid when the input is non-zero.
+func ToPGTimestamptzEmpty(t time.Time) pgtype.Timestamptz {
+	return pgtype.Timestamptz{
+		Time:             t,
+		InfinityModifier: pgtype.Finite,
+		Valid:            !t.IsZero(),
+	}
+}
+
+// PtrToPGTimestamptz converts a time pointer to a pgtype.Timestamptz. A nil
+// pointer produces an invalid value.
+func PtrToPGTimestamptz(t *time.Time) pgtype.Timestamptz {
+	if t == nil {
+		return pgtype.Timestamptz{
+			Time:             time.Time{},
+			InfinityModifier: pgtype.Finite,
+			Valid:            false,
+		}
+	}
+
+	return ToPGTimestamptz(*t)
 }
 
 // FromPGBool converts a pgtype.Bool to a bool or subtype of bool. If Bool is

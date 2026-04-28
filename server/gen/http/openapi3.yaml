@@ -28885,6 +28885,11 @@ components:
             description: Session based auth. By cookie or header.
             name: Gram-Session
             in: header
+        workos_signature_header_WorkOS-Signature:
+            type: apiKey
+            description: WorkOS webhook signature.
+            name: WorkOS-Signature
+            in: header
 tags:
     - name: access
       description: Manage roles and team member access control.
@@ -28908,6 +28913,8 @@ tags:
       description: Manage custom domains for gram.
     - name: environments
       description: Managing toolset environments.
+    - name: external
+      description: Endpoints for external services to interact with gram.
     - name: mcpRegistries
       description: External MCP registry operations
     - name: collections

@@ -3,6 +3,7 @@ package access
 import (
 	"context"
 	"testing"
+	"time"
 
 	mockidp "github.com/speakeasy-api/gram/mock-speakeasy-idp"
 
@@ -273,7 +274,7 @@ func TestService_UpdateMemberRole_AllowsOrgAdminGrant(t *testing.T) {
 		UserID:         "user_1",
 		OrganizationID: mockidp.MockOrgID,
 		RoleSlug:       "custom-builder",
-		CreatedAt:      mockMembershipTimestamp,
+		CreatedAt:      mockMembershipTimestamp.Format(time.RFC3339),
 	}, nil).Once()
 	ti.roles.On("ListOrgUsers", mock.Anything, mockidp.MockOrgID).Return(map[string]thirdpartyworkos.User{
 		"user_1": mockUser("user_1", "Ada", "Lovelace", "ada@example.com"),

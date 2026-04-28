@@ -35,11 +35,49 @@ SELECT *
 FROM organization_metadata
 WHERE id = @id;
 
+-- name: ListOrganizationsWithWorkosID :many
+SELECT workos_id::text AS workos_id
+FROM organization_metadata
+WHERE workos_id IS NOT NULL;
+
 -- name: GetOrganizationNameByWorkosID :one
 SELECT name
 FROM organization_metadata
 WHERE workos_id = @workos_id
 LIMIT 1;
+
+-- name: GetOrganizationIDByWorkosID :one
+SELECT id
+FROM organization_metadata
+WHERE workos_id = @workos_id
+LIMIT 1;
+
+-- name: UpsertOrganizationMetadataFromWorkOS :one
+INSERT INTO organization_metadata (
+    id,
+    name,
+    slug,
+    workos_id
+) VALUES (
+    @id,
+    @name,
+    @slug,
+    @workos_id
+)
+ON CONFLICT (id) DO UPDATE SET
+    name = EXCLUDED.name,
+    slug = COALESCE(organization_metadata.slug, EXCLUDED.slug),
+    workos_id = EXCLUDED.workos_id,
+    disabled_at = NULL,
+    updated_at = clock_timestamp()
+RETURNING *;
+
+-- name: DisableOrganizationByWorkosID :execrows
+UPDATE organization_metadata
+SET disabled_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE workos_id = @workos_id
+  AND disabled_at IS NULL;
 
 -- name: UpsertOrganizationUserRelationship :one
 INSERT INTO organization_user_relationships (
@@ -104,6 +142,53 @@ ON CONFLICT (organization_id, user_id) DO UPDATE SET
     workos_membership_id = COALESCE(organization_user_relationships.workos_membership_id, EXCLUDED.workos_membership_id),
     updated_at = clock_timestamp()
 WHERE organization_user_relationships.deleted_at IS NULL;
+
+-- name: UpsertWorkOSMembership :exec
+INSERT INTO organization_user_relationships (
+    organization_id,
+    user_id,
+    workos_membership_id
+) VALUES (
+    @organization_id,
+    @user_id,
+    @workos_membership_id
+)
+ON CONFLICT (organization_id, user_id) DO UPDATE SET
+    workos_membership_id = EXCLUDED.workos_membership_id,
+    deleted_at = NULL,
+    updated_at = clock_timestamp();
+
+-- name: SyncUserOrganizationRoles :exec
+-- Declaratively set all WorkOS roles for a user in an organization. Resolves
+-- slugs to internal role IDs, inserts new roles and removes roles not in the list.
+WITH input_roles AS (
+    SELECT id AS role_id
+    FROM organization_roles
+    WHERE organization_id = @organization_id
+      AND workos_slug = ANY(@workos_role_slugs::text[])
+      AND deleted IS FALSE
+      AND workos_deleted IS FALSE
+),
+upserted AS (
+    INSERT INTO organization_user_roles (organization_id, user_id, role_id)
+    SELECT @organization_id, @user_id, role_id
+    FROM input_roles
+    ON CONFLICT (organization_id, user_id, role_id) DO UPDATE SET
+        updated_at = clock_timestamp()
+    RETURNING role_id
+)
+DELETE FROM organization_user_roles
+WHERE organization_id = @organization_id::text
+  AND user_id = @user_id::text
+  AND role_id NOT IN (SELECT role_id FROM input_roles);
+
+-- name: GetOrganizationUserRoles :many
+SELECT our.id, our.organization_id, our.user_id, our.role_id,
+       r.workos_slug, r.workos_name
+FROM organization_user_roles our
+JOIN organization_roles r ON r.id = our.role_id
+WHERE our.organization_id = @organization_id
+  AND our.user_id = @user_id;
 
 -- name: SetUserWorkOSMemberships :exec
 -- Declaratively set all WorkOS memberships for a user. Takes WorkOS org IDs

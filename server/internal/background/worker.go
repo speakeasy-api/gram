@@ -7,6 +7,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
+	"github.com/workos/workos-go/v6/pkg/events"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/sdk/interceptor"
@@ -34,6 +35,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
 
 type WorkerOptions struct {
@@ -57,6 +59,8 @@ type WorkerOptions struct {
 	RagService          *rag.ToolsetVectorStore
 	MCPRegistryClient   *externalmcp.RegistryClient
 	TelemetryLogger     *telemetry.Logger
+	WorkOSClient        *workos.Client
+	WorkOSEventsClient  *events.Client
 	TriggersApp         *bgtriggers.App
 	PIIScanner          risk_analysis.PIIScanner
 }
@@ -91,6 +95,8 @@ func ForDeploymentProcessing(
 		PosthogClient:       nil,
 		TelemetryLogger:     nil,
 		TriggersApp:         nil,
+		WorkOSClient:        nil,
+		WorkOSEventsClient:  nil,
 		CacheAdapter:        nil,
 		PIIScanner:          nil,
 	}
@@ -124,6 +130,8 @@ func NewTemporalWorker(
 		MCPRegistryClient:   nil,
 		TelemetryLogger:     nil,
 		TriggersApp:         nil,
+		WorkOSClient:        nil,
+		WorkOSEventsClient:  nil,
 		CacheAdapter:        nil,
 		PIIScanner:          nil,
 	}
@@ -150,6 +158,8 @@ func NewTemporalWorker(
 			MCPRegistryClient:   conv.Default(o.MCPRegistryClient, opts.MCPRegistryClient),
 			TelemetryLogger:     conv.Default(o.TelemetryLogger, opts.TelemetryLogger),
 			TriggersApp:         conv.Default(o.TriggersApp, opts.TriggersApp),
+			WorkOSClient:        conv.Default(o.WorkOSClient, opts.WorkOSClient),
+			WorkOSEventsClient:  conv.Default(o.WorkOSEventsClient, opts.WorkOSEventsClient),
 			CacheAdapter:        conv.Default(o.CacheAdapter, opts.CacheAdapter),
 			PIIScanner:          conv.Default(o.PIIScanner, opts.PIIScanner),
 		}
@@ -187,6 +197,8 @@ func NewTemporalWorker(
 		env.Client(),
 		opts.TelemetryLogger,
 		opts.TriggersApp,
+		opts.WorkOSClient,
+		opts.WorkOSEventsClient,
 		opts.CacheAdapter,
 		opts.PIIScanner,
 	)
@@ -210,6 +222,8 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.ValidateDeployment)
 	temporalWorker.RegisterActivity(activities.GenerateToolsetEmbeddings)
 	temporalWorker.RegisterActivity(activities.FallbackModelUsageTracking)
+	temporalWorker.RegisterActivity(activities.ProcessWorkOSOrganizationEvents)
+	temporalWorker.RegisterActivity(activities.GetAllWorkOSLinkedOrganizations)
 	temporalWorker.RegisterActivity(activities.GenerateChatTitle)
 	temporalWorker.RegisterActivity(activities.SegmentChat)
 	temporalWorker.RegisterActivity(activities.DeleteChatResolutions)
@@ -235,6 +249,9 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(GenerateChatTitleWorkflow)
 	temporalWorker.RegisterWorkflow(AnalyzeChatResolutionsWorkflow)
 	temporalWorker.RegisterWorkflow(DelayedChatResolutionAnalysisWorkflow)
+	temporalWorker.RegisterWorkflow(ProcessWorkOSOrganizationEventsWorkflowDebounced)
+	temporalWorker.RegisterWorkflow(ProcessWorkOSOrganizationEventsWorkflow)
+	temporalWorker.RegisterWorkflow(ReconcileWorkOSOrganizationsWorkflow)
 	// Trigger workflows
 	temporalWorker.RegisterWorkflow(TriggerCronWorkflow)
 	temporalWorker.RegisterWorkflow(TriggerDispatchWorkflow)
@@ -253,6 +270,12 @@ func NewTemporalWorker(
 	if err := AddRefreshBillingUsageSchedule(context.Background(), env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
 			logger.ErrorContext(context.Background(), "failed to add refresh billing usage schedule", attr.SlogError(err))
+		}
+	}
+
+	if err := AddReconcileWorkOSOrganizationsSchedule(context.Background(), env); err != nil {
+		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
+			logger.ErrorContext(context.Background(), "failed to add reconcile workos organizations schedule", attr.SlogError(err))
 		}
 	}
 

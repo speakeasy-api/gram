@@ -16,4 +16,7 @@ const (
 
 	ProjectSlugSecuritySchema = "project_slug"
 	ProjectHeader             = "Gram-Project"
+
+	WorkOSSignatureSecurityScheme = "workos_signature"
+	WorkOSSignatureHeader         = "WorkOS-Signature"
 )
