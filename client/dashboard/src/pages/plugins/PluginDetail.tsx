@@ -28,7 +28,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useParams } from "react-router";
 import type { PluginServer } from "@gram/client/models/components";
-import { useFetcher } from "@/contexts/Fetcher";
+import { getServerURL } from "@/lib/utils";
+import { useSlugs } from "@/contexts/Sdk";
 
 export default function PluginDetail() {
   const { pluginId } = useParams<{ pluginId: string }>();
@@ -39,7 +40,7 @@ export default function PluginDetail() {
 
   const { data: plugin } = usePluginSuspense({ id: pluginId! });
 
-  const { fetch: authFetch } = useFetcher();
+  const { projectSlug } = useSlugs();
   const { data: toolsetsData, isLoading: isLoadingToolsets } =
     useListToolsets();
   const toolsets = toolsetsData?.toolsets ?? [];
@@ -110,9 +111,12 @@ export default function PluginDetail() {
 
   const handleDownload = async (platform: "claude" | "cursor" | "codex") => {
     setIsDownloadMenuOpen(false);
-    const resp = await authFetch(
-      `/rpc/plugins.downloadPluginPackage?plugin_id=${pluginId}&platform=${platform}`,
-      {},
+    const resp = await fetch(
+      `${getServerURL()}/rpc/plugins.downloadPluginPackage?plugin_id=${pluginId}&platform=${platform}`,
+      {
+        credentials: "include",
+        headers: { "gram-project": projectSlug ?? "" },
+      },
     );
     if (!resp.ok) return;
     const blob = await resp.blob();
