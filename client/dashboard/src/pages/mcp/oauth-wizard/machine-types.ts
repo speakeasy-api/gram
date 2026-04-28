@@ -5,16 +5,6 @@ export type DiscoveredOAuth = {
   metadata: Record<string, unknown>;
 };
 
-export type ProxyDefaults = {
-  slug: string;
-  authorizationEndpoint: string;
-  tokenEndpoint: string;
-  scopes: string;
-  audience: string;
-  tokenAuthMethod: string;
-  environmentSlug: string;
-};
-
 export type ExternalFormKey = "slug" | "metadataJson";
 
 export type ProxyFormKey =
@@ -29,7 +19,6 @@ export type ProxyFormKey =
   | "clientSecret";
 
 export type Context = {
-  mode: "create" | "edit";
   discovered: DiscoveredOAuth | null;
   external: {
     slug: string;
@@ -43,7 +32,6 @@ export type Context = {
     tokenEndpoint: string;
     scopes: string;
     audience: string;
-    audiencePrefilled: string;
     tokenAuthMethod: string;
     environmentSlug: string;
     clientId: string;
@@ -60,13 +48,11 @@ export type Context = {
 };
 
 export type Input = {
-  mode: "create" | "edit";
   discovered: DiscoveredOAuth | null;
   toolsetSlug: string;
   toolsetName: string;
   activeOrganizationId: string;
   existingEnvNames: string[];
-  editProxyDefaults: ProxyDefaults | null;
 };
 
 export type WizardEvent =
@@ -78,7 +64,6 @@ export type WizardEvent =
   | { type: "BACK" }
   | { type: "NEXT" }
   | { type: "SUBMIT" }
-  | { type: "SUBMIT_EDIT" }
   | { type: "RESET" };
 
 export function parseScopes(raw: string): string[] {
@@ -86,8 +71,4 @@ export function parseScopes(raw: string): string[] {
     .split(",")
     .map((s) => s.trim())
     .filter((s) => s.length > 0);
-}
-
-export function audienceDirty(ctx: Context): boolean {
-  return ctx.proxy.audience !== ctx.proxy.audiencePrefilled;
 }

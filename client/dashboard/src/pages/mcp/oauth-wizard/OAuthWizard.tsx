@@ -20,7 +20,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ExternalOAuthForm } from "./ExternalOAuthForm";
 import { FatalErrorStep } from "./FatalErrorStep";
 import { oauthWizardMachine, type WizardSnapshot } from "./machine";
-import type { DiscoveredOAuth, Input, ProxyDefaults } from "./machine-types";
+import type { DiscoveredOAuth, Input } from "./machine-types";
 import { PathSelection } from "./PathSelection";
 import { ProxyCredentialsForm } from "./ProxyCredentialsForm";
 import { ProxyMetadataForm } from "./ProxyMetadataForm";
@@ -31,20 +31,16 @@ import { createWizardServices } from "./services";
 // Container
 // ---------------------------------------------------------------------------
 
-type EditMode = { proxyServer: NonNullable<Toolset["oauthProxyServer"]> };
-
 function OAuthWizard({
   isOpen,
   onClose,
   toolsetSlug,
   toolset,
-  editMode,
 }: {
   isOpen: boolean;
   onClose: () => void;
   toolsetSlug: string;
   toolset: Toolset;
-  editMode?: EditMode;
 }) {
   // Force the inner machine to remount after the modal close animation
   // finishes (200ms). This replaces the old `dispatch RESET` pattern: it
@@ -65,7 +61,6 @@ function OAuthWizard({
           onClose={onClose}
           toolsetSlug={toolsetSlug}
           toolset={toolset}
-          editMode={editMode}
         />
       </Dialog.Content>
     </Dialog>
@@ -81,12 +76,10 @@ function WizardBody({
   onClose,
   toolsetSlug,
   toolset,
-  editMode,
 }: {
   onClose: () => void;
   toolsetSlug: string;
   toolset: Toolset;
-  editMode?: EditMode;
 }) {
   const client = useGramContext();
   const queryClient = useQueryClient();
@@ -104,23 +97,6 @@ function WizardBody({
     [environmentsData],
   );
 
-  const editProxyDefaults = useMemo<ProxyDefaults | null>(() => {
-    const proxy = editMode?.proxyServer;
-    if (!proxy) return null;
-    const provider = proxy.oauthProxyProviders?.[0];
-    return {
-      slug: proxy.slug ?? "",
-      audience: proxy.audience ?? "",
-      authorizationEndpoint: provider?.authorizationEndpoint ?? "",
-      tokenEndpoint: provider?.tokenEndpoint ?? "",
-      scopes: (provider?.scopesSupported ?? []).join(", "),
-      tokenAuthMethod:
-        provider?.tokenEndpointAuthMethodsSupported?.[0] ??
-        "client_secret_post",
-      environmentSlug: provider?.environmentSlug ?? "",
-    };
-  }, [editMode]);
-
   const provided = useMemo(
     () =>
       oauthWizardMachine.provide({
@@ -132,7 +108,6 @@ function WizardBody({
             invalidateAllGetMcpMetadata(queryClient);
             invalidateAllListEnvironments(queryClient);
           },
-          invalidateOnProxyUpdate: () => invalidateAllToolset(queryClient),
           captureExternalSuccess: () =>
             telemetry.capture("mcp_event", {
               action: "external_oauth_configured",
@@ -143,24 +118,17 @@ function WizardBody({
               action: "oauth_proxy_configured",
               slug: toolsetSlug,
             }),
-          captureProxyUpdateSuccess: () =>
-            telemetry.capture("mcp_event", {
-              action: "oauth_proxy_updated",
-              slug: toolsetSlug,
-            }),
         },
       }),
     [client, queryClient, telemetry, toolsetSlug],
   );
 
   const input: Input = {
-    mode: editMode ? "edit" : "create",
     discovered,
     toolsetSlug,
     toolsetName: toolset.name,
     activeOrganizationId: session.activeOrganizationId,
     existingEnvNames,
-    editProxyDefaults,
   };
 
   const [state, send] = useMachine(provided, { input });
@@ -174,7 +142,7 @@ function WizardBody({
   return (
     <>
       <Dialog.Header>
-        <Dialog.Title>{wizardTitle(state, !!editMode)}</Dialog.Title>
+        <Dialog.Title>{wizardTitle(state)}</Dialog.Title>
       </Dialog.Header>
 
       {state.matches("pathSelection") && (
@@ -194,16 +162,12 @@ function WizardBody({
         />
       )}
 
-      {(state.matches({ proxy: "metadata" }) ||
-        state.matches({ proxy: "updating" })) && (
+      {state.matches({ proxy: "metadata" }) && (
         <ProxyMetadataForm
           proxy={ctx.proxy}
           error={ctx.error}
-          editPending={state.matches({ proxy: "updating" })}
           discovered={discovered}
-          editMode={!!editMode}
           send={send}
-          onClose={onClose}
         />
       )}
 
@@ -231,14 +195,10 @@ function WizardBody({
 // Helpers
 // ---------------------------------------------------------------------------
 
-function wizardTitle(state: WizardSnapshot, editMode: boolean): string {
+function wizardTitle(state: WizardSnapshot): string {
   if (state.matches("pathSelection")) return "Connect OAuth";
   if (state.matches("external")) return "Configure External OAuth";
-  if (
-    state.matches({ proxy: "metadata" }) ||
-    state.matches({ proxy: "updating" })
-  )
-    return editMode ? "Edit OAuth Proxy" : "Configure OAuth Proxy";
+  if (state.matches({ proxy: "metadata" })) return "Configure OAuth Proxy";
   if (
     state.matches({ proxy: "credentials" }) ||
     state.matches({ proxy: "creatingEnvironment" }) ||
@@ -295,13 +255,11 @@ export function ConnectOAuthModal({
   onClose,
   toolsetSlug,
   toolset,
-  editMode,
 }: {
   isOpen: boolean;
   onClose: () => void;
   toolsetSlug: string;
   toolset: Toolset;
-  editMode?: EditMode;
 }) {
   const productTier = useProductTier();
   const isAccountUpgrade = productTier.includes("base");
@@ -327,7 +285,6 @@ export function ConnectOAuthModal({
       onClose={onClose}
       toolsetSlug={toolsetSlug}
       toolset={toolset}
-      editMode={editMode}
     />
   );
 }

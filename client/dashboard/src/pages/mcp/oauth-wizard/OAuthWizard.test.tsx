@@ -165,30 +165,6 @@ describe("OAuthWizard — rendering", () => {
     expect(screen.getByRole("button", { name: /OAuth Proxy/ })).toBeTruthy();
     expect(screen.getByRole("button", { name: /External OAuth/ })).toBeTruthy();
   });
-
-  it("renders the proxy edit form when editMode is supplied", () => {
-    renderWizard({
-      editMode: {
-        proxyServer: {
-          slug: "existing-proxy",
-          audience: "aud-1",
-          oauthProxyProviders: [
-            {
-              authorizationEndpoint: "https://e.example/auth",
-              tokenEndpoint: "https://e.example/token",
-              scopesSupported: ["read", "write"],
-              tokenEndpointAuthMethodsSupported: ["client_secret_post"],
-              environmentSlug: "env-existing",
-            },
-          ],
-        },
-      } as unknown as Parameters<typeof ConnectOAuthModal>[0]["editMode"],
-    });
-    expect(screen.getByText("Edit OAuth Proxy")).toBeTruthy();
-    expect(
-      (screen.getByPlaceholderText("my-oauth-proxy") as HTMLInputElement).value,
-    ).toBe("existing-proxy");
-  });
 });
 
 describe("OAuthWizard — happy proxy create", () => {

@@ -1,12 +1,10 @@
 import { assign, fromPromise, setup, type SnapshotFrom } from "xstate";
 
-import { checkExternal, checkProxyMeta, checkCreds } from "./guards";
+import { checkCreds, checkExternal, checkProxyMeta } from "./guards";
 import {
-  audienceDirty,
   type Context,
   type DiscoveredOAuth,
   type Input,
-  type ProxyDefaults,
   type WizardEvent,
 } from "./machine-types";
 import {
@@ -16,36 +14,28 @@ import {
   type CreateEnvironmentInput,
   type CreateEnvironmentOutput,
   type DeleteEnvironmentInput,
-  type UpdateOAuthProxyInput,
 } from "./services";
 
-const PROXY_BLANK: ProxyDefaults = {
-  slug: "",
-  authorizationEndpoint: "",
-  tokenEndpoint: "",
-  scopes: "",
-  audience: "",
-  tokenAuthMethod: "client_secret_post",
-  environmentSlug: "",
-};
-
-function initialProxy(input: Input): Context["proxy"] {
-  const defaults = input.editProxyDefaults ?? PROXY_BLANK;
+function initialProxy(): Context["proxy"] {
   return {
-    ...defaults,
-    audiencePrefilled: defaults.audience,
+    slug: "",
+    authorizationEndpoint: "",
+    tokenEndpoint: "",
+    scopes: "",
+    audience: "",
+    tokenAuthMethod: "client_secret_post",
+    environmentSlug: "",
     clientId: "",
     clientSecret: "",
-    prefilled: input.editProxyDefaults != null,
+    prefilled: false,
   };
 }
 
 function initialContext(input: Input): Context {
   return {
-    mode: input.mode,
     discovered: input.discovered,
     external: { slug: "", metadataJson: "", jsonError: null, prefilled: false },
-    proxy: initialProxy(input),
+    proxy: initialProxy(),
     envSlug: null,
     error: null,
     result: null,
@@ -70,9 +60,11 @@ function externalFromDiscovered(
   };
 }
 
-function proxyFieldsFromDiscovered(d: DiscoveredOAuth): Partial<ProxyDefaults> {
+function proxyFieldsFromDiscovered(
+  d: DiscoveredOAuth,
+): Partial<Context["proxy"]> {
   const m = d.metadata;
-  const out: Partial<ProxyDefaults> = { slug: d.slug };
+  const out: Partial<Context["proxy"]> = { slug: d.slug };
   if (typeof m.authorization_endpoint === "string")
     out.authorizationEndpoint = m.authorization_endpoint;
   if (typeof m.token_endpoint === "string")
@@ -109,21 +101,17 @@ export const oauthWizardMachine = setup({
     >("createEnvironment"),
     addOAuthProxy: placeholder<AddOAuthProxyInput>("addOAuthProxy"),
     deleteEnvironment: placeholder<DeleteEnvironmentInput>("deleteEnvironment"),
-    updateOAuthProxy: placeholder<UpdateOAuthProxyInput>("updateOAuthProxy"),
   },
   guards: {
     validExternal: ({ context }) => checkExternal(context).ok,
     validProxyMeta: ({ context }) => checkProxyMeta(context).ok,
     validCreds: ({ context }) => checkCreds(context).ok,
-    isEditMode: ({ context }) => context.mode === "edit",
   },
   actions: {
     invalidateOnExternalSuccess: () => {},
     invalidateOnProxyCreate: () => {},
-    invalidateOnProxyUpdate: () => {},
     captureExternalSuccess: () => {},
     captureProxyCreateSuccess: () => {},
-    captureProxyUpdateSuccess: () => {},
   },
 }).createMachine({
   id: "oauthWizard",
@@ -131,9 +119,6 @@ export const oauthWizardMachine = setup({
   initial: "pathSelection",
   states: {
     pathSelection: {
-      // Edit mode opens straight on the proxy metadata form — pathSelection
-      // exists only for the create flow.
-      always: { guard: "isEditMode", target: "proxy.metadata" },
       on: {
         SELECT_EXTERNAL: {
           target: "external.editing",
@@ -296,21 +281,6 @@ export const oauthWizardMachine = setup({
                 }),
               },
             ],
-            SUBMIT_EDIT: [
-              {
-                guard: "validProxyMeta",
-                target: "updating",
-                actions: assign({ error: () => null }),
-              },
-              {
-                actions: assign({
-                  error: ({ context }) => {
-                    const r = checkProxyMeta(context);
-                    return r.ok ? null : r.reason;
-                  },
-                }),
-              },
-            ],
             BACK: "#oauthWizard.pathSelection",
           },
         },
@@ -433,42 +403,6 @@ export const oauthWizardMachine = setup({
         },
         fatalError: {
           type: "final",
-        },
-        updating: {
-          invoke: {
-            src: "updateOAuthProxy",
-            input: ({ context }): UpdateOAuthProxyInput => ({
-              toolsetSlug: context.toolsetSlug,
-              authorizationEndpoint: context.proxy.authorizationEndpoint,
-              tokenEndpoint: context.proxy.tokenEndpoint,
-              scopes: context.proxy.scopes,
-              audience: context.proxy.audience,
-              audienceDirty: audienceDirty(context),
-              tokenAuthMethod: context.proxy.tokenAuthMethod,
-              environmentSlug: context.proxy.environmentSlug,
-            }),
-            onDone: {
-              target: "#oauthWizard.result.success",
-              actions: [
-                assign({
-                  result: () => ({
-                    success: true,
-                    message:
-                      "Your OAuth proxy server has been updated successfully.",
-                  }),
-                }),
-                "captureProxyUpdateSuccess",
-                "invalidateOnProxyUpdate",
-              ],
-            },
-            onError: {
-              target: "metadata",
-              actions: assign({
-                error: ({ event }) =>
-                  errorMessage(event.error, "Failed to update OAuth proxy"),
-              }),
-            },
-          },
         },
       },
     },

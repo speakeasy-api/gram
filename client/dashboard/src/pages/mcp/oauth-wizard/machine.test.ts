@@ -5,19 +5,16 @@ import {
   checkCreds,
   checkExternal,
   checkProxyMeta,
-  isEditMode,
   validCreds,
   validExternal,
   validProxyMeta,
 } from "./guards";
 import { oauthWizardMachine } from "./machine";
 import {
-  audienceDirty,
   parseScopes,
   type Context,
   type DiscoveredOAuth,
   type Input,
-  type ProxyDefaults,
 } from "./machine-types";
 import {
   nextEnvironmentName,
@@ -26,7 +23,6 @@ import {
   type CreateEnvironmentInput,
   type CreateEnvironmentOutput,
   type DeleteEnvironmentInput,
-  type UpdateOAuthProxyInput,
 } from "./services";
 
 // ---------------------------------------------------------------------------
@@ -50,23 +46,11 @@ const DISCOVERED_2_1: DiscoveredOAuth = {
 };
 
 const baseInput: Input = {
-  mode: "create",
   discovered: null,
   toolsetSlug: "ts",
   toolsetName: "Toolset",
   activeOrganizationId: "org-1",
   existingEnvNames: [],
-  editProxyDefaults: null,
-};
-
-const editProxyDefaults: ProxyDefaults = {
-  slug: "existing",
-  authorizationEndpoint: "https://e.example/auth",
-  tokenEndpoint: "https://e.example/token",
-  scopes: "read, write",
-  audience: "aud-original",
-  tokenAuthMethod: "client_secret_basic",
-  environmentSlug: "env-existing",
 };
 
 // ---------------------------------------------------------------------------
@@ -84,7 +68,6 @@ function happyServices() {
     deleteEnvironment: fromPromise<void, DeleteEnvironmentInput>(
       async () => {},
     ),
-    updateOAuthProxy: fromPromise<void, UpdateOAuthProxyInput>(async () => {}),
   };
 }
 
@@ -160,53 +143,6 @@ describe("parseScopes", () => {
   });
 });
 
-describe("audienceDirty", () => {
-  function ctx(audience: string, prefilled: string): Context {
-    return {
-      mode: "edit",
-      discovered: null,
-      external: {
-        slug: "",
-        metadataJson: "",
-        jsonError: null,
-        prefilled: false,
-      },
-      proxy: {
-        slug: "",
-        authorizationEndpoint: "",
-        tokenEndpoint: "",
-        scopes: "",
-        audience,
-        audiencePrefilled: prefilled,
-        tokenAuthMethod: "client_secret_post",
-        environmentSlug: "",
-        clientId: "",
-        clientSecret: "",
-        prefilled: false,
-      },
-      envSlug: null,
-      error: null,
-      result: null,
-      toolsetSlug: "",
-      toolsetName: "",
-      activeOrganizationId: "",
-      existingEnvNames: [],
-    };
-  }
-
-  it("is false when audience matches prefilled value", () => {
-    expect(audienceDirty(ctx("same", "same"))).toBe(false);
-  });
-
-  it("is true when user changes the audience", () => {
-    expect(audienceDirty(ctx("changed", "original"))).toBe(true);
-  });
-
-  it("is true when prefilled was empty and user typed a value", () => {
-    expect(audienceDirty(ctx("typed-now", ""))).toBe(true);
-  });
-});
-
 describe("nextEnvironmentName", () => {
   it("returns base name when no collision", () => {
     expect(nextEnvironmentName("MyTool", [])).toBe("MyTool OAuth");
@@ -235,7 +171,6 @@ describe("nextEnvironmentName", () => {
 
 function withExternal(over: Partial<Context["external"]> = {}): Context {
   return {
-    mode: "create",
     discovered: null,
     external: {
       slug: "ok",
@@ -250,7 +185,6 @@ function withExternal(over: Partial<Context["external"]> = {}): Context {
       tokenEndpoint: "",
       scopes: "",
       audience: "",
-      audiencePrefilled: "",
       tokenAuthMethod: "client_secret_post",
       environmentSlug: "",
       clientId: "",
@@ -276,7 +210,6 @@ function withProxy(over: Partial<Context["proxy"]> = {}): Context {
       tokenEndpoint: "https://e.example/token",
       scopes: "read",
       audience: "",
-      audiencePrefilled: "",
       tokenAuthMethod: "client_secret_post",
       environmentSlug: "",
       clientId: "id",
@@ -413,12 +346,6 @@ describe("guard boolean wrappers", () => {
     expect(validCreds(withProxy())).toBe(true);
     expect(validCreds(withProxy({ clientId: "" }))).toBe(false);
   });
-
-  it("isEditMode reflects context.mode", () => {
-    expect(isEditMode(withProxy())).toBe(false);
-    const editCtx = { ...withProxy(), mode: "edit" as const };
-    expect(isEditMode(editCtx)).toBe(true);
-  });
 });
 
 // ---------------------------------------------------------------------------
@@ -439,20 +366,6 @@ describe("oauthWizardMachine — initial state", () => {
     expect(ctx.toolsetName).toBe("MyTool");
     expect(ctx.proxy.slug).toBe("");
     expect(ctx.external.slug).toBe("");
-  });
-
-  it("pre-fills proxy from editProxyDefaults when provided", () => {
-    const actor = makeActor({
-      ...baseInput,
-      mode: "edit",
-      editProxyDefaults,
-    });
-    actor.start();
-    const ctx = actor.getSnapshot().context;
-    expect(ctx.mode).toBe("edit");
-    expect(ctx.proxy.slug).toBe("existing");
-    expect(ctx.proxy.audiencePrefilled).toBe("aud-original");
-    expect(ctx.proxy.audience).toBe("aud-original");
   });
 });
 
@@ -630,43 +543,6 @@ describe("oauthWizardMachine — rollback on proxy failure", () => {
     // fatalError is terminal — sending more events doesn't move us
     actor.send({ type: "BACK" });
     expect(actor.getSnapshot().matches({ proxy: "fatalError" })).toBe(true);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Machine — edit mode
-// ---------------------------------------------------------------------------
-
-describe("oauthWizardMachine — edit mode", () => {
-  it("SUBMIT_EDIT with valid form goes through updating to result.success", async () => {
-    const actor = makeActor({
-      ...baseInput,
-      mode: "edit",
-      editProxyDefaults,
-    });
-    actor.start();
-    actor.send({ type: "SELECT_PROXY" });
-    actor.send({ type: "SUBMIT_EDIT" });
-
-    await waitFor(actor, (s) => s.matches({ result: "success" }), {
-      timeout: 1000,
-    });
-
-    expect(actor.getSnapshot().context.result?.success).toBe(true);
-  });
-
-  it("SUBMIT_EDIT with invalid form stays in metadata with error", () => {
-    const actor = makeActor({
-      ...baseInput,
-      mode: "edit",
-      editProxyDefaults: { ...editProxyDefaults, slug: "" },
-    });
-    actor.start();
-    actor.send({ type: "SELECT_PROXY" });
-    actor.send({ type: "SUBMIT_EDIT" });
-    const snap = actor.getSnapshot();
-    expect(snap.matches({ proxy: "metadata" })).toBe(true);
-    expect(snap.context.error).toBeTruthy();
   });
 });
 

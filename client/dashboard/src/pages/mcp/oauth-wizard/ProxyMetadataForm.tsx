@@ -10,19 +10,13 @@ import type { Context, DiscoveredOAuth, ProxyFormKey } from "./machine-types";
 export function ProxyMetadataForm({
   proxy,
   error,
-  editPending,
   discovered,
-  editMode,
   send,
-  onClose,
 }: {
   proxy: Context["proxy"];
   error: string | null;
-  editPending: boolean;
   discovered: DiscoveredOAuth | null;
-  editMode: boolean;
   send: WizardSend;
-  onClose: () => void;
 }) {
   const setField = (key: ProxyFormKey, value: string) =>
     send({ type: "FIELD_PROXY", key, value });
@@ -90,7 +84,6 @@ export function ProxyMetadataForm({
                 value={proxy.slug}
                 onChange={(v: string) => setField("slug", v)}
                 maxLength={40}
-                disabled={editMode}
               />
             </div>
 
@@ -154,29 +147,19 @@ export function ProxyMetadataForm({
       </div>
 
       <Dialog.Footer className="flex justify-between">
-        <Button
-          variant="secondary"
-          onClick={() => {
-            if (editMode) {
-              onClose();
-            } else {
-              send({ type: "BACK" });
-            }
-          }}
-        >
-          {editMode ? "Cancel" : "Back"}
+        <Button variant="secondary" onClick={() => send({ type: "BACK" })}>
+          Back
         </Button>
         <div className="ml-auto">
           <Button
-            onClick={() => send({ type: editMode ? "SUBMIT_EDIT" : "NEXT" })}
+            onClick={() => send({ type: "NEXT" })}
             disabled={
-              (editMode && editPending) ||
               !proxy.slug.trim() ||
               !proxy.authorizationEndpoint.trim() ||
               !proxy.tokenEndpoint.trim()
             }
           >
-            {editMode ? (editPending ? "Saving..." : "Save changes") : "Next"}
+            Next
           </Button>
         </div>
       </Dialog.Footer>

@@ -1,6 +1,6 @@
 # OAuth Wizard — FSM Redesign
 
-Status: **Phase 2 in progress — container swap + cleanup**
+Status: **Phase 3 in progress — edit lifted out of the FSM**
 Author: walker
 Date: 2026-04-28
 
@@ -10,11 +10,17 @@ Date: 2026-04-28
       `2f464abd1`. Adds `machine.ts`, `machine-types.ts`, `guards.ts`,
       `services.ts`, `machine.test.ts`. xstate 5.30 + @xstate/react 6.1.
       Production code unchanged; 50 unit tests pass.
-- [ ] **Phase 2 — container swap + cleanup.** Rewrite `OAuthWizard.tsx`
-      onto `useMachine`; adapt step components to read from xstate state
-      and call `send`; add `FatalErrorStep`; delete `reducer.ts`,
-      `actions.ts`, `types.ts`, `state-machine-type.ts`; add RTL
-      integration tests.
+- [x] **Phase 2 — container swap + cleanup.** Commit `d18d7e71f`.
+      `OAuthWizard.tsx` runs on `useMachine`; step components read
+      from xstate state and call `send`; `FatalErrorStep` added;
+      `reducer.ts` / `actions.ts` / `types.ts` deleted; RTL tests added.
+- [ ] **Phase 3 — lift edit out of the FSM.** Move the edit flow to a
+      standalone `EditOAuthProxyModal` (plain form +
+      `useUpdateOAuthProxyServerMutation`); strip `mode`,
+      `editProxyDefaults`, `audiencePrefilled`, `audienceDirty`,
+      `isEditMode`, `SUBMIT_EDIT`, `proxy.updating`, and the
+      `updateOAuthProxy` actor from the FSM. Edit no longer goes
+      through the wizard machine.
 
 ## 1. Background
 
@@ -118,9 +124,8 @@ oauthWizard
 ├── proxy
 │   ├── metadata
 │   │   on:
-│   │     NEXT     → credentials         (guard: validProxyMeta)
-│   │     SUBMIT_EDIT → updating         (guard: editMode && validProxyMeta)
-│   │     BACK     → #pathSelection
+│   │     NEXT    → credentials          (guard: validProxyMeta)
+│   │     BACK    → #pathSelection
 │   ├── credentials
 │   │   on:
 │   │     SUBMIT  → creatingEnvironment  (guard: validCreds)
@@ -136,16 +141,16 @@ oauthWizard
 │   │     onError → fatalError  (compound error: proxy failed AND env rollback failed)
 │   ├── fatalError                       (terminal — orphaned env exists)
 │   │     no transitions; user must close modal & clean up env manually
-│   ├── updating                         (invoke updateOAuthProxy)
-│   │     onDone  → #result.success
-│   │     onError → metadata (assign error)
 │
 └── result
     ├── success
-    └── failure
     on:
       RESET → #pathSelection
 ```
+
+The machine handles **create only**. Editing an existing OAuth proxy is
+done by a separate component (`EditOAuthProxyModal.tsx`) — a plain form
+backed by `useUpdateOAuthProxyServerMutation`. See §8.6.
 
 ### 4.1 Context
 
@@ -154,7 +159,6 @@ what to _render_ off `state.matches(...)`, not what fields exist.
 
 ```ts
 type Context = {
-  mode: "create" | "edit";
   discovered: DiscoveredOAuth | null;
   external: { slug: string; metadataJson: string; jsonError: string | null };
   proxy: {
@@ -163,7 +167,6 @@ type Context = {
     tokenEndpoint: string;
     scopes: string; // raw input; parsed in guard/action
     audience: string;
-    audiencePrefilled: string; // ← replaces the ref
     tokenAuthMethod: string;
     environmentSlug: string;
     clientId: string;
@@ -173,7 +176,7 @@ type Context = {
   result: { success: boolean; message: string } | null;
   toolsetSlug: string;
   toolsetName: string;
-  existingEnvNames: Set<string>;
+  existingEnvNames: string[];
 };
 ```
 
@@ -188,7 +191,6 @@ type Event =
   | { type: "BACK" }
   | { type: "NEXT" }
   | { type: "SUBMIT" }
-  | { type: "SUBMIT_EDIT" }
   | { type: "RESET" };
 ```
 
@@ -203,12 +205,6 @@ One place each:
 - `validExternal` — slug + parseable JSON + required endpoints.
 - `validProxyMeta` — slug + endpoints + ≥1 scope.
 - `validCreds` — clientId + clientSecret non-empty.
-- `isEditMode` — `ctx.mode === "edit"`.
-
-`audience` dirtiness (`ctx.proxy.audience !== ctx.proxy.audiencePrefilled`)
-is **not** a guard — no transition branches on it. It's derived state read
-inside the `updating` service to shape the request payload. Lives in
-`services.ts`, not `guards.ts`.
 
 ### 4.4 Services / actors
 
@@ -221,7 +217,6 @@ value via a parent `onDone` action.
 - `createEnvironmentService` → returns `{ envSlug }`
 - `addOAuthProxyService`
 - `deleteEnvironmentService` → used by `rollingBackEnv`
-- `updateOAuthProxyService`
 
 The `proxy.creatingEnvironment → proxy.creatingProxy` chain becomes two
 visible states instead of a nested `onSuccess`. If `creatingProxy` fails,
@@ -259,21 +254,14 @@ useMachine(oauthWizardMachine, {
 
 `input` populates context once at machine startup.
 
-In edit mode, `SUBMIT_EDIT` transitions `metadata → updating` directly,
-skipping the `credentials` substate. **This is by design: this wizard
-does not support credential rotation.** Today's implementation works the
-same way — there is no UI for changing `client_id` / `client_secret`
-from the edit flow, only the metadata fields. If credential rotation
-becomes a requirement, it warrants its own flow (likely starting from
-the proxy detail page, not this wizard) and is out of scope here.
+Edit is **not** modeled in this machine — see §8.6. The wizard is
+create-only.
 
 The 200ms reset timer in `OAuthWizard.tsx:114-119` **stays** — it's there
 so the modal's close animation completes before content swaps. The shape
 changes slightly: instead of `dispatch({ type: "RESET" })` after the
 delay, we delay the unmount/remount of the machine so the user doesn't
-see content reflow mid-animation. The `key={editMode ? "edit" : "create"}`
-remount on `MCPEnvironmentSettings.tsx` is what gives us a fresh machine
-on reopen.
+see content reflow mid-animation.
 
 **Cancellation on close.** When the modal closes mid-flight (e.g. user
 hits ESC during `creatingEnvironment`), the machine actor is stopped on
@@ -282,8 +270,8 @@ aborted — `useMutation` doesn't cancel on unmount by default. The
 implementation must either (a) signal cancellation via an `AbortSignal`
 threaded into each service's `fetch` call, or (b) accept that the
 in-flight request resolves into a void; the machine is gone, so its
-`onDone`/`onError` won't fire. Option (b) is acceptable for `addExternal`
-and `updating` (idempotent retries). Option (a) is required for
+`onDone`/`onError` won't fire. Option (b) is acceptable for
+`addExternalOAuth` (idempotent retries). Option (a) is required for
 `creatingEnvironment` — otherwise a successful env-create whose machine
 already unmounted leaves an orphan env on the next open. Confirm during
 implementation which TanStack mutations already accept `AbortSignal`.
@@ -294,13 +282,12 @@ Several states in §4 have no user input — they exist to invoke an actor
 and route on its outcome. They are first-class members of the machine,
 not booleans threaded through props:
 
-| State                       | Region   | Service invoked     | onDone                                 | onError                              |
-| --------------------------- | -------- | ------------------- | -------------------------------------- | ------------------------------------ |
-| `external.submitting`       | external | `addExternalOAuth`  | `#result.success`                      | `external.editing`                   |
-| `proxy.creatingEnvironment` | proxy    | `createEnvironment` | `proxy.creatingProxy` (assign envSlug) | `proxy.credentials`                  |
-| `proxy.creatingProxy`       | proxy    | `addOAuthProxy`     | `#result.success`                      | `proxy.rollingBackEnv`               |
-| `proxy.rollingBackEnv`      | proxy    | `deleteEnvironment` | `proxy.credentials` (assign error)     | `proxy.credentials` (compound error) |
-| `proxy.updating`            | proxy    | `updateOAuthProxy`  | `#result.success`                      | `proxy.metadata`                     |
+| State                       | Region   | Service invoked     | onDone                                 | onError                             |
+| --------------------------- | -------- | ------------------- | -------------------------------------- | ----------------------------------- |
+| `external.submitting`       | external | `addExternalOAuth`  | `#result.success`                      | `external.editing`                  |
+| `proxy.creatingEnvironment` | proxy    | `createEnvironment` | `proxy.creatingProxy` (assign envSlug) | `proxy.credentials`                 |
+| `proxy.creatingProxy`       | proxy    | `addOAuthProxy`     | `#result.success`                      | `proxy.rollingBackEnv`              |
+| `proxy.rollingBackEnv`      | proxy    | `deleteEnvironment` | `proxy.credentials` (assign error)     | `proxy.fatalError` (compound error) |
 
 The view layer reads these via `state.matches(...)`. There is **no**
 `isPending` boolean anywhere in the React tree — pendingness is a state.
@@ -392,9 +379,16 @@ Resolved on 2026-04-28:
 4. **Modal close timing.** Keep the existing close-animation delay. The
    machine remount is gated behind that delay so content doesn't reflow
    mid-animation (see §4.5).
-5. **Credential rotation.** Not supported by this wizard. `SUBMIT_EDIT`
-   skips the credentials substate by design (see §4.5).
-6. **Free-tier gate.** Stays outside the machine, as the
+5. **Credential rotation.** Not supported by either the wizard or the
+   edit modal. Editing only mutates metadata fields.
+6. **Edit lives outside the FSM.** Editing an existing OAuth proxy is
+   a separate `EditOAuthProxyModal` — a plain form +
+   `useUpdateOAuthProxyServerMutation`. The wizard machine is
+   create-only. Reason: edit is one form → one PUT; the machine's value
+   (mutation cascade, partial-failure rollback, multi-step navigation,
+   `pathSelection`/`credentials` substates) doesn't apply, and folding
+   edit into the FSM dilutes both flows.
+7. **Free-tier gate.** Stays outside the machine, as the
    `ConnectOAuthModal` wrapper does today.
 
 ## 9. Prerequisites for the PR

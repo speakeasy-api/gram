@@ -3,7 +3,6 @@ import {
   buildAddOAuthProxyServerMutation,
   buildCreateEnvironmentMutation,
   buildDeleteEnvironmentMutation,
-  buildUpdateOAuthProxyServerMutation,
   useGramContext,
 } from "@gram/client/react-query";
 import { fromPromise } from "xstate";
@@ -44,17 +43,6 @@ export type AddOAuthProxyInput = {
 
 export type DeleteEnvironmentInput = { envSlug: string };
 
-export type UpdateOAuthProxyInput = {
-  toolsetSlug: string;
-  authorizationEndpoint: string;
-  tokenEndpoint: string;
-  scopes: string;
-  audience: string;
-  audienceDirty: boolean;
-  tokenAuthMethod: string;
-  environmentSlug: string;
-};
-
 export type WizardServices = {
   addExternalOAuth: ReturnType<typeof fromPromise<void, AddExternalOAuthInput>>;
   createEnvironment: ReturnType<
@@ -64,7 +52,6 @@ export type WizardServices = {
   deleteEnvironment: ReturnType<
     typeof fromPromise<void, DeleteEnvironmentInput>
   >;
-  updateOAuthProxy: ReturnType<typeof fromPromise<void, UpdateOAuthProxyInput>>;
 };
 
 export type GramClient = ReturnType<typeof useGramContext>;
@@ -143,34 +130,11 @@ export function createWizardServices(client: GramClient): WizardServices {
     },
   );
 
-  const updateOAuthProxy = fromPromise<void, UpdateOAuthProxyInput>(
-    async ({ input, signal }) => {
-      const { mutationFn } = buildUpdateOAuthProxyServerMutation(client);
-      await mutationFn({
-        request: {
-          slug: input.toolsetSlug,
-          updateOAuthProxyServerRequestBody: {
-            oauthProxyServer: {
-              audience: input.audienceDirty ? input.audience : undefined,
-              authorizationEndpoint: input.authorizationEndpoint,
-              tokenEndpoint: input.tokenEndpoint,
-              scopesSupported: parseScopes(input.scopes),
-              tokenEndpointAuthMethodsSupported: [input.tokenAuthMethod],
-              environmentSlug: input.environmentSlug || undefined,
-            },
-          },
-        },
-        ...fetchOptions({ signal }),
-      });
-    },
-  );
-
   return {
     addExternalOAuth,
     createEnvironment,
     addOAuthProxy,
     deleteEnvironment,
-    updateOAuthProxy,
   };
 }
 

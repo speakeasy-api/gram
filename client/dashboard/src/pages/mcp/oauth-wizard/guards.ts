@@ -94,4 +94,3 @@ export function checkCreds(ctx: Context): GuardResult {
 export const validExternal = (ctx: Context): boolean => checkExternal(ctx).ok;
 export const validProxyMeta = (ctx: Context): boolean => checkProxyMeta(ctx).ok;
 export const validCreds = (ctx: Context): boolean => checkCreds(ctx).ok;
-export const isEditMode = (ctx: Context): boolean => ctx.mode === "edit";
