@@ -131,37 +131,33 @@ func (s *Service) insertMessageWithFallbackUpsert(
 		return nil
 	}
 
-	chatRepoQueries := chatRepo.New(s.db)
-
-	// Try to insert the message
-	_, err = chatRepoQueries.CreateChatMessage(ctx, []chatRepo.CreateChatMessageParams{msgParams})
-	if err != nil {
-		// Check if this is a foreign key violation (chat doesn't exist)
-		if isForeignKeyViolation(err) {
-			// Create the chat and retry
-			_, upsertErr := s.repo.UpsertClaudeCodeSession(ctx, repo.UpsertClaudeCodeSessionParams{
-				ID:             chatID,
-				ProjectID:      projectID,
-				OrganizationID: metadata.GramOrgID,
-				UserID:         conv.ToPGTextEmpty(""),
-				ExternalUserID: conv.ToPGTextEmpty(metadata.UserEmail),
-				Title:          conv.ToPGText(defaultTitle),
-			})
-			if upsertErr != nil {
-				return fmt.Errorf("upsert claude code session after FK violation: %w", upsertErr)
-			}
-
-			// Retry message creation
-			_, err = chatRepoQueries.CreateChatMessage(ctx, []chatRepo.CreateChatMessageParams{msgParams})
-			if err != nil {
-				return fmt.Errorf("insert chat message after creating chat: %w", err)
-			}
-		} else {
-			return fmt.Errorf("insert chat message: %w", err)
-		}
+	// Try to insert the message (Write handles notification on success).
+	_, err = s.writer.Write(ctx, projectID, []chatRepo.CreateChatMessageParams{msgParams})
+	if err == nil {
+		return nil
 	}
 
-	s.messageStore.NotifyMessagesStored(ctx, projectID)
+	// If this is not a foreign key violation (chat doesn't exist), fail.
+	if !isForeignKeyViolation(err) {
+		return fmt.Errorf("insert chat message: %w", err)
+	}
+
+	// Create the chat and retry.
+	_, upsertErr := s.repo.UpsertClaudeCodeSession(ctx, repo.UpsertClaudeCodeSessionParams{
+		ID:             chatID,
+		ProjectID:      projectID,
+		OrganizationID: metadata.GramOrgID,
+		UserID:         conv.ToPGTextEmpty(""),
+		ExternalUserID: conv.ToPGTextEmpty(metadata.UserEmail),
+		Title:          conv.ToPGText(defaultTitle),
+	})
+	if upsertErr != nil {
+		return fmt.Errorf("upsert claude code session after FK violation: %w", upsertErr)
+	}
+
+	if _, err = s.writer.Write(ctx, projectID, []chatRepo.CreateChatMessageParams{msgParams}); err != nil {
+		return fmt.Errorf("insert chat message after creating chat: %w", err)
+	}
 	return nil
 }
 

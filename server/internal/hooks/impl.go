@@ -43,7 +43,7 @@ type Service struct {
 	productFeatures    ProductFeaturesClient
 	chatTitleGenerator ChatTitleGenerator
 	riskScanner        risk.RiskScanner
-	messageStore       *chat.MessageStore
+	writer             *chat.ChatMessageWriter
 }
 
 // SessionMetadata contains validated session information from the Logs endpoint
@@ -90,7 +90,7 @@ func NewService(
 	pfClient ProductFeaturesClient,
 	chatTitleGenerator ChatTitleGenerator,
 	riskScanner risk.RiskScanner,
-	messageStore *chat.MessageStore,
+	writer *chat.ChatMessageWriter,
 ) *Service {
 	return &Service{
 		tracer:             tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/hooks"),
@@ -105,7 +105,7 @@ func NewService(
 		productFeatures:    pfClient,
 		chatTitleGenerator: chatTitleGenerator,
 		riskScanner:        riskScanner,
-		messageStore:       messageStore,
+		writer:             writer,
 	}
 }
 
