@@ -28,6 +28,8 @@ import type { RiskResult } from "@gram/client/models/components";
 import { CircularProgress } from "./CircularProgress";
 import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
 import { MessageContent } from "@gram-ai/elements";
+import { useIsAdmin } from "@/contexts/Auth";
+import { toast } from "sonner";
 
 interface ChatDetailPanelProps {
   chatId: string;
@@ -64,43 +66,47 @@ function exportChatAsJson(chat: {
   totalTokens?: number;
   totalCost?: number;
 }) {
-  const exported = {
-    id: chat.id,
-    title: chat.title,
-    source: chat.source,
-    created_at: chat.createdAt.toISOString(),
-    updated_at: chat.updatedAt.toISOString(),
-    total_input_tokens: chat.totalInputTokens,
-    total_output_tokens: chat.totalOutputTokens,
-    total_tokens: chat.totalTokens,
-    total_cost: chat.totalCost,
-    messages: chat.messages.map((m) => ({
-      id: m.id,
-      role: m.role,
-      content: m.content,
-      model: m.model,
-      tool_call_id: m.toolCallId,
-      tool_calls: m.toolCalls ? JSON.parse(m.toolCalls) : undefined,
-      finish_reason: m.finishReason,
-      created_at: m.createdAt.toISOString(),
-      generation: m.generation,
-    })),
-  };
+  try {
+    const exported = {
+      id: chat.id,
+      title: chat.title,
+      source: chat.source,
+      created_at: chat.createdAt.toISOString(),
+      updated_at: chat.updatedAt.toISOString(),
+      total_input_tokens: chat.totalInputTokens,
+      total_output_tokens: chat.totalOutputTokens,
+      total_tokens: chat.totalTokens,
+      total_cost: chat.totalCost,
+      messages: chat.messages.map((m) => ({
+        id: m.id,
+        role: m.role,
+        content: m.content,
+        model: m.model,
+        tool_call_id: m.toolCallId,
+        tool_calls: m.toolCalls ? JSON.parse(m.toolCalls) : undefined,
+        finish_reason: m.finishReason,
+        created_at: m.createdAt.toISOString(),
+        generation: m.generation,
+      })),
+    };
 
-  const json = JSON.stringify(exported, null, 2);
-  const blob = new Blob([json], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  const slug = chat.title
-    ? chat.title
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "-")
-        .slice(0, 40)
-    : chat.id.slice(0, 8);
-  a.download = `chat-${slug}.json`;
-  a.click();
-  URL.revokeObjectURL(url);
+    const json = JSON.stringify(exported, null, 2);
+    const blob = new Blob([json], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    const slug = chat.title
+      ? chat.title
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "-")
+          .slice(0, 40)
+      : chat.id.slice(0, 8);
+    a.download = `chat-${slug}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    toast.error("Failed to export chat session");
+  }
 }
 
 function getOverallResolutionStatus(
@@ -696,6 +702,7 @@ export function ChatDetailPanel({
   onDelete,
   collapseNonRisk,
 }: ChatDetailPanelProps) {
+  const isAdmin = useIsAdmin();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const { data: chat, isLoading: chatLoading } = useLoadChat(
     { id: chatId },
@@ -795,13 +802,15 @@ export function ChatDetailPanel({
             )}
           </div>
           <div className="flex items-center gap-1">
-            <button
-              onClick={() => exportChatAsJson(chat)}
-              className="hover:bg-muted text-muted-foreground rounded-md p-1 transition-colors"
-              aria-label="Export chat as JSON"
-            >
-              <Icon name="download" className="size-5" />
-            </button>
+            {isAdmin && (
+              <button
+                onClick={() => exportChatAsJson(chat)}
+                className="hover:bg-muted text-muted-foreground rounded-md p-1 transition-colors"
+                aria-label="Export chat as JSON"
+              >
+                <Icon name="download" className="size-5" />
+              </button>
+            )}
             <button
               onClick={() => setShowDeleteConfirm(true)}
               className="hover:bg-destructive/10 text-muted-foreground hover:text-destructive rounded-md p-1 transition-colors"
