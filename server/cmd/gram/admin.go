@@ -16,40 +16,48 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"github.com/sourcegraph/conc/pool"
-	"github.com/speakeasy-api/gram/server/internal/admin"
-	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/control"
-	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/middleware"
-	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/urfave/cli/v2"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel"
 	"go.temporal.io/sdk/client"
 	goahttp "goa.design/goa/v3/http"
+
+	"github.com/speakeasy-api/gram/server/internal/admin"
+	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/control"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/middleware"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
 
 func newAdminCommand() *cli.Command {
 	var shutdownFuncs []func(context.Context) error
 
 	flags := []cli.Flag{
-		&cli.PathFlag{
-			Name:     "config-file",
-			Usage:    "Path to a config file to load. Supported formats are JSON, TOML and YAML.",
-			EnvVars:  []string{"GRAM_CONFIG_FILE"},
-			Required: false,
-		},
 		&cli.StringFlag{
 			Name:    "address",
-			Value:   ":9090",
-			Usage:   "HTTP address to listen on for web server",
+			Value:   ":8084",
+			Usage:   "HTTP address to listen on",
 			EnvVars: []string{"GRAM_ADMIN_SERVER_ADDRESS"},
 		},
 		&cli.StringFlag{
 			Name:    "control-address",
-			Value:   ":9091",
-			Usage:   "HTTP address to listen on for control server",
+			Value:   ":8085",
+			Usage:   "HTTP address to listen on",
 			EnvVars: []string{"GRAM_ADMIN_CONTROL_ADDRESS"},
+		},
+		&cli.StringFlag{
+			Name:     "admin-server-url",
+			Usage:    "The URL of the admin server",
+			EnvVars:  []string{"GRAM_ADMIN_SERVER_URL"},
+			Required: true,
+		},
+		&cli.StringFlag{
+			Name:     "environment",
+			Usage:    "The current server environment", // local, dev, prod
+			Required: true,
+			EnvVars:  []string{"GRAM_ENVIRONMENT"},
 		},
 		&cli.StringFlag{
 			Name:     "ssl-key-file",
@@ -64,6 +72,12 @@ func newAdminCommand() *cli.Command {
 			EnvVars:  []string{"GRAM_SSL_CERT_FILE"},
 		},
 		&cli.StringFlag{
+			Name:     "site-url",
+			Usage:    "The URL of the site",
+			EnvVars:  []string{"GRAM_SITE_URL"},
+			Required: true,
+		},
+		&cli.StringFlag{
 			Name:     "database-url",
 			Usage:    "Database URL",
 			EnvVars:  []string{"GRAM_DATABASE_URL"},
@@ -75,12 +89,6 @@ func newAdminCommand() *cli.Command {
 			EnvVars: []string{"GRAM_UNSAFE_DB_LOG"},
 			Value:   false,
 		},
-		&cli.StringFlag{
-			Name:     "environment",
-			Usage:    "The current server environment", // local, dev, prod
-			Required: true,
-			EnvVars:  []string{"GRAM_ENVIRONMENT"},
-		},
 		&cli.BoolFlag{
 			Name:    "with-otel-tracing",
 			Usage:   "Enable OpenTelemetry traces",
@@ -91,17 +99,68 @@ func newAdminCommand() *cli.Command {
 			Usage:   "Enable OpenTelemetry metrics",
 			EnvVars: []string{"GRAM_ENABLE_OTEL_METRICS"},
 		},
+		&cli.StringFlag{
+			Name:    "redis-cache-addr",
+			Usage:   "Address of the redis cache server",
+			EnvVars: []string{"GRAM_REDIS_CACHE_ADDR"},
+		},
+		&cli.StringFlag{
+			Name:    "redis-cache-password",
+			Usage:   "Password for the redis cache server",
+			EnvVars: []string{"GRAM_REDIS_CACHE_PASSWORD"},
+		},
+		&cli.StringFlag{
+			Name:     "admin-encryption-key",
+			Usage:    "Key for App level AES encryption/decyryption",
+			Required: true,
+			EnvVars:  []string{"GRAM_ADMIN_ENCRYPTION_KEY"},
+		},
+		&cli.StringFlag{
+			Name:    "admin-oidc-client-id",
+			Usage:   "OAuth 2.0 client ID for the admin login flow",
+			EnvVars: []string{"GRAM_ADMIN_OIDC_CLIENT_ID"},
+		},
+		&cli.StringFlag{
+			Name:    "admin-oidc-client-secret",
+			Usage:   "OAuth 2.0 client secret for the admin login flow",
+			EnvVars: []string{"GRAM_ADMIN_OIDC_CLIENT_SECRET"},
+		},
+		&cli.StringSliceFlag{
+			Name:    "admin-allowed-hds",
+			Usage:   "Comma-separated Google Workspace hosted domains allowed to authenticate against the admin service",
+			Value:   cli.NewStringSlice("speakeasyapi.dev", "speakeasy.com"),
+			EnvVars: []string{"GRAM_ADMIN_ALLOWED_HDS"},
+		},
+		&cli.StringFlag{
+			Name:    "admin-oidc-emulator-url",
+			Usage:   "Base URL for the OAuth 2.0 and OIDC emulator",
+			EnvVars: []string{"GRAM_ADMIN_OIDC_EMULATOR_URL"},
+		},
+		&cli.StringSliceFlag{
+			Name:     "disallowed-cidr-blocks",
+			Usage:    "List of CIDR blocks to block for SSRF protection",
+			EnvVars:  []string{"GRAM_DISALLOWED_CIDR_BLOCKS"},
+			Required: false,
+		},
+		&cli.PathFlag{
+			Name:     "config-file",
+			Usage:    "Path to a config file to load. Supported formats are JSON, TOML and YAML.",
+			EnvVars:  []string{"GRAM_CONFIG_FILE"},
+			Required: false,
+		},
+		&cli.StringFlag{
+			Name:     "workos-api-key",
+			Usage:    "WorkOS API key for user identity lookups",
+			EnvVars:  []string{"WORKOS_API_KEY"},
+			Required: false,
+		},
 	}
-	flags = append(flags, redisFlags...)
 
 	return &cli.Command{
 		Name:  "admin",
-		Usage: "Start the admin server",
+		Usage: "Start the Gram admin server",
 		Flags: flags,
 		Action: func(c *cli.Context) error {
-			ctx, cancel := context.WithCancel(c.Context)
-			defer cancel()
-
 			serviceName := "gram-admin"
 			serviceEnv := c.String("environment")
 			appinfo := o11y.PullAppInfo(c.Context)
@@ -113,6 +172,9 @@ func newAdminCommand() *cli.Command {
 				attr.SlogServiceEnv(serviceEnv),
 			)
 
+			ctx, cancel := context.WithCancel(c.Context)
+			defer cancel()
+
 			shutdown, err := o11y.SetupOTelSDK(ctx, logger, o11y.SetupOTelSDKOptions{
 				ServiceName:    serviceName,
 				ServiceVersion: shortGitSHA(),
@@ -121,18 +183,24 @@ func newAdminCommand() *cli.Command {
 				EnableMetrics:  c.Bool("with-otel-metrics"),
 			})
 			if err != nil {
-				return fmt.Errorf("failed to setup opentelemetry sdk: %w", err)
+				return fmt.Errorf("setup opentelemetry sdk: %w", err)
 			}
 			shutdownFuncs = append(shutdownFuncs, shutdown)
+
 			tracerProvider := otel.GetTracerProvider()
 			meterProvider := otel.GetMeterProvider()
 			slog.SetDefault(logger)
+
+			guardianPolicy, err := newGuardianPolicy(c, tracerProvider)
+			if err != nil {
+				return err
+			}
 
 			db, err := newDBClient(ctx, logger, meterProvider, c.String("database-url"), dbClientOptions{
 				enableUnsafeLogging: c.Bool("unsafe-db-log"),
 			})
 			if err != nil {
-				return err
+				return fmt.Errorf("failed to connect to database: %w", err)
 			}
 			// Ping the database to ensure connectivity
 			if err := db.Ping(ctx); err != nil {
@@ -141,18 +209,32 @@ func newAdminCommand() *cli.Command {
 			}
 			defer db.Close()
 
+			err = o11y.StartObservers(meterProvider, db)
+			if err != nil {
+				return fmt.Errorf("failed to create observers: %w", err)
+			}
+
 			redisClient, err := newRedisClient(ctx, redisClientOptions{
 				redisAddr:     c.String("redis-cache-addr"),
 				redisPassword: c.String("redis-cache-password"),
-				enableTracing: c.Bool("redis-enable-tracing"),
 			})
 			if err != nil {
 				return fmt.Errorf("failed to connect to redis: %w", err)
 			}
 
-			guardianPolicy, err := newGuardianPolicy(c, tracerProvider)
+			adminEncryption, err := encryption.New(c.String("admin-encryption-key"))
 			if err != nil {
-				return err
+				return fmt.Errorf("failed to create admin encryption client: %w", err)
+			}
+
+			adminServerURL, err := url.Parse(c.String("admin-server-url"))
+			if err != nil {
+				return fmt.Errorf("failed to parse admin server url: %w", err)
+			}
+
+			adminOIDCClient, err := newAdminOIDCClient(ctx, c, tracerProvider, guardianPolicy, adminServerURL)
+			if err != nil {
+				return fmt.Errorf("failed to create admin OIDC client: %w", err)
 			}
 
 			mux := goahttp.NewMuxer()
@@ -172,8 +254,9 @@ func newAdminCommand() *cli.Command {
 			mux.Use(middleware.RouteLabelerMiddleware)
 			mux.Use(middleware.NewHTTPLoggingMiddleware(logger))
 			mux.Use(middleware.NewRecovery(logger))
+			mux.Use(admin.SessionMiddleware)
 
-			admin.Attach(mux, admin.NewService(logger, tracerProvider, db, guardianPolicy))
+			admin.Attach(mux, admin.NewService(logger, tracerProvider, db, redisClient, adminOIDCClient, adminEncryption))
 
 			srv := &http.Server{
 				Addr:              c.String("address"),
@@ -213,7 +296,7 @@ func newAdminCommand() *cli.Command {
 
 				listenAddr := srv.Addr
 				if listenAddr == "" {
-					listenAddr = ":8080"
+					listenAddr = c.String("address")
 				}
 				host, port, _ := net.SplitHostPort(listenAddr)
 				if host == "" {
@@ -234,7 +317,6 @@ func newAdminCommand() *cli.Command {
 					}
 					healthzEndpoint.TLSCertificate = cert
 				}
-
 				shutdown, err := controlServer.Start(c.Context, o11y.NewHealthCheckHandler(
 					[]*o11y.NamedResource[*o11y.HTTPEndpoint]{{Name: "api", Resource: healthzEndpoint}},
 					[]*o11y.NamedResource[*pgxpool.Pool]{{Name: "default", Resource: db}},
@@ -263,7 +345,6 @@ func newAdminCommand() *cli.Command {
 			group.Wait()
 
 			return nil
-
 		},
 		Before: func(ctx *cli.Context) error {
 			return loadConfigFromFile(ctx, flags)

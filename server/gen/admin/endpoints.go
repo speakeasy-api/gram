@@ -11,29 +11,83 @@ import (
 	"context"
 
 	goa "goa.design/goa/v3/pkg"
+	"goa.design/goa/v3/security"
 )
 
 // Endpoints wraps the "admin" service endpoints.
 type Endpoints struct {
-	Poke goa.Endpoint
+	Login      goa.Endpoint
+	Callback   goa.Endpoint
+	Logout     goa.Endpoint
+	GetProject goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "admin" service with endpoints.
 func NewEndpoints(s Service) *Endpoints {
+	// Casting service to Auther interface
+	a := s.(Auther)
 	return &Endpoints{
-		Poke: NewPokeEndpoint(s),
+		Login:      NewLoginEndpoint(s),
+		Callback:   NewCallbackEndpoint(s),
+		Logout:     NewLogoutEndpoint(s),
+		GetProject: NewGetProjectEndpoint(s, a.APIKeyAuth),
 	}
 }
 
 // Use applies the given middleware to all the "admin" service endpoints.
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
-	e.Poke = m(e.Poke)
+	e.Login = m(e.Login)
+	e.Callback = m(e.Callback)
+	e.Logout = m(e.Logout)
+	e.GetProject = m(e.GetProject)
 }
 
-// NewPokeEndpoint returns an endpoint function that calls the method "poke" of
-// service "admin".
-func NewPokeEndpoint(s Service) goa.Endpoint {
+// NewLoginEndpoint returns an endpoint function that calls the method "login"
+// of service "admin".
+func NewLoginEndpoint(s Service) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
-		return s.Poke(ctx)
+		p := req.(*LoginPayload)
+		return s.Login(ctx, p)
+	}
+}
+
+// NewCallbackEndpoint returns an endpoint function that calls the method
+// "callback" of service "admin".
+func NewCallbackEndpoint(s Service) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*CallbackPayload)
+		return s.Callback(ctx, p)
+	}
+}
+
+// NewLogoutEndpoint returns an endpoint function that calls the method
+// "logout" of service "admin".
+func NewLogoutEndpoint(s Service) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*LogoutPayload)
+		return nil, s.Logout(ctx, p)
+	}
+}
+
+// NewGetProjectEndpoint returns an endpoint function that calls the method
+// "getProject" of service "admin".
+func NewGetProjectEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetProjectPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetProject(ctx, p)
 	}
 }

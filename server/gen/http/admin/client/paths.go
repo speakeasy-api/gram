@@ -7,7 +7,22 @@
 
 package client
 
-// PokeAdminPath returns the URL path to the admin service poke HTTP endpoint.
-func PokeAdminPath() string {
-	return "/admin/diagnostics.poke"
+// LoginAdminPath returns the URL path to the admin service login HTTP endpoint.
+func LoginAdminPath() string {
+	return "/admin/auth.login"
+}
+
+// CallbackAdminPath returns the URL path to the admin service callback HTTP endpoint.
+func CallbackAdminPath() string {
+	return "/admin/auth.callback"
+}
+
+// LogoutAdminPath returns the URL path to the admin service logout HTTP endpoint.
+func LogoutAdminPath() string {
+	return "/admin/auth.logout"
+}
+
+// GetProjectAdminPath returns the URL path to the admin service getProject HTTP endpoint.
+func GetProjectAdminPath() string {
+	return "/admin/project.get"
 }

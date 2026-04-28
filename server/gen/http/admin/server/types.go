@@ -12,15 +12,16 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
-// PokeResponseBody is the type of the "admin" service "poke" endpoint HTTP
-// response body.
-type PokeResponseBody struct {
-	OK bool `form:"ok" json:"ok" xml:"ok"`
+// GetProjectResponseBody is the type of the "admin" service "getProject"
+// endpoint HTTP response body.
+type GetProjectResponseBody struct {
+	ID   string `form:"id" json:"id" xml:"id"`
+	Slug string `form:"slug" json:"slug" xml:"slug"`
 }
 
-// PokeUnauthorizedResponseBody is the type of the "admin" service "poke"
+// LoginUnauthorizedResponseBody is the type of the "admin" service "login"
 // endpoint HTTP response body for the "unauthorized" error.
-type PokeUnauthorizedResponseBody struct {
+type LoginUnauthorizedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -36,9 +37,9 @@ type PokeUnauthorizedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// PokeForbiddenResponseBody is the type of the "admin" service "poke" endpoint
-// HTTP response body for the "forbidden" error.
-type PokeForbiddenResponseBody struct {
+// LoginForbiddenResponseBody is the type of the "admin" service "login"
+// endpoint HTTP response body for the "forbidden" error.
+type LoginForbiddenResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -54,9 +55,9 @@ type PokeForbiddenResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// PokeBadRequestResponseBody is the type of the "admin" service "poke"
+// LoginBadRequestResponseBody is the type of the "admin" service "login"
 // endpoint HTTP response body for the "bad_request" error.
-type PokeBadRequestResponseBody struct {
+type LoginBadRequestResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -72,9 +73,9 @@ type PokeBadRequestResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// PokeNotFoundResponseBody is the type of the "admin" service "poke" endpoint
-// HTTP response body for the "not_found" error.
-type PokeNotFoundResponseBody struct {
+// LoginNotFoundResponseBody is the type of the "admin" service "login"
+// endpoint HTTP response body for the "not_found" error.
+type LoginNotFoundResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -90,9 +91,9 @@ type PokeNotFoundResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// PokeConflictResponseBody is the type of the "admin" service "poke" endpoint
-// HTTP response body for the "conflict" error.
-type PokeConflictResponseBody struct {
+// LoginConflictResponseBody is the type of the "admin" service "login"
+// endpoint HTTP response body for the "conflict" error.
+type LoginConflictResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -108,9 +109,9 @@ type PokeConflictResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// PokeUnsupportedMediaResponseBody is the type of the "admin" service "poke"
+// LoginUnsupportedMediaResponseBody is the type of the "admin" service "login"
 // endpoint HTTP response body for the "unsupported_media" error.
-type PokeUnsupportedMediaResponseBody struct {
+type LoginUnsupportedMediaResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -126,9 +127,9 @@ type PokeUnsupportedMediaResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// PokeInvalidResponseBody is the type of the "admin" service "poke" endpoint
+// LoginInvalidResponseBody is the type of the "admin" service "login" endpoint
 // HTTP response body for the "invalid" error.
-type PokeInvalidResponseBody struct {
+type LoginInvalidResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -144,9 +145,9 @@ type PokeInvalidResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// PokeInvariantViolationResponseBody is the type of the "admin" service "poke"
-// endpoint HTTP response body for the "invariant_violation" error.
-type PokeInvariantViolationResponseBody struct {
+// LoginInvariantViolationResponseBody is the type of the "admin" service
+// "login" endpoint HTTP response body for the "invariant_violation" error.
+type LoginInvariantViolationResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -162,9 +163,9 @@ type PokeInvariantViolationResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// PokeUnexpectedResponseBody is the type of the "admin" service "poke"
+// LoginUnexpectedResponseBody is the type of the "admin" service "login"
 // endpoint HTTP response body for the "unexpected" error.
-type PokeUnexpectedResponseBody struct {
+type LoginUnexpectedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -180,9 +181,9 @@ type PokeUnexpectedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// PokeGatewayErrorResponseBody is the type of the "admin" service "poke"
+// LoginGatewayErrorResponseBody is the type of the "admin" service "login"
 // endpoint HTTP response body for the "gateway_error" error.
-type PokeGatewayErrorResponseBody struct {
+type LoginGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -198,19 +199,560 @@ type PokeGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// NewPokeResponseBody builds the HTTP response body from the result of the
-// "poke" endpoint of the "admin" service.
-func NewPokeResponseBody(res *admin.PokeResult) *PokeResponseBody {
-	body := &PokeResponseBody{
-		OK: res.OK,
+// CallbackUnauthorizedResponseBody is the type of the "admin" service
+// "callback" endpoint HTTP response body for the "unauthorized" error.
+type CallbackUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CallbackForbiddenResponseBody is the type of the "admin" service "callback"
+// endpoint HTTP response body for the "forbidden" error.
+type CallbackForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CallbackBadRequestResponseBody is the type of the "admin" service "callback"
+// endpoint HTTP response body for the "bad_request" error.
+type CallbackBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CallbackNotFoundResponseBody is the type of the "admin" service "callback"
+// endpoint HTTP response body for the "not_found" error.
+type CallbackNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CallbackConflictResponseBody is the type of the "admin" service "callback"
+// endpoint HTTP response body for the "conflict" error.
+type CallbackConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CallbackUnsupportedMediaResponseBody is the type of the "admin" service
+// "callback" endpoint HTTP response body for the "unsupported_media" error.
+type CallbackUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CallbackInvalidResponseBody is the type of the "admin" service "callback"
+// endpoint HTTP response body for the "invalid" error.
+type CallbackInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CallbackInvariantViolationResponseBody is the type of the "admin" service
+// "callback" endpoint HTTP response body for the "invariant_violation" error.
+type CallbackInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CallbackUnexpectedResponseBody is the type of the "admin" service "callback"
+// endpoint HTTP response body for the "unexpected" error.
+type CallbackUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CallbackGatewayErrorResponseBody is the type of the "admin" service
+// "callback" endpoint HTTP response body for the "gateway_error" error.
+type CallbackGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// LogoutUnauthorizedResponseBody is the type of the "admin" service "logout"
+// endpoint HTTP response body for the "unauthorized" error.
+type LogoutUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// LogoutForbiddenResponseBody is the type of the "admin" service "logout"
+// endpoint HTTP response body for the "forbidden" error.
+type LogoutForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// LogoutBadRequestResponseBody is the type of the "admin" service "logout"
+// endpoint HTTP response body for the "bad_request" error.
+type LogoutBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// LogoutNotFoundResponseBody is the type of the "admin" service "logout"
+// endpoint HTTP response body for the "not_found" error.
+type LogoutNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// LogoutConflictResponseBody is the type of the "admin" service "logout"
+// endpoint HTTP response body for the "conflict" error.
+type LogoutConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// LogoutUnsupportedMediaResponseBody is the type of the "admin" service
+// "logout" endpoint HTTP response body for the "unsupported_media" error.
+type LogoutUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// LogoutInvalidResponseBody is the type of the "admin" service "logout"
+// endpoint HTTP response body for the "invalid" error.
+type LogoutInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// LogoutInvariantViolationResponseBody is the type of the "admin" service
+// "logout" endpoint HTTP response body for the "invariant_violation" error.
+type LogoutInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// LogoutUnexpectedResponseBody is the type of the "admin" service "logout"
+// endpoint HTTP response body for the "unexpected" error.
+type LogoutUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// LogoutGatewayErrorResponseBody is the type of the "admin" service "logout"
+// endpoint HTTP response body for the "gateway_error" error.
+type LogoutGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetProjectUnauthorizedResponseBody is the type of the "admin" service
+// "getProject" endpoint HTTP response body for the "unauthorized" error.
+type GetProjectUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetProjectForbiddenResponseBody is the type of the "admin" service
+// "getProject" endpoint HTTP response body for the "forbidden" error.
+type GetProjectForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetProjectBadRequestResponseBody is the type of the "admin" service
+// "getProject" endpoint HTTP response body for the "bad_request" error.
+type GetProjectBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetProjectNotFoundResponseBody is the type of the "admin" service
+// "getProject" endpoint HTTP response body for the "not_found" error.
+type GetProjectNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetProjectConflictResponseBody is the type of the "admin" service
+// "getProject" endpoint HTTP response body for the "conflict" error.
+type GetProjectConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetProjectUnsupportedMediaResponseBody is the type of the "admin" service
+// "getProject" endpoint HTTP response body for the "unsupported_media" error.
+type GetProjectUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetProjectInvalidResponseBody is the type of the "admin" service
+// "getProject" endpoint HTTP response body for the "invalid" error.
+type GetProjectInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetProjectInvariantViolationResponseBody is the type of the "admin" service
+// "getProject" endpoint HTTP response body for the "invariant_violation" error.
+type GetProjectInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetProjectUnexpectedResponseBody is the type of the "admin" service
+// "getProject" endpoint HTTP response body for the "unexpected" error.
+type GetProjectUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetProjectGatewayErrorResponseBody is the type of the "admin" service
+// "getProject" endpoint HTTP response body for the "gateway_error" error.
+type GetProjectGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// NewGetProjectResponseBody builds the HTTP response body from the result of
+// the "getProject" endpoint of the "admin" service.
+func NewGetProjectResponseBody(res *admin.GetProjectResult) *GetProjectResponseBody {
+	body := &GetProjectResponseBody{
+		ID:   res.ID,
+		Slug: res.Slug,
 	}
 	return body
 }
 
-// NewPokeUnauthorizedResponseBody builds the HTTP response body from the
-// result of the "poke" endpoint of the "admin" service.
-func NewPokeUnauthorizedResponseBody(res *goa.ServiceError) *PokeUnauthorizedResponseBody {
-	body := &PokeUnauthorizedResponseBody{
+// NewLoginUnauthorizedResponseBody builds the HTTP response body from the
+// result of the "login" endpoint of the "admin" service.
+func NewLoginUnauthorizedResponseBody(res *goa.ServiceError) *LoginUnauthorizedResponseBody {
+	body := &LoginUnauthorizedResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -221,10 +763,10 @@ func NewPokeUnauthorizedResponseBody(res *goa.ServiceError) *PokeUnauthorizedRes
 	return body
 }
 
-// NewPokeForbiddenResponseBody builds the HTTP response body from the result
-// of the "poke" endpoint of the "admin" service.
-func NewPokeForbiddenResponseBody(res *goa.ServiceError) *PokeForbiddenResponseBody {
-	body := &PokeForbiddenResponseBody{
+// NewLoginForbiddenResponseBody builds the HTTP response body from the result
+// of the "login" endpoint of the "admin" service.
+func NewLoginForbiddenResponseBody(res *goa.ServiceError) *LoginForbiddenResponseBody {
+	body := &LoginForbiddenResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -235,10 +777,10 @@ func NewPokeForbiddenResponseBody(res *goa.ServiceError) *PokeForbiddenResponseB
 	return body
 }
 
-// NewPokeBadRequestResponseBody builds the HTTP response body from the result
-// of the "poke" endpoint of the "admin" service.
-func NewPokeBadRequestResponseBody(res *goa.ServiceError) *PokeBadRequestResponseBody {
-	body := &PokeBadRequestResponseBody{
+// NewLoginBadRequestResponseBody builds the HTTP response body from the result
+// of the "login" endpoint of the "admin" service.
+func NewLoginBadRequestResponseBody(res *goa.ServiceError) *LoginBadRequestResponseBody {
+	body := &LoginBadRequestResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -249,10 +791,10 @@ func NewPokeBadRequestResponseBody(res *goa.ServiceError) *PokeBadRequestRespons
 	return body
 }
 
-// NewPokeNotFoundResponseBody builds the HTTP response body from the result of
-// the "poke" endpoint of the "admin" service.
-func NewPokeNotFoundResponseBody(res *goa.ServiceError) *PokeNotFoundResponseBody {
-	body := &PokeNotFoundResponseBody{
+// NewLoginNotFoundResponseBody builds the HTTP response body from the result
+// of the "login" endpoint of the "admin" service.
+func NewLoginNotFoundResponseBody(res *goa.ServiceError) *LoginNotFoundResponseBody {
+	body := &LoginNotFoundResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -263,10 +805,10 @@ func NewPokeNotFoundResponseBody(res *goa.ServiceError) *PokeNotFoundResponseBod
 	return body
 }
 
-// NewPokeConflictResponseBody builds the HTTP response body from the result of
-// the "poke" endpoint of the "admin" service.
-func NewPokeConflictResponseBody(res *goa.ServiceError) *PokeConflictResponseBody {
-	body := &PokeConflictResponseBody{
+// NewLoginConflictResponseBody builds the HTTP response body from the result
+// of the "login" endpoint of the "admin" service.
+func NewLoginConflictResponseBody(res *goa.ServiceError) *LoginConflictResponseBody {
+	body := &LoginConflictResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -277,10 +819,10 @@ func NewPokeConflictResponseBody(res *goa.ServiceError) *PokeConflictResponseBod
 	return body
 }
 
-// NewPokeUnsupportedMediaResponseBody builds the HTTP response body from the
-// result of the "poke" endpoint of the "admin" service.
-func NewPokeUnsupportedMediaResponseBody(res *goa.ServiceError) *PokeUnsupportedMediaResponseBody {
-	body := &PokeUnsupportedMediaResponseBody{
+// NewLoginUnsupportedMediaResponseBody builds the HTTP response body from the
+// result of the "login" endpoint of the "admin" service.
+func NewLoginUnsupportedMediaResponseBody(res *goa.ServiceError) *LoginUnsupportedMediaResponseBody {
+	body := &LoginUnsupportedMediaResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -291,10 +833,10 @@ func NewPokeUnsupportedMediaResponseBody(res *goa.ServiceError) *PokeUnsupported
 	return body
 }
 
-// NewPokeInvalidResponseBody builds the HTTP response body from the result of
-// the "poke" endpoint of the "admin" service.
-func NewPokeInvalidResponseBody(res *goa.ServiceError) *PokeInvalidResponseBody {
-	body := &PokeInvalidResponseBody{
+// NewLoginInvalidResponseBody builds the HTTP response body from the result of
+// the "login" endpoint of the "admin" service.
+func NewLoginInvalidResponseBody(res *goa.ServiceError) *LoginInvalidResponseBody {
+	body := &LoginInvalidResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -305,10 +847,10 @@ func NewPokeInvalidResponseBody(res *goa.ServiceError) *PokeInvalidResponseBody 
 	return body
 }
 
-// NewPokeInvariantViolationResponseBody builds the HTTP response body from the
-// result of the "poke" endpoint of the "admin" service.
-func NewPokeInvariantViolationResponseBody(res *goa.ServiceError) *PokeInvariantViolationResponseBody {
-	body := &PokeInvariantViolationResponseBody{
+// NewLoginInvariantViolationResponseBody builds the HTTP response body from
+// the result of the "login" endpoint of the "admin" service.
+func NewLoginInvariantViolationResponseBody(res *goa.ServiceError) *LoginInvariantViolationResponseBody {
+	body := &LoginInvariantViolationResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -319,10 +861,10 @@ func NewPokeInvariantViolationResponseBody(res *goa.ServiceError) *PokeInvariant
 	return body
 }
 
-// NewPokeUnexpectedResponseBody builds the HTTP response body from the result
-// of the "poke" endpoint of the "admin" service.
-func NewPokeUnexpectedResponseBody(res *goa.ServiceError) *PokeUnexpectedResponseBody {
-	body := &PokeUnexpectedResponseBody{
+// NewLoginUnexpectedResponseBody builds the HTTP response body from the result
+// of the "login" endpoint of the "admin" service.
+func NewLoginUnexpectedResponseBody(res *goa.ServiceError) *LoginUnexpectedResponseBody {
+	body := &LoginUnexpectedResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -333,10 +875,10 @@ func NewPokeUnexpectedResponseBody(res *goa.ServiceError) *PokeUnexpectedRespons
 	return body
 }
 
-// NewPokeGatewayErrorResponseBody builds the HTTP response body from the
-// result of the "poke" endpoint of the "admin" service.
-func NewPokeGatewayErrorResponseBody(res *goa.ServiceError) *PokeGatewayErrorResponseBody {
-	body := &PokeGatewayErrorResponseBody{
+// NewLoginGatewayErrorResponseBody builds the HTTP response body from the
+// result of the "login" endpoint of the "admin" service.
+func NewLoginGatewayErrorResponseBody(res *goa.ServiceError) *LoginGatewayErrorResponseBody {
+	body := &LoginGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -345,4 +887,458 @@ func NewPokeGatewayErrorResponseBody(res *goa.ServiceError) *PokeGatewayErrorRes
 		Fault:     res.Fault,
 	}
 	return body
+}
+
+// NewCallbackUnauthorizedResponseBody builds the HTTP response body from the
+// result of the "callback" endpoint of the "admin" service.
+func NewCallbackUnauthorizedResponseBody(res *goa.ServiceError) *CallbackUnauthorizedResponseBody {
+	body := &CallbackUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCallbackForbiddenResponseBody builds the HTTP response body from the
+// result of the "callback" endpoint of the "admin" service.
+func NewCallbackForbiddenResponseBody(res *goa.ServiceError) *CallbackForbiddenResponseBody {
+	body := &CallbackForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCallbackBadRequestResponseBody builds the HTTP response body from the
+// result of the "callback" endpoint of the "admin" service.
+func NewCallbackBadRequestResponseBody(res *goa.ServiceError) *CallbackBadRequestResponseBody {
+	body := &CallbackBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCallbackNotFoundResponseBody builds the HTTP response body from the
+// result of the "callback" endpoint of the "admin" service.
+func NewCallbackNotFoundResponseBody(res *goa.ServiceError) *CallbackNotFoundResponseBody {
+	body := &CallbackNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCallbackConflictResponseBody builds the HTTP response body from the
+// result of the "callback" endpoint of the "admin" service.
+func NewCallbackConflictResponseBody(res *goa.ServiceError) *CallbackConflictResponseBody {
+	body := &CallbackConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCallbackUnsupportedMediaResponseBody builds the HTTP response body from
+// the result of the "callback" endpoint of the "admin" service.
+func NewCallbackUnsupportedMediaResponseBody(res *goa.ServiceError) *CallbackUnsupportedMediaResponseBody {
+	body := &CallbackUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCallbackInvalidResponseBody builds the HTTP response body from the result
+// of the "callback" endpoint of the "admin" service.
+func NewCallbackInvalidResponseBody(res *goa.ServiceError) *CallbackInvalidResponseBody {
+	body := &CallbackInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCallbackInvariantViolationResponseBody builds the HTTP response body from
+// the result of the "callback" endpoint of the "admin" service.
+func NewCallbackInvariantViolationResponseBody(res *goa.ServiceError) *CallbackInvariantViolationResponseBody {
+	body := &CallbackInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCallbackUnexpectedResponseBody builds the HTTP response body from the
+// result of the "callback" endpoint of the "admin" service.
+func NewCallbackUnexpectedResponseBody(res *goa.ServiceError) *CallbackUnexpectedResponseBody {
+	body := &CallbackUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCallbackGatewayErrorResponseBody builds the HTTP response body from the
+// result of the "callback" endpoint of the "admin" service.
+func NewCallbackGatewayErrorResponseBody(res *goa.ServiceError) *CallbackGatewayErrorResponseBody {
+	body := &CallbackGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewLogoutUnauthorizedResponseBody builds the HTTP response body from the
+// result of the "logout" endpoint of the "admin" service.
+func NewLogoutUnauthorizedResponseBody(res *goa.ServiceError) *LogoutUnauthorizedResponseBody {
+	body := &LogoutUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewLogoutForbiddenResponseBody builds the HTTP response body from the result
+// of the "logout" endpoint of the "admin" service.
+func NewLogoutForbiddenResponseBody(res *goa.ServiceError) *LogoutForbiddenResponseBody {
+	body := &LogoutForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewLogoutBadRequestResponseBody builds the HTTP response body from the
+// result of the "logout" endpoint of the "admin" service.
+func NewLogoutBadRequestResponseBody(res *goa.ServiceError) *LogoutBadRequestResponseBody {
+	body := &LogoutBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewLogoutNotFoundResponseBody builds the HTTP response body from the result
+// of the "logout" endpoint of the "admin" service.
+func NewLogoutNotFoundResponseBody(res *goa.ServiceError) *LogoutNotFoundResponseBody {
+	body := &LogoutNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewLogoutConflictResponseBody builds the HTTP response body from the result
+// of the "logout" endpoint of the "admin" service.
+func NewLogoutConflictResponseBody(res *goa.ServiceError) *LogoutConflictResponseBody {
+	body := &LogoutConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewLogoutUnsupportedMediaResponseBody builds the HTTP response body from the
+// result of the "logout" endpoint of the "admin" service.
+func NewLogoutUnsupportedMediaResponseBody(res *goa.ServiceError) *LogoutUnsupportedMediaResponseBody {
+	body := &LogoutUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewLogoutInvalidResponseBody builds the HTTP response body from the result
+// of the "logout" endpoint of the "admin" service.
+func NewLogoutInvalidResponseBody(res *goa.ServiceError) *LogoutInvalidResponseBody {
+	body := &LogoutInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewLogoutInvariantViolationResponseBody builds the HTTP response body from
+// the result of the "logout" endpoint of the "admin" service.
+func NewLogoutInvariantViolationResponseBody(res *goa.ServiceError) *LogoutInvariantViolationResponseBody {
+	body := &LogoutInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewLogoutUnexpectedResponseBody builds the HTTP response body from the
+// result of the "logout" endpoint of the "admin" service.
+func NewLogoutUnexpectedResponseBody(res *goa.ServiceError) *LogoutUnexpectedResponseBody {
+	body := &LogoutUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewLogoutGatewayErrorResponseBody builds the HTTP response body from the
+// result of the "logout" endpoint of the "admin" service.
+func NewLogoutGatewayErrorResponseBody(res *goa.ServiceError) *LogoutGatewayErrorResponseBody {
+	body := &LogoutGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetProjectUnauthorizedResponseBody builds the HTTP response body from the
+// result of the "getProject" endpoint of the "admin" service.
+func NewGetProjectUnauthorizedResponseBody(res *goa.ServiceError) *GetProjectUnauthorizedResponseBody {
+	body := &GetProjectUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetProjectForbiddenResponseBody builds the HTTP response body from the
+// result of the "getProject" endpoint of the "admin" service.
+func NewGetProjectForbiddenResponseBody(res *goa.ServiceError) *GetProjectForbiddenResponseBody {
+	body := &GetProjectForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetProjectBadRequestResponseBody builds the HTTP response body from the
+// result of the "getProject" endpoint of the "admin" service.
+func NewGetProjectBadRequestResponseBody(res *goa.ServiceError) *GetProjectBadRequestResponseBody {
+	body := &GetProjectBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetProjectNotFoundResponseBody builds the HTTP response body from the
+// result of the "getProject" endpoint of the "admin" service.
+func NewGetProjectNotFoundResponseBody(res *goa.ServiceError) *GetProjectNotFoundResponseBody {
+	body := &GetProjectNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetProjectConflictResponseBody builds the HTTP response body from the
+// result of the "getProject" endpoint of the "admin" service.
+func NewGetProjectConflictResponseBody(res *goa.ServiceError) *GetProjectConflictResponseBody {
+	body := &GetProjectConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetProjectUnsupportedMediaResponseBody builds the HTTP response body from
+// the result of the "getProject" endpoint of the "admin" service.
+func NewGetProjectUnsupportedMediaResponseBody(res *goa.ServiceError) *GetProjectUnsupportedMediaResponseBody {
+	body := &GetProjectUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetProjectInvalidResponseBody builds the HTTP response body from the
+// result of the "getProject" endpoint of the "admin" service.
+func NewGetProjectInvalidResponseBody(res *goa.ServiceError) *GetProjectInvalidResponseBody {
+	body := &GetProjectInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetProjectInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "getProject" endpoint of the "admin" service.
+func NewGetProjectInvariantViolationResponseBody(res *goa.ServiceError) *GetProjectInvariantViolationResponseBody {
+	body := &GetProjectInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetProjectUnexpectedResponseBody builds the HTTP response body from the
+// result of the "getProject" endpoint of the "admin" service.
+func NewGetProjectUnexpectedResponseBody(res *goa.ServiceError) *GetProjectUnexpectedResponseBody {
+	body := &GetProjectUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetProjectGatewayErrorResponseBody builds the HTTP response body from the
+// result of the "getProject" endpoint of the "admin" service.
+func NewGetProjectGatewayErrorResponseBody(res *goa.ServiceError) *GetProjectGatewayErrorResponseBody {
+	body := &GetProjectGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewLoginPayload builds a admin service login endpoint payload.
+func NewLoginPayload(returnTo *string) *admin.LoginPayload {
+	v := &admin.LoginPayload{}
+	v.ReturnTo = returnTo
+
+	return v
+}
+
+// NewCallbackPayload builds a admin service callback endpoint payload.
+func NewCallbackPayload(code string, stateParam string) *admin.CallbackPayload {
+	v := &admin.CallbackPayload{}
+	v.Code = code
+	v.StateParam = stateParam
+
+	return v
+}
+
+// NewLogoutPayload builds a admin service logout endpoint payload.
+func NewLogoutPayload(sessionID *string) *admin.LogoutPayload {
+	v := &admin.LogoutPayload{}
+	v.SessionID = sessionID
+
+	return v
+}
+
+// NewGetProjectPayload builds a admin service getProject endpoint payload.
+func NewGetProjectPayload(idOrSlug string, adminSessionToken *string) *admin.GetProjectPayload {
+	v := &admin.GetProjectPayload{}
+	v.IDOrSlug = idOrSlug
+	v.AdminSessionToken = adminSessionToken
+
+	return v
 }

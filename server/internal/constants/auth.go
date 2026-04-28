@@ -16,4 +16,7 @@ const (
 
 	ProjectSlugSecuritySchema = "project_slug"
 	ProjectHeader             = "Gram-Project"
+
+	AdminAuthSecurityScheme = "admin_auth"
+	AdminSessionCookie      = "gram_admin"
 )
