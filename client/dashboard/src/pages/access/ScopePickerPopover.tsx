@@ -30,7 +30,7 @@ import {
   Wrench,
   X,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { useQueries } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type {
@@ -159,12 +159,10 @@ export function ScopePickerPopover({
       : panelState.activePanel;
   const label = panelState.label;
 
-  // Clear override once selectors have content (user made a selection)
-  useEffect(() => {
-    if (selectors !== null && selectors.length > 0) {
-      setPanelOverride(null);
-    }
-  }, [selectors]);
+  // panelOverride persists until the user explicitly switches panels via
+  // switchPanel(). The derivation above already ignores the override when
+  // selectors have content, so clearing it eagerly only causes the UI to
+  // jump back to "servers" when the user deselects all items.
 
   // Org-scoped permissions have no resource picker — they're always org-wide
   if (resourceType === "org") {
@@ -394,7 +392,7 @@ export function ScopePickerPopover({
               ? "w-[620px]"
               : activePanel === "collection"
                 ? "w-[360px]"
-                : "max-h-[300px] w-44 overflow-y-auto",
+                : "max-h-[300px] w-52 overflow-y-auto",
           )}
           style={{
             transitionTimingFunction: "cubic-bezier(0.32, 0.72, 0, 1)",

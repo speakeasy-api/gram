@@ -56,9 +56,13 @@ function RoleActionsMenu({
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          <DropdownMenuItem onSelect={onEdit}>Edit</DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => setTimeout(onEdit, 0)}>
+            Edit
+          </DropdownMenuItem>
           {!role.isSystem && (
-            <DropdownMenuItem onSelect={onDelete}>Delete</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => setTimeout(onDelete, 0)}>
+              Delete
+            </DropdownMenuItem>
           )}
         </DropdownMenuContent>
       </DropdownMenu>
