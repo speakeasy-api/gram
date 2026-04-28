@@ -3,7 +3,6 @@ package testenv
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"testing"
 	"time"
 
@@ -49,7 +48,6 @@ func newPresidioClientFunc(container testcontainers.Container) PresidioClientFun
 
 		return risk_analysis.NewPresidioClient(
 			baseURL,
-			&http.Client{Timeout: 30 * time.Second},
 			NewTracerProvider(t),
 			NewMeterProvider(t),
 			NewLogger(t),

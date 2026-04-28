@@ -827,7 +827,7 @@ func newStartCommand() *cli.Command {
 				group.Go(func() {
 					var piiScanner risk_analysis.PIIScanner = &risk_analysis.StubPIIScanner{}
 					if presidioURL := c.String("presidio-analyzer-url"); presidioURL != "" {
-						piiScanner = risk_analysis.NewPresidioClient(presidioURL, guardianPolicy.PooledClient(), tracerProvider, meterProvider, logger)
+						piiScanner = risk_analysis.NewPresidioClient(presidioURL, tracerProvider, meterProvider, logger)
 					}
 
 					temporalWorker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, &background.WorkerOptions{
