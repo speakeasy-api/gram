@@ -284,7 +284,13 @@ func (s *Service) CreatePlugin(ctx context.Context, payload *gen.CreatePluginPay
 		return nil, oops.E(oops.CodeBadRequest, nil, "plugin name must produce a valid slug")
 	}
 
-	plugin, err := s.repo.CreatePlugin(ctx, repo.CreatePluginParams{
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").Log(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+
+	plugin, err := s.repo.WithTx(tx).CreatePlugin(ctx, repo.CreatePluginParams{
 		OrganizationID: ac.ActiveOrganizationID,
 		ProjectID:      *ac.ProjectID,
 		Name:           payload.Name,
@@ -297,6 +303,23 @@ func (s *Service) CreatePlugin(ctx context.Context, payload *gen.CreatePluginPay
 			return nil, oops.E(oops.CodeConflict, nil, "a plugin with this slug already exists")
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "create plugin").Log(ctx, s.logger)
+	}
+
+	if err := audit.LogPluginCreate(ctx, tx, audit.LogPluginCreateEvent{
+		OrganizationID:   ac.ActiveOrganizationID,
+		ProjectID:        *ac.ProjectID,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
+		ActorDisplayName: ac.Email,
+		ActorSlug:        nil,
+		PluginID:         plugin.ID,
+		PluginName:       plugin.Name,
+		PluginSlug:       plugin.Slug,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "audit log plugin create").Log(ctx, s.logger)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").Log(ctx, s.logger)
 	}
 
 	return pluginToGen(plugin, nil, nil), nil
@@ -322,7 +345,27 @@ func (s *Service) UpdatePlugin(ctx context.Context, payload *gen.UpdatePluginPay
 		return nil, oops.E(oops.CodeBadRequest, nil, "invalid slug: must be non-empty and contain only lowercase alphanumeric characters and hyphens")
 	}
 
-	plugin, err := s.repo.UpdatePlugin(ctx, repo.UpdatePluginParams{
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").Log(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+
+	txRepo := s.repo.WithTx(tx)
+
+	before, err := txRepo.GetPlugin(ctx, repo.GetPluginParams{
+		ID:             pluginID,
+		OrganizationID: ac.ActiveOrganizationID,
+		ProjectID:      *ac.ProjectID,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.C(oops.CodeNotFound)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "load plugin").Log(ctx, s.logger)
+	}
+
+	plugin, err := txRepo.UpdatePlugin(ctx, repo.UpdatePluginParams{
 		ID:             pluginID,
 		OrganizationID: ac.ActiveOrganizationID,
 		ProjectID:      *ac.ProjectID,
@@ -339,6 +382,33 @@ func (s *Service) UpdatePlugin(ctx context.Context, payload *gen.UpdatePluginPay
 			return nil, oops.E(oops.CodeConflict, nil, "a plugin with this slug already exists")
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "update plugin").Log(ctx, s.logger)
+	}
+
+	if err := audit.LogPluginUpdate(ctx, tx, audit.LogPluginUpdateEvent{
+		OrganizationID:   ac.ActiveOrganizationID,
+		ProjectID:        *ac.ProjectID,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
+		ActorDisplayName: ac.Email,
+		ActorSlug:        nil,
+		PluginID:         plugin.ID,
+		PluginName:       plugin.Name,
+		PluginSlug:       plugin.Slug,
+		SnapshotBefore: &audit.PluginSnapshot{
+			Name:        before.Name,
+			Slug:        before.Slug,
+			Description: conv.FromPGText[string](before.Description),
+		},
+		SnapshotAfter: &audit.PluginSnapshot{
+			Name:        plugin.Name,
+			Slug:        plugin.Slug,
+			Description: conv.FromPGText[string](plugin.Description),
+		},
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "audit log plugin update").Log(ctx, s.logger)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").Log(ctx, s.logger)
 	}
 
 	servers, err := s.repo.ListPluginServers(ctx, pluginID)
@@ -370,7 +440,8 @@ func (s *Service) DeletePlugin(ctx context.Context, payload *gen.DeletePluginPay
 	}
 
 	// Verify the plugin belongs to this project before mutating.
-	if _, err := s.repo.GetPlugin(ctx, repo.GetPluginParams{ID: pluginID, OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID}); err != nil {
+	plugin, err := s.repo.GetPlugin(ctx, repo.GetPluginParams{ID: pluginID, OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID})
+	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return oops.C(oops.CodeNotFound)
 		}
@@ -401,6 +472,19 @@ func (s *Service) DeletePlugin(ctx context.Context, payload *gen.DeletePluginPay
 		return oops.E(oops.CodeUnexpected, err, "delete plugin").Log(ctx, s.logger)
 	}
 
+	if err := audit.LogPluginDelete(ctx, tx, audit.LogPluginDeleteEvent{
+		OrganizationID:   ac.ActiveOrganizationID,
+		ProjectID:        *ac.ProjectID,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
+		ActorDisplayName: ac.Email,
+		ActorSlug:        nil,
+		PluginID:         plugin.ID,
+		PluginName:       plugin.Name,
+		PluginSlug:       plugin.Slug,
+	}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "audit log plugin delete").Log(ctx, s.logger)
+	}
+
 	if err := tx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "commit transaction").Log(ctx, s.logger)
 	}
@@ -425,7 +509,8 @@ func (s *Service) AddPluginServer(ctx context.Context, payload *gen.AddPluginSer
 	}
 
 	// Verify the plugin belongs to this project.
-	if _, err := s.repo.GetPlugin(ctx, repo.GetPluginParams{ID: pluginID, OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID}); err != nil {
+	plugin, err := s.repo.GetPlugin(ctx, repo.GetPluginParams{ID: pluginID, OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID})
+	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.C(oops.CodeNotFound)
 		}
@@ -452,7 +537,13 @@ func (s *Service) AddPluginServer(ctx context.Context, payload *gen.AddPluginSer
 		return nil, oops.E(oops.CodeBadRequest, nil, "toolset does not have MCP enabled")
 	}
 
-	row, err := s.repo.AddPluginServer(ctx, repo.AddPluginServerParams{
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").Log(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+
+	row, err := s.repo.WithTx(tx).AddPluginServer(ctx, repo.AddPluginServerParams{
 		PluginID:    pluginID,
 		ToolsetID:   toolsetID,
 		DisplayName: payload.DisplayName,
@@ -465,6 +556,28 @@ func (s *Service) AddPluginServer(ctx context.Context, payload *gen.AddPluginSer
 			return nil, oops.E(oops.CodeConflict, nil, "a server with this display name already exists in the plugin")
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "add plugin server").Log(ctx, s.logger)
+	}
+
+	if err := audit.LogPluginServerAdd(ctx, tx, audit.LogPluginServerAddEvent{
+		OrganizationID:    ac.ActiveOrganizationID,
+		ProjectID:         *ac.ProjectID,
+		Actor:             urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
+		ActorDisplayName:  ac.Email,
+		ActorSlug:         nil,
+		PluginID:          plugin.ID,
+		PluginName:        plugin.Name,
+		PluginSlug:        plugin.Slug,
+		ServerID:          row.ID,
+		ServerDisplayName: row.DisplayName,
+		ServerPolicy:      row.Policy,
+		ServerSortOrder:   row.SortOrder,
+		ToolsetURN:        urn.NewToolset(row.ToolsetID),
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "audit log plugin server add").Log(ctx, s.logger)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").Log(ctx, s.logger)
 	}
 
 	return pluginServerToGen(row), nil
@@ -490,14 +603,21 @@ func (s *Service) UpdatePluginServer(ctx context.Context, payload *gen.UpdatePlu
 	}
 
 	// Verify the plugin belongs to this project.
-	if _, err := s.repo.GetPlugin(ctx, repo.GetPluginParams{ID: pluginID, OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID}); err != nil {
+	plugin, err := s.repo.GetPlugin(ctx, repo.GetPluginParams{ID: pluginID, OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID})
+	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.C(oops.CodeNotFound)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "verify plugin ownership").Log(ctx, s.logger)
 	}
 
-	row, err := s.repo.UpdatePluginServer(ctx, repo.UpdatePluginServerParams{
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").Log(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+
+	row, err := s.repo.WithTx(tx).UpdatePluginServer(ctx, repo.UpdatePluginServerParams{
 		ID:          serverID,
 		PluginID:    pluginID,
 		DisplayName: payload.DisplayName,
@@ -509,6 +629,27 @@ func (s *Service) UpdatePluginServer(ctx context.Context, payload *gen.UpdatePlu
 			return nil, oops.C(oops.CodeNotFound)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "update plugin server").Log(ctx, s.logger)
+	}
+
+	if err := audit.LogPluginServerUpdate(ctx, tx, audit.LogPluginServerUpdateEvent{
+		OrganizationID:    ac.ActiveOrganizationID,
+		ProjectID:         *ac.ProjectID,
+		Actor:             urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
+		ActorDisplayName:  ac.Email,
+		ActorSlug:         nil,
+		PluginID:          plugin.ID,
+		PluginName:        plugin.Name,
+		PluginSlug:        plugin.Slug,
+		ServerID:          row.ID,
+		ServerDisplayName: row.DisplayName,
+		ServerPolicy:      row.Policy,
+		ServerSortOrder:   row.SortOrder,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "audit log plugin server update").Log(ctx, s.logger)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").Log(ctx, s.logger)
 	}
 
 	return pluginServerToGen(row), nil
@@ -534,18 +675,43 @@ func (s *Service) RemovePluginServer(ctx context.Context, payload *gen.RemovePlu
 	}
 
 	// Verify the plugin belongs to this project.
-	if _, err := s.repo.GetPlugin(ctx, repo.GetPluginParams{ID: pluginID, OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID}); err != nil {
+	plugin, err := s.repo.GetPlugin(ctx, repo.GetPluginParams{ID: pluginID, OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID})
+	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return oops.C(oops.CodeNotFound)
 		}
 		return oops.E(oops.CodeUnexpected, err, "verify plugin ownership").Log(ctx, s.logger)
 	}
 
-	if err := s.repo.RemovePluginServer(ctx, repo.RemovePluginServerParams{
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "begin transaction").Log(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+
+	if err := s.repo.WithTx(tx).RemovePluginServer(ctx, repo.RemovePluginServerParams{
 		ID:       serverID,
 		PluginID: pluginID,
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "remove plugin server").Log(ctx, s.logger)
+	}
+
+	if err := audit.LogPluginServerRemove(ctx, tx, audit.LogPluginServerRemoveEvent{
+		OrganizationID:   ac.ActiveOrganizationID,
+		ProjectID:        *ac.ProjectID,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
+		ActorDisplayName: ac.Email,
+		ActorSlug:        nil,
+		PluginID:         plugin.ID,
+		PluginName:       plugin.Name,
+		PluginSlug:       plugin.Slug,
+		ServerID:         serverID,
+	}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "audit log plugin server remove").Log(ctx, s.logger)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "commit transaction").Log(ctx, s.logger)
 	}
 	return nil
 }
@@ -568,7 +734,8 @@ func (s *Service) SetPluginAssignments(ctx context.Context, payload *gen.SetPlug
 	}
 
 	// Verify the plugin belongs to this project.
-	if _, err := s.repo.GetPlugin(ctx, repo.GetPluginParams{ID: pluginID, OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID}); err != nil {
+	plugin, err := s.repo.GetPlugin(ctx, repo.GetPluginParams{ID: pluginID, OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID})
+	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.C(oops.CodeNotFound)
 		}
@@ -604,6 +771,20 @@ func (s *Service) SetPluginAssignments(ctx context.Context, payload *gen.SetPlug
 			return nil, oops.E(oops.CodeUnexpected, err, "add plugin assignment").Log(ctx, s.logger)
 		}
 		assignments = append(assignments, pluginAssignmentToGen(row))
+	}
+
+	if err := audit.LogPluginAssignmentsSet(ctx, tx, audit.LogPluginAssignmentsSetEvent{
+		OrganizationID:   ac.ActiveOrganizationID,
+		ProjectID:        *ac.ProjectID,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
+		ActorDisplayName: ac.Email,
+		ActorSlug:        nil,
+		PluginID:         plugin.ID,
+		PluginName:       plugin.Name,
+		PluginSlug:       plugin.Slug,
+		PrincipalURNs:    payload.PrincipalUrns,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "audit log plugin assignments set").Log(ctx, s.logger)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -814,12 +995,17 @@ func (s *Service) PublishPlugins(ctx context.Context, payload *gen.PublishPlugin
 		}
 	}
 
-	// Persist the API key, audit log, and github connection atomically only
+	pluginSlugs := make([]string, 0, len(pluginInfos))
+	for _, p := range pluginInfos {
+		pluginSlugs = append(pluginSlugs, p.Slug)
+	}
+
+	// Persist the API key, audit logs, and github connection atomically only
 	// after the GitHub publish has succeeded. This prevents leaking valid
 	// consumer credentials when GitHub fails. If this transaction itself
 	// fails, the published repo contains a key string with no DB record —
 	// re-publish overwrites it with a fresh valid key.
-	if err := s.persistPluginAPIKey(ctx, ac, candidate, repoOwner, repoName); err != nil {
+	if err := s.persistPluginAPIKey(ctx, ac, candidate, repoOwner, repoName, pluginSlugs); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "persist plugin api key").Log(ctx, s.logger)
 	}
 
@@ -862,13 +1048,15 @@ func (s *Service) buildPluginAPIKeyCandidate() (pluginAPIKeyCandidate, error) {
 	}, nil
 }
 
-// persistPluginAPIKey atomically writes the API key, its audit log entry, and
-// the GitHub connection record in one transaction.
+// persistPluginAPIKey atomically writes the API key, its audit log entry,
+// the plugin publish audit log entry, and the GitHub connection record in
+// one transaction.
 func (s *Service) persistPluginAPIKey(
 	ctx context.Context,
 	ac *contextvalues.AuthContext,
 	candidate pluginAPIKeyCandidate,
 	repoOwner, repoName string,
+	pluginSlugs []string,
 ) error {
 	scopes := []string{auth.APIKeyScopeConsumer.String()}
 	projectID := uuid.NullUUID{UUID: *ac.ProjectID, Valid: true}
@@ -912,6 +1100,24 @@ func (s *Service) persistPluginAPIKey(
 		RepoName:       repoName,
 	}); err != nil {
 		return fmt.Errorf("upsert github connection: %w", err)
+	}
+
+	projectSlug := ""
+	if ac.ProjectSlug != nil {
+		projectSlug = *ac.ProjectSlug
+	}
+	if err := audit.LogPluginPublish(ctx, tx, audit.LogPluginPublishEvent{
+		OrganizationID:   ac.ActiveOrganizationID,
+		ProjectID:        *ac.ProjectID,
+		ProjectSlug:      projectSlug,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
+		ActorDisplayName: ac.Email,
+		ActorSlug:        nil,
+		PluginSlugs:      pluginSlugs,
+		RepoOwner:        repoOwner,
+		RepoName:         repoName,
+	}); err != nil {
+		return fmt.Errorf("audit log plugin publish: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
