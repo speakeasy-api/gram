@@ -47,8 +47,6 @@ migrations:
   - "go.sum"
   - "server/migrations/**"
   - "server/clickhouse/migrations/**"
-  - ".mise-tasks/lint/migrations.sh"
-  - ".mise-tasks/test/lint-migrations.sh"
 
 plog:
   - "go.mod"

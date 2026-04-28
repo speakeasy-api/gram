@@ -4,7 +4,6 @@
 
 #MISE flag "--git-base <base>" help="The git base to use for finding modified migrations"
 #USAGE flag "--file... <file>" help="The files to lint. This flag can be provided multiple times. If not provided, all modified migrations will be linted."
-#USAGE flag "--no-atlas" help="Skip the 'atlas migrate lint' step. Used for the static checks alone (no postgres dev DB required)."
 
 set -e
 
@@ -124,11 +123,6 @@ if [ -n "$latest_base_ts" ] && [ ${#added_files[@]} -gt 0 ]; then
   fi
 
   echo "✅ All new migrations are ordered correctly"
-fi
-
-if [ "${usage_no_atlas:-}" = "true" ]; then
-  echo -e "\nSkipping 'atlas migrate lint' (--no-atlas)"
-  exit 0
 fi
 
 # Run atlas migrate lint
