@@ -287,7 +287,7 @@ func (s *Service) HandleWellKnownOAuthServerMetadata(w http.ResponseWriter, r *h
 	}
 
 	if result == nil {
-		return oops.E(oops.CodeNotFound, nil, "no OAuth configuration found").Log(ctx, s.logger)
+		return oops.E(oops.CodeNotFound, nil, "no OAuth configuration found")
 	}
 
 	// Handle proxy case - reverse proxy to external MCP OAuth server
@@ -372,7 +372,7 @@ func (s *Service) HandleWellKnownOAuthProtectedResourceMetadata(w http.ResponseW
 	}
 
 	if metadata == nil {
-		return oops.E(oops.CodeNotFound, nil, "not found").Log(ctx, s.logger)
+		return oops.E(oops.CodeNotFound, nil, "not found")
 	}
 
 	w.Header().Set("Content-Type", "application/json")
