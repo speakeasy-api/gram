@@ -124,9 +124,12 @@ CREATE TABLE IF NOT EXISTS trace_summaries (
     -- time as: has_block → blocked, has_error → failure, has_result → success,
     -- otherwise pending.
     has_block SimpleAggregateFunction(max, UInt8),
-    -- The first non-empty block reason observed, surfaced in dashboards next
-    -- to the blocked status.
-    block_reason SimpleAggregateFunction(any, String)
+    -- The block reason surfaced in dashboards next to the blocked status.
+    -- Uses max() so empty strings ("") always lose to non-empty reasons during
+    -- part merges; any() is non-deterministic and can pick "" from a sibling
+    -- row (e.g. the original PreToolUse log) instead of the row that actually
+    -- carried the denial reason.
+    block_reason SimpleAggregateFunction(max, String)
 ) ENGINE = AggregatingMergeTree
 ORDER BY (gram_project_id, trace_id)
 TTL fromUnixTimestamp64Nano(start_time_unix_nano) + INTERVAL 30 DAY
