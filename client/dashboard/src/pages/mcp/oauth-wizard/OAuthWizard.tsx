@@ -13,13 +13,16 @@ import {
   useListEnvironments,
 } from "@gram/client/react-query";
 import { useQueryClient } from "@tanstack/react-query";
-import { useMachine } from "@xstate/react";
 import { Globe } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { ExternalOAuthForm } from "./ExternalOAuthForm";
 import { FatalErrorStep } from "./FatalErrorStep";
-import { oauthWizardMachine, selectWizardTitle } from "./machine";
+import {
+  oauthWizardMachine,
+  selectWizardTitle,
+  WizardContext,
+} from "./machine";
 import type { DiscoveredOAuth, Input } from "./machine-types";
 import { PathSelection } from "./PathSelection";
 import { ProxyCredentialsForm } from "./ProxyCredentialsForm";
@@ -88,9 +91,6 @@ function WizardBody({
   const { data: environmentsData } = useListEnvironments();
 
   const discovered = useDiscoveredOAuth(toolset);
-  const externalDiscovered = discovered?.version === "2.1" ? discovered : null;
-  const hasMultipleOAuth2AuthCode =
-    toolset.oauthEnablementMetadata?.oauth2SecurityCount > 1;
 
   const existingEnvNames = useMemo(
     () => (environmentsData?.environments ?? []).map((e) => e.name),
@@ -131,8 +131,24 @@ function WizardBody({
     existingEnvNames,
   };
 
-  const [state, send] = useMachine(provided, { input });
-  const ctx = state.context;
+  return (
+    <WizardContext.Provider logic={provided} options={{ input }}>
+      <WizardSteps onClose={onClose} toolset={toolset} />
+    </WizardContext.Provider>
+  );
+}
+
+function WizardSteps({
+  onClose,
+  toolset,
+}: {
+  onClose: () => void;
+  toolset: Toolset;
+}) {
+  const state = WizardContext.useSelector((s) => s);
+  const oauth2SecurityCount =
+    toolset.oauthEnablementMetadata?.oauth2SecurityCount ?? 0;
+  const hasMultipleOAuth2AuthCode = oauth2SecurityCount > 1;
 
   const isProxyCreating =
     state.matches({ proxy: "creatingEnvironment" }) ||
@@ -145,47 +161,27 @@ function WizardBody({
         <Dialog.Title>{selectWizardTitle(state)}</Dialog.Title>
       </Dialog.Header>
 
-      {state.matches("pathSelection") && (
-        <PathSelection discovered={discovered} send={send} />
-      )}
+      {state.matches("pathSelection") && <PathSelection />}
 
       {state.matches("external") && (
         <ExternalOAuthForm
-          external={ctx.external}
-          submitting={state.matches({ external: "submitting" })}
-          discovered={externalDiscovered}
           hasMultipleOAuth2AuthCode={hasMultipleOAuth2AuthCode}
-          oauth2SecurityCount={
-            toolset.oauthEnablementMetadata?.oauth2SecurityCount ?? 0
-          }
-          send={send}
+          oauth2SecurityCount={oauth2SecurityCount}
         />
       )}
 
-      {state.matches({ proxy: "metadata" }) && (
-        <ProxyMetadataForm
-          proxy={ctx.proxy}
-          error={ctx.error}
-          discovered={discovered}
-          send={send}
-        />
-      )}
+      {state.matches({ proxy: "metadata" }) && <ProxyMetadataForm />}
 
       {(state.matches({ proxy: "credentials" }) || isProxyCreating) && (
-        <ProxyCredentialsForm
-          proxy={ctx.proxy}
-          error={ctx.error}
-          submitting={isProxyCreating}
-          send={send}
-        />
+        <ProxyCredentialsForm />
       )}
 
       {state.matches({ proxy: "fatalError" }) && (
-        <FatalErrorStep error={ctx.error} onClose={onClose} />
+        <FatalErrorStep error={state.context.error} onClose={onClose} />
       )}
 
-      {state.matches("result") && ctx.result && (
-        <ResultStep message={ctx.result.message} onClose={onClose} />
+      {state.matches("result") && state.context.result && (
+        <ResultStep message={state.context.result.message} onClose={onClose} />
       )}
     </>
   );

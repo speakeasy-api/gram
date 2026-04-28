@@ -4,20 +4,15 @@ import { Link } from "@/components/ui/link";
 import { Type } from "@/components/ui/type";
 import { Button, Stack } from "@speakeasy-api/moonshine";
 
-import type { WizardSend } from "./machine";
-import type { Context, DiscoveredOAuth, ProxyFormKey } from "./machine-types";
+import { WizardContext } from "./machine";
+import type { ProxyFormKey } from "./machine-types";
 
-export function ProxyMetadataForm({
-  proxy,
-  error,
-  discovered,
-  send,
-}: {
-  proxy: Context["proxy"];
-  error: string | null;
-  discovered: DiscoveredOAuth | null;
-  send: WizardSend;
-}) {
+export function ProxyMetadataForm() {
+  const send = WizardContext.useActorRef().send;
+  const proxy = WizardContext.useSelector((s) => s.context.proxy);
+  const error = WizardContext.useSelector((s) => s.context.error);
+  const discovered = WizardContext.useSelector((s) => s.context.discovered);
+
   const setField = (key: ProxyFormKey, value: string) =>
     send({ type: "FIELD_PROXY", key, value });
 

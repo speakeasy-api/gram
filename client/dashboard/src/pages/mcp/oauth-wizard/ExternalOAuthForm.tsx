@@ -5,24 +5,25 @@ import { TextArea } from "@/components/ui/textarea";
 import { Type } from "@/components/ui/type";
 import { Button, Stack } from "@speakeasy-api/moonshine";
 
-import type { WizardSend } from "./machine";
-import type { Context, DiscoveredOAuth } from "./machine-types";
+import { WizardContext } from "./machine";
 
 export function ExternalOAuthForm({
-  external,
-  submitting,
-  discovered,
   hasMultipleOAuth2AuthCode,
   oauth2SecurityCount,
-  send,
 }: {
-  external: Context["external"];
-  submitting: boolean;
-  discovered: DiscoveredOAuth | null;
   hasMultipleOAuth2AuthCode: boolean;
   oauth2SecurityCount: number;
-  send: WizardSend;
 }) {
+  const send = WizardContext.useActorRef().send;
+  const external = WizardContext.useSelector((s) => s.context.external);
+  const discovered = WizardContext.useSelector((s) => {
+    const d = s.context.discovered;
+    return d?.version === "2.1" ? d : null;
+  });
+  const submitting = WizardContext.useSelector((s) =>
+    s.matches({ external: "submitting" }),
+  );
+
   return (
     <>
       <div className="max-h-[60vh] space-y-4 overflow-auto">

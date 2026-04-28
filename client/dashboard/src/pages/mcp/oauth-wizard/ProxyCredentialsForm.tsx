@@ -3,20 +3,19 @@ import { Input } from "@/components/ui/input";
 import { Type } from "@/components/ui/type";
 import { Button, Stack } from "@speakeasy-api/moonshine";
 
-import type { WizardSend } from "./machine";
-import type { Context } from "./machine-types";
+import { WizardContext } from "./machine";
 
-export function ProxyCredentialsForm({
-  proxy,
-  error,
-  submitting,
-  send,
-}: {
-  proxy: Context["proxy"];
-  error: string | null;
-  submitting: boolean;
-  send: WizardSend;
-}) {
+export function ProxyCredentialsForm() {
+  const send = WizardContext.useActorRef().send;
+  const proxy = WizardContext.useSelector((s) => s.context.proxy);
+  const error = WizardContext.useSelector((s) => s.context.error);
+  const submitting = WizardContext.useSelector(
+    (s) =>
+      s.matches({ proxy: "creatingEnvironment" }) ||
+      s.matches({ proxy: "creatingProxy" }) ||
+      s.matches({ proxy: "rollingBackEnv" }),
+  );
+
   return (
     <>
       <div className="max-h-[60vh] space-y-4 overflow-auto">

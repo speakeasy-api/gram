@@ -4,16 +4,13 @@ import { Globe, LockIcon } from "lucide-react";
 
 import { Badge } from "@speakeasy-api/moonshine";
 import { ReactNode } from "react";
-import type { WizardSend } from "./machine";
+import { WizardContext } from "./machine";
 import type { DiscoveredOAuth } from "./machine-types";
 
-export function PathSelection({
-  discovered,
-  send,
-}: {
-  discovered: DiscoveredOAuth | null;
-  send: WizardSend;
-}) {
+export function PathSelection() {
+  const send = WizardContext.useActorRef().send;
+  const discovered = WizardContext.useSelector((s) => s.context.discovered);
+
   return (
     <div className="space-y-4">
       {discovered && <OAuthDetectedCallout discovered={discovered} />}

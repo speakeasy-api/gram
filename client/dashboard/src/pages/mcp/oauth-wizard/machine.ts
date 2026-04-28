@@ -1,3 +1,4 @@
+import { createActorContext } from "@xstate/react";
 import { assign, fromPromise, setup, type SnapshotFrom } from "xstate";
 
 import { checkCreds, checkExternal, checkProxyMeta } from "./guards";
@@ -433,6 +434,8 @@ export const oauthWizardMachine = setup({
 export type OAuthWizardMachine = typeof oauthWizardMachine;
 export type WizardSnapshot = SnapshotFrom<typeof oauthWizardMachine>;
 export type WizardSend = (event: WizardEvent) => void;
+
+export const WizardContext = createActorContext(oauthWizardMachine);
 
 export function selectWizardTitle(state: WizardSnapshot): string {
   for (const m of Object.values(state.getMeta())) {
