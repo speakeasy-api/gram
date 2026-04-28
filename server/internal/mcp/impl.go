@@ -313,9 +313,15 @@ func (s *Service) HandleWellKnownOAuthServerMetadata(w http.ResponseWriter, r *h
 		return nil
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
+	return writeOAuthServerMetadataResponse(ctx, s.logger, w, result)
+}
 
+// writeOAuthServerMetadataResponse builds the OAuth server metadata body and
+// only commits the 200 OK status once the body is ready. This ordering matters:
+// if marshaling fails or the result kind is unrecognized, the caller's error
+// handler middleware needs an unwritten ResponseWriter so it can emit the real
+// error status — Go's net/http silently drops a second WriteHeader call.
+func writeOAuthServerMetadataResponse(ctx context.Context, logger *slog.Logger, w http.ResponseWriter, result *wellknown.OAuthServerMetadataResult) error {
 	var body []byte
 	switch result.Kind {
 	case wellknown.OAuthServerMetadataResultKindRaw:
@@ -324,15 +330,16 @@ func (s *Service) HandleWellKnownOAuthServerMetadata(w http.ResponseWriter, r *h
 		var marshalErr error
 		body, marshalErr = json.Marshal(result.Static)
 		if marshalErr != nil {
-			return oops.E(oops.CodeUnexpected, marshalErr, "failed to marshal OAuth server metadata").Log(ctx, s.logger)
+			return oops.E(oops.CodeUnexpected, marshalErr, "failed to marshal OAuth server metadata").Log(ctx, logger)
 		}
 	default:
-		return oops.E(oops.CodeUnexpected, nil, "unexpected OAuth server metadata result kind").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, nil, "unexpected OAuth server metadata result kind").Log(ctx, logger)
 	}
 
-	_, writeErr := w.Write(body)
-	if writeErr != nil {
-		return oops.E(oops.CodeUnexpected, writeErr, "failed to write response body").Log(ctx, s.logger)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if _, err := w.Write(body); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to write response body").Log(ctx, logger)
 	}
 
 	return nil
@@ -375,17 +382,23 @@ func (s *Service) HandleWellKnownOAuthProtectedResourceMetadata(w http.ResponseW
 		return oops.E(oops.CodeNotFound, nil, "not found")
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
+	return writeOAuthProtectedResourceMetadataResponse(ctx, s.logger, w, metadata)
+}
 
+// writeOAuthProtectedResourceMetadataResponse builds the OAuth protected
+// resource metadata body and only commits the 200 OK status once the body is
+// ready. See writeOAuthServerMetadataResponse for the rationale behind the
+// ordering.
+func writeOAuthProtectedResourceMetadataResponse(ctx context.Context, logger *slog.Logger, w http.ResponseWriter, metadata *wellknown.OAuthProtectedResourceMetadata) error {
 	body, err := json.Marshal(metadata)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to marshal OAuth protected resource metadata").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to marshal OAuth protected resource metadata").Log(ctx, logger)
 	}
 
-	_, writeErr := w.Write(body)
-	if writeErr != nil {
-		return oops.E(oops.CodeUnexpected, writeErr, "failed to write response body").Log(ctx, s.logger)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if _, err := w.Write(body); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to write response body").Log(ctx, logger)
 	}
 
 	return nil
