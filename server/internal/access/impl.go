@@ -507,6 +507,29 @@ func (s *Service) DeleteRole(ctx context.Context, payload *gen.DeleteRolePayload
 		return oops.E(oops.CodeBadRequest, nil, "system roles cannot be deleted").Log(ctx, logger)
 	}
 
+	// WorkOS rejects deleting a role that still has members assigned, so move
+	// any assigned members to the default member role first.
+	members, err := s.roles.ListMembers(ctx, workosOrgID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "list members from workos").Log(ctx, logger)
+	}
+	reassigned := false
+	for _, m := range members {
+		if m.RoleSlug != currentRole.Slug {
+			continue
+		}
+		if _, err := s.roles.UpdateMemberRole(ctx, m.ID, authz.SystemRoleMember); err != nil {
+			if reassigned {
+				s.authz.InvalidateAllRoleCaches(ctx, ac.ActiveOrganizationID)
+			}
+			return oops.E(oops.CodeUnexpected, err, "reassign member to default role").Log(ctx, logger)
+		}
+		reassigned = true
+	}
+	if reassigned {
+		s.authz.InvalidateAllRoleCaches(ctx, ac.ActiveOrganizationID)
+	}
+
 	if _, err := repo.New(s.db).DeletePrincipalGrantsByPrincipal(ctx, repo.DeletePrincipalGrantsByPrincipalParams{
 		OrganizationID: ac.ActiveOrganizationID,
 		PrincipalUrn:   urn.NewPrincipal(urn.PrincipalTypeRole, currentRole.Slug),

@@ -20711,6 +20711,9 @@ components:
         suppressOutput:
           type: boolean
           description: Whether to suppress the hook's output
+        systemMessage:
+          type: string
+          description: Warning message shown to the user in the terminal
       description: Unified result for all Claude Code hook events with proper response structure
     ConfigureSlackAppRequestBody:
       type: object
@@ -22038,6 +22041,11 @@ components:
     ExternalMCPRemote:
       type: object
       properties:
+        headers:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExternalMCPRemoteHeader'
+          description: HTTP headers the MCP client should collect and send when connecting to this remote
         transport_type:
           type: string
           description: Transport type (sse or streamable-http)
@@ -22048,10 +22056,57 @@ components:
           type: string
           description: URL of the remote endpoint
           format: uri
+        variables:
+          type: object
+          description: URL template variables for this remote endpoint
+          additionalProperties:
+            $ref: '#/components/schemas/ExternalMCPRemoteVariable'
       description: A remote endpoint for an MCP server
       required:
         - url
         - transport_type
+    ExternalMCPRemoteHeader:
+      type: object
+      properties:
+        description:
+          type: string
+          description: Description of the header
+        is_required:
+          type: boolean
+          description: Whether this header is required
+        is_secret:
+          type: boolean
+          description: Whether this header value should be treated as secret
+        name:
+          type: string
+          description: Header name
+        placeholder:
+          type: string
+          description: Placeholder value to show when collecting this header
+      description: A header requirement for a remote MCP server
+      required:
+        - name
+    ExternalMCPRemoteVariable:
+      type: object
+      properties:
+        choices:
+          type: array
+          items:
+            type: string
+          description: Allowed values for the variable
+        default:
+          type: string
+          description: Default value for the variable
+        description:
+          type: string
+          description: Description of the variable
+        is_required:
+          type: boolean
+          description: Whether this variable is required
+        is_secret:
+          type: boolean
+          description: Whether this variable value should be treated as secret
+      description: A URL template variable for a remote MCP server
     ExternalMCPServer:
       type: object
       properties:
@@ -23003,6 +23058,9 @@ components:
     GramProductFeatures:
       type: object
       properties:
+        block_shadow_mcp_enabled:
+          type: boolean
+          description: Whether shadow-MCP guarding is enabled (injects required toolset id and rejects unsigned tool calls)
         logs_enabled:
           type: boolean
           description: Whether logging is enabled
@@ -23017,6 +23075,7 @@ components:
         - logs_enabled
         - tool_io_logs_enabled
         - session_capture_enabled
+        - block_shadow_mcp_enabled
     HTTPToolDefinition:
       type: object
       properties:
@@ -23148,6 +23207,9 @@ components:
     HookTraceSummary:
       type: object
       properties:
+        block_reason:
+          type: string
+          description: Reason set when hook_status is 'blocked' (e.g. shadow-MCP guard rejection)
         event_source:
           type: string
           description: Event source (from materialized column)
@@ -23164,6 +23226,7 @@ components:
             - success
             - failure
             - pending
+            - blocked
         log_count:
           type: integer
           description: Total number of logs in this trace
@@ -26949,6 +27012,7 @@ components:
             - logs
             - tool_io_logs
             - session_capture
+            - block_shadow_mcp
           maxLength: 60
       required:
         - feature_name

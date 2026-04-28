@@ -106,6 +106,8 @@ type ClaudeHookResult struct {
 	StopReason *string
 	// Whether to suppress the hook's output
 	SuppressOutput *bool
+	// Warning message shown to the user in the terminal
+	SystemMessage *string
 	// Hook-specific output as JSON object
 	HookSpecificOutput any
 }

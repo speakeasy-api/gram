@@ -3183,6 +3183,8 @@ type HookTraceSummaryResponseBody struct {
 	LogCount uint64 `form:"log_count" json:"log_count" xml:"log_count"`
 	// Hook execution status
 	HookStatus *string `form:"hook_status,omitempty" json:"hook_status,omitempty" xml:"hook_status,omitempty"`
+	// Reason set when hook_status is 'blocked' (e.g. shadow-MCP guard rejection)
+	BlockReason *string `form:"block_reason,omitempty" json:"block_reason,omitempty" xml:"block_reason,omitempty"`
 	// Gram URN associated with this hook trace
 	GramUrn string `form:"gram_urn" json:"gram_urn" xml:"gram_urn"`
 	// Tool name (from materialized column)

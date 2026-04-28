@@ -13,4 +13,9 @@ type ExternalMCPRemote struct {
 	URL string
 	// Transport type (sse or streamable-http)
 	TransportType string
+	// HTTP headers the MCP client should collect and send when connecting to this
+	// remote
+	Headers []*ExternalMCPRemoteHeader
+	// URL template variables for this remote endpoint
+	Variables map[string]*ExternalMCPRemoteVariable
 }

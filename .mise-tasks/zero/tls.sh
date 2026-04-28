@@ -106,15 +106,36 @@ found_keypair() {
   [ -f "$CERT_PATH" ] && [ -f "$KEY_PATH" ]
 }
 
+cert_names() {
+  local site_host server_host assistant_host
+  site_host="$(extract_hostname "$GRAM_SITE_URL")"
+  server_host="$(extract_hostname "$GRAM_SERVER_URL")"
+  assistant_host="${GRAM_ASSISTANT_RUNTIME_SERVER_HOSTNAME:-}"
+
+  printf "%s\n" \
+    "$site_host" \
+    "$server_host" \
+    "$assistant_host" \
+    "localhost" \
+    "127.0.0.1" \
+    "::1" \
+    "gram.local" \
+    "host.lima.internal" \
+    | awk 'NF && !seen[$0]++'
+}
+
 gen_keypair() {
   ensure_dir "$(dirname "$CERT_PATH")"
   ensure_dir "$(dirname "$KEY_PATH")"
 
-  hostname=$(extract_hostname "$GRAM_SITE_URL")
+  names=()
+  while IFS= read -r name; do
+    names+=("$name")
+  done < <(cert_names)
 
-  echo "Generating cert and key for $hostname..."
+  echo "Generating cert and key for ${names[*]}..."
   mkcert \
-    -cert-file "$CERT_PATH" -key-file "$KEY_PATH" "$hostname"
+    -cert-file "$CERT_PATH" -key-file "$KEY_PATH" "${names[@]}"
 
   root_ca="$(mkcert -CAROOT)/rootCA.pem"
   if [ ! -f "$root_ca" ]; then
@@ -133,7 +154,7 @@ main() {
   check_command mkcert
   turn_on_tls
   trust_local_ca
-  if ! found_keypair; then gen_keypair; fi
+  gen_keypair
 }
 
 main "$@"

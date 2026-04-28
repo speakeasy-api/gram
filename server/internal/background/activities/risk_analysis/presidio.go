@@ -11,6 +11,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hashicorp/go-cleanhttp"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/metric"
@@ -50,9 +52,12 @@ type presidioResult struct {
 const presidioMaxWorkers = 100
 
 // PresidioClient calls the Presidio Analyzer HTTP API.
+// Presidio is a trusted cluster-internal service, so the client bypasses
+// guardian's SSRF blocklist (which rejects private IP ranges like 10.0.0.0/8
+// that Kubernetes ClusterIPs fall into).
 type PresidioClient struct {
 	baseURL         string
-	httpClient      *http.Client //nolint:forbidigo // Injected via guardian.Policy in the wiring layer.
+	httpClient      *http.Client //nolint:forbidigo // Internal pooled client, not guardian-managed.
 	tracer          trace.Tracer
 	logger          *slog.Logger
 	maxWorkers      int
@@ -61,8 +66,7 @@ type PresidioClient struct {
 }
 
 // NewPresidioClient creates a client pointing at the given base URL.
-// The httpClient should be obtained from guardian.Policy.PooledClient().
-func NewPresidioClient(baseURL string, httpClient *http.Client, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, logger *slog.Logger) *PresidioClient { //nolint:forbidigo // Accepts guardian-provided client.
+func NewPresidioClient(baseURL string, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, logger *slog.Logger) *PresidioClient {
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis/presidio")
 
 	requestDuration, _ := meter.Float64Histogram(
@@ -78,6 +82,11 @@ func NewPresidioClient(baseURL string, httpClient *http.Client, tracerProvider t
 		metric.WithUnit("{request}"),
 	)
 
+	httpClient := &http.Client{Transport: otelhttp.NewTransport( //nolint:forbidigo // Internal pooled client, not guardian-managed.
+		cleanhttp.DefaultPooledTransport(),
+		otelhttp.WithTracerProvider(tracerProvider),
+	)}
+
 	return &PresidioClient{
 		baseURL:         strings.TrimRight(baseURL, "/"),
 		httpClient:      httpClient,
@@ -91,8 +100,8 @@ func NewPresidioClient(baseURL string, httpClient *http.Client, tracerProvider t
 
 // NewPresidioClientWithWorkers is like NewPresidioClient but allows overriding
 // the concurrency limit. Used for benchmarking.
-func NewPresidioClientWithWorkers(baseURL string, httpClient *http.Client, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, logger *slog.Logger, maxWorkers int) *PresidioClient { //nolint:forbidigo // Accepts guardian-provided client.
-	c := NewPresidioClient(baseURL, httpClient, tracerProvider, meterProvider, logger)
+func NewPresidioClientWithWorkers(baseURL string, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, logger *slog.Logger, maxWorkers int) *PresidioClient {
+	c := NewPresidioClient(baseURL, tracerProvider, meterProvider, logger)
 	c.maxWorkers = maxWorkers
 	return c
 }

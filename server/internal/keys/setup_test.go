@@ -105,7 +105,6 @@ func withDefaultOrgAdminGrant(t *testing.T, ctx context.Context, conn *pgxpool.P
 		OrganizationID: authCtx.ActiveOrganizationID,
 		PrincipalUrn:   principal,
 		Scope:          string(authz.ScopeOrgAdmin),
-		Resource:       authCtx.ActiveOrganizationID,
 		Selectors:      selectors,
 	})
 	require.NoError(t, err)

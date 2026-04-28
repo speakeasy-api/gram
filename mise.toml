@@ -77,9 +77,9 @@ TEMPORAL_ADDRESS = "{{env.TEMPORAL_HOST}}:{{env.TEMPORAL_PORT}}"
 PRESIDIO_PORT = "5050"
 PRESIDIO_ANALYZER_URL = "http://127.0.0.1:{{env.PRESIDIO_PORT}}"
 
-###################################
-## Gram server and worker config ##
-###################################
+##########################################
+## Gram server, admin and worker config ##
+##########################################
 ## Setting this to 1 will run the server and worker in a single process.
 ## This is useful when debugging during local development. It can also be used
 ## for simple production deployments although you are encouraged to run the gram
@@ -89,6 +89,10 @@ GRAM_SERVER_PORT = "8080"
 GRAM_SERVER_ADDRESS = ":{{env.GRAM_SERVER_PORT}}"
 GRAM_CONTROL_PORT = "8081"
 GRAM_CONTROL_ADDRESS = ":{{env.GRAM_CONTROL_PORT}}"
+GRAM_ADMIN_SERVER_PORT = "9090"
+GRAM_ADMIN_SERVER_ADDRESS = ":{{env.GRAM_ADMIN_SERVER_PORT}}"
+GRAM_ADMIN_CONTROL_PORT = "9091"
+GRAM_ADMIN_CONTROL_ADDRESS = ":{{env.GRAM_ADMIN_CONTROL_PORT}}"
 GRAM_WORKER_CONTROL_PORT = "8082"
 GRAM_WORKER_CONTROL_ADDRESS = ":{{env.GRAM_WORKER_CONTROL_PORT}}"
 ## The following variable can be one of: local, test, prod
@@ -180,6 +184,18 @@ GRAM_FUNCTIONS_LOCAL_RUNNER_ROOT = "{{config_root}}/local/functions"
 # GRAM_FUNCTIONS_FLYIO_ORG = "unset"
 ## Default region for deploying fly.io apps
 # GRAM_FUNCTIONS_FLYIO_REGION = "sjc"
+
+########################################
+## Gram Assistant runtime settings ##
+########################################
+## Local Firecracker runtimes expose the runner HTTP API inside each guest on
+## this port. It is declared here so `mise work:init` remaps it for parallel
+## worktrees and re-declares dependent values in the generated local env.
+GRAM_ASSISTANT_RUNTIME_PROVIDER = "local"
+GRAM_ASSISTANT_RUNTIME_GUEST_PORT = "8081"
+GRAM_RUNNER_ADDR = "0.0.0.0:{{env.GRAM_ASSISTANT_RUNTIME_GUEST_PORT}}"
+GRAM_ASSISTANT_RUNTIME_WORKDIR = "{{config_root}}/local/assistant-runtimes"
+GRAM_ASSISTANT_RUNTIME_LIMA_INSTANCE = "gram-firecracker-{{env.GRAM_ASSISTANT_RUNTIME_GUEST_PORT}}"
 
 ##################
 ## MCP Registry ##

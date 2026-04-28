@@ -75,6 +75,7 @@ func makeHookResult(hookEventName string) *gen.ClaudeHookResult {
 		Continue:       nil,
 		StopReason:     nil,
 		SuppressOutput: nil,
+		SystemMessage:  nil,
 	}
 }
 

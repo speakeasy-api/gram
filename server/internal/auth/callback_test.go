@@ -93,6 +93,9 @@ func TestService_Callback(t *testing.T) {
 		t.Parallel()
 
 		userInfo := defaultMockUserInfo()
+		userInfo.UserID = "nonadmin-override-user"
+		userInfo.Email = "nonadmin-override@example.com"
+		userInfo.Organizations[0].ID = "nonadmin-primary-org"
 		userInfo.Organizations = append(userInfo.Organizations, MockOrganizationEntry{
 			ID:                 "override-org-123",
 			Name:               "Override Organization",
@@ -112,7 +115,7 @@ func TestService_Callback(t *testing.T) {
 		require.NoError(t, err, "load session after callback")
 		authCtx, ok := contextvalues.GetAuthContext(ctx)
 		require.True(t, ok, "auth context should be set after callback")
-		require.Equal(t, "org-123", authCtx.ActiveOrganizationID, "non-admin users should ignore admin override")
+		require.Equal(t, "nonadmin-primary-org", authCtx.ActiveOrganizationID, "non-admin users should ignore admin override")
 	})
 
 	t.Run("successful callback for admin with override", func(t *testing.T) {

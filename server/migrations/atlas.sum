@@ -1,4 +1,4 @@
-h1:RkVkTO3ZjyDvyFbuVym+JxA0okQ4Dj5/oQkqsYhOjYo=
+h1:5PTkUIoAloVHytNyn5XmMyOMm9k3/OfQd2yfpuu4Zoc=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -143,3 +143,5 @@ h1:RkVkTO3ZjyDvyFbuVym+JxA0okQ4Dj5/oQkqsYhOjYo=
 20260424180455_assistants-add-created-by-user-id.sql h1:rxhY6U/NefDBWyw7DGTbYyadyEVO0phfYsiVLQJDti4=
 20260424180558_risk-policies-presidio-entities.sql h1:T603WV4fB4zZ34l49+reMuJTFHlf2Ca5UIkJe0zhHI8=
 20260424180559_risk-policies-default-pii.sql h1:A+qKEtwSff7+mi6l0vTGLqv8kvIzStw9A98ydQjmJc0=
+20260427000001_drop-grant-resource-column.sql h1:Jitic/8a1v2PYnK6/UGxEqiAw2/w+WLDYoxlcpiR4Io=
+20260427000002_remove-noisy-pii-entities.sql h1:FqvDsDMiIG8deyZZpAj4+ipt3bUqL204W8qi4GmEAzU=

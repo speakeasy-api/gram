@@ -2,8 +2,6 @@ package risk_analysis_test
 
 import (
 	"fmt"
-	"net/http"
-	"os"
 	"slices"
 	"strings"
 	"testing"
@@ -13,28 +11,13 @@ import (
 	"github.com/stretchr/testify/require"
 
 	risk_analysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
-
-func presidioClient(t *testing.T) *risk_analysis.PresidioClient {
-	t.Helper()
-	url := os.Getenv("PRESIDIO_ANALYZER_URL")
-	if url == "" {
-		url = "http://127.0.0.1:5050"
-	}
-	resp, err := http.Get(url + "/health") //nolint:noctx // Test-only health check.
-	if err != nil || resp.StatusCode != http.StatusOK {
-		t.Skipf("presidio not running at %s", url) //nolint:forbidigo // Integration test requires external service.
-	}
-	resp.Body.Close() //nolint:errcheck // Test only.
-	return risk_analysis.NewPresidioClient(url, &http.Client{Timeout: 30 * time.Second}, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), testenv.NewLogger(t))
-}
 
 // --- Real positives: PII that should be detected ---
 
 func TestPresidio_DetectsPersonName(t *testing.T) {
 	t.Parallel()
-	client := presidioClient(t)
+	client := infra.NewPresidioClient(t)
 	results, err := client.AnalyzeBatch(t.Context(), []string{
 		"My name is John Smith and I live in New York",
 	}, nil, nil)
@@ -48,7 +31,7 @@ func TestPresidio_DetectsPersonName(t *testing.T) {
 
 func TestPresidio_DetectsEmail(t *testing.T) {
 	t.Parallel()
-	client := presidioClient(t)
+	client := infra.NewPresidioClient(t)
 	results, err := client.AnalyzeBatch(t.Context(), []string{
 		"Please contact me at john.smith@acmecorp.com for details",
 	}, nil, nil)
@@ -70,7 +53,7 @@ func TestPresidio_DetectsEmail(t *testing.T) {
 
 func TestPresidio_DetectsCreditCard(t *testing.T) {
 	t.Parallel()
-	client := presidioClient(t)
+	client := infra.NewPresidioClient(t)
 	results, err := client.AnalyzeBatch(t.Context(), []string{
 		"My credit card number is 4111111111111111",
 		"Card: 5500-0000-0000-0004",
@@ -87,7 +70,7 @@ func TestPresidio_DetectsCreditCard(t *testing.T) {
 
 func TestPresidio_DetectsPhoneNumber(t *testing.T) {
 	t.Parallel()
-	client := presidioClient(t)
+	client := infra.NewPresidioClient(t)
 	results, err := client.AnalyzeBatch(t.Context(), []string{
 		"Please call my phone number 425-882-8080 to confirm the appointment",
 		"My phone is +44 20 7946 0958",
@@ -110,7 +93,7 @@ func TestPresidio_DetectsPhoneNumber(t *testing.T) {
 
 func TestPresidio_DetectsMultiplePIIInSingleMessage(t *testing.T) {
 	t.Parallel()
-	client := presidioClient(t)
+	client := infra.NewPresidioClient(t)
 	results, err := client.AnalyzeBatch(t.Context(), []string{
 		"Patient Jane Doe (jane.doe@hospital.org) has credit card 4111111111111111. Call 555-123-4567.",
 	}, nil, nil)
@@ -128,7 +111,7 @@ func TestPresidio_DetectsMultiplePIIInSingleMessage(t *testing.T) {
 
 func TestPresidio_NoFalsePositiveOnVersionNumbers(t *testing.T) {
 	t.Parallel()
-	client := presidioClient(t)
+	client := infra.NewPresidioClient(t)
 	results, err := client.AnalyzeBatch(t.Context(), []string{
 		"Version 1.234.567.890 was released",
 		"API v2.0.0-beta.1 is now available",
@@ -143,7 +126,7 @@ func TestPresidio_NoFalsePositiveOnVersionNumbers(t *testing.T) {
 
 func TestPresidio_NoFalsePositiveOnUUIDs(t *testing.T) {
 	t.Parallel()
-	client := presidioClient(t)
+	client := infra.NewPresidioClient(t)
 	results, err := client.AnalyzeBatch(t.Context(), []string{
 		"Transaction ID: 550e8400-e29b-41d4-a716-446655440000",
 		"Session: a1b2c3d4-e5f6-7890-abcd-ef1234567890",
@@ -157,7 +140,7 @@ func TestPresidio_NoFalsePositiveOnUUIDs(t *testing.T) {
 
 func TestPresidio_NoFalsePositiveOnCodeSnippets(t *testing.T) {
 	t.Parallel()
-	client := presidioClient(t)
+	client := infra.NewPresidioClient(t)
 	results, err := client.AnalyzeBatch(t.Context(), []string{
 		`func main() { fmt.Println("hello world") }`,
 		`SELECT * FROM users WHERE id = 12345`,
@@ -178,7 +161,7 @@ func TestPresidio_NoFalsePositiveOnCodeSnippets(t *testing.T) {
 
 func TestPresidio_CleanMessagesProduceNoFindings(t *testing.T) {
 	t.Parallel()
-	client := presidioClient(t)
+	client := infra.NewPresidioClient(t)
 	results, err := client.AnalyzeBatch(t.Context(), []string{
 		"The deployment completed successfully.",
 		"Please review the pull request when you get a chance.",
@@ -196,7 +179,7 @@ func TestPresidio_CleanMessagesProduceNoFindings(t *testing.T) {
 
 func TestCombinedScanners_BothSourcesAppear(t *testing.T) {
 	t.Parallel()
-	client := presidioClient(t)
+	client := infra.NewPresidioClient(t)
 	scanner := risk_analysis.NewScanner()
 
 	// Message with both a secret (AWS key) and PII (email)
@@ -222,7 +205,7 @@ func TestCombinedScanners_BothSourcesAppear(t *testing.T) {
 
 func TestPresidio_StressBatch(t *testing.T) {
 	t.Parallel()
-	client := presidioClient(t)
+	client := infra.NewPresidioClient(t)
 
 	messages := make([]string, 200)
 	for i := range messages {
