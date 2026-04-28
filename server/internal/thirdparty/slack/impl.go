@@ -542,12 +542,11 @@ func (s *Service) CreateSlackApp(ctx context.Context, payload *gen.CreateSlackAp
 		if err != nil {
 			return nil, oops.E(oops.CodeBadRequest, err, "invalid toolset ID").Log(ctx, s.logger)
 		}
-		ts, err := s.toolsetRepo.GetToolsetByID(ctx, parsed)
-		if err != nil {
+		if _, err := s.toolsetRepo.GetToolsetByIDAndProject(ctx, toolset_repo.GetToolsetByIDAndProjectParams{
+			ID:        parsed,
+			ProjectID: *authCtx.ProjectID,
+		}); err != nil {
 			return nil, oops.E(oops.CodeNotFound, err, "toolset not found").Log(ctx, s.logger)
-		}
-		if ts.ProjectID != *authCtx.ProjectID {
-			return nil, oops.E(oops.CodeNotFound, nil, "toolset not found").Log(ctx, s.logger)
 		}
 		toolsetIDs = append(toolsetIDs, tsID)
 	}

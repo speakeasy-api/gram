@@ -292,14 +292,12 @@ func (s *ExternalOAuthService) handleExternalAuthorize(w http.ResponseWriter, r 
 	}
 
 	// Load toolset and verify user has access
-	toolset, err := s.toolsetsRepo.GetToolsetByID(ctx, toolsetID)
+	toolset, err := s.toolsetsRepo.GetToolsetByIDAndProject(ctx, toolsets_repo.GetToolsetByIDAndProjectParams{
+		ID:        toolsetID,
+		ProjectID: *authCtx.ProjectID,
+	})
 	if err != nil {
 		return oops.E(oops.CodeNotFound, err, "toolset not found").Log(ctx, s.logger)
-	}
-
-	// Verify user has access to this toolset's organization
-	if toolset.OrganizationID != authCtx.ActiveOrganizationID {
-		return oops.E(oops.CodeForbidden, nil, "access denied").Log(ctx, s.logger)
 	}
 
 	// Get external MCP OAuth configuration from toolset
@@ -425,7 +423,10 @@ func (s *ExternalOAuthService) handleExternalCallback(w http.ResponseWriter, r *
 	}
 
 	// Get OAuth config to get client credentials
-	toolset, err := s.toolsetsRepo.GetToolsetByID(ctx, state.ToolsetID)
+	toolset, err := s.toolsetsRepo.GetToolsetByIDAndProject(ctx, toolsets_repo.GetToolsetByIDAndProjectParams{
+		ID:        state.ToolsetID,
+		ProjectID: state.ProjectID,
+	})
 	if err != nil {
 		return oops.E(oops.CodeNotFound, err, "toolset not found").Log(ctx, s.logger)
 	}
@@ -574,14 +575,11 @@ func (s *ExternalOAuthService) handleExternalStatus(w http.ResponseWriter, r *ht
 	}
 
 	// Load toolset to verify user has access
-	toolset, err := s.toolsetsRepo.GetToolsetByID(ctx, toolsetID)
-	if err != nil {
+	if _, err := s.toolsetsRepo.GetToolsetByIDAndProject(ctx, toolsets_repo.GetToolsetByIDAndProjectParams{
+		ID:        toolsetID,
+		ProjectID: *authCtx.ProjectID,
+	}); err != nil {
 		return oops.E(oops.CodeNotFound, err, "toolset not found").Log(ctx, s.logger)
-	}
-
-	// Verify user has access
-	if toolset.OrganizationID != authCtx.ActiveOrganizationID {
-		return oops.E(oops.CodeForbidden, nil, "access denied").Log(ctx, s.logger)
 	}
 
 	// Check if user has a token for this toolset
@@ -657,6 +655,14 @@ func (s *ExternalOAuthService) handleExternalDisconnect(w http.ResponseWriter, r
 	toolsetID, err := uuid.Parse(toolsetIDStr)
 	if err != nil {
 		return oops.E(oops.CodeBadRequest, err, "invalid toolset_id").Log(ctx, s.logger)
+	}
+
+	// Verify toolset belongs to caller's project before deleting the token
+	if _, err := s.toolsetsRepo.GetToolsetByIDAndProject(ctx, toolsets_repo.GetToolsetByIDAndProjectParams{
+		ID:        toolsetID,
+		ProjectID: *authCtx.ProjectID,
+	}); err != nil {
+		return oops.E(oops.CodeNotFound, err, "toolset not found").Log(ctx, s.logger)
 	}
 
 	// Delete token

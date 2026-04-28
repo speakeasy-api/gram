@@ -438,15 +438,15 @@ func (s *Service) AddPluginServer(ctx context.Context, payload *gen.AddPluginSer
 	}
 
 	// Verify the toolset exists and belongs to the same project.
-	toolset, err := toolsetsrepo.New(s.db).GetToolsetByID(ctx, toolsetID)
+	toolset, err := toolsetsrepo.New(s.db).GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{
+		ID:        toolsetID,
+		ProjectID: *ac.ProjectID,
+	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.E(oops.CodeBadRequest, nil, "toolset not found")
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "verify toolset").Log(ctx, s.logger)
-	}
-	if toolset.ProjectID != *ac.ProjectID {
-		return nil, oops.E(oops.CodeBadRequest, nil, "toolset belongs to a different project")
 	}
 	if !toolset.McpEnabled || !toolset.McpSlug.Valid || toolset.McpSlug.String == "" {
 		return nil, oops.E(oops.CodeBadRequest, nil, "toolset does not have MCP enabled")
