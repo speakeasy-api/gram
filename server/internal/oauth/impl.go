@@ -949,7 +949,7 @@ func (s *Service) handleProxyRegister(w http.ResponseWriter, r *http.Request) er
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
 		s.logger.ErrorContext(ctx, "DCR failed",
 			attr.SlogHTTPResponseStatusCode(resp.StatusCode),
-			attr.SlogHTTPRequestBody(string(respBody)))
+			attr.SlogHTTPResponseBody(string(respBody)))
 		return oops.E(oops.CodeGatewayError, nil, "registration endpoint returned %d", resp.StatusCode).Log(ctx, s.logger)
 	}
 
