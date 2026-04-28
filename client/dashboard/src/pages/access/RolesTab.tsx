@@ -28,6 +28,43 @@ import { CreateRoleDialog } from "./CreateRoleDialog";
 import { DeleteRoleDialog } from "./DeleteRoleDialog";
 import { Ellipsis } from "lucide-react";
 import { RequireScope } from "@/components/require-scope";
+import { cn } from "@/lib/utils";
+
+function RoleActionsMenu({
+  role,
+  onEdit,
+  onDelete,
+}: {
+  role: Role;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <RequireScope scope="org:admin" level="component">
+      <DropdownMenu open={open} onOpenChange={setOpen} modal={false}>
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            className={cn(
+              "text-muted-foreground hover:bg-accent hover:text-foreground flex h-8 w-8 cursor-pointer items-center justify-center rounded-md transition-colors",
+              open && "bg-accent text-foreground",
+            )}
+          >
+            <Ellipsis className="h-4 w-4" />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem onSelect={onEdit}>Edit</DropdownMenuItem>
+          {!role.isSystem && (
+            <DropdownMenuItem onSelect={onDelete}>Delete</DropdownMenuItem>
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </RequireScope>
+  );
+}
 
 export function RolesTab() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -35,7 +72,9 @@ export function RolesTab() {
   const [deletingRole, setDeletingRole] = useState<Role | null>(null);
   const queryClient = useQueryClient();
   const { data: rolesData, isLoading } = useRoles();
-  const roles = rolesData?.roles ?? [];
+  const roles = [...(rolesData?.roles ?? [])].sort(
+    (a, b) => Number(b.isSystem) - Number(a.isSystem),
+  );
   const { data: membersData } = useMembers();
   const members = membersData?.members ?? [];
 
@@ -99,40 +138,11 @@ export function RolesTab() {
       header: "",
       width: "80px",
       render: (role) => (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="tertiary"
-              size="sm"
-              className="opacity-50 hover:opacity-100"
-            >
-              <Button.LeftIcon>
-                <Ellipsis className="h-4 w-4" />
-              </Button.LeftIcon>
-              <span className="hidden">Actions</span>
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <RequireScope scope="org:admin" level="component">
-              <DropdownMenuItem
-                className="cursor-pointer"
-                onSelect={() => setTimeout(() => setEditingRole(role), 0)}
-              >
-                Edit
-              </DropdownMenuItem>
-            </RequireScope>
-            {!role.isSystem && (
-              <RequireScope scope="org:admin" level="component">
-                <DropdownMenuItem
-                  className="text-destructive focus:text-destructive cursor-pointer"
-                  onSelect={() => setTimeout(() => setDeletingRole(role), 0)}
-                >
-                  Delete
-                </DropdownMenuItem>
-              </RequireScope>
-            )}
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <RoleActionsMenu
+          role={role}
+          onEdit={() => setEditingRole(role)}
+          onDelete={() => setDeletingRole(role)}
+        />
       ),
     },
   ];

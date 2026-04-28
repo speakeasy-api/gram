@@ -10,6 +10,9 @@ import { Button, Column, Icon, Table } from "@speakeasy-api/moonshine";
 import { useState } from "react";
 import { ChangeRoleDialog } from "./ChangeRoleDialog";
 import { RequireScope } from "@/components/require-scope";
+import { useOrganization } from "@/contexts/Auth";
+import { useTelemetry } from "@/contexts/Telemetry";
+import { useOrgRoutes } from "@/routes";
 
 function getInitials(name: string) {
   return name
@@ -24,10 +27,19 @@ export function MembersTab() {
   const [changingMember, setChangingMember] = useState<AccessMember | null>(
     null,
   );
+  const organization = useOrganization();
+  const telemetry = useTelemetry();
+  const orgRoutes = useOrgRoutes();
+  const isTeamPageEnabled =
+    telemetry.isFeatureEnabled("gram-team-page") ?? false;
   const { data: membersData, isLoading: membersLoading } = useMembers();
   const { data: rolesData } = useRoles();
-  const members = membersData?.members ?? [];
   const roles = rolesData?.roles ?? [];
+  const members = [...(membersData?.members ?? [])].sort((a, b) => {
+    const aSystem = roles.find((r) => r.id === a.roleId)?.isSystem ?? false;
+    const bSystem = roles.find((r) => r.id === b.roleId)?.isSystem ?? false;
+    return Number(bSystem) - Number(aSystem);
+  });
 
   const getRoleName = (roleId: string) =>
     roles.find((r) => r.id === roleId)?.name ?? "Unknown";
@@ -120,12 +132,35 @@ export function MembersTab() {
       )}
       <div className="border-border flex justify-center rounded-b-lg border border-t-0 py-3">
         <RequireScope scope="org:admin" level="component">
-          <Button variant="tertiary" size="sm">
-            <Button.Text>Manage Team</Button.Text>
-            <Button.RightIcon>
-              <Icon name="arrow-right" className="h-4 w-4" />
-            </Button.RightIcon>
-          </Button>
+          {isTeamPageEnabled ? (
+            <Button
+              variant="tertiary"
+              size="sm"
+              onClick={() => orgRoutes.team.goTo()}
+            >
+              <Button.Text>Manage Team</Button.Text>
+              <Button.RightIcon>
+                <Icon name="arrow-right" className="h-4 w-4" />
+              </Button.RightIcon>
+            </Button>
+          ) : (
+            <Button variant="tertiary" size="sm" asChild>
+              <a
+                href={
+                  organization?.userWorkspaceSlugs?.length
+                    ? `https://app.speakeasy.com/org/${organization.slug}/${organization.userWorkspaceSlugs[0]}/settings/team`
+                    : "https://app.speakeasy.com"
+                }
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <Button.Text>Manage Team</Button.Text>
+                <Button.RightIcon>
+                  <Icon name="external-link" className="h-4 w-4" />
+                </Button.RightIcon>
+              </a>
+            </Button>
+          )}
         </RequireScope>
       </div>
 

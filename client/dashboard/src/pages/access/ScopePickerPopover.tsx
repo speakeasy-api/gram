@@ -19,6 +19,7 @@ import {
   Check,
   ChevronDown,
   ChevronRight,
+  Info,
   Maximize2,
   Minimize2,
   Globe,
@@ -867,34 +868,6 @@ function CollectionGroupPanel({
     orgRoutes.collections.create.goTo();
   };
 
-  const intro = (
-    <div className="text-muted-foreground px-2 pt-2 pb-1 text-xs leading-relaxed">
-      Collections are reusable groups of MCP servers that can be installed into
-      multiple projects at once. Selecting a collection grants access to all of
-      its tools.
-    </div>
-  );
-
-  const createButton = (
-    <RequireScope
-      scope="org:admin"
-      level="component"
-      reason="You need org admin to create a collection."
-      className="w-full"
-    >
-      {({ disabled }) => (
-        <button
-          type="button"
-          onClick={disabled ? undefined : goToCreateCollection}
-          className="border-border bg-background hover:bg-muted/50 text-foreground mx-2 my-2 flex cursor-pointer items-center justify-center gap-1.5 rounded-md border border-dashed px-3 py-2 text-xs transition-colors"
-        >
-          <Plus className="h-3 w-3" />
-          Create new collection
-        </button>
-      )}
-    </RequireScope>
-  );
-
   if (collectionsLoading) {
     return (
       <div className="flex items-center justify-center py-6">
@@ -905,20 +878,38 @@ function CollectionGroupPanel({
 
   if (collections.length === 0 || collectionGroups.length === 0) {
     return (
-      <div className="py-1">
-        {intro}
-        <div className="text-muted-foreground px-2 py-4 text-center text-sm">
-          No collections with tools found
+      <div className="flex flex-col items-center px-4 py-5 text-center">
+        <div className="bg-muted mb-3 flex h-8 w-8 items-center justify-center rounded-full">
+          <Info className="text-muted-foreground h-4 w-4" />
         </div>
-        {createButton}
+        <p className="text-muted-foreground mb-4 text-xs leading-relaxed">
+          Collections group MCP servers for reuse across projects.
+          <br />
+          Selecting one grants access to all its tools.
+        </p>
+        <RequireScope
+          scope="org:admin"
+          level="component"
+          reason="You need org admin to create a collection."
+        >
+          {({ disabled }) => (
+            <button
+              type="button"
+              onClick={disabled ? undefined : goToCreateCollection}
+              className="border-input text-foreground hover:bg-accent inline-flex cursor-pointer items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs shadow-xs transition-colors"
+            >
+              <Plus className="h-3 w-3" />
+              Create new collection
+            </button>
+          )}
+        </RequireScope>
       </div>
     );
   }
 
   return (
     <div className="py-1">
-      {intro}
-      <div className="text-muted-foreground px-2 py-2 text-sm">
+      <div className="text-muted-foreground px-2 py-2 text-xs">
         Select all tools by collection:
       </div>
       {collectionGroups.map((group) => {
@@ -981,7 +972,25 @@ function CollectionGroupPanel({
           </button>
         );
       })}
-      {createButton}
+      <div className="border-border mx-2 mt-2 border-t pt-2">
+        <RequireScope
+          scope="org:admin"
+          level="component"
+          reason="You need org admin to create a collection."
+          className="w-full"
+        >
+          {({ disabled }) => (
+            <button
+              type="button"
+              onClick={disabled ? undefined : goToCreateCollection}
+              className="text-muted-foreground hover:text-foreground flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-sm px-3 py-1.5 text-xs transition-colors"
+            >
+              <Plus className="h-3 w-3" />
+              Create new collection
+            </button>
+          )}
+        </RequireScope>
+      </div>
     </div>
   );
 }
