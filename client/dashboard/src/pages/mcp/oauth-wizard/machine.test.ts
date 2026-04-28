@@ -50,7 +50,6 @@ const baseInput: Input = {
   toolsetSlug: "ts",
   toolsetName: "Toolset",
   activeOrganizationId: "org-1",
-  existingEnvNames: [],
 };
 
 // ---------------------------------------------------------------------------
@@ -197,7 +196,6 @@ function withExternal(over: Partial<Context["external"]> = {}): Context {
     toolsetSlug: "",
     toolsetName: "",
     activeOrganizationId: "",
-    existingEnvNames: [],
   };
 }
 

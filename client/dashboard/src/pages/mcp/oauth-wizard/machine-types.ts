@@ -44,7 +44,6 @@ export type Context = {
   toolsetSlug: string;
   toolsetName: string;
   activeOrganizationId: string;
-  existingEnvNames: string[];
 };
 
 export type Input = {
@@ -52,7 +51,6 @@ export type Input = {
   toolsetSlug: string;
   toolsetName: string;
   activeOrganizationId: string;
-  existingEnvNames: string[];
 };
 
 export type WizardEvent =

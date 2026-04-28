@@ -9,7 +9,6 @@ import {
   type WizardEvent,
 } from "./machine-types";
 import {
-  nextEnvironmentName,
   type AddExternalOAuthInput,
   type AddOAuthProxyInput,
   type CreateEnvironmentInput,
@@ -43,7 +42,6 @@ function initialContext(input: Input): Context {
     toolsetSlug: input.toolsetSlug,
     toolsetName: input.toolsetName,
     activeOrganizationId: input.activeOrganizationId,
-    existingEnvNames: input.existingEnvNames,
   };
 }
 
@@ -328,10 +326,7 @@ export const oauthWizardMachine = setup({
                 src: "createEnvironment",
                 input: ({ context }): CreateEnvironmentInput => ({
                   organizationId: context.activeOrganizationId,
-                  name: nextEnvironmentName(
-                    context.toolsetName,
-                    context.existingEnvNames,
-                  ),
+                  toolsetName: context.toolsetName,
                   clientId: context.proxy.clientId,
                   clientSecret: context.proxy.clientSecret,
                 }),

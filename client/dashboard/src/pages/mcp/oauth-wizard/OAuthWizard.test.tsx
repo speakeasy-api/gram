@@ -32,7 +32,6 @@ const mocks = vi.hoisted(() => {
 
 vi.mock("@gram/client/react-query", () => ({
   useGramContext: () => ({}),
-  useListEnvironments: () => ({ data: { environments: [] } }),
   invalidateAllToolset: mocks.invalidateAllToolset,
   invalidateAllGetMcpMetadata: mocks.invalidateAllGetMcpMetadata,
   invalidateAllListEnvironments: mocks.invalidateAllListEnvironments,
@@ -51,6 +50,10 @@ vi.mock("@gram/client/react-query", () => ({
   buildDeleteEnvironmentMutation: () => ({
     mutationKey: [],
     mutationFn: mocks.deleteEnvironment,
+  }),
+  buildListEnvironmentsQuery: () => ({
+    queryKey: ["@gram/client", "environments", "list", {}],
+    queryFn: () => Promise.resolve({ environments: [] }),
   }),
   buildUpdateOAuthProxyServerMutation: () => ({
     mutationKey: [],

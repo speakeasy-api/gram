@@ -10,7 +10,6 @@ import {
   invalidateAllListEnvironments,
   invalidateAllToolset,
   useGramContext,
-  useListEnvironments,
 } from "@gram/client/react-query";
 import { useQueryClient } from "@tanstack/react-query";
 import { Globe } from "lucide-react";
@@ -88,19 +87,13 @@ function WizardBody({
   const queryClient = useQueryClient();
   const telemetry = useTelemetry();
   const session = useSession();
-  const { data: environmentsData } = useListEnvironments();
 
   const discovered = useDiscoveredOAuth(toolset);
-
-  const existingEnvNames = useMemo(
-    () => (environmentsData?.environments ?? []).map((e) => e.name),
-    [environmentsData],
-  );
 
   const provided = useMemo(
     () =>
       oauthWizardMachine.provide({
-        actors: createWizardServices(client),
+        actors: createWizardServices(client, queryClient),
         actions: {
           invalidateOnExternalSuccess: () => invalidateAllToolset(queryClient),
           invalidateOnProxyCreate: () => {
@@ -128,7 +121,6 @@ function WizardBody({
     toolsetSlug,
     toolsetName: toolset.name,
     activeOrganizationId: session.activeOrganizationId,
-    existingEnvNames,
   };
 
   return (

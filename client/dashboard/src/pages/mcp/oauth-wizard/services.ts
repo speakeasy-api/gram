@@ -3,8 +3,10 @@ import {
   buildAddOAuthProxyServerMutation,
   buildCreateEnvironmentMutation,
   buildDeleteEnvironmentMutation,
+  buildListEnvironmentsQuery,
   useGramContext,
 } from "@gram/client/react-query";
+import type { QueryClient } from "@tanstack/react-query";
 import { fromPromise } from "xstate";
 
 import { parseScopes } from "./machine-types";
@@ -23,7 +25,7 @@ export type AddExternalOAuthInput = {
 
 export type CreateEnvironmentInput = {
   organizationId: string;
-  name: string;
+  toolsetName: string;
   clientId: string;
   clientSecret: string;
 };
@@ -56,7 +58,10 @@ export type WizardServices = {
 
 export type GramClient = ReturnType<typeof useGramContext>;
 
-export function createWizardServices(client: GramClient): WizardServices {
+export function createWizardServices(
+  client: GramClient,
+  queryClient: QueryClient,
+): WizardServices {
   const addExternalOAuth = fromPromise<void, AddExternalOAuthInput>(
     async ({ input, signal }) => {
       const { mutationFn } = buildAddExternalOAuthServerMutation(client);
@@ -79,11 +84,21 @@ export function createWizardServices(client: GramClient): WizardServices {
     CreateEnvironmentOutput,
     CreateEnvironmentInput
   >(async ({ input, signal }) => {
+    // Read fresh at submit time so the name-collision check doesn't race a
+    // still-loading useListEnvironments() at modal open.
+    const envs = await queryClient.fetchQuery(
+      buildListEnvironmentsQuery(client),
+    );
+    const name = nextEnvironmentName(
+      input.toolsetName,
+      envs.environments.map((e) => e.name),
+    );
+
     const { mutationFn } = buildCreateEnvironmentMutation(client);
     const env = await mutationFn({
       request: {
         createEnvironmentForm: {
-          name: input.name,
+          name,
           organizationId: input.organizationId,
           entries: [
             { name: "CLIENT_ID", value: input.clientId },
