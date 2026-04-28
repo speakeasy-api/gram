@@ -212,6 +212,7 @@ function withExternal(over: Partial<Context["external"]> = {}): Context {
     },
     envSlug: null,
     error: null,
+    autoRegistering: false,
     result: null,
     toolsetSlug: "",
     toolsetName: "",
