@@ -40,24 +40,17 @@ type EventsLister interface {
 	ListEvents(ctx context.Context, opts events.ListEventsOpts) (events.ListEventsResponse, error)
 }
 
-// MembershipLister fetches all active memberships for an org, used to reconcile role assignments on role events.
-type MembershipLister interface {
-	ListOrgMemberships(ctx context.Context, orgID string) ([]workos.Member, error)
-}
-
 type ProcessWorkOSOrganizationEvents struct {
-	db               *pgxpool.Pool
-	logger           *slog.Logger
-	eventsClient     EventsLister
-	membershipLister MembershipLister
+	db           *pgxpool.Pool
+	logger       *slog.Logger
+	eventsClient EventsLister
 }
 
-func NewProcessWorkOSOrganizationEvents(logger *slog.Logger, db *pgxpool.Pool, eventsClient EventsLister, membershipLister MembershipLister) *ProcessWorkOSOrganizationEvents {
+func NewProcessWorkOSOrganizationEvents(logger *slog.Logger, db *pgxpool.Pool, eventsClient EventsLister) *ProcessWorkOSOrganizationEvents {
 	return &ProcessWorkOSOrganizationEvents{
-		db:               db,
-		logger:           logger,
-		eventsClient:     eventsClient,
-		membershipLister: membershipLister,
+		db:           db,
+		logger:       logger,
+		eventsClient: eventsClient,
 	}
 }
 
@@ -144,18 +137,7 @@ func (p *ProcessWorkOSOrganizationEvents) handlePage(ctx context.Context, logger
 
 		eventLogger = eventLogger.With(attr.SlogWorkOSEventOrganizationID(orgEvent.OrganizationID))
 
-		// organization_role.created/updated do not carry member data; fetch current memberships
-		// before opening the transaction so we can sync role assignments inline.
-		var roleMembers []workos.Member
-		if event.Event == string(workos.EventKindOrganizationRoleCreated) || event.Event == string(workos.EventKindOrganizationRoleUpdated) {
-			var err error
-			roleMembers, err = p.membershipLister.ListOrgMemberships(ctx, workosOrgID)
-			if err != nil {
-				return lastEventID, oops.E(oops.CodeUnexpected, err, "failed to list org memberships for role event").Log(ctx, eventLogger)
-			}
-		}
-
-		eventID, err := p.handleEvent(ctx, eventLogger, workosOrgID, event, roleMembers)
+		eventID, err := p.handleEvent(ctx, eventLogger, workosOrgID, event)
 		if err != nil {
 			return lastEventID, oops.E(oops.CodeUnexpected, err, "failed to handle WorkOS event").Log(ctx, eventLogger)
 		}
@@ -167,14 +149,14 @@ func (p *ProcessWorkOSOrganizationEvents) handlePage(ctx context.Context, logger
 	return lastEventID, nil
 }
 
-func (p *ProcessWorkOSOrganizationEvents) handleEvent(ctx context.Context, logger *slog.Logger, workosOrgID string, event events.Event, roleMembers []workos.Member) (string, error) {
+func (p *ProcessWorkOSOrganizationEvents) handleEvent(ctx context.Context, logger *slog.Logger, workosOrgID string, event events.Event) (string, error) {
 	dbtx, err := p.db.Begin(ctx)
 	if err != nil {
 		return "", fmt.Errorf("begin transaction: %w", err)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
-	if err := handleOrganizationEvent(ctx, logger, dbtx, event, roleMembers); err != nil {
+	if err := handleOrganizationEvent(ctx, logger, dbtx, event); err != nil {
 		return "", err
 	}
 
@@ -206,7 +188,7 @@ type workosOrgEvent struct {
 	OrganizationID string `json:"organization_id"`
 }
 
-func handleOrganizationEvent(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, event events.Event, roleMembers []workos.Member) error {
+func handleOrganizationEvent(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, event events.Event) error {
 	switch event.Event {
 	case string(workos.EventKindOrganizationCreated):
 		return handleOrganizationCreatedOrUpdated(ctx, logger, dbtx, event)
@@ -221,11 +203,11 @@ func handleOrganizationEvent(ctx context.Context, logger *slog.Logger, dbtx data
 	case string(workos.EventKindOrganizationMembershipUpdated):
 		return handleOrganizationMembershipUpsert(ctx, logger, dbtx, event)
 	case string(workos.EventKindOrganizationRoleCreated):
-		return handleOrganizationRoleUpsert(ctx, logger, dbtx, event, roleMembers)
+		return handleOrganizationRoleUpsert(ctx, logger, dbtx, event)
 	case string(workos.EventKindOrganizationRoleDeleted):
 		return handleOrganizationRoleDeleted(ctx, logger, dbtx, event)
 	case string(workos.EventKindOrganizationRoleUpdated):
-		return handleOrganizationRoleUpsert(ctx, logger, dbtx, event, roleMembers)
+		return handleOrganizationRoleUpsert(ctx, logger, dbtx, event)
 	}
 
 	return oops.Permanent(fmt.Errorf("unhandled workos organization event: %s", event.Event))
@@ -422,10 +404,7 @@ type workosRoleEvent struct {
 	DeletedAt      *time.Time `json:"deleted_at"`
 }
 
-// handleOrganizationRoleUpsert handles organization_role.created and organization_role.updated events.
-// members is the pre-fetched current membership list from WorkOS; role assignments are synced inline
-// because role events do not carry member data.
-func handleOrganizationRoleUpsert(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, event events.Event, members []workos.Member) error {
+func handleOrganizationRoleUpsert(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, event events.Event) error {
 	var payload workosRoleEvent
 	if err := json.Unmarshal(event.Data, &payload); err != nil {
 		return fmt.Errorf("unmarshal organization role event: %w", err)
@@ -451,30 +430,6 @@ func handleOrganizationRoleUpsert(ctx context.Context, logger *slog.Logger, dbtx
 	})
 	if err != nil {
 		return fmt.Errorf("upsert organization role %q: %w", payload.Slug, err)
-	}
-
-	for _, member := range members {
-		roleSlugs := dedupeStrings(member.RoleSlugs)
-		if len(roleSlugs) == 0 && member.RoleSlug != "" {
-			roleSlugs = []string{member.RoleSlug}
-		}
-
-		userID, err := usersrepo.New(dbtx).GetUserIDByWorkosID(ctx, conv.ToPGText(member.UserID))
-		switch {
-		case errors.Is(err, pgx.ErrNoRows):
-			logger.DebugContext(ctx, "skipping role sync for unknown user during role event", attr.SlogWorkOSUserID(member.UserID))
-			continue
-		case err != nil:
-			return fmt.Errorf("get user by workos id %q: %w", member.UserID, err)
-		}
-
-		if err := orgrepo.New(dbtx).SyncUserOrganizationRoles(ctx, orgrepo.SyncUserOrganizationRolesParams{
-			OrganizationID:  organizationID,
-			UserID:          userID,
-			WorkosRoleSlugs: roleSlugs,
-		}); err != nil {
-			return fmt.Errorf("sync roles for user %q on role event: %w", member.UserID, err)
-		}
 	}
 
 	return nil

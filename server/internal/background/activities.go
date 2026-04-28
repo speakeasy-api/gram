@@ -128,7 +128,7 @@ func NewActivities(
 		getUserFeedbackForChat:          resolution_activities.NewGetUserFeedbackForChat(db),
 		fetchUnanalyzedMessages:         risk_analysis.NewFetchUnanalyzed(logger, tracerProvider, db),
 		analyzeBatch:                    risk_analysis.NewAnalyzeBatch(logger, tracerProvider, meterProvider, db, piiScanner),
-		processWorkOSOrganizationEvents: activities.NewProcessWorkOSOrganizationEvents(logger, db, workosEventsClient, workosClient),
+		processWorkOSOrganizationEvents: activities.NewProcessWorkOSOrganizationEvents(logger, db, workosEventsClient),
 		getAllWorkOSLinkedOrganizations: activities.NewGetAllWorkOSLinkedOrganizations(logger, db),
 	}
 }
