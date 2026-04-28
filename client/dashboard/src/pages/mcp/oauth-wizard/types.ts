@@ -68,7 +68,12 @@ export type WizardAction =
       title?: string;
     }
   | { type: "BACK" }
-  | { type: "PROXY_NEXT" }
+  | {
+      type: "PROXY_NEXT";
+      prefilledClientId?: string;
+      prefilledClientSecret?: string;
+      tokenAuthMethod?: string;
+    }
   | { type: "UPDATE_FIELD"; field: string; value: string }
   | { type: "SET_ERROR"; error: string | null }
   | { type: "APPLY_DISCOVERED"; discoveredOAuth: DiscoveredOAuth }

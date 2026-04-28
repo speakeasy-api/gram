@@ -12,6 +12,7 @@ export function ProxyMetadataForm({
   discoveredOAuth,
   editMode,
   isEditPending,
+  isNextPending,
   onNext,
   onEditSubmit,
   onClose,
@@ -21,6 +22,7 @@ export function ProxyMetadataForm({
   discoveredOAuth: DiscoveredOAuth | null;
   editMode: boolean;
   isEditPending: boolean;
+  isNextPending: boolean;
   onNext: () => void;
   onEditSubmit: () => void;
   onClose: () => void;
@@ -181,8 +183,8 @@ export function ProxyMetadataForm({
                   })
                 }
               >
-                <option value="client_secret_post">client_secret_post</option>
                 <option value="client_secret_basic">client_secret_basic</option>
+                <option value="client_secret_post">client_secret_post</option>
                 <option value="none">none</option>
               </select>
             </div>
@@ -193,6 +195,7 @@ export function ProxyMetadataForm({
       <Dialog.Footer className="flex justify-between">
         <Button
           variant="secondary"
+          disabled={!editMode && isNextPending}
           onClick={() => {
             if (editMode) {
               onClose();
@@ -208,12 +211,19 @@ export function ProxyMetadataForm({
             onClick={editMode ? onEditSubmit : onNext}
             disabled={
               (editMode && isEditPending) ||
+              (!editMode && isNextPending) ||
               !state.slug.trim() ||
               !state.authorizationEndpoint.trim() ||
               !state.tokenEndpoint.trim()
             }
           >
-            {editMode ? (isEditPending ? "Saving..." : "Save changes") : "Next"}
+            {editMode
+              ? isEditPending
+                ? "Saving..."
+                : "Save changes"
+              : isNextPending
+                ? "Registering client..."
+                : "Next"}
           </Button>
         </div>
       </Dialog.Footer>
