@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"time"
 
 	or "github.com/OpenRouterTeam/go-sdk/models/components"
 	"github.com/google/uuid"
@@ -29,7 +30,8 @@ type ChatMessageCaptureStrategy struct {
 	db           *pgxpool.Pool
 	repo         *repo.Queries
 	assetStorage assets.BlobStore
-	messageStore *MessageStore
+	observers    []MessageObserver
+	shutdownCtx  context.Context //nolint:containedctx // shutdown context must outlive any single request
 }
 
 var _ openrouter.MessageCaptureStrategy = (*ChatMessageCaptureStrategy)(nil)
@@ -51,15 +53,44 @@ func NewChatMessageCaptureStrategy(
 	logger *slog.Logger,
 	db *pgxpool.Pool,
 	assetStorage assets.BlobStore,
-	messageStore *MessageStore,
-) *ChatMessageCaptureStrategy {
+) (strategy *ChatMessageCaptureStrategy, shutdown func(context.Context) error) {
+	ctx, cancel := context.WithCancel(context.Background()) //nolint:contextcheck,gosec // this context must be tied to the lifetime of the application; cancel is called via the returned shutdown function
+	shutdown = func(_ context.Context) error {
+		cancel()
+		return nil
+	}
+
 	return &ChatMessageCaptureStrategy{
 		logger:       logger,
 		db:           db,
 		repo:         repo.New(db),
 		assetStorage: assetStorage,
-		messageStore: messageStore,
-	}
+		observers:    nil,
+		shutdownCtx:  ctx,
+	}, shutdown
+}
+
+// AddObserver registers a MessageObserver to be notified when messages are stored.
+func (s *ChatMessageCaptureStrategy) AddObserver(obs MessageObserver) {
+	s.observers = append(s.observers, obs)
+}
+
+func (s *ChatMessageCaptureStrategy) notifyObservers(ctx context.Context, projectID uuid.UUID) {
+	go func() {
+		ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+		defer cancel()
+		stop := context.AfterFunc(s.shutdownCtx, cancel)
+		defer stop()
+
+		s.logger.DebugContext(ctx, "notifying message observers",
+			attr.SlogProjectID(projectID.String()),
+			attr.SlogMessageObserverCount(len(s.observers)),
+		)
+
+		for _, obs := range s.observers {
+			obs.OnMessagesStored(ctx, projectID)
+		}
+	}()
 }
 
 func (s *ChatMessageCaptureStrategy) StartOrResumeChat(ctx context.Context, request openrouter.CompletionRequest) (openrouter.CaptureSession, error) {
@@ -131,7 +162,7 @@ func (s *ChatMessageCaptureStrategy) StartOrResumeChat(ctx context.Context, requ
 		}, nil
 	}
 
-	s.messageStore.NotifyMessagesStored(ctx, projectID)
+	s.notifyObservers(ctx, projectID)
 
 	return &chatCaptureSession{
 		generation:  generation,
@@ -309,7 +340,7 @@ func (s *ChatMessageCaptureStrategy) CaptureMessage(
 			s.logger.ErrorContext(ctx, "failed to store chat message", attr.SlogError(err))
 			return fmt.Errorf("store chat message: %w", err)
 		}
-		s.messageStore.NotifyMessagesStored(ctx, projectID)
+		s.notifyObservers(ctx, projectID)
 		return nil
 	}
 
@@ -320,7 +351,7 @@ func (s *ChatMessageCaptureStrategy) CaptureMessage(
 	if err := s.flushTurnAtomically(ctx, session.pendingRows, assistantRows); err != nil {
 		return err
 	}
-	s.messageStore.NotifyMessagesStored(ctx, projectID)
+	s.notifyObservers(ctx, projectID)
 	return nil
 }
 
