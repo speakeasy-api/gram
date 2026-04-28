@@ -1,21 +1,20 @@
 import { InputDialog } from "@/components/input-dialog";
+import { RequireScope } from "@/components/require-scope";
 import { BuiltInMCPCard } from "@/components/mcp/BuiltInMCPCard";
 import { MCPCard, MCPCardSkeleton } from "@/components/mcp/MCPCard";
 import { MCPTableRow, MCPTableRowSkeleton } from "@/components/mcp/MCPTableRow";
 import { Page } from "@/components/page-layout";
 import { DotTable } from "@/components/ui/dot-table";
-import { ViewToggle, useViewMode } from "@/components/ui/view-toggle";
+import { ViewToggle } from "@/components/ui/view-toggle";
+import { useViewMode } from "@/components/ui/use-view-mode";
 import { useSdkClient } from "@/contexts/Sdk";
-import { useTelemetry } from "@/contexts/Telemetry";
-import { useIsProjectEmpty } from "@/pages/onboarding/UploadOpenAPI";
-import { InitialChoiceStep } from "@/pages/onboarding/Wizard";
 import { useRoutes } from "@/routes";
 import { Button } from "@speakeasy-api/moonshine";
 import { Plus } from "lucide-react";
 import { useState } from "react";
 import { Outlet, useNavigate } from "react-router";
 import { toast } from "sonner";
-import { useToolsets } from "../toolsets/Toolsets";
+import { useToolsets } from "../toolsets/useToolsets";
 import { MCPEmptyState } from "./MCPEmptyState";
 
 const BUILT_IN_SERVERS = [
@@ -38,7 +37,9 @@ export const MCPPage = () => {
         <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body>
-        <MCPOverview />
+        <RequireScope scope={["mcp:read", "mcp:write"]} level="page">
+          <MCPOverview />
+        </RequireScope>
       </Page.Body>
     </Page>
   );
@@ -49,13 +50,8 @@ export function MCPOverview() {
   const routes = useRoutes();
   const navigate = useNavigate();
   const client = useSdkClient();
-  const { isEmpty: isProjectEmpty, isLoading: isProjectLoading } =
-    useIsProjectEmpty();
-  const telemetry = useTelemetry();
-  const isFunctionsEnabled =
-    telemetry.isFeatureEnabled("gram-functions") ?? false;
 
-  const isLoading = toolsets.isLoading || isProjectLoading;
+  const isLoading = toolsets.isLoading;
 
   const [viewMode, setViewMode] = useViewMode();
   const [newMcpDialogOpen, setNewMcpDialogOpen] = useState(false);
@@ -74,12 +70,14 @@ export function MCPOverview() {
   };
 
   const newMcpServerButton = (
-    <Button size="sm" onClick={() => setNewMcpDialogOpen(true)}>
-      <Button.LeftIcon>
-        <Plus />
-      </Button.LeftIcon>
-      <Button.Text>New MCP Server</Button.Text>
-    </Button>
+    <RequireScope scope="mcp:write" level="component">
+      <Button size="sm" onClick={() => setNewMcpDialogOpen(true)}>
+        <Button.LeftIcon>
+          <Plus />
+        </Button.LeftIcon>
+        <Button.Text>New MCP Server</Button.Text>
+      </Button>
+    </RequireScope>
   );
 
   const newMcpServerDialog = (
@@ -128,14 +126,7 @@ export function MCPOverview() {
   if (!isLoading && toolsets.length === 0) {
     return (
       <>
-        {isProjectEmpty ? (
-          <InitialChoiceStep
-            routes={routes}
-            isFunctionsEnabled={isFunctionsEnabled}
-          />
-        ) : (
-          <MCPEmptyState nonEmptyProjectCTA={newMcpServerButton} />
-        )}
+        <MCPEmptyState cta={newMcpServerButton} />
         {builtInSection}
         {newMcpServerDialog}
       </>

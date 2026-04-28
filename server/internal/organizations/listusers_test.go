@@ -4,7 +4,8 @@ import (
 	"testing"
 
 	gen "github.com/speakeasy-api/gram/server/gen/organizations"
-	"github.com/speakeasy-api/gram/server/internal/access"
+	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -61,7 +62,7 @@ func TestService_ListUsers_AllowsOrgReadGrant(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	ctx = withExactAccessGrants(t, ctx, ti.conn, access.Grant{Scope: access.ScopeOrgRead, Resource: authCtx.ActiveOrganizationID})
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgRead, Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID)})
 
 	res, err := ti.service.ListUsers(ctx, &gen.ListUsersPayload{})
 	require.NoError(t, err)
@@ -82,7 +83,7 @@ func TestService_ListUsers_AllowsOrgAdminGrantViaScopeHierarchy(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	ctx = withExactAccessGrants(t, ctx, ti.conn, access.Grant{Scope: access.ScopeOrgAdmin, Resource: authCtx.ActiveOrganizationID})
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)})
 
 	res, err := ti.service.ListUsers(ctx, &gen.ListUsersPayload{})
 	require.NoError(t, err)
@@ -93,10 +94,12 @@ func TestService_ListUsers_ForbiddenWithoutOrgReadGrant(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestOrganizationsServiceRBAC(t)
-	ctx = withExactAccessGrants(t, ctx, ti.conn)
+	ctx = authztest.WithExactGrants(t, ctx)
 
 	res, err := ti.service.ListUsers(ctx, &gen.ListUsersPayload{})
-	requireOopsCode(t, err, oops.CodeForbidden)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 	require.Nil(t, res)
 }
 
@@ -104,10 +107,12 @@ func TestService_ListUsers_ForbiddenWithGrantForDifferentOrganization(t *testing
 	t.Parallel()
 
 	ctx, ti := newTestOrganizationsServiceRBAC(t)
-	ctx = withExactAccessGrants(t, ctx, ti.conn, access.Grant{Scope: access.ScopeOrgAdmin, Resource: "org_other"})
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, "org_other")})
 
 	res, err := ti.service.ListUsers(ctx, &gen.ListUsersPayload{})
-	requireOopsCode(t, err, oops.CodeForbidden)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 	require.Nil(t, res)
 }
 
@@ -118,6 +123,8 @@ func TestService_ListUsers_ForbiddenWhenNotOrgAdmin(t *testing.T) {
 	expectWorkOSOrgNonAdminRole(t, ti.orgs)
 
 	res, err := ti.service.ListUsers(ctx, &gen.ListUsersPayload{})
-	requireOopsCode(t, err, oops.CodeForbidden)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 	require.Nil(t, res)
 }

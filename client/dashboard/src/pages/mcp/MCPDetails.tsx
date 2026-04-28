@@ -1,46 +1,44 @@
 import { Block, BlockInner } from "@/components/block";
 import { CodeBlock } from "@/components/code";
 import { DetailHero } from "@/components/detail-hero";
-import { FeatureRequestModal } from "@/components/FeatureRequestModal";
+import { InstallPageConfigForm } from "@/components/mcp_install_page/config_form";
 import {
-  InstallPageConfigForm,
   useMcpMetadataMetadataForm,
   type UseMcpMetadataMetadataFormResult,
-} from "@/components/mcp_install_page/config_form";
+} from "@/components/mcp_install_page/useMcpMetadataForm";
 import { Textarea } from "@/components/moon/textarea";
 import { Page } from "@/components/page-layout";
+import { PublicMcpWarningDialog } from "@/components/public-mcp-warning-dialog";
 import { ServerEnableDialog } from "@/components/server-enable-dialog";
+import { useExternalMcpOAuthConfigStatus } from "@/components/sources/sources-hooks";
 import { ToolList } from "@/components/tool-list";
-import { BigToggle } from "@/components/ui/big-toggle";
 import { Dialog } from "@/components/ui/dialog";
 import { Heading } from "@/components/ui/heading";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Link } from "@/components/ui/link";
 import { MultiSelect } from "@/components/ui/multi-select";
 import {
   PageTabsTrigger,
   Tabs,
   TabsContent,
   TabsList,
-  TabsTrigger,
 } from "@/components/ui/tabs";
-import { TextArea } from "@/components/ui/textarea";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
-import { useOrganization } from "@/contexts/Auth";
+import { RequireScope } from "@/components/require-scope";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
-import { useListTools, useToolset } from "@/hooks/toolTypes";
+import { useRBAC } from "@/hooks/useRBAC";
+import { useToolset } from "@/hooks/toolTypes";
+import { FeatureRequestModal } from "@/components/FeatureRequestModal";
 import { useMissingRequiredEnvVars } from "@/hooks/useMissingEnvironmentVariables";
 import { useProductTier } from "@/hooks/useProductTier";
-import { useToolsetEnvVars } from "@/hooks/useToolsetEnvVars";
 import { useCustomDomain, useMcpUrl } from "@/hooks/useToolsetUrl";
-import { isHttpTool, Tool, Toolset, useGroupedTools } from "@/lib/toolTypes";
+import { Tool, Toolset, useGroupedTools } from "@/lib/toolTypes";
 import { cn, getServerURL } from "@/lib/utils";
 import {
   useAttachServer,
@@ -58,9 +56,7 @@ import {
   invalidateAllToolset,
   invalidateTemplate,
   buildCollectionsListServersQuery,
-  useAddExternalOAuthServerMutation,
   useAddOAuthProxyServerMutation,
-  useUpdateOAuthProxyServerMutation,
   useExportMcpMetadataMutation,
   useGetMcpMetadata,
   useLatestDeployment,
@@ -68,11 +64,22 @@ import {
   useRemoveOAuthServerMutation,
   useUpdateToolsetMutation,
 } from "@gram/client/react-query";
-import { Badge, Button, Grid, Icon, Stack } from "@speakeasy-api/moonshine";
+import {
+  Badge,
+  Button,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  Grid,
+  Icon,
+  Stack,
+} from "@speakeasy-api/moonshine";
 import { useQueries, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
   CheckCircleIcon,
+  ChevronDown,
   Download,
   Globe,
   LockIcon,
@@ -82,22 +89,18 @@ import {
   XCircleIcon,
 } from "lucide-react";
 import { generateText } from "ai";
-import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Outlet, useParams } from "react-router";
 import { toast } from "sonner";
-import { EnvironmentDropdown } from "../environments/EnvironmentDropdown";
 import { useModel } from "../playground/Openrouter";
-import { onboardingStepStorageKeys } from "../home/Home";
 import { AddToolsDialog } from "../toolsets/AddToolsDialog";
 import { ToolsetEmptyState } from "../toolsets/ToolsetEmptyState";
+import { getSystemProvidedVariables } from "./environmentVariableUtils";
+import { useMcpConfigs, useMcpSlugValidation } from "./mcp-details-utils";
 import { MCPAuthenticationTab } from "./MCPEnvironmentSettings";
 import { MCPPerformanceTab } from "./MCPPerformanceTab";
+import { MCPTeamAccessTab } from "./MCPTeamAccessTab";
+import { useEnvironmentVariables } from "./useEnvironmentVariables";
 
 export function MCPDetailsRoot() {
   return <Outlet />;
@@ -153,8 +156,18 @@ function MCPLoading() {
 }
 
 export function MCPDetailPage() {
+  return (
+    <RequireScope scope={["mcp:read", "mcp:write"]} level="page">
+      <MCPDetailPageInner />
+    </RequireScope>
+  );
+}
+
+function MCPDetailPageInner() {
   const { toolsetSlug } = useParams();
   const routes = useRoutes();
+  const telemetry = useTelemetry();
+  const isRbacEnabled = telemetry.isFeatureEnabled("gram-rbac") ?? false;
 
   const { data: toolset, isLoading } = useToolset(toolsetSlug);
 
@@ -181,10 +194,20 @@ export function MCPDetailPage() {
       "prompts",
       "authentication",
       "performance",
+      ...(isRbacEnabled ? ["team-access"] : []),
       "settings",
     ];
     return hash && validTabs.includes(hash) ? hash : "overview";
   });
+
+  // Re-validate activeTab when feature flag loads asynchronously
+  useEffect(() => {
+    if (!isRbacEnabled) return;
+    const hash = window.location.hash.slice(1);
+    if (hash === "team-access") {
+      setActiveTab("team-access");
+    }
+  }, [isRbacEnabled]);
 
   const handleTabChange = (value: string) => {
     setActiveTab(value);
@@ -192,10 +215,6 @@ export function MCPDetailPage() {
     url.hash = value;
     window.history.replaceState(null, "", url.toString());
   };
-
-  useEffect(() => {
-    localStorage.setItem(onboardingStepStorageKeys.configure, "true");
-  }, []);
 
   // Calculate if there are missing required env vars for the tab indicator
   // Must be before early return to avoid hooks order issues
@@ -206,6 +225,11 @@ export function MCPDetailPage() {
     mcpMetadataForBadge,
   );
 
+  const externalMcpOAuthConfigStatus =
+    useExternalMcpOAuthConfigStatus(toolsetSlug);
+  const oauthRequiredUnconfigured =
+    externalMcpOAuthConfigStatus === "required-unconfigured";
+
   if (isLoading || !toolset) {
     return <MCPLoading />;
   }
@@ -213,27 +237,27 @@ export function MCPDetailPage() {
   let statusBadge = null;
   if (!toolset.mcpEnabled) {
     statusBadge = (
-      <Badge variant="neutral">
+      <Badge variant="warning">
         <Badge.LeftIcon>
-          <XCircleIcon className="h-3 w-3" />
+          <XCircleIcon />
         </Badge.LeftIcon>
         <Badge.Text>Disabled</Badge.Text>
       </Badge>
     );
   } else if (toolset.mcpIsPublic) {
     statusBadge = (
-      <Badge variant="neutral">
+      <Badge variant="success">
         <Badge.LeftIcon>
-          <CheckCircleIcon className="h-3 w-3 text-green-600" />
+          <CheckCircleIcon />
         </Badge.LeftIcon>
         <Badge.Text>Public</Badge.Text>
       </Badge>
     );
   } else {
     statusBadge = (
-      <Badge variant="neutral">
+      <Badge variant="information">
         <Badge.LeftIcon>
-          <LockIcon className="h-3 w-3" />
+          <LockIcon />
         </Badge.LeftIcon>
         <Badge.Text>Private</Badge.Text>
       </Badge>
@@ -261,15 +285,17 @@ export function MCPDetailPage() {
                   <Button.Text>Playground</Button.Text>
                 </Button>
               </routes.playground.Link>
-              <MCPEnableButton toolset={toolset} />
+              <MCPStatusDropdown toolset={toolset} />
             </>
           }
         >
           <div className="flex items-end justify-between">
             <Stack gap={2}>
-              <div className="ml-1 flex items-center gap-3">
+              <div className="ml-1 flex items-end gap-3">
                 <Heading variant="h1">{toolset.name}</Heading>
-                {statusBadge}
+                <div className="mb-1 flex items-center gap-2">
+                  {statusBadge}
+                </div>
               </div>
               <div className="ml-1 flex items-center gap-2">
                 <Type className="text-muted-foreground max-w-2xl truncate">
@@ -325,7 +351,8 @@ export function MCPDetailPage() {
                 <PageTabsTrigger value="authentication">
                   <span className="flex items-center gap-1.5">
                     Authentication
-                    {missingRequiredEnvVars > 0 && (
+                    {(missingRequiredEnvVars > 0 ||
+                      oauthRequiredUnconfigured) && (
                       <AlertTriangle className="text-warning h-3.5 w-3.5" />
                     )}
                   </span>
@@ -333,6 +360,11 @@ export function MCPDetailPage() {
                 <PageTabsTrigger value="performance">
                   Performance
                 </PageTabsTrigger>
+                {isRbacEnabled && (
+                  <PageTabsTrigger value="team-access">
+                    Team Access
+                  </PageTabsTrigger>
+                )}
                 <PageTabsTrigger value="settings">Settings</PageTabsTrigger>
               </TabsList>
             </div>
@@ -341,7 +373,7 @@ export function MCPDetailPage() {
           {/* Tab Content */}
           <div className="mx-auto w-full max-w-[1270px] px-8 py-8">
             <TabsContent value="overview" className="mt-0 w-full">
-              <MCPOverviewTab toolset={toolset} onTabChange={handleTabChange} />
+              <MCPOverviewTab toolset={toolset} />
             </TabsContent>
 
             <TabsContent value="tools" className="mt-0 w-full">
@@ -357,15 +389,29 @@ export function MCPDetailPage() {
             </TabsContent>
 
             <TabsContent value="authentication" className="mt-0 w-full">
-              <MCPAuthenticationTab toolset={toolset} />
+              <RequireScope scope="mcp:write" level="page">
+                <MCPAuthenticationTab toolset={toolset} />
+              </RequireScope>
             </TabsContent>
 
             <TabsContent value="performance" className="mt-0 w-full">
-              <MCPPerformanceTab toolset={toolset} />
+              <RequireScope scope="mcp:write" level="page">
+                <MCPPerformanceTab toolset={toolset} />
+              </RequireScope>
             </TabsContent>
 
+            {isRbacEnabled && (
+              <TabsContent value="team-access" className="mt-0 w-full">
+                <RequireScope scope="mcp:read" level="page">
+                  <MCPTeamAccessTab toolset={toolset} />
+                </RequireScope>
+              </TabsContent>
+            )}
+
             <TabsContent value="settings" className="mt-0 w-full">
-              <MCPSettingsTab toolset={toolset} />
+              <RequireScope scope="mcp:write" level="page">
+                <MCPSettingsTab toolset={toolset} />
+              </RequireScope>
             </TabsContent>
           </div>
         </Tabs>
@@ -374,51 +420,269 @@ export function MCPDetailPage() {
   );
 }
 
-export function MCPEnableButton({ toolset }: { toolset: Toolset }) {
+type ServerStatus = "disabled" | "private" | "public";
+
+const STATUS_OPTIONS: {
+  value: ServerStatus;
+  label: string;
+  description: string;
+  dotClass: string;
+  hoverDotClass: string;
+}[] = [
+  {
+    value: "disabled",
+    label: "Disabled",
+    description: "The server is offline.",
+    dotClass: "bg-amber-400",
+    hoverDotClass: "group-hover:bg-amber-400",
+  },
+  {
+    value: "private",
+    label: "Private",
+    description:
+      "Only users with a Gram API Key from this project can read the tools hosted by this server.",
+    dotClass: "bg-blue-400",
+    hoverDotClass: "group-hover:bg-blue-400",
+  },
+  {
+    value: "public",
+    label: "Public",
+    description:
+      "Anyone with the URL can read the tools hosted by this server. Authentication is still required to use the tools.",
+    dotClass: "bg-green-400",
+    hoverDotClass: "group-hover:bg-green-400",
+  },
+];
+
+export function MCPStatusDropdown({ toolset }: { toolset: Toolset }) {
+  const { hasScope } = useRBAC();
+  const canWrite = hasScope("mcp:write");
   const queryClient = useQueryClient();
-  const [isServerEnableDialogOpen, setIsServerEnableDialogOpen] =
-    useState(false);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [pendingStatus, setPendingStatus] = useState<ServerStatus | null>(null);
+  const [publicWarningPending, setPublicWarningPending] = useState<{
+    target: ServerStatus;
+    sourceStatus: ServerStatus;
+  } | null>(null);
+  const [isMaxServersModalOpen, setIsMaxServersModalOpen] = useState(false);
   const updateToolsetMutation = useUpdateToolsetMutation();
   const telemetry = useTelemetry();
-  const handleServerEnabledToggle = () => {
+
+  // Fetch data needed to detect system-provided vars on the attached env.
+  const { data: environmentsData } = useListEnvironments();
+  const environments = environmentsData?.environments ?? [];
+  const { data: mcpMetadataData, isLoading: mcpMetadataLoading } =
+    useGetMcpMetadata({ toolsetSlug: toolset.slug }, undefined, {
+      retry: false,
+      throwOnError: false, // Expected 404 when no metadata exists
+    });
+  const mcpMetadata = mcpMetadataData?.metadata;
+
+  const attachedEnvironment = mcpMetadata?.defaultEnvironmentId
+    ? (environments.find((e) => e.id === mcpMetadata.defaultEnvironmentId) ??
+      null)
+    : null;
+
+  const envVars = useEnvironmentVariables(toolset, environments, mcpMetadata);
+  const systemVarNames = useMemo(
+    () =>
+      attachedEnvironment
+        ? getSystemProvidedVariables(envVars, attachedEnvironment.slug)
+        : [],
+    [envVars, attachedEnvironment],
+  );
+
+  // While either the metadata or the environments query is still loading we
+  // can't resolve the attached env → can't know whether system vars exist →
+  // disable the "Public" option to prevent a silent bypass of the warning
+  // dialog. Covers the race where metadata resolves first and `environments`
+  // is still `[]`, which would otherwise make `attachedEnvironment` null and
+  // `systemVarNames` empty even when there are system vars on an attached env.
+  // We intentionally do NOT fail-closed on query errors: the metadata endpoint
+  // returns 404 when no metadata row exists for a toolset (a common, safe
+  // state meaning "no attached env"), and `retry: false` would otherwise lock
+  // the option permanently on that 404. Other call sites (MCPAuthenticationTab,
+  // MCPEnvironmentSettings) treat missing metadata the same way.
+  const publicOptionUnavailable = mcpMetadataLoading || !environmentsData;
+
+  const currentStatus: ServerStatus = !toolset.mcpEnabled
+    ? "disabled"
+    : toolset.mcpIsPublic
+      ? "public"
+      : "private";
+
+  const applyStatus = (status: ServerStatus) => {
+    const updates =
+      status === "disabled"
+        ? { mcpEnabled: false }
+        : { mcpEnabled: true, mcpIsPublic: status === "public" };
+
     updateToolsetMutation.mutate(
       {
         request: {
           slug: toolset.slug,
-          updateToolsetRequestBody: { mcpEnabled: !toolset.mcpEnabled },
+          updateToolsetRequestBody: updates,
         },
       },
       {
         onSuccess: () => {
           invalidateAllToolset(queryClient);
           invalidateAllGetPeriodUsage(queryClient);
-
           telemetry.capture("mcp_event", {
-            action: toolset.mcpEnabled ? "mcp_disabled" : "mcp_enabled",
+            action:
+              status === "disabled"
+                ? "mcp_disabled"
+                : status === "public"
+                  ? "mcp_made_public"
+                  : "mcp_made_private",
             slug: toolset.slug,
+            system_vars_warned:
+              status === "public" ? systemVarNames.length > 0 : undefined,
           });
-          toast.success(
-            toolset.mcpEnabled ? "MCP server disabled" : "MCP server enabled",
-          );
+          const label =
+            status === "disabled"
+              ? "MCP server disabled"
+              : status === "public"
+                ? "MCP server set to public"
+                : "MCP server set to private";
+          toast.success(label);
+        },
+        onError: (error) => {
+          if (
+            error instanceof Error &&
+            error.message.includes("maximum number of public MCP servers")
+          ) {
+            setIsMaxServersModalOpen(true);
+          } else {
+            toast.error(
+              error instanceof Error
+                ? error.message
+                : "Failed to update server status",
+            );
+          }
         },
       },
     );
   };
 
+  const handleSelect = (status: ServerStatus) => {
+    if (status === currentStatus) return;
+    setDropdownOpen(false);
+
+    const goingPublic = status === "public";
+    const needsEnableDialog =
+      status === "disabled" || currentStatus === "disabled";
+    const needsPublicWarning = goingPublic && systemVarNames.length > 0;
+
+    // Defer state changes until after the dropdown has fully closed to avoid
+    // Radix focus-trap conflicts (same pattern as before).
+    setTimeout(() => {
+      if (needsPublicWarning) {
+        // Show the system-vars warning first. If the user confirms, we chain to
+        // ServerEnableDialog when the transition also requires enablement.
+        setPublicWarningPending({
+          target: status,
+          sourceStatus: currentStatus,
+        });
+      } else if (needsEnableDialog) {
+        setPendingStatus(status);
+      } else {
+        applyStatus(status);
+      }
+    }, 0);
+  };
+
+  const handlePublicWarningConfirm = () => {
+    const pending = publicWarningPending;
+    setPublicWarningPending(null);
+    if (!pending) return;
+    // Use the source status captured when the dialog opened, not the live
+    // currentStatus — the toolset query may have revalidated in the meantime.
+    if (pending.sourceStatus === "disabled") {
+      setPendingStatus(pending.target);
+    } else {
+      applyStatus(pending.target);
+    }
+  };
+
+  const currentLabel =
+    currentStatus === "disabled"
+      ? "Disabled"
+      : currentStatus === "public"
+        ? "Public"
+        : "Private";
+
   return (
     <>
-      <Button
-        variant="primary"
-        onClick={() => setIsServerEnableDialogOpen(true)}
-      >
-        {toolset.mcpEnabled ? "DISABLE" : "ENABLE"}
-      </Button>
-      <ServerEnableDialog
-        isOpen={isServerEnableDialogOpen}
-        onClose={() => setIsServerEnableDialogOpen(false)}
-        onConfirm={handleServerEnabledToggle}
+      <DropdownMenu open={dropdownOpen} onOpenChange={setDropdownOpen}>
+        <DropdownMenuTrigger asChild disabled={!canWrite}>
+          <Button variant="primary" disabled={!canWrite}>
+            <Button.Text>{currentLabel}</Button.Text>
+            <Button.RightIcon>
+              <ChevronDown className="h-4 w-4" />
+            </Button.RightIcon>
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-[320px] p-1">
+          {STATUS_OPTIONS.map((option) => (
+            <DropdownMenuItem
+              key={option.value}
+              onSelect={() => handleSelect(option.value)}
+              disabled={
+                option.value === currentStatus ||
+                (option.value === "public" && publicOptionUnavailable)
+              }
+              className="group flex cursor-pointer items-start gap-2.5 rounded-md p-2"
+            >
+              <span
+                className={cn(
+                  "mt-1 h-2 w-2 shrink-0 rounded-full transition-colors",
+                  option.value === currentStatus
+                    ? option.dotClass
+                    : cn("bg-muted", option.hoverDotClass),
+                )}
+              />
+              <div className="flex-1">
+                <span className="block font-mono text-xs font-semibold tracking-wide uppercase">
+                  {option.label}
+                </span>
+                <span className="text-muted-foreground text-xs">
+                  {option.value === "public" && publicOptionUnavailable
+                    ? "Loading environment data…"
+                    : option.description}
+                </span>
+              </div>
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <PublicMcpWarningDialog
+        isOpen={publicWarningPending !== null}
+        onClose={() => setPublicWarningPending(null)}
+        onConfirm={handlePublicWarningConfirm}
         isLoading={updateToolsetMutation.isPending}
-        currentlyEnabled={toolset.mcpEnabled ?? false}
+        environmentSlug={attachedEnvironment?.slug ?? ""}
+        variableNames={systemVarNames}
+      />
+      <ServerEnableDialog
+        isOpen={pendingStatus !== null}
+        onClose={() => setPendingStatus(null)}
+        onConfirm={() => {
+          if (pendingStatus) applyStatus(pendingStatus);
+        }}
+        isLoading={updateToolsetMutation.isPending}
+        currentlyEnabled={currentStatus !== "disabled"}
+        targetIsPublic={pendingStatus === "public"}
+      />
+      <FeatureRequestModal
+        isOpen={isMaxServersModalOpen}
+        onClose={() => setIsMaxServersModalOpen(false)}
+        title="MCP Server Limit Reached"
+        description="You have reached the maximum number of MCP servers for the Base plan. Someone should be in touch shortly, or feel free to book a meeting directly to upgrade."
+        actionType="max_public_mcp_servers"
+        icon={Globe}
+        telemetryData={{ slug: toolset.slug }}
+        accountUpgrade
       />
     </>
   );
@@ -427,13 +691,7 @@ export function MCPEnableButton({ toolset }: { toolset: Toolset }) {
 /**
  * Overview Tab - Hosted URL and Installation instructions
  */
-function MCPOverviewTab({
-  toolset,
-  onTabChange,
-}: {
-  toolset: Toolset;
-  onTabChange: (tab: string) => void;
-}) {
+function MCPOverviewTab({ toolset }: { toolset: Toolset }) {
   const { url: mcpUrl } = useMcpUrl(toolset);
 
   const result = useGetMcpMetadata({ toolsetSlug: toolset.slug }, undefined, {
@@ -464,15 +722,8 @@ function MCPOverviewTab({
       >
         {!toolset.mcpIsPublic && (
           <Type small italic destructive>
-            Your server is private. To share with external users, you must make
-            it public in the{" "}
-            <button
-              className="appearance-none underline"
-              onClick={() => onTabChange("settings")}
-            >
-              server settings
-            </button>
-            .
+            Your server is private. To share with external users, use the status
+            dropdown in the header to set it to Public.
           </Type>
         )}
         <Stack className="mt-2" gap={1}>
@@ -512,6 +763,8 @@ function ServerInstructionsSection({
   form: UseMcpMetadataMetadataFormResult;
   isLoading: boolean;
 }) {
+  const { hasScope } = useRBAC();
+  const canWrite = hasScope("mcp:write");
   const charCount = form.instructionsHandlers.value?.length ?? 0;
   const overLimit = charCount > INSTRUCTIONS_SOFT_LIMIT;
 
@@ -523,6 +776,7 @@ function ServerInstructionsSection({
           className="min-h-[150px] w-full"
           value={form.instructionsHandlers.value ?? ""}
           onChange={form.instructionsHandlers.onChange}
+          disabled={!canWrite}
         />
         {charCount > 0 && (
           <span
@@ -536,23 +790,25 @@ function ServerInstructionsSection({
           </span>
         )}
       </div>
-      <Stack direction="horizontal" gap={2} justify="end">
-        <GenerateInstructionsButton toolset={toolset} form={form} />
-        <Button
-          onClick={async () => {
-            try {
-              await form.saveAsync();
-              toast.success("Server instructions saved.");
-            } catch {
-              toast.error("Failed to save instructions.");
-            }
-          }}
-          disabled={isLoading || !form.instructionsDirty}
-          size="sm"
-        >
-          <Button.Text>Save</Button.Text>
-        </Button>
-      </Stack>
+      {canWrite && (
+        <Stack direction="horizontal" gap={2} justify="end">
+          <GenerateInstructionsButton toolset={toolset} form={form} />
+          <Button
+            onClick={async () => {
+              try {
+                await form.saveAsync();
+                toast.success("Server instructions saved.");
+              } catch {
+                toast.error("Failed to save instructions.");
+              }
+            }}
+            disabled={isLoading || !form.instructionsDirty}
+            size="sm"
+          >
+            <Button.Text>Save</Button.Text>
+          </Button>
+        </Stack>
+      )}
     </Stack>
   );
 }
@@ -628,6 +884,8 @@ Respond with ONLY the server instructions as plain text. Do not wrap in JSON or 
  * Tools Tab - Manage tools in the MCP server
  */
 function MCPToolsTab({ toolset }: { toolset: Toolset }) {
+  const { hasScope } = useRBAC();
+  const canWrite = hasScope("mcp:write");
   const queryClient = useQueryClient();
   const telemetry = useTelemetry();
   const client = useSdkClient();
@@ -702,11 +960,12 @@ function MCPToolsTab({ toolset }: { toolset: Toolset }) {
     grouped.map((group) => group.key),
   );
 
-  const groupKeys = grouped.map((group) => group.key);
+  const groupKeysJoined = grouped.map((group) => group.key).join(",");
   // Set initial selected groups when the tool list resolves
   useEffect(() => {
-    setSelectedGroups(groupKeys);
-  }, [groupKeys.join(",")]);
+    setSelectedGroups(grouped.map((group) => group.key));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- recalculate only when the set of group keys changes
+  }, [groupKeysJoined]);
 
   const handleToolUpdate = async (
     tool: Tool,
@@ -783,17 +1042,21 @@ function MCPToolsTab({ toolset }: { toolset: Toolset }) {
         >
           <Heading variant="h3">Tools</Heading>
           <Stack direction="horizontal" gap={2}>
-            <routes.customTools.Link>
-              <Button variant="secondary" size="sm">
-                <Button.Text>Custom Tools</Button.Text>
+            {canWrite && (
+              <routes.customTools.Link>
+                <Button variant="secondary" size="sm">
+                  <Button.Text>Custom Tools</Button.Text>
+                </Button>
+              </routes.customTools.Link>
+            )}
+            {canWrite && (
+              <Button onClick={() => setAddToolsDialogOpen(true)} size="sm">
+                <Button.LeftIcon>
+                  <Icon name="plus" className="h-4 w-4" />
+                </Button.LeftIcon>
+                <Button.Text>Add Tools</Button.Text>
               </Button>
-            </routes.customTools.Link>
-            <Button onClick={() => setAddToolsDialogOpen(true)} size="sm">
-              <Button.LeftIcon>
-                <Icon name="plus" className="h-4 w-4" />
-              </Button.LeftIcon>
-              <Button.Text>Add Tools</Button.Text>
-            </Button>
+            )}
           </Stack>
         </Stack>
       )}
@@ -827,14 +1090,15 @@ function MCPToolsTab({ toolset }: { toolset: Toolset }) {
         <ToolList
           tools={toolsToDisplay}
           toolset={fullToolset}
-          onToolUpdate={handleToolUpdate}
-          onToolsRemove={handleToolsRemove}
+          onToolUpdate={canWrite ? handleToolUpdate : undefined}
+          onToolsRemove={canWrite ? handleToolsRemove : undefined}
           onTestInPlayground={handleTestInPlayground}
+          readOnly={!canWrite}
         />
       ) : (
         <ToolsetEmptyState
           toolsetSlug={toolset.slug}
-          onAddTools={() => setAddToolsDialogOpen(true)}
+          onAddTools={canWrite ? () => setAddToolsDialogOpen(true) : undefined}
         />
       )}
 
@@ -922,6 +1186,8 @@ function MCPPromptsTab({ toolset }: { toolset: Toolset }) {
  * Settings Tab - Visibility, Slug, Custom Domain, Actions, Danger Zone
  */
 function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
+  const { hasScope } = useRBAC();
+  const canWrite = hasScope("mcp:write");
   const telemetry = useTelemetry();
   const queryClient = useQueryClient();
   const productTier = useProductTier();
@@ -1040,29 +1306,16 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
       telemetry.capture("mcp_event", {
         action: "mcp_settings_saved",
         slug: toolset.slug,
-        isPublic: mcpIsPublic,
       });
     },
-    onError: (error) => {
-      if (
-        error.message &&
-        error.message.includes(
-          "maximum number of public MCP servers for your account type",
-        )
-      ) {
-        setIsMaxServersModalOpen(true);
-      }
-
+    onError: () => {
       // Discard staged changes
       setMcpSlug(toolset.mcpSlug || "");
-      setMcpIsPublic(toolset.mcpIsPublic);
     },
   });
 
   const [mcpSlug, setMcpSlug] = useState(toolset.mcpSlug || "");
-  const [mcpIsPublic, setMcpIsPublic] = useState(toolset.mcpIsPublic);
   const [isCustomDomainModalOpen, setIsCustomDomainModalOpen] = useState(false);
-  const [isMaxServersModalOpen, setIsMaxServersModalOpen] = useState(false);
 
   const mcpSlugError = useMcpSlugValidation(mcpSlug, toolset.mcpSlug);
 
@@ -1073,32 +1326,35 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
     setMcpSlug(value);
   };
 
-  const linkDomainButton = domain && domain.activated && domain.verified && (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <Button
-          variant="secondary"
-          size="sm"
-          className="mr-2"
-          disabled={updateToolsetMutation.isPending}
-          onClick={() => {
-            updateToolsetMutation.mutate({
-              request: {
-                slug: toolset.slug,
-                updateToolsetRequestBody: {
-                  customDomainId: domain.id,
-                  mcpSlug: mcpSlug,
+  const linkDomainButton = canWrite &&
+    domain &&
+    domain.activated &&
+    domain.verified && (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            variant="secondary"
+            size="sm"
+            className="mr-2"
+            disabled={updateToolsetMutation.isPending}
+            onClick={() => {
+              updateToolsetMutation.mutate({
+                request: {
+                  slug: toolset.slug,
+                  updateToolsetRequestBody: {
+                    customDomainId: domain.id,
+                    mcpSlug: mcpSlug,
+                  },
                 },
-              },
-            });
-          }}
-        >
-          Link Domain
-        </Button>
-      </TooltipTrigger>
-      <TooltipContent>{domain.domain}</TooltipContent>
-    </Tooltip>
-  );
+              });
+            }}
+          >
+            Link Domain
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>{domain.domain}</TooltipContent>
+      </Tooltip>
+    );
 
   // Account for legacy Pro tier which can still access custom domains
   const canAccessCustomDomain = !productTier.includes("base");
@@ -1107,19 +1363,21 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
     domain && canAccessCustomDomain && !toolset.customDomainId ? (
       linkDomainButton
     ) : (
-      <Button
-        variant="secondary"
-        size="sm"
-        onClick={() => {
-          if (!canAccessCustomDomain) {
-            setIsCustomDomainModalOpen(true);
-          } else {
-            routes.settings.goTo();
-          }
-        }}
-      >
-        Configure
-      </Button>
+      <RequireScope scope="project:write" level="component">
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => {
+            if (!canAccessCustomDomain) {
+              setIsCustomDomainModalOpen(true);
+            } else {
+              routes.settings.goTo();
+            }
+          }}
+        >
+          Configure
+        </Button>
+      </RequireScope>
     );
 
   const anyChanges = mcpSlug !== toolset.mcpSlug;
@@ -1132,7 +1390,6 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
             slug: toolset.slug,
             updateToolsetRequestBody: {
               mcpSlug: mcpSlug,
-              mcpIsPublic,
             },
           },
         });
@@ -1150,58 +1407,14 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
       size="sm"
       onClick={() => {
         setMcpSlug(toolset.mcpSlug || "");
-        setMcpIsPublic(toolset.mcpIsPublic);
       }}
     >
       Discard
     </Button>
   );
 
-  const PublicToggle = ({ isPublic }: { isPublic: boolean }) => {
-    const onToggle = (value: string) => {
-      const newIsPublic = value === "public";
-      setMcpIsPublic(newIsPublic);
-      updateToolsetMutation.mutate({
-        request: {
-          slug: toolset.slug,
-          updateToolsetRequestBody: { mcpIsPublic: newIsPublic },
-        },
-      });
-    };
-
-    return (
-      <BigToggle
-        options={[
-          {
-            value: "public",
-            icon: "globe",
-            label: "Public",
-            description:
-              "Anyone with the URL can read the tools hosted by this server. Authentication is still required to use the tools.",
-          },
-          {
-            value: "private",
-            icon: "lock",
-            label: "Private",
-            description:
-              "Only users with a Gram API Key from this project can read the tools hosted by this server.",
-          },
-        ]}
-        selectedValue={isPublic ? "public" : "private"}
-        onSelect={onToggle}
-      />
-    );
-  };
-
   return (
     <Stack className="mb-4">
-      <PageSection
-        heading="Visibility"
-        description="Make your MCP server visible to the world, or protected behind a Gram key."
-      >
-        <PublicToggle isPublic={mcpIsPublic ?? false} />
-      </PageSection>
-
       <PageSection
         heading="Custom Slug"
         description="Customize the URL path for your MCP server."
@@ -1227,6 +1440,7 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
                   onChange={handleMcpSlugChange}
                   maxLength={40}
                   requiredPrefix={`${orgSlug}-`}
+                  disabled={!canWrite}
                 />
               ) : (
                 <Input
@@ -1235,7 +1449,7 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
                   value={mcpSlug}
                   onChange={handleMcpSlugChange}
                   maxLength={40}
-                  disabled={!toolset.customDomainId}
+                  disabled={!toolset.customDomainId || !canWrite}
                 />
               )}
               <Stack
@@ -1275,9 +1489,7 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
         </Block>
       </PageSection>
 
-      {!toolset.toolUrns?.some((u) => u.startsWith("tools:externalmcp:")) && (
-        <MCPPublishingSection toolset={toolset} />
-      )}
+      <MCPPublishingSection toolset={toolset} />
 
       <PageSection
         heading="Actions"
@@ -1315,17 +1527,19 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
         <Type muted small className="mb-4">
           Permanently delete this MCP server. This action cannot be undone.
         </Type>
-        <Button
-          variant="destructive-primary"
-          size="md"
-          onClick={() => setIsDeleteDialogOpen(true)}
-          disabled={isDeleteDialogOpen}
-        >
-          <Button.LeftIcon>
-            <Trash2 className="h-4 w-4" />
-          </Button.LeftIcon>
-          <Button.Text>Delete MCP Server</Button.Text>
-        </Button>
+        <RequireScope scope="mcp:write" level="component">
+          <Button
+            variant="destructive-primary"
+            size="md"
+            onClick={() => setIsDeleteDialogOpen(true)}
+            disabled={isDeleteDialogOpen}
+          >
+            <Button.LeftIcon>
+              <Trash2 className="h-4 w-4" />
+            </Button.LeftIcon>
+            <Button.Text>Delete MCP Server</Button.Text>
+          </Button>
+        </RequireScope>
       </div>
 
       <Dialog
@@ -1377,24 +1591,12 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
         telemetryData={{ slug: toolset.slug }}
         accountUpgrade
       />
-      <FeatureRequestModal
-        isOpen={isMaxServersModalOpen}
-        onClose={() => setIsMaxServersModalOpen(false)}
-        title="MCP Server Limit Reached"
-        description={`You have reached the maximum number of MCP servers for the Base plan. Someone should be in touch shortly, or feel free to book a meeting directly to upgrade.`}
-        actionType="max_public_mcp_servers"
-        icon={Globe}
-        telemetryData={{ slug: toolset.slug }}
-        accountUpgrade
-      />
     </Stack>
   );
 }
 
 function MCPPublishingSection({ toolset }: { toolset: Toolset }) {
   const client = useSdkClient();
-  const organization = useOrganization();
-  const defaultProjectSlug = organization.projects?.[0]?.slug;
   const { data: collections, isLoading: collectionsLoading } = useCollections();
   const attachServer = useAttachServer();
   const detachServer = useDetachServer();
@@ -1405,9 +1607,8 @@ function MCPPublishingSection({ toolset }: { toolset: Toolset }) {
     queries: collections.map((collection) => ({
       ...buildCollectionsListServersQuery(client, {
         collectionSlug: collection.slug!,
-        gramProject: defaultProjectSlug,
       }),
-      enabled: !!collection.slug && !!defaultProjectSlug,
+      enabled: !!collection.slug,
     })),
   });
 
@@ -1417,6 +1618,11 @@ function MCPPublishingSection({ toolset }: { toolset: Toolset }) {
     for (let i = 0; i < collections.length; i++) {
       const servers = serveQueries[i]?.data?.servers ?? [];
       for (const server of servers) {
+        if (server.toolsetId === toolset.id) {
+          ids.add(collections[i].id);
+          break;
+        }
+
         const parts = server.registrySpecifier?.split("/") ?? [];
         const slug = parts[parts.length - 1];
         if (slug === toolset.mcpSlug) {
@@ -1427,7 +1633,7 @@ function MCPPublishingSection({ toolset }: { toolset: Toolset }) {
     }
 
     return ids;
-  }, [collections, serveQueries, toolset.mcpSlug]);
+  }, [collections, serveQueries, toolset.id, toolset.mcpSlug]);
 
   const effectiveSelected = selectedIds ?? publishedCollectionIds;
 
@@ -1454,7 +1660,7 @@ function MCPPublishingSection({ toolset }: { toolset: Toolset }) {
   };
 
   const handleSave = async () => {
-    if (!selectedIds || !defaultProjectSlug) return;
+    if (!selectedIds) return;
 
     setIsSaving(true);
     try {
@@ -1469,7 +1675,6 @@ function MCPPublishingSection({ toolset }: { toolset: Toolset }) {
         ...toAttach.map((collectionId) =>
           attachServer.mutateAsync({
             request: {
-              gramProject: defaultProjectSlug,
               attachServerRequestBody: {
                 collectionId,
                 toolsetId: toolset.id,
@@ -1480,7 +1685,6 @@ function MCPPublishingSection({ toolset }: { toolset: Toolset }) {
         ...toDetach.map((collectionId) =>
           detachServer.mutateAsync({
             request: {
-              gramProject: defaultProjectSlug,
               attachServerRequestBody: {
                 collectionId,
                 toolsetId: toolset.id,
@@ -1501,8 +1705,7 @@ function MCPPublishingSection({ toolset }: { toolset: Toolset }) {
   };
 
   const isLoading =
-    collectionsLoading ||
-    (!!defaultProjectSlug && serveQueries.some((query) => query.isLoading));
+    collectionsLoading || serveQueries.some((query) => query.isLoading);
 
   return (
     <PageSection
@@ -1511,11 +1714,7 @@ function MCPPublishingSection({ toolset }: { toolset: Toolset }) {
     >
       <Block label="Collections" className="p-0">
         <BlockInner>
-          {!defaultProjectSlug ? (
-            <Type muted small>
-              No project available for publishing.
-            </Type>
-          ) : !toolset.mcpEnabled || !toolset.mcpSlug ? (
+          {!toolset.mcpEnabled || !toolset.mcpSlug ? (
             <Type muted small>
               Enable this MCP server before publishing it to a collection.
             </Type>
@@ -1678,147 +1877,6 @@ export function MCPJson({
   );
 }
 
-export const useMcpConfigs = (toolset: ToolsetEntry | undefined) => {
-  const { url: mcpUrl } = useMcpUrl(toolset);
-  const { data: tools } = useListTools();
-
-  const toolsetTools = toolset
-    ? tools?.tools.filter((tool) => toolset.tools.some((t) => t.id === tool.id))
-    : undefined;
-
-  const requiresServerURL =
-    toolsetTools?.some((tool) => isHttpTool(tool) && !tool.defaultServerUrl) ??
-    false;
-
-  // Get env headers using the existing hook for fallback
-  const envHeaders = useToolsetEnvVars(toolset, requiresServerURL).filter(
-    (header) => !header.toLowerCase().includes("token_url"),
-  );
-
-  if (!toolset) return { public: "", internal: "" };
-
-  // Build header names using display names when available
-  // Display names make the config more user-friendly (e.g., "API-Key" instead of "X-RAPIDAPI-KEY")
-  const getHeaderNameForMcp = (envVar: string): string => {
-    // Find the security variable that has this env var
-    const secVar = toolset.securityVariables?.find((sv) =>
-      sv.envVariables.some((ev) => ev.toLowerCase() === envVar.toLowerCase()),
-    );
-
-    if (secVar?.displayName) {
-      // Use display name, normalized for header format
-      return secVar.displayName.replace(/\s+/g, "-").replace(/_/g, "-");
-    }
-
-    // Fall back to the env var format
-    return envVar.replace(/_/g, "-");
-  };
-
-  // Build the args array for public MCP config
-  const mcpJsonPublicArgs = [
-    "mcp-remote@0.1.25",
-    mcpUrl,
-    ...envHeaders.flatMap((header) => [
-      "--header",
-      `MCP-${getHeaderNameForMcp(header)}:${"${VALUE}"}`,
-    ]),
-  ];
-
-  if (!toolset.mcpIsPublic) {
-    mcpJsonPublicArgs.push("--header", "Authorization:${GRAM_KEY}");
-  }
-
-  // Indent each line of the header args array by 8 spaces for alignment
-  const INDENT = " ".repeat(8);
-  const argsStringIndented = JSON.stringify(mcpJsonPublicArgs, null, 2)
-    .split("\n")
-    .map((line, idx) => (idx === 0 ? line : INDENT + line))
-    .join("\n");
-
-  const mcpJsonPublic = `{
-  "mcpServers": {
-    "Gram${toolset.slug.replace(/-/g, "").replace(/^./, (c) => c.toUpperCase())}": {
-      "command": "npx",
-      "args": ${argsStringIndented}${
-        !toolset.mcpIsPublic
-          ? `,
-      "env": {
-        "GRAM_KEY": "Bearer <your-key-here>"
-      }`
-          : ""
-      }
-    }
-  }
-}`;
-
-  const mcpJsonInternal = `{
-  "mcpServers": {
-    "Gram${toolset.slug.replace(/-/g, "").replace(/^./, (c) => c.toUpperCase())}": {
-      "command": "npx",
-      "args": [
-        "mcp-remote@0.1.25",
-        "${mcpUrl}",
-        "--header",
-        "Gram-Environment:${toolset.defaultEnvironmentSlug}",
-        "--header",
-        "Authorization:\${GRAM_KEY}"
-      ],
-      "env": {
-        "GRAM_KEY": "Bearer <your-key-here>"
-      }
-    }
-  }
-}`;
-
-  return { public: mcpJsonPublic, internal: mcpJsonInternal };
-};
-
-export function useMcpSlugValidation(
-  mcpSlug: string | undefined,
-  currentSlug?: string,
-) {
-  const [slugError, setSlugError] = useState<string | null>(null);
-  const client = useSdkClient();
-
-  function validateMcpSlug(slug: string) {
-    if (!slug) return "MCP Slug is required";
-    if (slug.length > 40) return "Must be 40 characters or fewer";
-    if (!/^[a-z0-9_-]+$/.test(slug))
-      return "Lowercase letters, numbers, _ or - only";
-    return null;
-  }
-
-  useEffect(() => {
-    setSlugError(null);
-
-    if (mcpSlug && mcpSlug !== currentSlug) {
-      const validationError = validateMcpSlug(mcpSlug);
-      if (validationError) {
-        setSlugError(validationError);
-        return;
-      }
-      client.toolsets
-        .checkMCPSlugAvailability({ slug: mcpSlug })
-        .then((res) => {
-          if (res) {
-            setSlugError("This slug is already taken");
-          }
-        });
-    }
-  }, [mcpSlug]);
-
-  return slugError;
-}
-
-export const randSlug = () => {
-  const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
-  let rand = "";
-  for (let i = 0; i < 5; i++) {
-    rand += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return rand;
-};
-
 export function OAuthDetailsModal({
   isOpen,
   onClose,
@@ -1906,7 +1964,9 @@ export function OAuthDetailsModal({
                       className="hover:bg-destructive border-none hover:text-white"
                       onClick={() =>
                         removeOAuthMutation.mutate({
-                          request: { slug: toolset.slug },
+                          request: {
+                            slug: toolset.slug,
+                          },
                         })
                       }
                     >
@@ -2172,683 +2232,4 @@ export function GramOAuthProxyModal({
   );
 }
 
-export function ConnectOAuthModal({
-  isOpen,
-  onClose,
-  toolsetSlug,
-  toolset,
-  editMode,
-}: {
-  isOpen: boolean;
-  onClose: () => void;
-  toolsetSlug: string;
-  toolset: Toolset;
-  editMode?: { proxyServer: NonNullable<Toolset["oauthProxyServer"]> };
-}) {
-  const productTier = useProductTier();
-  const queryClient = useQueryClient();
-  const isAccountUpgrade = productTier.includes("base");
-
-  // For free accounts, show the FeatureRequestModal
-  if (isAccountUpgrade) {
-    return (
-      <FeatureRequestModal
-        isOpen={isOpen}
-        onClose={onClose}
-        title="Connect OAuth"
-        description="A Managed OAuth integration requires upgrading to a pro account type. Someone should be in touch shortly, or feel free to book a meeting directly."
-        actionType="mcp_oauth_integration"
-        icon={Globe}
-        telemetryData={{ slug: toolsetSlug }}
-        accountUpgrade={isAccountUpgrade}
-      />
-    );
-  }
-
-  // For non-free accounts, show the tab modal
-  return (
-    <OAuthTabModal
-      isOpen={isOpen}
-      onClose={onClose}
-      toolsetSlug={toolsetSlug}
-      toolset={toolset}
-      editMode={editMode}
-      onSuccess={() => {
-        invalidateAllToolset(queryClient);
-        toast.success(
-          editMode
-            ? "OAuth proxy server updated successfully"
-            : "External OAuth server configured successfully",
-        );
-        onClose();
-      }}
-    />
-  );
-}
-
-function OAuthTabModal({
-  isOpen,
-  onClose,
-  toolsetSlug,
-  toolset,
-  onSuccess,
-  editMode,
-}: {
-  isOpen: boolean;
-  onClose: () => void;
-  toolsetSlug: string;
-  toolset: Toolset;
-  onSuccess: () => void;
-  editMode?: { proxyServer: NonNullable<Toolset["oauthProxyServer"]> };
-}) {
-  // Extract discovered OAuth metadata from external MCP tools.
-  // Uses rawTools because proxy-type tools are filtered out of toolset.tools.
-  // Builds metadata matching the format the old server-side fallback produced:
-  // issuer = Gram's MCP URL, upstream endpoints passed through, plus standard
-  // response_types_supported, grant_types_supported, code_challenge_methods_supported.
-  const discoveredOAuth = useMemo(() => {
-    const baseURL = getServerURL();
-    const mcpSlug = toolset.mcpSlug;
-    for (const tool of toolset.rawTools) {
-      const def = tool.externalMcpToolDefinition;
-      if (!def?.requiresOauth) continue;
-
-      if (!def.oauthAuthorizationEndpoint && !def.oauthTokenEndpoint) continue;
-
-      const metadata: Record<string, unknown> = {
-        issuer: `${baseURL}/mcp/${mcpSlug}`,
-        response_types_supported: ["code"],
-        grant_types_supported: ["authorization_code", "refresh_token"],
-        code_challenge_methods_supported: ["S256"],
-      };
-      if (def.oauthAuthorizationEndpoint)
-        metadata.authorization_endpoint = def.oauthAuthorizationEndpoint;
-      if (def.oauthTokenEndpoint)
-        metadata.token_endpoint = def.oauthTokenEndpoint;
-      if (def.oauthRegistrationEndpoint)
-        metadata.registration_endpoint = def.oauthRegistrationEndpoint;
-      if (def.oauthScopesSupported?.length)
-        metadata.scopes_supported = def.oauthScopesSupported;
-
-      return {
-        slug: def.slug,
-        name: def.registryServerName,
-        version: def.oauthVersion,
-        metadata,
-      };
-    }
-    return null;
-  }, [toolset.rawTools, toolset.mcpSlug]);
-
-  const [activeTab, setActiveTab] = useState("external");
-  const [externalSlug, setExternalSlug] = useState("");
-  const [metadataJson, setMetadataJson] = useState("");
-  const [jsonError, setJsonError] = useState<string | null>(null);
-  const [prefilled, setPrefilled] = useState<Record<string, boolean>>({});
-  const telemetry = useTelemetry();
-
-  // OAuth Proxy form state
-  const [proxySlug, setProxySlug] = useState("");
-  const [proxyAuthorizationEndpoint, setProxyAuthorizationEndpoint] =
-    useState("");
-  const [proxyTokenEndpoint, setProxyTokenEndpoint] = useState("");
-  const [proxyScopes, setProxyScopes] = useState("");
-  const [proxyTokenAuthMethod, setProxyTokenAuthMethod] =
-    useState("client_secret_post");
-  const [proxyEnvironmentSlug, setProxyEnvironmentSlug] = useState(
-    toolset.defaultEnvironmentSlug ?? "",
-  );
-  const [proxyAudience, setProxyAudience] = useState("");
-  const [proxyError, setProxyError] = useState<string | null>(null);
-  // Snapshot the prefilled audience so we can detect whether the user actually
-  // changed it on submit. Without this, opening the edit modal on a proxy
-  // whose audience is NULL would silently submit `audience: ""` (because the
-  // form prefills empty-string for null DB values), mutating NULL → "" on the
-  // server. Empty audience and absent audience are NOT equivalent in OAuth
-  // authorization URL handling.
-  const proxyAudiencePrefilledRef = useRef<string>("");
-
-  // Pre-fill from editMode whenever the underlying proxy server data changes.
-  // Dep array depends on editMode?.proxyServer (the stable inner ref preserved
-  // by react-query's structural sharing) rather than editMode (the inline
-  // wrapper object that gets recreated on every parent re-render). This way
-  // the effect only fires when the actual proxy server data changes — not on
-  // every parent re-render (which would wipe user-typed form input).
-  const editProxyServer = editMode?.proxyServer;
-  useEffect(() => {
-    if (!editProxyServer) return;
-    const provider = editProxyServer.oauthProxyProviders?.[0];
-    setProxySlug(editProxyServer.slug ?? "");
-    const initialAudience = editProxyServer.audience ?? "";
-    setProxyAudience(initialAudience);
-    proxyAudiencePrefilledRef.current = initialAudience;
-    setProxyAuthorizationEndpoint(provider?.authorizationEndpoint ?? "");
-    setProxyTokenEndpoint(provider?.tokenEndpoint ?? "");
-    setProxyScopes((provider?.scopesSupported ?? []).join(", "));
-    setProxyTokenAuthMethod(
-      provider?.tokenEndpointAuthMethodsSupported?.[0] ?? "client_secret_post",
-    );
-    setProxyEnvironmentSlug(provider?.environmentSlug ?? "");
-    // When editing, force the proxy tab to be active.
-    setActiveTab("proxy");
-  }, [editProxyServer]);
-
-  const applyDiscoveredOAuth = useCallback(
-    (tab: "external" | "proxy") => {
-      if (!discoveredOAuth) return;
-      if (tab === "external") {
-        setExternalSlug(discoveredOAuth.slug);
-        setMetadataJson(JSON.stringify(discoveredOAuth.metadata, null, 2));
-        setJsonError(null);
-      } else {
-        setProxySlug(discoveredOAuth.slug);
-        const m = discoveredOAuth.metadata;
-        if (typeof m.authorization_endpoint === "string")
-          setProxyAuthorizationEndpoint(m.authorization_endpoint);
-        if (typeof m.token_endpoint === "string")
-          setProxyTokenEndpoint(m.token_endpoint);
-        if (Array.isArray(m.scopes_supported))
-          setProxyScopes(m.scopes_supported.join(", "));
-      }
-      setPrefilled((prev) => ({ ...prev, [tab]: true }));
-    },
-    [discoveredOAuth],
-  );
-
-  const hasMultipleOAuth2AuthCode =
-    toolset.oauthEnablementMetadata?.oauth2SecurityCount > 1;
-  const queryClient = useQueryClient();
-
-  const addExternalOAuthMutation = useAddExternalOAuthServerMutation({
-    onSuccess: () => {
-      invalidateAllToolset(queryClient);
-
-      telemetry.capture("mcp_event", {
-        action: "external_oauth_configured",
-        slug: toolsetSlug,
-      });
-
-      onSuccess();
-    },
-    onError: (error) => {
-      console.error("Failed to configure external OAuth:", error);
-      toast.error(
-        error instanceof Error ? error.message : "Failed to configure OAuth",
-      );
-    },
-  });
-
-  const addOAuthProxyMutation = useAddOAuthProxyServerMutation({
-    onSuccess: () => {
-      invalidateAllToolset(queryClient);
-
-      telemetry.capture("mcp_event", {
-        action: "oauth_proxy_configured",
-        slug: toolsetSlug,
-      });
-
-      onSuccess();
-    },
-    onError: (error) => {
-      console.error("Failed to configure OAuth proxy:", error);
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "Failed to configure OAuth proxy",
-      );
-    },
-  });
-
-  const updateOAuthProxyMutation = useUpdateOAuthProxyServerMutation({
-    onSuccess: () => {
-      invalidateAllToolset(queryClient);
-
-      telemetry.capture("mcp_event", {
-        action: "oauth_proxy_updated",
-        slug: toolsetSlug,
-      });
-
-      onSuccess();
-    },
-    onError: (error) => {
-      console.error("Failed to update OAuth proxy:", error);
-      toast.error(
-        error instanceof Error ? error.message : "Failed to update OAuth proxy",
-      );
-    },
-  });
-
-  const handleExternalSubmit = () => {
-    // Validate JSON
-    let parsedMetadata;
-    try {
-      parsedMetadata = JSON.parse(metadataJson);
-    } catch {
-      setJsonError("Invalid JSON format");
-      return;
-    }
-
-    if (!externalSlug.trim()) {
-      toast.error("Please provide a slug for the OAuth server");
-      return;
-    }
-
-    // Validate required OAuth endpoints
-    const requiredEndpoints = [
-      "authorization_endpoint",
-      "token_endpoint",
-      "registration_endpoint",
-    ];
-    const missingEndpoints = requiredEndpoints.filter(
-      (endpoint) => !parsedMetadata[endpoint],
-    );
-
-    if (missingEndpoints.length > 0) {
-      setJsonError(
-        `Missing required endpoints: ${missingEndpoints.join(", ")}`,
-      );
-      return;
-    }
-
-    setJsonError(null);
-    addExternalOAuthMutation.mutate({
-      request: {
-        slug: toolsetSlug,
-        addExternalOAuthServerRequestBody: {
-          externalOauthServer: {
-            slug: externalSlug,
-            metadata: parsedMetadata,
-          },
-        },
-      },
-    });
-  };
-
-  const handleProxySubmit = () => {
-    setProxyError(null);
-
-    if (!proxySlug.trim()) {
-      setProxyError("Please provide a slug for the OAuth proxy server");
-      return;
-    }
-
-    if (!proxyAuthorizationEndpoint.trim()) {
-      setProxyError("Authorization endpoint is required");
-      return;
-    }
-
-    if (!proxyTokenEndpoint.trim()) {
-      setProxyError("Token endpoint is required");
-      return;
-    }
-
-    if (!editMode && !proxyEnvironmentSlug.trim()) {
-      setProxyError("Environment slug is required");
-      return;
-    }
-
-    const scopesArray = proxyScopes
-      .split(",")
-      .map((s) => s.trim())
-      .filter((s) => s.length > 0);
-
-    if (scopesArray.length === 0) {
-      setProxyError("At least one scope is required");
-      return;
-    }
-
-    if (editMode) {
-      // Only send audience when the user actually changed it. Comparing the
-      // current form value to the prefilled snapshot avoids the silent
-      // NULL → "" mutation that happens when the user opens the modal on a
-      // proxy whose audience was NULL (the form prefills "") and saves
-      // without touching the field. The server treats absent vs empty
-      // differently in OAuth URL construction.
-      const audienceChanged =
-        proxyAudience !== proxyAudiencePrefilledRef.current;
-      updateOAuthProxyMutation.mutate({
-        request: {
-          slug: toolsetSlug,
-          updateOAuthProxyServerRequestBody: {
-            oauthProxyServer: {
-              audience: audienceChanged ? proxyAudience : undefined,
-              authorizationEndpoint: proxyAuthorizationEndpoint,
-              tokenEndpoint: proxyTokenEndpoint,
-              scopesSupported: scopesArray,
-              tokenEndpointAuthMethodsSupported: [proxyTokenAuthMethod],
-              environmentSlug: proxyEnvironmentSlug || undefined,
-            },
-          },
-        },
-      });
-      return;
-    }
-
-    addOAuthProxyMutation.mutate({
-      request: {
-        slug: toolsetSlug,
-        addOAuthProxyServerRequestBody: {
-          oauthProxyServer: {
-            providerType: "custom",
-            slug: proxySlug,
-            audience: proxyAudience || undefined,
-            authorizationEndpoint: proxyAuthorizationEndpoint,
-            tokenEndpoint: proxyTokenEndpoint,
-            scopesSupported: scopesArray,
-            tokenEndpointAuthMethodsSupported: [proxyTokenAuthMethod],
-            environmentSlug: proxyEnvironmentSlug,
-          },
-        },
-      },
-    });
-  };
-
-  return (
-    <>
-      <Dialog open={isOpen} onOpenChange={onClose}>
-        <Dialog.Content className="max-h-[90vh] max-w-6xl overflow-hidden">
-          <Dialog.Header>
-            <Dialog.Title>
-              {editMode ? "Edit OAuth Proxy" : "Connect OAuth"}
-            </Dialog.Title>
-          </Dialog.Header>
-
-          <Tabs
-            value={activeTab}
-            onValueChange={setActiveTab}
-            className="flex-1"
-          >
-            <TabsList>
-              <TabsTrigger value="external">External Server</TabsTrigger>
-              <TabsTrigger value="proxy">OAuth Proxy</TabsTrigger>
-            </TabsList>
-
-            <TabsContent
-              value="external"
-              className="max-h-[60vh] space-y-4 overflow-auto"
-            >
-              {hasMultipleOAuth2AuthCode && (
-                <div className="mb-4 rounded-md border border-red-200 bg-red-50 p-4">
-                  <Type small className="mt-1 text-red-600">
-                    Not Supported: This MCP server has{" "}
-                    {toolset.oauthEnablementMetadata?.oauth2SecurityCount}{" "}
-                    OAuth2 security schemes detected.
-                  </Type>
-                </div>
-              )}
-              {discoveredOAuth && !prefilled.external && (
-                <div className="border-border bg-muted/50 mb-4 flex items-start justify-between gap-4 rounded-md border p-4">
-                  <div>
-                    <Type small className="font-medium">
-                      OAuth detected from {discoveredOAuth.name}
-                    </Type>
-                    <Type muted small className="mt-1">
-                      We discovered OAuth {discoveredOAuth.version} metadata
-                      from this server. You can use it to pre-fill the form
-                      below.
-                    </Type>
-                  </div>
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    onClick={() => applyDiscoveredOAuth("external")}
-                  >
-                    Apply
-                  </Button>
-                </div>
-              )}
-              <div>
-                <Type className="mb-2 font-medium">
-                  External OAuth Server Configuration
-                </Type>
-                <Type muted small className="mb-4">
-                  Configure your MCP server to use an external authorization
-                  server if your API fits the very specific MCP OAuth
-                  requirements.{" "}
-                  <Link
-                    external
-                    to="https://docs.getgram.ai/host-mcp/adding-oauth#authorization-code"
-                  >
-                    Docs
-                  </Link>
-                </Type>
-
-                <Stack gap={4}>
-                  <div>
-                    <Type className="mb-2 font-medium">OAuth Server Slug</Type>
-                    <Input
-                      placeholder="my-oauth-server"
-                      value={externalSlug}
-                      onChange={setExternalSlug}
-                      maxLength={40}
-                    />
-                  </div>
-
-                  <div>
-                    <Type className="mb-2 font-medium">
-                      OAuth Authorization Server Metadata
-                    </Type>
-                    {jsonError && (
-                      <Type className="mt-1 text-sm text-red-500!">
-                        {jsonError}
-                      </Type>
-                    )}
-                    <TextArea
-                      placeholder={`{
-  "issuer": "https://your-oauth-server.com",
-  "authorization_endpoint": "https://your-oauth-server.com/oauth/authorize",
-  "registration_endpoint": "https://your-oauth-server.com/oauth/register",
-  "token_endpoint": "https://your-oauth-server.com/oauth/token",
-  "scopes_supported": ["read", "write"],
-  "response_types_supported": ["code"],
-  "grant_types_supported": ["authorization_code"],
-  "token_endpoint_auth_methods_supported": [
-    "client_secret_post"
-  ],
-  "code_challenge_methods_supported": [
-    "plain",
-    "S256"
-  ]
-}`}
-                      value={metadataJson}
-                      onChange={(value: string) => {
-                        setMetadataJson(value);
-                        setJsonError(null);
-                      }}
-                      rows={12}
-                      className="font-mono text-sm"
-                    />
-                  </div>
-                </Stack>
-              </div>
-            </TabsContent>
-
-            <TabsContent
-              value="proxy"
-              className="max-h-[60vh] space-y-4 overflow-auto"
-            >
-              <div>
-                <Type className="mb-2 font-medium">
-                  OAuth Proxy Server Configuration
-                </Type>
-                <Type muted small className="mb-4">
-                  ONLY USE FOR INTERNAL SERVERS. Configure an OAuth proxy server
-                  to handle OAuth authentication for APIs that don't natively
-                  support MCP OAuth requirements. Getting proxy settings correct
-                  can be tricky. Need help?{" "}
-                  <Link
-                    external
-                    to="https://calendly.com/d/ctgg-5dv-3kw/intro-to-gram-call"
-                  >
-                    Book a meeting
-                  </Link>
-                </Type>
-
-                {discoveredOAuth && !prefilled.proxy && (
-                  <div className="border-border bg-muted/50 mb-4 flex items-start justify-between gap-4 rounded-md border p-4">
-                    <div>
-                      <Type small className="font-medium">
-                        OAuth detected from {discoveredOAuth.name}
-                      </Type>
-                      <Type muted small className="mt-1">
-                        We discovered OAuth {discoveredOAuth.version} metadata
-                        from this server. You can use it to pre-fill the
-                        endpoints below.
-                      </Type>
-                    </div>
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      onClick={() => applyDiscoveredOAuth("proxy")}
-                    >
-                      Apply
-                    </Button>
-                  </div>
-                )}
-
-                {proxyError && (
-                  <Type className="mb-4 text-sm text-red-500!">
-                    {proxyError}
-                  </Type>
-                )}
-
-                <Stack gap={4}>
-                  <div>
-                    <Type className="mb-2 font-medium">
-                      OAuth Proxy Server Slug
-                    </Type>
-                    <Input
-                      placeholder="my-oauth-proxy"
-                      value={proxySlug}
-                      onChange={setProxySlug}
-                      maxLength={40}
-                      disabled={!!editMode}
-                    />
-                  </div>
-
-                  <div>
-                    <Type className="mb-2 font-medium">
-                      Authorization Endpoint
-                    </Type>
-                    <Input
-                      placeholder="https://provider.com/oauth/authorize"
-                      value={proxyAuthorizationEndpoint}
-                      onChange={setProxyAuthorizationEndpoint}
-                    />
-                  </div>
-
-                  <div>
-                    <Type className="mb-2 font-medium">Token Endpoint</Type>
-                    <Input
-                      placeholder="https://provider.com/oauth/token"
-                      value={proxyTokenEndpoint}
-                      onChange={setProxyTokenEndpoint}
-                    />
-                  </div>
-
-                  <div>
-                    <Type className="mb-2 font-medium">
-                      Scopes (comma-separated)
-                    </Type>
-                    <Input
-                      placeholder="read, write, openid"
-                      value={proxyScopes}
-                      onChange={setProxyScopes}
-                    />
-                  </div>
-
-                  <div>
-                    <Type className="mb-2 font-medium">
-                      Audience (optional)
-                    </Type>
-                    <Input
-                      placeholder="https://api.example.com"
-                      value={proxyAudience}
-                      onChange={setProxyAudience}
-                    />
-                    <Type muted small className="mt-1">
-                      The audience parameter sent to the upstream OAuth
-                      provider. Required by some providers (e.g. Auth0) to
-                      return JWT access tokens.
-                    </Type>
-                  </div>
-
-                  <div>
-                    <Type className="mb-2 font-medium">
-                      Token Endpoint Auth Method
-                    </Type>
-                    <select
-                      className="bg-background w-full rounded border px-3 py-2"
-                      value={proxyTokenAuthMethod}
-                      onChange={(e) => setProxyTokenAuthMethod(e.target.value)}
-                    >
-                      <option value="client_secret_post">
-                        client_secret_post
-                      </option>
-                      <option value="client_secret_basic">
-                        client_secret_basic
-                      </option>
-                      <option value="none">none</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <Type className="mb-2 font-medium">Environment</Type>
-                    <EnvironmentDropdown
-                      selectedEnvironment={proxyEnvironmentSlug}
-                      setSelectedEnvironment={setProxyEnvironmentSlug}
-                      tooltip="Select environment for OAuth credentials"
-                      className="w-full max-w-full"
-                    />
-                    <Type muted small className="mt-1">
-                      The environment where OAuth client credentials will be
-                      stored.
-                    </Type>
-                  </div>
-                </Stack>
-              </div>
-            </TabsContent>
-          </Tabs>
-
-          <Dialog.Footer className="flex justify-end">
-            {activeTab === "external" && (
-              <Button
-                onClick={handleExternalSubmit}
-                disabled={
-                  hasMultipleOAuth2AuthCode ||
-                  addExternalOAuthMutation.isPending ||
-                  !externalSlug.trim() ||
-                  !metadataJson.trim()
-                }
-              >
-                {addExternalOAuthMutation.isPending
-                  ? "Configuring..."
-                  : "Configure External OAuth"}
-              </Button>
-            )}
-            {activeTab === "proxy" && (
-              <Button
-                onClick={handleProxySubmit}
-                disabled={
-                  addOAuthProxyMutation.isPending ||
-                  updateOAuthProxyMutation.isPending ||
-                  !proxySlug.trim() ||
-                  !proxyAuthorizationEndpoint.trim() ||
-                  !proxyTokenEndpoint.trim() ||
-                  (!editMode && !proxyEnvironmentSlug.trim())
-                }
-              >
-                {addOAuthProxyMutation.isPending ||
-                updateOAuthProxyMutation.isPending
-                  ? "Saving..."
-                  : editMode
-                    ? "Save changes"
-                    : "Configure OAuth Proxy"}
-              </Button>
-            )}
-          </Dialog.Footer>
-        </Dialog.Content>
-      </Dialog>
-    </>
-  );
-}
+export { ConnectOAuthModal } from "./oauth-wizard";

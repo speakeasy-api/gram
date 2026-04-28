@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	workosrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/workos/repo"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
@@ -316,10 +317,15 @@ func TestProcessWorkOSOrganizationEvents_MembershipCreatedLinksUser(t *testing.T
 	eventsClient := newMockEventsLister(t)
 	eventsClient.On("ListEvents", mock.Anything, mock.Anything).
 		Return(events.ListEventsResponse{Data: []events.Event{
+			newWorkOSRoleEvent(t, "organization_role.created", "evt_role_member", "role_member", workosOrgID, "member", "Member"),
 			newWorkOSMembershipEvent(t, "organization_membership.created", "evt_mem_link", "mem_link_1", workosOrgID, workosUserID, "member"),
 		}}, nil).Once()
 
-	activity, db := newWorkOSEventsActivity(t, eventsClient)
+	membershipLister := newMockMembershipLister(t)
+	membershipLister.On("ListOrgMemberships", mock.Anything, workosOrgID).
+		Return([]workos.Member{}, nil).Once()
+
+	activity, db := newWorkOSEventsActivityWithMemberships(t, eventsClient, membershipLister)
 	ctx := t.Context()
 
 	_, err := orgrepo.New(db).UpsertOrganizationMetadataFromWorkOS(ctx, orgrepo.UpsertOrganizationMetadataFromWorkOSParams{
@@ -355,6 +361,131 @@ func TestProcessWorkOSOrganizationEvents_MembershipCreatedLinksUser(t *testing.T
 	})
 	require.NoError(t, err)
 	require.True(t, linked)
+
+	userRoles, err := orgrepo.New(db).GetOrganizationUserRoles(ctx, orgrepo.GetOrganizationUserRolesParams{
+		OrganizationID: gramOrgID,
+		UserID:         gramUserID,
+	})
+	require.NoError(t, err)
+	require.Len(t, userRoles, 1)
+	require.Equal(t, "member", userRoles[0].WorkosSlug)
+}
+
+func TestProcessWorkOSOrganizationEvents_MembershipBeforeRoleEventSilentlySkipsRoleAssignment(t *testing.T) {
+	t.Parallel()
+
+	const workosOrgID = "wos_org_mem_missing_role"
+	const gramOrgID = "gram_org_mem_missing_role"
+	const gramUserID = "gram_user_mem_missing_role"
+	const workosUserID = "wos_user_mem_missing_role"
+
+	eventsClient := newMockEventsLister(t)
+	eventsClient.On("ListEvents", mock.Anything, mock.Anything).
+		Return(events.ListEventsResponse{Data: []events.Event{
+			newWorkOSMembershipEvent(t, "organization_membership.created", "evt_mem_missing_role", "mem_missing_role_1", workosOrgID, workosUserID, "member"),
+		}}, nil).Once()
+
+	activity, db := newWorkOSEventsActivity(t, eventsClient)
+	ctx := t.Context()
+
+	_, err := orgrepo.New(db).UpsertOrganizationMetadataFromWorkOS(ctx, orgrepo.UpsertOrganizationMetadataFromWorkOSParams{
+		ID:       gramOrgID,
+		Name:     "Org",
+		Slug:     "org",
+		WorkosID: conv.ToPGText(workosOrgID),
+	})
+	require.NoError(t, err)
+
+	_, err = usersrepo.New(db).UpsertUser(ctx, usersrepo.UpsertUserParams{
+		ID:          gramUserID,
+		Email:       "missing-role@example.com",
+		DisplayName: "Missing Role",
+		PhotoUrl:    conv.ToPGText(""),
+		Admin:       false,
+	})
+	require.NoError(t, err)
+	err = usersrepo.New(db).SetUserWorkosID(ctx, usersrepo.SetUserWorkosIDParams{
+		WorkosID: conv.ToPGText(workosUserID),
+		ID:       gramUserID,
+	})
+	require.NoError(t, err)
+
+	_, err = activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{
+		WorkOSOrganizationID: workosOrgID,
+	})
+	require.NoError(t, err)
+
+	cursor, err := workosrepo.New(db).GetOrganizationSyncLastEventID(ctx, workosOrgID)
+	require.NoError(t, err)
+	require.Equal(t, "evt_mem_missing_role", cursor)
+
+	userRoles, err := orgrepo.New(db).GetOrganizationUserRoles(ctx, orgrepo.GetOrganizationUserRolesParams{
+		OrganizationID: gramOrgID,
+		UserID:         gramUserID,
+	})
+	require.NoError(t, err)
+	require.Empty(t, userRoles)
+}
+
+func TestProcessWorkOSOrganizationEvents_RoleUpdatedSyncsMemberships(t *testing.T) {
+	t.Parallel()
+
+	const workosOrgID = "wos_org_role_updated"
+	const gramOrgID = "gram_org_role_updated"
+	const gramUserID = "gram_user_role_updated"
+	const workosUserID = "wos_user_role_updated"
+
+	membershipLister := newMockMembershipLister(t)
+	// Called once for role.created and once for role.updated.
+	membershipLister.On("ListOrgMemberships", mock.Anything, workosOrgID).
+		Return([]workos.Member{
+			{UserID: workosUserID, RoleSlugs: []string{"member"}},
+		}, nil).Times(2)
+
+	eventsClient := newMockEventsLister(t)
+	eventsClient.On("ListEvents", mock.Anything, mock.Anything).
+		Return(events.ListEventsResponse{Data: []events.Event{
+			newWorkOSRoleEvent(t, "organization_role.created", "evt_role_create", "role_member", workosOrgID, "member", "Member"),
+			newWorkOSRoleEvent(t, "organization_role.updated", "evt_role_update", "role_member", workosOrgID, "member", "Member Updated"),
+		}}, nil).Once()
+
+	activity, db := newWorkOSEventsActivityWithMemberships(t, eventsClient, membershipLister)
+	ctx := t.Context()
+
+	_, err := orgrepo.New(db).UpsertOrganizationMetadataFromWorkOS(ctx, orgrepo.UpsertOrganizationMetadataFromWorkOSParams{
+		ID:       gramOrgID,
+		Name:     "Org",
+		Slug:     "org",
+		WorkosID: conv.ToPGText(workosOrgID),
+	})
+	require.NoError(t, err)
+
+	_, err = usersrepo.New(db).UpsertUser(ctx, usersrepo.UpsertUserParams{
+		ID:          gramUserID,
+		Email:       "role-updated@example.com",
+		DisplayName: "Role Updated User",
+		PhotoUrl:    conv.ToPGText(""),
+		Admin:       false,
+	})
+	require.NoError(t, err)
+	err = usersrepo.New(db).SetUserWorkosID(ctx, usersrepo.SetUserWorkosIDParams{
+		WorkosID: conv.ToPGText(workosUserID),
+		ID:       gramUserID,
+	})
+	require.NoError(t, err)
+
+	_, err = activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{
+		WorkOSOrganizationID: workosOrgID,
+	})
+	require.NoError(t, err)
+
+	userRoles, err := orgrepo.New(db).GetOrganizationUserRoles(ctx, orgrepo.GetOrganizationUserRolesParams{
+		OrganizationID: gramOrgID,
+		UserID:         gramUserID,
+	})
+	require.NoError(t, err)
+	require.Len(t, userRoles, 1)
+	require.Equal(t, "member", userRoles[0].WorkosSlug)
 }
 
 type MockEventsLister struct {
@@ -372,6 +503,23 @@ func (m *MockEventsLister) ListEvents(ctx context.Context, opts events.ListEvent
 	args := m.Called(ctx, opts)
 	resp, _ := args.Get(0).(events.ListEventsResponse)
 	return resp, mockErr(args, 1)
+}
+
+type MockMembershipLister struct {
+	mock.Mock
+}
+
+func newMockMembershipLister(t *testing.T) *MockMembershipLister {
+	t.Helper()
+	m := &MockMembershipLister{}
+	t.Cleanup(func() { require.True(t, m.AssertExpectations(t)) })
+	return m
+}
+
+func (m *MockMembershipLister) ListOrgMemberships(ctx context.Context, orgID string) ([]workos.Member, error) {
+	args := m.Called(ctx, orgID)
+	members, _ := args.Get(0).([]workos.Member)
+	return members, mockErr(args, 1)
 }
 
 func mockErr(args mock.Arguments, index int) error {
@@ -410,13 +558,42 @@ func newWorkOSMembershipEvent(t *testing.T, kind, eventID, membershipID, workosO
 	return events.Event{ID: eventID, Event: kind, Data: data, CreatedAt: now}
 }
 
+func newWorkOSRoleEvent(t *testing.T, kind, eventID, roleID, workosOrgID, slug, name string) events.Event {
+	t.Helper()
+	now := time.Now()
+	data, err := json.Marshal(map[string]any{
+		"id":              roleID,
+		"object":          "organization_role",
+		"organization_id": workosOrgID,
+		"name":            name,
+		"slug":            slug,
+		"description":     "",
+		"created_at":      now,
+		"updated_at":      now,
+	})
+	require.NoError(t, err)
+	return events.Event{ID: eventID, Event: kind, Data: data, CreatedAt: now}
+}
+
+// newWorkOSEventsActivity creates an activity with a no-op membership lister (for tests that don't exercise role events).
 func newWorkOSEventsActivity(t *testing.T, eventsClient activities.EventsLister) (*activities.ProcessWorkOSOrganizationEvents, *pgxpool.Pool) {
+	t.Helper()
+	return newWorkOSEventsActivityWithMemberships(t, eventsClient, &noopMembershipLister{})
+}
+
+func newWorkOSEventsActivityWithMemberships(t *testing.T, eventsClient activities.EventsLister, membershipLister activities.MembershipLister) (*activities.ProcessWorkOSOrganizationEvents, *pgxpool.Pool) {
 	t.Helper()
 	conn, err := infra.CloneTestDatabase(t, "workos_org_events_test")
 	require.NoError(t, err)
 	logger := testenv.NewLogger(t)
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, eventsClient)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, eventsClient, membershipLister)
 	return activity, conn
+}
+
+type noopMembershipLister struct{}
+
+func (n *noopMembershipLister) ListOrgMemberships(_ context.Context, _ string) ([]workos.Member, error) {
+	return nil, nil
 }
 
 func emptyEventsResponse() events.ListEventsResponse {

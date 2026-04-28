@@ -26,6 +26,13 @@ export function FullPageError({ error }: FullPageErrorProps) {
             <p className="text-muted-foreground font-mono text-xs break-all">
               {error.message}
             </p>
+            {"rawResponse" in error &&
+              error.rawResponse instanceof Response &&
+              error.rawResponse.url && (
+                <p className="text-muted-foreground mt-2 font-mono text-xs break-all">
+                  {error.rawResponse.url}
+                </p>
+              )}
           </div>
         </Stack>
 

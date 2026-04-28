@@ -2,6 +2,15 @@ import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import { TelemetryLogRecord } from "@gram/client/models/components";
+import { Operator } from "@gram/client/models/components/logfilter";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+  Icon,
+} from "@speakeasy-api/moonshine";
 import { ChevronDown, Copy } from "lucide-react";
 import { useState } from "react";
 import { formatNanoTimestamp, getSeverityColorClass } from "./utils";
@@ -10,12 +19,14 @@ interface LogDetailSheetProps {
   log: TelemetryLogRecord | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onAddFilter?: (path: string, op: Operator, value: string) => void;
 }
 
 export function LogDetailSheet({
   log,
   open,
   onOpenChange,
+  onAddFilter,
 }: LogDetailSheetProps) {
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -23,7 +34,7 @@ export function LogDetailSheet({
         className="h-full max-h-screen overflow-y-auto"
         style={{ width: "33vw", minWidth: 500, maxWidth: "none" }}
       >
-        {log && <LogDetailContent log={log} />}
+        {log && <LogDetailContent log={log} onAddFilter={onAddFilter} />}
       </SheetContent>
     </Sheet>
   );
@@ -34,6 +45,8 @@ const TOOL_IO_ATTR_KEYS = {
   input: "gen_ai.tool.call.arguments",
   output: "gen_ai.tool.call.result",
 } as const;
+
+const HOOK_BLOCK_REASON_KEY = "gram.hook.block_reason";
 
 /**
  * Extract a deeply nested value from an object using a dot-separated path.
@@ -78,7 +91,13 @@ function removeNestedKey(
   return clone;
 }
 
-function LogDetailContent({ log }: { log: TelemetryLogRecord }) {
+function LogDetailContent({
+  log,
+  onAddFilter,
+}: {
+  log: TelemetryLogRecord;
+  onAddFilter?: (path: string, op: Operator, value: string) => void;
+}) {
   const severityClass = getSeverityColorClass(log.severityText);
   const resourceAttrs = log.resourceAttributes as
     | { gram?: { tool?: { urn?: string } } }
@@ -93,8 +112,11 @@ function LogDetailContent({ log }: { log: TelemetryLogRecord }) {
   const toolOutput = attrs
     ? getNestedValue(attrs, TOOL_IO_ATTR_KEYS.output)
     : undefined;
+  const blockReason = attrs
+    ? getNestedValue(attrs, HOOK_BLOCK_REASON_KEY)
+    : undefined;
 
-  // Remove tool I/O keys from attributes to avoid duplication in the generic section
+  // Remove surfaced keys from attributes to avoid duplication in the generic section
   let filteredAttrs = attrs;
   if (filteredAttrs && toolInput) {
     filteredAttrs = removeNestedKey(filteredAttrs, TOOL_IO_ATTR_KEYS.input);
@@ -102,21 +124,48 @@ function LogDetailContent({ log }: { log: TelemetryLogRecord }) {
   if (filteredAttrs && toolOutput) {
     filteredAttrs = removeNestedKey(filteredAttrs, TOOL_IO_ATTR_KEYS.output);
   }
+  if (filteredAttrs && blockReason) {
+    filteredAttrs = removeNestedKey(filteredAttrs, HOOK_BLOCK_REASON_KEY);
+  }
 
   return (
     <div className="flex flex-col gap-6 px-5 pt-6 pb-6">
       {/* Header with span info */}
       <div className="flex flex-col gap-4">
         <div className="flex items-center gap-3">
-          <div
-            className={`rounded px-2 py-1 text-xs font-semibold uppercase ${severityClass} bg-muted`}
-          >
-            {log.severityText || "INFO"}
-          </div>
+          {blockReason ? (
+            <div className="inline-flex items-center gap-1.5 rounded bg-amber-500/10 px-2 py-1 text-xs font-semibold text-amber-700 uppercase dark:text-amber-300">
+              <Icon name="shield-alert" className="size-3" />
+              Blocked
+            </div>
+          ) : (
+            <div
+              className={`rounded px-2 py-1 text-xs font-semibold uppercase ${severityClass} bg-muted`}
+            >
+              {log.severityText || "INFO"}
+            </div>
+          )}
           <SheetTitle className="text-base font-medium tracking-tight">
             {log.body?.slice(0, 80) || "(no message)"}
           </SheetTitle>
         </div>
+
+        {blockReason && (
+          <div className="flex items-start gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3">
+            <Icon
+              name="shield-alert"
+              className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400"
+            />
+            <div className="flex min-w-0 flex-1 flex-col gap-1">
+              <div className="text-xs font-semibold tracking-wide text-amber-700 uppercase dark:text-amber-300">
+                Block Reason
+              </div>
+              <div className="text-foreground text-sm break-words">
+                {blockReason}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Metadata badges */}
         <div className="flex flex-wrap gap-2">
@@ -191,10 +240,16 @@ function LogDetailContent({ log }: { log: TelemetryLogRecord }) {
 
           {/* Attributes (with tool I/O keys removed) */}
           {filteredAttrs && Object.keys(filteredAttrs).length > 0 && (
-            <AttributesSection title="Attributes" data={filteredAttrs} />
+            <AttributesSection
+              title="Attributes"
+              data={filteredAttrs}
+              onAddFilter={onAddFilter}
+            />
           )}
 
-          {/* Resource */}
+          {/* Resource — no onAddFilter: the backend's attribute filter
+              resolves paths against `attributes.*`, not `resource_attributes.*`,
+              so resource-derived filters would silently return no results. */}
           {log.resourceAttributes &&
             Object.keys(log.resourceAttributes as object).length > 0 && (
               <AttributesSection
@@ -316,14 +371,90 @@ function MetadataBadge({
   );
 }
 
+interface AttributeEntry {
+  key: string;
+  displayValue: string;
+  filterValue: string | null;
+}
+
+/**
+ * Flatten a nested object into dot-notation keys with filterability metadata.
+ * e.g. { http: { request: { method: "POST" } } } =>
+ *   [{ key: "http.request.method", displayValue: "POST", filterValue: "POST" }]
+ */
+function flattenObject(
+  obj: Record<string, unknown>,
+  prefix = "",
+): AttributeEntry[] {
+  const result: AttributeEntry[] = [];
+
+  for (const [key, value] of Object.entries(obj)) {
+    const fullKey = prefix ? `${prefix}.${key}` : key;
+
+    if (value === null || value === undefined) {
+      result.push({ key: fullKey, displayValue: "\u2014", filterValue: null });
+      continue;
+    }
+
+    switch (typeof value) {
+      case "object":
+        if (Array.isArray(value)) {
+          result.push({
+            key: fullKey,
+            displayValue: JSON.stringify(value),
+            filterValue: null,
+          });
+        } else if (Object.keys(value).length > 0) {
+          result.push(
+            ...flattenObject(value as Record<string, unknown>, fullKey),
+          );
+        }
+        break;
+      case "string":
+        // Empty strings are treated as non-filterable (same as null/undefined):
+        // a `key = ""` filter matches empty and missing values equivalently
+        // server-side, so surfacing it as a filter option would be misleading.
+        result.push({
+          key: fullKey,
+          displayValue: value || "\u2014",
+          filterValue: value || null,
+        });
+        break;
+      case "number":
+      case "boolean":
+        result.push({
+          key: fullKey,
+          displayValue: String(value),
+          filterValue: String(value),
+        });
+        break;
+      default:
+        result.push({
+          key: fullKey,
+          displayValue: JSON.stringify(value),
+          filterValue: JSON.stringify(value),
+        });
+    }
+  }
+
+  return result;
+}
+
 function AttributesSection({
   title,
   data,
+  onAddFilter,
 }: {
   title: string;
   data: Record<string, unknown>;
+  onAddFilter?: (path: string, op: Operator, value: string) => void;
 }) {
   const flatEntries = flattenObject(data);
+  // Controlled state: track which single row's menu is open. Each row has its
+  // own DropdownMenu instance, so we need a coordinator to ensure only one is
+  // open at a time (Radix's default uncontrolled behavior opened each one
+  // independently inside the Sheet modal stack).
+  const [openMenuKey, setOpenMenuKey] = useState<string | null>(null);
 
   return (
     <div className="flex flex-col gap-2">
@@ -341,59 +472,108 @@ function AttributesSection({
         </button>
       </div>
       <div className="bg-muted border-border divide-border divide-y rounded-lg border">
-        {flatEntries.map(([key, value]) => (
-          <div
-            key={key}
-            className="hover:bg-muted/50 flex flex-col gap-1 px-4 py-2.5 transition-colors"
-          >
-            <span className="text-muted-foreground text-xs">{key}</span>
-            <span className="font-mono text-sm break-all">{value}</span>
-          </div>
-        ))}
+        {flatEntries.map((entry) => {
+          const isFilterable = entry.filterValue !== null;
+
+          const rowContent = (
+            <>
+              <span className="text-muted-foreground text-xs">{entry.key}</span>
+              <span className="font-mono text-sm break-all">
+                {entry.displayValue}
+              </span>
+            </>
+          );
+
+          if (!onAddFilter) {
+            return (
+              <div
+                key={entry.key}
+                className="hover:bg-muted/50 flex flex-col gap-1 px-4 py-2.5 transition-colors"
+              >
+                {rowContent}
+              </div>
+            );
+          }
+
+          return (
+            <DropdownMenu
+              key={entry.key}
+              open={openMenuKey === entry.key}
+              onOpenChange={(open) => setOpenMenuKey(open ? entry.key : null)}
+            >
+              <DropdownMenuTrigger asChild>
+                <button
+                  className="hover:bg-muted/50 flex w-full cursor-pointer flex-col gap-1 px-4 py-2.5 text-left transition-colors"
+                  aria-label={`Attribute actions for ${entry.key}`}
+                >
+                  {rowContent}
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start">
+                <DropdownMenuItem
+                  disabled={!isFilterable}
+                  onClick={() => {
+                    // Runtime guard: Radix `disabled` sets aria-disabled but
+                    // does not suppress onClick, so re-check filterValue here.
+                    if (entry.filterValue !== null) {
+                      onAddFilter(entry.key, Operator.Eq, entry.filterValue);
+                    }
+                  }}
+                >
+                  <span className="flex items-center gap-1">
+                    Filter by
+                    <span className="max-w-[200px] truncate font-mono text-xs">
+                      {entry.key} = {entry.filterValue ?? ""}
+                    </span>
+                  </span>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  disabled={!isFilterable}
+                  onClick={() => {
+                    if (entry.filterValue !== null) {
+                      onAddFilter(entry.key, Operator.NotEq, entry.filterValue);
+                    }
+                  }}
+                >
+                  <span className="flex items-center gap-1">
+                    Exclude
+                    <span className="max-w-[200px] truncate font-mono text-xs">
+                      {entry.key} != {entry.filterValue ?? ""}
+                    </span>
+                  </span>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  disabled={!isFilterable}
+                  onClick={() => {
+                    if (entry.filterValue !== null) {
+                      onAddFilter(
+                        entry.key,
+                        Operator.Contains,
+                        entry.filterValue,
+                      );
+                    }
+                  }}
+                >
+                  <span className="flex items-center gap-1">
+                    Contains
+                    <span className="max-w-[200px] truncate font-mono text-xs">
+                      {entry.filterValue ?? ""}
+                    </span>
+                  </span>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={() => {
+                    void navigator.clipboard.writeText(entry.displayValue);
+                  }}
+                >
+                  Copy value
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          );
+        })}
       </div>
     </div>
   );
-}
-
-/**
- * Flatten a nested object into dot-notation keys
- * e.g. { http: { request: { method: "POST" } } } => [["http.request.method", "POST"]]
- */
-function flattenObject(
-  obj: Record<string, unknown>,
-  prefix = "",
-): [string, string][] {
-  const result: [string, string][] = [];
-
-  for (const [key, value] of Object.entries(obj)) {
-    const fullKey = prefix ? `${prefix}.${key}` : key;
-
-    if (value === null || value === undefined) {
-      result.push([fullKey, "—"]);
-      continue;
-    }
-
-    switch (typeof value) {
-      case "object":
-        if (Array.isArray(value)) {
-          result.push([fullKey, JSON.stringify(value)]);
-        } else if (Object.keys(value).length > 0) {
-          result.push(
-            ...flattenObject(value as Record<string, unknown>, fullKey),
-          );
-        }
-        break;
-      case "string":
-        result.push([fullKey, value || "—"]);
-        break;
-      case "number":
-      case "boolean":
-        result.push([fullKey, String(value)]);
-        break;
-      default:
-        result.push([fullKey, JSON.stringify(value)]);
-    }
-  }
-
-  return result;
 }

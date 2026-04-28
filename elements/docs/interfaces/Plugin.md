@@ -1,4 +1,4 @@
-[**@gram-ai/elements v1.27.6**](../README.md)
+[**@gram-ai/elements v1.30.0**](../README.md)
 
 ***
 
@@ -16,6 +16,15 @@ The general flow of a plugin is:
 3. The code fence is rendered using the custom renderer
 
 ## Properties
+
+### id?
+
+> `optional` **id**: `string`
+
+Unique identifier for the plugin. Used by `recommended.except()` to
+selectively exclude plugins. Defaults to `language` if not set.
+
+***
 
 ### prompt
 

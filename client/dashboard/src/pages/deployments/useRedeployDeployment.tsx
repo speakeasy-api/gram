@@ -7,6 +7,7 @@ import {
 } from "@gram/client/react-query/redeployDeployment.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import RedeploySuccessToast from "./RedeploySuccessToast";
 
 /**
  * A wrapper around the useRedeployDeploymentMutation hook that adds UI
@@ -53,18 +54,4 @@ export const useRedeployDeployment = (
   });
 
   return redeployMutation;
-};
-
-const RedeploySuccessToast = ({ href }: { href: string | undefined }) => {
-  if (!href) return <p>Successfully redeployed!</p>;
-
-  return (
-    <p>
-      Successfully redeployed!{" "}
-      <a href={href} className="underline">
-        View deployment
-      </a>
-      .
-    </p>
-  );
 };

@@ -1,13 +1,10 @@
 import { Page } from "@/components/page-layout";
+import { RequireScope } from "@/components/require-scope";
 import { Heading } from "@/components/ui/heading";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { dateTimeFormatters } from "@/lib/dates";
 import { cn } from "@/lib/utils";
-import {
-  useDeployment,
-  useDeploymentLogs,
-  useDeploymentSuspense,
-} from "@gram/client/react-query";
+import { useDeployment, useDeploymentSuspense } from "@gram/client/react-query";
 import { Button, Separator, Skeleton } from "@speakeasy-api/moonshine";
 import {
   CheckIcon,
@@ -182,7 +179,9 @@ const HeadingSection = () => {
   return (
     <div className="flex items-center justify-between">
       <Heading variant="h1">Deployment Overview</Heading>
-      <RedeployButton />
+      <RequireScope scope="project:write" level="section">
+        <RedeployButton />
+      </RequireScope>
     </div>
   );
 };
@@ -277,30 +276,3 @@ const HumanizedDeploymentStatus = memo((props: { status: string }) => {
 
   return <span className="capitalize">{props.status}</span>;
 });
-
-export function useDeploymentLogsSummary(deploymentId: string | undefined) {
-  const { data: logs } = useDeploymentLogs(
-    { deploymentId: deploymentId! },
-    undefined,
-    {
-      staleTime: Infinity,
-      refetchOnWindowFocus: false,
-      refetchOnReconnect: false,
-      enabled: !!deploymentId,
-    },
-  );
-
-  return logs?.events.reduce(
-    (acc, event) => {
-      if (event.message.includes("skipped")) {
-        acc.skipped++;
-      }
-      // Skipped are also errors
-      if (event.event.includes("error")) {
-        acc.errors++;
-      }
-      return acc;
-    },
-    { skipped: 0, errors: 0 },
-  );
-}

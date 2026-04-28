@@ -10,8 +10,8 @@ import (
 var _ = Service("collections", func() {
 	Description("MCP collection operations")
 
-	Security(security.Session, security.ProjectSlug)
-	Security(security.ByKey, security.ProjectSlug, func() {
+	Security(security.Session)
+	Security(security.ByKey, func() {
 		Scope("producer")
 	})
 	shared.DeclareErrorResponses()
@@ -44,7 +44,6 @@ var _ = Service("collections", func() {
 
 			security.SessionPayload()
 			security.ByKeyPayload()
-			security.ProjectPayload()
 		})
 
 		Result(MCPCollection)
@@ -53,7 +52,6 @@ var _ = Service("collections", func() {
 			POST("/rpc/collections.create")
 			security.SessionHeader()
 			security.ByKeyHeader()
-			security.ProjectHeader()
 			Response(StatusCreated)
 		})
 
@@ -67,7 +65,6 @@ var _ = Service("collections", func() {
 		Payload(func() {
 			security.SessionPayload()
 			security.ByKeyPayload()
-			security.ProjectPayload()
 		})
 
 		Result(func() {
@@ -79,7 +76,6 @@ var _ = Service("collections", func() {
 			GET("/rpc/collections.list")
 			security.SessionHeader()
 			security.ByKeyHeader()
-			security.ProjectHeader()
 			Response(StatusOK)
 		})
 
@@ -109,7 +105,6 @@ var _ = Service("collections", func() {
 
 			security.SessionPayload()
 			security.ByKeyPayload()
-			security.ProjectPayload()
 		})
 
 		Result(MCPCollection)
@@ -118,7 +113,6 @@ var _ = Service("collections", func() {
 			POST("/rpc/collections.update")
 			security.SessionHeader()
 			security.ByKeyHeader()
-			security.ProjectHeader()
 			Response(StatusOK)
 		})
 
@@ -137,14 +131,12 @@ var _ = Service("collections", func() {
 
 			security.SessionPayload()
 			security.ByKeyPayload()
-			security.ProjectPayload()
 		})
 
 		HTTP(func() {
 			DELETE("/rpc/collections.delete")
 			security.SessionHeader()
 			security.ByKeyHeader()
-			security.ProjectHeader()
 			Param("collection_id")
 			Response(StatusNoContent)
 		})
@@ -167,7 +159,6 @@ var _ = Service("collections", func() {
 
 			security.SessionPayload()
 			security.ByKeyPayload()
-			security.ProjectPayload()
 		})
 
 		Result(MCPCollection)
@@ -176,7 +167,6 @@ var _ = Service("collections", func() {
 			POST("/rpc/collections.attachServer")
 			security.SessionHeader()
 			security.ByKeyHeader()
-			security.ProjectHeader()
 			Response(StatusOK)
 		})
 
@@ -198,14 +188,12 @@ var _ = Service("collections", func() {
 
 			security.SessionPayload()
 			security.ByKeyPayload()
-			security.ProjectPayload()
 		})
 
 		HTTP(func() {
 			POST("/rpc/collections.detachServer")
 			security.SessionHeader()
 			security.ByKeyHeader()
-			security.ProjectHeader()
 			Response(StatusNoContent)
 		})
 
@@ -222,7 +210,6 @@ var _ = Service("collections", func() {
 
 			security.SessionPayload()
 			security.ByKeyPayload()
-			security.ProjectPayload()
 		})
 
 		Result(func() {
@@ -234,7 +221,6 @@ var _ = Service("collections", func() {
 			GET("/rpc/collections.listServers")
 			security.SessionHeader()
 			security.ByKeyHeader()
-			security.ProjectHeader()
 			Param("collection_slug")
 			Response(StatusOK)
 		})

@@ -1427,6 +1427,8 @@ type ExternalMCPServerResponseBody struct {
 	Version string `form:"version" json:"version" xml:"version"`
 	// Description of what the server does
 	Description string `form:"description" json:"description" xml:"description"`
+	// ID of the attached toolset when this server is listed from a Collection
+	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
 	// ID of the external MCP registry this server came from
 	RegistryID *string `form:"registry_id,omitempty" json:"registry_id,omitempty" xml:"registry_id,omitempty"`
 	// ID of the internal collection registry this server came from
@@ -1462,6 +1464,41 @@ type ExternalMCPRemoteResponseBody struct {
 	URL string `form:"url" json:"url" xml:"url"`
 	// Transport type (sse or streamable-http)
 	TransportType string `form:"transport_type" json:"transport_type" xml:"transport_type"`
+	// HTTP headers the MCP client should collect and send when connecting to this
+	// remote
+	Headers []*ExternalMCPRemoteHeaderResponseBody `form:"headers,omitempty" json:"headers,omitempty" xml:"headers,omitempty"`
+	// URL template variables for this remote endpoint
+	Variables map[string]*ExternalMCPRemoteVariableResponseBody `form:"variables,omitempty" json:"variables,omitempty" xml:"variables,omitempty"`
+}
+
+// ExternalMCPRemoteHeaderResponseBody is used to define fields on response
+// body types.
+type ExternalMCPRemoteHeaderResponseBody struct {
+	// Header name
+	Name string `form:"name" json:"name" xml:"name"`
+	// Description of the header
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// Whether this header value should be treated as secret
+	IsSecret *bool `form:"is_secret,omitempty" json:"is_secret,omitempty" xml:"is_secret,omitempty"`
+	// Whether this header is required
+	IsRequired *bool `form:"is_required,omitempty" json:"is_required,omitempty" xml:"is_required,omitempty"`
+	// Placeholder value to show when collecting this header
+	Placeholder *string `form:"placeholder,omitempty" json:"placeholder,omitempty" xml:"placeholder,omitempty"`
+}
+
+// ExternalMCPRemoteVariableResponseBody is used to define fields on response
+// body types.
+type ExternalMCPRemoteVariableResponseBody struct {
+	// Description of the variable
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// Whether this variable is required
+	IsRequired *bool `form:"is_required,omitempty" json:"is_required,omitempty" xml:"is_required,omitempty"`
+	// Whether this variable value should be treated as secret
+	IsSecret *bool `form:"is_secret,omitempty" json:"is_secret,omitempty" xml:"is_secret,omitempty"`
+	// Default value for the variable
+	Default *string `form:"default,omitempty" json:"default,omitempty" xml:"default,omitempty"`
+	// Allowed values for the variable
+	Choices []string `form:"choices,omitempty" json:"choices,omitempty" xml:"choices,omitempty"`
 }
 
 // NewCreateResponseBody builds the HTTP response body from the result of the
@@ -2525,7 +2562,7 @@ func NewListServersGatewayErrorResponseBody(res *goa.ServiceError) *ListServersG
 }
 
 // NewCreatePayload builds a collections service create endpoint payload.
-func NewCreatePayload(body *CreateRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *collections.CreatePayload {
+func NewCreatePayload(body *CreateRequestBody, sessionToken *string, apikeyToken *string) *collections.CreatePayload {
 	v := &collections.CreatePayload{
 		Name:                 *body.Name,
 		Slug:                 *body.Slug,
@@ -2546,23 +2583,21 @@ func NewCreatePayload(body *CreateRequestBody, sessionToken *string, apikeyToken
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
-	v.ProjectSlugInput = projectSlugInput
 
 	return v
 }
 
 // NewListPayload builds a collections service list endpoint payload.
-func NewListPayload(sessionToken *string, apikeyToken *string, projectSlugInput *string) *collections.ListPayload {
+func NewListPayload(sessionToken *string, apikeyToken *string) *collections.ListPayload {
 	v := &collections.ListPayload{}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
-	v.ProjectSlugInput = projectSlugInput
 
 	return v
 }
 
 // NewUpdatePayload builds a collections service update endpoint payload.
-func NewUpdatePayload(body *UpdateRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *collections.UpdatePayload {
+func NewUpdatePayload(body *UpdateRequestBody, sessionToken *string, apikeyToken *string) *collections.UpdatePayload {
 	v := &collections.UpdatePayload{
 		CollectionID: *body.CollectionID,
 		Name:         body.Name,
@@ -2571,58 +2606,53 @@ func NewUpdatePayload(body *UpdateRequestBody, sessionToken *string, apikeyToken
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
-	v.ProjectSlugInput = projectSlugInput
 
 	return v
 }
 
 // NewDeletePayload builds a collections service delete endpoint payload.
-func NewDeletePayload(collectionID string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *collections.DeletePayload {
+func NewDeletePayload(collectionID string, sessionToken *string, apikeyToken *string) *collections.DeletePayload {
 	v := &collections.DeletePayload{}
 	v.CollectionID = collectionID
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
-	v.ProjectSlugInput = projectSlugInput
 
 	return v
 }
 
 // NewAttachServerPayload builds a collections service attachServer endpoint
 // payload.
-func NewAttachServerPayload(body *AttachServerRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *collections.AttachServerPayload {
+func NewAttachServerPayload(body *AttachServerRequestBody, sessionToken *string, apikeyToken *string) *collections.AttachServerPayload {
 	v := &collections.AttachServerPayload{
 		CollectionID: *body.CollectionID,
 		ToolsetID:    *body.ToolsetID,
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
-	v.ProjectSlugInput = projectSlugInput
 
 	return v
 }
 
 // NewDetachServerPayload builds a collections service detachServer endpoint
 // payload.
-func NewDetachServerPayload(body *DetachServerRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *collections.DetachServerPayload {
+func NewDetachServerPayload(body *DetachServerRequestBody, sessionToken *string, apikeyToken *string) *collections.DetachServerPayload {
 	v := &collections.DetachServerPayload{
 		CollectionID: *body.CollectionID,
 		ToolsetID:    *body.ToolsetID,
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
-	v.ProjectSlugInput = projectSlugInput
 
 	return v
 }
 
 // NewListServersPayload builds a collections service listServers endpoint
 // payload.
-func NewListServersPayload(collectionSlug string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *collections.ListServersPayload {
+func NewListServersPayload(collectionSlug string, sessionToken *string, apikeyToken *string) *collections.ListServersPayload {
 	v := &collections.ListServersPayload{}
 	v.CollectionSlug = collectionSlug
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
-	v.ProjectSlugInput = projectSlugInput
 
 	return v
 }

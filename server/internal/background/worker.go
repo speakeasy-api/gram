@@ -16,6 +16,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	risk_analysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/background/interceptors"
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/billing"
@@ -61,6 +62,7 @@ type WorkerOptions struct {
 	WorkOSClient        *workos.Client
 	WorkOSEventsClient  *events.Client
 	TriggersApp         *bgtriggers.App
+	PIIScanner          risk_analysis.PIIScanner
 }
 
 func ForDeploymentProcessing(
@@ -96,6 +98,7 @@ func ForDeploymentProcessing(
 		WorkOSClient:        nil,
 		WorkOSEventsClient:  nil,
 		CacheAdapter:        nil,
+		PIIScanner:          nil,
 	}
 }
 
@@ -130,6 +133,7 @@ func NewTemporalWorker(
 		WorkOSClient:        nil,
 		WorkOSEventsClient:  nil,
 		CacheAdapter:        nil,
+		PIIScanner:          nil,
 	}
 
 	for _, o := range options {
@@ -157,6 +161,7 @@ func NewTemporalWorker(
 			WorkOSClient:        conv.Default(o.WorkOSClient, opts.WorkOSClient),
 			WorkOSEventsClient:  conv.Default(o.WorkOSEventsClient, opts.WorkOSEventsClient),
 			CacheAdapter:        conv.Default(o.CacheAdapter, opts.CacheAdapter),
+			PIIScanner:          conv.Default(o.PIIScanner, opts.PIIScanner),
 		}
 	}
 
@@ -195,6 +200,7 @@ func NewTemporalWorker(
 		opts.WorkOSClient,
 		opts.WorkOSEventsClient,
 		opts.CacheAdapter,
+		opts.PIIScanner,
 	)
 
 	temporalWorker.RegisterActivity(activities.ProcessDeployment)
@@ -226,6 +232,9 @@ func NewTemporalWorker(
 	// Trigger related activities
 	temporalWorker.RegisterActivity(activities.DispatchTrigger)
 	temporalWorker.RegisterActivity(activities.ProcessScheduledTrigger)
+	// Risk analysis activities
+	temporalWorker.RegisterActivity(activities.FetchUnanalyzedMessages)
+	temporalWorker.RegisterActivity(activities.AnalyzeBatch)
 
 	temporalWorker.RegisterWorkflow(ProcessDeploymentWorkflow)
 	temporalWorker.RegisterWorkflow(FunctionsReaperWorkflow)
@@ -246,6 +255,11 @@ func NewTemporalWorker(
 	// Trigger workflows
 	temporalWorker.RegisterWorkflow(TriggerCronWorkflow)
 	temporalWorker.RegisterWorkflow(TriggerDispatchWorkflow)
+	// Risk analysis workflow
+	temporalWorker.RegisterWorkflow(DrainRiskAnalysisWorkflow)
+	// Assistant workflows (stub bodies — populated in the workflows PR)
+	temporalWorker.RegisterWorkflow(AssistantCoordinatorWorkflow)
+	temporalWorker.RegisterWorkflow(AssistantThreadWorkflow)
 
 	if err := AddPlatformUsageMetricsSchedule(context.Background(), env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {

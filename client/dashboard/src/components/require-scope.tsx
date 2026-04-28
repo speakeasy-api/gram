@@ -3,12 +3,9 @@ import { useRBAC } from "@/hooks/useRBAC";
 import { cn } from "@/lib/utils";
 import { Icon } from "@speakeasy-api/moonshine";
 import React from "react";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "./ui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
+
+type RenderFn = (props: { disabled: boolean }) => React.ReactNode;
 
 type RequireScopeProps = {
   scope: Scope | Scope[];
@@ -16,7 +13,12 @@ type RequireScopeProps = {
   all?: boolean;
   /** Optional resource ID to check scope against. */
   resourceId?: string;
-  children: React.ReactNode;
+  /**
+   * Either a React node or a render function receiving `{ disabled }`.
+   * Use the render function form when children contain portals (e.g. dropdowns,
+   * dialogs) that escape CSS containment and need to receive disabled state directly.
+   */
+  children: React.ReactNode | RenderFn;
 } & (
   | {
       /**
@@ -49,6 +51,9 @@ export function RequireScope(props: RequireScopeProps) {
     ? hasAllScopes(scopes, resourceId)
     : hasAnyScope(scopes, resourceId);
 
+  const resolveChildren = (disabled: boolean): React.ReactNode =>
+    typeof children === "function" ? children({ disabled }) : children;
+
   // While grants are loading, render nothing to avoid flash of unauthorized
   if (isLoading) {
     if (level === "page") return null;
@@ -56,13 +61,13 @@ export function RequireScope(props: RequireScopeProps) {
     // For component-level, show disabled state while loading
     return (
       <div className="pointer-events-none opacity-50 select-none">
-        {children}
+        {resolveChildren(true)}
       </div>
     );
   }
 
   if (allowed) {
-    return <>{children}</>;
+    return <>{resolveChildren(false)}</>;
   }
 
   switch (level) {
@@ -75,7 +80,7 @@ export function RequireScope(props: RequireScopeProps) {
     case "component":
       return (
         <ScopeDisabled reason={props.reason} className={props.className}>
-          {children}
+          {resolveChildren(true)}
         </ScopeDisabled>
       );
   }
@@ -94,30 +99,28 @@ function ScopeDisabled({
   children: React.ReactNode;
 }) {
   return (
-    <TooltipProvider>
-      <Tooltip>
-        <TooltipTrigger asChild>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <div
+          className={cn(
+            "pointer-events-none inline-flex opacity-50 select-none",
+            className,
+          )}
+        >
+          {/* Wrapper div that re-enables pointer events for the tooltip to work */}
           <div
-            className={cn(
-              "pointer-events-none inline-flex opacity-50 select-none",
-              className,
-            )}
+            className="pointer-events-auto w-full cursor-not-allowed [&_*]:cursor-not-allowed"
+            onClickCapture={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
           >
-            {/* Wrapper div that re-enables pointer events for the tooltip to work */}
-            <div
-              className="pointer-events-auto w-full cursor-not-allowed [&_*]:cursor-not-allowed"
-              onClickCapture={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-              }}
-            >
-              {children}
-            </div>
+            {children}
           </div>
-        </TooltipTrigger>
-        <TooltipContent>{reason}</TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
+        </div>
+      </TooltipTrigger>
+      <TooltipContent>{reason}</TooltipContent>
+    </Tooltip>
   );
 }
 

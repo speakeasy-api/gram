@@ -65,7 +65,7 @@ var _ = Service("toolsets", func() {
 	})
 
 	Method("listToolsetsForOrg", func() {
-		Description("List all toolsets across the organization")
+		Description("List all toolsets across the organization (summary view)")
 
 		Security(security.Session)
 		Security(security.ByKey, func() {
@@ -77,7 +77,7 @@ var _ = Service("toolsets", func() {
 			security.ByKeyPayload()
 		})
 
-		Result(ListToolsetsResult)
+		Result(ListToolsetSummariesResult)
 
 		HTTP(func() {
 			GET("/rpc/toolsets.listForOrg")
@@ -331,12 +331,18 @@ var CreateToolsetForm = Type("CreateToolsetForm", func() {
 	Attribute("tool_urns", ArrayOf(String), "List of tool URNs to include in the toolset")
 	Attribute("resource_urns", ArrayOf(String), "List of resource URNs to include in the toolset")
 	Attribute("default_environment_slug", shared.Slug, "The slug of the environment to use as the default for the toolset")
+	Attribute("origin", shared.ToolsetOrigin, "Optional registry lineage for toolsets installed from an external MCP catalog")
 	security.ProjectPayload()
 	Required("name")
 })
 
 var ListToolsetsResult = Type("ListToolsetsResult", func() {
 	Attribute("toolsets", ArrayOf(shared.ToolsetEntry), "The list of toolsets")
+	Required("toolsets")
+})
+
+var ListToolsetSummariesResult = Type("ListToolsetSummariesResult", func() {
+	Attribute("toolsets", ArrayOf(shared.ToolsetSummary), "The list of toolset summaries")
 	Required("toolsets")
 })
 

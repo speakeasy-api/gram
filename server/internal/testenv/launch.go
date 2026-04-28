@@ -12,6 +12,7 @@ import (
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
+	risk_analysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
@@ -26,6 +27,7 @@ type LaunchOptions struct {
 	Redis      bool
 	ClickHouse bool
 	Temporal   bool
+	Presidio   bool
 }
 
 type Environment struct {
@@ -33,16 +35,18 @@ type Environment struct {
 	NewRedisClient      RedisClientFunc
 	NewClickhouseClient ClickhouseClientFunc
 	NewTemporalEnv      func(t *testing.T) (env *temporal.Environment, server *testsuite.DevServer)
+	NewPresidioClient   PresidioClientFunc
 }
 
 func Launch(ctx context.Context, opts LaunchOptions) (*Environment, func() error, error) {
-	if !opts.Postgres && !opts.Redis && !opts.ClickHouse && !opts.Temporal {
+	if !opts.Postgres && !opts.Redis && !opts.ClickHouse && !opts.Temporal && !opts.Presidio {
 		return nil, nil, fmt.Errorf("launch options: %w", errCapabilityNotEnabled)
 	}
 
 	var pgcontainer terminateable
 	var rediscontainer terminateable
 	var clickhousecontainer terminateable
+	var presidiocontainer terminateable
 	var temporalserver *testsuite.DevServer
 	var temporalserverErr error
 	var temporalserverOnce sync.Once
@@ -52,6 +56,7 @@ func Launch(ctx context.Context, opts LaunchOptions) (*Environment, func() error
 		NewRedisClient:      unsupportedRedisClientFunc(),
 		NewClickhouseClient: unsupportedClickhouseClientFunc(),
 		NewTemporalEnv:      unsupportedTemporalEnvFunc(),
+		NewPresidioClient:   unsupportedPresidioClientFunc(),
 	}
 
 	if opts.Postgres {
@@ -79,6 +84,15 @@ func Launch(ctx context.Context, opts LaunchOptions) (*Environment, func() error
 		}
 		clickhousecontainer = container
 		res.NewClickhouseClient = chFactory
+	}
+
+	if opts.Presidio {
+		container, pcFactory, err := NewTestPresidio(ctx)
+		if err != nil {
+			return nil, nil, fmt.Errorf("start presidio container: %w", err)
+		}
+		presidiocontainer = container
+		res.NewPresidioClient = pcFactory
 	}
 
 	if opts.Temporal {
@@ -129,6 +143,16 @@ func Launch(ctx context.Context, opts LaunchOptions) (*Environment, func() error
 				return nil
 			})
 		}
+		if presidiocontainer != nil {
+			eg.Go(func() error {
+				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+				defer cancel()
+				if err := presidiocontainer.Terminate(ctx); err != nil {
+					log.Printf("terminate presidio container: %v", err)
+				}
+				return nil
+			})
+		}
 		if temporalserver != nil {
 			eg.Go(func() error {
 				temporalserver.Client().Close()
@@ -162,6 +186,14 @@ func unsupportedRedisClientFunc() RedisClientFunc {
 func unsupportedClickhouseClientFunc() ClickhouseClientFunc {
 	return func(_ *testing.T) (clickhouse.Conn, error) {
 		return nil, fmt.Errorf("new clickhouse client: %w", errCapabilityNotEnabled)
+	}
+}
+
+func unsupportedPresidioClientFunc() PresidioClientFunc {
+	return func(t *testing.T) *risk_analysis.PresidioClient {
+		t.Helper()
+		t.Fatal(fmt.Errorf("new presidio client: %w", errCapabilityNotEnabled))
+		return nil
 	}
 }
 

@@ -36,11 +36,12 @@ import CollectionDetail from "./pages/collections/CollectionDetail";
 import CreateCollection from "./pages/collections/CreateCollection";
 import OrgAdminSettings from "./pages/org/OrgAdminSettings";
 import OrgApiKeys from "./pages/org/OrgApiKeys";
-import Plugins, { PluginsRoot } from "./pages/org/Plugins";
-import PluginDetail from "./pages/org/PluginDetail";
+import Plugins, { PluginsRoot } from "./pages/plugins/Plugins";
+import PluginDetail from "./pages/plugins/PluginDetail";
 import OrgAuditLogs from "./pages/org/OrgAuditLogs";
 import OrgDomains from "./pages/org/OrgDomains";
 import OrgHome from "./pages/org/OrgHome";
+import OrgIdentity from "./pages/org/OrgIdentity";
 import OrgLogs from "./pages/org/OrgLogs";
 import Playground from "./pages/playground/Playground";
 import NewPromptPage from "./pages/prompts/NewPrompt";
@@ -52,10 +53,16 @@ import Settings from "./pages/settings/Settings";
 import SlackAppsIndex, { SlackAppsRoot } from "./pages/slackapp/SlackApp";
 import TriggersIndex, { TriggersRoot } from "./pages/triggers/Triggers";
 import SlackAppDetailPage from "./pages/slackapp/SlackAppDetail";
+import SecurityOverview from "./pages/security/SecurityOverview";
+import PolicyCenter from "./pages/security/PolicyCenter";
 import Team from "./pages/team/Team";
 import AcceptInvite from "./pages/invite/AcceptInvite";
 import SourceDetails from "./pages/sources/SourceDetails";
-import { SourcesPage, SourcesRoot } from "./pages/sources/Sources";
+import {
+  AddFromCatalogGate,
+  SourcesPage,
+  SourcesRoot,
+} from "./pages/sources/Sources";
 import CustomTools, { CustomToolsRoot } from "./pages/toolBuilder/CustomTools";
 import {
   ToolBuilderNew,
@@ -233,7 +240,7 @@ const ROUTE_STRUCTURE = {
       addFromCatalog: {
         title: "Add from Catalog",
         url: "add-from-catalog",
-        component: CatalogRoot,
+        component: AddFromCatalogGate,
         indexComponent: Catalog,
       },
     },
@@ -296,6 +303,7 @@ const ROUTE_STRUCTURE = {
   environments: {
     title: "Environments",
     url: "environments",
+    icon: "blocks",
     component: EnvironmentsRoot,
     indexComponent: Environments,
     subPages: {
@@ -336,6 +344,18 @@ const ROUTE_STRUCTURE = {
     url: "observability",
     icon: "layout-dashboard",
     component: ObservabilityOverview,
+  },
+  riskOverview: {
+    title: "Risk Overview",
+    url: "risk-overview",
+    icon: "shield",
+    component: SecurityOverview,
+  },
+  policyCenter: {
+    title: "Policy Center",
+    url: "risk-policies",
+    icon: "shield-check",
+    component: PolicyCenter,
   },
   sdks: {
     title: "SDKs",
@@ -551,7 +571,8 @@ export const useRoutes = (overrides?: {
 
   const routes: RoutesWithGoTo = useMemo(
     () => addGoToToRoutes(ROUTE_STRUCTURE),
-    [location.pathname],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- addGoToToRoutes is stable in behavior; recompute only when pathname or slugs change
+    [location.pathname, orgSlug, projectSlug, navigate],
   );
 
   return routes;
@@ -602,6 +623,12 @@ const ORG_ROUTE_STRUCTURE = {
     icon: "history",
     component: OrgAuditLogs,
   },
+  identity: {
+    title: "Identity",
+    url: "identity",
+    icon: "fingerprint",
+    component: OrgIdentity,
+  },
   access: {
     title: "Roles & Permissions",
     url: "access",
@@ -650,7 +677,10 @@ const ORG_ROUTE_STRUCTURE = {
 type OrgRouteStructure = typeof ORG_ROUTE_STRUCTURE;
 type OrgRoutesWithGoTo = TransformRouteToGoTo<OrgRouteStructure>;
 
-export { ORG_ROUTE_STRUCTURE };
+/** The URL segments used by org-level routes (for redirect logic). */
+export const orgRoutePaths = Object.values(ORG_ROUTE_STRUCTURE)
+  .map((r) => r.url)
+  .filter(Boolean);
 
 export const useOrgRoutes = (): OrgRoutesWithGoTo => {
   const location = useLocation();
@@ -778,7 +808,8 @@ export const useOrgRoutes = (): OrgRoutesWithGoTo => {
 
   const routes: OrgRoutesWithGoTo = useMemo(
     () => addGoToToRoutes(ORG_ROUTE_STRUCTURE),
-    [location.pathname],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- addGoToToRoutes is stable in behavior; recompute only when pathname or slug change
+    [location.pathname, orgSlug, navigate],
   );
 
   return routes;

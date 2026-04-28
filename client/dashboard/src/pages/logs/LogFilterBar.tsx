@@ -18,6 +18,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   type ActiveLogFilter,
   OP_LABELS,
+  applyFilterAdd,
   parseOperatorSymbol,
   tryParseFilterExpression,
 } from "./log-filter-types";
@@ -123,15 +124,7 @@ export function LogFilterBar({
 
   const addFilter = useCallback(
     (path: string, op: Op, value?: string) => {
-      const newFilter = { id: crypto.randomUUID(), path, op, value };
-      // Replace any existing filter on the same path+op for equality to avoid
-      // impossible AND conditions (e.g. status_code = 404 AND status_code = 500).
-      // For != and ~ multiple filters on the same path are valid.
-      const rest =
-        op === Op.Eq || op === Op.In
-          ? filters.filter((f) => !(f.path === path && f.op === op))
-          : filters;
-      onChange([...rest, newFilter]);
+      onChange(applyFilterAdd(filters, { path, op, value }));
       onSearchInputChange("");
       resetFlow();
     },
@@ -154,12 +147,15 @@ export function LogFilterBar({
     focusMainInput();
   };
 
-  const handleOpSelect = (op: Op) => {
-    setSelectedOp(op);
-    setStep("value");
-    setFilterValue("");
-    onSearchInputChange("");
-  };
+  const handleOpSelect = useCallback(
+    (op: Op) => {
+      setSelectedOp(op);
+      setStep("value");
+      setFilterValue("");
+      onSearchInputChange("");
+    },
+    [onSearchInputChange],
+  );
 
   // Wraps the parent onSearchInputChange. During the operator step, if the
   // user types a recognised operator followed by a space (e.g. "!= ") we

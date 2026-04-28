@@ -1,6 +1,6 @@
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
-import { useEnvironments } from "@/pages/environments/Environments";
+import { useEnvironments } from "@/pages/environments/useEnvironments";
 import {
   Environment,
   ToolsetEnvironmentLink,
@@ -119,7 +119,7 @@ export function useAttachedEnvironmentForm({
 
   useEffect(() => {
     serverDataReceived(attachedEnvironmentQuery.data ?? null);
-  }, [attachedEnvironmentQuery.data]);
+  }, [attachedEnvironmentQuery.data, serverDataReceived]);
 
   const mutation = useMutation<ToolsetEnvironmentLink | null, Error, void>({
     mutationFn: async (): Promise<ToolsetEnvironmentLink | null> => {

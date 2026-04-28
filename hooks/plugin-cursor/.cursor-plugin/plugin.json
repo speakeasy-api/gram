@@ -2,7 +2,7 @@
   "name": "gram-hooks",
   "displayName": "Gram Hooks",
   "description": "Forward Cursor hooks to Gram for analytics, monitoring, and compliance",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "author": {
     "name": "Gram",
     "url": "https://getgram.ai"

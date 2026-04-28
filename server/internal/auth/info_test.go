@@ -1,12 +1,16 @@
 package auth_test
 
 import (
+	"context"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -86,7 +90,7 @@ func TestService_Info(t *testing.T) {
 			ID:                 "other-org-456",
 			Name:               "Other Organization",
 			Slug:               "other-org",
-			SsoConnectionID:    nil,
+			WorkosID:           nil,
 			UserWorkspaceSlugs: []string{"other-workspace"},
 		})
 		ctx, instance := newTestAuthService(t, userInfo)
@@ -312,7 +316,7 @@ func TestService_Info_AdminOrgRelationshipUpserted(t *testing.T) {
 				ID:                 "speakeasy-team-org-id",
 				Name:               "Speakeasy Team",
 				Slug:               "speakeasy-team",
-				SsoConnectionID:    nil,
+				WorkosID:           nil,
 				UserWorkspaceSlugs: []string{"speakeasy-workspace"},
 			},
 		},
@@ -368,6 +372,130 @@ func TestService_Info_AdminOrgRelationshipUpserted(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.True(t, exists, "expected org-user relationship to be upserted by Info call")
+}
+
+func TestService_Info_ProjectFiltering(t *testing.T) {
+	t.Parallel()
+
+	// setupInfoCtx is a small helper that creates the user, org, session and
+	// auth context needed to call Info. It returns the ready-to-use context.
+	setupInfoCtx := func(t *testing.T, instance *testInstance, userInfo *MockUserInfo) context.Context {
+		t.Helper()
+		ctx := t.Context()
+
+		err := instance.createTestUser(ctx, userInfo)
+		require.NoError(t, err)
+		err = instance.createTestOrganization(ctx, userInfo.Organizations[0])
+		require.NoError(t, err)
+
+		session := sessions.Session{
+			SessionID:            "filter-test-session",
+			UserID:               userInfo.UserID,
+			ActiveOrganizationID: userInfo.Organizations[0].ID,
+		}
+		err = instance.sessionManager.StoreSession(ctx, session)
+		require.NoError(t, err)
+
+		return contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{
+			SessionID:            &session.SessionID,
+			UserID:               session.UserID,
+			ActiveOrganizationID: session.ActiveOrganizationID,
+			AccountType:          "test",
+			Email:                &userInfo.Email,
+		})
+	}
+
+	t.Run("authz filters disallowed projects", func(t *testing.T) {
+		t.Parallel()
+
+		userInfo := defaultMockUserInfo()
+		_, instance := newTestAuthServiceWithAuthz(t, userInfo)
+		ctx := setupInfoCtx(t, instance, userInfo)
+
+		orgID := userInfo.Organizations[0].ID
+		p1, err := instance.createTestProject(ctx, orgID, "ProjectA", "project-a")
+		require.NoError(t, err)
+		p2, err := instance.createTestProject(ctx, orgID, "ProjectB", "project-b")
+		require.NoError(t, err)
+
+		ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeProjectRead, Selector: authz.NewSelector(authz.ScopeProjectRead, p1.ID.String())})
+
+		result, err := instance.service.Info(ctx, &gen.InfoPayload{})
+		require.NoError(t, err)
+		require.Len(t, result.Organizations, 1)
+		require.Len(t, result.Organizations[0].Projects, 1)
+		assert.Equal(t, p1.ID.String(), result.Organizations[0].Projects[0].ID)
+		assert.NotEqual(t, p2.ID.String(), result.Organizations[0].Projects[0].ID)
+	})
+
+	t.Run("wildcard grant allows all projects", func(t *testing.T) {
+		t.Parallel()
+
+		userInfo := defaultMockUserInfo()
+		userInfo.UserID = "filter-all-user"
+		userInfo.Email = "filterall@example.com"
+		userInfo.Organizations[0].ID = "filter-all-org"
+		_, instance := newTestAuthServiceWithAuthz(t, userInfo)
+		ctx := setupInfoCtx(t, instance, userInfo)
+
+		orgID := userInfo.Organizations[0].ID
+		_, err := instance.createTestProject(ctx, orgID, "ProjX", "proj-x")
+		require.NoError(t, err)
+		_, err = instance.createTestProject(ctx, orgID, "ProjY", "proj-y")
+		require.NoError(t, err)
+
+		ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeProjectRead, Selector: authz.NewSelector(authz.ScopeProjectRead, authz.WildcardResource)})
+
+		result, err := instance.service.Info(ctx, &gen.InfoPayload{})
+		require.NoError(t, err)
+
+		assert.Len(t, result.Organizations[0].Projects, 2)
+	})
+
+	t.Run("empty grants remove all projects", func(t *testing.T) {
+		t.Parallel()
+
+		userInfo := defaultMockUserInfo()
+		userInfo.UserID = "filter-none-user"
+		userInfo.Email = "filternone@example.com"
+		userInfo.Organizations[0].ID = "filter-none-org"
+		_, instance := newTestAuthServiceWithAuthz(t, userInfo)
+		ctx := setupInfoCtx(t, instance, userInfo)
+
+		orgID := userInfo.Organizations[0].ID
+		_, err := instance.createTestProject(ctx, orgID, "Hidden", "hidden")
+		require.NoError(t, err)
+
+		ctx = authztest.WithExactGrants(t, ctx)
+
+		result, err := instance.service.Info(ctx, &gen.InfoPayload{})
+		require.NoError(t, err)
+
+		assert.Empty(t, result.Organizations[0].Projects)
+	})
+
+	t.Run("missing grants error propagates", func(t *testing.T) {
+		t.Parallel()
+
+		userInfo := defaultMockUserInfo()
+		userInfo.UserID = "filter-err-user"
+		userInfo.Email = "filtererr@example.com"
+		userInfo.Organizations[0].ID = "filter-err-org"
+		_, instance := newTestAuthServiceWithAuthz(t, userInfo)
+		ctx := setupInfoCtx(t, instance, userInfo)
+		authCtx, ok := contextvalues.GetAuthContext(ctx)
+		require.True(t, ok)
+		authCtx.AccountType = "enterprise"
+		ctx = contextvalues.SetAuthContext(ctx, authCtx)
+
+		orgID := userInfo.Organizations[0].ID
+		_, err := instance.createTestProject(ctx, orgID, "Proj", "proj")
+		require.NoError(t, err)
+
+		result, err := instance.service.Info(ctx, &gen.InfoPayload{})
+		require.ErrorIs(t, err, authz.ErrMissingGrants)
+		require.Nil(t, result)
+	})
 }
 
 // TestService_Info_AdminVisitingCustomerOrgDoesNotUpsertRelationship verifies that

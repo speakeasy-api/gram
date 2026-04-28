@@ -18,15 +18,14 @@ import (
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
 
-	genAuth "github.com/speakeasy-api/gram/server/gen/auth"
 	srv "github.com/speakeasy-api/gram/server/gen/http/projects/server"
 	gen "github.com/speakeasy-api/gram/server/gen/projects"
 	"github.com/speakeasy-api/gram/server/gen/types"
-	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	envrepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
@@ -45,12 +44,12 @@ type Service struct {
 	envRepo  *envrepo.Queries
 	sessions *sessions.Manager
 	auth     *auth.Auth
-	access   *access.Manager
+	authz    *authz.Engine
 }
 
 var _ gen.Service = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, accessManager *access.Manager) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, authzEngine *authz.Engine) *Service {
 	logger = logger.With(attr.SlogComponent("projects"))
 
 	return &Service{
@@ -60,8 +59,8 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		repo:     repo.New(db),
 		envRepo:  envrepo.New(db),
 		sessions: sessions,
-		auth:     auth.New(logger, db, sessions, accessManager),
-		access:   accessManager,
+		auth:     auth.New(logger, db, sessions, authzEngine),
+		authz:    authzEngine,
 	}
 }
 
@@ -97,7 +96,7 @@ func (s *Service) GetProject(ctx context.Context, payload *gen.GetProjectPayload
 		return nil, oops.E(oops.CodeUnexpected, err, "error getting project by slug").Log(ctx, s.logger, attr.SlogProjectSlug(slug), attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
 	}
 
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeBuildRead, ResourceID: proj.ID.String()}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: proj.ID.String(), Dimensions: nil}); err != nil {
 		var shareableErr *oops.ShareableError
 		if errors.As(err, &shareableErr) && shareableErr.Code == oops.CodeForbidden {
 			return nil, oops.C(oops.CodeNotFound)
@@ -128,7 +127,7 @@ func (s *Service) CreateProject(ctx context.Context, payload *gen.CreateProjectP
 		return nil, oops.E(oops.CodeForbidden, nil, "organization does not match active organization context")
 	}
 
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgAdmin, ResourceID: payload.OrganizationID}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: payload.OrganizationID, Dimensions: nil}); err != nil {
 		return nil, err
 	}
 
@@ -137,7 +136,7 @@ func (s *Service) CreateProject(ctx context.Context, payload *gen.CreateProjectP
 		return nil, fmt.Errorf("get session user info: %w", err)
 	}
 
-	if orgIdx := slices.IndexFunc(userInfo.Organizations, func(org genAuth.OrganizationEntry) bool {
+	if orgIdx := slices.IndexFunc(userInfo.Organizations, func(org sessions.Organization) bool {
 		return org.ID == payload.OrganizationID
 	}); orgIdx == -1 {
 		return nil, oops.C(oops.CodeForbidden)
@@ -227,7 +226,7 @@ func (s *Service) ListProjects(ctx context.Context, payload *gen.ListProjectsPay
 		return nil, fmt.Errorf("get session user info: %w", err)
 	}
 
-	if orgIdx := slices.IndexFunc(userInfo.Organizations, func(org genAuth.OrganizationEntry) bool {
+	if orgIdx := slices.IndexFunc(userInfo.Organizations, func(org sessions.Organization) bool {
 		return org.ID == payload.OrganizationID
 	}); orgIdx == -1 {
 		return nil, oops.C(oops.CodeForbidden)
@@ -247,7 +246,7 @@ func (s *Service) ListProjects(ctx context.Context, payload *gen.ListProjectsPay
 		projectIDs = append(projectIDs, project.ID.String())
 	}
 
-	allowedProjectIDs, err := s.access.Filter(ctx, access.ScopeBuildRead, projectIDs)
+	allowedProjectIDs, err := s.authz.Filter(ctx, authz.ScopeProjectRead, projectIDs)
 	if err != nil {
 		return nil, err
 	}
@@ -281,7 +280,7 @@ func (s *Service) SetLogo(ctx context.Context, payload *gen.SetLogoPayload) (res
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeBuildWrite, ResourceID: authCtx.ProjectID.String()}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
 		return nil, err
 	}
 
@@ -347,7 +346,7 @@ func (s *Service) ListAllowedOrigins(ctx context.Context, payload *gen.ListAllow
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeBuildRead, ResourceID: authCtx.ProjectID.String()}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
 		return nil, err
 	}
 
@@ -379,7 +378,7 @@ func (s *Service) UpsertAllowedOrigin(ctx context.Context, payload *gen.UpsertAl
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeBuildWrite, ResourceID: authCtx.ProjectID.String()}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
 		return nil, err
 	}
 
@@ -421,7 +420,7 @@ func (s *Service) DeleteProject(ctx context.Context, payload *gen.DeleteProjectP
 		return oops.E(oops.CodeInvalid, err, "invalid project id").Log(ctx, s.logger)
 	}
 
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeOrgAdmin, ResourceID: authCtx.ActiveOrganizationID}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
 		return err
 	}
 

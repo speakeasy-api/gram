@@ -33,6 +33,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -167,7 +168,7 @@ type Service struct {
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, serverURL *url.URL, siteURL *url.URL, cacheAdapter cache.Cache, accessLoader auth.AccessLoader) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, serverURL *url.URL, siteURL *url.URL, cacheAdapter cache.Cache, authzEngine *authz.Engine) *Service {
 	logger = logger.With(attr.SlogComponent("mcp_metadata"))
 
 	// Calculate content hash for install page script (for cache busting)
@@ -182,7 +183,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		toolsetRepo:  toolsets_repo.New(db),
 		orgsRepo:     organizations_repo.New(db),
 		domainsRepo:  customdomains_repo.New(db),
-		auth:         auth.New(logger, db, sessions, accessLoader),
+		auth:         auth.New(logger, db, sessions, authzEngine),
 		serverURL:    serverURL,
 		siteURL:      siteURL,
 		toolsetCache: cache.NewTypedObjectCache[mv.ToolsetBaseContents](logger.With(attr.SlogCacheNamespace("toolset")), cacheAdapter, cache.SuffixNone),
@@ -218,9 +219,9 @@ func (s *Service) GetMcpMetadata(ctx context.Context, payload *gen.GetMcpMetadat
 	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return nil, oops.E(oops.CodeBadRequest, err, "toolset not found").Log(ctx, s.logger, slog.String("toolset_slug", string(payload.ToolsetSlug)))
+		return nil, oops.E(oops.CodeBadRequest, err, "toolset not found").Log(ctx, s.logger, attr.SlogToolsetSlug(string(payload.ToolsetSlug)))
 	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to fetch toolset").Log(ctx, s.logger, slog.String("toolset_slug", string(payload.ToolsetSlug)))
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to fetch toolset").Log(ctx, s.logger, attr.SlogToolsetSlug(string(payload.ToolsetSlug)))
 	}
 
 	record, err := s.repo.GetMetadataForToolset(ctx, toolset.ID)
@@ -267,9 +268,9 @@ func (s *Service) SetMcpMetadata(ctx context.Context, payload *gen.SetMcpMetadat
 	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return nil, oops.E(oops.CodeBadRequest, err, "toolset not found").Log(ctx, logger, slog.String("toolset_slug", string(payload.ToolsetSlug)))
+		return nil, oops.E(oops.CodeBadRequest, err, "toolset not found").Log(ctx, logger, attr.SlogToolsetSlug(string(payload.ToolsetSlug)))
 	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to fetch toolset").Log(ctx, logger, slog.String("toolset_slug", string(payload.ToolsetSlug)))
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to fetch toolset").Log(ctx, logger, attr.SlogToolsetSlug(string(payload.ToolsetSlug)))
 	}
 
 	logger = logger.With(

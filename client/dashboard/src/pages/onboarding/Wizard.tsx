@@ -12,7 +12,8 @@ import { Input } from "@/components/ui/input";
 import { SkeletonParagraph } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { Type } from "@/components/ui/type";
-import { AsciiVideo, useWebGLStore } from "@/components/webgl";
+import { AsciiVideo } from "@/components/webgl";
+import { useWebGLStore } from "@/components/webgl/store";
 import { useOrganization, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
@@ -50,8 +51,9 @@ import { AnimatePresence, motion, useMotionValue } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import { toast } from "sonner";
-import { useMcpSlugValidation } from "../mcp/MCPDetails";
-import { DeploymentLogs, useUploadOpenAPISteps } from "./UploadOpenAPI";
+import { useMcpSlugValidation } from "../mcp/mcp-details-utils";
+import { DeploymentLogs } from "./UploadOpenAPI";
+import { useUploadOpenAPISteps } from "./upload-openapi-utils";
 
 type OnboardingPath = "openapi" | "cli";
 type OnboardingStep =
@@ -1126,18 +1128,19 @@ const DefaultLogo = () => (
   </motion.div>
 );
 
+const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+
 const TerminalSpinner = () => {
-  const spinnerFrames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
   const [frame, setFrame] = useState(0);
 
   useEffect(() => {
     const interval = setInterval(() => {
-      setFrame((prev) => (prev + 1) % spinnerFrames.length);
+      setFrame((prev) => (prev + 1) % SPINNER_FRAMES.length);
     }, 80);
     return () => clearInterval(interval);
   }, []);
 
-  return <span className="text-primary">{spinnerFrames[frame]}</span>;
+  return <span className="text-primary">{SPINNER_FRAMES[frame]}</span>;
 };
 
 const TerminalAnimationWithLogs = () => {
@@ -1207,6 +1210,7 @@ export default gram;`;
   // Initialize editor with MCP code
   useEffect(() => {
     setEditorCode(mcpCode);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on mount
   }, []);
 
   // Animate logs appearing one by one
@@ -1271,6 +1275,7 @@ export default gram;`;
     });
 
     return () => timers.forEach(clearTimeout);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mcpCode and greetCode are stable string constants defined in the component
   }, [animationKey, hasMoved]);
 
   // Check for actual tools deployment

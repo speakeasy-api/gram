@@ -1,9 +1,11 @@
 import { Page } from "@/components/page-layout";
+import { RequireScope } from "@/components/require-scope";
 import { DotTable } from "@/components/ui/dot-table";
-import { useViewMode, ViewToggle } from "@/components/ui/view-toggle";
+import { ViewToggle } from "@/components/ui/view-toggle";
+import { useViewMode } from "@/components/ui/use-view-mode";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
-import { useInfiniteListMCPCatalog } from "@/pages/catalog/hooks";
+import { useCatalogIconMap, useDeploymentIsEmpty } from "./sources-hooks";
 import { useRoutes } from "@/routes";
 import {
   useLatestDeployment,
@@ -61,37 +63,6 @@ const useDialogStore = create<DialogStore>((set) => ({
   openViewAsset: (asset) => set({ dialogState: { type: "view-asset", asset } }),
   closeDialog: () => set({ dialogState: { type: "closed" } }),
 }));
-
-export function useDeploymentIsEmpty() {
-  const { data: deploymentResult, isLoading } = useLatestDeployment();
-  const deployment = deploymentResult?.deployment;
-
-  if (isLoading) {
-    return false;
-  }
-
-  return (
-    !deployment ||
-    (deployment.openapiv3Assets.length === 0 &&
-      (deployment.functionsAssets?.length ?? 0) === 0 &&
-      deployment.packages.length === 0 &&
-      (deployment.externalMcps?.length ?? 0) === 0)
-  );
-}
-
-export const useCatalogIconMap = () => {
-  const { data: catalogData } = useInfiniteListMCPCatalog();
-  return useMemo(() => {
-    if (!catalogData?.pages) {
-      return new Map<string, string>();
-    }
-    return new Map(
-      catalogData.pages.flatMap((page) =>
-        page.servers.map((s) => [s.registrySpecifier, s.iconUrl!]),
-      ),
-    );
-  }, [catalogData]);
-};
 
 export default function Sources() {
   const client = useSdkClient();
@@ -264,65 +235,71 @@ export default function Sources() {
           <DeploymentsButton deploymentId={deployment?.id} />
         </Page.Section.CTA>
         <Page.Section.CTA>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="secondary">
-                <Button.LeftIcon>
-                  <Plus className="h-4 w-4" />
-                </Button.LeftIcon>
-                <Button.Text>Add Source</Button.Text>
-                <Button.RightIcon>
-                  <ChevronDown className="h-4 w-4" />
-                </Button.RightIcon>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-[320px] p-1">
-              <DropdownMenuItem
-                onSelect={() => routes.sources.addOpenAPI.goTo()}
-                className="flex cursor-pointer items-start gap-3 rounded-md p-2"
-              >
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-500/10 dark:bg-blue-500/20">
-                  <FileCode className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                </div>
-                <div className="flex flex-col gap-0.5">
-                  <span className="font-medium">From your API</span>
-                  <span className="text-muted-foreground text-xs">
-                    Upload an OpenAPI spec to generate tools
-                  </span>
-                </div>
-              </DropdownMenuItem>
-              {isFunctionsEnabled && (
-                <DropdownMenuItem
-                  onSelect={() => routes.sources.addFunction.goTo()}
-                  className="flex cursor-pointer items-start gap-3 rounded-md p-2"
-                >
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 dark:bg-emerald-500/20">
-                    <Code className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
-                  </div>
-                  <div className="flex flex-col gap-0.5">
-                    <span className="font-medium">Write custom code</span>
-                    <span className="text-muted-foreground text-xs">
-                      Create tools with TypeScript functions
-                    </span>
-                  </div>
-                </DropdownMenuItem>
-              )}
-              <DropdownMenuItem
-                onSelect={() => routes.sources.addFromCatalog.goTo()}
-                className="flex cursor-pointer items-start gap-3 rounded-md p-2"
-              >
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-violet-500/10 dark:bg-violet-500/20">
-                  <Server className="h-5 w-5 text-violet-600 dark:text-violet-400" />
-                </div>
-                <div className="flex flex-col gap-0.5">
-                  <span className="font-medium">Third party server</span>
-                  <span className="text-muted-foreground text-xs">
-                    Add pre-built servers from the catalog
-                  </span>
-                </div>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <RequireScope scope="project:write" level="component">
+            {({ disabled }) => (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild disabled={disabled}>
+                  <Button variant="secondary">
+                    <Button.LeftIcon>
+                      <Plus className="h-4 w-4" />
+                    </Button.LeftIcon>
+                    <Button.Text>Add Source</Button.Text>
+                    <Button.RightIcon>
+                      <ChevronDown className="h-4 w-4" />
+                    </Button.RightIcon>
+                  </Button>
+                </DropdownMenuTrigger>
+                {!disabled && (
+                  <DropdownMenuContent align="end" className="w-[320px] p-1">
+                    <DropdownMenuItem
+                      onSelect={() => routes.sources.addOpenAPI.goTo()}
+                      className="flex cursor-pointer items-start gap-3 rounded-md p-2"
+                    >
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-500/10 dark:bg-blue-500/20">
+                        <FileCode className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                      </div>
+                      <div className="flex flex-col gap-0.5">
+                        <span className="font-medium">From your API</span>
+                        <span className="text-muted-foreground text-xs">
+                          Upload an OpenAPI spec to generate tools
+                        </span>
+                      </div>
+                    </DropdownMenuItem>
+                    {isFunctionsEnabled && (
+                      <DropdownMenuItem
+                        onSelect={() => routes.sources.addFunction.goTo()}
+                        className="flex cursor-pointer items-start gap-3 rounded-md p-2"
+                      >
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 dark:bg-emerald-500/20">
+                          <Code className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                        </div>
+                        <div className="flex flex-col gap-0.5">
+                          <span className="font-medium">Write custom code</span>
+                          <span className="text-muted-foreground text-xs">
+                            Create tools with TypeScript functions
+                          </span>
+                        </div>
+                      </DropdownMenuItem>
+                    )}
+                    <DropdownMenuItem
+                      onSelect={() => routes.sources.addFromCatalog.goTo()}
+                      className="flex cursor-pointer items-start gap-3 rounded-md p-2"
+                    >
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-violet-500/10 dark:bg-violet-500/20">
+                        <Server className="h-5 w-5 text-violet-600 dark:text-violet-400" />
+                      </div>
+                      <div className="flex flex-col gap-0.5">
+                        <span className="font-medium">Third party server</span>
+                        <span className="text-muted-foreground text-xs">
+                          Add pre-built servers from the catalog
+                        </span>
+                      </div>
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                )}
+              </DropdownMenu>
+            )}
+          </RequireScope>
         </Page.Section.CTA>
         <Page.Section.Body>
           {isLoading ? (

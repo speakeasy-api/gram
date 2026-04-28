@@ -3,8 +3,8 @@ import { useLatestDeployment } from "@gram/client/react-query";
 import { Button, Input, Stack } from "@speakeasy-api/moonshine";
 import React from "react";
 import { Type } from "../ui/type";
-import { useStep } from "./step";
-import { useStepper } from "./stepper";
+import { useStep } from "./step/use-step";
+import { useStepper } from "./stepper/use-stepper";
 
 export default function NameDeploymentStep() {
   const stepper = useStepper();
@@ -19,7 +19,7 @@ export default function NameDeploymentStep() {
       const name = stepper.meta.current.file.name.replace(/\.[^/.]+$/, "");
       setValue(slugify(name));
     }
-  }, [step.isCurrentStep]);
+  }, [step.isCurrentStep, stepper.meta]);
 
   const validation = React.useMemo<string | null>(() => {
     if (!value) return "API name is required";

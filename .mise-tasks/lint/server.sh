@@ -12,4 +12,9 @@ if [ "${usage_long:-false}" = "true" ]; then
     args=()
 fi
 
-exec golangci-lint run --max-issues-per-linter=0 "${args[@]}" ./...
+if [ ! -x ./bin/gcl ] || [ -n "$(find ../glint .custom-gcl.yml ../go.mod ../go.sum -newer ./bin/gcl -type f 2>/dev/null)" ]; then
+    golangci-lint custom --destination ./bin --name gcl
+    ./bin/gcl cache clean
+fi
+
+exec ./bin/gcl run --max-issues-per-linter=0 "${args[@]}" ./...

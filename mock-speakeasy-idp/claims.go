@@ -39,6 +39,7 @@ func deriveOrgs(claims *OidcClaims) []organization {
 				UpdatedAt:          now,
 				AccountType:        "free",
 				SSOConnectionID:    &workosOrgID,
+				WorkOSID:           &workosOrgID,
 				UserWorkspaceSlugs: []string{},
 			},
 		}
@@ -55,6 +56,7 @@ func deriveOrgs(claims *OidcClaims) []organization {
 				CreatedAt:          now,
 				UpdatedAt:          now,
 				AccountType:        "free",
+				WorkOSID:           nil,
 				UserWorkspaceSlugs: []string{},
 			})
 		}
@@ -78,6 +80,7 @@ func deriveOrgs(claims *OidcClaims) []organization {
 			CreatedAt:          now,
 			UpdatedAt:          now,
 			AccountType:        "free",
+			WorkOSID:           nil,
 			UserWorkspaceSlugs: []string{},
 		},
 	}

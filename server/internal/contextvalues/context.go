@@ -26,6 +26,7 @@ type AuthContext struct {
 }
 
 type RequestContext struct {
+	ReqID       string
 	ReqURL      string
 	Host        string
 	Method      string
@@ -40,6 +41,7 @@ const (
 	AdminOverrideContextKey     contextKey = "adminOverrideKey"
 	RequestContextKey           contextKey = "requestContextKey"
 	RBACScopeOverrideContextKey contextKey = "rbacScopeOverrideKey"
+	AssistantPrincipalKey       contextKey = "assistantPrincipalKey"
 )
 
 func SetSessionTokenInContext(ctx context.Context, value string) context.Context {
@@ -85,4 +87,23 @@ func SetRBACScopeOverride(ctx context.Context, value string) context.Context {
 func GetRBACScopeOverride(ctx context.Context) (string, bool) {
 	value, ok := ctx.Value(RBACScopeOverrideContextKey).(string)
 	return value, ok && value != ""
+}
+
+// AssistantPrincipal marks an auth context that was established via an
+// assistant runtime token. It signals to RBAC that grants should be loaded
+// and enforced against the assistant's owning user (stamped as UserID on
+// the AuthContext) rather than being skipped as they would be for a non-
+// session request.
+type AssistantPrincipal struct {
+	AssistantID uuid.UUID
+	ThreadID    uuid.UUID
+}
+
+func SetAssistantPrincipal(ctx context.Context, value AssistantPrincipal) context.Context {
+	return context.WithValue(ctx, AssistantPrincipalKey, value)
+}
+
+func GetAssistantPrincipal(ctx context.Context) (AssistantPrincipal, bool) {
+	value, ok := ctx.Value(AssistantPrincipalKey).(AssistantPrincipal)
+	return value, ok
 }

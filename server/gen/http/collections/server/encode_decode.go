@@ -58,9 +58,8 @@ func DecodeCreateRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.
 		}
 
 		var (
-			sessionToken     *string
-			apikeyToken      *string
-			projectSlugInput *string
+			sessionToken *string
+			apikeyToken  *string
 		)
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
@@ -70,23 +69,12 @@ func DecodeCreateRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.
 		if apikeyTokenRaw != "" {
 			apikeyToken = &apikeyTokenRaw
 		}
-		projectSlugInputRaw := r.Header.Get("Gram-Project")
-		if projectSlugInputRaw != "" {
-			projectSlugInput = &projectSlugInputRaw
-		}
-		payload = NewCreatePayload(&body, sessionToken, apikeyToken, projectSlugInput)
+		payload = NewCreatePayload(&body, sessionToken, apikeyToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
 				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
 				payload.SessionToken = &cred
-			}
-		}
-		if payload.ProjectSlugInput != nil {
-			if strings.Contains(*payload.ProjectSlugInput, " ") {
-				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
-				payload.ProjectSlugInput = &cred
 			}
 		}
 		if payload.ApikeyToken != nil {
@@ -275,9 +263,8 @@ func DecodeListRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.De
 	return func(r *http.Request) (*collections.ListPayload, error) {
 		var payload *collections.ListPayload
 		var (
-			sessionToken     *string
-			apikeyToken      *string
-			projectSlugInput *string
+			sessionToken *string
+			apikeyToken  *string
 		)
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
@@ -287,23 +274,12 @@ func DecodeListRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.De
 		if apikeyTokenRaw != "" {
 			apikeyToken = &apikeyTokenRaw
 		}
-		projectSlugInputRaw := r.Header.Get("Gram-Project")
-		if projectSlugInputRaw != "" {
-			projectSlugInput = &projectSlugInputRaw
-		}
-		payload = NewListPayload(sessionToken, apikeyToken, projectSlugInput)
+		payload = NewListPayload(sessionToken, apikeyToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
 				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
 				payload.SessionToken = &cred
-			}
-		}
-		if payload.ProjectSlugInput != nil {
-			if strings.Contains(*payload.ProjectSlugInput, " ") {
-				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
-				payload.ProjectSlugInput = &cred
 			}
 		}
 		if payload.ApikeyToken != nil {
@@ -512,9 +488,8 @@ func DecodeUpdateRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.
 		}
 
 		var (
-			sessionToken     *string
-			apikeyToken      *string
-			projectSlugInput *string
+			sessionToken *string
+			apikeyToken  *string
 		)
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
@@ -524,23 +499,12 @@ func DecodeUpdateRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.
 		if apikeyTokenRaw != "" {
 			apikeyToken = &apikeyTokenRaw
 		}
-		projectSlugInputRaw := r.Header.Get("Gram-Project")
-		if projectSlugInputRaw != "" {
-			projectSlugInput = &projectSlugInputRaw
-		}
-		payload = NewUpdatePayload(&body, sessionToken, apikeyToken, projectSlugInput)
+		payload = NewUpdatePayload(&body, sessionToken, apikeyToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
 				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
 				payload.SessionToken = &cred
-			}
-		}
-		if payload.ProjectSlugInput != nil {
-			if strings.Contains(*payload.ProjectSlugInput, " ") {
-				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
-				payload.ProjectSlugInput = &cred
 			}
 		}
 		if payload.ApikeyToken != nil {
@@ -726,11 +690,10 @@ func DecodeDeleteRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.
 	return func(r *http.Request) (*collections.DeletePayload, error) {
 		var payload *collections.DeletePayload
 		var (
-			collectionID     string
-			sessionToken     *string
-			apikeyToken      *string
-			projectSlugInput *string
-			err              error
+			collectionID string
+			sessionToken *string
+			apikeyToken  *string
+			err          error
 		)
 		collectionID = r.URL.Query().Get("collection_id")
 		if collectionID == "" {
@@ -745,26 +708,15 @@ func DecodeDeleteRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.
 		if apikeyTokenRaw != "" {
 			apikeyToken = &apikeyTokenRaw
 		}
-		projectSlugInputRaw := r.Header.Get("Gram-Project")
-		if projectSlugInputRaw != "" {
-			projectSlugInput = &projectSlugInputRaw
-		}
 		if err != nil {
 			return payload, err
 		}
-		payload = NewDeletePayload(collectionID, sessionToken, apikeyToken, projectSlugInput)
+		payload = NewDeletePayload(collectionID, sessionToken, apikeyToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
 				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
 				payload.SessionToken = &cred
-			}
-		}
-		if payload.ProjectSlugInput != nil {
-			if strings.Contains(*payload.ProjectSlugInput, " ") {
-				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
-				payload.ProjectSlugInput = &cred
 			}
 		}
 		if payload.ApikeyToken != nil {
@@ -973,9 +925,8 @@ func DecodeAttachServerRequest(mux goahttp.Muxer, decoder func(*http.Request) go
 		}
 
 		var (
-			sessionToken     *string
-			apikeyToken      *string
-			projectSlugInput *string
+			sessionToken *string
+			apikeyToken  *string
 		)
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
@@ -985,23 +936,12 @@ func DecodeAttachServerRequest(mux goahttp.Muxer, decoder func(*http.Request) go
 		if apikeyTokenRaw != "" {
 			apikeyToken = &apikeyTokenRaw
 		}
-		projectSlugInputRaw := r.Header.Get("Gram-Project")
-		if projectSlugInputRaw != "" {
-			projectSlugInput = &projectSlugInputRaw
-		}
-		payload = NewAttachServerPayload(&body, sessionToken, apikeyToken, projectSlugInput)
+		payload = NewAttachServerPayload(&body, sessionToken, apikeyToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
 				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
 				payload.SessionToken = &cred
-			}
-		}
-		if payload.ProjectSlugInput != nil {
-			if strings.Contains(*payload.ProjectSlugInput, " ") {
-				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
-				payload.ProjectSlugInput = &cred
 			}
 		}
 		if payload.ApikeyToken != nil {
@@ -1207,9 +1147,8 @@ func DecodeDetachServerRequest(mux goahttp.Muxer, decoder func(*http.Request) go
 		}
 
 		var (
-			sessionToken     *string
-			apikeyToken      *string
-			projectSlugInput *string
+			sessionToken *string
+			apikeyToken  *string
 		)
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
@@ -1219,23 +1158,12 @@ func DecodeDetachServerRequest(mux goahttp.Muxer, decoder func(*http.Request) go
 		if apikeyTokenRaw != "" {
 			apikeyToken = &apikeyTokenRaw
 		}
-		projectSlugInputRaw := r.Header.Get("Gram-Project")
-		if projectSlugInputRaw != "" {
-			projectSlugInput = &projectSlugInputRaw
-		}
-		payload = NewDetachServerPayload(&body, sessionToken, apikeyToken, projectSlugInput)
+		payload = NewDetachServerPayload(&body, sessionToken, apikeyToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
 				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
 				payload.SessionToken = &cred
-			}
-		}
-		if payload.ProjectSlugInput != nil {
-			if strings.Contains(*payload.ProjectSlugInput, " ") {
-				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
-				payload.ProjectSlugInput = &cred
 			}
 		}
 		if payload.ApikeyToken != nil {
@@ -1424,11 +1352,10 @@ func DecodeListServersRequest(mux goahttp.Muxer, decoder func(*http.Request) goa
 	return func(r *http.Request) (*collections.ListServersPayload, error) {
 		var payload *collections.ListServersPayload
 		var (
-			collectionSlug   string
-			sessionToken     *string
-			apikeyToken      *string
-			projectSlugInput *string
-			err              error
+			collectionSlug string
+			sessionToken   *string
+			apikeyToken    *string
+			err            error
 		)
 		collectionSlug = r.URL.Query().Get("collection_slug")
 		if collectionSlug == "" {
@@ -1442,26 +1369,15 @@ func DecodeListServersRequest(mux goahttp.Muxer, decoder func(*http.Request) goa
 		if apikeyTokenRaw != "" {
 			apikeyToken = &apikeyTokenRaw
 		}
-		projectSlugInputRaw := r.Header.Get("Gram-Project")
-		if projectSlugInputRaw != "" {
-			projectSlugInput = &projectSlugInputRaw
-		}
 		if err != nil {
 			return payload, err
 		}
-		payload = NewListServersPayload(collectionSlug, sessionToken, apikeyToken, projectSlugInput)
+		payload = NewListServersPayload(collectionSlug, sessionToken, apikeyToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
 				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
 				payload.SessionToken = &cred
-			}
-		}
-		if payload.ProjectSlugInput != nil {
-			if strings.Contains(*payload.ProjectSlugInput, " ") {
-				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
-				payload.ProjectSlugInput = &cred
 			}
 		}
 		if payload.ApikeyToken != nil {
@@ -1655,6 +1571,7 @@ func marshalTypesExternalMCPServerToExternalMCPServerResponseBody(v *types.Exter
 		RegistrySpecifier:                   v.RegistrySpecifier,
 		Version:                             v.Version,
 		Description:                         v.Description,
+		ToolsetID:                           v.ToolsetID,
 		RegistryID:                          v.RegistryID,
 		OrganizationMcpCollectionRegistryID: v.OrganizationMcpCollectionRegistryID,
 		Title:                               v.Title,
@@ -1712,6 +1629,68 @@ func marshalTypesExternalMCPRemoteToExternalMCPRemoteResponseBody(v *types.Exter
 	res := &ExternalMCPRemoteResponseBody{
 		URL:           v.URL,
 		TransportType: v.TransportType,
+	}
+	if v.Headers != nil {
+		res.Headers = make([]*ExternalMCPRemoteHeaderResponseBody, len(v.Headers))
+		for i, val := range v.Headers {
+			if val == nil {
+				res.Headers[i] = nil
+				continue
+			}
+			res.Headers[i] = marshalTypesExternalMCPRemoteHeaderToExternalMCPRemoteHeaderResponseBody(val)
+		}
+	}
+	if v.Variables != nil {
+		res.Variables = make(map[string]*ExternalMCPRemoteVariableResponseBody, len(v.Variables))
+		for key, val := range v.Variables {
+			tk := key
+			if val == nil {
+				res.Variables[tk] = nil
+				continue
+			}
+			res.Variables[tk] = marshalTypesExternalMCPRemoteVariableToExternalMCPRemoteVariableResponseBody(val)
+		}
+	}
+
+	return res
+}
+
+// marshalTypesExternalMCPRemoteHeaderToExternalMCPRemoteHeaderResponseBody
+// builds a value of type *ExternalMCPRemoteHeaderResponseBody from a value of
+// type *types.ExternalMCPRemoteHeader.
+func marshalTypesExternalMCPRemoteHeaderToExternalMCPRemoteHeaderResponseBody(v *types.ExternalMCPRemoteHeader) *ExternalMCPRemoteHeaderResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &ExternalMCPRemoteHeaderResponseBody{
+		Name:        v.Name,
+		Description: v.Description,
+		IsSecret:    v.IsSecret,
+		IsRequired:  v.IsRequired,
+		Placeholder: v.Placeholder,
+	}
+
+	return res
+}
+
+// marshalTypesExternalMCPRemoteVariableToExternalMCPRemoteVariableResponseBody
+// builds a value of type *ExternalMCPRemoteVariableResponseBody from a value
+// of type *types.ExternalMCPRemoteVariable.
+func marshalTypesExternalMCPRemoteVariableToExternalMCPRemoteVariableResponseBody(v *types.ExternalMCPRemoteVariable) *ExternalMCPRemoteVariableResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &ExternalMCPRemoteVariableResponseBody{
+		Description: v.Description,
+		IsRequired:  v.IsRequired,
+		IsSecret:    v.IsSecret,
+		Default:     v.Default,
+	}
+	if v.Choices != nil {
+		res.Choices = make([]string, len(v.Choices))
+		for i, val := range v.Choices {
+			res.Choices[i] = val
+		}
 	}
 
 	return res

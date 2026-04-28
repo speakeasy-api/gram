@@ -10,8 +10,9 @@ import (
 
 	agen "github.com/speakeasy-api/gram/server/gen/assets"
 	gen "github.com/speakeasy-api/gram/server/gen/deployments"
-	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
+	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -23,7 +24,7 @@ func TestDeployments_RBAC_ReadOps_DeniedWithNoGrants(t *testing.T) {
 	assetStorage := assetstest.NewTestBlobStore(t)
 	ctx, ti := newTestDeploymentService(t, assetStorage)
 
-	ctx = withExactAccessGrants(t, ctx, ti.conn)
+	ctx = authztest.WithExactGrants(t, ctx)
 
 	_, err := ti.service.ListDeployments(ctx, &gen.ListDeploymentsPayload{
 		Cursor:           nil,
@@ -31,7 +32,9 @@ func TestDeployments_RBAC_ReadOps_DeniedWithNoGrants(t *testing.T) {
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
 	})
-	requireOopsCode(t, err, oops.CodeForbidden)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 
 	_, err = ti.service.GetDeployment(ctx, &gen.GetDeploymentPayload{
 		ID:               uuid.NewString(),
@@ -39,21 +42,24 @@ func TestDeployments_RBAC_ReadOps_DeniedWithNoGrants(t *testing.T) {
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
 	})
-	requireOopsCode(t, err, oops.CodeForbidden)
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 
 	_, err = ti.service.GetLatestDeployment(ctx, &gen.GetLatestDeploymentPayload{
 		ApikeyToken:      nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
 	})
-	requireOopsCode(t, err, oops.CodeForbidden)
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 
 	_, err = ti.service.GetActiveDeployment(ctx, &gen.GetActiveDeploymentPayload{
 		ApikeyToken:      nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
 	})
-	requireOopsCode(t, err, oops.CodeForbidden)
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }
 
 func TestDeployments_RBAC_ReadOps_AllowedWithBuildReadGrant(t *testing.T) {
@@ -67,7 +73,7 @@ func TestDeployments_RBAC_ReadOps_AllowedWithBuildReadGrant(t *testing.T) {
 	require.NotNil(t, authCtx)
 
 	projectID := authCtx.ProjectID.String()
-	ctx = withExactAccessGrants(t, ctx, ti.conn, access.Grant{Scope: access.ScopeBuildRead, Resource: projectID})
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeProjectRead, Selector: authz.NewSelector(authz.ScopeProjectRead, projectID)})
 
 	_, err := ti.service.ListDeployments(ctx, &gen.ListDeploymentsPayload{
 		Cursor:           nil,
@@ -103,7 +109,7 @@ func TestDeployments_RBAC_ReadOps_AllowedWithBuildWriteGrant(t *testing.T) {
 	require.NotNil(t, authCtx)
 
 	projectID := authCtx.ProjectID.String()
-	ctx = withExactAccessGrants(t, ctx, ti.conn, access.Grant{Scope: access.ScopeBuildWrite, Resource: projectID})
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeProjectWrite, Selector: authz.NewSelector(authz.ScopeProjectWrite, projectID)})
 
 	_, err := ti.service.ListDeployments(ctx, &gen.ListDeploymentsPayload{
 		Cursor:           nil,
@@ -120,7 +126,7 @@ func TestDeployments_RBAC_ReadOps_DeniedWithWrongResourceID(t *testing.T) {
 	assetStorage := assetstest.NewTestBlobStore(t)
 	ctx, ti := newTestDeploymentService(t, assetStorage)
 
-	ctx = withExactAccessGrants(t, ctx, ti.conn, access.Grant{Scope: access.ScopeBuildRead, Resource: uuid.NewString()})
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeProjectRead, Selector: authz.NewSelector(authz.ScopeProjectRead, uuid.NewString())})
 
 	_, err := ti.service.ListDeployments(ctx, &gen.ListDeploymentsPayload{
 		Cursor:           nil,
@@ -128,7 +134,9 @@ func TestDeployments_RBAC_ReadOps_DeniedWithWrongResourceID(t *testing.T) {
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
 	})
-	requireOopsCode(t, err, oops.CodeForbidden)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }
 
 func TestDeployments_RBAC_WriteOps_DeniedWithNoGrants(t *testing.T) {
@@ -137,7 +145,7 @@ func TestDeployments_RBAC_WriteOps_DeniedWithNoGrants(t *testing.T) {
 	assetStorage := assetstest.NewTestBlobStore(t)
 	ctx, ti := newTestDeploymentService(t, assetStorage)
 
-	ctx = withExactAccessGrants(t, ctx, ti.conn)
+	ctx = authztest.WithExactGrants(t, ctx)
 
 	_, err := ti.service.CreateDeployment(ctx, &gen.CreateDeploymentPayload{
 		IdempotencyKey:   "rbac-test-create",
@@ -155,7 +163,9 @@ func TestDeployments_RBAC_WriteOps_DeniedWithNoGrants(t *testing.T) {
 		ExternalURL:      nil,
 		NonBlocking:      nil,
 	})
-	requireOopsCode(t, err, oops.CodeForbidden)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 
 	_, err = ti.service.Evolve(ctx, &gen.EvolvePayload{
 		ApikeyToken:            nil,
@@ -172,7 +182,8 @@ func TestDeployments_RBAC_WriteOps_DeniedWithNoGrants(t *testing.T) {
 		ExcludeExternalMcps:    []string{},
 		NonBlocking:            nil,
 	})
-	requireOopsCode(t, err, oops.CodeForbidden)
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 
 	_, err = ti.service.Redeploy(ctx, &gen.RedeployPayload{
 		DeploymentID:     uuid.NewString(),
@@ -180,7 +191,8 @@ func TestDeployments_RBAC_WriteOps_DeniedWithNoGrants(t *testing.T) {
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
 	})
-	requireOopsCode(t, err, oops.CodeForbidden)
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }
 
 func TestDeployments_RBAC_WriteOps_DeniedWithReadOnlyGrant(t *testing.T) {
@@ -194,7 +206,7 @@ func TestDeployments_RBAC_WriteOps_DeniedWithReadOnlyGrant(t *testing.T) {
 	require.NotNil(t, authCtx)
 
 	projectID := authCtx.ProjectID.String()
-	ctx = withExactAccessGrants(t, ctx, ti.conn, access.Grant{Scope: access.ScopeBuildRead, Resource: projectID})
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeProjectRead, Selector: authz.NewSelector(authz.ScopeProjectRead, projectID)})
 
 	_, err := ti.service.CreateDeployment(ctx, &gen.CreateDeploymentPayload{
 		IdempotencyKey:   "rbac-test-create-readonly",
@@ -212,7 +224,9 @@ func TestDeployments_RBAC_WriteOps_DeniedWithReadOnlyGrant(t *testing.T) {
 		ExternalURL:      nil,
 		NonBlocking:      nil,
 	})
-	requireOopsCode(t, err, oops.CodeForbidden)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }
 
 func TestDeployments_RBAC_WriteOps_AllowedWithBuildWriteGrant(t *testing.T) {
@@ -226,7 +240,7 @@ func TestDeployments_RBAC_WriteOps_AllowedWithBuildWriteGrant(t *testing.T) {
 	require.NotNil(t, authCtx)
 
 	projectID := authCtx.ProjectID.String()
-	ctx = withExactAccessGrants(t, ctx, ti.conn, access.Grant{Scope: access.ScopeBuildWrite, Resource: projectID})
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeProjectWrite, Selector: authz.NewSelector(authz.ScopeProjectWrite, projectID)})
 
 	bs := bytes.NewBuffer(testenv.ReadFixture(t, "fixtures/todo-valid.yaml"))
 	ares, err := ti.assets.UploadOpenAPIv3(ctx, &agen.UploadOpenAPIv3Form{

@@ -29,7 +29,14 @@ import { useQueryClient } from "@tanstack/react-query";
 import { ArrowRight, ChevronRight, Loader2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { ScopePickerPopover } from "./ScopePickerPopover";
-import type { RoleGrant, Scope } from "./types";
+import type {
+  AnnotationHint,
+  CustomTab,
+  RoleGrant,
+  Scope,
+  Selector,
+} from "./types";
+import { DISPOSITION_TO_ANNOTATION } from "./types";
 
 interface CreateRoleDialogProps {
   open: boolean;
@@ -40,9 +47,33 @@ interface CreateRoleDialogProps {
 function grantsFromRole(role: Role): Record<string, RoleGrant> {
   const result: Record<string, RoleGrant> = {};
   for (const g of role.grants) {
-    result[g.scope] = { scope: g.scope, resources: g.resources ?? null };
+    result[g.scope] = { scope: g.scope, selectors: g.selectors ?? null };
   }
   return result;
+}
+
+/**
+ * Infer which custom tab was used from saved selectors by inspecting
+ * their keys — disposition selectors → "auto-groups", tool selectors → "select".
+ */
+function inferCustomTab(selectors: Selector[]): {
+  tab: CustomTab;
+  annotations?: AnnotationHint[];
+} {
+  if (!selectors.length) return { tab: "select" };
+
+  // Check for disposition selectors → "auto-groups" tab
+  const dispositionSelectors = selectors.filter((s) => s.disposition);
+  if (dispositionSelectors.length > 0) {
+    const annotations = dispositionSelectors
+      .map((s) =>
+        s.disposition ? DISPOSITION_TO_ANNOTATION[s.disposition] : undefined,
+      )
+      .filter((a): a is AnnotationHint => !!a);
+    return { tab: "auto-groups", annotations };
+  }
+
+  return { tab: "select" };
 }
 
 export function CreateRoleDialog({
@@ -86,11 +117,33 @@ export function CreateRoleDialog({
     }));
   }, [scopesData]);
 
-  // Pre-populate fields when editing
-  if (editingRole && !initialized) {
+  // Pre-populate fields when editing — wait for async data so autoExpanded works correctly.
+  if (editingRole && !initialized && scopesData) {
     setName(editingRole.name);
     setDescription(editingRole.description);
-    setGrants(grantsFromRole(editingRole));
+    const roleGrants = grantsFromRole(editingRole);
+    // Auto-expand groups that have at least one scope selected
+    const grantedScopes = new Set(Object.keys(roleGrants));
+    const autoExpanded = new Set(
+      scopeGroups
+        .filter((g) => g.scopes.some((s) => grantedScopes.has(s.slug)))
+        .map((g) => g.label),
+    );
+    setExpandedGroups(autoExpanded);
+    // Restore custom tab hints for MCP scopes with tool/disposition selectors
+    for (const [scope, grant] of Object.entries(roleGrants)) {
+      if (!scope.startsWith("mcp:")) continue;
+      const hasCustomSelectors =
+        grant.selectors?.some((s) => s.tool || s.disposition) ?? false;
+      if (!hasCustomSelectors) continue;
+      const detected = inferCustomTab(grant.selectors ?? []);
+      roleGrants[scope] = {
+        ...grant,
+        customTab: detected.tab,
+        ...(detected.annotations ? { annotations: detected.annotations } : {}),
+      };
+    }
+    setGrants(roleGrants);
     const assignedIds = new Set(
       members.filter((m) => m.roleId === editingRole.id).map((m) => m.id),
     );
@@ -124,7 +177,7 @@ export function CreateRoleDialog({
   const isMutating = createRole.isPending || updateRole.isPending;
 
   const grantCount = Object.values(grants).filter(
-    (g) => g.resources === null || g.resources.length > 0,
+    (g) => g.selectors === null || g.selectors.length > 0,
   ).length;
 
   const toggleScope = (scope: Scope) => {
@@ -133,16 +186,23 @@ export function CreateRoleDialog({
       if (next[scope]) {
         delete next[scope];
       } else {
-        next[scope] = { scope, resources: null };
+        next[scope] = { scope, selectors: null };
       }
       return next;
     });
   };
 
-  const setGrantResources = (scope: Scope, resources: string[] | null) => {
+  const setGrantSelectors = (scope: Scope, selectors: Selector[] | null) => {
     setGrants((prev) => ({
       ...prev,
-      [scope]: { scope, resources },
+      [scope]: { ...prev[scope], scope, selectors },
+    }));
+  };
+
+  const setGrantAnnotations = (scope: Scope, annotations: AnnotationHint[]) => {
+    setGrants((prev) => ({
+      ...prev,
+      [scope]: { ...prev[scope], scope, annotations },
     }));
   };
 
@@ -170,7 +230,7 @@ export function CreateRoleDialog({
         if (allSelected) {
           delete next[scope.slug];
         } else if (!next[scope.slug]) {
-          next[scope.slug] = { scope: scope.slug, resources: null };
+          next[scope.slug] = { scope: scope.slug, selectors: null };
         }
       }
       return next;
@@ -191,13 +251,13 @@ export function CreateRoleDialog({
 
   const handleSubmit = () => {
     const sdkGrants = Object.values(grants)
-      // Drop scopes with an empty resource list — the user switched to
-      // "specific" but didn't select any resources, so there's nothing to grant.
-      .filter((g) => g.resources === null || g.resources.length > 0)
+      // Drop scopes with an empty selector list — the user switched to
+      // "specific" but didn't select anything, so there's nothing to grant.
+      .filter((g) => g.selectors === null || g.selectors.length > 0)
       .map((g) => ({
         scope: g.scope,
         // Local type uses null for unrestricted; SDK uses undefined
-        resources: g.resources === null ? undefined : g.resources,
+        selectors: g.selectors === null ? undefined : g.selectors,
       }));
 
     if (isEditing) {
@@ -205,9 +265,8 @@ export function CreateRoleDialog({
         request: {
           updateRoleForm: {
             id: editingRole.id,
-            name,
-            description,
-            grants: sdkGrants,
+            // System roles are immutable in WorkOS — only member assignment is allowed.
+            ...(isSystemRole ? {} : { name, description, grants: sdkGrants }),
             memberIds:
               selectedMembers.size > 0
                 ? Array.from(selectedMembers)
@@ -320,7 +379,18 @@ export function CreateRoleDialog({
                       className="border-border rounded-md border"
                     >
                       {/* Group header */}
-                      <div className="flex items-center justify-between px-3 py-2">
+                      <div
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => toggleGroup(group.label)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            toggleGroup(group.label);
+                          }
+                        }}
+                        className="hover:bg-muted/50 flex w-full cursor-pointer items-center justify-between rounded-t-md px-3 py-2"
+                      >
                         <div className="flex items-center gap-2">
                           <Checkbox
                             disabled={isSystemRole}
@@ -331,35 +401,28 @@ export function CreateRoleDialog({
                                   ? "indeterminate"
                                   : false
                             }
-                            onCheckedChange={() =>
-                              toggleGroupCheckbox(group.label)
-                            }
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleGroupCheckbox(group.label);
+                            }}
+                            className="cursor-pointer"
                           />
-                          <button
-                            type="button"
-                            onClick={() => toggleGroup(group.label)}
-                            className="flex items-center gap-1"
+                          <Type variant="body" className="text-sm font-medium">
+                            {group.label}
+                          </Type>
+                          <Type
+                            variant="body"
+                            className="text-muted-foreground text-sm"
                           >
-                            <ChevronRight
-                              className={cn(
-                                "text-muted-foreground h-3.5 w-3.5 transition-transform",
-                                isExpanded && "rotate-90",
-                              )}
-                            />
-                            <Type
-                              variant="body"
-                              className="text-sm font-medium"
-                            >
-                              {group.label}
-                            </Type>
-                            <Type
-                              variant="body"
-                              className="text-muted-foreground text-sm"
-                            >
-                              ({selectedInGroup}/{group.scopes.length})
-                            </Type>
-                          </button>
+                            ({selectedInGroup}/{group.scopes.length})
+                          </Type>
                         </div>
+                        <ChevronRight
+                          className={cn(
+                            "text-muted-foreground h-3.5 w-3.5 transition-transform",
+                            isExpanded && "rotate-90",
+                          )}
+                        />
                       </div>
 
                       {/* Expanded scope rows */}
@@ -372,7 +435,7 @@ export function CreateRoleDialog({
                             return (
                               <div
                                 key={scopeDef.slug}
-                                className="hover:bg-muted/50 flex items-start gap-3 px-3 py-2.5 pl-10"
+                                className="hover:bg-muted/50 flex items-start gap-3 px-3 py-2.5"
                               >
                                 <label className="flex min-w-0 flex-1 cursor-pointer items-start gap-3">
                                   <Checkbox
@@ -403,12 +466,30 @@ export function CreateRoleDialog({
                                   {isChecked && !isSystemRole && (
                                     <ScopePickerPopover
                                       resourceType={scopeDef.resourceType}
-                                      resources={grant.resources}
-                                      onChangeResources={(resources) =>
-                                        setGrantResources(
+                                      scope={scopeDef.slug}
+                                      selectors={grant.selectors}
+                                      onChangeSelectors={(selectors) =>
+                                        setGrantSelectors(
                                           scopeDef.slug,
-                                          resources,
+                                          selectors,
                                         )
+                                      }
+                                      annotations={grant.annotations}
+                                      onChangeAnnotations={(annotations) =>
+                                        setGrantAnnotations(
+                                          scopeDef.slug,
+                                          annotations,
+                                        )
+                                      }
+                                      customTab={grant.customTab}
+                                      onCustomTabChange={(tab) =>
+                                        setGrants((prev) => ({
+                                          ...prev,
+                                          [scopeDef.slug]: {
+                                            ...prev[scopeDef.slug]!,
+                                            customTab: tab,
+                                          },
+                                        }))
                                       }
                                     />
                                   )}
@@ -543,10 +624,10 @@ export function CreateRoleDialog({
           <Button
             onClick={handleSubmit}
             disabled={
-              !name.trim() ||
-              !description.trim() ||
-              grantCount === 0 ||
-              isMutating
+              isMutating ||
+              (isSystemRole
+                ? selectedMembers.size === 0
+                : !name.trim() || !description.trim() || grantCount === 0)
             }
           >
             {isMutating && (

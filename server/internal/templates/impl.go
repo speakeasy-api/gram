@@ -22,11 +22,11 @@ import (
 	srv "github.com/speakeasy-api/gram/server/gen/http/templates/server"
 	gen "github.com/speakeasy-api/gram/server/gen/templates"
 	variationsTypes "github.com/speakeasy-api/gram/server/gen/variations"
-	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/jsonschema"
@@ -51,24 +51,24 @@ type Service struct {
 	repo       *repo.Queries
 	variations *variations.Service
 	toolsets   ToolsetsService
-	access     *access.Manager
+	authz      *authz.Engine
 }
 
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, toolsets ToolsetsService, accessManager *access.Manager) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, toolsets ToolsetsService, authzEngine *authz.Engine) *Service {
 	logger = logger.With(attr.SlogComponent("templates"))
 
 	return &Service{
 		tracer:     tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/templates"),
 		logger:     logger,
 		db:         db,
-		auth:       auth.New(logger, db, sessions, accessManager),
+		auth:       auth.New(logger, db, sessions, authzEngine),
 		repo:       repo.New(db),
-		variations: variations.NewService(logger, tracerProvider, db, sessions, accessManager),
+		variations: variations.NewService(logger, tracerProvider, db, sessions, authzEngine),
 		toolsets:   toolsets,
-		access:     accessManager,
+		authz:      authzEngine,
 	}
 }
 
@@ -94,7 +94,7 @@ func (s *Service) CreateTemplate(ctx context.Context, payload *gen.CreateTemplat
 
 	projectID := *authCtx.ProjectID
 
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeBuildWrite, ResourceID: projectID.String()}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: projectID.String(), Dimensions: nil}); err != nil {
 		return nil, err
 	}
 
@@ -184,7 +184,7 @@ func (s *Service) UpdateTemplate(ctx context.Context, payload *gen.UpdateTemplat
 
 	projectID := *authCtx.ProjectID
 
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeBuildWrite, ResourceID: projectID.String()}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: projectID.String(), Dimensions: nil}); err != nil {
 		return nil, err
 	}
 
@@ -332,7 +332,7 @@ func (s *Service) DeleteTemplate(ctx context.Context, payload *gen.DeleteTemplat
 
 	projectID := *authCtx.ProjectID
 
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeBuildWrite, ResourceID: projectID.String()}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: projectID.String(), Dimensions: nil}); err != nil {
 		return err
 	}
 
@@ -440,7 +440,7 @@ func (s *Service) GetTemplate(ctx context.Context, payload *gen.GetTemplatePaylo
 
 	projectID := *authCtx.ProjectID
 
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeBuildRead, ResourceID: projectID.String()}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: projectID.String(), Dimensions: nil}); err != nil {
 		return nil, err
 	}
 
@@ -475,7 +475,7 @@ func (s *Service) ListTemplates(ctx context.Context, payload *gen.ListTemplatesP
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeBuildRead, ResourceID: authCtx.ProjectID.String()}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
 		return nil, err
 	}
 
@@ -495,7 +495,7 @@ func (s *Service) RenderTemplateByID(ctx context.Context, payload *gen.RenderTem
 
 	projectID := *authCtx.ProjectID
 
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeBuildRead, ResourceID: projectID.String()}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: projectID.String(), Dimensions: nil}); err != nil {
 		return nil, err
 	}
 
@@ -533,7 +533,7 @@ func (s *Service) RenderTemplate(ctx context.Context, payload *gen.RenderTemplat
 
 	projectID := *authCtx.ProjectID
 
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeBuildRead, ResourceID: projectID.String()}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: projectID.String(), Dimensions: nil}); err != nil {
 		return nil, err
 	}
 

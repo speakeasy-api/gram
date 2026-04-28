@@ -120,13 +120,29 @@ SELECT
   ps.policy AS server_policy,
   ps.sort_order AS server_sort_order,
   ps.toolset_id,
-  t.mcp_slug AS toolset_mcp_slug
+  t.mcp_slug AS toolset_mcp_slug,
+  t.mcp_is_public AS toolset_is_public
 FROM plugins p
 JOIN plugin_servers ps ON ps.plugin_id = p.id AND ps.deleted IS FALSE
-JOIN toolsets t ON t.id = ps.toolset_id AND t.deleted IS FALSE
+JOIN toolsets t ON t.id = ps.toolset_id AND t.deleted IS FALSE AND t.mcp_enabled IS TRUE
 WHERE p.project_id = @project_id
   AND p.deleted IS FALSE
 ORDER BY p.slug, ps.sort_order ASC;
 
 -- name: GetOrganizationName :one
 SELECT name FROM organization_metadata WHERE id = @id;
+
+-- name: GetGitHubConnection :one
+SELECT *
+FROM plugin_github_connections
+WHERE project_id = @project_id;
+
+-- name: UpsertGitHubConnection :one
+INSERT INTO plugin_github_connections (project_id, installation_id, repo_owner, repo_name)
+VALUES (@project_id, @installation_id, @repo_owner, @repo_name)
+ON CONFLICT (project_id) DO UPDATE
+  SET installation_id = EXCLUDED.installation_id,
+      repo_owner = EXCLUDED.repo_owner,
+      repo_name = EXCLUDED.repo_name,
+      updated_at = clock_timestamp()
+RETURNING *;

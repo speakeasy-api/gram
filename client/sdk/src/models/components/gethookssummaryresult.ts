@@ -8,27 +8,59 @@ import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
+  HooksBreakdownRow,
+  HooksBreakdownRow$inboundSchema,
+} from "./hooksbreakdownrow.js";
+import {
   HooksServerSummary,
   HooksServerSummary$inboundSchema,
 } from "./hooksserversummary.js";
 import {
+  HooksTimeSeriesPoint,
+  HooksTimeSeriesPoint$inboundSchema,
+} from "./hookstimeseriespoint.js";
+import {
   HooksUserSummary,
   HooksUserSummary$inboundSchema,
 } from "./hooksusersummary.js";
+import {
+  SkillBreakdownRow,
+  SkillBreakdownRow$inboundSchema,
+} from "./skillbreakdownrow.js";
 import { SkillSummary, SkillSummary$inboundSchema } from "./skillsummary.js";
+import {
+  SkillTimeSeriesPoint,
+  SkillTimeSeriesPoint$inboundSchema,
+} from "./skilltimeseriespoint.js";
 
 /**
  * Result of hooks summary query
  */
 export type GetHooksSummaryResult = {
   /**
+   * Cross-dimensional pivot: (user, server, source, tool) x counts
+   */
+  breakdown: Array<HooksBreakdownRow>;
+  /**
    * Aggregated metrics grouped by server
    */
   servers: Array<HooksServerSummary>;
   /**
+   * Per-user skill breakdown
+   */
+  skillBreakdown: Array<SkillBreakdownRow>;
+  /**
+   * Time-bucketed event counts by skill
+   */
+  skillTimeSeries: Array<SkillTimeSeriesPoint>;
+  /**
    * Aggregated metrics grouped by skill
    */
   skills: Array<SkillSummary>;
+  /**
+   * Time-bucketed event counts by server and user
+   */
+  timeSeries: Array<HooksTimeSeriesPoint>;
   /**
    * Total number of hook events
    */
@@ -49,14 +81,21 @@ export const GetHooksSummaryResult$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    breakdown: z.array(HooksBreakdownRow$inboundSchema),
     servers: z.array(HooksServerSummary$inboundSchema),
+    skill_breakdown: z.array(SkillBreakdownRow$inboundSchema),
+    skill_time_series: z.array(SkillTimeSeriesPoint$inboundSchema),
     skills: z.array(SkillSummary$inboundSchema),
+    time_series: z.array(HooksTimeSeriesPoint$inboundSchema),
     total_events: z.int(),
     total_sessions: z.int(),
     users: z.array(HooksUserSummary$inboundSchema),
   }),
   z.transform((v) => {
     return remap$(v, {
+      "skill_breakdown": "skillBreakdown",
+      "skill_time_series": "skillTimeSeries",
+      "time_series": "timeSeries",
       "total_events": "totalEvents",
       "total_sessions": "totalSessions",
     });

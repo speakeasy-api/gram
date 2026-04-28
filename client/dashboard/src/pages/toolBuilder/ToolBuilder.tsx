@@ -47,10 +47,11 @@ import { useParams } from "react-router";
 import { toast } from "sonner";
 import { v7 as uuidv7 } from "uuid";
 import { EnvironmentDropdown } from "../environments/EnvironmentDropdown";
-import { ChatProvider, useChatContext } from "../playground/ChatContext";
+import { ChatProvider } from "../playground/ChatContext";
+import { useChatContext } from "../playground/useChatContext";
 import { ChatConfig, ChatWindow } from "../playground/ChatWindow";
 import { ToolsetDropdown } from "../toolsets/ToolsetDropown";
-import { useToolifyContext } from "./Toolify";
+import { useToolifyContext } from "./useToolifyContext";
 
 type Input = {
   name: string;
@@ -246,6 +247,7 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
     setPurpose(initial.purpose);
     setInputs(initial.inputs);
     setSteps(initial.steps.map(makeStep));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- makeStep depends on tools/setStep which are derived from initial; re-running on initial change is correct
   }, [initial]);
 
   const insertTool = (
@@ -283,15 +285,17 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
   useEffect(() => {
     const allInputs = steps.flatMap((step) => parseInputs(step.instructions));
     allInputs.push(...parseInputs(purpose));
-    const currentInputs = inputs.map((input) => input.name);
 
-    const curFiltered = inputs.filter((input) =>
-      allInputs.includes(input.name),
-    );
-    const toInsert = allInputs.filter(
-      (input) => !currentInputs.includes(input),
-    );
-    setInputs([...curFiltered, ...toInsert.map((input) => ({ name: input }))]);
+    setInputs((prevInputs) => {
+      const currentInputs = prevInputs.map((input) => input.name);
+      const curFiltered = prevInputs.filter((input) =>
+        allInputs.includes(input.name),
+      );
+      const toInsert = allInputs.filter(
+        (input) => !currentInputs.includes(input),
+      );
+      return [...curFiltered, ...toInsert.map((input) => ({ name: input }))];
+    });
   }, [steps, purpose]);
 
   const validateName = (v: string) => {

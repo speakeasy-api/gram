@@ -4,14 +4,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
 	"time"
 
-	"github.com/jackc/pgx/v5"
-	"github.com/speakeasy-api/gram/server/gen/auth"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -39,7 +36,7 @@ type speakeasyProviderOrganization struct {
 	CreatedAt          time.Time `json:"created_at"`
 	UpdatedAt          time.Time `json:"updated_at"`
 	AccountType        string    `json:"account_type"`
-	SSOConnectionID    *string   `json:"sso_connection_id,omitempty"`
+	WorkOSID           *string   `json:"workos_id,omitempty"`   //nolint:tagliatelle // workos_id is correct snake_case
 	UserWorkspaceSlugs []string  `json:"user_workspaces_slugs"` // speakeasy-registry side is user_workspaces_slugs
 }
 
@@ -202,30 +199,30 @@ func (s *Manager) GetUserInfoFromSpeakeasy(ctx context.Context, idToken string) 
 		}
 	}
 
-	// Update user and user-org relationships with WorkOS IDs, if applicable
-	s.syncWorkOSIDs(ctx, user, validateResp)
+	if err := s.syncWorkOSMemberships(ctx, user, validateResp); err != nil {
+		return nil, fmt.Errorf("sync workos memberships: %w", err)
+	}
 
 	var adminOverride string
 	if override, _ := contextvalues.GetAdminOverrideFromContext(ctx); override != "" && validateResp.User.Admin {
 		adminOverride = override
 	}
 
-	organizations := make([]auth.OrganizationEntry, len(validateResp.Organizations))
-	var nonFreeOrganizations []auth.OrganizationEntry
+	organizations := make([]Organization, len(validateResp.Organizations))
+	var nonFreeOrganizations []Organization
 	for i, org := range validateResp.Organizations {
-		authOrg := auth.OrganizationEntry{
+		o := Organization{
 			ID:                 org.ID,
 			Name:               org.Name,
 			Slug:               org.Slug,
-			SsoConnectionID:    org.SSOConnectionID,
+			WorkosID:           org.WorkOSID,
 			UserWorkspaceSlugs: org.UserWorkspaceSlugs,
-			Projects:           []*auth.ProjectEntry{}, // filled in from gram server
 		}
 
-		organizations[i] = authOrg
+		organizations[i] = o
 
 		if (org.AccountType != "" && org.AccountType != "free") || adminOverride == org.Slug {
-			nonFreeOrganizations = append(nonFreeOrganizations, authOrg)
+			nonFreeOrganizations = append(nonFreeOrganizations, o)
 		}
 	}
 
@@ -233,7 +230,9 @@ func (s *Manager) GetUserInfoFromSpeakeasy(ctx context.Context, idToken string) 
 
 	// If applicable we will only utilize non-free organizations, plus an applied admin override
 	if len(nonFreeOrganizations) > 0 {
-		organizations = nonFreeOrganizations
+		if !user.Admin { // admins can access any org
+			organizations = nonFreeOrganizations
+		}
 		// At this point if a user has paid organizations we consider them whitelisted
 		whitelisted = true
 	}
@@ -311,18 +310,15 @@ func (s *Manager) CreateOrgFromSpeakeasy(ctx context.Context, idToken string, or
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
 
-	organizations := make([]auth.OrganizationEntry, len(validateResp.Organizations))
+	organizations := make([]Organization, len(validateResp.Organizations))
 	for i, org := range validateResp.Organizations {
-		authOrg := auth.OrganizationEntry{
+		organizations[i] = Organization{
 			ID:                 org.ID,
 			Name:               org.Name,
 			Slug:               org.Slug,
-			SsoConnectionID:    org.SSOConnectionID,
+			WorkosID:           org.WorkOSID,
 			UserWorkspaceSlugs: org.UserWorkspaceSlugs,
-			Projects:           []*auth.ProjectEntry{},
 		}
-
-		organizations[i] = authOrg
 	}
 
 	return &CachedUserInfo{
@@ -338,7 +334,7 @@ func (s *Manager) CreateOrgFromSpeakeasy(ctx context.Context, idToken string, or
 }
 
 func (s *Manager) InvalidateUserInfoCache(ctx context.Context, userID string) error {
-	err := s.userInfoCache.Delete(ctx, CachedUserInfo{UserID: userID, UserWhitelisted: true, Organizations: []auth.OrganizationEntry{}, Email: "", Admin: false, DisplayName: nil, PhotoURL: nil, UserPylonSignature: nil})
+	err := s.userInfoCache.Delete(ctx, CachedUserInfo{UserID: userID, UserWhitelisted: true, Organizations: []Organization{}, Email: "", Admin: false, DisplayName: nil, PhotoURL: nil, UserPylonSignature: nil})
 	if err != nil {
 		return fmt.Errorf("cache delete: %w", err)
 	}
@@ -367,7 +363,7 @@ func (s *Manager) GetUserInfo(ctx context.Context, userID, sessionID string) (*C
 	return userInfo, false, nil
 }
 
-func (s *Manager) HasAccessToOrganization(ctx context.Context, organizationID, userID, sessionID string) (*auth.OrganizationEntry, string, bool) {
+func (s *Manager) HasAccessToOrganization(ctx context.Context, organizationID, userID, sessionID string) (*Organization, string, bool) {
 	userInfo, _, err := s.GetUserInfo(ctx, userID, sessionID)
 	if err != nil {
 		return nil, "", false
@@ -400,7 +396,17 @@ func (p *Manager) BuildAuthorizationURL(ctx context.Context, params AuthURLParam
 	return authURL, nil
 }
 
-func (s *Manager) syncWorkOSIDs(ctx context.Context, user userRepo.UpsertUserRow, validateResp validateTokenResponse) {
+// syncWorkOSMemberships reconciles the user's WorkOS identity and membership
+// records against what WorkOS currently reports. Organization metadata upserts
+// are the caller's responsibility and happen at login/switch-scope sites where
+// the active org is known. Failures here are best-effort and logged — they
+// don't block authentication because WorkOS membership data is only used for
+// RBAC features that degrade gracefully without it.
+func (s *Manager) syncWorkOSMemberships(ctx context.Context, user userRepo.UpsertUserRow, validateResp validateTokenResponse) error {
+	if s.workos == nil {
+		return nil
+	}
+
 	var workosUserID string
 
 	if user.WorkosID.Valid && user.WorkosID.String != "" {
@@ -410,10 +416,10 @@ func (s *Manager) syncWorkOSIDs(ctx context.Context, user userRepo.UpsertUserRow
 		workosUser, err := s.workos.GetUserByEmail(ctx, user.Email)
 		if err != nil {
 			s.logger.ErrorContext(ctx, "failed to get workos user by email", attr.SlogError(err))
-			return
+			return nil
 		}
 		if workosUser == nil {
-			return
+			return nil
 		}
 
 		workosUserID = workosUser.ID
@@ -426,26 +432,12 @@ func (s *Manager) syncWorkOSIDs(ctx context.Context, user userRepo.UpsertUserRow
 		}
 	}
 
-	// Ensure that all orgs in the response with WorkOS syncing have been
-	// upserted into the database.
-	for _, org := range validateResp.Organizations {
-		if org.SSOConnectionID == nil {
-			continue
-		}
-		if _, err := s.orgRepo.SetOrgWorkosID(ctx, orgRepo.SetOrgWorkosIDParams{
-			WorkosID:       conv.ToPGText(*org.SSOConnectionID),
-			OrganizationID: org.ID,
-		}); err != nil && !errors.Is(err, pgx.ErrNoRows) {
-			s.logger.ErrorContext(ctx, "failed to set org workos ID", attr.SlogError(err))
-		}
-	}
-
 	// Load current org membership state directly from WorkOS so we can populate
 	// the workos membership ID in the org membership records
 	memberships, err := s.workos.ListUserMemberships(ctx, workosUserID)
 	if err != nil {
 		s.logger.ErrorContext(ctx, "failed to list workos user memberships", attr.SlogError(err))
-		return
+		return nil
 	}
 
 	workosOrgIDs := make([]string, len(memberships))
@@ -462,4 +454,6 @@ func (s *Manager) syncWorkOSIDs(ctx context.Context, user userRepo.UpsertUserRow
 	}); err != nil {
 		s.logger.ErrorContext(ctx, "failed to set user workos memberships", attr.SlogError(err))
 	}
+
+	return nil
 }

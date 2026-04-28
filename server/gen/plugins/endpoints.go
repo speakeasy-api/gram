@@ -27,6 +27,8 @@ type Endpoints struct {
 	RemovePluginServer    goa.Endpoint
 	SetPluginAssignments  goa.Endpoint
 	DownloadPluginPackage goa.Endpoint
+	GetPublishStatus      goa.Endpoint
+	PublishPlugins        goa.Endpoint
 }
 
 // DownloadPluginPackageResponseData holds both the result and the HTTP
@@ -53,6 +55,8 @@ func NewEndpoints(s Service) *Endpoints {
 		RemovePluginServer:    NewRemovePluginServerEndpoint(s, a.APIKeyAuth),
 		SetPluginAssignments:  NewSetPluginAssignmentsEndpoint(s, a.APIKeyAuth),
 		DownloadPluginPackage: NewDownloadPluginPackageEndpoint(s, a.APIKeyAuth),
+		GetPublishStatus:      NewGetPublishStatusEndpoint(s, a.APIKeyAuth),
+		PublishPlugins:        NewPublishPluginsEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -68,6 +72,8 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.RemovePluginServer = m(e.RemovePluginServer)
 	e.SetPluginAssignments = m(e.SetPluginAssignments)
 	e.DownloadPluginPackage = m(e.DownloadPluginPackage)
+	e.GetPublishStatus = m(e.GetPublishStatus)
+	e.PublishPlugins = m(e.PublishPlugins)
 }
 
 // NewListPluginsEndpoint returns an endpoint function that calls the method
@@ -421,5 +427,75 @@ func NewDownloadPluginPackageEndpoint(s Service, authAPIKeyFn security.AuthAPIKe
 			return nil, err
 		}
 		return &DownloadPluginPackageResponseData{Result: res, Body: body}, nil
+	}
+}
+
+// NewGetPublishStatusEndpoint returns an endpoint function that calls the
+// method "getPublishStatus" of service "plugins".
+func NewGetPublishStatusEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetPublishStatusPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.GetPublishStatus(ctx, p)
+	}
+}
+
+// NewPublishPluginsEndpoint returns an endpoint function that calls the method
+// "publishPlugins" of service "plugins".
+func NewPublishPluginsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*PublishPluginsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.PublishPlugins(ctx, p)
 	}
 }

@@ -40,17 +40,24 @@ type EventsLister interface {
 	ListEvents(ctx context.Context, opts events.ListEventsOpts) (events.ListEventsResponse, error)
 }
 
-type ProcessWorkOSOrganizationEvents struct {
-	db           *pgxpool.Pool
-	logger       *slog.Logger
-	eventsClient EventsLister
+// MembershipLister fetches all active memberships for an org, used to reconcile role assignments on role events.
+type MembershipLister interface {
+	ListOrgMemberships(ctx context.Context, orgID string) ([]workos.Member, error)
 }
 
-func NewProcessWorkOSOrganizationEvents(logger *slog.Logger, db *pgxpool.Pool, eventsClient EventsLister) *ProcessWorkOSOrganizationEvents {
+type ProcessWorkOSOrganizationEvents struct {
+	db               *pgxpool.Pool
+	logger           *slog.Logger
+	eventsClient     EventsLister
+	membershipLister MembershipLister
+}
+
+func NewProcessWorkOSOrganizationEvents(logger *slog.Logger, db *pgxpool.Pool, eventsClient EventsLister, membershipLister MembershipLister) *ProcessWorkOSOrganizationEvents {
 	return &ProcessWorkOSOrganizationEvents{
-		db:           db,
-		logger:       logger,
-		eventsClient: eventsClient,
+		db:               db,
+		logger:           logger,
+		eventsClient:     eventsClient,
+		membershipLister: membershipLister,
 	}
 }
 
@@ -118,63 +125,71 @@ func (p *ProcessWorkOSOrganizationEvents) do(ctx context.Context, params Process
 }
 
 func (p *ProcessWorkOSOrganizationEvents) handlePage(ctx context.Context, logger *slog.Logger, workosOrgID string, page []events.Event) (string, error) {
-	if len(page) == 0 {
-		return "", nil
-	}
-
-	dbtx, err := p.db.Begin(ctx)
-	if err != nil {
-		return "", oops.E(oops.CodeUnexpected, err, "failed to begin database transaction for workos event processing").Log(ctx, logger)
-	}
-	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
-
-	wrepo := workosrepo.New(dbtx)
-
 	var lastEventID string
-	var eventErr error
 	for _, event := range page {
-		logger = logger.With(
+		eventLogger := logger.With(
 			attr.SlogWorkOSEventID(event.ID),
 			attr.SlogWorkOSEventType(event.Event),
 		)
+
 		var orgEvent workosOrgEvent
 		if err := json.Unmarshal(event.Data, &orgEvent); err != nil {
-			eventErr = oops.E(oops.CodeUnexpected, err, "failed to unmarshal workos organization event data").Log(ctx, logger)
-			break
+			return lastEventID, oops.E(oops.CodeUnexpected, err, "failed to unmarshal workos organization event data").Log(ctx, eventLogger)
 		}
 
 		orgID := conv.Ternary(orgEvent.Object == "organization", orgEvent.ID, orgEvent.OrganizationID)
 		if orgID == "" {
-			return "", oops.E(oops.CodeUnexpected, nil, "unexpected non-organization event object: %s", orgEvent.Object).Log(ctx, logger)
+			return lastEventID, oops.E(oops.CodeUnexpected, nil, "unexpected non-organization event object: %s", orgEvent.Object).Log(ctx, eventLogger)
 		}
 
-		logger = logger.With(
-			attr.SlogWorkOSEventOrganizationID(orgEvent.OrganizationID),
-		)
+		eventLogger = eventLogger.With(attr.SlogWorkOSEventOrganizationID(orgEvent.OrganizationID))
 
-		err := handleOrganizationEvent(ctx, logger, dbtx, event)
+		// organization_role.created/updated do not carry member data; fetch current memberships
+		// before opening the transaction so we can sync role assignments inline.
+		var roleMembers []workos.Member
+		if event.Event == string(workos.EventKindOrganizationRoleCreated) || event.Event == string(workos.EventKindOrganizationRoleUpdated) {
+			var err error
+			roleMembers, err = p.membershipLister.ListOrgMemberships(ctx, workosOrgID)
+			if err != nil {
+				return lastEventID, oops.E(oops.CodeUnexpected, err, "failed to list org memberships for role event").Log(ctx, eventLogger)
+			}
+		}
+
+		eventID, err := p.handleEvent(ctx, eventLogger, workosOrgID, event, roleMembers)
 		if err != nil {
-			eventErr = oops.E(oops.CodeUnexpected, err, "failed to handle WorkOS event").Log(ctx, logger)
-			break
+			return lastEventID, oops.E(oops.CodeUnexpected, err, "failed to handle WorkOS event").Log(ctx, eventLogger)
 		}
-		if _, err := wrepo.SetOrganizationSyncLastEventID(ctx, workosrepo.SetOrganizationSyncLastEventIDParams{
-			WorkosOrganizationID: workosOrgID,
-			LastEventID:          event.ID,
-		}); err != nil {
-			return "", oops.E(oops.CodeUnexpected, err, "failed to set organization sync last event ID").Log(ctx, logger)
+		if eventID != "" {
+			lastEventID = eventID
 		}
-		lastEventID = event.ID
-	}
-
-	if err := dbtx.Commit(ctx); err != nil {
-		return "", oops.E(oops.CodeUnexpected, err, "failed to commit database transaction for workos event processing").Log(ctx, logger)
-	}
-
-	if eventErr != nil {
-		return "", fmt.Errorf("process workos organization event page: %w", eventErr)
 	}
 
 	return lastEventID, nil
+}
+
+func (p *ProcessWorkOSOrganizationEvents) handleEvent(ctx context.Context, logger *slog.Logger, workosOrgID string, event events.Event, roleMembers []workos.Member) (string, error) {
+	dbtx, err := p.db.Begin(ctx)
+	if err != nil {
+		return "", fmt.Errorf("begin transaction: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	if err := handleOrganizationEvent(ctx, logger, dbtx, event, roleMembers); err != nil {
+		return "", err
+	}
+
+	if _, err := workosrepo.New(dbtx).SetOrganizationSyncLastEventID(ctx, workosrepo.SetOrganizationSyncLastEventIDParams{
+		WorkosOrganizationID: workosOrgID,
+		LastEventID:          event.ID,
+	}); err != nil {
+		return "", fmt.Errorf("set organization sync last event ID: %w", err)
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return "", fmt.Errorf("commit transaction: %w", err)
+	}
+
+	return event.ID, nil
 }
 
 func stringifyEventKinds(eventKinds ...workos.EventKind) []string {
@@ -191,7 +206,7 @@ type workosOrgEvent struct {
 	OrganizationID string `json:"organization_id"`
 }
 
-func handleOrganizationEvent(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, event events.Event) error {
+func handleOrganizationEvent(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, event events.Event, roleMembers []workos.Member) error {
 	switch event.Event {
 	case string(workos.EventKindOrganizationCreated):
 		return handleOrganizationCreatedOrUpdated(ctx, logger, dbtx, event)
@@ -206,11 +221,11 @@ func handleOrganizationEvent(ctx context.Context, logger *slog.Logger, dbtx data
 	case string(workos.EventKindOrganizationMembershipUpdated):
 		return handleOrganizationMembershipUpsert(ctx, logger, dbtx, event)
 	case string(workos.EventKindOrganizationRoleCreated):
-		return handleOrganizationRoleUpsert(ctx, logger, dbtx, event)
+		return handleOrganizationRoleUpsert(ctx, logger, dbtx, event, roleMembers)
 	case string(workos.EventKindOrganizationRoleDeleted):
 		return handleOrganizationRoleDeleted(ctx, logger, dbtx, event)
 	case string(workos.EventKindOrganizationRoleUpdated):
-		return handleOrganizationRoleUpsert(ctx, logger, dbtx, event)
+		return handleOrganizationRoleUpsert(ctx, logger, dbtx, event, roleMembers)
 	}
 
 	return oops.Permanent(fmt.Errorf("unhandled workos organization event: %s", event.Event))
@@ -287,6 +302,7 @@ type workosMembershipEvent struct {
 	Object         string                 `json:"object"`
 	OrganizationID string                 `json:"organization_id"`
 	UserID         string                 `json:"user_id"`
+	RoleSlug       string                 `json:"role_slug"`
 	Role           workosMembershipRole   `json:"role"`
 	Roles          []workosMembershipRole `json:"roles"`
 	Status         string                 `json:"status"`
@@ -307,7 +323,6 @@ func handleOrganizationMembershipUpsert(ctx context.Context, logger *slog.Logger
 		return nil
 	case err != nil:
 		return fmt.Errorf("get organization by workos id %q: %w", payload.OrganizationID, err)
-
 	}
 
 	userID, err := usersrepo.New(dbtx).GetUserIDByWorkosID(ctx, conv.ToPGText(payload.UserID))
@@ -328,6 +343,11 @@ func handleOrganizationMembershipUpsert(ctx context.Context, logger *slog.Logger
 		return fmt.Errorf("upsert organization membership %q: %w", payload.ID, err)
 	}
 
+	// WorkOS membership events expose roles in three shapes depending on event version:
+	// - Roles []Role (newer schema, preferred)
+	// - Role   Role  (single-role fallback)
+	// - RoleSlug string (legacy flat field)
+	// Collect from all three, preferring the array; fall back in order.
 	roleSlugs := make([]string, 0, len(payload.Roles))
 	for _, r := range payload.Roles {
 		if r.Slug != "" {
@@ -337,6 +357,12 @@ func handleOrganizationMembershipUpsert(ctx context.Context, logger *slog.Logger
 	if len(roleSlugs) == 0 && payload.Role.Slug != "" {
 		roleSlugs = append(roleSlugs, payload.Role.Slug)
 	}
+	if len(roleSlugs) == 0 && payload.RoleSlug != "" {
+		roleSlugs = append(roleSlugs, payload.RoleSlug)
+	}
+
+	// WorkOS has been observed sending duplicate slugs within payload.Roles.
+	roleSlugs = dedupeStrings(roleSlugs)
 
 	if err := orgrepo.New(dbtx).SyncUserOrganizationRoles(ctx, orgrepo.SyncUserOrganizationRolesParams{
 		OrganizationID:  organizationID,
@@ -396,7 +422,10 @@ type workosRoleEvent struct {
 	DeletedAt      *time.Time `json:"deleted_at"`
 }
 
-func handleOrganizationRoleUpsert(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, event events.Event) error {
+// handleOrganizationRoleUpsert handles organization_role.created and organization_role.updated events.
+// members is the pre-fetched current membership list from WorkOS; role assignments are synced inline
+// because role events do not carry member data.
+func handleOrganizationRoleUpsert(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, event events.Event, members []workos.Member) error {
 	var payload workosRoleEvent
 	if err := json.Unmarshal(event.Data, &payload); err != nil {
 		return fmt.Errorf("unmarshal organization role event: %w", err)
@@ -422,6 +451,30 @@ func handleOrganizationRoleUpsert(ctx context.Context, logger *slog.Logger, dbtx
 	})
 	if err != nil {
 		return fmt.Errorf("upsert organization role %q: %w", payload.Slug, err)
+	}
+
+	for _, member := range members {
+		roleSlugs := dedupeStrings(member.RoleSlugs)
+		if len(roleSlugs) == 0 && member.RoleSlug != "" {
+			roleSlugs = []string{member.RoleSlug}
+		}
+
+		userID, err := usersrepo.New(dbtx).GetUserIDByWorkosID(ctx, conv.ToPGText(member.UserID))
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+			logger.DebugContext(ctx, "skipping role sync for unknown user during role event", attr.SlogWorkOSUserID(member.UserID))
+			continue
+		case err != nil:
+			return fmt.Errorf("get user by workos id %q: %w", member.UserID, err)
+		}
+
+		if err := orgrepo.New(dbtx).SyncUserOrganizationRoles(ctx, orgrepo.SyncUserOrganizationRolesParams{
+			OrganizationID:  organizationID,
+			UserID:          userID,
+			WorkosRoleSlugs: roleSlugs,
+		}); err != nil {
+			return fmt.Errorf("sync roles for user %q on role event: %w", member.UserID, err)
+		}
 	}
 
 	return nil
@@ -470,4 +523,20 @@ func handleOrganizationRoleDeleted(ctx context.Context, logger *slog.Logger, dbt
 	}
 
 	return nil
+}
+
+func dedupeStrings(values []string) []string {
+	seen := make(map[string]struct{}, len(values))
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
+	}
+	return out
 }

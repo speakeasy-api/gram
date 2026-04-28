@@ -26,6 +26,10 @@ type Client struct {
 	// Logs Doer is the HTTP client used to make requests to the logs endpoint.
 	LogsDoer goahttp.Doer
 
+	// Metrics Doer is the HTTP client used to make requests to the metrics
+	// endpoint.
+	MetricsDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -49,6 +53,7 @@ func NewClient(
 		ClaudeDoer:          doer,
 		CursorDoer:          doer,
 		LogsDoer:            doer,
+		MetricsDoer:         doer,
 		RestoreResponseBody: restoreBody,
 		scheme:              scheme,
 		host:                host,
@@ -124,6 +129,30 @@ func (c *Client) Logs() goa.Endpoint {
 		resp, err := c.LogsDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("hooks", "logs", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// Metrics returns an endpoint that makes HTTP requests to the hooks service
+// metrics server.
+func (c *Client) Metrics() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeMetricsRequest(c.encoder)
+		decodeResponse = DecodeMetricsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildMetricsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.MetricsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("hooks", "metrics", err)
 		}
 		return decodeResponse(resp)
 	}

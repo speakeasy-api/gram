@@ -50,10 +50,6 @@ func EncodeCreateRequest(encoder func(*http.Request) goahttp.Encoder) func(*http
 			head := *p.ApikeyToken
 			req.Header.Set("Gram-Key", head)
 		}
-		if p.ProjectSlugInput != nil {
-			head := *p.ProjectSlugInput
-			req.Header.Set("Gram-Project", head)
-		}
 		body := NewCreateRequestBody(p)
 		if err := encoder(req).Encode(&body); err != nil {
 			return goahttp.ErrEncodingError("collections", "create", err)
@@ -292,10 +288,6 @@ func EncodeListRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.R
 			head := *p.ApikeyToken
 			req.Header.Set("Gram-Key", head)
 		}
-		if p.ProjectSlugInput != nil {
-			head := *p.ProjectSlugInput
-			req.Header.Set("Gram-Project", head)
-		}
 		return nil
 	}
 }
@@ -529,10 +521,6 @@ func EncodeUpdateRequest(encoder func(*http.Request) goahttp.Encoder) func(*http
 		if p.ApikeyToken != nil {
 			head := *p.ApikeyToken
 			req.Header.Set("Gram-Key", head)
-		}
-		if p.ProjectSlugInput != nil {
-			head := *p.ProjectSlugInput
-			req.Header.Set("Gram-Project", head)
 		}
 		body := NewUpdateRequestBody(p)
 		if err := encoder(req).Encode(&body); err != nil {
@@ -772,10 +760,6 @@ func EncodeDeleteRequest(encoder func(*http.Request) goahttp.Encoder) func(*http
 			head := *p.ApikeyToken
 			req.Header.Set("Gram-Key", head)
 		}
-		if p.ProjectSlugInput != nil {
-			head := *p.ProjectSlugInput
-			req.Header.Set("Gram-Project", head)
-		}
 		values := req.URL.Query()
 		values.Add("collection_id", p.CollectionID)
 		req.URL.RawQuery = values.Encode()
@@ -999,10 +983,6 @@ func EncodeAttachServerRequest(encoder func(*http.Request) goahttp.Encoder) func
 		if p.ApikeyToken != nil {
 			head := *p.ApikeyToken
 			req.Header.Set("Gram-Key", head)
-		}
-		if p.ProjectSlugInput != nil {
-			head := *p.ProjectSlugInput
-			req.Header.Set("Gram-Project", head)
 		}
 		body := NewAttachServerRequestBody(p)
 		if err := encoder(req).Encode(&body); err != nil {
@@ -1242,10 +1222,6 @@ func EncodeDetachServerRequest(encoder func(*http.Request) goahttp.Encoder) func
 			head := *p.ApikeyToken
 			req.Header.Set("Gram-Key", head)
 		}
-		if p.ProjectSlugInput != nil {
-			head := *p.ProjectSlugInput
-			req.Header.Set("Gram-Project", head)
-		}
 		body := NewDetachServerRequestBody(p)
 		if err := encoder(req).Encode(&body); err != nil {
 			return goahttp.ErrEncodingError("collections", "detachServer", err)
@@ -1470,10 +1446,6 @@ func EncodeListServersRequest(encoder func(*http.Request) goahttp.Encoder) func(
 		if p.ApikeyToken != nil {
 			head := *p.ApikeyToken
 			req.Header.Set("Gram-Key", head)
-		}
-		if p.ProjectSlugInput != nil {
-			head := *p.ProjectSlugInput
-			req.Header.Set("Gram-Project", head)
 		}
 		values := req.URL.Query()
 		values.Add("collection_slug", p.CollectionSlug)
@@ -1704,6 +1676,7 @@ func unmarshalExternalMCPServerResponseBodyToTypesExternalMCPServer(v *ExternalM
 		RegistrySpecifier:                   *v.RegistrySpecifier,
 		Version:                             *v.Version,
 		Description:                         *v.Description,
+		ToolsetID:                           v.ToolsetID,
 		RegistryID:                          v.RegistryID,
 		OrganizationMcpCollectionRegistryID: v.OrganizationMcpCollectionRegistryID,
 		Title:                               v.Title,
@@ -1761,6 +1734,68 @@ func unmarshalExternalMCPRemoteResponseBodyToTypesExternalMCPRemote(v *ExternalM
 	res := &types.ExternalMCPRemote{
 		URL:           *v.URL,
 		TransportType: *v.TransportType,
+	}
+	if v.Headers != nil {
+		res.Headers = make([]*types.ExternalMCPRemoteHeader, len(v.Headers))
+		for i, val := range v.Headers {
+			if val == nil {
+				res.Headers[i] = nil
+				continue
+			}
+			res.Headers[i] = unmarshalExternalMCPRemoteHeaderResponseBodyToTypesExternalMCPRemoteHeader(val)
+		}
+	}
+	if v.Variables != nil {
+		res.Variables = make(map[string]*types.ExternalMCPRemoteVariable, len(v.Variables))
+		for key, val := range v.Variables {
+			tk := key
+			if val == nil {
+				res.Variables[tk] = nil
+				continue
+			}
+			res.Variables[tk] = unmarshalExternalMCPRemoteVariableResponseBodyToTypesExternalMCPRemoteVariable(val)
+		}
+	}
+
+	return res
+}
+
+// unmarshalExternalMCPRemoteHeaderResponseBodyToTypesExternalMCPRemoteHeader
+// builds a value of type *types.ExternalMCPRemoteHeader from a value of type
+// *ExternalMCPRemoteHeaderResponseBody.
+func unmarshalExternalMCPRemoteHeaderResponseBodyToTypesExternalMCPRemoteHeader(v *ExternalMCPRemoteHeaderResponseBody) *types.ExternalMCPRemoteHeader {
+	if v == nil {
+		return nil
+	}
+	res := &types.ExternalMCPRemoteHeader{
+		Name:        *v.Name,
+		Description: v.Description,
+		IsSecret:    v.IsSecret,
+		IsRequired:  v.IsRequired,
+		Placeholder: v.Placeholder,
+	}
+
+	return res
+}
+
+// unmarshalExternalMCPRemoteVariableResponseBodyToTypesExternalMCPRemoteVariable
+// builds a value of type *types.ExternalMCPRemoteVariable from a value of type
+// *ExternalMCPRemoteVariableResponseBody.
+func unmarshalExternalMCPRemoteVariableResponseBodyToTypesExternalMCPRemoteVariable(v *ExternalMCPRemoteVariableResponseBody) *types.ExternalMCPRemoteVariable {
+	if v == nil {
+		return nil
+	}
+	res := &types.ExternalMCPRemoteVariable{
+		Description: v.Description,
+		IsRequired:  v.IsRequired,
+		IsSecret:    v.IsSecret,
+		Default:     v.Default,
+	}
+	if v.Choices != nil {
+		res.Choices = make([]string, len(v.Choices))
+		for i, val := range v.Choices {
+			res.Choices[i] = val
+		}
 	}
 
 	return res

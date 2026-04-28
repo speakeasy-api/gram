@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	resolution_activities "github.com/speakeasy-api/gram/server/internal/background/activities/chat_resolutions"
+	risk_analysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -61,6 +62,8 @@ type Activities struct {
 	deleteChatResolutions           *resolution_activities.DeleteChatResolutions
 	analyzeSegment                  *resolution_activities.AnalyzeSegment
 	getUserFeedbackForChat          *resolution_activities.GetUserFeedbackForChat
+	fetchUnanalyzedMessages         *risk_analysis.FetchUnanalyzed
+	analyzeBatch                    *risk_analysis.AnalyzeBatch
 	processWorkOSOrganizationEvents *activities.ProcessWorkOSOrganizationEvents
 	getAllWorkOSLinkedOrganizations *activities.GetAllWorkOSLinkedOrganizations
 }
@@ -92,6 +95,7 @@ func NewActivities(
 	workosClient *workos.Client,
 	workosEventsClient *events.Client,
 	cacheAdapter cache.Cache,
+	piiScanner risk_analysis.PIIScanner,
 ) *Activities {
 	usageTrackingStrategy := chat.NewDefaultUsageTrackingStrategy(db, logger, openrouterProvisioner, billingTracker, nil)
 
@@ -108,7 +112,7 @@ func NewActivities(
 		processDeployment:               activities.NewProcessDeployment(logger, tracerProvider, meterProvider, guardianPolicy, db, features, assetStorage, billingRepo, mcpRegistryClient),
 		provisionFunctionsAccess:        activities.NewProvisionFunctionsAccess(logger, db, encryption),
 		deployFunctionRunners:           activities.NewDeployFunctionRunners(logger, db, functionsDeployer, functionsVersion, encryption),
-		reapFlyApps:                     activities.NewReapFlyApps(logger, meterProvider, db, functionsDeployer, 3),
+		reapFlyApps:                     activities.NewReapFlyApps(logger, meterProvider, db, functionsDeployer, 1),
 		refreshBillingUsage:             activities.NewRefreshBillingUsage(logger, db, billingRepo),
 		refreshOpenRouterKey:            activities.NewRefreshOpenRouterKey(logger, db, openrouterProvisioner),
 		slackChatCompletion:             activities.NewSlackChatCompletionActivity(logger, slackClient, chatClient),
@@ -122,7 +126,9 @@ func NewActivities(
 		deleteChatResolutions:           resolution_activities.NewDeleteChatResolutions(db),
 		analyzeSegment:                  resolution_activities.NewAnalyzeSegment(logger, db, chatClient, telemetryLogger),
 		getUserFeedbackForChat:          resolution_activities.NewGetUserFeedbackForChat(db),
-		processWorkOSOrganizationEvents: activities.NewProcessWorkOSOrganizationEvents(logger, db, workosEventsClient),
+		fetchUnanalyzedMessages:         risk_analysis.NewFetchUnanalyzed(logger, tracerProvider, db),
+		analyzeBatch:                    risk_analysis.NewAnalyzeBatch(logger, tracerProvider, meterProvider, db, piiScanner),
+		processWorkOSOrganizationEvents: activities.NewProcessWorkOSOrganizationEvents(logger, db, workosEventsClient, workosClient),
 		getAllWorkOSLinkedOrganizations: activities.NewGetAllWorkOSLinkedOrganizations(logger, db),
 	}
 }
@@ -243,6 +249,25 @@ func (a *Activities) DispatchTrigger(ctx context.Context, input activities.Dispa
 
 func (a *Activities) ProcessScheduledTrigger(ctx context.Context, input activities.ProcessScheduledTriggerInput) (*activities.ProcessScheduledTriggerResult, error) {
 	return a.processScheduledTrigger.Do(ctx, input)
+}
+
+func (a *Activities) FetchUnanalyzedMessages(ctx context.Context, input risk_analysis.FetchUnanalyzedArgs) (*risk_analysis.FetchUnanalyzedResult, error) {
+	result, err := a.fetchUnanalyzedMessages.Do(ctx, input)
+	if err != nil {
+		return nil, fmt.Errorf("fetch unanalyzed messages: %w", err)
+	}
+	return result, nil
+}
+
+func (a *Activities) AnalyzeBatch(ctx context.Context, input risk_analysis.AnalyzeBatchArgs) (*risk_analysis.AnalyzeBatchResult, error) {
+	if a.analyzeBatch == nil {
+		return nil, fmt.Errorf("analyze batch: gitleaks detector pool not initialized")
+	}
+	result, err := a.analyzeBatch.Do(ctx, input)
+	if err != nil {
+		return nil, fmt.Errorf("analyze batch: %w", err)
+	}
+	return result, nil
 }
 
 func (a *Activities) ProcessWorkOSOrganizationEvents(ctx context.Context, params activities.ProcessWorkOSOrganizationEventsParams) (*activities.ProcessWorkOSOrganizationEventsResult, error) {

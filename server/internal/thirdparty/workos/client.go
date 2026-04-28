@@ -160,12 +160,23 @@ func convertUser(u usermanagement.User) User {
 }
 
 func convertMember(m usermanagement.OrganizationMembership) Member {
+	roleSlugs := make([]string, 0, len(m.Roles))
+	for _, r := range m.Roles {
+		if r.Slug != "" {
+			roleSlugs = append(roleSlugs, r.Slug)
+		}
+	}
+	// Fall back to singular Role if Roles array is absent (older API responses).
+	if len(roleSlugs) == 0 && m.Role.Slug != "" {
+		roleSlugs = []string{m.Role.Slug}
+	}
 	return Member{
 		ID:             m.ID,
 		UserID:         m.UserID,
 		OrganizationID: m.OrganizationID,
 		Organization:   m.OrganizationName,
 		RoleSlug:       m.Role.Slug,
+		RoleSlugs:      roleSlugs,
 		Status:         string(m.Status),
 		CreatedAt:      m.CreatedAt,
 		UpdatedAt:      m.UpdatedAt,

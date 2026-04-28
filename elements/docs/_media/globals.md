@@ -1,11 +1,12 @@
-[**@gram-ai/elements v1.27.6**](README.md)
+[**@gram-ai/elements v1.30.0**](README.md)
 
 ***
 
-# @gram-ai/elements v1.27.6
+# @gram-ai/elements v1.30.0
 
 ## Interfaces
 
+- [MessageContentProps](interfaces/MessageContentProps.md)
 - [ShareButtonProps](interfaces/ShareButtonProps.md)
 - [CalendarProps](interfaces/CalendarProps.md)
 - [TimeRange](interfaces/TimeRange.md)
@@ -55,6 +56,8 @@
 
 ## Variables
 
+- [MessageContent](variables/MessageContent.md)
+- [ToolFallback](variables/ToolFallback.md)
 - [PRESETS](variables/PRESETS.md)
 - [MODELS](variables/MODELS.md)
 

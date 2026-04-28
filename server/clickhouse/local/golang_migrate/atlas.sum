@@ -1,4 +1,4 @@
-h1:a41uipwjD3Mtb/gmf3tZTVdMRq45It5VTitz/JvDVcs=
+h1:U3ji6At/MZPzADSONAOPqrY24Ft5Eo5XFFjOYXVyAmg=
 20251127155815_initial_golang_migrate.up.sql h1:fkATa14aucJEoldFi1VgW7TRT8gyC6NGe1Hq/OzXVuI=
 20251208142630_add-tool-logs-table.up.sql h1:cGJCiWBvLPFwOlpx0jYYLgdPZD21+gKSF/x4mVksBcI=
 20251209104438_add-id-col-to-tool-logs-table.up.sql h1:+Ubsl1ZKfeCZL9dBhohUnkBksKZj6nwdZSXm7WwowaE=
@@ -29,3 +29,6 @@ h1:a41uipwjD3Mtb/gmf3tZTVdMRq45It5VTitz/JvDVcs=
 20260327155410_add-hook-status-to-trace-summaries.up.sql h1:RrmJAFoaaJfMnSVD3/Dvap+P+obXIPSxHmXdubxH9AE=
 20260407215740_materialzie_skill_name.up.sql h1:s9UY5hy9ux63nANiIhJbCNtDL2oAjQwBWuwbzquEo+4=
 20260410153709_add-attribute-keys-mv.up.sql h1:c2bZLvYnQKmxUGDZ8zdtvSADnqvkWOLCQiv15Hjav/c=
+20260416194404_add-cache-cost-metrics.up.sql h1:MrTbFKr0ieEKB7CQYuHTV0g1oVFYr7MHWcgQ0IB6rJg=
+20260423195357_trace-status-from-attributes.up.sql h1:sGtbt2CBDOPTZhPHl0A7Xoxd1DauF2391lckPQXzizw=
+20260427192006_add-hook-block-reason.up.sql h1:AYNAwIQG07w6OoCgLMKrgyuLi6n+9GoM3r9NPG/bZSo=

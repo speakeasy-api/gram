@@ -1,16 +1,54 @@
 package plugins_test
 
 import (
+	"context"
+	"encoding/json"
+	"errors"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/plugins"
-	"github.com/speakeasy-api/gram/server/internal/access"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
+	mcpmetarepo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
+
+// mockGitHubPublisher records calls for testing. Set the *Err fields to
+// simulate GitHub-side failures.
+type mockGitHubPublisher struct {
+	createRepoCalled      bool
+	pushFilesCalled       bool
+	addCollaboratorCalled bool
+	lastPushedFiles       map[string][]byte
+	createRepoErr         error
+	pushFilesErr          error
+}
+
+func (m *mockGitHubPublisher) CreateRepo(_ context.Context, _ int64, _, _ string, _ bool) error {
+	m.createRepoCalled = true
+	return m.createRepoErr
+}
+
+func (m *mockGitHubPublisher) PushFiles(_ context.Context, _ int64, _, _, _, _ string, files map[string][]byte) (string, error) {
+	m.pushFilesCalled = true
+	m.lastPushedFiles = files
+	if m.pushFilesErr != nil {
+		return "", m.pushFilesErr
+	}
+	return "abc123", nil
+}
+
+func (m *mockGitHubPublisher) AddCollaborator(_ context.Context, _ int64, _, _, _, _ string) error {
+	m.addCollaboratorCalled = true
+	return nil
+}
 
 func TestPluginsService_CreatePlugin(t *testing.T) {
 	t.Parallel()
@@ -50,7 +88,7 @@ func TestPluginsService_CreatePlugin_ForbiddenWithoutOrgAdmin(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestPluginsService(t)
-	ctx = access.GrantsToContext(ctx, &access.Grants{})
+	ctx = authz.GrantsToContext(ctx, nil)
 
 	_, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{
 		Name: "Forbidden Plugin",
@@ -76,6 +114,30 @@ func TestPluginsService_GetPlugin(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, created.ID, result.ID)
 	require.Equal(t, "Get Test", result.Name)
+}
+
+// API key auth populates ProjectID but leaves ProjectSlug nil
+// (server/internal/auth/key.go:168). Non-publish endpoints must still work
+// in that mode — only PublishPlugins genuinely needs the slug.
+func TestPluginsService_ReadEndpoints_WorkWithoutProjectSlug(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestPluginsService(t)
+
+	created, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "API Key Test"})
+	require.NoError(t, err)
+
+	// Simulate API key auth by clearing ProjectSlug on the existing context.
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	authCtx.ProjectSlug = nil
+	apiKeyCtx := contextvalues.SetAuthContext(ctx, authCtx)
+
+	_, err = ti.service.GetPlugin(apiKeyCtx, &gen.GetPluginPayload{ID: created.ID})
+	require.NoError(t, err, "GetPlugin must work with API key auth (nil ProjectSlug)")
+
+	_, err = ti.service.ListPlugins(apiKeyCtx, &gen.ListPluginsPayload{})
+	require.NoError(t, err, "ListPlugins must work with API key auth (nil ProjectSlug)")
 }
 
 func TestPluginsService_GetPlugin_NotFound(t *testing.T) {
@@ -341,4 +403,477 @@ func TestPluginsService_DownloadPluginPackage(t *testing.T) {
 	require.Contains(t, result.ContentDisposition, "download-test.zip")
 	require.NotNil(t, body)
 	require.NoError(t, body.Close())
+}
+
+func TestPluginsService_GetPublishStatus_NotConfigured(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestPluginsService(t)
+
+	result, err := ti.service.GetPublishStatus(ctx, &gen.GetPublishStatusPayload{})
+	require.NoError(t, err)
+	require.False(t, result.Configured)
+	require.False(t, result.Connected)
+	require.Nil(t, result.RepoOwner)
+	require.Nil(t, result.RepoName)
+	require.Nil(t, result.RepoURL)
+}
+
+func TestPluginsService_PublishPlugins_NotConfigured(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestPluginsService(t)
+
+	_, err := ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
+	require.Error(t, err)
+
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
+}
+
+func TestPluginsService_GetPublishStatus_Configured(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockGitHubPublisher{}
+	ctx, ti := newTestPluginsServiceWithGitHub(t, mock)
+
+	result, err := ti.service.GetPublishStatus(ctx, &gen.GetPublishStatusPayload{})
+	require.NoError(t, err)
+	require.True(t, result.Configured)
+	require.False(t, result.Connected)
+}
+
+func TestPluginsService_PublishPlugins_NoPlugins(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockGitHubPublisher{}
+	ctx, ti := newTestPluginsServiceWithGitHub(t, mock)
+
+	_, err := ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
+	require.Error(t, err)
+
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
+	require.False(t, mock.createRepoCalled)
+}
+
+func TestPluginsService_PublishPlugins_HappyPath(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockGitHubPublisher{}
+	ctx, ti := newTestPluginsServiceWithGitHub(t, mock)
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Publish Test"})
+	require.NoError(t, err)
+
+	toolset := createTestToolset(t, ctx, ti.conn, "publish-toolset")
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
+		PluginID:    plugin.ID,
+		ToolsetID:   toolset.ID.String(),
+		DisplayName: "Test Server",
+		Policy:      "required",
+		SortOrder:   0,
+	})
+	require.NoError(t, err)
+
+	result, err := ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
+	require.NoError(t, err)
+	require.Contains(t, result.RepoURL, "test-org")
+	require.True(t, mock.createRepoCalled)
+	require.True(t, mock.pushFilesCalled)
+	require.NotEmpty(t, mock.lastPushedFiles)
+
+	status, err := ti.service.GetPublishStatus(ctx, &gen.GetPublishStatusPayload{})
+	require.NoError(t, err)
+	require.True(t, status.Connected)
+	require.NotNil(t, status.RepoURL)
+}
+
+func TestPluginsService_PublishPlugins_WithCollaborator(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockGitHubPublisher{}
+	ctx, ti := newTestPluginsServiceWithGitHub(t, mock)
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Collab Test"})
+	require.NoError(t, err)
+
+	toolset := createTestToolset(t, ctx, ti.conn, "collab-toolset")
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
+		PluginID:    plugin.ID,
+		ToolsetID:   toolset.ID.String(),
+		DisplayName: "Collab Server",
+		Policy:      "required",
+		SortOrder:   0,
+	})
+	require.NoError(t, err)
+
+	username := "octocat"
+	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{
+		GithubUsername: &username,
+	})
+	require.NoError(t, err)
+	require.True(t, mock.addCollaboratorCalled)
+}
+
+func TestPluginsService_PublishPlugins_CreatesAPIKeyWithCorrectScope(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockGitHubPublisher{}
+	ctx, ti := newTestPluginsServiceWithGitHub(t, mock)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Key Test"})
+	require.NoError(t, err)
+
+	toolset := createTestToolset(t, ctx, ti.conn, "key-toolset")
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
+		PluginID:    plugin.ID,
+		ToolsetID:   toolset.ID.String(),
+		DisplayName: "Key Server",
+		Policy:      "required",
+		SortOrder:   0,
+	})
+	require.NoError(t, err)
+
+	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
+	require.NoError(t, err)
+
+	// Verify a key was created with consumer scope.
+	keys, err := keysrepo.New(ti.conn).ListAPIKeysByOrganization(ctx, authCtx.ActiveOrganizationID)
+	require.NoError(t, err)
+
+	var pluginKey *keysrepo.ApiKey
+	for i := range keys {
+		if strings.HasPrefix(keys[i].Name, "plugins-") {
+			pluginKey = &keys[i]
+			break
+		}
+	}
+	require.NotNil(t, pluginKey, "expected a plugins-* API key to be created")
+	require.Contains(t, pluginKey.Scopes, "consumer")
+	require.True(t, strings.HasPrefix(pluginKey.KeyPrefix, "gram_local_"))
+
+	// Verify the key is injected into the pushed MCP config.
+	mcpJSON := mock.lastPushedFiles["key-test/.mcp.json"]
+	require.NotNil(t, mcpJSON)
+	require.Contains(t, string(mcpJSON), "gram_local_")
+	require.NotContains(t, string(mcpJSON), "user_config")
+}
+
+func TestPluginsService_PublishPlugins_RePublishCreatesAdditionalKey(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockGitHubPublisher{}
+	ctx, ti := newTestPluginsServiceWithGitHub(t, mock)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Republish Test"})
+	require.NoError(t, err)
+
+	toolset := createTestToolset(t, ctx, ti.conn, "republish-toolset")
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
+		PluginID:    plugin.ID,
+		ToolsetID:   toolset.ID.String(),
+		DisplayName: "Republish Server",
+		Policy:      "required",
+		SortOrder:   0,
+	})
+	require.NoError(t, err)
+
+	// Publish twice.
+	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
+	require.NoError(t, err)
+	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
+	require.NoError(t, err)
+
+	// Count plugin keys — currently creates one per publish (known issue).
+	keys, err := keysrepo.New(ti.conn).ListAPIKeysByOrganization(ctx, authCtx.ActiveOrganizationID)
+	require.NoError(t, err)
+
+	count := 0
+	for _, k := range keys {
+		if strings.HasPrefix(k.Name, "plugins-") {
+			count++
+		}
+	}
+	// Documents the current behavior: each publish creates a new key.
+	// A future improvement should revoke the previous key first.
+	require.Equal(t, 2, count, "expected 2 plugin keys after 2 publishes")
+}
+
+// PublishPlugins must not persist the API key (or audit log entry, or
+// github connection) when GitHub publishing fails. Otherwise every failed
+// publish leaks a valid consumer credential.
+func TestPluginsService_PublishPlugins_NoOrphanedKeyOnGitHubFailure(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockGitHubPublisher{
+		createRepoErr: errors.New("simulated github outage"),
+	}
+	ctx, ti := newTestPluginsServiceWithGitHub(t, mock)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Will Fail"})
+	require.NoError(t, err)
+
+	toolset := createTestToolset(t, ctx, ti.conn, "fail-toolset")
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
+		PluginID:    plugin.ID,
+		ToolsetID:   toolset.ID.String(),
+		DisplayName: "Server",
+		Policy:      "required",
+		SortOrder:   0,
+	})
+	require.NoError(t, err)
+
+	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
+	require.Error(t, err, "publish must fail when GitHub does")
+
+	// No plugins-* API key should have been persisted.
+	keys, err := keysrepo.New(ti.conn).ListAPIKeysByOrganization(ctx, authCtx.ActiveOrganizationID)
+	require.NoError(t, err)
+	for _, k := range keys {
+		require.False(t, strings.HasPrefix(k.Name, "plugins-"),
+			"orphaned plugin api key %q persisted despite github failure", k.Name)
+	}
+}
+
+func TestPluginsService_PublishPlugins_PublicToolsetEnvConfigs(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockGitHubPublisher{}
+	ctx, ti := newTestPluginsServiceWithGitHub(t, mock)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Public Test"})
+	require.NoError(t, err)
+
+	// Create a toolset and make it public.
+	toolset := createTestToolset(t, ctx, ti.conn, "public-toolset")
+	_, err = ti.conn.Exec(ctx, "UPDATE toolsets SET mcp_is_public = TRUE WHERE id = $1", toolset.ID)
+	require.NoError(t, err)
+
+	// Create MCP metadata + environment config for the public toolset.
+	mcpRepo := mcpmetarepo.New(ti.conn)
+	metadata, err := mcpRepo.UpsertMetadata(ctx, mcpmetarepo.UpsertMetadataParams{
+		ToolsetID:                 toolset.ID,
+		ProjectID:                 *authCtx.ProjectID,
+		ExternalDocumentationUrl:  pgtype.Text{Valid: false},
+		ExternalDocumentationText: pgtype.Text{Valid: false},
+		LogoID:                    uuid.NullUUID{Valid: false},
+		Instructions:              pgtype.Text{Valid: false},
+		DefaultEnvironmentID:      uuid.NullUUID{Valid: false},
+		InstallationOverrideUrl:   pgtype.Text{Valid: false},
+	})
+	require.NoError(t, err)
+
+	_, err = mcpRepo.UpsertEnvironmentConfig(ctx, mcpmetarepo.UpsertEnvironmentConfigParams{
+		ProjectID:         *authCtx.ProjectID,
+		McpMetadataID:     metadata.ID,
+		VariableName:      "ANALYTICS_API_KEY",
+		HeaderDisplayName: pgtype.Text{String: "Authorization", Valid: true},
+		ProvidedBy:        "user",
+	})
+	require.NoError(t, err)
+
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
+		PluginID:    plugin.ID,
+		ToolsetID:   toolset.ID.String(),
+		DisplayName: "Public Server",
+		Policy:      "required",
+		SortOrder:   0,
+	})
+	require.NoError(t, err)
+
+	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
+	require.NoError(t, err)
+
+	// Verify the Cursor config uses ${env:ANALYTICS_API_KEY} for the public server.
+	cursorMCP := mock.lastPushedFiles["public-test-cursor/mcp.json"]
+	require.NotNil(t, cursorMCP)
+
+	var cursorConfig struct {
+		MCPServers map[string]struct {
+			Headers map[string]string `json:"headers"`
+		} `json:"mcpServers"`
+	}
+	err = json.Unmarshal(cursorMCP, &cursorConfig)
+	require.NoError(t, err)
+
+	server, ok := cursorConfig.MCPServers["Public Server"]
+	require.True(t, ok)
+	require.Equal(t, "${env:ANALYTICS_API_KEY}", server.Headers["Authorization"])
+
+	// Verify the Claude config uses ${user_config.ANALYTICS_API_KEY}.
+	claudeMCP := mock.lastPushedFiles["public-test/.mcp.json"]
+	require.NotNil(t, claudeMCP)
+	require.Contains(t, string(claudeMCP), "${user_config.ANALYTICS_API_KEY}")
+
+	// Verify NO Gram API key is injected for public servers.
+	require.NotContains(t, string(cursorMCP), "gram_local_")
+}
+
+// User-provided env configs without a HeaderDisplayName must be skipped —
+// substituting the variable name as the HTTP header would produce a broken
+// MCP config. Only configs with an explicit header name should be emitted.
+func TestPluginsService_PublishPlugins_SkipsUserEnvConfigsWithoutHeaderName(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockGitHubPublisher{}
+	ctx, ti := newTestPluginsServiceWithGitHub(t, mock)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Headerless"})
+	require.NoError(t, err)
+
+	toolset := createTestToolset(t, ctx, ti.conn, "headerless-toolset")
+	_, err = ti.conn.Exec(ctx, "UPDATE toolsets SET mcp_is_public = TRUE WHERE id = $1", toolset.ID)
+	require.NoError(t, err)
+
+	mcpRepo := mcpmetarepo.New(ti.conn)
+	metadata, err := mcpRepo.UpsertMetadata(ctx, mcpmetarepo.UpsertMetadataParams{
+		ToolsetID:                 toolset.ID,
+		ProjectID:                 *authCtx.ProjectID,
+		ExternalDocumentationUrl:  pgtype.Text{Valid: false},
+		ExternalDocumentationText: pgtype.Text{Valid: false},
+		LogoID:                    uuid.NullUUID{Valid: false},
+		Instructions:              pgtype.Text{Valid: false},
+		DefaultEnvironmentID:      uuid.NullUUID{Valid: false},
+		InstallationOverrideUrl:   pgtype.Text{Valid: false},
+	})
+	require.NoError(t, err)
+
+	// Two user-provided env configs: one with header name, one without.
+	_, err = mcpRepo.UpsertEnvironmentConfig(ctx, mcpmetarepo.UpsertEnvironmentConfigParams{
+		ProjectID:         *authCtx.ProjectID,
+		McpMetadataID:     metadata.ID,
+		VariableName:      "HAS_HEADER",
+		HeaderDisplayName: pgtype.Text{String: "X-Has-Header", Valid: true},
+		ProvidedBy:        "user",
+	})
+	require.NoError(t, err)
+	_, err = mcpRepo.UpsertEnvironmentConfig(ctx, mcpmetarepo.UpsertEnvironmentConfigParams{
+		ProjectID:         *authCtx.ProjectID,
+		McpMetadataID:     metadata.ID,
+		VariableName:      "NO_HEADER",
+		HeaderDisplayName: pgtype.Text{Valid: false},
+		ProvidedBy:        "user",
+	})
+	require.NoError(t, err)
+
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
+		PluginID:    plugin.ID,
+		ToolsetID:   toolset.ID.String(),
+		DisplayName: "Headerless Server",
+		Policy:      "required",
+		SortOrder:   0,
+	})
+	require.NoError(t, err)
+
+	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
+	require.NoError(t, err)
+
+	cursorMCP := mock.lastPushedFiles["headerless-cursor/mcp.json"]
+	require.NotNil(t, cursorMCP)
+
+	var cursorConfig struct {
+		MCPServers map[string]struct {
+			Headers map[string]string `json:"headers"`
+		} `json:"mcpServers"`
+	}
+	require.NoError(t, json.Unmarshal(cursorMCP, &cursorConfig))
+
+	server, ok := cursorConfig.MCPServers["Headerless Server"]
+	require.True(t, ok)
+
+	// HAS_HEADER survived with its proper header name.
+	require.Equal(t, "${env:HAS_HEADER}", server.Headers["X-Has-Header"])
+
+	// NO_HEADER must not leak through as either a header key or a value.
+	require.NotContains(t, server.Headers, "NO_HEADER")
+	for k, v := range server.Headers {
+		require.NotContains(t, v, "NO_HEADER", "NO_HEADER variable leaked into header %q", k)
+	}
+}
+
+// AddPluginServer rejects toolsets without mcp_enabled, but mcp can be
+// disabled later without removing the persisted mcp_slug. The publish path
+// must filter those out so generated configs don't reference dead URLs.
+func TestPluginsService_PublishPlugins_SkipsDisabledMCPToolsets(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockGitHubPublisher{}
+	ctx, ti := newTestPluginsServiceWithGitHub(t, mock)
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Mixed"})
+	require.NoError(t, err)
+
+	enabled := createTestToolset(t, ctx, ti.conn, "enabled-toolset")
+	disabled := createTestToolset(t, ctx, ti.conn, "disabled-toolset")
+
+	for _, ts := range []toolsetsrepo.Toolset{enabled, disabled} {
+		_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
+			PluginID:    plugin.ID,
+			ToolsetID:   ts.ID.String(),
+			DisplayName: "Server " + ts.Name,
+			Policy:      "required",
+			SortOrder:   0,
+		})
+		require.NoError(t, err)
+	}
+
+	// Disable MCP after the server was added (slug stays persisted).
+	_, err = ti.conn.Exec(ctx, "UPDATE toolsets SET mcp_enabled = FALSE WHERE id = $1", disabled.ID)
+	require.NoError(t, err)
+
+	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
+	require.NoError(t, err)
+
+	cursorMCP := mock.lastPushedFiles["mixed-cursor/mcp.json"]
+	require.NotNil(t, cursorMCP)
+
+	var cursorConfig struct {
+		MCPServers map[string]json.RawMessage `json:"mcpServers"`
+	}
+	require.NoError(t, json.Unmarshal(cursorMCP, &cursorConfig))
+
+	require.Contains(t, cursorConfig.MCPServers, "Server enabled-toolset", "enabled toolset should appear in published config")
+	require.NotContains(t, cursorConfig.MCPServers, "Server disabled-toolset", "disabled toolset must be filtered out by ListPluginsWithServersForProject")
+}
+
+// A public toolset with no mcp_metadata row should publish cleanly. The
+// metadata row is created by an explicit UpsertMetadata call, not auto-
+// created when a toolset is made public, so this is a real production state.
+func TestPluginsService_PublishPlugins_PublicToolsetWithoutMetadata(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockGitHubPublisher{}
+	ctx, ti := newTestPluginsServiceWithGitHub(t, mock)
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "No Meta"})
+	require.NoError(t, err)
+
+	toolset := createTestToolset(t, ctx, ti.conn, "public-no-meta")
+	_, err = ti.conn.Exec(ctx, "UPDATE toolsets SET mcp_is_public = TRUE WHERE id = $1", toolset.ID)
+	require.NoError(t, err)
+
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
+		PluginID:    plugin.ID,
+		ToolsetID:   toolset.ID.String(),
+		DisplayName: "No Meta Server",
+		Policy:      "required",
+		SortOrder:   0,
+	})
+	require.NoError(t, err)
+
+	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
+	require.NoError(t, err)
 }

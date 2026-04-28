@@ -21,8 +21,8 @@ type Service interface {
 	CreateToolset(context.Context, *CreateToolsetPayload) (res *types.Toolset, err error)
 	// List all toolsets for a project
 	ListToolsets(context.Context, *ListToolsetsPayload) (res *ListToolsetsResult, err error)
-	// List all toolsets across the organization
-	ListToolsetsForOrg(context.Context, *ListToolsetsForOrgPayload) (res *ListToolsetsResult, err error)
+	// List all toolsets across the organization (summary view)
+	ListToolsetsForOrg(context.Context, *ListToolsetsForOrgPayload) (res *ListToolsetSummariesResult, err error)
 	// Update a toolset's properties including name, description, and HTTP tools
 	UpdateToolset(context.Context, *UpdateToolsetPayload) (res *types.Toolset, err error)
 	// Delete a toolset by its ID
@@ -124,7 +124,9 @@ type CreateToolsetPayload struct {
 	ResourceUrns []string
 	// The slug of the environment to use as the default for the toolset
 	DefaultEnvironmentSlug *types.Slug
-	ProjectSlugInput       *string
+	// Optional registry lineage for toolsets installed from an external MCP catalog
+	Origin           *types.ToolsetOrigin
+	ProjectSlugInput *string
 }
 
 // DeleteToolsetPayload is the payload type of the toolsets service
@@ -145,6 +147,13 @@ type GetToolsetPayload struct {
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
+}
+
+// ListToolsetSummariesResult is the result type of the toolsets service
+// listToolsetsForOrg method.
+type ListToolsetSummariesResult struct {
+	// The list of toolset summaries
+	Toolsets []*types.ToolsetSummary
 }
 
 // ListToolsetsForOrgPayload is the payload type of the toolsets service

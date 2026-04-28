@@ -1,4 +1,5 @@
 import { Page } from "@/components/page-layout";
+import { RequireScope } from "@/components/require-scope";
 import { Stepper, StepProps } from "@/components/stepper";
 import {
   Accordion,
@@ -13,28 +14,14 @@ import { FullWidthUpload } from "@/components/upload";
 import DeployStep from "@/components/upload-asset/deploy-step";
 import NameDeploymentStep from "@/components/upload-asset/name-deployment-step";
 import UploadAssetStep from "@/components/upload-asset/step";
-import UploadAssetStepper, {
-  useStepper,
-} from "@/components/upload-asset/stepper";
+import UploadAssetStepper from "@/components/upload-asset/stepper";
+import { useStepper } from "@/components/upload-asset/stepper/use-stepper";
 import UploadFileStep from "@/components/upload-asset/upload-file-step";
-import { useProject, useSession } from "@/contexts/Auth";
-import { useSdkClient } from "@/contexts/Sdk";
-import { useTelemetry } from "@/contexts/Telemetry";
 import { useListTools } from "@/hooks/toolTypes";
-import { slugify } from "@/lib/constants";
-import { cn, getServerURL } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
-import {
-  Deployment,
-  GetDeploymentResult,
-  UploadOpenAPIv3Result,
-} from "@gram/client/models/components";
-import { assetsServeOpenAPIv3 } from "@gram/client/funcs/assetsServeOpenAPIv3";
-import {
-  useDeploymentLogs,
-  useLatestDeployment,
-  useListToolsets,
-} from "@gram/client/react-query/index.js";
+import { Deployment } from "@gram/client/models/components";
+import { useDeploymentLogs } from "@gram/client/react-query/index.js";
 import { Heading } from "@/components/ui/heading";
 import { Alert, Button, CodeSnippet, Stack } from "@speakeasy-api/moonshine";
 import {
@@ -43,9 +30,7 @@ import {
   FileTextIcon,
   RefreshCcwIcon,
 } from "lucide-react";
-import { useState } from "react";
-import { toast } from "sonner";
-import { useParams } from "react-router";
+import { useUploadOpenAPISteps } from "./upload-openapi-utils";
 
 export default function UploadOpenAPI() {
   return (
@@ -54,77 +39,79 @@ export default function UploadOpenAPI() {
         <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body>
-        <div className="max-w-2xl">
-          {/* Header */}
-          <Stack gap={3} className="mb-8">
-            <Stack direction="horizontal" gap={3} align="center">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-500/10">
-                <FileTextIcon className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-              </div>
-              <Heading variant="h3">Import OpenAPI Specification</Heading>
-            </Stack>
-            <Type muted>
-              Upload your OpenAPI spec to automatically generate tools for every
-              endpoint. Supports JSON and YAML formats.
-            </Type>
-          </Stack>
-
-          {/* Stepper */}
-          <UploadAssetStepper.Provider step={1}>
-            <UploadAssetStepper.Frame>
-              <UploadAssetStep step={1}>
-                <UploadAssetStep.Indicator />
-                <UploadAssetStep.Header
-                  title="Upload OpenAPI Specification"
-                  description="Upload your OpenAPI specification to get started."
-                />
-                <UploadAssetStep.Content>
-                  <UploadFileStep />
-                </UploadAssetStep.Content>
-              </UploadAssetStep>
-
-              <UploadAssetStep step={2}>
-                <UploadAssetStep.Indicator />
-                <UploadAssetStep.Header
-                  title="Name Your API"
-                  description="The tools generated will be scoped under this name."
-                />
-                <UploadAssetStep.Content>
-                  <NameDeploymentStep />
-                </UploadAssetStep.Content>
-              </UploadAssetStep>
-
-              <UploadAssetStep step={3}>
-                <UploadAssetStep.Indicator />
-                <UploadAssetStep.Header
-                  title="Generate Tools"
-                  description="Gram will generate tools for your API."
-                />
-                <UploadAssetStep.Content>
-                  <DeployStep />
-                </UploadAssetStep.Content>
-              </UploadAssetStep>
-
-              <Stack direction="horizontal" justify="start">
-                <FooterActions />
+        <RequireScope scope="project:write" level="page">
+          <div className="max-w-2xl">
+            {/* Header */}
+            <Stack gap={3} className="mb-8">
+              <Stack direction="horizontal" gap={3} align="center">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-500/10">
+                  <FileTextIcon className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                </div>
+                <Heading variant="h3">Import OpenAPI Specification</Heading>
               </Stack>
-            </UploadAssetStepper.Frame>
-          </UploadAssetStepper.Provider>
+              <Type muted>
+                Upload your OpenAPI spec to automatically generate tools for
+                every endpoint. Supports JSON and YAML formats.
+              </Type>
+            </Stack>
 
-          {/* Help text */}
-          <Type small muted className="mt-6">
-            Don't have an OpenAPI spec?{" "}
-            <a
-              href="https://www.speakeasy.com/docs/gram"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-primary hover:underline"
-            >
-              Learn how to create one
-            </a>{" "}
-            or try our sample specs.
-          </Type>
-        </div>
+            {/* Stepper */}
+            <UploadAssetStepper.Provider step={1}>
+              <UploadAssetStepper.Frame>
+                <UploadAssetStep step={1}>
+                  <UploadAssetStep.Indicator />
+                  <UploadAssetStep.Header
+                    title="Upload OpenAPI Specification"
+                    description="Upload your OpenAPI specification to get started."
+                  />
+                  <UploadAssetStep.Content>
+                    <UploadFileStep />
+                  </UploadAssetStep.Content>
+                </UploadAssetStep>
+
+                <UploadAssetStep step={2}>
+                  <UploadAssetStep.Indicator />
+                  <UploadAssetStep.Header
+                    title="Name Your API"
+                    description="The tools generated will be scoped under this name."
+                  />
+                  <UploadAssetStep.Content>
+                    <NameDeploymentStep />
+                  </UploadAssetStep.Content>
+                </UploadAssetStep>
+
+                <UploadAssetStep step={3}>
+                  <UploadAssetStep.Indicator />
+                  <UploadAssetStep.Header
+                    title="Generate Tools"
+                    description="Gram will generate tools for your API."
+                  />
+                  <UploadAssetStep.Content>
+                    <DeployStep />
+                  </UploadAssetStep.Content>
+                </UploadAssetStep>
+
+                <Stack direction="horizontal" justify="start">
+                  <FooterActions />
+                </Stack>
+              </UploadAssetStepper.Frame>
+            </UploadAssetStepper.Provider>
+
+            {/* Help text */}
+            <Type small muted className="mt-6">
+              Don't have an OpenAPI spec?{" "}
+              <a
+                href="https://www.speakeasy.com/docs/gram"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary hover:underline"
+              >
+                Learn how to create one
+              </a>{" "}
+              or try our sample specs.
+            </Type>
+          </div>
+        </RequireScope>
       </Page.Body>
     </Page>
   );
@@ -169,249 +156,6 @@ function FooterActions() {
         </>
       );
   }
-}
-
-export function useUploadOpenAPISteps(checkDocumentSlugUnique = true) {
-  const project = useProject();
-  const session = useSession();
-  const client = useSdkClient();
-  const telemetry = useTelemetry();
-
-  const { data: latestDeployment } = useLatestDeployment();
-
-  const [file, setFile] = useState<File>();
-  const [asset, setAsset] = useState<UploadOpenAPIv3Result>();
-  const [isUploading, setIsUploading] = useState(false);
-  const [creatingDeployment, setCreatingDeployment] = useState(false);
-  const [apiName, setApiName] = useState<string | undefined>();
-  const [deployment, setDeployment] = useState<Deployment>();
-
-  // If an existing document slug was NOT provided, then we need to make sure the provided slug
-  // isn't accidentally overwriting an existing document slug.
-  let apiNameError: string | undefined;
-
-  if (apiName) {
-    if (apiName.length < 3) {
-      apiNameError = "API name must be at least 3 characters long";
-    }
-
-    if (
-      checkDocumentSlugUnique &&
-      latestDeployment?.deployment?.openapiv3Assets
-        .map((a) => a.slug)
-        .includes(apiName)
-    ) {
-      apiNameError = "API name must be unique";
-    }
-  } else {
-    apiNameError = "API name is required";
-  }
-
-  const getContentType = (file: File) => {
-    if (file.type) return file.type;
-    const ext = file.name.split(".").pop()?.toLowerCase();
-    switch (ext) {
-      case "json":
-        return "application/json";
-      case "yaml":
-      case "yml":
-        return "application/yaml";
-      default:
-        return "application/octet-stream";
-    }
-  };
-
-  const handleSpecUpload = async (file: File) => {
-    try {
-      setIsUploading(true);
-
-      telemetry.capture("onboarding_event", {
-        action: "spec_uploaded",
-      });
-
-      // Need to use fetch directly because the SDK doesn't support file uploads
-      const response = await fetch(
-        `${getServerURL()}/rpc/assets.uploadOpenAPIv3`,
-        {
-          method: "POST",
-          headers: {
-            "content-type": getContentType(file),
-            "content-length": file.size.toString(),
-            "gram-session": session.session,
-            "gram-project": project.slug,
-          },
-          body: file,
-        },
-      );
-
-      if (!response.ok) {
-        throw new Error(`Upload failed`);
-      }
-
-      const result: UploadOpenAPIv3Result = await response.json();
-
-      setAsset(result);
-      setFile(file);
-      if (!apiName) {
-        setApiName(slugify(file?.name.split(".")[0] ?? "My API"));
-      }
-    } catch (_error) {
-      toast.error("Failed to upload OpenAPI spec");
-    } finally {
-      setIsUploading(false);
-    }
-  };
-
-  const handleUrlUpload = async (result: UploadOpenAPIv3Result) => {
-    setIsUploading(true);
-    try {
-      const response = await assetsServeOpenAPIv3(client, {
-        id: result.asset.id,
-        projectId: project.id,
-      });
-      if (!response.ok) {
-        toast.error(
-          `Failed to fetch OpenAPI content: ${response.error.message}`,
-        );
-        return;
-      }
-
-      // Convert ReadableStream to Blob
-      const blob = await new Response(response.value.result).blob();
-
-      setAsset(result);
-      setFile(
-        new File([blob], "My API", {
-          type: result.asset.contentType,
-        }),
-      );
-
-      telemetry.capture("onboarding_event", {
-        action: "spec_uploaded",
-        source: "url",
-      });
-      if (!apiName) {
-        setApiName("My API");
-      }
-    } catch (_error) {
-      toast.error("Failed to load OpenAPI spec from URL");
-    } finally {
-      setIsUploading(false);
-    }
-  };
-
-  const createDeployment = async (documentSlug?: string, forceNew = false) => {
-    if (!asset || !apiName) {
-      throw new Error("Asset or file not found");
-    }
-
-    setCreatingDeployment(true);
-
-    try {
-      const shouldCreateNew =
-        !latestDeployment ||
-        (forceNew && latestDeployment.deployment?.openapiv3ToolCount === 0);
-
-      let deployment: Deployment | undefined;
-      if (shouldCreateNew) {
-        const createResult = await client.deployments.create({
-          idempotencyKey: crypto.randomUUID(),
-          createDeploymentRequestBody: {
-            nonBlocking: true,
-            openapiv3Assets: [
-              {
-                assetId: asset.asset.id,
-                name: documentSlug ?? apiName,
-                slug: documentSlug ?? slugify(apiName),
-              },
-            ],
-          },
-        });
-
-        deployment = createResult.deployment;
-      } else {
-        const createResult = await client.deployments.evolveDeployment({
-          evolveForm: {
-            nonBlocking: true,
-            upsertOpenapiv3Assets: [
-              {
-                assetId: asset.asset.id,
-                name: documentSlug ?? apiName,
-                slug: documentSlug ?? slugify(apiName),
-              },
-            ],
-          },
-        });
-
-        deployment = createResult.deployment;
-      }
-
-      if (!deployment) {
-        throw new Error("Deployment not found");
-      }
-
-      // Wait for deployment to finish
-      const maxAttempts = 600; // 5 minutes at 500ms intervals
-      let attempts = 0;
-      while (
-        deployment.status !== "completed" &&
-        deployment.status !== "failed"
-      ) {
-        if (++attempts >= maxAttempts) {
-          throw new Error("Deployment timed out waiting for completion");
-        }
-        await new Promise((resolve) => setTimeout(resolve, 500));
-        deployment = await client.deployments.getById({
-          id: deployment.id,
-        });
-      }
-
-      setDeployment(deployment);
-
-      if (deployment.status === "failed") {
-        telemetry.capture("onboarding_event", {
-          action: "deployment_failed",
-        });
-      } else {
-        telemetry.capture("onboarding_event", {
-          action: "deployment_created",
-          num_tools: deployment?.openapiv3ToolCount,
-        });
-      }
-
-      if (deployment?.openapiv3ToolCount === 0) {
-        telemetry.capture("onboarding_event", {
-          action: "no_tools_found",
-          error: "no_tools_found",
-        });
-      }
-
-      return deployment;
-    } finally {
-      setCreatingDeployment(false);
-    }
-  };
-
-  const undoSpecUpload = () => {
-    setFile(undefined);
-    setAsset(undefined);
-    setApiName(undefined);
-  };
-
-  return {
-    apiNameError,
-    handleSpecUpload,
-    handleUrlUpload,
-    undoSpecUpload,
-    apiName,
-    setApiName,
-    createDeployment,
-    file,
-    asset,
-    isUploading,
-    createdDeployment: deployment,
-    creatingDeployment,
-  };
 }
 
 const useAssetNumtools = (
@@ -620,31 +364,5 @@ export function DeploymentLogs(props: {
     <div className="max-h-[250px] overflow-y-auto font-mono text-sm">
       {lines.length > 0 ? lines : "OpenAPI document processed without issue"}
     </div>
-  );
-}
-
-export function useIsProjectEmpty() {
-  const { projectSlug } = useParams();
-
-  const { data: deployment, isLoading: isDeploymentLoading } =
-    useLatestDeployment({ gramProject: projectSlug });
-  const { data: toolsets, isLoading: isToolsetsLoading } = useListToolsets({
-    gramProject: projectSlug,
-  });
-
-  return {
-    isLoading: isDeploymentLoading || isToolsetsLoading,
-    isEmpty:
-      isDeploymentEmpty(deployment?.deployment) &&
-      toolsets?.toolsets.length === 0,
-  };
-}
-
-function isDeploymentEmpty(deployment: GetDeploymentResult | undefined) {
-  return (
-    !deployment ||
-    (deployment?.openapiv3Assets.length === 0 &&
-      (deployment.functionsAssets?.length ?? 0) === 0 &&
-      deployment?.packages.length === 0)
   );
 }

@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -31,14 +32,14 @@ type Service struct {
 
 var _ gen.Service = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, chatSessionsManager *chatsessions.Manager, accessLoader auth.AccessLoader) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, chatSessionsManager *chatsessions.Manager, authzEngine *authz.Engine) *Service {
 	logger = logger.With(attr.SlogComponent("chat_sessions"))
 
 	return &Service{
 		tracer:              tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/chatsessions"),
 		logger:              logger,
 		db:                  db,
-		auth:                auth.New(logger, db, sessions, accessLoader),
+		auth:                auth.New(logger, db, sessions, authzEngine),
 		chatSessionsManager: chatSessionsManager,
 	}
 }

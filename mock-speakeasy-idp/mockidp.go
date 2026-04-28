@@ -60,11 +60,15 @@ type OrgConfig struct {
 	Name        string
 	Slug        string
 	AccountType string
+	// WorkOSID is the WorkOS organization id included in /validate (json workos_id).
+	// Nil means omit the field so Gram's syncWorkOSIDs skips SetOrgWorkosID for that org.
+	WorkOSID *string
 }
 
 // NewConfig returns a Config with hardcoded test defaults (no env var lookup).
 // Use this in tests for deterministic behavior. Always runs in mock mode.
 func NewConfig() Config {
+	mockOrgWorkOSID := MockOrgID
 	return Config{
 		SecretKey: MockSecretKey,
 		User: UserConfig{
@@ -79,6 +83,7 @@ func NewConfig() Config {
 			Name:        MockOrgName,
 			Slug:        MockOrgSlug,
 			AccountType: "free",
+			WorkOSID:    &mockOrgWorkOSID,
 		},
 	}
 }
@@ -87,6 +92,7 @@ func NewConfig() Config {
 // When OIDC env vars are set, OIDC mode is enabled and the mock user/org
 // config is ignored (real identity comes from the OIDC provider).
 func DefaultConfig() Config {
+	orgID := envStr("MOCK_IDP_ORG_ID", "550e8400-e29b-41d4-a716-446655440000")
 	cfg := Config{
 		SecretKey: envStr("SPEAKEASY_SECRET_KEY", MockSecretKey),
 		User: UserConfig{
@@ -97,10 +103,11 @@ func DefaultConfig() Config {
 			Whitelisted: envBool("MOCK_IDP_USER_WHITELISTED", true),
 		},
 		Organization: OrgConfig{
-			ID:          envStr("MOCK_IDP_ORG_ID", "550e8400-e29b-41d4-a716-446655440000"),
+			ID:          orgID,
 			Name:        envStr("MOCK_IDP_ORG_NAME", "Local Dev Org"),
 			Slug:        envStr("MOCK_IDP_ORG_SLUG", "local-dev-org"),
 			AccountType: envStr("MOCK_IDP_ORG_ACCOUNT_TYPE", "free"),
+			WorkOSID:    &orgID,
 		},
 		Oidc: OidcConfig{
 			Issuer:       envStrNoUnset("OIDC_ISSUER"),
@@ -179,6 +186,7 @@ type organization struct {
 	UpdatedAt          string   `json:"updated_at"`
 	AccountType        string   `json:"account_type"`
 	SSOConnectionID    *string  `json:"sso_connection_id"`
+	WorkOSID           *string  `json:"workos_id,omitempty"`
 	UserWorkspaceSlugs []string `json:"user_workspaces_slugs"`
 }
 
@@ -726,6 +734,7 @@ func (s *server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		UpdatedAt:          now,
 		AccountType:        accountType,
 		SSOConnectionID:    nil,
+		WorkOSID:           nil,
 		UserWorkspaceSlugs: []string{slug},
 	}
 
@@ -894,6 +903,7 @@ func (s *server) buildOrg() organization {
 		UpdatedAt:          fixedTime,
 		AccountType:        s.cfg.Organization.AccountType,
 		SSOConnectionID:    nil,
+		WorkOSID:           s.cfg.Organization.WorkOSID,
 		UserWorkspaceSlugs: []string{s.cfg.Organization.Slug},
 	}
 }

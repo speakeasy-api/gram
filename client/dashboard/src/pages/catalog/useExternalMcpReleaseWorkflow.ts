@@ -1,9 +1,10 @@
 import { useSdkClient } from "@/contexts/Sdk";
-import type { Server } from "@/pages/catalog/hooks";
+import type { PulseMCPServer } from "@/pages/catalog/hooks";
 import {
   useDeployment,
   useDeploymentLogs,
   useLatestDeployment,
+  useListToolsets,
 } from "@gram/client/react-query";
 import type {
   DeploymentLogEvent,
@@ -27,7 +28,7 @@ export type ReleasePhase =
   | "error";
 
 export interface ServerConfig {
-  server: Server;
+  server: PulseMCPServer;
   name: string;
   /** For multi-remote servers, track which remotes are selected */
   selectedRemotes?: ExternalMCPRemote[];
@@ -35,7 +36,7 @@ export interface ServerConfig {
 
 /** Configuration for a server with multiple remotes during the selectRemotes phase */
 export interface MultiRemoteServerConfig {
-  server: Server;
+  server: PulseMCPServer;
   name: string;
   remotes: ExternalMCPRemote[];
   selectedRemoteUrls: Set<string>;
@@ -52,7 +53,7 @@ export interface ServerToolsetStatus {
 
 interface WorkflowBase {
   projectSlug?: string;
-  existingSpecifiers: Set<string>;
+  isServerAlreadyInstalled: (server: PulseMCPServer) => boolean;
   reset: () => void;
 }
 
@@ -113,8 +114,45 @@ export type ExternalMcpReleaseWorkflow =
   | ErrorPhase;
 
 interface UseExternalMcpReleaseWorkflowOptions {
-  servers: Server[];
+  servers: PulseMCPServer[];
   projectSlug?: string;
+}
+
+function buildInitialToolsetStatuses(
+  serverConfigs: ServerConfig[],
+): ServerToolsetStatus[] {
+  return serverConfigs.map((config) => ({
+    name: config.name,
+    slug: generateSlug(config.name),
+    status: "pending" as const,
+  }));
+}
+
+function buildToolUrns(config: ServerConfig): string[] {
+  // The slug must match the one we send to evolveDeployment so the resulting
+  // external_mcp_attachment row resolves the URNs. Deriving from the user-chosen
+  // name (rather than the server specifier) is what lets a fork own a distinct
+  // attachment from the original install.
+  const slug = generateSlug(config.name);
+
+  if (!config.server.tools) {
+    return [`tools:externalmcp:${slug}:proxy`];
+  }
+
+  return config.server.tools.map(
+    (tool) => `tools:externalmcp:${slug}:${tool.name}`,
+  );
+}
+
+function buildToolsetOrigin(server: PulseMCPServer) {
+  return {
+    registrySpecifier: server.registrySpecifier,
+  };
+}
+
+function buildForkPrefillName(server: PulseMCPServer): string {
+  const baseName = server.title ?? server.registrySpecifier;
+  return `${baseName} Copy`;
 }
 
 export function useExternalMcpReleaseWorkflow({
@@ -122,6 +160,9 @@ export function useExternalMcpReleaseWorkflow({
   projectSlug,
 }: UseExternalMcpReleaseWorkflowOptions): ExternalMcpReleaseWorkflow {
   const client = useSdkClient();
+  const { data: toolsetsResult } = useListToolsets(
+    projectSlug ? { gramProject: projectSlug } : undefined,
+  );
   const { data: latestDeploymentResult } = useLatestDeployment(
     projectSlug ? { gramProject: projectSlug } : undefined,
   );
@@ -129,12 +170,35 @@ export function useExternalMcpReleaseWorkflow({
 
   const existingSpecifiers = useMemo(
     () =>
-      new Set(
-        (latestDeployment?.externalMcps ?? []).map(
+      new Set<string>([
+        ...(latestDeployment?.externalMcps ?? []).map(
           (mcp) => mcp.registryServerSpecifier,
         ),
+        ...(toolsetsResult?.toolsets ?? [])
+          .map((toolset) => toolset.origin?.registrySpecifier)
+          .filter((specifier): specifier is string => !!specifier),
+      ]),
+    [latestDeployment?.externalMcps, toolsetsResult?.toolsets],
+  );
+  const existingToolsetIds = useMemo(
+    () =>
+      new Set((toolsetsResult?.toolsets ?? []).map((toolset) => toolset.id)),
+    [toolsetsResult?.toolsets],
+  );
+  const existingSlugs = useMemo(
+    () =>
+      new Set<string>(
+        (latestDeployment?.externalMcps ?? [])
+          .map((mcp) => mcp.slug)
+          .filter((slug): slug is string => !!slug),
       ),
     [latestDeployment?.externalMcps],
+  );
+  const isServerAlreadyInstalled = useCallback(
+    (server: PulseMCPServer) =>
+      existingSpecifiers.has(server.registrySpecifier) ||
+      (!!server.toolsetId && existingToolsetIds.has(server.toolsetId)),
+    [existingSpecifiers, existingToolsetIds],
   );
 
   const [phase, setPhase] = useState<ReleasePhase>("configure");
@@ -157,29 +221,49 @@ export function useExternalMcpReleaseWorkflow({
   // Track last processed server index to prevent double-click duplicates
   const lastProcessedIndexRef = useRef(-1);
 
-  // Initialize server configs when servers change - partition into multi/single remote
+  // Keep a live handle on the current phase so the partition effect can bail
+  // out when installed-state changes arrive after the user has started (or
+  // finished) deploying. Without this, a post-deploy cache refresh would
+  // re-run the partition and snap the dialog back to a fresh configure step.
+  const phaseRef = useRef<ReleasePhase>("configure");
   useEffect(() => {
+    phaseRef.current = phase;
+  }, [phase]);
+
+  // Initialize server configs when servers change - partition into multi/single remote.
+  // Already-installed servers always go to singleRemote: the fork flow reuses the
+  // existing external MCP attachment, so remote re-selection is not meaningful.
+  // Fork-friendly names are applied here so they appear on the first configure
+  // render, regardless of when installed-state data resolves.
+  useEffect(() => {
+    // Don't re-partition once we've moved past configuration. Post-submission
+    // refetches (e.g., refreshing the latest deployment after success) can
+    // otherwise flip `isServerAlreadyInstalled` and clobber deploying/complete/error state.
+    if (
+      phaseRef.current !== "selectRemotes" &&
+      phaseRef.current !== "configure"
+    ) {
+      return;
+    }
+
     const multiRemote: MultiRemoteServerConfig[] = [];
     const singleRemote: ServerConfig[] = [];
 
     for (const server of servers) {
-      // Skip servers already installed in the target project
-      if (existingSpecifiers.has(server.registrySpecifier)) {
-        continue;
-      }
-
       const remotes = server.remotes ?? [];
-      if (remotes.length > 1) {
+      const installed = isServerAlreadyInstalled(server);
+      const baseName = server.title ?? server.registrySpecifier;
+      if (remotes.length > 1 && !installed) {
         multiRemote.push({
           server,
-          name: server.title ?? server.registrySpecifier,
+          name: baseName,
           remotes,
           selectedRemoteUrls: new Set(),
         });
       } else {
         singleRemote.push({
           server,
-          name: server.title ?? server.registrySpecifier,
+          name: installed ? buildForkPrefillName(server) : baseName,
         });
       }
     }
@@ -194,7 +278,7 @@ export function useExternalMcpReleaseWorkflow({
     } else {
       setPhase("configure");
     }
-  }, [servers, existingSpecifiers]);
+  }, [servers, isServerAlreadyInstalled]);
 
   // Poll deployment status — pass gramProject for cross-project batch flow
   const { data: deploymentData } = useDeployment(
@@ -233,12 +317,7 @@ export function useExternalMcpReleaseWorkflow({
     if (deploymentStatus === "completed") {
       hasTransitionedRef.current = true;
       // Initialize toolset statuses as pending, then start creating them
-      const statuses: ServerToolsetStatus[] = serverConfigs.map((config) => ({
-        name: config.name,
-        slug: generateSlug(config.name),
-        status: "pending" as const,
-      }));
-      setToolsetStatuses(statuses);
+      setToolsetStatuses(buildInitialToolsetStatuses(serverConfigs));
       setPhase("complete");
     } else if (deploymentStatus === "failed") {
       hasTransitionedRef.current = true;
@@ -264,7 +343,6 @@ export function useExternalMcpReleaseWorkflow({
     async function createToolsets() {
       for (let i = 0; i < serverConfigs.length; i++) {
         const config = serverConfigs[i];
-        const slug = generateSlug(config.server.registrySpecifier);
 
         setToolsetStatuses((prev) =>
           prev.map((s, idx) =>
@@ -273,13 +351,6 @@ export function useExternalMcpReleaseWorkflow({
         );
 
         try {
-          let toolUrns = [`tools:externalmcp:${slug}:proxy`];
-          if (config.server.tools) {
-            toolUrns = config.server.tools.map(
-              (t) => `tools:externalmcp:${slug}:${t.name}`,
-            );
-          }
-
           const toolset = await client.toolsets.create(
             {
               createToolsetRequestBody: {
@@ -287,7 +358,8 @@ export function useExternalMcpReleaseWorkflow({
                 description:
                   config.server.description ||
                   `MCP server: ${config.server.registrySpecifier}`,
-                toolUrns,
+                origin: buildToolsetOrigin(config.server),
+                toolUrns: buildToolUrns(config),
               },
             },
             undefined,
@@ -341,6 +413,7 @@ export function useExternalMcpReleaseWorkflow({
     }
 
     createToolsets();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- toolset creation should only trigger on phase transition to "complete", not when serverConfigs/toolsetStatuses change mid-creation
   }, [phase]);
 
   const updateServerConfig = useCallback(
@@ -363,7 +436,9 @@ export function useExternalMcpReleaseWorkflow({
           if (i !== currentServerIndex) return config;
           return {
             ...config,
-            ...(updates.name !== undefined && { name: updates.name }),
+            ...(updates.name !== undefined && {
+              name: updates.name,
+            }),
             ...(updates.selectedRemoteUrls !== undefined && {
               selectedRemoteUrls: updates.selectedRemoteUrls,
             }),
@@ -432,13 +507,42 @@ export function useExternalMcpReleaseWorkflow({
     setPhase("selectRemotes");
   }, []);
 
-  // Only provide goBack if we originally had multi-remote servers
-  const hasMultiRemoteServers = useMemo(() => {
-    return servers.some((s) => (s.remotes ?? []).length > 1);
-  }, [servers]);
+  // Only provide goBack if we actually routed any servers through selectRemotes.
+  // Installed multi-remote servers skip that phase entirely, so we can't navigate
+  // back to a step that never ran.
+  const hasMultiRemoteServers = multiRemoteConfigs.length > 0;
 
   const startDeployment = useCallback(async () => {
     if (!canDeploy) return;
+
+    // Install-as-fork: every selected server (whether this is a fresh install
+    // or a fork of an already-installed one) must go through evolveDeployment
+    // so its attachment row exists under the slug we bake into its tool URNs.
+    // That slug is derived from the user-chosen name, so we need to reject two
+    // kinds of collisions before the upsert silently clobbers a row:
+    //   1. the derived slug matches one already deployed to this project, and
+    //   2. two configs in this same batch derive to the same slug (e.g.
+    //      "My Server!" and "My Server?" both slug to "my-server").
+    const seenInBatch = new Map<string, ServerConfig>();
+    for (const config of serverConfigs) {
+      const slug = generateSlug(config.name);
+      if (existingSlugs.has(slug)) {
+        setError(
+          `A server with slug "${slug}" already exists in this project. Rename "${config.name}" to disambiguate.`,
+        );
+        setPhase("error");
+        return;
+      }
+      const prior = seenInBatch.get(slug);
+      if (prior) {
+        setError(
+          `"${prior.name}" and "${config.name}" both resolve to slug "${slug}". Rename one to disambiguate.`,
+        );
+        setPhase("error");
+        return;
+      }
+      seenInBatch.set(slug, config);
+    }
 
     setPhase("deploying");
     setError(undefined);
@@ -454,20 +558,17 @@ export function useExternalMcpReleaseWorkflow({
           evolveForm: {
             deploymentId: latestDeployment?.id,
             nonBlocking: true,
-            upsertExternalMcps: serverConfigs.map((config) => {
-              const slug = generateSlug(config.server.registrySpecifier);
-              return {
-                registryId: config.server.registryId,
-                organizationMcpCollectionRegistryId:
-                  config.server.organizationMcpCollectionRegistryId,
-                name: config.name,
-                slug,
-                registryServerSpecifier: config.server.registrySpecifier,
-                selectedRemotes:
-                  config.selectedRemotes?.map((r) => r.url) ??
-                  config.server.remotes?.map((r) => r.url),
-              };
-            }),
+            upsertExternalMcps: serverConfigs.map((config) => ({
+              registryId: config.server.registryId,
+              organizationMcpCollectionRegistryId:
+                config.server.organizationMcpCollectionRegistryId,
+              name: config.name,
+              slug: generateSlug(config.name),
+              registryServerSpecifier: config.server.registrySpecifier,
+              selectedRemotes:
+                config.selectedRemotes?.map((r) => r.url) ??
+                config.server.remotes?.map((r) => r.url),
+            })),
           },
         },
         undefined,
@@ -478,19 +579,21 @@ export function useExternalMcpReleaseWorkflow({
         setDeploymentId(result.deployment.id);
       } else {
         // No deployment ID — may have completed synchronously
-        const statuses: ServerToolsetStatus[] = serverConfigs.map((config) => ({
-          name: config.name,
-          slug: generateSlug(config.name),
-          status: "pending" as const,
-        }));
-        setToolsetStatuses(statuses);
+        setToolsetStatuses(buildInitialToolsetStatuses(serverConfigs));
         setPhase("complete");
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
       setPhase("error");
     }
-  }, [canDeploy, client, latestDeployment?.id, projectSlug, serverConfigs]);
+  }, [
+    canDeploy,
+    client,
+    existingSlugs,
+    latestDeployment?.id,
+    projectSlug,
+    serverConfigs,
+  ]);
 
   const reset = useCallback(() => {
     setDeploymentId(undefined);
@@ -498,28 +601,24 @@ export function useExternalMcpReleaseWorkflow({
     setError(undefined);
     hasTransitionedRef.current = false;
     setCurrentServerIndex(0);
-
-    // Re-partition servers into multi/single remote, skipping already-installed
     const multiRemote: MultiRemoteServerConfig[] = [];
     const singleRemote: ServerConfig[] = [];
 
     for (const server of servers) {
-      if (existingSpecifiers.has(server.registrySpecifier)) {
-        continue;
-      }
-
       const remotes = server.remotes ?? [];
-      if (remotes.length > 1) {
+      const installed = isServerAlreadyInstalled(server);
+      const baseName = server.title ?? server.registrySpecifier;
+      if (remotes.length > 1 && !installed) {
         multiRemote.push({
           server,
-          name: server.title ?? server.registrySpecifier,
+          name: baseName,
           remotes,
           selectedRemoteUrls: new Set(),
         });
       } else {
         singleRemote.push({
           server,
-          name: server.title ?? server.registrySpecifier,
+          name: installed ? buildForkPrefillName(server) : baseName,
         });
       }
     }
@@ -532,11 +631,11 @@ export function useExternalMcpReleaseWorkflow({
     } else {
       setPhase("configure");
     }
-  }, [servers]);
+  }, [servers, isServerAlreadyInstalled]);
 
   const base: WorkflowBase = {
     projectSlug,
-    existingSpecifiers,
+    isServerAlreadyInstalled,
     reset,
   };
 
@@ -572,6 +671,12 @@ export function useExternalMcpReleaseWorkflow({
     case "complete":
       return { phase, toolsetStatuses, ...base };
     case "error":
-      return { phase, error: error!, deploymentId, deploymentLogs, ...base };
+      return {
+        phase,
+        error: error!,
+        deploymentId,
+        deploymentLogs,
+        ...base,
+      };
   }
 }

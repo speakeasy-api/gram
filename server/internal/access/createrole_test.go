@@ -2,6 +2,7 @@ package access
 
 import (
 	"errors"
+	mockidp "github.com/speakeasy-api/gram/mock-speakeasy-idp"
 	"testing"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	thirdpartyworkos "github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -26,7 +28,7 @@ func TestService_CreateRole(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	ti.roles.On("CreateRole", mock.Anything, "org_workos_test", thirdpartyworkos.CreateRoleOpts{
+	ti.roles.On("CreateRole", mock.Anything, mockidp.MockOrgID, thirdpartyworkos.CreateRoleOpts{
 		Name:        "Custom Builder",
 		Slug:        "org-custom-builder",
 		Description: "Can build selected resources",
@@ -38,23 +40,23 @@ func TestService_CreateRole(t *testing.T) {
 		CreatedAt:   mockRoleTimestamp,
 		UpdatedAt:   mockRoleTimestamp,
 	}, nil).Once()
-	ti.roles.On("ListMembers", mock.Anything, "org_workos_test").Return([]thirdpartyworkos.Member{
-		mockMember("org_workos_test", "membership_1", "user_1", "member"),
-		mockMember("org_workos_test", "membership_2", "user_2", "member"),
+	ti.roles.On("ListMembers", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Member{
+		mockMember(mockidp.MockOrgID, "membership_1", "user_1", "member"),
+		mockMember(mockidp.MockOrgID, "membership_2", "user_2", "member"),
 		// user_workos_only has never logged into Gram — should not be counted
-		mockMember("org_workos_test", "membership_workos_only", "user_workos_only", "member"),
+		mockMember(mockidp.MockOrgID, "membership_workos_only", "user_workos_only", "member"),
 	}, nil).Once()
 	ti.roles.On("UpdateMemberRole", mock.Anything, "membership_1", "org-custom-builder").Return(&thirdpartyworkos.Member{
 		ID:             "membership_1",
 		UserID:         "user_1",
-		OrganizationID: "org_workos_test",
+		OrganizationID: mockidp.MockOrgID,
 		RoleSlug:       "org-custom-builder",
 		CreatedAt:      mockMembershipTimestamp.Format(time.RFC3339),
 	}, nil).Once()
 	ti.roles.On("UpdateMemberRole", mock.Anything, "membership_2", "org-custom-builder").Return(&thirdpartyworkos.Member{
 		ID:             "membership_2",
 		UserID:         "user_2",
-		OrganizationID: "org_workos_test",
+		OrganizationID: mockidp.MockOrgID,
 		RoleSlug:       "org-custom-builder",
 		CreatedAt:      mockMembershipTimestamp.Format(time.RFC3339),
 	}, nil).Once()
@@ -66,10 +68,10 @@ func TestService_CreateRole(t *testing.T) {
 		Name:        "Custom Builder",
 		Description: "Can build selected resources",
 		Grants: []*gen.RoleGrant{
-			{Scope: string(ScopeBuildRead), Resources: []string{"project-1", "project-2"}},
-			{Scope: string(ScopeMCPConnect), Resources: nil},
+			{Scope: string(authz.ScopeProjectRead), Selectors: []*gen.Selector{{ResourceKind: "project", ResourceID: "project-1"}, {ResourceKind: "project", ResourceID: "project-2"}}},
+			{Scope: string(authz.ScopeMCPConnect), Selectors: nil},
 		},
-		MemberIds: []string{"user_1", "user_2"},
+		MemberIds: []string{"local_user_1", "local_user_2"},
 	})
 	require.NoError(t, err)
 	require.Equal(t, "Custom Builder", role.Name)
@@ -88,7 +90,7 @@ func TestService_CreateRole_WorkOSCreateFailure(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
-	ti.roles.On("CreateRole", mock.Anything, "org_workos_test", thirdpartyworkos.CreateRoleOpts{
+	ti.roles.On("CreateRole", mock.Anything, mockidp.MockOrgID, thirdpartyworkos.CreateRoleOpts{
 		Name:        "Custom Builder",
 		Slug:        "org-custom-builder",
 		Description: "Can build selected resources",
@@ -98,7 +100,7 @@ func TestService_CreateRole_WorkOSCreateFailure(t *testing.T) {
 		Name:        "Custom Builder",
 		Description: "Can build selected resources",
 		Grants: []*gen.RoleGrant{
-			{Scope: string(ScopeBuildRead), Resources: []string{"project-1"}},
+			{Scope: string(authz.ScopeProjectRead), Selectors: []*gen.Selector{{ResourceKind: "project", ResourceID: "project-1"}}},
 		},
 	})
 	require.Error(t, err)
@@ -113,18 +115,18 @@ func TestService_CreateRole_ContinuesAfterConflictWhenRoleAlreadyExists(t *testi
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 	existingRole := mockRole("role_existing", "Custom Builder", "org-custom-builder", "Can build selected resources")
-	ti.roles.On("CreateRole", mock.Anything, "org_workos_test", thirdpartyworkos.CreateRoleOpts{
+	ti.roles.On("CreateRole", mock.Anything, mockidp.MockOrgID, thirdpartyworkos.CreateRoleOpts{
 		Name:        "Custom Builder",
 		Slug:        "org-custom-builder",
 		Description: "Can build selected resources",
 	}).Return((*thirdpartyworkos.Role)(nil), &thirdpartyworkos.APIError{Method: "POST", Path: "/authorization/organizations/org_workos_test/roles", StatusCode: 409, Body: "role already exists"}).Once()
-	ti.roles.On("ListRoles", mock.Anything, "org_workos_test").Return([]thirdpartyworkos.Role{existingRole}, nil).Once()
+	ti.roles.On("ListRoles", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Role{existingRole}, nil).Once()
 
 	role, err := ti.service.CreateRole(ctx, &gen.CreateRolePayload{
 		Name:        "Custom Builder",
 		Description: "Can build selected resources",
 		Grants: []*gen.RoleGrant{
-			{Scope: string(ScopeBuildRead), Resources: []string{"project-1"}},
+			{Scope: string(authz.ScopeProjectRead), Selectors: []*gen.Selector{{ResourceKind: "project", ResourceID: "project-1"}}},
 		},
 	})
 	require.NoError(t, err)
@@ -145,7 +147,7 @@ func TestService_CreateRole_RejectsEmptySlug(t *testing.T) {
 		Name:        "!!!",
 		Description: "Can build selected resources",
 		Grants: []*gen.RoleGrant{
-			{Scope: string(ScopeBuildRead), Resources: []string{"project-1"}},
+			{Scope: string(authz.ScopeProjectRead), Selectors: []*gen.Selector{{ResourceKind: "project", ResourceID: "project-1"}}},
 		},
 	})
 	require.Error(t, err)
@@ -159,7 +161,7 @@ func TestService_CreateRole_AuditLog(t *testing.T) {
 	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionAccessRoleCreate)
 	require.NoError(t, err)
 
-	ti.roles.On("CreateRole", mock.Anything, "org_workos_test", thirdpartyworkos.CreateRoleOpts{
+	ti.roles.On("CreateRole", mock.Anything, mockidp.MockOrgID, thirdpartyworkos.CreateRoleOpts{
 		Name:        "Audit Builder",
 		Slug:        "org-audit-builder",
 		Description: "Tracks audit writes",
@@ -176,8 +178,8 @@ func TestService_CreateRole_AuditLog(t *testing.T) {
 		Name:        "Audit Builder",
 		Description: "Tracks audit writes",
 		Grants: []*gen.RoleGrant{{
-			Scope:     string(ScopeBuildRead),
-			Resources: []string{"project-1"},
+			Scope:     string(authz.ScopeProjectRead),
+			Selectors: []*gen.Selector{{ResourceKind: "project", ResourceID: "project-1"}},
 		}},
 	})
 	require.NoError(t, err)
@@ -205,7 +207,7 @@ func TestService_CreateRole_GrantSyncFailureDoesNotAssignMembers(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	ti.roles.On("CreateRole", mock.Anything, "org_workos_test", thirdpartyworkos.CreateRoleOpts{
+	ti.roles.On("CreateRole", mock.Anything, mockidp.MockOrgID, thirdpartyworkos.CreateRoleOpts{
 		Name:        "Broken Builder",
 		Slug:        "org-broken-builder",
 		Description: "Will fail grant sync",
@@ -228,9 +230,9 @@ func TestService_CreateRole_GrantSyncFailureDoesNotAssignMembers(t *testing.T) {
 		Name:        "Broken Builder",
 		Description: "Will fail grant sync",
 		Grants: []*gen.RoleGrant{
-			{Scope: string(ScopeBuildRead), Resources: []string{"project-1"}},
+			{Scope: string(authz.ScopeProjectRead), Selectors: []*gen.Selector{{ResourceKind: "project", ResourceID: "project-1"}}},
 		},
-		MemberIds: []string{"user_1", "user_2"},
+		MemberIds: []string{"local_user_1", "local_user_2"},
 	})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "sync grants for created role")

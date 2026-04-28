@@ -16,6 +16,7 @@ export const HookStatus = {
   Success: "success",
   Failure: "failure",
   Pending: "pending",
+  Blocked: "blocked",
 } as const;
 /**
  * Hook execution status
@@ -26,6 +27,10 @@ export type HookStatus = ClosedEnum<typeof HookStatus>;
  * Summary information for a hook trace
  */
 export type HookTraceSummary = {
+  /**
+   * Reason set when hook_status is 'blocked' (e.g. shadow-MCP guard rejection)
+   */
+  blockReason?: string | undefined;
   /**
    * Event source (from materialized column)
    */
@@ -82,6 +87,7 @@ export const HookTraceSummary$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    block_reason: z.optional(z.string()),
     event_source: z.optional(z.string()),
     gram_urn: z.string(),
     hook_source: z.optional(z.string()),
@@ -96,6 +102,7 @@ export const HookTraceSummary$inboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      "block_reason": "blockReason",
       "event_source": "eventSource",
       "gram_urn": "gramUrn",
       "hook_source": "hookSource",

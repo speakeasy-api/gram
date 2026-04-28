@@ -255,6 +255,10 @@ var ChatOverview = Type("ChatOverview", func() {
 		Description("When the chat was last updated.")
 		Format(FormatDateTime)
 	})
+	Attribute("total_input_tokens", Int64, "Total input tokens used in this chat")
+	Attribute("total_output_tokens", Int64, "Total output tokens used in this chat")
+	Attribute("total_tokens", Int64, "Total tokens (input + output) used in this chat")
+	Attribute("total_cost", Float64, "Total cost in USD for this chat")
 	Attribute("last_message_timestamp", String, func() {
 		Description("When the last message in the chat was created.")
 		Format(FormatDateTime)
@@ -286,8 +290,9 @@ var ChatMessage = Type("ChatMessage", func() {
 		Description("When the message was created.")
 		Format(FormatDateTime)
 	})
+	Attribute("generation", Int, "Conversation generation — bumps on compaction or edit divergence")
 
-	Required("id", "role", "model", "created_at")
+	Required("id", "role", "model", "created_at", "generation")
 })
 
 var ChatResolution = Type("ChatResolution", func() {

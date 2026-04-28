@@ -1,5 +1,11 @@
 # cli
 
+## 0.16.0
+
+### Minor Changes
+
+- 42e4248: Add support for scaling the number of instances and memory for machines deployed for a Gram Function. It is now possible to go up to 5 machines per function and up to 4096 MiB for each machine.
+
 ## 0.15.8
 
 ### Patch Changes

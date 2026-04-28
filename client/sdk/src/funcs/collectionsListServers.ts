@@ -106,10 +106,6 @@ async function $do(
       explode: false,
       charEncoding: "none",
     }),
-    "Gram-Project": encodeSimple("Gram-Project", payload["Gram-Project"], {
-      explode: false,
-      charEncoding: "none",
-    }),
     "Gram-Session": encodeSimple("Gram-Session", payload["Gram-Session"], {
       explode: false,
       charEncoding: "none",
@@ -119,26 +115,16 @@ async function $do(
   const requestSecurity = resolveSecurity(
     [
       {
-        fieldName: "Gram-Project",
-        type: "apiKey:header",
-        value: security?.option1?.projectSlugHeaderGramProject,
-      },
-      {
         fieldName: "Gram-Session",
         type: "apiKey:header",
-        value: security?.option1?.sessionHeaderGramSession,
+        value: security?.sessionHeaderGramSession,
       },
     ],
     [
       {
         fieldName: "Gram-Key",
         type: "apiKey:header",
-        value: security?.option2?.apikeyHeaderGramKey,
-      },
-      {
-        fieldName: "Gram-Project",
-        type: "apiKey:header",
-        value: security?.option2?.projectSlugHeaderGramProject,
+        value: security?.apikeyHeaderGramKey,
       },
     ],
   );

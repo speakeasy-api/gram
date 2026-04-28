@@ -31,8 +31,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
+	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/constants"
@@ -64,6 +66,7 @@ type Service struct {
 	logger           *slog.Logger
 	sessions         *sessions.Manager
 	chatSessions     *chatsessions.Manager
+	assistantTokens  *assistanttokens.Manager
 	assetStorage     assets.BlobStore
 	posthog          *posthog.Posthog
 	telemetryService *telemetry.Service
@@ -80,15 +83,17 @@ func NewService(
 	posthog *posthog.Posthog,
 	telemetryService *telemetry.Service,
 	assetStorage assets.BlobStore,
-	accessLoader auth.AccessLoader,
+	authzEngine *authz.Engine,
+	assistantTokens *assistanttokens.Manager,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("chat"))
 
 	return &Service{
-		auth:             auth.New(logger, db, sessions, accessLoader),
+		auth:             auth.New(logger, db, sessions, authzEngine),
 		db:               db,
 		sessions:         sessions,
 		chatSessions:     chatSessions,
+		assistantTokens:  assistantTokens,
 		logger:           logger,
 		repo:             repo.New(db),
 		tracer:           tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/chat"),
@@ -123,6 +128,17 @@ func (s *Service) JWTAuth(ctx context.Context, token string, schema *security.JW
 // It tries session auth first, then API key auth, then chat session token as fallback.
 // It also validates the project header and ensures ProjectID is present.
 func (s *Service) directAuthorize(ctx context.Context, r *http.Request) (context.Context, *contextvalues.AuthContext, error) {
+	if token := r.Header.Get("Authorization"); token != "" {
+		authorizedCtx, _, err := s.assistantTokens.Authorize(ctx, token)
+		if err == nil {
+			authCtx, ok := contextvalues.GetAuthContext(authorizedCtx)
+			if !ok || authCtx == nil || authCtx.ProjectID == nil {
+				return authorizedCtx, nil, oops.C(oops.CodeUnauthorized)
+			}
+			return authorizedCtx, authCtx, nil
+		}
+	}
+
 	// Try session auth first
 	sc := security.APIKeyScheme{
 		Name:           constants.SessionSecurityScheme,
@@ -201,7 +217,7 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 		}
 
 		for _, chat := range chats {
-			var lastMessageTimestamp string
+			lastMessageTimestamp := chat.CreatedAt.Time.Format(time.RFC3339)
 			if chat.LastMessageTimestamp.Valid {
 				lastMessageTimestamp = chat.LastMessageTimestamp.Time.Format(time.RFC3339)
 			}
@@ -215,7 +231,16 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 				CreatedAt:            chat.CreatedAt.Time.Format(time.RFC3339),
 				UpdatedAt:            chat.UpdatedAt.Time.Format(time.RFC3339),
 				LastMessageTimestamp: lastMessageTimestamp,
+				TotalInputTokens:     nil,
+				TotalOutputTokens:    nil,
+				TotalTokens:          nil,
+				TotalCost:            nil,
 			})
+		}
+
+		// Enrich with metrics from ClickHouse
+		if err := s.enrichChatsWithMetrics(ctx, authCtx.ProjectID.String(), result); err != nil {
+			s.logger.WarnContext(ctx, "failed to enrich chats with metrics", attr.SlogError(err))
 		}
 
 		return &gen.ListChatsResult{Chats: result}, nil
@@ -229,7 +254,7 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 		}
 
 		for _, chat := range chats {
-			var lastMessageTimestamp string
+			lastMessageTimestamp := chat.CreatedAt.Time.Format(time.RFC3339)
 			if chat.LastMessageTimestamp.Valid {
 				lastMessageTimestamp = chat.LastMessageTimestamp.Time.Format(time.RFC3339)
 			}
@@ -243,7 +268,16 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 				CreatedAt:            chat.CreatedAt.Time.Format(time.RFC3339),
 				UpdatedAt:            chat.UpdatedAt.Time.Format(time.RFC3339),
 				LastMessageTimestamp: lastMessageTimestamp,
+				TotalInputTokens:     nil,
+				TotalOutputTokens:    nil,
+				TotalTokens:          nil,
+				TotalCost:            nil,
 			})
+		}
+
+		// Enrich with metrics from ClickHouse
+		if err := s.enrichChatsWithMetrics(ctx, authCtx.ProjectID.String(), result); err != nil {
+			s.logger.WarnContext(ctx, "failed to enrich chats with metrics", attr.SlogError(err))
 		}
 
 		return &gen.ListChatsResult{Chats: result}, nil
@@ -263,7 +297,7 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 	}
 
 	for _, chat := range chats {
-		var lastMessageTimestamp string
+		lastMessageTimestamp := chat.CreatedAt.Time.Format(time.RFC3339)
 		if chat.LastMessageTimestamp.Valid {
 			lastMessageTimestamp = chat.LastMessageTimestamp.Time.Format(time.RFC3339)
 		}
@@ -277,7 +311,16 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 			CreatedAt:            chat.CreatedAt.Time.Format(time.RFC3339),
 			UpdatedAt:            chat.UpdatedAt.Time.Format(time.RFC3339),
 			LastMessageTimestamp: lastMessageTimestamp,
+			TotalInputTokens:     nil,
+			TotalOutputTokens:    nil,
+			TotalTokens:          nil,
+			TotalCost:            nil,
 		})
+	}
+
+	// Enrich with metrics from ClickHouse
+	if err := s.enrichChatsWithMetrics(ctx, authCtx.ProjectID.String(), result); err != nil {
+		s.logger.WarnContext(ctx, "failed to enrich chats with metrics", attr.SlogError(err))
 	}
 
 	return &gen.ListChatsResult{Chats: result}, nil
@@ -323,13 +366,13 @@ func (s *Service) ListChatsWithResolutions(ctx context.Context, payload *gen.Lis
 	if payload.From != nil {
 		t, err := time.Parse(time.RFC3339, *payload.From)
 		if err == nil {
-			fromTime = pgtype.Timestamptz{Time: t, Valid: true, InfinityModifier: pgtype.Finite}
+			fromTime = conv.ToPGTimestamptz(t)
 		}
 	}
 	if payload.To != nil {
 		t, err := time.Parse(time.RFC3339, *payload.To)
 		if err == nil {
-			toTime = pgtype.Timestamptz{Time: t, Valid: true, InfinityModifier: pgtype.Finite}
+			toTime = conv.ToPGTimestamptz(t)
 		}
 	}
 
@@ -372,7 +415,7 @@ func (s *Service) ListChatsWithResolutions(ctx context.Context, payload *gen.Lis
 
 		// If this is the first row for this chat, create the chat entry
 		if _, exists := chatMap[chatID]; !exists {
-			var lastMessageTimestamp string
+			lastMessageTimestamp := row.CreatedAt.Time.Format(time.RFC3339)
 			if row.LastMessageTimestamp.Valid {
 				lastMessageTimestamp = row.LastMessageTimestamp.Time.Format(time.RFC3339)
 			}
@@ -387,6 +430,10 @@ func (s *Service) ListChatsWithResolutions(ctx context.Context, payload *gen.Lis
 				UpdatedAt:            row.UpdatedAt.Time.Format(time.RFC3339),
 				LastMessageTimestamp: lastMessageTimestamp,
 				Resolutions:          make([]*gen.ChatResolution, 0),
+				TotalInputTokens:     nil,
+				TotalOutputTokens:    nil,
+				TotalTokens:          nil,
+				TotalCost:            nil,
 			}
 			chatOrder = append(chatOrder, chatID)
 		}
@@ -424,6 +471,11 @@ func (s *Service) ListChatsWithResolutions(ctx context.Context, payload *gen.Lis
 	chats := make([]*gen.ChatOverviewWithResolutions, len(chatOrder))
 	for i, chatID := range chatOrder {
 		chats[i] = chatMap[chatID]
+	}
+
+	// Enrich with metrics from ClickHouse
+	if err := s.enrichChatsWithResolutionsWithMetrics(ctx, authCtx.ProjectID.String(), chats); err != nil {
+		s.logger.WarnContext(ctx, "failed to enrich chats with metrics", attr.SlogError(err))
 	}
 
 	return &gen.ListChatsWithResolutionsResult{
@@ -486,6 +538,7 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 			ToolCallID:     &msg.ToolCallID.String,
 			FinishReason:   &msg.FinishReason.String,
 			CreatedAt:      msg.CreatedAt.Time.Format(time.RFC3339),
+			Generation:     int(msg.Generation),
 		}
 	}
 
@@ -499,13 +552,14 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		}
 	}
 
-	// Get last message timestamp from the most recent message
-	var lastMessageTimestamp string
+	// Get last message timestamp from the most recent message, or fall back to
+	// the chat's own created_at so the response always carries a valid datetime.
+	lastMessageTimestamp := chat.CreatedAt.Time.Format(time.RFC3339)
 	if len(messages) > 0 {
 		lastMessageTimestamp = messages[len(messages)-1].CreatedAt.Time.Format(time.RFC3339)
 	}
 
-	return &gen.Chat{
+	result := &gen.Chat{
 		ID:                   chat.ID.String(),
 		Title:                chat.Title.String,
 		UserID:               &chat.UserID.String,
@@ -516,7 +570,18 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		UpdatedAt:            chat.UpdatedAt.Time.Format(time.RFC3339),
 		LastMessageTimestamp: lastMessageTimestamp,
 		Messages:             resultMessages,
-	}, nil
+		TotalInputTokens:     nil,
+		TotalOutputTokens:    nil,
+		TotalTokens:          nil,
+		TotalCost:            nil,
+	}
+
+	// Enrich with metrics from ClickHouse
+	if err := s.enrichChatWithMetrics(ctx, authCtx.ProjectID.String(), result); err != nil {
+		s.logger.WarnContext(ctx, "failed to enrich chat with metrics", attr.SlogError(err))
+	}
+
+	return result, nil
 }
 
 // httpMetadata contains HTTP request metadata to be stored with chat messages.
@@ -617,6 +682,30 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 		return oops.E(oops.CodeBadRequest, err, "failed to parse request body").Log(ctx, s.logger)
 	}
 
+	// Defense-in-depth: reject any single tool-result message larger than the
+	// per-tool byte cap. The client is expected to truncate oversized tool
+	// results before sending, but if it doesn't, a huge payload here will
+	// waste upstream tokens and typically trip the provider's own context
+	// limit with an opaque 400. Failing fast here keeps the error clean.
+	const maxToolMessageBytes = 200 * 1024
+	for i, m := range chatRequest.Messages {
+		if openrouter.GetRole(m) != "tool" {
+			continue
+		}
+		content, err := openrouter.GetContentJSON(m)
+		if err != nil {
+			continue // other validation will catch malformed messages
+		}
+		if len(content) > maxToolMessageBytes {
+			return oops.E(
+				oops.CodeRequestTooLarge,
+				nil,
+				"tool message %d exceeds %d bytes; truncate tool output client-side",
+				i, maxToolMessageBytes,
+			).Log(ctx, s.logger)
+		}
+	}
+
 	chatIDHeader := r.Header.Get("Gram-Chat-ID")
 
 	eventProperties["model"] = chatRequest.Model
@@ -635,11 +724,23 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 
 	// Extract JSON schema from response_format if present
 	// This enables structured output mode (e.g., for generateObject in AI SDK)
-	var jsonSchema *or.JSONSchemaConfig
-	if chatRequest.ResponseFormat != nil && chatRequest.ResponseFormat.ResponseFormatJSONSchema != nil {
-		schema := chatRequest.ResponseFormat.ResponseFormatJSONSchema.GetJSONSchema()
+	var jsonSchema *or.ChatJSONSchemaConfig
+	if chatRequest.ResponseFormat != nil && chatRequest.ResponseFormat.ChatFormatJSONSchemaConfig != nil {
+		schema := chatRequest.ResponseFormat.ChatFormatJSONSchemaConfig.GetJSONSchema()
 		jsonSchema = &schema
 	}
+
+	toolNames := make([]string, 0, len(chatRequest.Tools))
+	for _, t := range chatRequest.Tools {
+		if t.Function != nil {
+			toolNames = append(toolNames, t.Function.Name)
+		}
+	}
+	s.logger.DebugContext(ctx, "chat completions tools forwarded",
+		attr.SlogChatModel(chatRequest.Model),
+		attr.SlogChatToolCount(len(toolNames)),
+		attr.SlogChatToolNames(toolNames),
+	)
 
 	completionReq := openrouter.CompletionRequest{
 		OrgID:          orgID,
@@ -719,8 +820,8 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 		Created: time.Now().Unix(),
 		Model:   response.Model,
 		Choices: []struct {
-			Message      or.Message `json:"message"`
-			FinishReason string     `json:"finish_reason"`
+			Message      or.ChatMessages `json:"message"`
+			FinishReason string          `json:"finish_reason"`
 		}{
 			{
 				Message:      *response.Message,
@@ -940,12 +1041,15 @@ type chatMessageRow struct {
 
 	role             string
 	model            string
-	content          or.Message
+	content          or.ChatMessages
 	finishReason     *string
 	toolCalls        []string
 	promptTokens     int64
 	completionTokens int64
 	totalTokens      int64
+
+	contentHash []byte
+	generation  int32
 
 	metadata httpMetadata
 }
@@ -1075,6 +1179,8 @@ func storeMessages(ctx context.Context, logger *slog.Logger, tx repo.DBTX, asset
 			UserAgent:        conv.ToPGText(row.metadata.UserAgent),
 			IpAddress:        conv.ToPGText(row.metadata.IPAddress),
 			Source:           conv.ToPGText(row.metadata.Source),
+			ContentHash:      row.contentHash,
+			Generation:       row.generation,
 		}
 	}
 
@@ -1082,6 +1188,105 @@ func storeMessages(ctx context.Context, logger *slog.Logger, tx repo.DBTX, asset
 	crepo := repo.New(tx)
 	if _, err := crepo.CreateChatMessage(ctx, dbrows); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to insert chat messages").Log(ctx, logger)
+	}
+
+	return nil
+}
+
+// enrichChatsWithMetrics fetches token and cost metrics from ClickHouse and adds them to chat overviews.
+// This is a best-effort operation - if metrics can't be fetched, chats are returned with zero values.
+func (s *Service) enrichChatsWithMetrics(ctx context.Context, projectID string, chats []*gen.ChatOverview) error {
+	if len(chats) == 0 {
+		return nil
+	}
+
+	// Check if telemetry service is available
+	if s.telemetryService == nil {
+		return nil
+	}
+
+	// Extract chat IDs
+	chatIDs := make([]string, len(chats))
+	for i, chat := range chats {
+		chatIDs[i] = chat.ID
+	}
+
+	// Fetch metrics from ClickHouse
+	metricsMap, err := s.telemetryService.GetChatMetricsByIDs(ctx, projectID, chatIDs)
+	if err != nil {
+		return fmt.Errorf("get chat metrics from ClickHouse: %w", err)
+	}
+
+	// Enrich each chat with its metrics
+	for _, chat := range chats {
+		if metrics, found := metricsMap[chat.ID]; found {
+			chat.TotalInputTokens = &metrics.TotalInputTokens
+			chat.TotalOutputTokens = &metrics.TotalOutputTokens
+			chat.TotalTokens = &metrics.TotalTokens
+			chat.TotalCost = &metrics.TotalCost
+		}
+	}
+
+	return nil
+}
+
+// enrichChatsWithResolutionsWithMetrics fetches token and cost metrics from ClickHouse and adds them to chat overviews with resolutions.
+// This is a best-effort operation - if metrics can't be fetched, chats are returned with zero values.
+func (s *Service) enrichChatsWithResolutionsWithMetrics(ctx context.Context, projectID string, chats []*gen.ChatOverviewWithResolutions) error {
+	if len(chats) == 0 {
+		return nil
+	}
+
+	// Check if telemetry service is available
+	if s.telemetryService == nil {
+		return nil
+	}
+
+	// Extract chat IDs
+	chatIDs := make([]string, len(chats))
+	for i, chat := range chats {
+		chatIDs[i] = chat.ID
+	}
+
+	// Fetch metrics from ClickHouse
+	metricsMap, err := s.telemetryService.GetChatMetricsByIDs(ctx, projectID, chatIDs)
+	if err != nil {
+		return fmt.Errorf("get chat metrics from ClickHouse: %w", err)
+	}
+
+	// Enrich each chat with its metrics
+	for _, chat := range chats {
+		if metrics, found := metricsMap[chat.ID]; found {
+			chat.TotalInputTokens = &metrics.TotalInputTokens
+			chat.TotalOutputTokens = &metrics.TotalOutputTokens
+			chat.TotalTokens = &metrics.TotalTokens
+			chat.TotalCost = &metrics.TotalCost
+		}
+	}
+
+	return nil
+}
+
+// enrichChatWithMetrics fetches token and cost metrics from ClickHouse and adds them to a single chat.
+// This is a best-effort operation - if metrics can't be fetched, the chat is returned with zero values.
+func (s *Service) enrichChatWithMetrics(ctx context.Context, projectID string, chat *gen.Chat) error {
+	// Check if telemetry service is available
+	if s.telemetryService == nil {
+		return nil
+	}
+
+	// Fetch metrics from ClickHouse
+	metricsMap, err := s.telemetryService.GetChatMetricsByIDs(ctx, projectID, []string{chat.ID})
+	if err != nil {
+		return fmt.Errorf("get chat metrics from ClickHouse: %w", err)
+	}
+
+	// Enrich chat with its metrics
+	if metrics, found := metricsMap[chat.ID]; found {
+		chat.TotalInputTokens = &metrics.TotalInputTokens
+		chat.TotalOutputTokens = &metrics.TotalOutputTokens
+		chat.TotalTokens = &metrics.TotalTokens
+		chat.TotalCost = &metrics.TotalCost
 	}
 
 	return nil

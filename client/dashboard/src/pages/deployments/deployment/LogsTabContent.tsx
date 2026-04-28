@@ -194,9 +194,11 @@ export const LogsTabContent = ({
   const { searchParams, setSearchParams } = useDeploymentSearchParams();
   const [localGrouping, setLocalGrouping] = useState(false);
 
-  const setGroupBySource = embeddedMode
-    ? (value: boolean) => setLocalGrouping(value)
-    : (value: boolean) => {
+  const setGroupBySource = useCallback(
+    (value: boolean) => {
+      if (embeddedMode) {
+        setLocalGrouping(value);
+      } else {
         setSearchParams((prev) => {
           if (prev.tab !== "logs") return prev;
           const next = { ...prev };
@@ -204,7 +206,10 @@ export const LogsTabContent = ({
           else next.grouping = undefined;
           return next;
         });
-      };
+      }
+    },
+    [embeddedMode, setSearchParams],
+  );
 
   const groupBySource = React.useMemo(() => {
     if (embeddedMode) return localGrouping;
@@ -360,28 +365,31 @@ export const LogsTabContent = ({
     [effectiveSearchIndex, filteredIndices, scrollToLog],
   );
 
-  const handleFocusChange = (newFocus: LogFocus) => {
-    setFocus(newFocus);
-    setCurrentSearchIndex(0);
+  const handleFocusChange = useCallback(
+    (newFocus: LogFocus) => {
+      setFocus(newFocus);
+      setCurrentSearchIndex(0);
 
-    if (newFocus !== "all") {
-      const indices = parsedLogs
-        .map((log, index) =>
-          (newFocus === "warns" && log.level === "WARN") ||
-          (newFocus === "errors" && log.level === "ERROR") ||
-          (newFocus === "skipped" && log.level === "SKIP")
-            ? index
-            : -1,
-        )
-        .filter((i) => i !== -1);
+      if (newFocus !== "all") {
+        const indices = parsedLogs
+          .map((log, index) =>
+            (newFocus === "warns" && log.level === "WARN") ||
+            (newFocus === "errors" && log.level === "ERROR") ||
+            (newFocus === "skipped" && log.level === "SKIP")
+              ? index
+              : -1,
+          )
+          .filter((i) => i !== -1);
 
-      if (indices.length > 0 && indices[0] !== undefined) {
-        scrollToLog(indices[0]);
+        if (indices.length > 0 && indices[0] !== undefined) {
+          scrollToLog(indices[0]);
+        }
+      } else {
+        setCurrentLogIndex(null);
       }
-    } else {
-      setCurrentLogIndex(null);
-    }
-  };
+    },
+    [parsedLogs, scrollToLog],
+  );
 
   const handleSearchChange = (query: string) => {
     setSearchQuery(query);
@@ -430,7 +438,11 @@ export const LogsTabContent = ({
     const handleKeyDown = (e: KeyboardEvent) => {
       // Check if the logs container or its children are focused
       const logsContainer = logsContainerRef.current;
-      const activeElement = document.activeElement;
+      // Walk through shadow roots to find the real focused element
+      let activeElement: Element | null = document.activeElement;
+      while (activeElement?.shadowRoot?.activeElement) {
+        activeElement = activeElement.shadowRoot.activeElement;
+      }
       const isWithinLogsSection = logsContainer?.contains(
         activeElement as Node,
       );
@@ -464,7 +476,11 @@ export const LogsTabContent = ({
         return;
       }
 
-      const isInInput = document.activeElement?.tagName === "INPUT";
+      const isInInput =
+        activeElement?.tagName === "INPUT" ||
+        activeElement?.tagName === "TEXTAREA" ||
+        activeElement?.tagName === "SELECT" ||
+        activeElement?.closest("[contenteditable]") !== null;
       if (!isInInput) {
         switch (e.key) {
           case "/": {
@@ -539,7 +555,15 @@ export const LogsTabContent = ({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [currentLogIndex, parsedLogs.length, navigateToResult, groupBySource]);
+  }, [
+    currentLogIndex,
+    parsedLogs.length,
+    navigateToResult,
+    groupBySource,
+    handleFocusChange,
+    scrollToLog,
+    setGroupBySource,
+  ]);
 
   const searchRegex = useMemo(() => {
     if (!searchQuery) return null;

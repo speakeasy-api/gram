@@ -1,15 +1,15 @@
 import { Page } from "@/components/page-layout";
+import { RequireScope } from "@/components/require-scope";
 import { Card, Cards } from "@/components/ui/card";
 import { MoreActions } from "@/components/ui/more-actions";
 import { UpdatedAt } from "@/components/updated-at";
-import { isPrompt } from "@/lib/toolTypes";
 import { useRoutes } from "@/routes";
 import { PromptTemplate } from "@gram/client/models/components";
 import {
   invalidateAllTemplates,
   useDeleteTemplateMutation,
-  useTemplates,
 } from "@gram/client/react-query/index.js";
+import { usePrompts } from "./usePrompts";
 import { Button } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
@@ -20,19 +20,34 @@ export function PromptsRoot() {
   return <Outlet />;
 }
 
-export function usePrompts() {
-  const { data, isLoading } = useTemplates();
-  return {
-    prompts: data?.templates.filter(isPrompt),
-    isLoading,
-  };
+export default function Prompts() {
+  return (
+    <Page>
+      <Page.Header>
+        <Page.Header.Breadcrumbs />
+      </Page.Header>
+      <Page.Body>
+        <RequireScope scope={["project:read", "project:write"]} level="page">
+          <PromptsInner />
+        </RequireScope>
+      </Page.Body>
+    </Page>
+  );
 }
 
-export default function Prompts() {
+function PromptsInner() {
   const { prompts, isLoading } = usePrompts();
   const routes = useRoutes();
 
-  let content = (
+  if (!isLoading && prompts && prompts.length === 0) {
+    return (
+      <PromptsEmptyState
+        onCreatePrompt={() => routes.prompts.newPrompt.goTo()}
+      />
+    );
+  }
+
+  return (
     <Page.Section>
       <Page.Section.Title>Prompt Templates</Page.Section.Title>
       <Page.Section.Description>
@@ -54,23 +69,6 @@ export default function Prompts() {
         </Cards>
       </Page.Section.Body>
     </Page.Section>
-  );
-
-  if (!isLoading && prompts && prompts.length === 0) {
-    content = (
-      <PromptsEmptyState
-        onCreatePrompt={() => routes.prompts.newPrompt.goTo()}
-      />
-    );
-  }
-
-  return (
-    <Page>
-      <Page.Header>
-        <Page.Header.Breadcrumbs />
-      </Page.Header>
-      <Page.Body>{content}</Page.Body>
-    </Page>
   );
 }
 

@@ -18,8 +18,8 @@ import { ChevronDownIcon, ExternalLinkIcon } from "lucide-react";
 import React from "react";
 import { Spinner } from "../ui/spinner";
 import { Type } from "../ui/type";
-import { useStep } from "./step";
-import { useStepper } from "./stepper";
+import { useStep } from "./step/use-step";
+import { useStepper } from "./stepper/use-stepper";
 
 export default function DeployStep() {
   const stepper = useStepper();
@@ -56,7 +56,7 @@ export default function DeployStep() {
       toolCount: matchingTools.length,
       toolUrns: matchingTools.map((tool) => tool.toolUrn),
     };
-  }, [toolsList.data]);
+  }, [toolsList.data, stepper.meta]);
 
   // Auto-create toolset after tools are loaded (regardless of overall deployment status)
   // The deployment may fail due to unrelated issues (e.g., external MCP), but if tools
@@ -109,7 +109,7 @@ export default function DeployStep() {
     };
 
     createToolset();
-  }, [step.state, toolUrns.length]);
+  }, [step.state, toolUrns, client.toolsets, stepper.meta, telemetry]);
 
   const deploymentLogs = useDeploymentLogs(
     {
@@ -153,7 +153,14 @@ export default function DeployStep() {
         step.setState("failed");
         stepper.setState("error");
       });
-  }, [step.isCurrentStep, step.state]);
+  }, [
+    step.isCurrentStep,
+    step.state,
+    createOrEvolveDeployment,
+    step,
+    stepper,
+    telemetry,
+  ]);
 
   if (!step.isCurrentStep) return null;
 
@@ -286,9 +293,9 @@ function DeploymentDetailsCollapsible({
  * deployment state.
  */
 const useCreateDeployment = (): (() => Promise<Deployment>) => {
-  const latestDeployment = useLatestDeployment();
+  const _latestDeployment = useLatestDeployment();
   const stepper = useStepper();
-  const step = useStep();
+  const _step = useStep();
   const client = useSdkClient();
 
   const _do = React.useCallback(async () => {
@@ -334,7 +341,7 @@ const useCreateDeployment = (): (() => Promise<Deployment>) => {
     }
 
     return deployment;
-  }, [latestDeployment.data, step.isCurrentStep]);
+  }, [client.deployments, stepper.meta]);
 
   return _do;
 };

@@ -2,6 +2,7 @@ package access
 
 import (
 	"errors"
+	mockidp "github.com/speakeasy-api/gram/mock-speakeasy-idp"
 	"testing"
 	"time"
 
@@ -9,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/access"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	thirdpartyworkos "github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -22,23 +24,23 @@ func TestService_GetRole(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	ti.roles.On("ListRoles", mock.Anything, "org_workos_test").Return([]thirdpartyworkos.Role{
+	ti.roles.On("ListRoles", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Role{
 		mockSystemRole("role_admin", "Admin", "admin"),
 		mockRole("role_custom", "Custom Builder", "custom-builder", "Can build selected resources"),
 	}, nil).Once()
-	ti.roles.On("ListMembers", mock.Anything, "org_workos_test").Return([]thirdpartyworkos.Member{
-		mockMember("org_workos_test", "membership_1", "user_1", "custom-builder"),
-		mockMember("org_workos_test", "membership_2", "user_2", "custom-builder"),
-		mockMember("org_workos_test", "membership_3", "user_3", "admin"),
+	ti.roles.On("ListMembers", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Member{
+		mockMember(mockidp.MockOrgID, "membership_1", "user_1", "custom-builder"),
+		mockMember(mockidp.MockOrgID, "membership_2", "user_2", "custom-builder"),
+		mockMember(mockidp.MockOrgID, "membership_3", "user_3", "admin"),
 		// user_workos_only has never logged into Gram — should not be counted
-		mockMember("org_workos_test", "membership_workos_only", "user_workos_only", "custom-builder"),
+		mockMember(mockidp.MockOrgID, "membership_workos_only", "user_workos_only", "custom-builder"),
 	}, nil).Once()
 
 	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_1", "user1@test.com", "User 1", "user_1", "membership_1")
 	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_2", "user2@test.com", "User 2", "user_2", "membership_2")
 	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_3", "user3@test.com", "User 3", "user_3", "membership_3")
-	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), ScopeBuildRead, "project-1")
-	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), ScopeMCPConnect, WildcardResource)
+	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), authz.ScopeProjectRead, "project-1")
+	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), authz.ScopeMCPConnect, authz.WildcardResource)
 
 	role, err := ti.service.GetRole(ctx, &gen.GetRolePayload{ID: "role_custom"})
 	require.NoError(t, err)
@@ -55,15 +57,17 @@ func TestService_GetRole(t *testing.T) {
 	for _, grant := range role.Grants {
 		grantsByScope[grant.Scope] = grant
 	}
-	require.ElementsMatch(t, []string{"project-1"}, grantsByScope[string(ScopeBuildRead)].Resources)
-	require.Nil(t, grantsByScope[string(ScopeMCPConnect)].Resources)
+	sels := grantsByScope[string(authz.ScopeProjectRead)].Selectors
+	require.Len(t, sels, 1)
+	require.Equal(t, "project-1", sels[0].ResourceID)
+	require.Nil(t, grantsByScope[string(authz.ScopeMCPConnect)].Selectors)
 }
 
 func TestService_GetRole_NotFound(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
-	ti.roles.On("ListRoles", mock.Anything, "org_workos_test").Return([]thirdpartyworkos.Role{}, nil).Once()
+	ti.roles.On("ListRoles", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Role{}, nil).Once()
 
 	_, err := ti.service.GetRole(ctx, &gen.GetRolePayload{ID: "role_missing"})
 	require.Error(t, err)
@@ -104,7 +108,7 @@ func TestService_GetRole_WorkOSListRolesFailure(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
-	ti.roles.On("ListRoles", mock.Anything, "org_workos_test").Return([]thirdpartyworkos.Role(nil), errors.New("workos unavailable")).Once()
+	ti.roles.On("ListRoles", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Role(nil), errors.New("workos unavailable")).Once()
 
 	_, err := ti.service.GetRole(ctx, &gen.GetRolePayload{ID: "role_custom"})
 	require.Error(t, err)

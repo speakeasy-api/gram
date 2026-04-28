@@ -8,6 +8,8 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"sort"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -58,14 +60,14 @@ type mockMessageCaptureStrategy struct {
 	capturedResponse     *CompletionResponse
 }
 
-func (m *mockMessageCaptureStrategy) StartOrResumeChat(ctx context.Context, request CompletionRequest) error {
+func (m *mockMessageCaptureStrategy) StartOrResumeChat(ctx context.Context, request CompletionRequest) (CaptureSession, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.startOrResumeCalled = true
-	return m.startOrResumeError
+	return nil, m.startOrResumeError
 }
 
-func (m *mockMessageCaptureStrategy) CaptureMessage(ctx context.Context, request CompletionRequest, response CompletionResponse) error {
+func (m *mockMessageCaptureStrategy) CaptureMessage(ctx context.Context, session CaptureSession, request CompletionRequest, response CompletionResponse) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.captureMessageCalled = true
@@ -229,7 +231,7 @@ func TestChatClient_GetCompletion(t *testing.T) {
 	req := CompletionRequest{
 		OrgID:     "test-org",
 		ProjectID: projectID.String(),
-		Messages: []or.Message{
+		Messages: []or.ChatMessages{
 			CreateMessageUser("Hello"),
 		},
 		ChatID:      chatID,
@@ -353,7 +355,7 @@ func TestChatClient_GetCompletionStream(t *testing.T) {
 	req := CompletionRequest{
 		OrgID:     "test-org",
 		ProjectID: projectID.String(),
-		Messages: []or.Message{
+		Messages: []or.ChatMessages{
 			CreateMessageUser("Hello"),
 		},
 		Stream:      true,
@@ -469,7 +471,7 @@ func TestChatClient_GetCompletion_WithToolCalls(t *testing.T) {
 	req := CompletionRequest{
 		OrgID:     "test-org",
 		ProjectID: projectID.String(),
-		Messages: []or.Message{
+		Messages: []or.ChatMessages{
 			CreateMessageUser("What's the weather in NYC?"),
 		},
 		Tools: []Tool{
@@ -523,7 +525,7 @@ func TestChatClient_ErrorHandling(t *testing.T) {
 		{
 			name:               "start or resume error",
 			startOrResumeError: fmt.Errorf("failed to start chat"),
-			expectedError:      "failed to start or resume chat",
+			expectedError:      "start or resume chat",
 		},
 	}
 
@@ -566,7 +568,7 @@ func TestChatClient_ErrorHandling(t *testing.T) {
 			req := CompletionRequest{
 				OrgID:     "test-org",
 				ProjectID: projectID.String(),
-				Messages: []or.Message{
+				Messages: []or.ChatMessages{
 					CreateMessageUser("Hello"),
 				},
 				ChatID:      uuid.New(),
@@ -644,7 +646,7 @@ func TestChatClient_MultipleCompletions_TitleAndResolutionScheduling(t *testing.
 	req := CompletionRequest{
 		OrgID:     "test-org",
 		ProjectID: projectID.String(),
-		Messages: []or.Message{
+		Messages: []or.ChatMessages{
 			CreateMessageUser("Hello"),
 		},
 		ChatID:      chatID,
@@ -708,13 +710,13 @@ func newTrackingCaptureStrategy() *trackingCaptureStrategy {
 	}
 }
 
-func (t *trackingCaptureStrategy) StartOrResumeChat(ctx context.Context, request CompletionRequest) error {
+func (t *trackingCaptureStrategy) StartOrResumeChat(ctx context.Context, request CompletionRequest) (CaptureSession, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
 	chatID := request.ChatID
 	if chatID == uuid.Nil {
-		return nil
+		return nil, nil
 	}
 
 	currentCount := t.messageCount[chatID]
@@ -729,10 +731,10 @@ func (t *trackingCaptureStrategy) StartOrResumeChat(ctx context.Context, request
 			t.messageCount[chatID]++
 		}
 	}
-	return nil
+	return nil, nil
 }
 
-func (t *trackingCaptureStrategy) CaptureMessage(ctx context.Context, request CompletionRequest, response CompletionResponse) error {
+func (t *trackingCaptureStrategy) CaptureMessage(ctx context.Context, session CaptureSession, request CompletionRequest, response CompletionResponse) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -806,7 +808,7 @@ func TestChatClient_NilChatID_ShouldNotScheduleTitleGeneration(t *testing.T) {
 	req := CompletionRequest{
 		OrgID:       "test-org",
 		ProjectID:   projectID.String(),
-		Messages:    []or.Message{CreateMessageUser("Hello")},
+		Messages:    []or.ChatMessages{CreateMessageUser("Hello")},
 		ChatID:      uuid.Nil, // No chat — like title generation activity's internal call
 		UsageSource: billing.ModelUsageSourceGram,
 		APIKeyID:    "",
@@ -857,7 +859,7 @@ func TestChatClient_TitleGeneration_ScheduledPerCompletionWithValidChatID(t *tes
 		_, err := client.GetCompletion(context.Background(), CompletionRequest{
 			OrgID:       "test-org",
 			ProjectID:   projectID.String(),
-			Messages:    []or.Message{CreateMessageUser("Hello")},
+			Messages:    []or.ChatMessages{CreateMessageUser("Hello")},
 			ChatID:      chatID,
 			UsageSource: billing.ModelUsageSourcePlayground,
 			APIKeyID:    "key-1",
@@ -869,7 +871,7 @@ func TestChatClient_TitleGeneration_ScheduledPerCompletionWithValidChatID(t *tes
 	_, err = client.GetCompletion(context.Background(), CompletionRequest{
 		OrgID:       "test-org",
 		ProjectID:   projectID.String(),
-		Messages:    []or.Message{CreateMessageUser("Generate title")},
+		Messages:    []or.ChatMessages{CreateMessageUser("Generate title")},
 		ChatID:      uuid.Nil,
 		UsageSource: billing.ModelUsageSourceGram,
 		APIKeyID:    "",
@@ -922,7 +924,7 @@ func TestChatClient_ReloadChat_NoDuplicateMessages(t *testing.T) {
 	req1 := CompletionRequest{
 		OrgID:       "test-org",
 		ProjectID:   projectID.String(),
-		Messages:    []or.Message{CreateMessageUser("Hello")},
+		Messages:    []or.ChatMessages{CreateMessageUser("Hello")},
 		ChatID:      chatID,
 		UsageSource: billing.ModelUsageSourcePlayground,
 		APIKeyID:    "key-1",
@@ -944,7 +946,7 @@ func TestChatClient_ReloadChat_NoDuplicateMessages(t *testing.T) {
 	req2 := CompletionRequest{
 		OrgID:     "test-org",
 		ProjectID: projectID.String(),
-		Messages: []or.Message{
+		Messages: []or.ChatMessages{
 			CreateMessageUser("Hello"),           // from history
 			CreateMessageAssistant("Response 1"), // from history
 			CreateMessageUser("How are you?"),    // new user message
@@ -1055,13 +1057,13 @@ func TestChatClient_GetCompletion_WithJSONSchema(t *testing.T) {
 	req := CompletionRequest{
 		OrgID:     "test-org",
 		ProjectID: projectID.String(),
-		Messages: []or.Message{
+		Messages: []or.ChatMessages{
 			CreateMessageUser("Is this a question?"),
 		},
 		ChatID:      chatID,
 		UsageSource: billing.ModelUsageSourcePlayground,
 		APIKeyID:    "test-api-key-id",
-		JSONSchema: &or.JSONSchemaConfig{
+		JSONSchema: &or.ChatJSONSchemaConfig{
 			Name: "question_check",
 			Schema: map[string]any{
 				"type": "object",
@@ -1073,6 +1075,8 @@ func TestChatClient_GetCompletion_WithJSONSchema(t *testing.T) {
 				},
 				"required": []string{"isQuestion"},
 			},
+			Description: nil,
+			Strict:      nil,
 		},
 	}
 
@@ -1091,9 +1095,9 @@ func TestChatClient_GetCompletion_WithJSONSchema(t *testing.T) {
 	// Verify the response_format contains the JSON schema
 	assert.Equal(t, "json_schema", string(receivedRequestBody.ResponseFormat.Type),
 		"response_format type should be json_schema")
-	assert.NotNil(t, receivedRequestBody.ResponseFormat.ResponseFormatJSONSchema,
-		"ResponseFormatJSONSchema should be set")
-	assert.Equal(t, "question_check", receivedRequestBody.ResponseFormat.ResponseFormatJSONSchema.JSONSchema.Name,
+	assert.NotNil(t, receivedRequestBody.ResponseFormat.ChatFormatJSONSchemaConfig,
+		"ChatFormatJSONSchemaConfig should be set")
+	assert.Equal(t, "question_check", receivedRequestBody.ResponseFormat.ChatFormatJSONSchemaConfig.JSONSchema.Name,
 		"schema name should match")
 }
 
@@ -1170,7 +1174,7 @@ func TestChatClient_GetCompletion_WithoutJSONSchema(t *testing.T) {
 	req := CompletionRequest{
 		OrgID:     "test-org",
 		ProjectID: projectID.String(),
-		Messages: []or.Message{
+		Messages: []or.ChatMessages{
 			CreateMessageUser("Hello"),
 		},
 		ChatID:      chatID,
@@ -1187,6 +1191,107 @@ func TestChatClient_GetCompletion_WithoutJSONSchema(t *testing.T) {
 	// Verify that response_format was NOT set
 	assert.Nil(t, receivedRequestBody.ResponseFormat,
 		"response_format should not be set when JSONSchema is nil")
+}
+
+func firstAllowedModelForProvider(prefix string) string {
+	var models []string
+	for m := range allowList {
+		if strings.HasPrefix(m, prefix) {
+			models = append(models, m)
+		}
+	}
+	sort.Strings(models)
+	return models[0]
+}
+
+func TestResolveModel_AllowedModelReturnedAsIs(t *testing.T) {
+	t.Parallel()
+	require.Equal(t, "openai/gpt-5.4", ResolveModel("openai/gpt-5.4"))
+}
+
+func TestResolveModel_UnsupportedOpenAIFallback(t *testing.T) {
+	t.Parallel()
+	expected := firstAllowedModelForProvider("openai/")
+	require.Equal(t, expected, ResolveModel("openai/gpt-4"))
+}
+
+func TestResolveModel_UnsupportedAnthropicFallback(t *testing.T) {
+	t.Parallel()
+	expected := firstAllowedModelForProvider("anthropic/")
+	require.Equal(t, expected, ResolveModel("anthropic/claude-2"))
+}
+
+func TestResolveModel_UnknownProviderReturnsEmpty(t *testing.T) {
+	t.Parallel()
+	require.Empty(t, ResolveModel("fakeprovider/some-model"))
+}
+
+func TestResolveModel_BareModelNameReturnsEmpty(t *testing.T) {
+	t.Parallel()
+	require.Empty(t, ResolveModel("gpt-4"))
+}
+
+func TestResolveModel_EmptyModelReturnsEmpty(t *testing.T) {
+	t.Parallel()
+	require.Empty(t, ResolveModel(""))
+}
+
+func TestChatClient_GetCompletion_UnsupportedModelFallback(t *testing.T) {
+	t.Parallel()
+
+	// Track which model the server receives
+	var receivedModel string
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var reqBody OpenAIChatRequest
+		_ = json.NewDecoder(r.Body).Decode(&reqBody)
+		receivedModel = reqBody.Model
+
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(fmt.Appendf(nil, `{
+			"id": "msg_fallback",
+			"model": "%s",
+			"choices": [{"message": {"role": "assistant", "content": "Hello"}, "finish_reason": "stop"}],
+			"usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}
+		}`, reqBody.Model))
+	}))
+	defer server.Close()
+
+	tracerProvider := testenv.NewTracerProvider(t)
+	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+	require.NoError(t, err)
+
+	client := NewUnifiedClient(
+		slog.Default(),
+		guardianPolicy,
+		&mockProvisioner{apiKey: "test-api-key"},
+		&mockMessageCaptureStrategy{},
+		&mockUsageTrackingStrategy{},
+		&mockChatTitleGenerator{},
+		&mockChatResolutionAnalyzer{},
+		&mockTelemetryLogger{},
+	)
+	client.httpClient = &http.Client{Transport: &testTransport{server: server}}
+
+	projectID := uuid.New()
+	req := CompletionRequest{
+		OrgID:       "test-org",
+		ProjectID:   projectID.String(),
+		Messages:    []or.ChatMessages{CreateMessageUser("Hello")},
+		Model:       "openai/gpt-4", // unsupported model
+		ChatID:      uuid.New(),
+		UsageSource: billing.ModelUsageSourcePlayground,
+	}
+
+	resp, err := client.GetCompletion(t.Context(), req)
+	require.NoError(t, err, "unsupported model should fall back, not error")
+	require.NotNil(t, resp)
+
+	// The server should have received a supported openai model, not gpt-4
+	require.True(t, IsModelAllowed(receivedModel),
+		"server should receive a model from the allowlist, got: %s", receivedModel)
+	require.True(t, strings.HasPrefix(receivedModel, "openai/"),
+		"fallback model should be from the same provider (openai), got: %s", receivedModel)
 }
 
 // testTransport is a custom http.RoundTripper that redirects all requests to the test server

@@ -1,13 +1,18 @@
 import { Page } from "@/components/page-layout";
+import { RequireScope } from "@/components/require-scope";
 import { DotTable } from "@/components/ui/dot-table";
 import { Heading } from "@/components/ui/heading";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Type } from "@/components/ui/type";
-import { useViewMode, ViewToggle } from "@/components/ui/view-toggle";
+import { ViewToggle } from "@/components/ui/view-toggle";
+import { useViewMode } from "@/components/ui/use-view-mode";
 import { useProject } from "@/contexts/Auth";
 import { AddServerDialog } from "@/pages/catalog/AddServerDialog";
 import { CommandBar } from "@/pages/catalog/CommandBar";
-import { type Server, useInfiniteListMCPCatalog } from "@/pages/catalog/hooks";
+import {
+  type PulseMCPServer,
+  useInfiniteListMCPCatalog,
+} from "@/pages/catalog/hooks";
 import { useRoutes } from "@/routes";
 import { useLatestDeployment } from "@gram/client/react-query";
 import { Button, Input, Stack } from "@speakeasy-api/moonshine";
@@ -15,7 +20,8 @@ import { Loader2, Search, SearchXIcon, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Outlet } from "react-router";
 import { FilterChips } from "./FilterChips";
-import { defaultFilterValues, FilterSidebar } from "./FilterSidebar";
+import { defaultFilterValues } from "./filter-defaults";
+import { FilterSidebar } from "./FilterSidebar";
 import { filterAndSortServers } from "./hooks/serverMetadata";
 import { useFilterState } from "./hooks/useFilterState";
 import { useSelectionState } from "./hooks/useSelectionState";
@@ -28,6 +34,14 @@ export function CatalogRoot() {
 }
 
 export default function Catalog() {
+  return (
+    <RequireScope scope={["project:read", "mcp:write"]} level="page">
+      <CatalogInner />
+    </RequireScope>
+  );
+}
+
+function CatalogInner() {
   const routes = useRoutes();
   const project = useProject();
   const [searchQuery, setSearchQuery] = useState("");
@@ -40,7 +54,7 @@ export default function Catalog() {
     useSelectionState();
 
   const [viewMode, setViewMode] = useViewMode();
-  const [addingServers, setAddingServers] = useState<Server[]>([]);
+  const [addingServers, setAddingServers] = useState<PulseMCPServer[]>([]);
   const [gridElement, setGridElement] = useState<HTMLDivElement | null>(null);
 
   // Track if we've loaded all data (for client-side search)
@@ -84,7 +98,9 @@ export default function Catalog() {
 
   // Flatten all pages into a single list
   const allServers = useMemo(() => {
-    return data?.pages.flatMap((page) => page.servers as Server[]) ?? [];
+    return (
+      data?.pages.flatMap((page) => page.servers as PulseMCPServer[]) ?? []
+    );
   }, [data]);
 
   // Apply client-side filtering based on filter state

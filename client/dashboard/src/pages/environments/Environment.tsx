@@ -1,4 +1,5 @@
 import { Page } from "@/components/page-layout";
+import { RequireScope } from "@/components/require-scope";
 import { Button } from "@speakeasy-api/moonshine";
 import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -7,6 +8,7 @@ import {
   useRegisterEnvironmentTelemetry,
   useTelemetry,
 } from "@/contexts/Telemetry";
+import { useRBAC } from "@/hooks/useRBAC";
 import {
   useDeleteEnvironmentMutation,
   useListToolsets,
@@ -15,8 +17,8 @@ import {
 } from "@gram/client/react-query/index.js";
 import { AlertCircle, Eye, EyeOff, Plus, Trash2, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router";
-import { useEnvironments } from "./Environments";
+import { useNavigate } from "react-router";
+import { useEnvironment } from "./useEnvironment";
 import { MoreActions } from "@/components/ui/more-actions";
 
 interface SaveActionBarProps {
@@ -158,25 +160,20 @@ function ToolsetDialog({ open, onOpenChange, onSubmit }: ToolsetDialogProps) {
   );
 }
 
-export function useEnvironment(slug?: string) {
-  let { environmentSlug } = useParams();
-  if (slug) environmentSlug = slug;
-
-  const environments = useEnvironments();
-
-  const environment = environments.find(
-    (environment) => environment.slug === environmentSlug,
+export default function EnvironmentPage() {
+  return (
+    <RequireScope scope="project:read" level="page">
+      <EnvironmentPageInner />
+    </RequireScope>
   );
-
-  return environment
-    ? Object.assign(environment, { refetch: environments.refetch })
-    : null;
 }
 
-export default function EnvironmentPage() {
+function EnvironmentPageInner() {
   const environment = useEnvironment();
   const navigate = useNavigate();
   const telemetry = useTelemetry();
+  const { hasScope } = useRBAC();
+  const canWrite = hasScope("project:write");
 
   const [toolsetDialogOpen, setToolsetDialogOpen] = useState(false);
   const [selectedToolsetSlug, setSelectedToolsetSlug] = useState<string>("");
@@ -374,6 +371,18 @@ export default function EnvironmentPage() {
     [saveError],
   );
 
+  const validateEntryName = useCallback(
+    (name: string) => {
+      return (
+        name.length > 0 &&
+        !environment?.entries.some((entry) => entry.name === name) &&
+        !Object.keys(envValues).includes(name) &&
+        /^[-_.a-zA-Z][-_.a-zA-Z0-9]*$/.test(name)
+      );
+    },
+    [environment?.entries, envValues],
+  );
+
   const handleSave = useCallback(() => {
     if (!environment) return;
 
@@ -415,6 +424,7 @@ export default function EnvironmentPage() {
     newEntryValue,
     deletedFields,
     updateEnvironment,
+    validateEntryName,
   ]);
 
   const handleAddNewEntry = useCallback(() => {
@@ -427,15 +437,6 @@ export default function EnvironmentPage() {
     setNewEntryValue("");
     setNewEntryVisible(false);
   }, []);
-
-  const validateEntryName = (name: string) => {
-    return (
-      name.length > 0 &&
-      !environment?.entries.some((entry) => entry.name === name) &&
-      !Object.keys(envValues).includes(name) &&
-      /^[-_.a-zA-Z][-_.a-zA-Z0-9]*$/.test(name)
-    );
-  };
 
   const handleToolsetSubmit = (toolsetSlug: string) => {
     setSelectedToolsetSlug(toolsetSlug);
@@ -469,12 +470,14 @@ export default function EnvironmentPage() {
         <Page.Section>
           <Page.Section.Title>{environment.name}</Page.Section.Title>
           <Page.Section.CTA>
-            <Button
-              onClick={handleAddNewEntry}
-              disabled={isSaving || isAddingNew}
-            >
-              Add Variable
-            </Button>
+            <RequireScope scope="project:write" level="component">
+              <Button
+                onClick={handleAddNewEntry}
+                disabled={isSaving || isAddingNew}
+              >
+                Add Variable
+              </Button>
+            </RequireScope>
           </Page.Section.CTA>
           <MoreActions
             actions={[
@@ -482,6 +485,7 @@ export default function EnvironmentPage() {
                 label: "Fill for Toolset",
                 onClick: () => setToolsetDialogOpen(true),
                 icon: "copy-plus",
+                disabled: !canWrite,
               },
               {
                 label: "Delete Environment",
@@ -491,6 +495,7 @@ export default function EnvironmentPage() {
                   }),
                 icon: "trash",
                 destructive: true,
+                disabled: !canWrite,
               },
             ]}
           />
@@ -551,46 +556,50 @@ export default function EnvironmentPage() {
                                 : "Enter value"
                             }
                             type={
-                              visibleFields.has(entry.name)
+                              canWrite && visibleFields.has(entry.name)
                                 ? "text"
                                 : "password"
                             }
                             className={`w-full font-mono text-sm ${isEdited ? "ring-1 ring-blue-500" : ""}`}
-                            disabled={isSaving}
+                            disabled={isSaving || !canWrite}
                           />
                         </div>
-                        <Button
-                          variant="tertiary"
-                          size="sm"
-                          className="mt-[1px] h-8 w-8 flex-shrink-0 self-start"
-                          onClick={() => handleToggleVisibility(entry.name)}
-                          disabled={isSaving}
-                          aria-label={
-                            visibleFields.has(entry.name)
-                              ? `Hide ${entry.name}`
-                              : `Show ${entry.name}`
-                          }
-                        >
-                          <Button.LeftIcon>
-                            {visibleFields.has(entry.name) ? (
-                              <EyeOff className="h-4 w-4" />
-                            ) : (
-                              <Eye className="h-4 w-4" />
-                            )}
-                          </Button.LeftIcon>
-                        </Button>
-                        <Button
-                          variant="tertiary"
-                          size="sm"
-                          className="mt-[1px] h-8 w-8 flex-shrink-0 self-start"
-                          onClick={() => handleRemoveVariable(entry.name)}
-                          disabled={isSaving}
-                          aria-label={`Remove ${entry.name}`}
-                        >
-                          <Button.LeftIcon>
-                            <Trash2 className="h-4 w-4" />
-                          </Button.LeftIcon>
-                        </Button>
+                        {canWrite && (
+                          <>
+                            <Button
+                              variant="tertiary"
+                              size="sm"
+                              className="mt-[1px] h-8 w-8 flex-shrink-0 self-start"
+                              onClick={() => handleToggleVisibility(entry.name)}
+                              disabled={isSaving}
+                              aria-label={
+                                visibleFields.has(entry.name)
+                                  ? `Hide ${entry.name}`
+                                  : `Show ${entry.name}`
+                              }
+                            >
+                              <Button.LeftIcon>
+                                {visibleFields.has(entry.name) ? (
+                                  <EyeOff className="h-4 w-4" />
+                                ) : (
+                                  <Eye className="h-4 w-4" />
+                                )}
+                              </Button.LeftIcon>
+                            </Button>
+                            <Button
+                              variant="tertiary"
+                              size="sm"
+                              className="mt-[1px] h-8 w-8 flex-shrink-0 self-start"
+                              onClick={() => handleRemoveVariable(entry.name)}
+                              disabled={isSaving}
+                              aria-label={`Remove ${entry.name}`}
+                            >
+                              <Button.LeftIcon>
+                                <Trash2 className="h-4 w-4" />
+                              </Button.LeftIcon>
+                            </Button>
+                          </>
+                        )}
                       </div>
                     </div>
                   );
@@ -683,18 +692,20 @@ export default function EnvironmentPage() {
                   <p className="text-muted-foreground text-sm">
                     No environment variables defined
                   </p>
-                  <div className="mt-4 flex flex-col items-center gap-2">
-                    <Button onClick={handleAddNewEntry}>
-                      <Plus className="mr-2 h-4 w-4" />
-                      ADD YOUR FIRST VARIABLE
-                    </Button>
-                    <Button
-                      variant="secondary"
-                      onClick={() => setToolsetDialogOpen(true)}
-                    >
-                      FILL FOR TOOLSET
-                    </Button>
-                  </div>
+                  {canWrite && (
+                    <div className="mt-4 flex flex-col items-center gap-2">
+                      <Button onClick={handleAddNewEntry}>
+                        <Plus className="mr-2 h-4 w-4" />
+                        ADD YOUR FIRST VARIABLE
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        onClick={() => setToolsetDialogOpen(true)}
+                      >
+                        FILL FOR TOOLSET
+                      </Button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

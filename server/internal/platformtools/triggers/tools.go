@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	environmentsrepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
 	"github.com/speakeasy-api/gram/server/internal/platformtools/core"
+	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	triggerrepo "github.com/speakeasy-api/gram/server/internal/triggers/repo"
 )
 
@@ -248,7 +249,7 @@ func (t *ListTriggers) Descriptor() core.ToolDescriptor {
 	}
 }
 
-func (t *ListTriggers) Call(ctx context.Context, payload io.Reader, wr io.Writer) error {
+func (t *ListTriggers) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload io.Reader, wr io.Writer) error {
 	if t.db == nil || t.app == nil {
 		return fmt.Errorf("trigger tools are not configured")
 	}
@@ -309,7 +310,7 @@ func (t *ConfigureTrigger) Descriptor() core.ToolDescriptor {
 	}
 }
 
-func (t *ConfigureTrigger) Call(ctx context.Context, payload io.Reader, wr io.Writer) error {
+func (t *ConfigureTrigger) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload io.Reader, wr io.Writer) error {
 	if t.db == nil || t.app == nil {
 		return fmt.Errorf("trigger tools are not configured")
 	}

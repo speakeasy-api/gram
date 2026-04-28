@@ -1,4 +1,4 @@
-[**@gram-ai/elements v1.27.6**](../README.md)
+[**@gram-ai/elements v1.30.0**](../README.md)
 
 ***
 
@@ -155,3 +155,24 @@ Only tool names listed here that match a tool in the MCP will be exposed to the 
 tools: {
   toolsToInclude: ['get_current_weather', 'get_current_time'],
 }
+
+***
+
+### maxOutputBytes?
+
+> `optional` **maxOutputBytes**: `number`
+
+Maximum UTF-8 byte size for any single tool call's result. Results larger
+than this are truncated with a head+tail preserving strategy and a notice
+suffix before being added to the conversation. Prevents one greedy tool
+call (e.g. a wide log search) from filling the model's context window.
+
+Omit or set to 0 to disable.
+
+#### Example
+
+```ts
+tools: {
+  maxOutputBytes: 50_000, // ~12.5K tokens per tool call
+}
+```

@@ -84,10 +84,16 @@ function CopyButton({
   );
 
   return (
-    <button
+    <span
+      role="button"
+      tabIndex={0}
       onClick={handleCopy}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ")
+          handleCopy(e as unknown as React.MouseEvent);
+      }}
       className={cn(
-        "rounded p-0.5 transition-colors",
+        "cursor-pointer rounded p-0.5 transition-colors",
         "opacity-50 hover:opacity-100",
         "hover:bg-muted/80",
         copied && "opacity-100",
@@ -102,7 +108,7 @@ function CopyButton({
           copied ? "text-emerald-500" : "text-muted-foreground",
         )}
       />
-    </button>
+    </span>
   );
 }
 
@@ -337,6 +343,15 @@ export function ChatLogsTable({
                       />
                       {chat.numMessages} messages
                     </span>
+                    {chat.totalCost !== undefined && chat.totalCost > 0 && (
+                      <span className="flex items-center gap-0">
+                        <Icon
+                          name="dollar-sign"
+                          className="size-4 opacity-60"
+                        />
+                        {chat.totalCost.toFixed(4)}
+                      </span>
+                    )}
                   </div>
                 </div>
 

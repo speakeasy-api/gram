@@ -17,13 +17,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 )
 
-const (
-	logKeyOrgID     = "org_id"
-	logKeyOrgName   = "org_name"
-	logKeyToolCalls = "tool_calls"
-	logKeyServers   = "servers"
-)
-
 type CollectPlatformUsageMetrics struct {
 	logger *slog.Logger
 	db     *pgxpool.Pool
@@ -156,10 +149,10 @@ func (f *FreeTierReportingUsageMetrics) Do(ctx context.Context, orgIDs []string)
 			}
 
 			f.logger.InfoContext(ctx, "billing usage report",
-				slog.String(logKeyOrgID, org.ID),
-				slog.String(logKeyOrgName, org.Name),
-				slog.Int(logKeyToolCalls, usage.ToolCalls),
-				slog.Int(logKeyServers, usage.Servers),
+				attr.SlogOrganizationID(org.ID),
+				attr.SlogOrganizationSlug(org.Slug),
+				attr.SlogStatsToolCallCount(usage.ToolCalls),
+				attr.SlogStatsMCPServerCount(usage.Servers),
 			)
 
 			anyOverage := usage.ToolCalls > usage.IncludedToolCalls || usage.Servers > usage.IncludedServers || usage.Credits > usage.IncludedCredits

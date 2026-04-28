@@ -1,40 +1,43 @@
 import { InputDialog } from "@/components/input-dialog";
 import { Page } from "@/components/page-layout";
-import { Badge } from "@/components/ui/badge";
-import { Card, Cards } from "@/components/ui/card";
-import { UpdatedAt } from "@/components/updated-at";
+import { RequireScope } from "@/components/require-scope";
+import { DotCard } from "@/components/ui/dot-card";
 import { useSession } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useRoutes } from "@/routes";
 import { Environment } from "@gram/client/models/components/environment.js";
-import {
-  useCreateEnvironmentMutation,
-  useListEnvironmentsSuspense,
-} from "@gram/client/react-query/index.js";
-import { Plus } from "lucide-react";
+import { useCreateEnvironmentMutation } from "@gram/client/react-query/index.js";
+import { ArrowRight, Blocks, Plus } from "lucide-react";
 import { useState } from "react";
 import { Outlet } from "react-router";
-import { Button } from "@speakeasy-api/moonshine";
+import { Badge, Button } from "@speakeasy-api/moonshine";
+import { Type } from "@/components/ui/type";
 import { handleAPIError } from "@/lib/errors";
+import { useEnvironments } from "./useEnvironments";
 export function EnvironmentsRoot() {
   return <Outlet />;
 }
 
-export function useEnvironments() {
-  const { data: environments, refetch: refetchEnvironments } =
-    useListEnvironmentsSuspense(undefined, undefined, {
-      refetchOnWindowFocus: false,
-    });
-
-  return Object.assign(environments?.environments || [], {
-    refetch: refetchEnvironments,
-  });
+export default function Environments() {
+  return (
+    <Page>
+      <Page.Header>
+        <Page.Header.Breadcrumbs />
+      </Page.Header>
+      <Page.Body>
+        <RequireScope scope={["project:read", "project:write"]} level="page">
+          <EnvironmentsInner />
+        </RequireScope>
+      </Page.Body>
+    </Page>
+  );
 }
 
-export default function Environments() {
+function EnvironmentsInner() {
   const session = useSession();
   const routes = useRoutes();
   const telemetry = useTelemetry();
+  const environments = useEnvironments();
 
   const [createEnvironmentDialogOpen, setCreateEnvironmentDialogOpen] =
     useState(false);
@@ -71,52 +74,74 @@ export default function Environments() {
   };
 
   return (
-    <Page>
-      <Page.Header>
-        <Page.Header.Breadcrumbs />
-      </Page.Header>
-      <Page.Body>
-        <Page.Section>
-          <Page.Section.Title>Environments</Page.Section.Title>
-          <Page.Section.Description>
-            Use environments to manage API keys, allowing Gram to handle
-            authentication for you
-          </Page.Section.Description>
-          <Page.Section.CTA>
-            <Button onClick={() => setCreateEnvironmentDialogOpen(true)}>
-              <Button.LeftIcon>
-                <Plus className="h-4 w-4" />
-              </Button.LeftIcon>
-              <Button.Text>New Environment</Button.Text>
-            </Button>
-          </Page.Section.CTA>
-          <Page.Section.Body>
-            <Cards>
-              {useEnvironments().map((environment) => (
+    <>
+      <Page.Section>
+        <Page.Section.Title>Environments</Page.Section.Title>
+        <Page.Section.Description>
+          Create re-usable environment configurations and share amongst multiple
+          MCP servers
+        </Page.Section.Description>
+        <Page.Section.CTA>
+          {environments.length > 0 && (
+            <RequireScope scope="project:write" level="component">
+              <Button onClick={() => setCreateEnvironmentDialogOpen(true)}>
+                <Button.LeftIcon>
+                  <Plus className="h-4 w-4" />
+                </Button.LeftIcon>
+                <Button.Text>New Environment</Button.Text>
+              </Button>
+            </RequireScope>
+          )}
+        </Page.Section.CTA>
+        <Page.Section.Body>
+          {environments.length === 0 ? (
+            <div className="bg-muted/20 flex flex-col items-center justify-center rounded-xl border border-dashed px-8 py-16">
+              <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
+                <Blocks className="text-muted-foreground h-6 w-6" />
+              </div>
+              <Type variant="subheading" className="mb-1">
+                No environments yet
+              </Type>
+              <Type small muted className="mb-4 max-w-md text-center">
+                Environments let you store configuration and secrets that can be
+                shared across multiple MCP servers.
+              </Type>
+              <RequireScope scope="project:write" level="component">
+                <Button onClick={() => setCreateEnvironmentDialogOpen(true)}>
+                  <Button.LeftIcon>
+                    <Plus className="h-4 w-4" />
+                  </Button.LeftIcon>
+                  <Button.Text>New Environment</Button.Text>
+                </Button>
+              </RequireScope>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+              {environments.map((environment) => (
                 <EnvironmentCard
                   key={environment.id}
                   environment={environment}
                 />
               ))}
-            </Cards>
-          </Page.Section.Body>
-        </Page.Section>
-        <InputDialog
-          open={createEnvironmentDialogOpen}
-          onOpenChange={setCreateEnvironmentDialogOpen}
-          title="Create an Environment"
-          description="Give your environment a name."
-          inputs={{
-            label: "Environment name",
-            placeholder: "Environment name",
-            value: environmentName,
-            onChange: (value) => setEnvironmentName(value),
-            onSubmit: createEnvironment,
-            validate: (value) => value.length > 0,
-          }}
-        />
-      </Page.Body>
-    </Page>
+            </div>
+          )}
+        </Page.Section.Body>
+      </Page.Section>
+      <InputDialog
+        open={createEnvironmentDialogOpen}
+        onOpenChange={setCreateEnvironmentDialogOpen}
+        title="Create an Environment"
+        description="Give your environment a name."
+        inputs={{
+          label: "Environment name",
+          placeholder: "Environment name",
+          value: environmentName,
+          onChange: (value) => setEnvironmentName(value),
+          onSubmit: createEnvironment,
+          validate: (value) => value.length > 0,
+        }}
+      />
+    </>
   );
 }
 
@@ -128,22 +153,31 @@ function EnvironmentCard({ environment }: { environment: Environment }) {
       params={[environment.slug]}
       className="hover:no-underline"
     >
-      <Card>
-        <Card.Header>
-          <Card.Title>{environment.name}</Card.Title>
-        </Card.Header>
-        <Card.Content>
-          <Card.Description>
-            {environment.description || "No description provided"}
-          </Card.Description>
-        </Card.Content>
-        <Card.Footer>
-          <Badge variant="outline">
-            {environment.entries.length || "No"} Entries
+      <DotCard icon={<Blocks className="text-muted-foreground h-8 w-8" />}>
+        <div className="mb-2 flex items-start justify-between gap-2">
+          <Type
+            variant="subheading"
+            as="div"
+            className="text-md group-hover:text-primary flex-1 truncate transition-colors"
+            title={environment.name}
+          >
+            {environment.name}
+          </Type>
+        </div>
+        <Type small muted className="truncate">
+          {environment.description || "No description provided"}
+        </Type>
+        <div className="mt-auto flex items-center justify-between gap-2 pt-2">
+          <Badge variant="neutral">
+            {environment.entries.length}{" "}
+            {environment.entries.length === 1 ? "Entry" : "Entries"}
           </Badge>
-          <UpdatedAt date={new Date(environment.updatedAt)} />
-        </Card.Footer>
-      </Card>
+          <div className="text-muted-foreground group-hover:text-primary flex items-center gap-1 text-sm transition-colors">
+            <span>Open</span>
+            <ArrowRight className="h-3.5 w-3.5" />
+          </div>
+        </div>
+      </DotCard>
     </routes.environments.environment.Link>
   );
 }

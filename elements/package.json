@@ -2,7 +2,7 @@
   "name": "@gram-ai/elements",
   "description": "Gram Elements is a library of UI primitives for building chat-like experiences for MCP Servers.",
   "type": "module",
-  "version": "1.27.6",
+  "version": "1.30.0",
   "main": "dist/index.js",
   "exports": {
     ".": {
@@ -194,7 +194,7 @@
     "assistant-stream": "^0.2.46",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "lucide-react": "^0.544.0",
+    "lucide-react": "catalog:",
     "radix-ui": "^1.4.3",
     "recharts": "^2.15.4",
     "tailwind-merge": "^3.3.1",

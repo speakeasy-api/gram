@@ -1,5 +1,43 @@
 # @gram-ai/elements
 
+## 1.30.0
+
+### Minor Changes
+
+- 3c581aa: Add `Plugin.id` field and `recommended.except()` helper for selectively excluding plugins by identifier.
+- e8e2d81: deps: lucide-react from 0.554 to 1.8.0
+
+### Patch Changes
+
+- a74a72b: fix(ai-insights): stop sidebar crash on rapid Explore-with-AI clicks, and render `chart` / `ui` widgets in the agent session pop-out
+
+## 1.29.0
+
+### Minor Changes
+
+- 8c5d6e9: Add two context-length management primitives to prevent upstream "prompt is
+  too long" errors on long tool-heavy conversations:
+
+  - `ElementsConfig.tools.maxOutputBytes` — cap the UTF-8 byte size of any
+    single MCP tool call's result. Oversized results are truncated with a
+    head+tail preserving strategy and a notice suffix before entering
+    conversation history. Disabled by default; opt in per-page.
+  - `ElementsConfig.contextCompaction` — auto-compact older turns when the
+    estimated token count passes a fraction of the model's context ceiling
+    (default 70%). System prompt and the most recent turns are preserved; a
+    synthetic marker is inserted so the model knows older context was elided.
+    Enabled by default; `disabled: true` to opt out.
+
+### Patch Changes
+
+- d0356b5: fix: resume the chat turn after a client-side frontend tool completes. `useChatRuntime` now wires `sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls`, so Skip/Save clicks on frontend-tool forms no longer leave the conversation stuck with an unresolved tool-call.
+
+## 1.28.0
+
+### Minor Changes
+
+- 3a3850e: Restore the rich tool-call rendering in the playground. The MCP Apps integration had replaced Elements' default tool UI for every tool call; now the playground delegates to the default `ToolFallback` and only appends the MCP App iframe when the tool has a UI resource binding. Elements now exports `ToolFallback` from its public API so consumers can compose around it.
+
 ## 1.27.6
 
 ### Patch Changes

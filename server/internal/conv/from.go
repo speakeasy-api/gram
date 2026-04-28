@@ -3,6 +3,7 @@ package conv
 import (
 	"crypto/rand"
 	"fmt"
+	"math"
 	"regexp"
 	"strings"
 	"time"
@@ -147,6 +148,15 @@ func PtrToPGTextEmpty(t *string) pgtype.Text {
 	return pgtype.Text{String: *t, Valid: *t != ""}
 }
 
+// PtrToPGInt8 converts an int pointer to a pgtype.Int8. If the pointer is nil,
+// the result has Valid set to false.
+func PtrToPGInt8(v *int) pgtype.Int8 {
+	if v == nil {
+		return pgtype.Int8{Int64: 0, Valid: false}
+	}
+	return pgtype.Int8{Int64: int64(*v), Valid: true}
+}
+
 // PtrToPGBool converts a bool pointer to a pgtype.Bool. If the pointer is nil,
 // the result has Valid set to false.
 func PtrToPGBool(b *bool) pgtype.Bool {
@@ -199,6 +209,31 @@ func FromPGBool[T ~bool](t pgtype.Bool) *T {
 
 	val := T(t.Bool)
 	return &val
+}
+
+// FromPGInt4 converts a pgtype.Int4 to *int32. If not valid, returns nil.
+func FromPGInt4(t pgtype.Int4) *int32 {
+	if !t.Valid {
+		return nil
+	}
+	return &t.Int32
+}
+
+// PtrInt32ToInt converts a *int32 to *int. If nil, returns nil.
+func PtrInt32ToInt(v *int32) *int {
+	if v == nil {
+		return nil
+	}
+	i := int(*v)
+	return &i
+}
+
+// FromPGFloat8 converts a pgtype.Float8 to *float64. If not valid, returns nil.
+func FromPGFloat8(t pgtype.Float8) *float64 {
+	if !t.Valid {
+		return nil
+	}
+	return &t.Float64
 }
 
 // FromBytes converts a byte slice to a string pointer. If the byte slice is
@@ -263,4 +298,53 @@ func Ternary[T any](condition bool, trueVal, falseVal T) T {
 		return trueVal
 	}
 	return falseVal
+}
+
+// SafeInt32 converts int to int32, clamping at boundaries.
+func SafeInt32(v int) int32 {
+	const maxInt32 = 1<<31 - 1
+	const minInt32 = -(1 << 31)
+	if v > maxInt32 {
+		return maxInt32
+	}
+	if v < minInt32 {
+		return minInt32
+	}
+	return int32(v)
+}
+
+// ClampedUintToInt32 converts a uint to an int32, clamping the value to
+// math.MaxInt32 if it exceeds the maximum value for int32. The second return
+// value indicates whether clamping occurred.
+func ClampedUintToInt32(v uint) (out int32, clamped bool) {
+	if v > math.MaxInt32 {
+		return math.MaxInt32, true
+	}
+	return int32(v), false
+}
+
+// ClampedIntToUint8 converts an int to a uint8, clamping the value to
+// math.MaxUint8 if it exceeds the maximum value for uint8, and to 0 if it is
+// negative. The second return value indicates whether clamping occurred.
+func ClampedIntToUint8(v int) (out uint8, clamped bool) {
+	if v > math.MaxUint8 {
+		return math.MaxUint8, true
+	}
+	if v < 0 {
+		return 0, true
+	}
+	return uint8(v), false
+}
+
+// SafeInt converts int64 to int, clamping at the platform's int boundaries.
+func SafeInt(v int64) int {
+	const maxInt = int64(^uint(0) >> 1)
+	const minInt = -maxInt - 1
+	if v > maxInt {
+		return int(maxInt)
+	}
+	if v < minInt {
+		return int(minInt)
+	}
+	return int(v)
 }

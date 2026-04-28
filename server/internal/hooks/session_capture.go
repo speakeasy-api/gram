@@ -49,9 +49,17 @@ func isConversationEvent(eventName string) bool {
 	}
 }
 
-// sessionIDToUUID converts a Claude Code session_id string to a deterministic UUIDv5.
-// Uses RFC 4122 compliant UUIDv5 generation so the same session_id always maps to the same UUID.
+// sessionIDToUUID converts a Claude Code session_id string to a UUID.
+// The session_id is expected to already be a valid UUID string.
+// If parsing fails, falls back to generating a deterministic UUIDv5 from the session_id.
 func sessionIDToUUID(sessionID string) uuid.UUID {
+	// Try to parse the session ID as a UUID directly
+	parsedUUID, err := uuid.Parse(sessionID)
+	if err == nil {
+		return parsedUUID
+	}
+
+	// Fallback: generate a deterministic UUIDv5 from the session ID string
 	return uuid.NewSHA1(claudeSessionNamespace, []byte(sessionID))
 }
 
@@ -67,6 +75,7 @@ func makeHookResult(hookEventName string) *gen.ClaudeHookResult {
 		Continue:       nil,
 		StopReason:     nil,
 		SuppressOutput: nil,
+		SystemMessage:  nil,
 	}
 }
 
@@ -199,6 +208,8 @@ func (s *Service) persistConversationEvent(ctx context.Context, payload *gen.Cla
 		Origin:           conv.ToPGTextEmpty(""),
 		UserAgent:        conv.ToPGTextEmpty(""),
 		IpAddress:        conv.ToPGTextEmpty(""),
+		ContentHash:      nil,
+		Generation:       0,
 	}
 
 	if err := s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams, activities.DefaultClaudeChatTitle); err != nil {
@@ -251,7 +262,7 @@ func (s *Service) writeToolCallRequestToPG(ctx context.Context, payload *gen.Cla
 		Content:          "", // Tool call requests typically have empty content
 		Model:            conv.ToPGTextEmpty(conv.PtrValOr(payload.Model, "")),
 		UserID:           conv.ToPGTextEmpty(""),
-		Source:           conv.ToPGText("ClaudeCode"),
+		Source:           conv.ToPGText(metadata.ServiceName),
 		ToolCalls:        toolCallsJSON,
 		FinishReason:     conv.ToPGText("tool_calls"),
 		PromptTokens:     0,
@@ -266,6 +277,8 @@ func (s *Service) writeToolCallRequestToPG(ctx context.Context, payload *gen.Cla
 		Origin:           conv.ToPGTextEmpty(""),
 		UserAgent:        conv.ToPGTextEmpty(""),
 		IpAddress:        conv.ToPGTextEmpty(""),
+		ContentHash:      nil,
+		Generation:       0,
 	}
 
 	return s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams, activities.DefaultClaudeChatTitle)
@@ -299,7 +312,7 @@ func (s *Service) writeToolCallResultToPG(ctx context.Context, payload *gen.Clau
 		Role:             "tool",
 		Content:          content,
 		UserID:           conv.ToPGTextEmpty(""),
-		Source:           conv.ToPGText("ClaudeCode"),
+		Source:           conv.ToPGText(metadata.ServiceName),
 		ToolCallID:       conv.ToPGTextEmpty(conv.PtrValOr(payload.ToolUseID, "")),
 		PromptTokens:     0,
 		CompletionTokens: 0,
@@ -315,6 +328,8 @@ func (s *Service) writeToolCallResultToPG(ctx context.Context, payload *gen.Clau
 		Origin:           conv.ToPGTextEmpty(""),
 		UserAgent:        conv.ToPGTextEmpty(""),
 		IpAddress:        conv.ToPGTextEmpty(""),
+		ContentHash:      nil,
+		Generation:       0,
 	}
 
 	// If this was an error, we could optionally set tool_outcome based on isError

@@ -12,41 +12,72 @@ LEFT JOIN latest_status ON deployments.id = latest_status.deployment_id
 WHERE deployments.id = @id AND deployments.project_id = @project_id;
 
 -- name: ListDeployments :many
-WITH latest_statuses AS (
-  SELECT DISTINCT ON (deployment_id) deployment_id, status
-  FROM deployment_statuses
-  WHERE deployment_id IN (
-    SELECT id FROM deployments WHERE project_id = @project_id
-  )
-  ORDER BY deployment_id, seq DESC
+WITH paged AS (
+  SELECT d.id, d.user_id, d.created_at
+  FROM deployments d
+  WHERE d.project_id = @project_id
+    AND (sqlc.narg(cursor)::uuid IS NULL OR d.id <= sqlc.narg(cursor)::uuid)
+  ORDER BY d.id DESC
+  LIMIT 51
+),
+oa_counts AS (
+  SELECT deployment_id, COUNT(*) AS c
+  FROM deployments_openapiv3_assets
+  WHERE deployment_id IN (SELECT id FROM paged)
+  GROUP BY deployment_id
+),
+http_counts AS (
+  SELECT deployment_id, COUNT(*) AS c
+  FROM http_tool_definitions
+  WHERE deployment_id IN (SELECT id FROM paged) AND deleted IS FALSE
+  GROUP BY deployment_id
+),
+fn_counts AS (
+  SELECT deployment_id,
+         COUNT(DISTINCT function_id) AS asset_c,
+         COUNT(*) AS tool_c
+  FROM function_tool_definitions
+  WHERE deployment_id IN (SELECT id FROM paged) AND deleted IS FALSE
+  GROUP BY deployment_id
+),
+ema_counts AS (
+  SELECT deployment_id, COUNT(*) AS c
+  FROM external_mcp_attachments
+  WHERE deployment_id IN (SELECT id FROM paged) AND deleted IS FALSE
+  GROUP BY deployment_id
+),
+emtd_counts AS (
+  SELECT ema.deployment_id, COUNT(*) AS c
+  FROM external_mcp_tool_definitions emtd
+  JOIN external_mcp_attachments ema ON emtd.external_mcp_attachment_id = ema.id
+  WHERE ema.deployment_id IN (SELECT id FROM paged)
+    AND ema.deleted IS FALSE AND emtd.deleted IS FALSE
+  GROUP BY ema.deployment_id
 )
-SELECT 
-  d.id,
-  d.user_id,
-  d.created_at,
-  COALESCE(ls.status, 'unknown') as status,
-  COUNT(DISTINCT doa.id) as openapiv3_asset_count,
-  COUNT(DISTINCT htd.id) as openapiv3_tool_count,
-  COUNT(DISTINCT tf.function_id) as functions_asset_count,
-  COUNT(DISTINCT tf.id) as functions_tool_count,
-  COUNT(DISTINCT ema.id) as external_mcp_asset_count,
-  COUNT(DISTINCT emtd.id) as external_mcp_tool_count
-FROM deployments d
-LEFT JOIN latest_statuses ls ON d.id = ls.deployment_id
-LEFT JOIN deployments_openapiv3_assets doa ON d.id = doa.deployment_id
-LEFT JOIN http_tool_definitions htd ON d.id = htd.deployment_id AND htd.deleted IS FALSE
-LEFT JOIN function_tool_definitions tf ON d.id = tf.deployment_id AND tf.deleted IS FALSE
-LEFT JOIN external_mcp_attachments ema ON d.id = ema.deployment_id AND ema.deleted IS FALSE
-LEFT JOIN external_mcp_tool_definitions emtd ON ema.id = emtd.external_mcp_attachment_id AND emtd.deleted IS FALSE
-WHERE
-  d.project_id = @project_id
-  AND d.id <= CASE 
-    WHEN sqlc.narg(cursor)::uuid IS NOT NULL THEN sqlc.narg(cursor)::uuid
-    ELSE (SELECT id FROM deployments WHERE project_id = @project_id ORDER BY id DESC LIMIT 1)
-  END
-GROUP BY d.id, ls.status
-ORDER BY d.id DESC
-LIMIT 51;
+SELECT
+  p.id,
+  p.user_id,
+  p.created_at,
+  COALESCE(ls.status, 'unknown') AS status,
+  COALESCE(oa.c, 0) AS openapiv3_asset_count,
+  COALESCE(ht.c, 0) AS openapiv3_tool_count,
+  COALESCE(fn.asset_c, 0) AS functions_asset_count,
+  COALESCE(fn.tool_c, 0) AS functions_tool_count,
+  COALESCE(ema.c, 0) AS external_mcp_asset_count,
+  COALESCE(emtd.c, 0) AS external_mcp_tool_count
+FROM paged p
+LEFT JOIN LATERAL (
+  SELECT status FROM deployment_statuses
+  WHERE deployment_id = p.id
+  ORDER BY seq DESC
+  LIMIT 1
+) ls ON TRUE
+LEFT JOIN oa_counts   oa   ON oa.deployment_id   = p.id
+LEFT JOIN http_counts ht   ON ht.deployment_id   = p.id
+LEFT JOIN fn_counts   fn   ON fn.deployment_id   = p.id
+LEFT JOIN ema_counts  ema  ON ema.deployment_id  = p.id
+LEFT JOIN emtd_counts emtd ON emtd.deployment_id = p.id
+ORDER BY p.id DESC;
 
 -- name: GetDeploymentLogs :many
 WITH latest_status as (
@@ -125,6 +156,8 @@ SELECT
   deployments_functions.name as deployments_functions_name,
   deployments_functions.slug as deployments_functions_slug,
   deployments_functions.runtime as deployments_functions_runtime,
+  deployments_functions.scale as deployments_functions_scale,
+  deployments_functions.memory_mib as deployments_functions_memory_mib,
   deployments_packages.package_id as deployment_package_id,
   packages.name as package_name,
   package_versions.major as package_version_major,
@@ -282,6 +315,8 @@ INSERT INTO deployments_functions (
   , name
   , slug
   , runtime
+  , memory_mib
+  , scale
 )
 SELECT 
   @clone_deployment_id
@@ -289,6 +324,8 @@ SELECT
   , current.name
   , current.slug
   , current.runtime
+  , COALESCE(current.memory_mib, @default_memory_mib::int)
+  , COALESCE(current.scale, @default_scale::int)
 FROM deployments_functions as current
 WHERE current.deployment_id = @original_deployment_id
   AND current.asset_id <> ALL (@excluded_ids::uuid[])
@@ -409,18 +446,24 @@ INSERT INTO deployments_functions (
   , name
   , slug
   , runtime
+  , memory_mib
+  , scale
 ) VALUES (
   @deployment_id
   , @asset_id
   , @name
   , @slug
   , @runtime
+  , sqlc.narg(memory_mib)
+  , sqlc.narg(scale)
 )
 ON CONFLICT (deployment_id, slug) DO UPDATE
 SET
   asset_id = EXCLUDED.asset_id
   , name = EXCLUDED.name
   , runtime = EXCLUDED.runtime
+  , memory_mib = COALESCE(EXCLUDED.memory_mib, deployments_functions.memory_mib)
+  , scale = COALESCE(EXCLUDED.scale, deployments_functions.scale)
 RETURNING id, asset_id, name, slug;
 
 -- name: UpsertDeploymentPackage :one

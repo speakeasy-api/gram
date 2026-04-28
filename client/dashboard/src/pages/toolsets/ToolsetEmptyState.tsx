@@ -6,13 +6,13 @@ export function ToolsetEmptyState({
   onAddTools,
 }: {
   toolsetSlug: string;
-  onAddTools: () => void;
+  onAddTools?: () => void;
 }) {
-  const cta = (
+  const cta = onAddTools ? (
     <Button size="sm" onClick={onAddTools}>
       ADD TOOLS
     </Button>
-  );
+  ) : undefined;
 
   return (
     <EmptyState

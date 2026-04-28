@@ -106,13 +106,13 @@ func (c *Client) ListToolsets(ctx context.Context, p *ListToolsetsPayload) (res 
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
-func (c *Client) ListToolsetsForOrg(ctx context.Context, p *ListToolsetsForOrgPayload) (res *ListToolsetsResult, err error) {
+func (c *Client) ListToolsetsForOrg(ctx context.Context, p *ListToolsetsForOrgPayload) (res *ListToolsetSummariesResult, err error) {
 	var ires any
 	ires, err = c.ListToolsetsForOrgEndpoint(ctx, p)
 	if err != nil {
 		return
 	}
-	return ires.(*ListToolsetsResult), nil
+	return ires.(*ListToolsetSummariesResult), nil
 }
 
 // UpdateToolset calls the "updateToolset" endpoint of the "toolsets" service.

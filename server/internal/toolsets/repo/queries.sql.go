@@ -163,6 +163,51 @@ func (q *Queries) CreateToolset(ctx context.Context, arg CreateToolsetParams) (T
 	return i, err
 }
 
+const createToolsetOrigin = `-- name: CreateToolsetOrigin :one
+INSERT INTO toolset_origins (
+    organization_id
+  , toolset_id
+  , origin_registry_specifier
+) VALUES (
+    $1
+  , $2
+  , $3
+)
+RETURNING
+    id
+  , toolset_id
+  , origin_registry_specifier AS registry_specifier
+  , created_at
+  , updated_at
+`
+
+type CreateToolsetOriginParams struct {
+	OrganizationID    string
+	ToolsetID         uuid.UUID
+	RegistrySpecifier string
+}
+
+type CreateToolsetOriginRow struct {
+	ID                uuid.UUID
+	ToolsetID         uuid.UUID
+	RegistrySpecifier string
+	CreatedAt         pgtype.Timestamptz
+	UpdatedAt         pgtype.Timestamptz
+}
+
+func (q *Queries) CreateToolsetOrigin(ctx context.Context, arg CreateToolsetOriginParams) (CreateToolsetOriginRow, error) {
+	row := q.db.QueryRow(ctx, createToolsetOrigin, arg.OrganizationID, arg.ToolsetID, arg.RegistrySpecifier)
+	var i CreateToolsetOriginRow
+	err := row.Scan(
+		&i.ID,
+		&i.ToolsetID,
+		&i.RegistrySpecifier,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const createToolsetVersion = `-- name: CreateToolsetVersion :one
 INSERT INTO toolset_versions (
     toolset_id
@@ -312,6 +357,45 @@ func (q *Queries) GetLatestToolsetVersion(ctx context.Context, toolsetID uuid.UU
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const getLatestToolsetVersionsBatch = `-- name: GetLatestToolsetVersionsBatch :many
+SELECT DISTINCT ON (toolset_id) id, toolset_id, version, tool_urns, resource_urns, predecessor_id, created_at, updated_at, deleted_at, deleted
+FROM toolset_versions
+WHERE toolset_id = ANY($1::uuid[])
+  AND deleted IS FALSE
+ORDER BY toolset_id, version DESC
+`
+
+func (q *Queries) GetLatestToolsetVersionsBatch(ctx context.Context, toolsetIds []uuid.UUID) ([]ToolsetVersion, error) {
+	rows, err := q.db.Query(ctx, getLatestToolsetVersionsBatch, toolsetIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ToolsetVersion
+	for rows.Next() {
+		var i ToolsetVersion
+		if err := rows.Scan(
+			&i.ID,
+			&i.ToolsetID,
+			&i.Version,
+			&i.ToolUrns,
+			&i.ResourceUrns,
+			&i.PredecessorID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getPromptTemplateUrnsByNames = `-- name: GetPromptTemplateUrnsByNames :many
@@ -691,6 +775,45 @@ func (q *Queries) GetToolsetByPlatformMcpSlug(ctx context.Context, mcpSlug pgtyp
 	return i, err
 }
 
+const getToolsetOriginByToolsetID = `-- name: GetToolsetOriginByToolsetID :one
+SELECT
+    id
+  , toolset_id
+  , origin_registry_specifier AS registry_specifier
+  , created_at
+  , updated_at
+FROM toolset_origins
+WHERE toolset_id = $1
+  AND organization_id = $2
+  AND deleted IS FALSE
+`
+
+type GetToolsetOriginByToolsetIDParams struct {
+	ToolsetID      uuid.UUID
+	OrganizationID string
+}
+
+type GetToolsetOriginByToolsetIDRow struct {
+	ID                uuid.UUID
+	ToolsetID         uuid.UUID
+	RegistrySpecifier string
+	CreatedAt         pgtype.Timestamptz
+	UpdatedAt         pgtype.Timestamptz
+}
+
+func (q *Queries) GetToolsetOriginByToolsetID(ctx context.Context, arg GetToolsetOriginByToolsetIDParams) (GetToolsetOriginByToolsetIDRow, error) {
+	row := q.db.QueryRow(ctx, getToolsetOriginByToolsetID, arg.ToolsetID, arg.OrganizationID)
+	var i GetToolsetOriginByToolsetIDRow
+	err := row.Scan(
+		&i.ID,
+		&i.ToolsetID,
+		&i.RegistrySpecifier,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getToolsetPromptTemplateNames = `-- name: GetToolsetPromptTemplateNames :many
 SELECT tp.prompt_name
 FROM toolset_prompts tp
@@ -944,6 +1067,92 @@ func (q *Queries) ListToolsetsByProject(ctx context.Context, projectID uuid.UUID
 			&i.UpdatedAt,
 			&i.DeletedAt,
 			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listToolsetsWithVersionsByOrganization = `-- name: ListToolsetsWithVersionsByOrganization :many
+SELECT
+  t.id,
+  t.organization_id,
+  t.project_id,
+  t.name,
+  t.slug,
+  t.description,
+  t.default_environment_slug,
+  t.mcp_slug,
+  t.mcp_is_public,
+  t.mcp_enabled,
+  t.tool_selection_mode,
+  t.created_at,
+  t.updated_at,
+  COALESCE(tv.tool_urns, ARRAY[]::TEXT[]) AS latest_tool_urns,
+  COALESCE(tv.resource_urns, ARRAY[]::TEXT[]) AS latest_resource_urns
+FROM toolsets t
+JOIN projects p ON t.project_id = p.id
+LEFT JOIN LATERAL (
+  SELECT tool_urns, resource_urns
+  FROM toolset_versions
+  WHERE toolset_id = t.id AND deleted IS FALSE
+  ORDER BY version DESC
+  LIMIT 1
+) tv ON TRUE
+WHERE p.organization_id = $1
+  AND t.deleted IS FALSE
+  AND p.deleted IS FALSE
+ORDER BY t.created_at DESC
+`
+
+type ListToolsetsWithVersionsByOrganizationRow struct {
+	ID                     uuid.UUID
+	OrganizationID         string
+	ProjectID              uuid.UUID
+	Name                   string
+	Slug                   string
+	Description            pgtype.Text
+	DefaultEnvironmentSlug pgtype.Text
+	McpSlug                pgtype.Text
+	McpIsPublic            bool
+	McpEnabled             bool
+	ToolSelectionMode      string
+	CreatedAt              pgtype.Timestamptz
+	UpdatedAt              pgtype.Timestamptz
+	LatestToolUrns         []urn.Tool
+	LatestResourceUrns     []urn.Resource
+}
+
+func (q *Queries) ListToolsetsWithVersionsByOrganization(ctx context.Context, organizationID string) ([]ListToolsetsWithVersionsByOrganizationRow, error) {
+	rows, err := q.db.Query(ctx, listToolsetsWithVersionsByOrganization, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListToolsetsWithVersionsByOrganizationRow
+	for rows.Next() {
+		var i ListToolsetsWithVersionsByOrganizationRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.ProjectID,
+			&i.Name,
+			&i.Slug,
+			&i.Description,
+			&i.DefaultEnvironmentSlug,
+			&i.McpSlug,
+			&i.McpIsPublic,
+			&i.McpEnabled,
+			&i.ToolSelectionMode,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.LatestToolUrns,
+			&i.LatestResourceUrns,
 		); err != nil {
 			return nil, err
 		}

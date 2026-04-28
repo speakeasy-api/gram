@@ -58,6 +58,8 @@ type Toolset struct {
 	ToolSelectionMode string
 	// The ID of the custom domain to use for the toolset
 	CustomDomainID *string
+	// The registry lineage for toolsets installed from an external MCP catalog
+	Origin *ToolsetOrigin
 	// The external OAuth server details
 	ExternalOauthServer *ExternalOAuthServer
 	// The OAuth proxy server details

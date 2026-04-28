@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	envRepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
@@ -50,12 +51,14 @@ type AuthConfigurations struct {
 }
 
 // Service for gram dashboard authentication endpoints
+
 type Service struct {
 	tracer       trace.Tracer
 	logger       *slog.Logger
 	db           *pgxpool.Pool
 	sessions     *sessions.Manager
 	cfg          AuthConfigurations
+	authz        *authz.Engine
 	projectsRepo *projectsRepo.Queries
 	envRepo      *envRepo.Queries
 	orgRepo      *orgRepo.Queries
@@ -69,6 +72,7 @@ func NewService(
 	db *pgxpool.Pool,
 	sessions *sessions.Manager,
 	cfg AuthConfigurations,
+	authzEngine *authz.Engine,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("auth"))
 
@@ -78,6 +82,7 @@ func NewService(
 		db:           db,
 		sessions:     sessions,
 		cfg:          cfg,
+		authz:        authzEngine,
 		projectsRepo: projectsRepo.New(db),
 		envRepo:      envRepo.New(db),
 		orgRepo:      orgRepo.New(db),
@@ -99,7 +104,15 @@ func Attach(mux goahttp.Muxer, service *Service) {
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
-	return s.sessions.Authenticate(ctx, key)
+	ctx, err := s.sessions.Authenticate(ctx, key)
+	if err != nil {
+		return ctx, err
+	}
+	ctx, err = s.authz.PrepareContext(ctx)
+	if err != nil {
+		return ctx, oops.E(oops.CodeUnexpected, err, "load access grants").Log(ctx, s.logger)
+	}
+	return ctx, nil
 }
 
 func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (res *gen.CallbackResult, err error) {
@@ -153,30 +166,30 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 	}
 
 	activeOrg := userInfo.Organizations[0]
+	selectedActiveOrgFromState := false
+	if org, ok := activeOrganizationFromState(payload, userInfo.Organizations); ok {
+		activeOrg = org
+		selectedActiveOrgFromState = true
+	}
 
-	// For speakeasy users and admins we default speakeasy-team being the active organization if present
-	// For admins we allow you to override the active organization returned by header if present
-	if strings.HasSuffix(userInfo.Email, "@speakeasy.com") || strings.HasSuffix(userInfo.Email, "@speakeasyapi.dev") || userInfo.Admin {
-		override := "speakeasy-team"
-		if userInfo.Admin {
-			if adminOverride, _ := contextvalues.GetAdminOverrideFromContext(ctx); adminOverride != "" {
-				override = adminOverride
-			}
-		}
-		for _, org := range userInfo.Organizations {
-			if org.Slug == override {
-				activeOrg = org
-				break
+	// For admins we allow you to override the active organization returned by header if present.
+	if !selectedActiveOrgFromState && userInfo.Admin {
+		if adminOverride, _ := contextvalues.GetAdminOverrideFromContext(ctx); adminOverride != "" {
+			for _, org := range userInfo.Organizations {
+				if org.Slug == adminOverride {
+					activeOrg = org
+					break
+				}
 			}
 		}
 	}
 
 	orgMetadata, err := s.orgRepo.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
-		ID:              activeOrg.ID,
-		Name:            activeOrg.Name,
-		Slug:            activeOrg.Slug,
-		SsoConnectionID: conv.PtrToPGText(activeOrg.SsoConnectionID),
-		Whitelisted:     pgtype.Bool{Bool: false, Valid: false},
+		ID:          activeOrg.ID,
+		Name:        activeOrg.Name,
+		Slug:        activeOrg.Slug,
+		WorkosID:    conv.PtrToPGText(activeOrg.WorkosID),
+		Whitelisted: pgtype.Bool{Bool: false, Valid: false},
 	})
 	if err != nil {
 		return redirectWithError(authErrInit, err)
@@ -225,6 +238,48 @@ func (s *Service) Login(ctx context.Context, payload *gen.LoginPayload) (res *ge
 	}, nil
 }
 
+func activeOrganizationFromState(payload *gen.CallbackPayload, organizations []sessions.Organization) (sessions.Organization, bool) {
+	var empty sessions.Organization
+
+	state := decodeStateParam(payload)
+	if state == nil {
+		return empty, false
+	}
+
+	orgSlug := organizationSlugFromDestinationURL(state.FinalDestinationURL)
+	if orgSlug == "" {
+		return empty, false
+	}
+
+	for _, org := range organizations {
+		if org.Slug == orgSlug {
+			return org, true
+		}
+	}
+
+	return empty, false
+}
+
+func organizationSlugFromDestinationURL(destinationURL string) string {
+	location := relativeURL(destinationURL)
+	if location == "" {
+		return ""
+	}
+
+	parsed, err := url.Parse(location)
+	if err != nil {
+		return ""
+	}
+
+	path := strings.Trim(parsed.Path, "/")
+	if path == "" {
+		return ""
+	}
+
+	orgSlug, _, _ := strings.Cut(path, "/")
+	return orgSlug
+}
+
 func (s *Service) SwitchScopes(ctx context.Context, payload *gen.SwitchScopesPayload) (res *gen.SwitchScopesResult, err error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.SessionID == nil {
@@ -241,19 +296,12 @@ func (s *Service) SwitchScopes(ctx context.Context, payload *gen.SwitchScopesPay
 		selectedOrg = *payload.OrganizationID
 	}
 
+	var selected sessions.Organization
 	orgFound := false
 	for _, org := range userInfo.Organizations {
 		if org.ID == selectedOrg {
+			selected = org
 			orgFound = true
-			if _, err := s.orgRepo.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
-				ID:              org.ID,
-				Name:            org.Name,
-				Slug:            org.Slug,
-				SsoConnectionID: conv.PtrToPGText(org.SsoConnectionID),
-				Whitelisted:     pgtype.Bool{Bool: false, Valid: false},
-			}); err != nil {
-				return nil, oops.E(oops.CodeUnexpected, err, "error upserting organization metadata").Log(ctx, s.logger)
-			}
 			break
 		}
 	}
@@ -261,6 +309,16 @@ func (s *Service) SwitchScopes(ctx context.Context, payload *gen.SwitchScopesPay
 		return nil, oops.E(oops.CodeInvalid, nil, "organization not found in user info")
 	}
 	authCtx.ActiveOrganizationID = selectedOrg
+
+	if _, err := s.orgRepo.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
+		ID:          selected.ID,
+		Name:        selected.Name,
+		Slug:        selected.Slug,
+		WorkosID:    conv.PtrToPGText(selected.WorkosID),
+		Whitelisted: pgtype.Bool{Bool: false, Valid: false},
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error upserting organization metadata").Log(ctx, s.logger)
+	}
 
 	if err := s.sessions.StoreSession(ctx, sessions.Session{
 		SessionID:            *authCtx.SessionID,
@@ -307,7 +365,7 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	userInfo, fromCache, err := s.sessions.GetUserInfo(ctx, authCtx.UserID, *authCtx.SessionID)
+	userInfo, _, err := s.sessions.GetUserInfo(ctx, authCtx.UserID, *authCtx.SessionID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error getting user info").Log(ctx, s.logger)
 	}
@@ -316,7 +374,7 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 	if userInfo.Admin {
 		for _, org := range userInfo.Organizations {
 			if org.ID == authCtx.ActiveOrganizationID {
-				userInfo.Organizations = []gen.OrganizationEntry{org}
+				userInfo.Organizations = []sessions.Organization{org}
 			}
 		}
 	}
@@ -351,8 +409,31 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 		if err != nil {
 			return nil, err
 		}
-		var orgProjects []*gen.ProjectEntry
+		// Build the full list of project IDs, then filter to only those the
+		// user is allowed to see (mirrors the projects.List endpoint).
+		projectIDs := make([]string, 0, len(projectRows))
+		for _, p := range projectRows {
+			projectIDs = append(projectIDs, p.ID.String())
+		}
+
+		allowedIDs := projectIDs
+		if len(projectIDs) > 0 && org.ID == authCtx.ActiveOrganizationID {
+			allowedIDs, err = s.authz.Filter(ctx, authz.ScopeProjectRead, projectIDs)
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		allowed := make(map[string]struct{}, len(allowedIDs))
+		for _, id := range allowedIDs {
+			allowed[id] = struct{}{}
+		}
+
+		orgProjects := make([]*gen.ProjectEntry, 0, len(allowedIDs))
 		for _, project := range projectRows {
+			if _, ok := allowed[project.ID.String()]; !ok {
+				continue
+			}
 			orgProjects = append(orgProjects, &gen.ProjectEntry{
 				ID:   project.ID.String(),
 				Name: project.Name,
@@ -360,25 +441,10 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 			})
 		}
 
-		// write through organization metadata when not from cache to keep entries updated
-		// TODO: there may be a better place to do this
-		if !fromCache {
-			if _, err := s.orgRepo.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
-				ID:              org.ID,
-				Name:            org.Name,
-				Slug:            org.Slug,
-				SsoConnectionID: conv.PtrToPGText(org.SsoConnectionID),
-				Whitelisted:     pgtype.Bool{Bool: false, Valid: false},
-			}); err != nil {
-				return nil, oops.E(oops.CodeUnexpected, err, "error upserting organization metadata").Log(ctx, s.logger)
-			}
-		}
-
 		organizations = append(organizations, &gen.OrganizationEntry{
 			ID:                 org.ID,
 			Name:               org.Name,
 			Slug:               org.Slug,
-			SsoConnectionID:    org.SsoConnectionID,
 			UserWorkspaceSlugs: org.UserWorkspaceSlugs,
 			Projects:           orgProjects,
 		})
@@ -447,11 +513,11 @@ func (s *Service) Register(ctx context.Context, payload *gen.RegisterPayload) (e
 
 	whitelisted := false
 	if _, err := s.orgRepo.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
-		ID:              info.Organizations[0].ID,
-		Name:            info.Organizations[0].Name,
-		Slug:            info.Organizations[0].Slug,
-		SsoConnectionID: conv.PtrToPGText(nil),
-		Whitelisted:     conv.PtrToPGBool(&whitelisted),
+		ID:          info.Organizations[0].ID,
+		Name:        info.Organizations[0].Name,
+		Slug:        info.Organizations[0].Slug,
+		WorkosID:    conv.PtrToPGText(info.Organizations[0].WorkosID),
+		Whitelisted: conv.PtrToPGBool(&whitelisted),
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "error upserting organization metadata").Log(ctx, s.logger)
 	}

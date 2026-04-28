@@ -136,6 +136,8 @@ INSERT INTO deployments_functions (
   , name
   , slug
   , runtime
+  , memory_mib
+  , scale
 )
 SELECT 
   $1
@@ -143,20 +145,30 @@ SELECT
   , current.name
   , current.slug
   , current.runtime
+  , COALESCE(current.memory_mib, $2::int)
+  , COALESCE(current.scale, $3::int)
 FROM deployments_functions as current
-WHERE current.deployment_id = $2
-  AND current.asset_id <> ALL ($3::uuid[])
+WHERE current.deployment_id = $4
+  AND current.asset_id <> ALL ($5::uuid[])
 RETURNING id
 `
 
 type CloneDeploymentFunctionsAssetsParams struct {
 	CloneDeploymentID    uuid.UUID
+	DefaultMemoryMib     int32
+	DefaultScale         int32
 	OriginalDeploymentID uuid.UUID
 	ExcludedIds          []uuid.UUID
 }
 
 func (q *Queries) CloneDeploymentFunctionsAssets(ctx context.Context, arg CloneDeploymentFunctionsAssetsParams) ([]uuid.UUID, error) {
-	rows, err := q.db.Query(ctx, cloneDeploymentFunctionsAssets, arg.CloneDeploymentID, arg.OriginalDeploymentID, arg.ExcludedIds)
+	rows, err := q.db.Query(ctx, cloneDeploymentFunctionsAssets,
+		arg.CloneDeploymentID,
+		arg.DefaultMemoryMib,
+		arg.DefaultScale,
+		arg.OriginalDeploymentID,
+		arg.ExcludedIds,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -1084,7 +1096,7 @@ func (q *Queries) GetDeploymentByIdempotencyKey(ctx context.Context, arg GetDepl
 }
 
 const getDeploymentFunctions = `-- name: GetDeploymentFunctions :many
-SELECT df.id, df.deployment_id, df.asset_id, df.name, df.slug, df.runtime, df.runner_version
+SELECT df.id, df.deployment_id, df.asset_id, df.name, df.slug, df.runtime, df.runner_version, df.memory_mib, df.scale
 FROM deployments_functions df
 INNER JOIN deployments d ON df.deployment_id = d.id
 WHERE 
@@ -1114,6 +1126,8 @@ func (q *Queries) GetDeploymentFunctions(ctx context.Context, arg GetDeploymentF
 			&i.Slug,
 			&i.Runtime,
 			&i.RunnerVersion,
+			&i.MemoryMib,
+			&i.Scale,
 		); err != nil {
 			return nil, err
 		}
@@ -1317,6 +1331,8 @@ SELECT
   deployments_functions.name as deployments_functions_name,
   deployments_functions.slug as deployments_functions_slug,
   deployments_functions.runtime as deployments_functions_runtime,
+  deployments_functions.scale as deployments_functions_scale,
+  deployments_functions.memory_mib as deployments_functions_memory_mib,
   deployments_packages.package_id as deployment_package_id,
   packages.name as package_name,
   package_versions.major as package_version_major,
@@ -1364,6 +1380,8 @@ type GetDeploymentWithAssetsRow struct {
 	DeploymentsFunctionsName           pgtype.Text
 	DeploymentsFunctionsSlug           pgtype.Text
 	DeploymentsFunctionsRuntime        pgtype.Text
+	DeploymentsFunctionsScale          pgtype.Int4
+	DeploymentsFunctionsMemoryMib      pgtype.Int4
 	DeploymentPackageID                uuid.NullUUID
 	PackageName                        pgtype.Text
 	PackageVersionMajor                pgtype.Int8
@@ -1416,6 +1434,8 @@ func (q *Queries) GetDeploymentWithAssets(ctx context.Context, arg GetDeployment
 			&i.DeploymentsFunctionsName,
 			&i.DeploymentsFunctionsSlug,
 			&i.DeploymentsFunctionsRuntime,
+			&i.DeploymentsFunctionsScale,
+			&i.DeploymentsFunctionsMemoryMib,
 			&i.DeploymentPackageID,
 			&i.PackageName,
 			&i.PackageVersionMajor,
@@ -1562,41 +1582,72 @@ func (q *Queries) ListDeploymentExternalMCPs(ctx context.Context, deploymentID u
 }
 
 const listDeployments = `-- name: ListDeployments :many
-WITH latest_statuses AS (
-  SELECT DISTINCT ON (deployment_id) deployment_id, status
-  FROM deployment_statuses
-  WHERE deployment_id IN (
-    SELECT id FROM deployments WHERE project_id = $1
-  )
-  ORDER BY deployment_id, seq DESC
+WITH paged AS (
+  SELECT d.id, d.user_id, d.created_at
+  FROM deployments d
+  WHERE d.project_id = $1
+    AND ($2::uuid IS NULL OR d.id <= $2::uuid)
+  ORDER BY d.id DESC
+  LIMIT 51
+),
+oa_counts AS (
+  SELECT deployment_id, COUNT(*) AS c
+  FROM deployments_openapiv3_assets
+  WHERE deployment_id IN (SELECT id FROM paged)
+  GROUP BY deployment_id
+),
+http_counts AS (
+  SELECT deployment_id, COUNT(*) AS c
+  FROM http_tool_definitions
+  WHERE deployment_id IN (SELECT id FROM paged) AND deleted IS FALSE
+  GROUP BY deployment_id
+),
+fn_counts AS (
+  SELECT deployment_id,
+         COUNT(DISTINCT function_id) AS asset_c,
+         COUNT(*) AS tool_c
+  FROM function_tool_definitions
+  WHERE deployment_id IN (SELECT id FROM paged) AND deleted IS FALSE
+  GROUP BY deployment_id
+),
+ema_counts AS (
+  SELECT deployment_id, COUNT(*) AS c
+  FROM external_mcp_attachments
+  WHERE deployment_id IN (SELECT id FROM paged) AND deleted IS FALSE
+  GROUP BY deployment_id
+),
+emtd_counts AS (
+  SELECT ema.deployment_id, COUNT(*) AS c
+  FROM external_mcp_tool_definitions emtd
+  JOIN external_mcp_attachments ema ON emtd.external_mcp_attachment_id = ema.id
+  WHERE ema.deployment_id IN (SELECT id FROM paged)
+    AND ema.deleted IS FALSE AND emtd.deleted IS FALSE
+  GROUP BY ema.deployment_id
 )
-SELECT 
-  d.id,
-  d.user_id,
-  d.created_at,
-  COALESCE(ls.status, 'unknown') as status,
-  COUNT(DISTINCT doa.id) as openapiv3_asset_count,
-  COUNT(DISTINCT htd.id) as openapiv3_tool_count,
-  COUNT(DISTINCT tf.function_id) as functions_asset_count,
-  COUNT(DISTINCT tf.id) as functions_tool_count,
-  COUNT(DISTINCT ema.id) as external_mcp_asset_count,
-  COUNT(DISTINCT emtd.id) as external_mcp_tool_count
-FROM deployments d
-LEFT JOIN latest_statuses ls ON d.id = ls.deployment_id
-LEFT JOIN deployments_openapiv3_assets doa ON d.id = doa.deployment_id
-LEFT JOIN http_tool_definitions htd ON d.id = htd.deployment_id AND htd.deleted IS FALSE
-LEFT JOIN function_tool_definitions tf ON d.id = tf.deployment_id AND tf.deleted IS FALSE
-LEFT JOIN external_mcp_attachments ema ON d.id = ema.deployment_id AND ema.deleted IS FALSE
-LEFT JOIN external_mcp_tool_definitions emtd ON ema.id = emtd.external_mcp_attachment_id AND emtd.deleted IS FALSE
-WHERE
-  d.project_id = $1
-  AND d.id <= CASE 
-    WHEN $2::uuid IS NOT NULL THEN $2::uuid
-    ELSE (SELECT id FROM deployments WHERE project_id = $1 ORDER BY id DESC LIMIT 1)
-  END
-GROUP BY d.id, ls.status
-ORDER BY d.id DESC
-LIMIT 51
+SELECT
+  p.id,
+  p.user_id,
+  p.created_at,
+  COALESCE(ls.status, 'unknown') AS status,
+  COALESCE(oa.c, 0) AS openapiv3_asset_count,
+  COALESCE(ht.c, 0) AS openapiv3_tool_count,
+  COALESCE(fn.asset_c, 0) AS functions_asset_count,
+  COALESCE(fn.tool_c, 0) AS functions_tool_count,
+  COALESCE(ema.c, 0) AS external_mcp_asset_count,
+  COALESCE(emtd.c, 0) AS external_mcp_tool_count
+FROM paged p
+LEFT JOIN LATERAL (
+  SELECT status FROM deployment_statuses
+  WHERE deployment_id = p.id
+  ORDER BY seq DESC
+  LIMIT 1
+) ls ON TRUE
+LEFT JOIN oa_counts   oa   ON oa.deployment_id   = p.id
+LEFT JOIN http_counts ht   ON ht.deployment_id   = p.id
+LEFT JOIN fn_counts   fn   ON fn.deployment_id   = p.id
+LEFT JOIN ema_counts  ema  ON ema.deployment_id  = p.id
+LEFT JOIN emtd_counts emtd ON emtd.deployment_id = p.id
+ORDER BY p.id DESC
 `
 
 type ListDeploymentsParams struct {
@@ -1817,18 +1868,24 @@ INSERT INTO deployments_functions (
   , name
   , slug
   , runtime
+  , memory_mib
+  , scale
 ) VALUES (
   $1
   , $2
   , $3
   , $4
   , $5
+  , $6
+  , $7
 )
 ON CONFLICT (deployment_id, slug) DO UPDATE
 SET
   asset_id = EXCLUDED.asset_id
   , name = EXCLUDED.name
   , runtime = EXCLUDED.runtime
+  , memory_mib = COALESCE(EXCLUDED.memory_mib, deployments_functions.memory_mib)
+  , scale = COALESCE(EXCLUDED.scale, deployments_functions.scale)
 RETURNING id, asset_id, name, slug
 `
 
@@ -1838,6 +1895,8 @@ type UpsertDeploymentFunctionsAssetParams struct {
 	Name         string
 	Slug         string
 	Runtime      string
+	MemoryMib    pgtype.Int4
+	Scale        pgtype.Int4
 }
 
 type UpsertDeploymentFunctionsAssetRow struct {
@@ -1854,6 +1913,8 @@ func (q *Queries) UpsertDeploymentFunctionsAsset(ctx context.Context, arg Upsert
 		arg.Name,
 		arg.Slug,
 		arg.Runtime,
+		arg.MemoryMib,
+		arg.Scale,
 	)
 	var i UpsertDeploymentFunctionsAssetRow
 	err := row.Scan(

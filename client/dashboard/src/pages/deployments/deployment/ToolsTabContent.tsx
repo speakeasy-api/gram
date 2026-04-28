@@ -18,7 +18,7 @@ export const ToolsTabContent = ({ deploymentId }: { deploymentId: string }) => {
       <Heading variant="h2" className="mb-6">
         Tools
       </Heading>
-      <ToolList tools={toolDefinitions} />
+      <ToolList tools={toolDefinitions} readOnly />
     </div>
   );
 };

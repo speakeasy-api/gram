@@ -17,6 +17,9 @@ export { Chat } from "@/components/Chat";
 export { ChatHistory } from "@/components/ChatHistory";
 export { ShareButton } from "@/components/ShareButton";
 export type { ShareButtonProps } from "@/components/ShareButton";
+export { ToolFallback } from "@/components/assistant-ui/tool-fallback";
+export { MessageContent } from "@/components/MessageContent";
+export type { MessageContentProps } from "@/components/MessageContent";
 
 // Replay
 export { Replay } from "@/components/Replay";

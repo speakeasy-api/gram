@@ -56,6 +56,87 @@ type Asset struct {
 	Deleted       bool
 }
 
+type Assistant struct {
+	ID              uuid.UUID
+	ProjectID       uuid.UUID
+	OrganizationID  string
+	CreatedByUserID pgtype.Text
+	Name            string
+	Model           string
+	Instructions    string
+	WarmTtlSeconds  int64
+	MaxConcurrency  int64
+	Status          string
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+	Deleted         bool
+}
+
+type AssistantRuntime struct {
+	ID                  uuid.UUID
+	AssistantThreadID   uuid.UUID
+	AssistantID         uuid.UUID
+	ProjectID           uuid.UUID
+	Backend             string
+	State               string
+	WarmUntil           pgtype.Timestamptz
+	LeaseOwner          pgtype.Text
+	LastHeartbeatAt     pgtype.Timestamptz
+	BackendMetadataJson []byte
+	EndedAt             pgtype.Timestamptz
+	CreatedAt           pgtype.Timestamptz
+	UpdatedAt           pgtype.Timestamptz
+	DeletedAt           pgtype.Timestamptz
+	Deleted             bool
+	Ended               bool
+}
+
+type AssistantThread struct {
+	ID            uuid.UUID
+	AssistantID   uuid.UUID
+	ProjectID     uuid.UUID
+	CorrelationID string
+	ChatID        uuid.UUID
+	SourceKind    string
+	SourceRefJson []byte
+	LastEventAt   pgtype.Timestamptz
+	CreatedAt     pgtype.Timestamptz
+	UpdatedAt     pgtype.Timestamptz
+	DeletedAt     pgtype.Timestamptz
+	Deleted       bool
+}
+
+type AssistantThreadEvent struct {
+	ID                    uuid.UUID
+	AssistantThreadID     uuid.UUID
+	AssistantID           uuid.UUID
+	ProjectID             uuid.UUID
+	TriggerInstanceID     uuid.NullUUID
+	EventID               string
+	CorrelationID         string
+	Status                string
+	NormalizedPayloadJson []byte
+	SourcePayloadJson     []byte
+	Attempts              int64
+	LastError             pgtype.Text
+	ProcessedAt           pgtype.Timestamptz
+	CreatedAt             pgtype.Timestamptz
+	UpdatedAt             pgtype.Timestamptz
+	DeletedAt             pgtype.Timestamptz
+	Deleted               bool
+}
+
+type AssistantToolset struct {
+	ID            uuid.UUID
+	AssistantID   uuid.UUID
+	ToolsetID     uuid.UUID
+	EnvironmentID uuid.NullUUID
+	ProjectID     uuid.UUID
+	CreatedAt     pgtype.Timestamptz
+	UpdatedAt     pgtype.Timestamptz
+}
+
 type AuditLog struct {
 	ID                 uuid.UUID
 	Seq                int64
@@ -116,6 +197,8 @@ type ChatMessage struct {
 	ToolUrn          urn.Tool
 	ToolOutcome      pgtype.Text
 	ToolOutcomeNotes pgtype.Text
+	ContentHash      []byte
+	Generation       int32
 	CreatedAt        pgtype.Timestamptz
 }
 
@@ -225,6 +308,8 @@ type DeploymentsFunction struct {
 	Slug          string
 	Runtime       string
 	RunnerVersion pgtype.Text
+	MemoryMib     pgtype.Int4
+	Scale         pgtype.Int4
 }
 
 type DeploymentsOpenapiv3Asset struct {
@@ -505,6 +590,21 @@ type McpEnvironmentConfig struct {
 	UpdatedAt         pgtype.Timestamptz
 }
 
+type McpFrontend struct {
+	ID                    uuid.UUID
+	ProjectID             uuid.UUID
+	EnvironmentID         uuid.NullUUID
+	ExternalOauthServerID uuid.NullUUID
+	OauthProxyServerID    uuid.NullUUID
+	RemoteMcpServerID     uuid.NullUUID
+	ToolsetID             uuid.NullUUID
+	Visibility            string
+	CreatedAt             pgtype.Timestamptz
+	UpdatedAt             pgtype.Timestamptz
+	DeletedAt             pgtype.Timestamptz
+	Deleted               bool
+}
+
 type McpMetadatum struct {
 	ID                        uuid.UUID
 	ToolsetID                 uuid.UUID
@@ -528,6 +628,18 @@ type McpRegistry struct {
 	UpdatedAt pgtype.Timestamptz
 	DeletedAt pgtype.Timestamptz
 	Deleted   bool
+}
+
+type McpSlug struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	CustomDomainID uuid.NullUUID
+	McpFrontendID  uuid.UUID
+	Slug           string
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	DeletedAt      pgtype.Timestamptz
+	Deleted        bool
 }
 
 type OauthProxyClientInfo struct {
@@ -654,7 +766,6 @@ type OrganizationMetadatum struct {
 type OrganizationRole struct {
 	ID                uuid.UUID
 	OrganizationID    string
-	WorkosID          string
 	WorkosSlug        string
 	WorkosName        string
 	WorkosDescription pgtype.Text
@@ -745,6 +856,16 @@ type PluginAssignment struct {
 	UpdatedAt      pgtype.Timestamptz
 }
 
+type PluginGithubConnection struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	InstallationID int64
+	RepoOwner      string
+	RepoName       string
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
 type PluginServer struct {
 	ID          uuid.UUID
 	PluginID    uuid.UUID
@@ -758,7 +879,7 @@ type PluginServer struct {
 	Deleted     bool
 }
 
-// RBAC grants. Normalized: one row per (org, principal, scope, resource). Resource='*' means unrestricted.
+// RBAC grants. One row per (org, principal, scope, selectors). Selectors define resource constraints.
 type PrincipalGrant struct {
 	ID uuid.UUID
 	// The organization this grant belongs to. Grants are always org-scoped.
@@ -769,8 +890,8 @@ type PrincipalGrant struct {
 	PrincipalType string
 	// The scope being granted, e.g. "build:read". Validated in application code, not via FK.
 	Scope string
-	// '*' = unrestricted (scope applies to all resources in the org). Any other value = a specific resource ID this scope is granted on.
-	Resource  string
+	// JSON selector constraints defining what the grant applies to, e.g. {"resource_kind":"project","resource_id":"proj_123"}.
+	Selectors []byte
 	CreatedAt pgtype.Timestamptz
 	UpdatedAt pgtype.Timestamptz
 }
@@ -849,6 +970,40 @@ type RemoteMcpServerHeader struct {
 	UpdatedAt              pgtype.Timestamptz
 	DeletedAt              pgtype.Timestamptz
 	Deleted                bool
+}
+
+type RiskPolicy struct {
+	ID               uuid.UUID
+	ProjectID        uuid.UUID
+	OrganizationID   string
+	Enabled          bool
+	Name             string
+	Sources          []string
+	PresidioEntities []string
+	Version          int64
+	CreatedAt        pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
+	DeletedAt        pgtype.Timestamptz
+	Deleted          bool
+}
+
+type RiskResult struct {
+	ID                uuid.UUID
+	ProjectID         uuid.UUID
+	OrganizationID    string
+	RiskPolicyID      uuid.UUID
+	RiskPolicyVersion int64
+	ChatMessageID     uuid.UUID
+	Source            string
+	Found             bool
+	RuleID            pgtype.Text
+	Description       pgtype.Text
+	Match             pgtype.Text
+	StartPos          pgtype.Int4
+	EndPos            pgtype.Int4
+	Confidence        pgtype.Float8
+	Tags              []string
+	CreatedAt         pgtype.Timestamptz
 }
 
 type SlackApp struct {
@@ -976,6 +1131,17 @@ type ToolsetEnvironment struct {
 	EnvironmentID uuid.UUID
 	CreatedAt     pgtype.Timestamptz
 	UpdatedAt     pgtype.Timestamptz
+}
+
+type ToolsetOrigin struct {
+	ID                      uuid.UUID
+	OrganizationID          string
+	ToolsetID               uuid.UUID
+	OriginRegistrySpecifier string
+	CreatedAt               pgtype.Timestamptz
+	UpdatedAt               pgtype.Timestamptz
+	DeletedAt               pgtype.Timestamptz
+	Deleted                 bool
 }
 
 type ToolsetPrompt struct {

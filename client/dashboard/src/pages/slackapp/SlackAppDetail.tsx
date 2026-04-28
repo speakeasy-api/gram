@@ -17,7 +17,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "react-router";
 import { useRoutes } from "@/routes";
-import { useToolsets } from "@/pages/toolsets/Toolsets";
+import { useToolsets } from "@/pages/toolsets/useToolsets";
 import { StatusBadge } from "./SlackApp";
 import { buildDeepLinkUrl, buildInviteUrl } from "./slackManifest";
 
@@ -390,7 +390,7 @@ function LeftPanel({ app }: { app: SlackAppResult }) {
           </div>
         ) : (
           <div className="flex flex-col items-center justify-center rounded-lg border border-dashed px-6 py-10">
-            <Icon name="slack" className="text-muted-foreground mb-3 h-6 w-6" />
+            <Icon name="bot" className="text-muted-foreground mb-3 h-6 w-6" />
             <Type muted small className="mb-3 text-center">
               No installs yet. Share the invite link to get your first workspace
               connected.

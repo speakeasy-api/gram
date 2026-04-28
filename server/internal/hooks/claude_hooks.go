@@ -10,12 +10,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	goahttp "goa.design/goa/v3/http"
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/telemetry"
 )
 
 // claudeRequestDecoder is a custom decoder that handles both JSON and form-urlencoded content types
@@ -107,6 +109,27 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 	return nil
 }
 
+// Metrics handles authenticated OTEL metrics data from Claude Code
+func (s *Service) Metrics(ctx context.Context, payload *gen.MetricsPayload) error {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return oops.E(oops.CodeUnauthorized, nil, "unauthorized")
+	}
+
+	s.logger.InfoContext(ctx, "Received Claude token metrics",
+		attr.SlogEvent("claude_metrics"),
+		attr.SlogValueAny(map[string]any{
+			"organization_id": authCtx.ActiveOrganizationID,
+			"project_id":      authCtx.ProjectID.String(),
+		}),
+	)
+
+	// Write metrics to ClickHouse
+	s.writeMetricsToClickHouse(ctx, payload, authCtx.ActiveOrganizationID, authCtx.ProjectID.String())
+
+	return nil
+}
+
 type claudeLogMetadata struct {
 	SessionID   string
 	ServiceName string
@@ -168,6 +191,7 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudeHookPayload) (*
 		attr.SlogValueAny(map[string]any{
 			"hookEventName": payload.HookEventName,
 			"toolName":      payload.ToolName,
+			"sessionID":     payload.SessionID,
 		}),
 	)
 
@@ -245,17 +269,146 @@ func (s *Service) getSessionMetadata(ctx context.Context, sessionID string) (Ses
 }
 
 func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudeHookPayload) (*gen.ClaudeHookResult, error) {
-	// For now, always allow tools
 	allow := "allow"
+	deny := "deny"
 	result := makeHookResult(payload.HookEventName)
-	if output, ok := result.HookSpecificOutput.(*HookSpecificOutput); ok {
+	output, _ := result.HookSpecificOutput.(*HookSpecificOutput)
+
+	// Only Gram-hosted (non-local) tool calls carry the x-gram-toolset-id
+	// property. In Claude Code, MCP-routed tools are identified by the
+	// "mcp__<server>__<tool>" name convention; native tools (Read, Edit, Bash,
+	// ...) are skipped.
+	rawToolName := ""
+	if payload.ToolName != nil {
+		rawToolName = *payload.ToolName
+	}
+	mcpToolName, isMCP := claudeMCPToolName(rawToolName)
+	if !isMCP {
+		if output != nil {
+			output.PermissionDecision = &allow
+		}
+		return result, nil
+	}
+
+	sessionID := ""
+	if payload.SessionID != nil {
+		sessionID = *payload.SessionID
+	}
+	if sessionID == "" {
+		// No session yet to derive org from — fall back to allow rather than
+		// breaking the tool call. Hook event will still be buffered.
+		if output != nil {
+			output.PermissionDecision = &allow
+		}
+		return result, nil
+	}
+	metadata, err := s.getSessionMetadata(ctx, sessionID)
+	if err != nil {
+		// Session metadata not yet validated — allow this call; the buffered
+		// hook will be re-persisted once metadata arrives.
+		s.logger.WarnContext(ctx, "claude PreToolUse fired before session metadata available; allowing tool call",
+			attr.SlogEvent("claude_hook_pretooluse_no_metadata"),
+			attr.SlogError(err),
+		)
+		if output != nil {
+			output.PermissionDecision = &allow
+		}
+		return result, nil
+	}
+
+	if !s.blockShadowMCPEnabled(ctx, metadata.GramOrgID) {
+		if output != nil {
+			output.PermissionDecision = &allow
+		}
+		return result, nil
+	}
+
+	reason, denied := s.validateGramToolsetCall(ctx, payload.ToolInput, mcpToolName, metadata.GramOrgID)
+	if denied {
+		s.logger.InfoContext(ctx, "denying claude tool call: failed gram toolset validation",
+			attr.SlogEvent("claude_hook_denied"),
+			attr.SlogValueAny(map[string]any{
+				"hookEventName": payload.HookEventName,
+				"toolName":      rawToolName,
+				"reason":        reason,
+			}),
+		)
+		// Record a companion ClickHouse entry with gram.hook.block_reason set
+		// so the trace_summaries materialized view can flag this trace as
+		// blocked. Shares the original PreToolUse trace_id (derived from
+		// tool_use_id) so both rows aggregate into the same trace summary.
+		s.writeClaudeBlockToClickHouse(ctx, payload, &metadata, reason)
+
+		userMsg := gramToolsetDenyUserMessage
+		// systemMessage renders as a warning in the user's terminal;
+		// permissionDecisionReason is what Claude itself sees and may quote
+		// back to the user, so we send the same friendly message in both.
+		result.SystemMessage = &userMsg
+		if output != nil {
+			output.PermissionDecision = &deny
+			output.PermissionDecisionReason = &userMsg
+		}
+		return result, nil
+	}
+
+	if output != nil {
 		output.PermissionDecision = &allow
 	}
 	return result, nil
 }
 
+// claudeMCPToolName returns the bare tool name and true if rawName follows the
+// "mcp__<server>__<tool>" convention used by Claude Code for MCP-routed tools.
+// Returns ("", false) for native Claude Code tools (Read, Edit, Bash, etc.).
+func claudeMCPToolName(rawName string) (string, bool) {
+	if !strings.HasPrefix(rawName, "mcp__") {
+		return "", false
+	}
+	parts := strings.SplitN(rawName, "__", 3)
+	if len(parts) != 3 || parts[2] == "" {
+		return "", false
+	}
+	return parts[2], true
+}
+
 func (s *Service) handlePostToolUse(ctx context.Context, payload *gen.ClaudeHookPayload) (*gen.ClaudeHookResult, error) {
 	return makeHookResult(payload.HookEventName), nil
+}
+
+// writeClaudeBlockToClickHouse writes a companion ClickHouse log entry for a
+// Claude PreToolUse call that the shadow-MCP guard denied. It reuses
+// buildTelemetryAttributesWithMetadata so the new row shares the same trace_id
+// (derived from tool_use_id) as the original PreToolUse log, and adds
+// gram.hook.block_reason. trace_summaries_mv aggregates with max(), so the
+// trace will surface as blocked regardless of which row arrives first.
+func (s *Service) writeClaudeBlockToClickHouse(ctx context.Context, payload *gen.ClaudeHookPayload, metadata *SessionMetadata, reason string) {
+	if s.telemetryLogger == nil || reason == "" {
+		return
+	}
+
+	attrs := s.buildTelemetryAttributesWithMetadata(ctx, payload, metadata)
+	attrs[attr.HookBlockReasonKey] = reason
+	toolName, _ := attrs[attr.ToolNameKey].(string)
+
+	projectID, err := uuid.Parse(metadata.ProjectID)
+	if err != nil {
+		s.logger.WarnContext(ctx, "invalid project ID for Claude block log", attr.SlogError(err))
+		return
+	}
+
+	s.telemetryLogger.Log(ctx, telemetry.LogParams{
+		Timestamp: time.Now(),
+		ToolInfo: telemetry.ToolInfo{
+			Name:           toolName,
+			OrganizationID: metadata.GramOrgID,
+			ProjectID:      projectID.String(),
+			ID:             "",
+			URN:            "",
+			DeploymentID:   "",
+			FunctionID:     nil,
+		},
+		Attributes: attrs,
+	})
 }
 
 func (s *Service) handlePostToolUseFailure(ctx context.Context, payload *gen.ClaudeHookPayload) (*gen.ClaudeHookResult, error) {
@@ -315,4 +468,19 @@ func extractLogData(logRecord *gen.OTELLogRecord) OTELLogData {
 	}
 
 	return data
+}
+
+// extractAttributeString extracts a string attribute value by key
+func extractAttributeString(attributes []*gen.OTELAttribute, key string) string {
+	if attributes == nil {
+		return ""
+	}
+
+	for _, attr := range attributes {
+		if attr.Key == key && attr.Value != nil && attr.Value.StringValue != nil {
+			return *attr.Value.StringValue
+		}
+	}
+
+	return ""
 }

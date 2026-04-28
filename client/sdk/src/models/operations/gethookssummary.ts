@@ -34,7 +34,7 @@ export type GetHooksSummaryRequest = {
    * project header
    */
   gramProject?: string | undefined;
-  getProjectMetricsSummaryPayload: components.GetProjectMetricsSummaryPayload;
+  getHooksSummaryPayload: components.GetHooksSummaryPayload;
 };
 
 /** @internal */
@@ -143,8 +143,7 @@ export type GetHooksSummaryRequest$Outbound = {
   "Gram-Key"?: string | undefined;
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
-  GetProjectMetricsSummaryPayload:
-    components.GetProjectMetricsSummaryPayload$Outbound;
+  GetHooksSummaryPayload: components.GetHooksSummaryPayload$Outbound;
 };
 
 /** @internal */
@@ -156,15 +155,14 @@ export const GetHooksSummaryRequest$outboundSchema: z.ZodMiniType<
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-    getProjectMetricsSummaryPayload:
-      components.GetProjectMetricsSummaryPayload$outboundSchema,
+    getHooksSummaryPayload: components.GetHooksSummaryPayload$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
       gramKey: "Gram-Key",
       gramSession: "Gram-Session",
       gramProject: "Gram-Project",
-      getProjectMetricsSummaryPayload: "GetProjectMetricsSummaryPayload",
+      getHooksSummaryPayload: "GetHooksSummaryPayload",
     });
   }),
 );

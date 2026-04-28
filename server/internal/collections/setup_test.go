@@ -12,9 +12,9 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/collections"
 	tgen "github.com/speakeasy-api/gram/server/gen/toolsets"
 	"github.com/speakeasy-api/gram/server/gen/types"
-	"github.com/speakeasy-api/gram/server/internal/access"
-	"github.com/speakeasy-api/gram/server/internal/access/accesstest"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/collections"
@@ -76,10 +76,10 @@ func newTestCollectionsService(t *testing.T) (context.Context, *testInstance) {
 
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
 
-	accessManager := access.NewManager(logger, conn, accesstest.AlwaysEnabledFeatureChecker{}, workos.NewStubClient(), cache.NoopCache)
+	authzEngine := authz.NewEngine(logger, conn, authztest.RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
 
-	svc := collections.NewService(logger, tracerProvider, conn, sessionManager, accessManager, testenv.DefaultSiteURL(t))
-	toolsetsSvc := toolsets.NewService(logger, tracerProvider, conn, sessionManager, nil, accessManager)
+	svc := collections.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, testenv.DefaultSiteURL(t))
+	toolsetsSvc := toolsets.NewService(logger, tracerProvider, conn, sessionManager, nil, authzEngine)
 
 	return ctx, &testInstance{
 		service:        svc,
@@ -89,8 +89,21 @@ func newTestCollectionsService(t *testing.T) (context.Context, *testInstance) {
 	}
 }
 
-func createMCPEnabledToolset(t *testing.T, ctx context.Context, ti *testInstance, name string) *types.Toolset {
+func createMCPEnabledToolset(
+	t *testing.T,
+	ctx context.Context,
+	ti *testInstance,
+	name string,
+	registrySpecifier string,
+) *types.Toolset {
 	t.Helper()
+
+	var origin *types.ToolsetOrigin
+	if registrySpecifier != "" {
+		origin = &types.ToolsetOrigin{
+			RegistrySpecifier: registrySpecifier,
+		}
+	}
 
 	created, err := ti.toolsets.CreateToolset(ctx, &tgen.CreateToolsetPayload{
 		SessionToken:           nil,
@@ -100,7 +113,7 @@ func createMCPEnabledToolset(t *testing.T, ctx context.Context, ti *testInstance
 		ToolUrns:               []string{},
 		ResourceUrns:           nil,
 		DefaultEnvironmentSlug: nil,
-		ProjectSlugInput:       nil,
+		Origin:                 origin,
 	})
 	require.NoError(t, err)
 
@@ -119,7 +132,6 @@ func createMCPEnabledToolset(t *testing.T, ctx context.Context, ti *testInstance
 		McpIsPublic:            nil,
 		McpEnabled:             &mcpEnabled,
 		CustomDomainID:         nil,
-		ProjectSlugInput:       nil,
 	})
 	require.NoError(t, err)
 	require.True(t, *updated.McpEnabled)
@@ -139,7 +151,6 @@ func createCollection(t *testing.T, ctx context.Context, ti *testInstance, name,
 		ToolsetIds:           []string{},
 		SessionToken:         nil,
 		ApikeyToken:          nil,
-		ProjectSlugInput:     nil,
 	})
 	require.NoError(t, err)
 

@@ -160,3 +160,15 @@ export const environmentHasAllRequiredVariables = (
 ): boolean => {
   return requiredVars.every((v) => environmentHasValue(v, environmentSlug));
 };
+
+// Returns keys of variables that will be server-injected for every caller of the
+// MCP server — i.e. variables in `state: "system"` with a value present in the
+// attached environment. Used to warn users before flipping an MCP to public.
+export const getSystemProvidedVariables = (
+  envVars: EnvironmentVariable[],
+  attachedEnvironmentSlug: string,
+): string[] =>
+  envVars
+    .filter((v) => v.state === "system")
+    .filter((v) => environmentHasValue(v, attachedEnvironmentSlug))
+    .map((v) => v.key);

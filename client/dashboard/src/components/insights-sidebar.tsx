@@ -1,59 +1,79 @@
+import { devObservabilityMcpMissing } from "@/hooks/useObservabilityMcpConfig";
+import { cn } from "@/lib/utils";
+import { useAssistantRuntime } from "@assistant-ui/react";
 import type { ElementsConfig } from "@gram-ai/elements";
 import { Chat, GramElementsProvider } from "@gram-ai/elements";
 import { useMoonshineConfig } from "@speakeasy-api/moonshine";
-import { Wand2, ChevronRight, Sparkles, Terminal } from "lucide-react";
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
-import { cn } from "@/lib/utils";
-import { devObservabilityMcpMissing } from "@/hooks/useObservabilityMcpConfig";
+import { ChevronRight, Sparkles, Terminal, Wand2 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { InsightsConfigOptions } from "./insights-context";
+import { InsightsContext, useInsightsState } from "./insights-context";
+
+// Types-only re-export (erased at compile time, won't break Fast Refresh)
+export type { InsightsConfigOptions } from "./insights-context";
 
 /**
- * Per-page overrides for the global AI Insights panel. Pages mount
- * <InsightsConfig {...} /> to register custom title/subtitle/suggestions
- * /context/mcpConfig; on unmount, the global defaults take over again.
+ * Cycles an element's `color` through the Speakeasy brand rainbow on hover —
+ * used for small icon-only "Explore with AI" CTAs where a border treatment
+ * would be invisible. Requires <InsightsRainbowStyles /> in the tree.
  */
-export interface InsightsConfigOptions {
-  mcpConfig?: Omit<ElementsConfig, "variant" | "welcome" | "theme">;
-  title?: string;
-  subtitle?: string;
-  suggestions?: Array<{
-    title: string;
-    label: string;
-    prompt: string;
-  }>;
-  contextInfo?: string;
-  /** Hide the trigger button (e.g., when logs are disabled on this page). */
-  hideTrigger?: boolean;
-}
-
-interface InsightsContextValue {
-  available: boolean;
-  isExpanded: boolean;
-  setIsExpanded: (expanded: boolean) => void;
-  /** Pages call this to register a per-page config override. Pass null to
-   *  clear (typically on unmount of <InsightsConfig />). */
-  setOverride: (override: InsightsConfigOptions | null) => void;
-}
-
-const InsightsContext = createContext<InsightsContextValue>({
-  available: false,
-  isExpanded: false,
-  setIsExpanded: () => {},
-  setOverride: () => {},
-});
+export const INSIGHTS_AI_RAINBOW_CLASS = "insights-ai-rainbow";
 
 /**
- * Hook to access the insights sidebar state. `available` is false when no
- * InsightsProvider ancestor exists.
+ * Reveals a full-spectrum Speakeasy brand gradient border on hover — same
+ * 9-stop palette as the login page's BrandGradientBar. Used for the nav-bar
+ * AI Insights trigger where the button shape can host a real border.
+ * Requires <InsightsRainbowStyles /> in the tree. Works best on elements
+ * with a 1px border and a border-radius.
  */
-export function useInsightsState() {
-  return useContext(InsightsContext);
+export const INSIGHTS_AI_RAINBOW_BORDER_CLASS = "insights-ai-rainbow-border";
+
+function InsightsRainbowStyles() {
+  return (
+    <style>{`
+      @keyframes insights-ai-rainbow {
+        0%   { color: #C83228; }
+        16%  { color: #FB873F; }
+        33%  { color: #D2DC91; }
+        50%  { color: #5A8250; }
+        66%  { color: #2873D7; }
+        83%  { color: #9BC3FF; }
+        100% { color: #C83228; }
+      }
+      .${INSIGHTS_AI_RAINBOW_CLASS}:hover {
+        animation: insights-ai-rainbow 2.5s linear infinite;
+      }
+
+      /* Gradient border via a masked pseudo-element. Mask cuts the interior
+         so only the 1px ring shows; border-radius is inherited so rounded
+         corners stay intact. Fades in on hover; the underlying border goes
+         transparent so we don't double up. */
+      .${INSIGHTS_AI_RAINBOW_BORDER_CLASS} {
+        position: relative;
+      }
+      .${INSIGHTS_AI_RAINBOW_BORDER_CLASS}::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        padding: 1px;
+        border-radius: inherit;
+        background: linear-gradient(90deg, #320F1E 0%, #C83228 12.5%, #FB873F 25%, #D2DC91 37.5%, #5A8250 50%, #002314 62%, #00143C 74%, #2873D7 86%, #9BC3FF 100%);
+        -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+        -webkit-mask-composite: xor;
+        mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+        mask-composite: exclude;
+        opacity: 0;
+        transition: opacity 200ms ease;
+        pointer-events: none;
+      }
+      .${INSIGHTS_AI_RAINBOW_BORDER_CLASS}:hover::before {
+        opacity: 1;
+      }
+      .${INSIGHTS_AI_RAINBOW_BORDER_CLASS}:hover {
+        border-color: transparent;
+      }
+    `}</style>
+  );
 }
 
 /**
@@ -74,6 +94,7 @@ export function InsightsTrigger({ className }: { className?: string }) {
       className={cn(
         "border-border hover:bg-accent hover:text-accent-foreground inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2.5 py-1 text-sm transition-colors",
         isExpanded && "bg-accent text-accent-foreground",
+        INSIGHTS_AI_RAINBOW_BORDER_CLASS,
         className,
       )}
     >
@@ -132,6 +153,16 @@ export function InsightsProvider({
 }: InsightsProviderProps) {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
   const [override, setOverride] = useState<InsightsConfigOptions | null>(null);
+  const [pendingPrompt, setPendingPrompt] = useState<{
+    text: string;
+    nonce: number;
+  } | null>(null);
+  // Used as React `key` on <GramElementsProvider>; bumped from
+  // handleSendPrompt so each "Explore with AI" click gets a fresh assistant
+  // runtime. Avoids an assistant-ui race where rapid switchToNewThread()
+  // calls in a long-lived runtime throw `tapLookupResources: Resource not
+  // found for lookup: __LOCALID_…` during render.
+  const [sessionKey, setSessionKey] = useState(0);
   const { theme } = useMoonshineConfig();
 
   // Resolve effective values: per-page override wins, fall back to defaults.
@@ -156,7 +187,9 @@ Custom attributes: SDK users can attach arbitrary key-value attributes to their 
 When a user asks about logs for a specific user, tenant, customer, or entity:
 1. Always call listAttributeKeys first for the relevant time window to discover which @-prefixed attributes exist.
 2. Identify the most relevant attribute and filter on it (e.g. { path: "@user", operator: "eq", values: ["someone@example.com"] }).
-3. If no relevant @-prefixed attributes exist, tell the user and fall back to text search instead.`;
+3. If no relevant @-prefixed attributes exist, tell the user and fall back to text search instead.
+
+MCP server vs. client breakdowns: \`gram.hook.source\` and \`gram.tool_call.source\` are complementary dimensions, not aliases. \`gram.hook.source\` identifies the agent/client that invoked Gram (e.g. "claude-code", "cursor") — use this for adoption / "who's using us" questions. \`gram.tool_call.source\` identifies the downstream MCP server that handled the call (e.g. "datadog-mcp", "linear") — use this for "top servers" / per-MCP usage questions. When asked about MCP server-level breakdowns, query BOTH dimensions: a server can appear in one and not the other depending on whether you're slicing by caller or callee.`;
 
   const systemPrompt = contextInfo
     ? `${baseInstructions}
@@ -173,7 +206,28 @@ When the user asks about "current period", "selected period", "this timeframe", 
       variant: "standalone",
       systemPrompt,
       model: {
-        defaultModel: "anthropic/claude-sonnet-4.5",
+        defaultModel: "anthropic/claude-sonnet-4.6",
+      },
+      api: {
+        ...mcpConfig.api,
+        headers: {
+          ...mcpConfig.api?.headers,
+          "X-Gram-Source": "dashboard-ai-insights",
+        },
+      },
+      tools: {
+        ...mcpConfig.tools,
+        // Cap individual MCP tool outputs to ~12.5K tokens. Observability
+        // queries (gram_search_logs, gram_get_deployment_logs) can return
+        // hundreds of KB; without this cap, one wide search fills the
+        // context window.
+        maxOutputBytes: 50_000,
+      },
+      contextCompaction: {
+        // Start compacting at 60% of the model ceiling — Insights runs long
+        // tool-heavy conversations and benefits from a tighter margin than
+        // the library default of 70%.
+        compactAtFraction: 0.6,
       },
       welcome: {
         title,
@@ -187,23 +241,41 @@ When the user asks about "current period", "selected period", "this timeframe", 
     [mcpConfig, title, subtitle, suggestions, theme, systemPrompt],
   );
 
+  // Page-level <InsightsConfig> calls this on every parent re-render and on
+  // page navigation; deliberately does NOT bump sessionKey, so navigating
+  // between pages preserves any in-flight chat.
   const handleSetOverride = useCallback(
-    (next: InsightsConfigOptions | null) => setOverride(next),
+    (next: InsightsConfigOptions | null) => {
+      setOverride(next);
+    },
     [],
   );
 
-  const contextValue = useMemo<InsightsContextValue>(
+  // Only "Explore with AI" clicks call this — bump sessionKey here (not in
+  // setOverride) so a fresh runtime is mounted before the prompt lands.
+  // Nonce defeats reference-equality skipping when the same chart is clicked
+  // twice in a row.
+  const handleSendPrompt = useCallback((text: string) => {
+    setSessionKey((k) => k + 1);
+    setPendingPrompt({ text, nonce: Date.now() });
+  }, []);
+
+  const consumePendingPrompt = useCallback(() => setPendingPrompt(null), []);
+
+  const contextValue = useMemo(
     () => ({
       available: !hideTrigger,
       isExpanded,
       setIsExpanded,
       setOverride: handleSetOverride,
+      sendPrompt: handleSendPrompt,
     }),
-    [hideTrigger, isExpanded, handleSetOverride],
+    [hideTrigger, isExpanded, handleSetOverride, handleSendPrompt],
   );
 
   return (
     <InsightsContext.Provider value={contextValue}>
+      <InsightsRainbowStyles />
       <div className="flex h-full w-full">
         {/* Main content area - shrinks when sidebar opens */}
         <div
@@ -264,7 +336,11 @@ When the user asks about "current period", "selected period", "this timeframe", 
 
           {/* Chat content */}
           <div className="flex-1 overflow-hidden">
-            <GramElementsProvider config={elementsConfig}>
+            <GramElementsProvider key={sessionKey} config={elementsConfig}>
+              <PendingPromptBridge
+                pending={pendingPrompt}
+                onConsume={consumePendingPrompt}
+              />
               <Chat />
             </GramElementsProvider>
           </div>
@@ -280,3 +356,41 @@ When the user asks about "current period", "selected period", "this timeframe", 
  * to avoid breaking out-of-tree consumers; remove after migration.
  */
 export const InsightsSidebar = InsightsProvider;
+
+/**
+ * Lives inside GramElementsProvider so it can access useThreadRuntime().
+ * When a pending prompt is queued via InsightsContext.sendPrompt, this bridge
+ * appends it to the current thread as a user message, triggering the
+ * assistant to respond. It fires once per nonce so repeat clicks on the
+ * same CTA still work.
+ */
+function PendingPromptBridge({
+  pending,
+  onConsume,
+}: {
+  pending: { text: string; nonce: number } | null;
+  onConsume: () => void;
+}) {
+  const assistantRuntime = useAssistantRuntime();
+  const firedNonceRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!pending || !assistantRuntime) return;
+    if (firedNonceRef.current === pending.nonce) return;
+    firedNonceRef.current = pending.nonce;
+
+    const { text } = pending;
+    // The fresh runtime (mounted by sessionKey bump in handleSendPrompt)
+    // already starts on a new thread, so just append.
+    try {
+      assistantRuntime.thread.append(text);
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error("Failed to send Explore prompt:", err);
+    }
+
+    onConsume();
+  }, [pending, assistantRuntime, onConsume]);
+
+  return null;
+}

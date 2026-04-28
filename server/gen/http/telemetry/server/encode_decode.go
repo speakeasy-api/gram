@@ -3299,18 +3299,21 @@ func unmarshalSearchUsersFilterRequestBodyToTelemetrySearchUsersFilter(v *Search
 // *UserSummaryResponseBody from a value of type *telemetry.UserSummary.
 func marshalTelemetryUserSummaryToUserSummaryResponseBody(v *telemetry.UserSummary) *UserSummaryResponseBody {
 	res := &UserSummaryResponseBody{
-		UserID:              v.UserID,
-		FirstSeenUnixNano:   v.FirstSeenUnixNano,
-		LastSeenUnixNano:    v.LastSeenUnixNano,
-		TotalChats:          v.TotalChats,
-		TotalChatRequests:   v.TotalChatRequests,
-		TotalInputTokens:    v.TotalInputTokens,
-		TotalOutputTokens:   v.TotalOutputTokens,
-		TotalTokens:         v.TotalTokens,
-		AvgTokensPerRequest: v.AvgTokensPerRequest,
-		TotalToolCalls:      v.TotalToolCalls,
-		ToolCallSuccess:     v.ToolCallSuccess,
-		ToolCallFailure:     v.ToolCallFailure,
+		UserID:                   v.UserID,
+		FirstSeenUnixNano:        v.FirstSeenUnixNano,
+		LastSeenUnixNano:         v.LastSeenUnixNano,
+		TotalChats:               v.TotalChats,
+		TotalChatRequests:        v.TotalChatRequests,
+		TotalInputTokens:         v.TotalInputTokens,
+		TotalOutputTokens:        v.TotalOutputTokens,
+		TotalTokens:              v.TotalTokens,
+		CacheReadInputTokens:     v.CacheReadInputTokens,
+		CacheCreationInputTokens: v.CacheCreationInputTokens,
+		AvgTokensPerRequest:      v.AvgTokensPerRequest,
+		TotalCost:                v.TotalCost,
+		TotalToolCalls:           v.TotalToolCalls,
+		ToolCallSuccess:          v.ToolCallSuccess,
+		ToolCallFailure:          v.ToolCallFailure,
 	}
 	if v.Tools != nil {
 		res.Tools = make([]*ToolUsageResponseBody, len(v.Tools))
@@ -3346,28 +3349,31 @@ func marshalTelemetryToolUsageToToolUsageResponseBody(v *telemetry.ToolUsage) *T
 // *telemetry.ProjectSummary.
 func marshalTelemetryProjectSummaryToProjectSummaryResponseBody(v *telemetry.ProjectSummary) *ProjectSummaryResponseBody {
 	res := &ProjectSummaryResponseBody{
-		FirstSeenUnixNano:       v.FirstSeenUnixNano,
-		LastSeenUnixNano:        v.LastSeenUnixNano,
-		TotalInputTokens:        v.TotalInputTokens,
-		TotalOutputTokens:       v.TotalOutputTokens,
-		TotalTokens:             v.TotalTokens,
-		AvgTokensPerRequest:     v.AvgTokensPerRequest,
-		TotalChatRequests:       v.TotalChatRequests,
-		AvgChatDurationMs:       v.AvgChatDurationMs,
-		FinishReasonStop:        v.FinishReasonStop,
-		FinishReasonToolCalls:   v.FinishReasonToolCalls,
-		TotalToolCalls:          v.TotalToolCalls,
-		ToolCallSuccess:         v.ToolCallSuccess,
-		ToolCallFailure:         v.ToolCallFailure,
-		AvgToolDurationMs:       v.AvgToolDurationMs,
-		ChatResolutionSuccess:   v.ChatResolutionSuccess,
-		ChatResolutionFailure:   v.ChatResolutionFailure,
-		ChatResolutionPartial:   v.ChatResolutionPartial,
-		ChatResolutionAbandoned: v.ChatResolutionAbandoned,
-		AvgChatResolutionScore:  v.AvgChatResolutionScore,
-		TotalChats:              v.TotalChats,
-		DistinctModels:          v.DistinctModels,
-		DistinctProviders:       v.DistinctProviders,
+		FirstSeenUnixNano:        v.FirstSeenUnixNano,
+		LastSeenUnixNano:         v.LastSeenUnixNano,
+		TotalInputTokens:         v.TotalInputTokens,
+		TotalOutputTokens:        v.TotalOutputTokens,
+		TotalTokens:              v.TotalTokens,
+		CacheReadInputTokens:     v.CacheReadInputTokens,
+		CacheCreationInputTokens: v.CacheCreationInputTokens,
+		AvgTokensPerRequest:      v.AvgTokensPerRequest,
+		TotalCost:                v.TotalCost,
+		TotalChatRequests:        v.TotalChatRequests,
+		AvgChatDurationMs:        v.AvgChatDurationMs,
+		FinishReasonStop:         v.FinishReasonStop,
+		FinishReasonToolCalls:    v.FinishReasonToolCalls,
+		TotalToolCalls:           v.TotalToolCalls,
+		ToolCallSuccess:          v.ToolCallSuccess,
+		ToolCallFailure:          v.ToolCallFailure,
+		AvgToolDurationMs:        v.AvgToolDurationMs,
+		ChatResolutionSuccess:    v.ChatResolutionSuccess,
+		ChatResolutionFailure:    v.ChatResolutionFailure,
+		ChatResolutionPartial:    v.ChatResolutionPartial,
+		ChatResolutionAbandoned:  v.ChatResolutionAbandoned,
+		AvgChatResolutionScore:   v.AvgChatResolutionScore,
+		TotalChats:               v.TotalChats,
+		DistinctModels:           v.DistinctModels,
+		DistinctProviders:        v.DistinctProviders,
 	}
 	if v.Models != nil {
 		res.Models = make([]*ModelUsageResponseBody, len(v.Models))
@@ -3413,14 +3419,20 @@ func marshalTelemetryModelUsageToModelUsageResponseBody(v *telemetry.ModelUsage)
 // type *telemetry.ObservabilitySummary.
 func marshalTelemetryObservabilitySummaryToObservabilitySummaryResponseBody(v *telemetry.ObservabilitySummary) *ObservabilitySummaryResponseBody {
 	res := &ObservabilitySummaryResponseBody{
-		TotalChats:           v.TotalChats,
-		ResolvedChats:        v.ResolvedChats,
-		FailedChats:          v.FailedChats,
-		AvgSessionDurationMs: v.AvgSessionDurationMs,
-		AvgResolutionTimeMs:  v.AvgResolutionTimeMs,
-		TotalToolCalls:       v.TotalToolCalls,
-		FailedToolCalls:      v.FailedToolCalls,
-		AvgLatencyMs:         v.AvgLatencyMs,
+		TotalChats:               v.TotalChats,
+		ResolvedChats:            v.ResolvedChats,
+		FailedChats:              v.FailedChats,
+		AvgSessionDurationMs:     v.AvgSessionDurationMs,
+		AvgResolutionTimeMs:      v.AvgResolutionTimeMs,
+		TotalInputTokens:         v.TotalInputTokens,
+		TotalOutputTokens:        v.TotalOutputTokens,
+		TotalTokens:              v.TotalTokens,
+		CacheReadInputTokens:     v.CacheReadInputTokens,
+		CacheCreationInputTokens: v.CacheCreationInputTokens,
+		TotalCost:                v.TotalCost,
+		TotalToolCalls:           v.TotalToolCalls,
+		FailedToolCalls:          v.FailedToolCalls,
+		AvgLatencyMs:             v.AvgLatencyMs,
 	}
 
 	return res
@@ -3431,16 +3443,22 @@ func marshalTelemetryObservabilitySummaryToObservabilitySummaryResponseBody(v *t
 // *telemetry.TimeSeriesBucket.
 func marshalTelemetryTimeSeriesBucketToTimeSeriesBucketResponseBody(v *telemetry.TimeSeriesBucket) *TimeSeriesBucketResponseBody {
 	res := &TimeSeriesBucketResponseBody{
-		BucketTimeUnixNano:   v.BucketTimeUnixNano,
-		TotalChats:           v.TotalChats,
-		ResolvedChats:        v.ResolvedChats,
-		FailedChats:          v.FailedChats,
-		PartialChats:         v.PartialChats,
-		AbandonedChats:       v.AbandonedChats,
-		TotalToolCalls:       v.TotalToolCalls,
-		FailedToolCalls:      v.FailedToolCalls,
-		AvgToolLatencyMs:     v.AvgToolLatencyMs,
-		AvgSessionDurationMs: v.AvgSessionDurationMs,
+		BucketTimeUnixNano:       v.BucketTimeUnixNano,
+		TotalChats:               v.TotalChats,
+		ResolvedChats:            v.ResolvedChats,
+		FailedChats:              v.FailedChats,
+		PartialChats:             v.PartialChats,
+		AbandonedChats:           v.AbandonedChats,
+		TotalInputTokens:         v.TotalInputTokens,
+		TotalOutputTokens:        v.TotalOutputTokens,
+		TotalTokens:              v.TotalTokens,
+		CacheReadInputTokens:     v.CacheReadInputTokens,
+		CacheCreationInputTokens: v.CacheCreationInputTokens,
+		TotalCost:                v.TotalCost,
+		TotalToolCalls:           v.TotalToolCalls,
+		FailedToolCalls:          v.FailedToolCalls,
+		AvgToolLatencyMs:         v.AvgToolLatencyMs,
+		AvgSessionDurationMs:     v.AvgSessionDurationMs,
 	}
 
 	return res
@@ -3605,6 +3623,63 @@ func marshalTelemetrySkillSummaryToSkillSummaryResponseBody(v *telemetry.SkillSu
 	return res
 }
 
+// marshalTelemetryHooksBreakdownRowToHooksBreakdownRowResponseBody builds a
+// value of type *HooksBreakdownRowResponseBody from a value of type
+// *telemetry.HooksBreakdownRow.
+func marshalTelemetryHooksBreakdownRowToHooksBreakdownRowResponseBody(v *telemetry.HooksBreakdownRow) *HooksBreakdownRowResponseBody {
+	res := &HooksBreakdownRowResponseBody{
+		UserEmail:    v.UserEmail,
+		ServerName:   v.ServerName,
+		HookSource:   v.HookSource,
+		ToolName:     v.ToolName,
+		EventCount:   v.EventCount,
+		FailureCount: v.FailureCount,
+	}
+
+	return res
+}
+
+// marshalTelemetryHooksTimeSeriesPointToHooksTimeSeriesPointResponseBody
+// builds a value of type *HooksTimeSeriesPointResponseBody from a value of
+// type *telemetry.HooksTimeSeriesPoint.
+func marshalTelemetryHooksTimeSeriesPointToHooksTimeSeriesPointResponseBody(v *telemetry.HooksTimeSeriesPoint) *HooksTimeSeriesPointResponseBody {
+	res := &HooksTimeSeriesPointResponseBody{
+		BucketStartNs: v.BucketStartNs,
+		ServerName:    v.ServerName,
+		UserEmail:     v.UserEmail,
+		EventCount:    v.EventCount,
+		FailureCount:  v.FailureCount,
+	}
+
+	return res
+}
+
+// marshalTelemetrySkillTimeSeriesPointToSkillTimeSeriesPointResponseBody
+// builds a value of type *SkillTimeSeriesPointResponseBody from a value of
+// type *telemetry.SkillTimeSeriesPoint.
+func marshalTelemetrySkillTimeSeriesPointToSkillTimeSeriesPointResponseBody(v *telemetry.SkillTimeSeriesPoint) *SkillTimeSeriesPointResponseBody {
+	res := &SkillTimeSeriesPointResponseBody{
+		BucketStartNs: v.BucketStartNs,
+		SkillName:     v.SkillName,
+		EventCount:    v.EventCount,
+	}
+
+	return res
+}
+
+// marshalTelemetrySkillBreakdownRowToSkillBreakdownRowResponseBody builds a
+// value of type *SkillBreakdownRowResponseBody from a value of type
+// *telemetry.SkillBreakdownRow.
+func marshalTelemetrySkillBreakdownRowToSkillBreakdownRowResponseBody(v *telemetry.SkillBreakdownRow) *SkillBreakdownRowResponseBody {
+	res := &SkillBreakdownRowResponseBody{
+		SkillName: v.SkillName,
+		UserEmail: v.UserEmail,
+		UseCount:  v.UseCount,
+	}
+
+	return res
+}
+
 // marshalTelemetryHookTraceSummaryToHookTraceSummaryResponseBody builds a
 // value of type *HookTraceSummaryResponseBody from a value of type
 // *telemetry.HookTraceSummary.
@@ -3614,6 +3689,7 @@ func marshalTelemetryHookTraceSummaryToHookTraceSummaryResponseBody(v *telemetry
 		StartTimeUnixNano: v.StartTimeUnixNano,
 		LogCount:          v.LogCount,
 		HookStatus:        v.HookStatus,
+		BlockReason:       v.BlockReason,
 		GramUrn:           v.GramUrn,
 		ToolName:          v.ToolName,
 		ToolSource:        v.ToolSource,

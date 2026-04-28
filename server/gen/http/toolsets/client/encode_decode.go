@@ -578,7 +578,7 @@ func DecodeListToolsetsForOrgResponse(decoder func(*http.Response) goahttp.Decod
 			if err != nil {
 				return nil, goahttp.ErrValidationError("toolsets", "listToolsetsForOrg", err)
 			}
-			res := NewListToolsetsForOrgListToolsetsResultOK(&body)
+			res := NewListToolsetsForOrgListToolsetSummariesResultOK(&body)
 			return res, nil
 		case http.StatusUnauthorized:
 			var (
@@ -2905,6 +2905,32 @@ func DecodeUpdateOAuthProxyServerResponse(decoder func(*http.Response) goahttp.D
 	}
 }
 
+// marshalTypesToolsetOriginToToolsetOriginRequestBody builds a value of type
+// *ToolsetOriginRequestBody from a value of type *types.ToolsetOrigin.
+func marshalTypesToolsetOriginToToolsetOriginRequestBody(v *types.ToolsetOrigin) *ToolsetOriginRequestBody {
+	if v == nil {
+		return nil
+	}
+	res := &ToolsetOriginRequestBody{
+		RegistrySpecifier: v.RegistrySpecifier,
+	}
+
+	return res
+}
+
+// marshalToolsetOriginRequestBodyToTypesToolsetOrigin builds a value of type
+// *types.ToolsetOrigin from a value of type *ToolsetOriginRequestBody.
+func marshalToolsetOriginRequestBodyToTypesToolsetOrigin(v *ToolsetOriginRequestBody) *types.ToolsetOrigin {
+	if v == nil {
+		return nil
+	}
+	res := &types.ToolsetOrigin{
+		RegistrySpecifier: v.RegistrySpecifier,
+	}
+
+	return res
+}
+
 // unmarshalSecurityVariableResponseBodyToTypesSecurityVariable builds a value
 // of type *types.SecurityVariable from a value of type
 // *SecurityVariableResponseBody.
@@ -3396,6 +3422,19 @@ func unmarshalFunctionResourceDefinitionResponseBodyToTypesFunctionResourceDefin
 	return res
 }
 
+// unmarshalToolsetOriginResponseBodyToTypesToolsetOrigin builds a value of
+// type *types.ToolsetOrigin from a value of type *ToolsetOriginResponseBody.
+func unmarshalToolsetOriginResponseBodyToTypesToolsetOrigin(v *ToolsetOriginResponseBody) *types.ToolsetOrigin {
+	if v == nil {
+		return nil
+	}
+	res := &types.ToolsetOrigin{
+		RegistrySpecifier: *v.RegistrySpecifier,
+	}
+
+	return res
+}
+
 // unmarshalExternalOAuthServerResponseBodyToTypesExternalOAuthServer builds a
 // value of type *types.ExternalOAuthServer from a value of type
 // *ExternalOAuthServerResponseBody.
@@ -3583,6 +3622,9 @@ func unmarshalToolsetEntryResponseBodyToTypesToolsetEntry(v *ToolsetEntryRespons
 		}
 		res.PromptTemplates[i] = unmarshalPromptTemplateEntryResponseBodyToTypesPromptTemplateEntry(val)
 	}
+	if v.Origin != nil {
+		res.Origin = unmarshalToolsetOriginResponseBodyToTypesToolsetOrigin(v.Origin)
+	}
 
 	return res
 }
@@ -3591,10 +3633,14 @@ func unmarshalToolsetEntryResponseBodyToTypesToolsetEntry(v *ToolsetEntryRespons
 // *types.ToolEntry from a value of type *ToolEntryResponseBody.
 func unmarshalToolEntryResponseBodyToTypesToolEntry(v *ToolEntryResponseBody) *types.ToolEntry {
 	res := &types.ToolEntry{
-		Type:    *v.Type,
-		ID:      *v.ID,
-		ToolUrn: *v.ToolUrn,
-		Name:    *v.Name,
+		Type:       *v.Type,
+		ID:         *v.ID,
+		ToolUrn:    *v.ToolUrn,
+		Name:       *v.Name,
+		HTTPMethod: v.HTTPMethod,
+	}
+	if v.Annotations != nil {
+		res.Annotations = unmarshalToolAnnotationsResponseBodyToTypesToolAnnotations(v.Annotations)
 	}
 
 	return res
@@ -3622,6 +3668,41 @@ func unmarshalPromptTemplateEntryResponseBodyToTypesPromptTemplateEntry(v *Promp
 		ID:   *v.ID,
 		Name: types.Slug(*v.Name),
 		Kind: v.Kind,
+	}
+
+	return res
+}
+
+// unmarshalToolsetSummaryResponseBodyToTypesToolsetSummary builds a value of
+// type *types.ToolsetSummary from a value of type *ToolsetSummaryResponseBody.
+func unmarshalToolsetSummaryResponseBodyToTypesToolsetSummary(v *ToolsetSummaryResponseBody) *types.ToolsetSummary {
+	res := &types.ToolsetSummary{
+		ID:                *v.ID,
+		ProjectID:         *v.ProjectID,
+		OrganizationID:    *v.OrganizationID,
+		Name:              *v.Name,
+		Slug:              types.Slug(*v.Slug),
+		McpEnabled:        v.McpEnabled,
+		McpIsPublic:       v.McpIsPublic,
+		ToolSelectionMode: *v.ToolSelectionMode,
+		CreatedAt:         *v.CreatedAt,
+		UpdatedAt:         *v.UpdatedAt,
+	}
+	if v.DefaultEnvironmentSlug != nil {
+		defaultEnvironmentSlug := types.Slug(*v.DefaultEnvironmentSlug)
+		res.DefaultEnvironmentSlug = &defaultEnvironmentSlug
+	}
+	if v.McpSlug != nil {
+		mcpSlug := types.Slug(*v.McpSlug)
+		res.McpSlug = &mcpSlug
+	}
+	res.Tools = make([]*types.ToolEntry, len(v.Tools))
+	for i, val := range v.Tools {
+		if val == nil {
+			res.Tools[i] = nil
+			continue
+		}
+		res.Tools[i] = unmarshalToolEntryResponseBodyToTypesToolEntry(val)
 	}
 
 	return res

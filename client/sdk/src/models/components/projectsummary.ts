@@ -31,6 +31,14 @@ export type ProjectSummary = {
    */
   avgToolDurationMs: number;
   /**
+   * Sum of cache creation input tokens
+   */
+  cacheCreationInputTokens: number;
+  /**
+   * Sum of cache read input tokens
+   */
+  cacheReadInputTokens: number;
+  /**
    * Chats abandoned by user
    */
   chatResolutionAbandoned: number;
@@ -95,6 +103,10 @@ export type ProjectSummary = {
    */
   totalChats: number;
   /**
+   * Total cost of all requests
+   */
+  totalCost: number;
+  /**
    * Sum of input tokens used
    */
   totalInputTokens: number;
@@ -122,6 +134,8 @@ export const ProjectSummary$inboundSchema: z.ZodMiniType<
     avg_chat_resolution_score: z.number(),
     avg_tokens_per_request: z.number(),
     avg_tool_duration_ms: z.number(),
+    cache_creation_input_tokens: z.int(),
+    cache_read_input_tokens: z.int(),
     chat_resolution_abandoned: z.int(),
     chat_resolution_failure: z.int(),
     chat_resolution_partial: z.int(),
@@ -138,6 +152,7 @@ export const ProjectSummary$inboundSchema: z.ZodMiniType<
     tools: z.array(ToolUsage$inboundSchema),
     total_chat_requests: z.int(),
     total_chats: z.int(),
+    total_cost: z.number(),
     total_input_tokens: z.int(),
     total_output_tokens: z.int(),
     total_tokens: z.int(),
@@ -149,6 +164,8 @@ export const ProjectSummary$inboundSchema: z.ZodMiniType<
       "avg_chat_resolution_score": "avgChatResolutionScore",
       "avg_tokens_per_request": "avgTokensPerRequest",
       "avg_tool_duration_ms": "avgToolDurationMs",
+      "cache_creation_input_tokens": "cacheCreationInputTokens",
+      "cache_read_input_tokens": "cacheReadInputTokens",
       "chat_resolution_abandoned": "chatResolutionAbandoned",
       "chat_resolution_failure": "chatResolutionFailure",
       "chat_resolution_partial": "chatResolutionPartial",
@@ -163,6 +180,7 @@ export const ProjectSummary$inboundSchema: z.ZodMiniType<
       "tool_call_success": "toolCallSuccess",
       "total_chat_requests": "totalChatRequests",
       "total_chats": "totalChats",
+      "total_cost": "totalCost",
       "total_input_tokens": "totalInputTokens",
       "total_output_tokens": "totalOutputTokens",
       "total_tokens": "totalTokens",

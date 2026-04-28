@@ -10,7 +10,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-// RBAC grants. Normalized: one row per (org, principal, scope, resource). Resource='*' means unrestricted.
+// RBAC grants. One row per (org, principal, scope, selectors). Selectors define resource constraints.
 type PrincipalGrant struct {
 	ID uuid.UUID
 	// The organization this grant belongs to. Grants are always org-scoped.
@@ -21,8 +21,8 @@ type PrincipalGrant struct {
 	PrincipalType string
 	// The scope being granted, e.g. "build:read". Validated in application code, not via FK.
 	Scope string
-	// '*' = unrestricted (scope applies to all resources in the org). Any other value = a specific resource ID this scope is granted on.
-	Resource  string
+	// JSON selector constraints defining what the grant applies to, e.g. {"resource_kind":"project","resource_id":"proj_123"}.
+	Selectors []byte
 	CreatedAt pgtype.Timestamptz
 	UpdatedAt pgtype.Timestamptz
 }

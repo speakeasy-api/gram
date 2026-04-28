@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/constants"
+	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -67,14 +68,16 @@ func (d ToolDescriptor) ToTool(projectID uuid.UUID) *types.Tool {
 
 func (d ToolDescriptor) ToToolEntry() *types.ToolEntry {
 	return &types.ToolEntry{
-		Type:    string(urn.ToolKindPlatform),
-		ID:      d.SyntheticID(),
-		Name:    d.Name,
-		ToolUrn: d.ToolURN().String(),
+		Type:        string(urn.ToolKindPlatform),
+		ID:          d.SyntheticID(),
+		Name:        d.Name,
+		ToolUrn:     d.ToolURN().String(),
+		Annotations: nil,
+		HTTPMethod:  nil,
 	}
 }
 
 type PlatformToolExecutor interface {
 	Descriptor() ToolDescriptor
-	Call(ctx context.Context, payload io.Reader, wr io.Writer) error
+	Call(ctx context.Context, env toolconfig.ToolCallEnv, payload io.Reader, wr io.Writer) error
 }

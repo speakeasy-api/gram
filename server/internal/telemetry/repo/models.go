@@ -86,7 +86,8 @@ type HookTraceSummary struct {
 	TraceID           string  `ch:"trace_id"`             // FixedString(32)
 	StartTimeUnixNano int64   `ch:"start_time_unix_nano"` // Int64 - earliest log timestamp
 	LogCount          uint64  `ch:"log_count"`            // UInt64 - total logs in trace
-	HookStatus        *string `ch:"hook_status"`          // String - hook execution status: "success", "failure", or "pending"
+	HookStatus        *string `ch:"hook_status"`          // String - hook execution status: "success", "failure", "blocked", or "pending"
+	BlockReason       *string `ch:"block_reason"`         // String - reason set when hook_status is "blocked"
 	GramURN           string  `ch:"gram_urn"`             // String - any gram_urn from the trace
 	ToolName          *string `ch:"tool_name"`            // String - tool name from materialized column
 	ToolSource        *string `ch:"tool_source"`          // String - tool call source from materialized column
@@ -127,10 +128,15 @@ type MetricsSummaryRow struct {
 	DistinctProviders uint64 `ch:"distinct_providers"`
 
 	// Token metrics
-	TotalInputTokens  int64   `ch:"total_input_tokens"`
-	TotalOutputTokens int64   `ch:"total_output_tokens"`
-	TotalTokens       int64   `ch:"total_tokens"`
-	AvgTokensPerReq   float64 `ch:"avg_tokens_per_request"`
+	TotalInputTokens         int64   `ch:"total_input_tokens"`
+	TotalOutputTokens        int64   `ch:"total_output_tokens"`
+	TotalTokens              int64   `ch:"total_tokens"`
+	CacheReadInputTokens     int64   `ch:"cache_read_input_tokens"`
+	CacheCreationInputTokens int64   `ch:"cache_creation_input_tokens"`
+	AvgTokensPerReq          float64 `ch:"avg_tokens_per_request"`
+
+	// Cost metrics
+	TotalCost float64 `ch:"total_cost"`
 
 	// Chat request metrics
 	TotalChatRequests uint64  `ch:"total_chat_requests"`
@@ -178,10 +184,15 @@ type UserSummary struct {
 	TotalChatRequests uint64 `ch:"total_chat_requests"`
 
 	// Token metrics
-	TotalInputTokens  int64   `ch:"total_input_tokens"`
-	TotalOutputTokens int64   `ch:"total_output_tokens"`
-	TotalTokens       int64   `ch:"total_tokens"`
-	AvgTokensPerReq   float64 `ch:"avg_tokens_per_request"`
+	TotalInputTokens         int64   `ch:"total_input_tokens"`
+	TotalOutputTokens        int64   `ch:"total_output_tokens"`
+	TotalTokens              int64   `ch:"total_tokens"`
+	CacheReadInputTokens     int64   `ch:"cache_read_input_tokens"`
+	CacheCreationInputTokens int64   `ch:"cache_creation_input_tokens"`
+	AvgTokensPerReq          float64 `ch:"avg_tokens_per_request"`
+
+	// Cost metrics
+	TotalCost float64 `ch:"total_cost"`
 
 	// Tool call metrics
 	TotalToolCalls  uint64 `ch:"total_tool_calls"`
@@ -197,12 +208,23 @@ type UserSummary struct {
 // TimeSeriesBucket represents a single time bucket for time series metrics.
 // Used for plotting metrics over time in the observability overview.
 type TimeSeriesBucket struct {
-	BucketTimeUnixNano   int64   `ch:"bucket_time_unix_nano"`
-	TotalChats           uint64  `ch:"total_chats"`
-	ResolvedChats        uint64  `ch:"resolved_chats"`
-	FailedChats          uint64  `ch:"failed_chats"`
-	PartialChats         uint64  `ch:"partial_chats"`
-	AbandonedChats       uint64  `ch:"abandoned_chats"`
+	BucketTimeUnixNano int64  `ch:"bucket_time_unix_nano"`
+	TotalChats         uint64 `ch:"total_chats"`
+	ResolvedChats      uint64 `ch:"resolved_chats"`
+	FailedChats        uint64 `ch:"failed_chats"`
+	PartialChats       uint64 `ch:"partial_chats"`
+	AbandonedChats     uint64 `ch:"abandoned_chats"`
+
+	// Token metrics
+	TotalInputTokens         int64 `ch:"total_input_tokens"`
+	TotalOutputTokens        int64 `ch:"total_output_tokens"`
+	TotalTokens              int64 `ch:"total_tokens"`
+	CacheReadInputTokens     int64 `ch:"cache_read_input_tokens"`
+	CacheCreationInputTokens int64 `ch:"cache_creation_input_tokens"`
+
+	// Cost metrics
+	TotalCost float64 `ch:"total_cost"`
+
 	TotalToolCalls       uint64  `ch:"total_tool_calls"`
 	FailedToolCalls      uint64  `ch:"failed_tool_calls"`
 	AvgToolLatencyMs     float64 `ch:"avg_tool_latency_ms"`
@@ -229,6 +251,16 @@ type OverviewSummary struct {
 	FailedChats          uint64  `ch:"failed_chats"`
 	AvgSessionDurationMs float64 `ch:"avg_session_duration_ms"`
 	AvgResolutionTimeMs  float64 `ch:"avg_resolution_time_ms"`
+
+	// Token metrics
+	TotalInputTokens         int64 `ch:"total_input_tokens"`
+	TotalOutputTokens        int64 `ch:"total_output_tokens"`
+	TotalTokens              int64 `ch:"total_tokens"`
+	CacheReadInputTokens     int64 `ch:"cache_read_input_tokens"`
+	CacheCreationInputTokens int64 `ch:"cache_creation_input_tokens"`
+
+	// Cost metrics
+	TotalCost float64 `ch:"total_cost"`
 
 	// Tool metrics
 	TotalToolCalls  uint64  `ch:"total_tool_calls"`

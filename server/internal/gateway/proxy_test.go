@@ -31,7 +31,7 @@ type mockPlatformExecutor struct {
 	err         error
 }
 
-func (m *mockPlatformExecutor) ExecuteTool(_ context.Context, _ *ToolCallPlan, requestBody io.Reader) (*PlatformResult, error) {
+func (m *mockPlatformExecutor) ExecuteTool(_ context.Context, _ *ToolCallPlan, _ toolconfig.ToolCallEnv, requestBody io.Reader) (*PlatformResult, error) {
 	if requestBody != nil {
 		body, err := io.ReadAll(requestBody)
 		if err != nil {

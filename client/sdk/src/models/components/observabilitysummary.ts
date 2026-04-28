@@ -25,6 +25,14 @@ export type ObservabilitySummary = {
    */
   avgSessionDurationMs: number;
   /**
+   * Sum of cache creation input tokens
+   */
+  cacheCreationInputTokens: number;
+  /**
+   * Sum of cache read input tokens
+   */
+  cacheReadInputTokens: number;
+  /**
    * Number of failed chat sessions
    */
   failedChats: number;
@@ -41,6 +49,22 @@ export type ObservabilitySummary = {
    */
   totalChats: number;
   /**
+   * Total cost of all requests
+   */
+  totalCost: number;
+  /**
+   * Sum of input tokens used
+   */
+  totalInputTokens: number;
+  /**
+   * Sum of output tokens used
+   */
+  totalOutputTokens: number;
+  /**
+   * Sum of all tokens used
+   */
+  totalTokens: number;
+  /**
    * Total number of tool calls
    */
   totalToolCalls: number;
@@ -55,10 +79,16 @@ export const ObservabilitySummary$inboundSchema: z.ZodMiniType<
     avg_latency_ms: z.number(),
     avg_resolution_time_ms: z.number(),
     avg_session_duration_ms: z.number(),
+    cache_creation_input_tokens: z.int(),
+    cache_read_input_tokens: z.int(),
     failed_chats: z.int(),
     failed_tool_calls: z.int(),
     resolved_chats: z.int(),
     total_chats: z.int(),
+    total_cost: z.number(),
+    total_input_tokens: z.int(),
+    total_output_tokens: z.int(),
+    total_tokens: z.int(),
     total_tool_calls: z.int(),
   }),
   z.transform((v) => {
@@ -66,10 +96,16 @@ export const ObservabilitySummary$inboundSchema: z.ZodMiniType<
       "avg_latency_ms": "avgLatencyMs",
       "avg_resolution_time_ms": "avgResolutionTimeMs",
       "avg_session_duration_ms": "avgSessionDurationMs",
+      "cache_creation_input_tokens": "cacheCreationInputTokens",
+      "cache_read_input_tokens": "cacheReadInputTokens",
       "failed_chats": "failedChats",
       "failed_tool_calls": "failedToolCalls",
       "resolved_chats": "resolvedChats",
       "total_chats": "totalChats",
+      "total_cost": "totalCost",
+      "total_input_tokens": "totalInputTokens",
+      "total_output_tokens": "totalOutputTokens",
+      "total_tokens": "totalTokens",
       "total_tool_calls": "totalToolCalls",
     });
   }),

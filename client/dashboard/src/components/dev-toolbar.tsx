@@ -1,8 +1,15 @@
-import { useIsAdmin, useOrganization } from "@/contexts/Auth";
+import { useIsAdmin, useOrganization, useSession } from "@/contexts/Auth";
+import { useListToolsetsForOrg } from "@gram/client/react-query/listToolsetsForOrg.js";
 import { Switch } from "./ui/switch";
 import { useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, ChevronUp, GripVertical, Shield } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { createPortal } from "react-dom";
 
 const STORAGE_KEY = "gram-rbac-dev-override";
@@ -28,14 +35,14 @@ const SCOPE_DEFS: {
     description: "Manage org settings & access",
   },
   {
-    scope: "build:read",
-    label: "build:read",
+    scope: "project:read",
+    label: "project:read",
     resourceType: "project",
     description: "View projects & build resources",
   },
   {
-    scope: "build:write",
-    label: "build:write",
+    scope: "project:write",
+    label: "project:write",
     resourceType: "project",
     description: "Modify projects & build resources",
   },
@@ -107,6 +114,27 @@ function saveState(state: OverrideState) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 }
 
+const resourcesCacheKey = (orgId: string) => `gram-rbac-dev-resources:${orgId}`;
+
+type CachedResources = {
+  projects: { id: string; label: string }[];
+  mcps: { id: string; label: string }[];
+};
+
+function loadCachedResources(orgId: string): CachedResources | null {
+  try {
+    const raw = localStorage.getItem(resourcesCacheKey(orgId));
+    if (raw) return JSON.parse(raw);
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
+function saveCachedResources(resources: CachedResources, orgId: string) {
+  localStorage.setItem(resourcesCacheKey(orgId), JSON.stringify(resources));
+}
+
 const POSITION_KEY = "gram-rbac-dev-toolbar-pos";
 
 function loadPosition(): { x: number; y: number } | null {
@@ -125,43 +153,6 @@ function loadPosition(): { x: number; y: number } | null {
   return null;
 }
 
-/**
- * Returns the X-Gram-Scope-Override header value if the dev override is active,
- * or null if disabled. Called by the SDK fetcher on every request.
- *
- * @param allowed - Whether the caller is permitted to read override data.
- *   Defaults to `import.meta.env.DEV` so the SDK fetcher (which lives outside
- *   auth context) never sends the header in production. Callers that have
- *   verified admin status should pass `import.meta.env.DEV || isAdmin`.
- */
-export function getRBACScopeOverrideHeader(
-  allowed: boolean = import.meta.env.DEV,
-): string | null {
-  if (!allowed) return null;
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
-    const state: OverrideState = JSON.parse(raw);
-    if (!state.enabled) return null;
-    const parts = Object.entries(state.scopes)
-      .filter(([, s]) => {
-        if (typeof s === "boolean") return s; // backwards compat
-        return s.enabled;
-      })
-      .map(([scope, s]) => {
-        if (typeof s === "boolean") return scope;
-        // Include resource IDs if restricted: build:read=proj_1|proj_2
-        if (s.resources && s.resources.length > 0) {
-          return `${scope}=${s.resources.join("|")}`;
-        }
-        return scope;
-      });
-    return parts.length > 0 ? parts.join(",") : null;
-  } catch {
-    return null;
-  }
-}
-
 const GROUP_ORDER: { key: ResourceType; label: string }[] = [
   { key: "org", label: "Organization" },
   { key: "project", label: "Project" },
@@ -169,7 +160,11 @@ const GROUP_ORDER: { key: ResourceType; label: string }[] = [
 ];
 
 export function RBACDevToolbar() {
+  const { session } = useSession();
   const isAdmin = useIsAdmin();
+  // Don't render when unauthenticated (e.g. login page) to avoid firing
+  // API calls like toolsets.listForOrg that will 401 and trigger the error boundary.
+  if (!session) return null;
   // Always visible in dev; in other environments, restricted to superadmins.
   if (import.meta.env.DEV || isAdmin) return <RBACDevToolbarInner />;
   return null;
@@ -179,11 +174,48 @@ function RBACDevToolbarInner() {
   const [state, setState] = useState<OverrideState>(loadState);
   const [collapsed, setCollapsed] = useState(true);
   const [activeTab, setActiveTab] = useState("rbac");
-  const [expandedScope, setExpandedScope] = useState<string | null>(null);
   const [pos, setPos] = useState<{ x: number; y: number } | null>(loadPosition);
   const queryClient = useQueryClient();
   const organization = useOrganization();
-  const projects = organization?.projects ?? [];
+  const liveProjects = (organization?.projects ?? []).map((project) => ({
+    id: project.id,
+    label: project.slug,
+  }));
+  const { data: toolsetsData } = useListToolsetsForOrg(undefined, undefined, {
+    throwOnError: false,
+  });
+  const liveMcps = (toolsetsData?.toolsets ?? []).map((toolset) => ({
+    id: toolset.id,
+    label: toolset.name,
+  }));
+
+  // Cache the full resource list when overrides are off so the toolbar
+  // still shows all projects/MCPs after the user restricts scopes.
+  const orgProjects = organization?.projects;
+  const toolsets = toolsetsData?.toolsets;
+  const orgId = organization?.id ?? "";
+  useEffect(() => {
+    if (
+      !state.enabled &&
+      orgId &&
+      orgProjects &&
+      orgProjects.length > 0 &&
+      toolsets
+    ) {
+      saveCachedResources(
+        {
+          projects: orgProjects.map((p) => ({ id: p.id, label: p.slug })),
+          mcps: toolsets.map((t) => ({ id: t.id, label: t.name })),
+        },
+        orgId,
+      );
+    }
+  }, [state.enabled, orgId, orgProjects, toolsets]);
+
+  const cached = orgId ? loadCachedResources(orgId) : null;
+  const projectResources =
+    state.enabled && cached ? cached.projects : liveProjects;
+  const mcpResources = state.enabled && cached ? cached.mcps : liveMcps;
   const rootRef = useRef<HTMLDivElement>(null);
   const dragOffset = useRef<{
     ox: number;
@@ -200,6 +232,18 @@ function RBACDevToolbarInner() {
   useEffect(() => {
     if (pos) localStorage.setItem(POSITION_KEY, JSON.stringify(pos));
   }, [pos]);
+
+  // Clamp position so the expanded toolbar stays within the viewport
+  useLayoutEffect(() => {
+    if (collapsed) return;
+    const el = rootRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    if (rect.bottom > window.innerHeight) {
+      const clampedY = Math.max(0, window.innerHeight - rect.height - 8);
+      setPos({ x: rect.left, y: clampedY });
+    }
+  }, [collapsed]);
 
   const onPointerDown = useCallback(
     (e: React.PointerEvent<HTMLButtonElement>) => {
@@ -403,18 +447,16 @@ function RBACDevToolbarInner() {
                             enabled: true,
                             resources: null,
                           };
-                          const isExpanded = expandedScope === def.scope;
                           const isRestricted =
                             scopeState.resources !== null &&
                             scopeState.resources.length > 0;
-                          const knownResources =
-                            def.resourceType === "project" ||
-                            def.resourceType === "mcp"
-                              ? projects.map((p) => ({
-                                  id: p.id,
-                                  label: p.slug,
-                                }))
-                              : [];
+                          let knownResources: { id: string; label: string }[] =
+                            [];
+                          if (def.resourceType === "project") {
+                            knownResources = projectResources;
+                          } else if (def.resourceType === "mcp") {
+                            knownResources = mcpResources;
+                          }
 
                           return (
                             <div key={def.scope}>
@@ -444,38 +486,18 @@ function RBACDevToolbarInner() {
                                     )}
                                   </div>
                                 </div>
-                                {scopeState.enabled &&
-                                  def.resourceType !== "org" && (
-                                    <button
-                                      type="button"
-                                      className="text-muted-foreground rounded p-0.5 hover:bg-black/10 dark:hover:bg-white/10"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setExpandedScope(
-                                          isExpanded ? null : def.scope,
-                                        );
-                                      }}
-                                    >
-                                      {isExpanded ? (
-                                        <ChevronUp className="h-3 w-3" />
-                                      ) : (
-                                        <ChevronDown className="h-3 w-3" />
-                                      )}
-                                    </button>
-                                  )}
                               </div>
 
-                              {/* Resource picker */}
-                              {/* TODO: verify resource-scoped overrides are enforced end-to-end (header → backend → UI) */}
-                              {isExpanded && scopeState.enabled && (
-                                <ResourcePicker
-                                  knownResources={knownResources}
-                                  selected={scopeState.resources}
-                                  onChange={(resources) =>
-                                    setScopeResources(def.scope, resources)
-                                  }
-                                />
-                              )}
+                              {scopeState.enabled &&
+                                knownResources.length > 0 && (
+                                  <ResourceDropdown
+                                    knownResources={knownResources}
+                                    selected={scopeState.resources}
+                                    onChange={(resources) =>
+                                      setScopeResources(def.scope, resources)
+                                    }
+                                  />
+                                )}
                             </div>
                           );
                         })}
@@ -513,7 +535,7 @@ function RBACDevToolbarInner() {
   );
 }
 
-function ResourcePicker({
+function ResourceDropdown({
   knownResources,
   selected,
   onChange,
@@ -522,84 +544,143 @@ function ResourcePicker({
   selected: string[] | null;
   onChange: (resources: string[] | null) => void;
 }) {
+  const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
   const isAll = selected === null;
+  const selectedSet = new Set(selected ?? []);
 
-  const alreadySelected = new Set(selected ?? []);
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (
+        !triggerRef.current?.contains(target) &&
+        !panelRef.current?.contains(target)
+      )
+        setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
 
-  // Filter known resources by query
-  const suggestions = knownResources.filter((r) => {
+  const filtered = knownResources.filter((r) => {
     if (!query) return true;
     const q = query.toLowerCase();
     return r.label.toLowerCase().includes(q) || r.id.toLowerCase().includes(q);
   });
 
   const toggleResource = (id: string) => {
-    if (alreadySelected.has(id)) {
-      removeResource(id);
+    if (selectedSet.has(id)) {
+      const next = (selected ?? []).filter((s) => s !== id);
+      onChange(next.length === 0 ? null : next);
     } else {
       onChange([...(selected ?? []), id]);
     }
-    setQuery("");
   };
 
-  const removeResource = (id: string) => {
-    const next = (selected ?? []).filter((s) => s !== id);
-    onChange(next.length === 0 ? null : next);
-  };
+  const label = isAll
+    ? "All resources"
+    : `${selectedSet.size} of ${knownResources.length} selected`;
+
+  // Compute position from trigger rect so the portal panel aligns correctly
+  const triggerRect = triggerRef.current?.getBoundingClientRect();
 
   return (
-    <div className="border-border bg-muted/30 mr-2 mb-1.5 ml-7 space-y-1.5 rounded-lg border border-dashed p-2">
-      <div className="flex items-center justify-between">
-        <span className="text-muted-foreground text-[10px] font-medium">
-          Resources
+    <div className="mr-2 mb-1.5 ml-7">
+      <button
+        ref={triggerRef}
+        type="button"
+        className="border-border bg-background hover:bg-muted/50 flex w-full items-center justify-between rounded-md border px-2 py-1 text-left"
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen(!open);
+        }}
+      >
+        <span className="text-muted-foreground truncate text-[11px]">
+          {label}
         </span>
-        <button
-          type="button"
-          className={`text-[10px] transition-colors ${isAll ? "text-foreground font-medium" : "text-muted-foreground hover:text-foreground"}`}
-          onClick={() => {
-            onChange(null);
-            setQuery("");
-          }}
-        >
-          All (wildcard)
-        </button>
-      </div>
-
-      {/* Filter input (only shown when there are many resources) */}
-      {knownResources.length > 5 && (
-        <input
-          type="text"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="filter…"
-          className="bg-background border-border text-foreground placeholder:text-muted-foreground/50 focus:border-foreground/30 w-full rounded border px-1.5 py-0.5 font-mono text-[11px] outline-none"
+        <ChevronDown
+          className={`text-muted-foreground h-3 w-3 shrink-0 transition-transform ${open ? "rotate-180" : ""}`}
         />
-      )}
+      </button>
 
-      {/* Resource list */}
-      <div className="max-h-[140px] space-y-0.5 overflow-y-auto">
-        {suggestions.map((r) => {
-          const isChecked = alreadySelected.has(r.id);
-          return (
+      {open &&
+        triggerRect &&
+        createPortal(
+          <div
+            ref={panelRef}
+            className="border-border bg-background fixed z-[999999] rounded-md border shadow-lg"
+            style={{
+              top: triggerRect.bottom + 4,
+              left: triggerRect.left,
+              width: triggerRect.width,
+            }}
+          >
+            {/* All wildcard option */}
             <button
-              key={r.id}
               type="button"
-              className={`hover:bg-muted/50 flex w-full items-center gap-1.5 rounded px-1.5 py-0.5 text-left transition-colors ${isChecked ? "bg-muted/30" : ""}`}
-              onClick={() => toggleResource(r.id)}
+              className="hover:bg-muted/50 flex w-full items-center gap-1.5 border-b border-inherit px-2 py-1.5 text-left transition-colors"
+              onClick={() => {
+                onChange(null);
+                setQuery("");
+              }}
             >
               <div
-                className={`flex h-3 w-3 shrink-0 items-center justify-center rounded-sm border text-[8px] transition-all ${isChecked ? "bg-foreground border-foreground text-background" : "border-muted-foreground/30"}`}
+                className={`flex h-3 w-3 shrink-0 items-center justify-center rounded-sm border text-[8px] transition-all ${isAll ? "bg-foreground border-foreground text-background" : "border-muted-foreground/30"}`}
               >
-                {isChecked && "✓"}
+                {isAll && "✓"}
               </div>
-              <span className="text-foreground truncate font-mono text-[11px]">
-                {r.label}
+              <span className="text-foreground text-[11px] font-medium">
+                All (wildcard)
               </span>
             </button>
-          );
-        })}
-      </div>
+
+            {/* Filter input */}
+            {knownResources.length > 5 && (
+              <div className="border-b border-inherit px-2 py-1">
+                <input
+                  type="text"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Filter…"
+                  className="text-foreground placeholder:text-muted-foreground/50 w-full bg-transparent text-[11px] outline-none"
+                />
+              </div>
+            )}
+
+            {/* Resource list */}
+            <div className="max-h-[160px] overflow-y-auto py-0.5">
+              {filtered.map((r) => {
+                const isChecked = selectedSet.has(r.id);
+                return (
+                  <button
+                    key={r.id}
+                    type="button"
+                    className="hover:bg-muted/50 flex w-full items-center gap-1.5 px-2 py-1 text-left transition-colors"
+                    onClick={() => toggleResource(r.id)}
+                  >
+                    <div
+                      className={`flex h-3 w-3 shrink-0 items-center justify-center rounded-sm border text-[8px] transition-all ${isChecked ? "bg-foreground border-foreground text-background" : "border-muted-foreground/30"}`}
+                    >
+                      {isChecked && "✓"}
+                    </div>
+                    <span className="text-foreground truncate font-mono text-[11px]">
+                      {r.label}
+                    </span>
+                  </button>
+                );
+              })}
+              {filtered.length === 0 && (
+                <p className="text-muted-foreground px-2 py-1.5 text-center text-[11px]">
+                  No matches
+                </p>
+              )}
+            </div>
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }

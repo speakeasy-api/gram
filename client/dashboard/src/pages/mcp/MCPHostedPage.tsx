@@ -72,7 +72,7 @@ export function MCPPagePreview({
         setError(err.message);
         setIsLoading(false);
       });
-  }, [toolset?.mcpSlug, session.session, project.slug]);
+  }, [installPageUrl, session.session, project.slug]);
 
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
@@ -127,7 +127,7 @@ export function MCPPagePreview({
 
       updateScale();
     }
-  }, [rawHtml]);
+  }, [rawHtml, height]);
 
   if (error) {
     return <div className="text-red-600">Error loading page: {error}</div>;

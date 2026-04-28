@@ -275,6 +275,51 @@ var _ = Service("plugins", func() {
 		Meta("openapi:operationId", "downloadPluginPackage")
 		Meta("openapi:extension:x-speakeasy-name-override", "downloadPluginPackage")
 	})
+
+	Method("getPublishStatus", func() {
+		Description("Check whether GitHub publishing is configured and connected for this project.")
+
+		Payload(func() {
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(PublishStatusResult)
+
+		HTTP(func() {
+			GET("/rpc/plugins.getPublishStatus")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getPublishStatus")
+		Meta("openapi:extension:x-speakeasy-name-override", "getPublishStatus")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "PublishStatus"}`)
+	})
+
+	Method("publishPlugins", func() {
+		Description("Generate and publish all plugin packages to a GitHub repository.")
+
+		Payload(func() {
+			Attribute("github_username", String, "GitHub username to add as a collaborator on the repo.")
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(PublishPluginsResult)
+
+		HTTP(func() {
+			POST("/rpc/plugins.publishPlugins")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "publishPlugins")
+		Meta("openapi:extension:x-speakeasy-name-override", "publishPlugins")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "PublishPlugins"}`)
+	})
 })
 
 // --- Models ---
@@ -413,4 +458,19 @@ var SetPluginAssignmentsForm = Type("SetPluginAssignmentsForm", func() {
 var ListPluginsResult = Type("ListPluginsResult", func() {
 	Required("plugins")
 	Attribute("plugins", ArrayOf(PluginModel), "The plugins in the organization.")
+})
+
+var PublishStatusResult = Type("PublishStatusResult", func() {
+	Required("configured", "connected")
+
+	Attribute("configured", Boolean, "Whether GitHub publishing is configured on the server.")
+	Attribute("connected", Boolean, "Whether this project has a GitHub connection.")
+	Attribute("repo_owner", String, "GitHub repo owner, if connected.")
+	Attribute("repo_name", String, "GitHub repo name, if connected.")
+	Attribute("repo_url", String, "Full GitHub repository URL, if connected.")
+})
+
+var PublishPluginsResult = Type("PublishPluginsResult", func() {
+	Required("repo_url")
+	Attribute("repo_url", String, "The URL of the published GitHub repository.")
 })

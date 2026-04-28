@@ -1,6 +1,7 @@
 import { DotRow } from "@/components/ui/dot-row";
 import { MoreActions } from "@/components/ui/more-actions";
 import { Type } from "@/components/ui/type";
+import { useRBAC } from "@/hooks/useRBAC";
 import { sourceTypeToUrnKind } from "@/lib/sources";
 import { useRoutes } from "@/routes";
 import { Badge } from "@speakeasy-api/moonshine";
@@ -40,6 +41,8 @@ export function SourceTableRow({
   setChangeDocumentTargetSlug: (slug: string) => void;
 }) {
   const routes = useRoutes();
+  const { hasScope } = useRBAC();
+  const canWrite = hasScope("project:write");
   const config = sourceTypeConfig[asset.type];
   const sourceKind = sourceTypeToUrnKind(asset.type);
 
@@ -58,6 +61,7 @@ export function SourceTableRow({
             label: "Update",
             onClick: () => setChangeDocumentTargetSlug(asset.slug),
             icon: "upload" as const,
+            disabled: !canWrite,
           },
         ]
       : []),
@@ -75,6 +79,7 @@ export function SourceTableRow({
       onClick: () => handleRemove(asset.id),
       icon: "trash" as const,
       destructive: true,
+      disabled: !canWrite,
     },
   ];
 

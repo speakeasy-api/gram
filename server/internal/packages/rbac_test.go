@@ -7,7 +7,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/packages"
-	"github.com/speakeasy-api/gram/server/internal/access"
+	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
@@ -16,14 +17,16 @@ func TestPackages_RBAC_ReadOps_DeniedWithNoGrants(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestPackagesService(t)
-	ctx = withExactAccessGrants(t, ctx, ti.conn)
+	ctx = authztest.WithExactGrants(t, ctx)
 
 	_, err := ti.service.ListPackages(ctx, &gen.ListPackagesPayload{
 		ApikeyToken:      nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
 	})
-	requireOopsCode(t, err, oops.CodeForbidden)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }
 
 func TestPackages_RBAC_ReadOps_AllowedWithBuildReadGrant(t *testing.T) {
@@ -35,7 +38,7 @@ func TestPackages_RBAC_ReadOps_AllowedWithBuildReadGrant(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	ctx = withExactAccessGrants(t, ctx, ti.conn, access.Grant{Scope: access.ScopeBuildRead, Resource: authCtx.ProjectID.String()})
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeProjectRead, Selector: authz.NewSelector(authz.ScopeProjectRead, authCtx.ProjectID.String())})
 
 	_, err := ti.service.ListPackages(ctx, &gen.ListPackagesPayload{
 		ApikeyToken:      nil,
@@ -54,7 +57,7 @@ func TestPackages_RBAC_ReadOps_AllowedWithBuildWriteGrant(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	ctx = withExactAccessGrants(t, ctx, ti.conn, access.Grant{Scope: access.ScopeBuildWrite, Resource: authCtx.ProjectID.String()})
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeProjectWrite, Selector: authz.NewSelector(authz.ScopeProjectWrite, authCtx.ProjectID.String())})
 
 	_, err := ti.service.ListPackages(ctx, &gen.ListPackagesPayload{
 		ApikeyToken:      nil,
@@ -68,21 +71,23 @@ func TestPackages_RBAC_ReadOps_DeniedWithWrongResourceID(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestPackagesService(t)
-	ctx = withExactAccessGrants(t, ctx, ti.conn, access.Grant{Scope: access.ScopeBuildRead, Resource: uuid.NewString()})
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeProjectRead, Selector: authz.NewSelector(authz.ScopeProjectRead, uuid.NewString())})
 
 	_, err := ti.service.ListPackages(ctx, &gen.ListPackagesPayload{
 		ApikeyToken:      nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
 	})
-	requireOopsCode(t, err, oops.CodeForbidden)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }
 
 func TestPackages_RBAC_WriteOps_DeniedWithNoGrants(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestPackagesService(t)
-	ctx = withExactAccessGrants(t, ctx, ti.conn)
+	ctx = authztest.WithExactGrants(t, ctx)
 
 	_, err := ti.service.CreatePackage(ctx, &gen.CreatePackagePayload{
 		ApikeyToken:      nil,
@@ -96,7 +101,9 @@ func TestPackages_RBAC_WriteOps_DeniedWithNoGrants(t *testing.T) {
 		Keywords:         []string{},
 		ImageAssetID:     nil,
 	})
-	requireOopsCode(t, err, oops.CodeForbidden)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }
 
 func TestPackages_RBAC_WriteOps_DeniedWithReadOnlyGrant(t *testing.T) {
@@ -108,7 +115,7 @@ func TestPackages_RBAC_WriteOps_DeniedWithReadOnlyGrant(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	ctx = withExactAccessGrants(t, ctx, ti.conn, access.Grant{Scope: access.ScopeBuildRead, Resource: authCtx.ProjectID.String()})
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeProjectRead, Selector: authz.NewSelector(authz.ScopeProjectRead, authCtx.ProjectID.String())})
 
 	_, err := ti.service.CreatePackage(ctx, &gen.CreatePackagePayload{
 		ApikeyToken:      nil,
@@ -122,7 +129,9 @@ func TestPackages_RBAC_WriteOps_DeniedWithReadOnlyGrant(t *testing.T) {
 		Keywords:         []string{},
 		ImageAssetID:     nil,
 	})
-	requireOopsCode(t, err, oops.CodeForbidden)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }
 
 func TestPackages_RBAC_WriteOps_AllowedWithBuildWriteGrant(t *testing.T) {
@@ -134,7 +143,7 @@ func TestPackages_RBAC_WriteOps_AllowedWithBuildWriteGrant(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	ctx = withExactAccessGrants(t, ctx, ti.conn, access.Grant{Scope: access.ScopeBuildWrite, Resource: authCtx.ProjectID.String()})
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeProjectWrite, Selector: authz.NewSelector(authz.ScopeProjectWrite, authCtx.ProjectID.String())})
 
 	_, err := ti.service.CreatePackage(ctx, &gen.CreatePackagePayload{
 		ApikeyToken:      nil,

@@ -14,16 +14,34 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 )
 
-var temporalKeys = map[string]attr.Key{
-	"Namespace":    attr.TemporalNamespaceNameKey,
-	"TaskQueue":    attr.TemporalTaskQueueNameKey,
-	"WorkerID":     attr.TemporalWorkerIDKey,
-	"ActivityID":   attr.TemporalActivityIDKey,
-	"ActivityType": attr.TemporalActivityTypeKey,
-	"Attempt":      attr.TemporalAttemptKey,
-	"WorkflowType": attr.TemporalWorkflowTypeKey,
-	"WorkflowID":   attr.TemporalWorkflowIDKey,
-	"RunID":        attr.TemporalRunIDKey,
+func getTemporalKeyRemaps(withDataDogAttr bool) map[string]attr.Key {
+	out := map[string]attr.Key{
+		"Namespace":    attr.TemporalNamespaceNameKey,
+		"TaskQueue":    attr.TemporalTaskQueueNameKey,
+		"WorkerID":     attr.TemporalWorkerIDKey,
+		"ActivityID":   attr.TemporalActivityIDKey,
+		"ActivityType": attr.TemporalActivityTypeKey,
+		"Attempt":      attr.TemporalAttemptKey,
+		"WorkflowType": attr.TemporalWorkflowTypeKey,
+		"WorkflowID":   attr.TemporalWorkflowIDKey,
+		"RunID":        attr.TemporalRunIDKey,
+		"TraceID":      attr.TraceIDKey,
+		"SpanID":       attr.SpanIDKey,
+	}
+
+	// Temporal uses "TraceID" and "SpanID" as the keys for trace and span IDs
+	// in their logs. In some instances our logger doesn't have access to a
+	// context.Context so it will not emit the appropriate keys automatically.
+	// This typically happens when logging at the level of workflows which use
+	// workflow.Context. Under these circumstances, all we can do is observe the
+	// keys Temporal emits and remap them to the appropriate DataDog keys if
+	// needed.
+	if withDataDogAttr {
+		out["TraceID"] = attr.DataDogTraceIDKey
+		out["SpanID"] = attr.DataDogSpanIDKey
+	}
+
+	return out
 }
 
 type LogHandlerOptions struct {
@@ -41,6 +59,8 @@ func NewLogHandler(opts *LogHandlerOptions) slog.Handler {
 	if rl == "" {
 		rl = "error"
 	}
+
+	temporalKeys := getTemporalKeyRemaps(opts.DataDogAttr)
 
 	if opts.Pretty {
 		return &ContextHandler{
@@ -64,6 +84,11 @@ func NewLogHandler(opts *LogHandlerOptions) slog.Handler {
 				Level:     LogLevels[rl].Slog,
 				ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
 					if len(groups) != 0 {
+						return a
+					}
+
+					if a.Key == slog.TimeKey {
+						a.Key = "timestamp"
 						return a
 					}
 

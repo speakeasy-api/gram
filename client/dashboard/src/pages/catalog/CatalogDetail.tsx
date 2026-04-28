@@ -4,9 +4,12 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Type } from "@/components/ui/type";
 import { useSdkClient } from "@/contexts/Sdk";
 import { AddServerDialog } from "@/pages/catalog/AddServerDialog";
-import { Server, useInfiniteListMCPCatalog } from "@/pages/catalog/hooks";
+import {
+  PulseMCPServer,
+  useInfiniteListMCPCatalog,
+} from "@/pages/catalog/hooks";
 import { useRoutes } from "@/routes";
-import { useLatestDeployment } from "@gram/client/react-query";
+import { useLatestDeployment, useListToolsets } from "@gram/client/react-query";
 import { Badge, Button, Stack } from "@speakeasy-api/moonshine";
 import { useMutation } from "@tanstack/react-query";
 import {
@@ -48,9 +51,13 @@ export default function CatalogDetail() {
     useLatestDeployment();
   const deployment = deploymentResult?.deployment;
 
+  const { data: toolsetsResult } = useListToolsets();
+
   const server = useMemo(() => {
     if (!data?.pages || !serverSpecifier) return null;
-    const allServers = data.pages.flatMap((page) => page.servers as Server[]);
+    const allServers = data.pages.flatMap(
+      (page) => page.servers as PulseMCPServer[],
+    );
     // The specifier is URL encoded, so we need to decode it
     const decodedSpecifier = decodeURIComponent(serverSpecifier);
     return (
@@ -88,8 +95,8 @@ export default function CatalogDetail() {
     },
   });
 
-  const meta = server?.meta["com.pulsemcp/server"];
-  const versionMeta = server?.meta["com.pulsemcp/server-version"];
+  const meta = server?.meta?.["com.pulsemcp/server"];
+  const versionMeta = server?.meta?.["com.pulsemcp/server-version"];
   const isOfficial = meta?.isOfficial;
   const visitorsTotal = meta?.visitorsEstimateLastFourWeeks;
   const decodedSpecifier = serverSpecifier
@@ -107,6 +114,18 @@ export default function CatalogDetail() {
       (mcp) => mcp.registryServerSpecifier === server.registrySpecifier,
     );
   }, [deployment?.externalMcps, server]);
+
+  // Also consider origin-backed toolsets as installed, matching the rule
+  // used by useExternalMcpReleaseWorkflow for fork detection.
+  const hasOriginMatch = useMemo(() => {
+    if (!server) return false;
+    return (toolsetsResult?.toolsets ?? []).some(
+      (toolset) =>
+        toolset.origin?.registrySpecifier === server.registrySpecifier,
+    );
+  }, [toolsetsResult?.toolsets, server]);
+
+  const isInstalled = !!existingExternalMcp || hasOriginMatch;
 
   if (isLoading) {
     return (
@@ -219,27 +238,37 @@ export default function CatalogDetail() {
                   </Type>
                 )}
                 <div className="mt-4">
-                  {existingExternalMcp ? (
-                    <Button
-                      variant="secondary"
-                      size="md"
-                      onClick={() =>
-                        removeServerMutation.mutate(existingExternalMcp.slug)
-                      }
-                      disabled={removeServerMutation.isPending}
-                    >
-                      {removeServerMutation.isPending ? (
-                        <>
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                          <Button.Text>Removing...</Button.Text>
-                        </>
-                      ) : (
-                        <>
-                          <Minus className="h-4 w-4" />
-                          <Button.Text>Remove</Button.Text>
-                        </>
+                  {isInstalled ? (
+                    <Stack direction="horizontal" gap={2} align="center">
+                      {existingExternalMcp && (
+                        <Button
+                          variant="secondary"
+                          size="md"
+                          onClick={() =>
+                            removeServerMutation.mutate(
+                              existingExternalMcp.slug,
+                            )
+                          }
+                          disabled={removeServerMutation.isPending}
+                        >
+                          {removeServerMutation.isPending ? (
+                            <>
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                              <Button.Text>Removing...</Button.Text>
+                            </>
+                          ) : (
+                            <>
+                              <Minus className="h-4 w-4" />
+                              <Button.Text>Remove</Button.Text>
+                            </>
+                          )}
+                        </Button>
                       )}
-                    </Button>
+                      <Button size="md" onClick={() => setShowAddDialog(true)}>
+                        <Plus className="h-4 w-4" />
+                        <Button.Text>Install as fork</Button.Text>
+                      </Button>
+                    </Stack>
                   ) : (
                     <Button size="md" onClick={() => setShowAddDialog(true)}>
                       <Plus className="h-4 w-4" />

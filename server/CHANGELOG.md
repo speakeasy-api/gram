@@ -1,5 +1,84 @@
 # server
 
+## 0.44.0
+
+### Minor Changes
+
+- 58b4498: Support tool-level RBAC for MCP servers. Grants now use typed selectors with `resource_kind`, `resource_id`, `disposition`, and `tool` fields instead of untyped string maps. The dashboard scope picker stores toolset UUIDs (not slugs) as resource identifiers, fixing a bug where grants created via the UI never matched backend authorization checks. Public MCP servers correctly skip per-tool RBAC enforcement.
+
+## 0.43.0
+
+### Minor Changes
+
+- 42e4248: Add support for scaling the number of instances and memory for machines deployed for a Gram Function. It is now possible to go up to 5 machines per function and up to 4096 MiB for each machine.
+
+## 0.42.1
+
+### Patch Changes
+
+- 2b2d423: added per-skill time series data to the hooks summary API to power skill usage charts.
+
+## 0.42.0
+
+### Minor Changes
+
+- ea3e1aa: Add GitHub publishing for plugins. Admins can publish generated plugin
+  packages to a GitHub repository via a configured GitHub App, enabling
+  distribution through Claude Code and Cursor team marketplaces.
+
+### Patch Changes
+
+- 672795f: Updated fly app reaping to target all apps used by old deployments, leaving only the most recent deployment's app(s) untouched. This is a more aggressive strategy that is coming ahead of support for scaling up fly apps to multiple machines per deployment.
+- f03a7d2: Fix a data race in concurrent OpenAPI tool extraction that could corrupt schemas or crash deployments when the same schema was referenced by multiple operations.
+- 00a8f2a: Cursor hooks native MCP support. Token use tracking support for Cursor sessions
+
+## 0.41.0
+
+### Minor Changes
+
+- d8c6ce1: add support for publishing external servers into collections.
+- 78e3323: Add remote MCP server management API endpoints with CRUD operations, RBAC scopes, header encryption, and audit logging
+- 1ee9f95: Improved Hooks dashboard with new charts, refined visuals, and smarter default filters.
+- 04c6c30: Add team invite flow with accept page, configurable expiry, and security hardening
+
+### Patch Changes
+
+- afe4b80: Normalize the `Source` column on `chat_messages` for Claude Code hook
+  intake so tool-call messages use the OTEL `service.name` like user and
+  assistant messages, instead of hardcoding `ClaudeCode`.
+- bbe494e: Fix chats breaking when switching providers mid-conversation. Assistant turns that contained both a text reply and a tool call could cause the next turn to fail with a validation error on some provider routes, leaving the conversation unrecoverable. Affected chats now continue to work seamlessly across providers.
+- 8c5d6e9: Add a defense-in-depth 413 guard on the `/completion` chat proxy — reject any
+  single tool-result message over 200KB with a clean HTTP 413 / `request_too_large`
+  error instead of forwarding to OpenRouter where it would surface as an opaque
+  "prompt is too long" 400. Clients are expected to truncate tool outputs
+  before sending (see `@gram-ai/elements` `tools.maxOutputBytes`), but this
+  guard keeps the error surface clean if they don't.
+
+## 0.40.1
+
+### Patch Changes
+
+- 3d9188f: Change ID Token syncing behavior to be slighlty less eager
+
+## 0.40.0
+
+### Minor Changes
+
+- ea1e23d: Add organisational collections and the capability to publish MCP servers to share within the organisation.
+- f749a53: Add plugins feature for distributing MCP server bundles to teams and allowing zip distribution
+
+### Patch Changes
+
+- d2bf604: Adds a new project metrics summary endpoint containing new data to power the new homepage
+- 1ea6dff: Adds a super-admin interface for enabling RBAC to organisations.
+- f127399: Set a hard limit on concurrent HTTP requests to Gram Function runners deployed on Fly. This prevents OOM errors when a large number of tool calls are made in a short period of time. This can cause memory exhaustion and crashes.
+- 8e4fd98: Adds a better error handler for failed role resolution in the case that the user winds up with a corrupt session.
+- 7b925e4: Remove the legacy column sso_connection_id
+- 7376613: Add database migration for plugins tables (plugins, plugin_servers, plugin_assignments)
+  to support the upcoming Plugins feature for distributing MCP server bundles.
+- be476e6: feat: use pre-aggregated summary endpoint for hooks analytics charts and KPIs
+- ba580e4: Fixes a race condition where concurrent `collections.List` calls could fail with `"default registry collection already exists"` while bootstrapping the default Registry collection. The ensure routine now treats unique-constraint violations as success and re-fetches the existing rows.
+
 ## 0.39.0
 
 ### Minor Changes

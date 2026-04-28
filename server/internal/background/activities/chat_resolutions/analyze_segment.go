@@ -303,7 +303,7 @@ If there are no tool calls, return an empty array.`, userPromptText)
 		"additionalProperties": false,
 	}
 
-	jsonSchemaConfig := or.JSONSchemaConfig{
+	jsonSchemaConfig := or.ChatJSONSchemaConfig{
 		Name:        "segment_analysis",
 		Schema:      schema,
 		Description: nil,

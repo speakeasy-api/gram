@@ -1,4 +1,4 @@
-import { NavButton, NavMenu } from "@/components/nav-menu";
+import { NavButton } from "@/components/nav-menu";
 import { RequireScope } from "@/components/require-scope";
 import {
   Sidebar,
@@ -30,16 +30,16 @@ function ScopeGatedNavItem({
   scope: Scope | Scope[];
 }) {
   return (
-    <SidebarMenuItem>
-      <RequireScope scope={scope} level="component" className="w-full">
+    <RequireScope scope={scope} level="section">
+      <SidebarMenuItem>
         <NavButton
           title={item.title}
           href={item.href()}
           active={item.active}
           Icon={item.Icon}
         />
-      </RequireScope>
-    </SidebarMenuItem>
+      </SidebarMenuItem>
+    </RequireScope>
   );
 }
 
@@ -59,7 +59,7 @@ export function OrgSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       : "https://app.speakeasy.com";
 
   return (
-    <Sidebar collapsible="offcanvas" {...props}>
+    <Sidebar collapsible="icon" {...props}>
       <SidebarContent className="pt-2">
         <SidebarGroup>
           <SidebarGroupLabel>projects</SidebarGroupLabel>
@@ -67,7 +67,7 @@ export function OrgSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             <SidebarMenu>
               <ScopeGatedNavItem
                 item={orgRoutes.home}
-                scope={["build:read", "org:admin"]}
+                scope={["org:read", "project:read", "org:admin"]}
               />
             </SidebarMenu>
           </SidebarGroupContent>
@@ -75,7 +75,12 @@ export function OrgSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         <SidebarGroup>
           <SidebarGroupLabel>explore</SidebarGroupLabel>
           <SidebarGroupContent>
-            <NavMenu items={[orgRoutes.collections]} />
+            <SidebarMenu>
+              <ScopeGatedNavItem
+                item={orgRoutes.collections}
+                scope="org:admin"
+              />
+            </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
         <SidebarGroup>
@@ -122,16 +127,6 @@ export function OrgSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 item={orgRoutes.logs}
                 scope={["org:read", "org:admin"]}
               />
-              <ScopeGatedNavItem
-                item={orgRoutes.auditLogs}
-                scope={["org:read", "org:admin"]}
-              />
-              {isRbacEnabled && (
-                <ScopeGatedNavItem
-                  item={orgRoutes.access}
-                  scope={["org:read", "org:admin"]}
-                />
-              )}
               {isAdmin && (
                 <SidebarMenuItem>
                   <NavButton
@@ -141,6 +136,27 @@ export function OrgSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                     Icon={orgRoutes.adminSettings.Icon}
                   />
                 </SidebarMenuItem>
+              )}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+        <SidebarGroup>
+          <SidebarGroupLabel>secure</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <ScopeGatedNavItem
+                item={orgRoutes.auditLogs}
+                scope={["org:read", "org:admin"]}
+              />
+              <ScopeGatedNavItem
+                item={orgRoutes.identity}
+                scope={["org:read", "org:admin"]}
+              />
+              {isRbacEnabled && (
+                <ScopeGatedNavItem
+                  item={orgRoutes.access}
+                  scope={["org:read", "org:admin"]}
+                />
               )}
             </SidebarMenu>
           </SidebarGroupContent>

@@ -152,6 +152,9 @@ var ExternalMCPServer = Type("ExternalMCPServer", func() {
 		Example("1.0.0")
 	})
 	Attribute("description", String, "Description of what the server does")
+	Attribute("toolset_id", String, "ID of the attached toolset when this server is listed from a Collection", func() {
+		Format(FormatUUID)
+	})
 	Attribute("registry_id", String, "ID of the external MCP registry this server came from", func() {
 		Format(FormatUUID)
 	})
@@ -203,6 +206,34 @@ var ExternalMCPRemote = Type("ExternalMCPRemote", func() {
 	Attribute("transport_type", String, "Transport type (sse or streamable-http)", func() {
 		Enum("sse", "streamable-http")
 	})
+	Attribute("headers", ArrayOf(ExternalMCPRemoteHeader), "HTTP headers the MCP client should collect and send when connecting to this remote")
+	Attribute("variables", MapOf(String, ExternalMCPRemoteVariable), "URL template variables for this remote endpoint")
 
 	Required("url", "transport_type")
+})
+
+var ExternalMCPRemoteHeader = Type("ExternalMCPRemoteHeader", func() {
+	Meta("struct:pkg:path", "types")
+
+	Description("A header requirement for a remote MCP server")
+
+	Attribute("name", String, "Header name")
+	Attribute("description", String, "Description of the header")
+	Attribute("is_secret", Boolean, "Whether this header value should be treated as secret")
+	Attribute("is_required", Boolean, "Whether this header is required")
+	Attribute("placeholder", String, "Placeholder value to show when collecting this header")
+
+	Required("name")
+})
+
+var ExternalMCPRemoteVariable = Type("ExternalMCPRemoteVariable", func() {
+	Meta("struct:pkg:path", "types")
+
+	Description("A URL template variable for a remote MCP server")
+
+	Attribute("description", String, "Description of the variable")
+	Attribute("is_required", Boolean, "Whether this variable is required")
+	Attribute("is_secret", Boolean, "Whether this variable value should be treated as secret")
+	Attribute("default", String, "Default value for the variable")
+	Attribute("choices", ArrayOf(String), "Allowed values for the variable")
 })

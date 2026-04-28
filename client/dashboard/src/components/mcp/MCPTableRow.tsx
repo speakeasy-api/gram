@@ -1,21 +1,37 @@
 import { CopyButton } from "@/components/ui/copy-button";
 import { DotRow } from "@/components/ui/dot-row";
+import { Button } from "@/components/ui/button";
 import { Type } from "@/components/ui/type";
 import { useMcpUrl } from "@/hooks/useToolsetUrl";
 import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import { ToolsetEntry } from "@gram/client/models/components";
 import { useLatestDeployment } from "@gram/client/react-query";
-import { Link2, Network } from "lucide-react";
+import { AlertTriangleIcon, Link2, Network, Package } from "lucide-react";
 import { useMemo } from "react";
-import { useCatalogIconMap } from "../sources/Sources";
+import { useNavigate } from "react-router";
+import {
+  useCatalogIconMap,
+  useExternalMcpOAuthConfigStatus,
+} from "../sources/sources-hooks";
 import { ToolCollectionBadge } from "../tool-collection-badge";
+import { Badge } from "../ui/badge";
 
 export function MCPTableRow({ toolset }: { toolset: ToolsetEntry }) {
   const routes = useRoutes();
+  const navigate = useNavigate();
   const { url: mcpUrl } = useMcpUrl(toolset);
   const catalogIconMap = useCatalogIconMap();
   const { data: deploymentResult } = useLatestDeployment();
+  const oauthStatus = useExternalMcpOAuthConfigStatus(toolset.slug);
+
+  const handleClick = () => {
+    if (oauthStatus === "required-unconfigured") {
+      navigate(`${routes.mcp.details.href(toolset.slug)}#authentication`);
+    } else {
+      routes.mcp.details.goTo(toolset.slug);
+    }
+  };
 
   const externalMcpInfo = useMemo(() => {
     const externalMcpUrn = toolset.toolUrns?.find((urn) =>
@@ -49,10 +65,13 @@ export function MCPTableRow({ toolset }: { toolset: ToolsetEntry }) {
   };
 
   const status = getStatusConfig();
+  const installSourceTooltip = toolset.origin?.registrySpecifier
+    ? `Installed from ${toolset.origin.registrySpecifier}`
+    : undefined;
 
   return (
     <DotRow
-      onClick={() => routes.mcp.details.goTo(toolset.slug)}
+      onClick={handleClick}
       icon={
         externalMcpInfo?.logoUrl ? (
           <img
@@ -67,14 +86,25 @@ export function MCPTableRow({ toolset }: { toolset: ToolsetEntry }) {
     >
       {/* Name */}
       <td className="px-3 py-3">
-        <Type
-          variant="subheading"
-          as="div"
-          className="group-hover:text-primary truncate text-sm transition-colors"
-          title={toolset.name}
-        >
-          {toolset.name}
-        </Type>
+        <div className="flex items-center gap-2">
+          <Type
+            variant="subheading"
+            as="div"
+            className="group-hover:text-primary truncate text-sm transition-colors"
+            title={toolset.name}
+          >
+            {toolset.name}
+          </Type>
+          {oauthStatus === "required-unconfigured" && (
+            <Badge
+              variant="outline"
+              className="border-warning-foreground bg-warning text-warning-foreground text-xs backdrop-blur-sm"
+            >
+              <AlertTriangleIcon />
+              OAuth Required
+            </Badge>
+          )}
+        </div>
       </td>
 
       {/* Status */}
@@ -115,6 +145,18 @@ export function MCPTableRow({ toolset }: { toolset: ToolsetEntry }) {
               icon={Link2}
               tooltip="Copy MCP URL"
             />
+            {installSourceTooltip && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                tooltip={installSourceTooltip}
+                aria-label={installSourceTooltip}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <Package className="text-muted-foreground group-hover:text-foreground h-4 w-4" />
+              </Button>
+            )}
           </div>
         ) : (
           <Type small muted>

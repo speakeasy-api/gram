@@ -8,6 +8,7 @@ package repo
 import (
 	"context"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -156,6 +157,56 @@ func (q *Queries) GetOrganizationUserRelationship(ctx context.Context, arg GetOr
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const getOrganizationUserRoles = `-- name: GetOrganizationUserRoles :many
+SELECT our.id, our.organization_id, our.user_id, our.role_id,
+       r.workos_slug, r.workos_name
+FROM organization_user_roles our
+JOIN organization_roles r ON r.id = our.role_id
+WHERE our.organization_id = $1
+  AND our.user_id = $2
+`
+
+type GetOrganizationUserRolesParams struct {
+	OrganizationID string
+	UserID         string
+}
+
+type GetOrganizationUserRolesRow struct {
+	ID             uuid.UUID
+	OrganizationID string
+	UserID         string
+	RoleID         uuid.UUID
+	WorkosSlug     string
+	WorkosName     string
+}
+
+func (q *Queries) GetOrganizationUserRoles(ctx context.Context, arg GetOrganizationUserRolesParams) ([]GetOrganizationUserRolesRow, error) {
+	rows, err := q.db.Query(ctx, getOrganizationUserRoles, arg.OrganizationID, arg.UserID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetOrganizationUserRolesRow
+	for rows.Next() {
+		var i GetOrganizationUserRolesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.UserID,
+			&i.RoleID,
+			&i.WorkosSlug,
+			&i.WorkosName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const hasOrganizationUserRelationship = `-- name: HasOrganizationUserRelationship :one
@@ -365,20 +416,25 @@ func (q *Queries) SetUserWorkOSMemberships(ctx context.Context, arg SetUserWorkO
 
 const syncUserOrganizationRoles = `-- name: SyncUserOrganizationRoles :exec
 WITH input_roles AS (
-    SELECT unnest($3::text[]) AS workos_role_slug
+    SELECT id AS role_id
+    FROM organization_roles
+    WHERE organization_id = $1
+      AND workos_slug = ANY($3::text[])
+      AND deleted IS FALSE
+      AND workos_deleted IS FALSE
 ),
 upserted AS (
-    INSERT INTO organization_user_roles (organization_id, user_id, workos_role_slug)
-    SELECT $1, $2, workos_role_slug
+    INSERT INTO organization_user_roles (organization_id, user_id, role_id)
+    SELECT $1, $2, role_id
     FROM input_roles
-    ON CONFLICT (organization_id, user_id, workos_role_slug) DO UPDATE SET
+    ON CONFLICT (organization_id, user_id, role_id) DO UPDATE SET
         updated_at = clock_timestamp()
-    RETURNING workos_role_slug
+    RETURNING role_id
 )
 DELETE FROM organization_user_roles
 WHERE organization_id = $1::text
   AND user_id = $2::text
-  AND workos_role_slug NOT IN (SELECT workos_role_slug FROM input_roles)
+  AND role_id NOT IN (SELECT role_id FROM input_roles)
 `
 
 type SyncUserOrganizationRolesParams struct {
@@ -387,8 +443,8 @@ type SyncUserOrganizationRolesParams struct {
 	WorkosRoleSlugs []string
 }
 
-// Declaratively set all WorkOS roles for a user in an organization. Inserts new
-// roles and removes roles not in the provided list.
+// Declaratively set all WorkOS roles for a user in an organization. Resolves
+// slugs to internal role IDs, inserts new roles and removes roles not in the list.
 func (q *Queries) SyncUserOrganizationRoles(ctx context.Context, arg SyncUserOrganizationRolesParams) error {
 	_, err := q.db.Exec(ctx, syncUserOrganizationRoles, arg.OrganizationID, arg.UserID, arg.WorkosRoleSlugs)
 	return err
@@ -399,7 +455,7 @@ INSERT INTO organization_metadata (
     id,
     name,
     slug,
-    sso_connection_id,
+    workos_id,
     whitelisted
 ) VALUES (
     $1,
@@ -411,7 +467,8 @@ INSERT INTO organization_metadata (
 ON CONFLICT (id) DO UPDATE SET
     name = EXCLUDED.name,
     slug = EXCLUDED.slug,
-    sso_connection_id = EXCLUDED.sso_connection_id,
+    -- TODO: remove COALESCE once WorkOS org migration is complete and all orgs reliably provide workos_id.
+    workos_id = COALESCE(EXCLUDED.workos_id, organization_metadata.workos_id),
     whitelisted = CASE
         WHEN $5::boolean IS NOT NULL THEN $5::boolean
         ELSE organization_metadata.whitelisted
@@ -421,11 +478,11 @@ RETURNING id, name, slug, gram_account_type, sso_connection_id, workos_id, white
 `
 
 type UpsertOrganizationMetadataParams struct {
-	ID              string
-	Name            string
-	Slug            string
-	SsoConnectionID pgtype.Text
-	Whitelisted     pgtype.Bool
+	ID          string
+	Name        string
+	Slug        string
+	WorkosID    pgtype.Text
+	Whitelisted pgtype.Bool
 }
 
 func (q *Queries) UpsertOrganizationMetadata(ctx context.Context, arg UpsertOrganizationMetadataParams) (OrganizationMetadatum, error) {
@@ -433,7 +490,7 @@ func (q *Queries) UpsertOrganizationMetadata(ctx context.Context, arg UpsertOrga
 		arg.ID,
 		arg.Name,
 		arg.Slug,
-		arg.SsoConnectionID,
+		arg.WorkosID,
 		arg.Whitelisted,
 	)
 	var i OrganizationMetadatum

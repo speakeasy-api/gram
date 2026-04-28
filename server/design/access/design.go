@@ -314,16 +314,36 @@ var _ = Service("access", func() {
 
 })
 
+var SelectorModel = Type("Selector", func() {
+	Description("A constraint that narrows which resources a grant applies to.")
+	Required("resource_kind", "resource_id")
+
+	Attribute("resource_kind", String, func() {
+		Description("The kind of resource this selector targets.")
+		Enum("project", "mcp", "org", "*")
+	})
+	Attribute("resource_id", String, func() {
+		Description("The resource identifier, or '*' for all resources of this kind.")
+	})
+	Attribute("disposition", String, func() {
+		Description("Tool disposition filter (MCP scopes only).")
+		Enum("read_only", "destructive", "idempotent", "open_world")
+	})
+	Attribute("tool", String, func() {
+		Description("Specific tool name filter (MCP scopes only).")
+	})
+})
+
 var RoleGrantModel = Type("RoleGrant", func() {
 	Required("scope")
 
 	Attribute("scope", String, func() {
 		Description("The scope slug this grant applies to.")
-		Enum("org:read", "org:admin", "build:read", "build:write", "mcp:read", "mcp:write", "mcp:connect")
+		Enum("org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect")
 	})
 
-	Attribute("resources", ArrayOf(String), func() {
-		Description("Resource allowlist. Null means unrestricted access. An array means only the listed resource IDs.")
+	Attribute("selectors", ArrayOf(SelectorModel), func() {
+		Description("Selector constraints. Null means unrestricted.")
 	})
 })
 
@@ -333,16 +353,18 @@ var ListRoleGrantModel = Type("ListRoleGrant", func() {
 
 	Attribute("scope", String, func() {
 		Description("The scope slug this grant applies to.")
-		Enum("org:read", "org:admin", "build:read", "build:write", "mcp:read", "mcp:write", "mcp:connect")
+		Enum("org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect")
 	})
 	Attribute("sub_scopes", ArrayOf(String), func() {
 		Description("The inherited scopes the primary scope grants.")
 		Elem(func() {
-			Enum("org:read", "org:admin", "build:read", "build:write", "mcp:read", "mcp:write", "mcp:connect")
+			Enum("org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect")
 		})
 	})
 
-	Attribute("resources", ArrayOf(String), "Resource allowlist. Null means unrestricted access. An array means only the listed resource IDs.")
+	Attribute("selectors", ArrayOf(SelectorModel), func() {
+		Description("Selector constraints. Null means unrestricted.")
+	})
 })
 
 var RoleModel = Type("Role", func() {
@@ -372,7 +394,7 @@ var ScopeModel = Type("ScopeDefinition", func() {
 
 	Attribute("slug", String, func() {
 		Description("Unique scope identifier.")
-		Enum("org:read", "org:admin", "build:read", "build:write", "mcp:read", "mcp:write", "mcp:connect")
+		Enum("org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect")
 	})
 	Attribute("description", String, "What this scope protects.")
 	Attribute("resource_type", String, func() {

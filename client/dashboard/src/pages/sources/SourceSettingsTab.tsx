@@ -13,6 +13,7 @@ import {
   useLatestDeployment,
   useListAssets,
 } from "@gram/client/react-query/index.js";
+import { RequireScope } from "@/components/require-scope";
 import { Button, Dialog, Stack } from "@speakeasy-api/moonshine";
 import { Download, Eye, Trash2 } from "lucide-react";
 import { useState } from "react";
@@ -131,16 +132,18 @@ export function SourceSettingsTab({
             Removing this source will remove it from the current deployment.
             This action cannot be undone.
           </Type>
-          <Button
-            variant="destructive-primary"
-            size="md"
-            onClick={() => setDeleteDialogOpen(true)}
-          >
-            <Button.LeftIcon>
-              <Trash2 className="h-4 w-4" />
-            </Button.LeftIcon>
-            <Button.Text>Delete Source</Button.Text>
-          </Button>
+          <RequireScope scope="project:write" level="component">
+            <Button
+              variant="destructive-primary"
+              size="md"
+              onClick={() => setDeleteDialogOpen(true)}
+            >
+              <Button.LeftIcon>
+                <Trash2 className="h-4 w-4" />
+              </Button.LeftIcon>
+              <Button.Text>Delete Source</Button.Text>
+            </Button>
+          </RequireScope>
         </div>
       </div>
 

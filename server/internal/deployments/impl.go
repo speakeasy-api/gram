@@ -16,16 +16,17 @@ import (
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
 
+	"github.com/speakeasy-api/gram/glint/annotations"
 	gen "github.com/speakeasy-api/gram/server/gen/deployments"
 	srv "github.com/speakeasy-api/gram/server/gen/http/deployments/server"
 	"github.com/speakeasy-api/gram/server/gen/types"
-	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	assetsRepo "github.com/speakeasy-api/gram/server/internal/assets/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/background"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -45,6 +46,8 @@ import (
 )
 
 type Service struct {
+	annotations.Service[gen.Service, gen.Auther]
+
 	logger         *slog.Logger
 	tracer         trace.Tracer
 	db             *pgxpool.Pool
@@ -52,7 +55,7 @@ type Service struct {
 	externalmcp    *externalmcpRepo.Queries
 	registryClient *externalmcp.RegistryClient
 	auth           *auth.Auth
-	access         *access.Manager
+	authz          *authz.Engine
 	assets         *assetsRepo.Queries
 	packages       *packagesRepo.Queries
 	assetStorage   assets.BlobStore
@@ -62,6 +65,7 @@ type Service struct {
 }
 
 var _ gen.Service = (*Service)(nil)
+var _ gen.Auther = (*Service)(nil)
 
 func NewService(
 	logger *slog.Logger,
@@ -73,7 +77,7 @@ func NewService(
 	posthog *posthog.Posthog,
 	siteURL *url.URL,
 	mcpRegistryClient *externalmcp.RegistryClient,
-	accessManager *access.Manager,
+	authzEngine *authz.Engine,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("deployments"))
 	tracer := tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/deployments")
@@ -84,8 +88,8 @@ func NewService(
 		db:             db,
 		repo:           repo.New(db),
 		externalmcp:    externalmcpRepo.New(db),
-		auth:           auth.New(logger, db, sessions, accessManager),
-		access:         accessManager,
+		auth:           auth.New(logger, db, sessions, authzEngine),
+		authz:          authzEngine,
 		assets:         assetsRepo.New(db),
 		packages:       packagesRepo.New(db),
 		assetStorage:   assetStorage,
@@ -93,6 +97,7 @@ func NewService(
 		posthog:        posthog,
 		siteURL:        siteURL,
 		registryClient: mcpRegistryClient,
+		Service:        annotations.Service[gen.Service, gen.Auther]{},
 	}
 }
 
@@ -116,7 +121,7 @@ func (s *Service) GetDeployment(ctx context.Context, form *gen.GetDeploymentPayl
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeBuildRead, ResourceID: authCtx.ProjectID.String()}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
 		return nil, err
 	}
 
@@ -164,7 +169,7 @@ func (s *Service) GetDeploymentLogs(ctx context.Context, form *gen.GetDeployment
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeBuildRead, ResourceID: authCtx.ProjectID.String()}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
 		return nil, err
 	}
 
@@ -232,7 +237,7 @@ func (s *Service) GetLatestDeployment(ctx context.Context, _ *gen.GetLatestDeplo
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeBuildRead, ResourceID: authCtx.ProjectID.String()}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
 		return nil, err
 	}
 
@@ -278,7 +283,7 @@ func (s *Service) GetActiveDeployment(ctx context.Context, _ *gen.GetActiveDeplo
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeBuildRead, ResourceID: authCtx.ProjectID.String()}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
 		return nil, err
 	}
 
@@ -324,7 +329,7 @@ func (s *Service) ListDeployments(ctx context.Context, form *gen.ListDeployments
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeBuildRead, ResourceID: authCtx.ProjectID.String()}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
 		return nil, err
 	}
 
@@ -382,7 +387,7 @@ func (s *Service) CreateDeployment(ctx context.Context, form *gen.CreateDeployme
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeBuildWrite, ResourceID: authCtx.ProjectID.String()}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
 		return nil, err
 	}
 
@@ -429,10 +434,12 @@ func (s *Service) CreateDeployment(ctx context.Context, form *gen.CreateDeployme
 		}
 
 		newFunctions = append(newFunctions, upsertFunctions{
-			assetID: assetID,
-			name:    add.Name,
-			slug:    string(add.Slug),
-			runtime: add.Runtime,
+			assetID:   assetID,
+			name:      add.Name,
+			slug:      string(add.Slug),
+			runtime:   add.Runtime,
+			memoryMiB: add.MemoryMib,
+			scale:     add.Scale,
 		})
 	}
 
@@ -562,7 +569,7 @@ func (s *Service) Evolve(ctx context.Context, form *gen.EvolvePayload) (*gen.Evo
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeBuildWrite, ResourceID: authCtx.ProjectID.String()}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
 		return nil, err
 	}
 
@@ -614,10 +621,12 @@ func (s *Service) Evolve(ctx context.Context, form *gen.EvolvePayload) (*gen.Evo
 		}
 
 		functionsToUpsert = append(functionsToUpsert, upsertFunctions{
-			assetID: assetID,
-			name:    add.Name,
-			slug:    string(add.Slug),
-			runtime: add.Runtime,
+			assetID:   assetID,
+			name:      add.Name,
+			slug:      string(add.Slug),
+			runtime:   add.Runtime,
+			memoryMiB: add.MemoryMib,
+			scale:     add.Scale,
 		})
 	}
 
@@ -826,7 +835,7 @@ func (s *Service) Redeploy(ctx context.Context, payload *gen.RedeployPayload) (*
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.access.Require(ctx, access.Check{Scope: access.ScopeBuildWrite, ResourceID: authCtx.ProjectID.String()}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
 		return nil, err
 	}
 
@@ -894,7 +903,7 @@ func (s *Service) Redeploy(ctx context.Context, payload *gen.RedeployPayload) (*
 
 		DeploymentURN: urn.NewDeployment(newID),
 
-		SourceDeploymentID: urn.NewDeployment(deploymentID),
+		SourceDeploymentURN: urn.NewDeployment(deploymentID),
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error adding deployment redeploy audit log").Log(ctx, s.logger)
 	}

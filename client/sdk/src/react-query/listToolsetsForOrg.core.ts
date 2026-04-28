@@ -14,7 +14,7 @@ import { RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
 import * as operations from "../models/operations/index.js";
 import { unwrapAsync } from "../types/fp.js";
-export type ListToolsetsForOrgQueryData = components.ListToolsetsResult;
+export type ListToolsetsForOrgQueryData = components.ListToolsetSummariesResult;
 
 export function prefetchListToolsetsForOrg(
   queryClient: QueryClient,

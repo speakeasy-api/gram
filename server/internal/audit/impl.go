@@ -25,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit/repo"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
@@ -34,36 +35,26 @@ import (
 
 const listAuditLogsPageSize = 50
 
-type AccessContextPreparer interface {
-	PrepareContext(ctx context.Context) (context.Context, error)
-}
-
-// RequireOrgReadFn injects RBAC enforcement without importing access here,
-// which would create an import cycle because access depends on audit.
-type RequireOrgReadFn func(ctx context.Context, organizationID string) error
-
 type Service struct {
 	tracer trace.Tracer
 	logger *slog.Logger
 	db     *pgxpool.Pool
 	auth   *auth.Auth
-	// access already depends on audit for log writers, so inject the concrete
-	// check here to avoid an import cycle.
-	requireOrgRead RequireOrgReadFn
+	authz  *authz.Engine
 }
 
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, accessLoader AccessContextPreparer, requireOrgRead RequireOrgReadFn) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, authzEngine *authz.Engine) *Service {
 	logger = logger.With(attr.SlogComponent("audit"))
 
 	return &Service{
-		tracer:         tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/audit"),
-		logger:         logger,
-		db:             db,
-		auth:           auth.New(logger, db, sessions, accessLoader),
-		requireOrgRead: requireOrgRead,
+		tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/audit"),
+		logger: logger,
+		db:     db,
+		auth:   auth.New(logger, db, sessions, authzEngine),
+		authz:  authzEngine,
 	}
 }
 
@@ -86,8 +77,8 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.List
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.requireOrgRead(ctx, authCtx.ActiveOrganizationID); err != nil {
-		return nil, err
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, fmt.Errorf("require org read: %w", err)
 	}
 
 	projectID, err := s.resolveProjectID(ctx, authCtx.ActiveOrganizationID, conv.PtrValOrEmpty(payload.ProjectSlug, ""))
@@ -146,8 +137,8 @@ func (s *Service) ListFacets(ctx context.Context, payload *gen.ListFacetsPayload
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.requireOrgRead(ctx, authCtx.ActiveOrganizationID); err != nil {
-		return nil, err
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, fmt.Errorf("require org read: %w", err)
 	}
 
 	projectID, err := s.resolveProjectID(ctx, authCtx.ActiveOrganizationID, conv.PtrValOrEmpty(payload.ProjectSlug, ""))

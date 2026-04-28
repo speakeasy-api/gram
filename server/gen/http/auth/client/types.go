@@ -1127,7 +1127,6 @@ type OrganizationEntryResponseBody struct {
 	Name               *string                     `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	Slug               *string                     `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	Projects           []*ProjectEntryResponseBody `form:"projects,omitempty" json:"projects,omitempty" xml:"projects,omitempty"`
-	SsoConnectionID    *string                     `form:"sso_connection_id,omitempty" json:"sso_connection_id,omitempty" xml:"sso_connection_id,omitempty"`
 	UserWorkspaceSlugs []string                    `form:"user_workspace_slugs,omitempty" json:"user_workspace_slugs,omitempty" xml:"user_workspace_slugs,omitempty"`
 }
 

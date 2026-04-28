@@ -7,7 +7,7 @@
 [tools]
 "aqua:ariga/atlas" = "1.0.0"
 "github:speakeasy-api/openapi" = "1.19.2"
-"github:speakeasy-api/speakeasy" = "1.730.1"
+"github:speakeasy-api/speakeasy" = "1.761.5"
 "github:FiloSottile/mkcert" = "1.4.4"
 apko = "1.1.3"
 flyctl = "0.4.6"
@@ -24,7 +24,7 @@ uv = "0.10.9"
 yq = "4.52.4"
 hk = "1.38.0"
 pkl = "0.31.0"
-"github:speakeasy-api/madprocs" = "0.1.27"
+"github:speakeasy-api/madprocs" = "0.1.32"
 "github:temporalio/cli" = "1.6.1"
 
 # ℹ️ The settings below are sensible defaults for local development. When
@@ -71,9 +71,15 @@ TEMPORAL_TASK_QUEUE = "main"
 ##     "<namespace>.<account>.tmprl.cloud:7233".
 TEMPORAL_ADDRESS = "{{env.TEMPORAL_HOST}}:{{env.TEMPORAL_PORT}}"
 
-###################################
-## Gram server and worker config ##
-###################################
+##############################
+## Presidio configuration   ##
+##############################
+PRESIDIO_PORT = "5050"
+PRESIDIO_ANALYZER_URL = "http://127.0.0.1:{{env.PRESIDIO_PORT}}"
+
+##########################################
+## Gram server, admin and worker config ##
+##########################################
 ## Setting this to 1 will run the server and worker in a single process.
 ## This is useful when debugging during local development. It can also be used
 ## for simple production deployments although you are encouraged to run the gram
@@ -83,6 +89,10 @@ GRAM_SERVER_PORT = "8080"
 GRAM_SERVER_ADDRESS = ":{{env.GRAM_SERVER_PORT}}"
 GRAM_CONTROL_PORT = "8081"
 GRAM_CONTROL_ADDRESS = ":{{env.GRAM_CONTROL_PORT}}"
+GRAM_ADMIN_SERVER_PORT = "9090"
+GRAM_ADMIN_SERVER_ADDRESS = ":{{env.GRAM_ADMIN_SERVER_PORT}}"
+GRAM_ADMIN_CONTROL_PORT = "9091"
+GRAM_ADMIN_CONTROL_ADDRESS = ":{{env.GRAM_ADMIN_CONTROL_PORT}}"
 GRAM_WORKER_CONTROL_PORT = "8082"
 GRAM_WORKER_CONTROL_ADDRESS = ":{{env.GRAM_WORKER_CONTROL_PORT}}"
 ## The following variable can be one of: local, test, prod
@@ -99,6 +109,7 @@ GRAM_REDIS_CACHE_HOST = "127.0.0.1"
 GRAM_REDIS_CACHE_PORT = "5445"
 GRAM_REDIS_CACHE_ADDR = "{{env.GRAM_REDIS_CACHE_HOST}}:{{env.GRAM_REDIS_CACHE_PORT}}"
 GRAM_REDIS_CACHE_PASSWORD = "xi9XILbY"
+GRAM_REDIS_ENABLE_TRACING = "false"
 OPENROUTER_DEV_KEY = "unset"
 ## The following variables configure the mock Speakeasy IDP for local dev.
 ## MOCK_IDP_PORT is auto-remapped by `mise work:init` for parallel worktrees.
@@ -119,6 +130,11 @@ OIDC_EXTERNAL_URL = "http://{{env.MOCK_IDP_HOST}}:{{env.MOCK_IDP_PORT}}"
 ## - Local development with SSL enabled.
 GRAM_SSL_CERT_FILE = "{{config_root}}/local/ssl/certs/local.pem"
 GRAM_SSL_KEY_FILE = "{{config_root}}/local/ssl/keys/local-key.pem"
+## GitHub App for plugin publishing (leave unset to disable)
+# GRAM_PLUGINS_GITHUB_APP_ID = ""
+# GRAM_PLUGINS_GITHUB_PRIVATE_KEY = ""
+# GRAM_PLUGINS_GITHUB_ORG = ""
+# GRAM_PLUGINS_GITHUB_INSTALLATION_ID = ""
 
 ############
 ## WorkOS ##
@@ -175,6 +191,18 @@ GRAM_FUNCTIONS_LOCAL_RUNNER_ROOT = "{{config_root}}/local/functions"
 # GRAM_FUNCTIONS_FLYIO_ORG = "unset"
 ## Default region for deploying fly.io apps
 # GRAM_FUNCTIONS_FLYIO_REGION = "sjc"
+
+########################################
+## Gram Assistant runtime settings ##
+########################################
+## Local Firecracker runtimes expose the runner HTTP API inside each guest on
+## this port. It is declared here so `mise work:init` remaps it for parallel
+## worktrees and re-declares dependent values in the generated local env.
+GRAM_ASSISTANT_RUNTIME_PROVIDER = "local"
+GRAM_ASSISTANT_RUNTIME_GUEST_PORT = "8081"
+GRAM_RUNNER_ADDR = "0.0.0.0:{{env.GRAM_ASSISTANT_RUNTIME_GUEST_PORT}}"
+GRAM_ASSISTANT_RUNTIME_WORKDIR = "{{config_root}}/local/assistant-runtimes"
+GRAM_ASSISTANT_RUNTIME_LIMA_INSTANCE = "gram-firecracker-{{env.GRAM_ASSISTANT_RUNTIME_GUEST_PORT}}"
 
 ##################
 ## MCP Registry ##

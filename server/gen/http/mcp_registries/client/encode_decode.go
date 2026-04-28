@@ -996,6 +996,7 @@ func unmarshalExternalMCPServerResponseBodyToTypesExternalMCPServer(v *ExternalM
 		RegistrySpecifier:                   *v.RegistrySpecifier,
 		Version:                             *v.Version,
 		Description:                         *v.Description,
+		ToolsetID:                           v.ToolsetID,
 		RegistryID:                          v.RegistryID,
 		OrganizationMcpCollectionRegistryID: v.OrganizationMcpCollectionRegistryID,
 		Title:                               v.Title,
@@ -1053,6 +1054,68 @@ func unmarshalExternalMCPRemoteResponseBodyToTypesExternalMCPRemote(v *ExternalM
 	res := &types.ExternalMCPRemote{
 		URL:           *v.URL,
 		TransportType: *v.TransportType,
+	}
+	if v.Headers != nil {
+		res.Headers = make([]*types.ExternalMCPRemoteHeader, len(v.Headers))
+		for i, val := range v.Headers {
+			if val == nil {
+				res.Headers[i] = nil
+				continue
+			}
+			res.Headers[i] = unmarshalExternalMCPRemoteHeaderResponseBodyToTypesExternalMCPRemoteHeader(val)
+		}
+	}
+	if v.Variables != nil {
+		res.Variables = make(map[string]*types.ExternalMCPRemoteVariable, len(v.Variables))
+		for key, val := range v.Variables {
+			tk := key
+			if val == nil {
+				res.Variables[tk] = nil
+				continue
+			}
+			res.Variables[tk] = unmarshalExternalMCPRemoteVariableResponseBodyToTypesExternalMCPRemoteVariable(val)
+		}
+	}
+
+	return res
+}
+
+// unmarshalExternalMCPRemoteHeaderResponseBodyToTypesExternalMCPRemoteHeader
+// builds a value of type *types.ExternalMCPRemoteHeader from a value of type
+// *ExternalMCPRemoteHeaderResponseBody.
+func unmarshalExternalMCPRemoteHeaderResponseBodyToTypesExternalMCPRemoteHeader(v *ExternalMCPRemoteHeaderResponseBody) *types.ExternalMCPRemoteHeader {
+	if v == nil {
+		return nil
+	}
+	res := &types.ExternalMCPRemoteHeader{
+		Name:        *v.Name,
+		Description: v.Description,
+		IsSecret:    v.IsSecret,
+		IsRequired:  v.IsRequired,
+		Placeholder: v.Placeholder,
+	}
+
+	return res
+}
+
+// unmarshalExternalMCPRemoteVariableResponseBodyToTypesExternalMCPRemoteVariable
+// builds a value of type *types.ExternalMCPRemoteVariable from a value of type
+// *ExternalMCPRemoteVariableResponseBody.
+func unmarshalExternalMCPRemoteVariableResponseBodyToTypesExternalMCPRemoteVariable(v *ExternalMCPRemoteVariableResponseBody) *types.ExternalMCPRemoteVariable {
+	if v == nil {
+		return nil
+	}
+	res := &types.ExternalMCPRemoteVariable{
+		Description: v.Description,
+		IsRequired:  v.IsRequired,
+		IsSecret:    v.IsSecret,
+		Default:     v.Default,
+	}
+	if v.Choices != nil {
+		res.Choices = make([]string, len(v.Choices))
+		for i, val := range v.Choices {
+			res.Choices[i] = val
+		}
 	}
 
 	return res

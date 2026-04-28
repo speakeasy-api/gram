@@ -41,13 +41,12 @@ import {
 } from "ai";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { v7 as uuidv7 } from "uuid";
-import { onboardingStepStorageKeys } from "../home/Home";
 import { ChatComposerWrapper } from "./ChatComposerWrapper";
-import { useChatContext } from "./ChatContext";
+import { useChatContext } from "./useChatContext";
 import { useChatHistory } from "./ChatHistory";
 import { MessageHistoryIndicator } from "./MessageHistoryIndicator";
 import { useModel } from "./Openrouter";
-import { Tool as MentionTool, parseMentionedTools } from "./ToolMentions";
+import { Tool as MentionTool, parseMentionedTools } from "./tool-mention-utils";
 import { useMessageHistoryNavigation } from "./useMessageHistoryNavigation";
 
 type CoreTool = {
@@ -307,7 +306,8 @@ function ChatInner({
     });
 
     return tools;
-  }, [instance.data, client]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- configRef is a stable ref; createToolExecutor is defined inline and depends on stable refs
+  }, [instance.data, client, configRef]);
 
   // Create a list of tools for the mention system
   const mentionTools: MentionTool[] = useMemo(() => {
@@ -425,7 +425,7 @@ function ChatInner({
   }, [
     openrouterChat,
     _temperature,
-    allTools,
+    maxTokens,
     isToolTaggingEnabled,
     mentionTools,
     appendDisplayOnlyMessage,
@@ -500,7 +500,13 @@ function ChatInner({
         setUseChatMessages(initialMessagesInner);
       }
     }
-  }, [currentChatId, isChatHistoryLoading]);
+  }, [
+    currentChatId,
+    isChatHistoryLoading,
+    chatHistory,
+    _initialMessages,
+    setUseChatMessages,
+  ]);
 
   const handleSend = useCallback(
     async (msg: string) => {
@@ -511,8 +517,6 @@ function ChatInner({
           model,
           message: msg,
         });
-
-        localStorage.setItem(onboardingStepStorageKeys.test, "true");
       }
 
       if (isToolTaggingEnabled) {
@@ -528,18 +532,25 @@ function ChatInner({
       sendMessage({ text: msg });
       setInputText("");
     },
-    [chatMessages, telemetry, model, mentionTools, sendMessage],
+    [
+      chatMessages,
+      telemetry,
+      model,
+      mentionTools,
+      sendMessage,
+      isToolTaggingEnabled,
+    ],
   );
 
   useEffect(() => {
     chat.setAppendMessage((message) => {
       sendMessage({ text: message.content as string });
     });
-  }, [sendMessage]);
+  }, [sendMessage, chat]);
 
   useEffect(() => {
     setMessages(chatMessages);
-  }, [chatMessages]);
+  }, [chatMessages, setMessages]);
 
   useEffect(() => {
     setDisplayOnlyMessages([]);
@@ -685,7 +696,7 @@ const extractStreamError = (event: { error: unknown }) => {
               if (rawError.error?.message) {
                 message = rawError.error.message;
               }
-            } catch (_e) {
+            } catch {
               if (typeof parsedBody.error.message === "string") {
                 message = parsedBody.error.message;
               }

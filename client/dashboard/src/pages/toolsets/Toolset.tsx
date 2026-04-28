@@ -22,9 +22,7 @@ import { Confirm } from "@gram/client/models/components";
 import { invalidateTemplate } from "@gram/client/react-query";
 import {
   queryKeyInstance,
-  useCloneToolsetMutation,
   useCreateToolsetMutation,
-  useDeleteToolsetMutation,
   useUpdateToolsetMutation,
 } from "@gram/client/react-query/index.js";
 import { Button, Icon, Stack } from "@speakeasy-api/moonshine";
@@ -32,7 +30,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useState } from "react";
 import { Outlet, useLocation, useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
-import { MCPDetails, MCPEnableButton } from "../mcp/MCPDetails";
+import { MCPDetails, MCPStatusDropdown } from "../mcp/MCPDetails";
 import { AddToolsDialog } from "./AddToolsDialog";
 import { PromptsTabContent } from "./PromptsTab";
 import { ResourcesTabContent } from "./resources/ResourcesTab";
@@ -40,72 +38,8 @@ import { ServerTabContent } from "./ServerTab";
 import { ToolsetAuthAlert } from "./ToolsetAuthAlert";
 import { ToolsetEmptyState } from "./ToolsetEmptyState";
 import { ToolsetHeader } from "./ToolsetHeader";
-import { useToolsets } from "./Toolsets";
-
-export function useDeleteToolset({
-  onSuccess,
-}: { onSuccess?: () => void } = {}) {
-  const toolsets = useToolsets();
-  const telemetry = useTelemetry();
-
-  const mutation = useDeleteToolsetMutation({
-    onSuccess: async () => {
-      telemetry.capture("toolset_event", {
-        action: "toolset_deleted",
-      });
-      await toolsets.refetch();
-      onSuccess?.();
-    },
-    onError: (error) => {
-      handleAPIError(error, "Failed to delete toolset");
-    },
-  });
-
-  return (slug: string) => {
-    if (
-      confirm(
-        "Are you sure you want to delete this toolset? This action cannot be undone.",
-      )
-    ) {
-      mutation.mutate({
-        request: {
-          slug,
-        },
-      });
-    }
-  };
-}
-
-export function useCloneToolset({
-  onSuccess,
-}: { onSuccess?: () => void } = {}) {
-  const toolsets = useToolsets();
-  const telemetry = useTelemetry();
-  const routes = useRoutes();
-  const mutation = useCloneToolsetMutation({
-    onSuccess: async (data) => {
-      telemetry.capture("toolset_event", {
-        action: "toolset_cloned",
-        toolset_slug: data.slug,
-      });
-      toast.success(`Toolset cloned successfully as "${data.name}"`);
-      await toolsets.refetch();
-      routes.mcp.details.goTo(data.slug);
-      onSuccess?.();
-    },
-    onError: (error) => {
-      handleAPIError(error, "Failed to clone toolset");
-    },
-  });
-
-  return (slug: string) => {
-    mutation.mutate({
-      request: {
-        slug,
-      },
-    });
-  };
-}
+import { useToolsets } from "./useToolsets";
+import { useDeleteToolset, useCloneToolset } from "./useToolsetActions";
 
 function AddToToolsetDialog({
   open,
@@ -288,6 +222,7 @@ export function ToolsetView({
     if (newTab !== activeTab) {
       setActiveTab(newTab);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- getTabFromHash reads location.hash; activeTab excluded to avoid loop
   }, [location.hash]);
 
   // Redirect to appropriate default tab based on toolset kind
@@ -308,6 +243,7 @@ export function ToolsetView({
       setActiveTab("tools");
       navigate("#tools", { replace: true });
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only redirect on toolset kind change; activeTab/navigate/isExternalMcpProxy excluded to avoid loops
   }, [toolset?.kind]);
 
   // Update URL hash when tab changes
@@ -366,9 +302,8 @@ export function ToolsetView({
     return () => {
       removeActions(pageActions.map((a) => a.id));
     };
-    // addActions and removeActions are memoized in CommandPaletteContext with empty deps
-    // so they're stable and don't need to be in the dependency array
-  }, [toolsetSlug, toolset?.kind]); // Re-run when toolset slug or kind changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- routes changes every render; addActions/removeActions/cloneToolset are stable
+  }, [toolsetSlug, toolset?.kind]);
 
   // Refetch any loaded instances of this toolset on update (primarily for the playground)
   const refetchInstance = () => {
@@ -476,12 +411,13 @@ export function ToolsetView({
         },
       );
     },
-    [toolset?.toolUrns, toolsetSlug],
+    [toolset?.toolUrns, toolsetSlug, telemetry, updateToolsetMutation],
   );
 
   const handleTestInPlayground = useCallback(() => {
     routes.playground.goTo(toolsetSlug);
-  }, [toolsetSlug]); // routes changes every render but is used in closure
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- routes changes every render but goTo is stable
+  }, [toolsetSlug]);
 
   const handleCreateToolset = useCallback((toolUrns: string[]) => {
     setSelectedToolUrns(toolUrns);
@@ -687,7 +623,7 @@ export function ToolsetView({
                 gap={2}
               >
                 <Heading variant="h2">MCP Server Settings</Heading>
-                <MCPEnableButton toolset={toolset} />
+                <MCPStatusDropdown toolset={toolset} />
               </Stack>
               <MCPDetails toolset={toolset} />
             </Stack>

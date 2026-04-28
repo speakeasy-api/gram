@@ -1,3 +1,4 @@
+import { RequireScope } from "@/components/require-scope";
 import { Checkbox } from "@/components/ui/checkbox";
 import type { FailedSource } from "@/components/sources/useFailedDeploymentSources";
 import { cn } from "@/lib/utils";
@@ -278,24 +279,26 @@ export function FailedSourcesSection({
 
         {failedSources.length > 0 && (
           <div className="flex justify-end">
-            <Button
-              variant="destructive-primary"
-              onClick={handleRemoveClick}
-              disabled={pending || selected.size === 0}
-            >
-              {pending ? (
-                <>
-                  <Button.LeftIcon>
-                    <Loader2 className="size-4 animate-spin" />
-                  </Button.LeftIcon>
-                  <Button.Text>Removing...</Button.Text>
-                </>
-              ) : (
-                <Button.Text>
-                  {`Remove ${selected.size > 0 ? selected.size : ""} source${selected.size !== 1 ? "s" : ""}`}
-                </Button.Text>
-              )}
-            </Button>
+            <RequireScope scope="project:write" level="component">
+              <Button
+                variant="destructive-primary"
+                onClick={handleRemoveClick}
+                disabled={pending || selected.size === 0}
+              >
+                {pending ? (
+                  <>
+                    <Button.LeftIcon>
+                      <Loader2 className="size-4 animate-spin" />
+                    </Button.LeftIcon>
+                    <Button.Text>Removing...</Button.Text>
+                  </>
+                ) : (
+                  <Button.Text>
+                    {`Remove ${selected.size > 0 ? selected.size : ""} source${selected.size !== 1 ? "s" : ""}`}
+                  </Button.Text>
+                )}
+              </Button>
+            </RequireScope>
           </div>
         )}
       </section>

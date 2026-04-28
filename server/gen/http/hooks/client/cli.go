@@ -73,7 +73,7 @@ func BuildCursorPayload(hooksCursorBody string, hooksCursorApikeyToken string, h
 	{
 		err = json.Unmarshal([]byte(hooksCursorBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"additional_data\": {\n         \"abc123\": \"abc123\"\n      },\n      \"cache_read_tokens\": 1,\n      \"cache_write_tokens\": 1,\n      \"composer_mode\": \"abc123\",\n      \"conversation_id\": \"abc123\",\n      \"cursor_version\": \"abc123\",\n      \"duration_ms\": 1,\n      \"error\": \"abc123\",\n      \"generation_id\": \"abc123\",\n      \"hook_event_name\": \"abc123\",\n      \"input_tokens\": 1,\n      \"is_interrupt\": false,\n      \"loop_count\": 1,\n      \"model\": \"abc123\",\n      \"output_tokens\": 1,\n      \"prompt\": \"abc123\",\n      \"session_id\": \"abc123\",\n      \"status\": \"abc123\",\n      \"text\": \"abc123\",\n      \"tool_input\": \"abc123\",\n      \"tool_name\": \"abc123\",\n      \"tool_response\": \"abc123\",\n      \"tool_use_id\": \"abc123\",\n      \"transcript_path\": \"abc123\",\n      \"user_email\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"additional_data\": {\n         \"abc123\": \"abc123\"\n      },\n      \"cache_read_tokens\": 1,\n      \"cache_write_tokens\": 1,\n      \"command\": \"abc123\",\n      \"composer_mode\": \"abc123\",\n      \"conversation_id\": \"abc123\",\n      \"cursor_version\": \"abc123\",\n      \"duration\": 1,\n      \"duration_ms\": 1,\n      \"error\": \"abc123\",\n      \"generation_id\": \"abc123\",\n      \"hook_event_name\": \"abc123\",\n      \"input_tokens\": 1,\n      \"is_interrupt\": false,\n      \"loop_count\": 1,\n      \"model\": \"abc123\",\n      \"output_tokens\": 1,\n      \"prompt\": \"abc123\",\n      \"result_json\": \"abc123\",\n      \"session_id\": \"abc123\",\n      \"status\": \"abc123\",\n      \"text\": \"abc123\",\n      \"tool_input\": \"abc123\",\n      \"tool_name\": \"abc123\",\n      \"tool_response\": \"abc123\",\n      \"tool_use_id\": \"abc123\",\n      \"transcript_path\": \"abc123\",\n      \"url\": \"abc123\",\n      \"user_email\": \"abc123\"\n   }'")
 		}
 	}
 	var apikeyToken *string
@@ -113,6 +113,10 @@ func BuildCursorPayload(hooksCursorBody string, hooksCursorApikeyToken string, h
 		CacheWriteTokens: body.CacheWriteTokens,
 		Text:             body.Text,
 		DurationMs:       body.DurationMs,
+		URL:              body.URL,
+		Command:          body.Command,
+		ResultJSON:       body.ResultJSON,
+		Duration:         body.Duration,
 	}
 	if body.AdditionalData != nil {
 		v.AdditionalData = make(map[string]any, len(body.AdditionalData))
@@ -176,6 +180,61 @@ func BuildLogsPayload(hooksLogsBody string, hooksLogsApikeyToken string, hooksLo
 		}
 	} else {
 		v.ResourceLogs = []*hooks.OTELResourceLog{}
+	}
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildMetricsPayload builds the payload for the hooks metrics endpoint from
+// CLI flags.
+func BuildMetricsPayload(hooksMetricsBody string, hooksMetricsApikeyToken string, hooksMetricsProjectSlugInput string) (*hooks.MetricsPayload, error) {
+	var err error
+	var body MetricsRequestBody
+	{
+		err = json.Unmarshal([]byte(hooksMetricsBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"resourceMetrics\": [\n         {\n            \"resource\": {\n               \"attributes\": [\n                  {\n                     \"key\": \"abc123\",\n                     \"value\": {\n                        \"intValue\": 1,\n                        \"stringValue\": \"abc123\"\n                     }\n                  }\n               ],\n               \"droppedAttributesCount\": 1\n            },\n            \"scopeMetrics\": [\n               {\n                  \"metrics\": [\n                     {\n                        \"description\": \"abc123\",\n                        \"name\": \"abc123\",\n                        \"sum\": {\n                           \"aggregationTemporality\": 1,\n                           \"dataPoints\": [\n                              {\n                                 \"asDouble\": 1,\n                                 \"asInt\": 1,\n                                 \"attributes\": [\n                                    {\n                                       \"key\": \"abc123\",\n                                       \"value\": {\n                                          \"intValue\": 1,\n                                          \"stringValue\": \"abc123\"\n                                       }\n                                    }\n                                 ],\n                                 \"startTimeUnixNano\": \"abc123\",\n                                 \"timeUnixNano\": \"abc123\"\n                              }\n                           ],\n                           \"isMonotonic\": false\n                        },\n                        \"unit\": \"abc123\"\n                     }\n                  ],\n                  \"scope\": {\n                     \"name\": \"abc123\",\n                     \"version\": \"abc123\"\n                  }\n               }\n            ]\n         }\n      ]\n   }'")
+		}
+		if body.ResourceMetrics == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("resourceMetrics", "body"))
+		}
+		for _, e := range body.ResourceMetrics {
+			if e != nil {
+				if err2 := ValidateOTELResourceMetricsRequestBody(e); err2 != nil {
+					err = goa.MergeErrors(err, err2)
+				}
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if hooksMetricsApikeyToken != "" {
+			apikeyToken = &hooksMetricsApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if hooksMetricsProjectSlugInput != "" {
+			projectSlugInput = &hooksMetricsProjectSlugInput
+		}
+	}
+	v := &hooks.MetricsPayload{}
+	if body.ResourceMetrics != nil {
+		v.ResourceMetrics = make([]*hooks.OTELResourceMetrics, len(body.ResourceMetrics))
+		for i, val := range body.ResourceMetrics {
+			if val == nil {
+				v.ResourceMetrics[i] = nil
+				continue
+			}
+			v.ResourceMetrics[i] = marshalOTELResourceMetricsRequestBodyToHooksOTELResourceMetrics(val)
+		}
+	} else {
+		v.ResourceMetrics = []*hooks.OTELResourceMetrics{}
 	}
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput

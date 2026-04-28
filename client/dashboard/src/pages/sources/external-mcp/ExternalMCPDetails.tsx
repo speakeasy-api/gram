@@ -1,7 +1,7 @@
 import { Page } from "@/components/page-layout";
 import { RemoveSourceDialogContent } from "@/components/sources/RemoveSourceDialogContent";
 import { ExternalMCPIllustration } from "@/components/sources/SourceCardIllustrations";
-import { useCatalogIconMap } from "@/components/sources/Sources";
+import { useCatalogIconMap } from "@/components/sources/sources-hooks";
 import { Heading } from "@/components/ui/heading";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Type } from "@/components/ui/type";
@@ -12,6 +12,7 @@ import {
   useListToolsets,
 } from "@gram/client/react-query/index.js";
 import { ToolsetEntry } from "@gram/client/models/components";
+import { RequireScope } from "@/components/require-scope";
 import { Badge, Button, Dialog, Stack } from "@speakeasy-api/moonshine";
 import { ChevronRight, Globe, Lock, Power, Server, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -279,16 +280,18 @@ export default function ExternalMCPDetails() {
                   Removing this source will remove it from the current
                   deployment. This action cannot be undone.
                 </Type>
-                <Button
-                  variant="destructive-primary"
-                  size="md"
-                  onClick={() => setDeleteDialogOpen(true)}
-                >
-                  <Button.LeftIcon>
-                    <Trash2 className="h-4 w-4" />
-                  </Button.LeftIcon>
-                  <Button.Text>Delete Source</Button.Text>
-                </Button>
+                <RequireScope scope="project:write" level="component">
+                  <Button
+                    variant="destructive-primary"
+                    size="md"
+                    onClick={() => setDeleteDialogOpen(true)}
+                  >
+                    <Button.LeftIcon>
+                      <Trash2 className="h-4 w-4" />
+                    </Button.LeftIcon>
+                    <Button.Text>Delete Source</Button.Text>
+                  </Button>
+                </RequireScope>
               </div>
             </div>
           </TabsContent>

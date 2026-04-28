@@ -144,6 +144,10 @@ type GetHooksSummaryPayload struct {
 	From string
 	// End time in ISO 8601 format
 	To string
+	// Filter conditions (same as listHooksTraces)
+	Filters []*LogFilter
+	// Hook types to include (mcp, local, skill). If empty, includes all types.
+	TypesToInclude []string
 }
 
 // GetHooksSummaryResult is the result type of the telemetry service
@@ -159,6 +163,14 @@ type GetHooksSummaryResult struct {
 	TotalEvents int64
 	// Total number of unique sessions
 	TotalSessions int64
+	// Cross-dimensional pivot: (user, server, source, tool) x counts
+	Breakdown []*HooksBreakdownRow
+	// Time-bucketed event counts by server and user
+	TimeSeries []*HooksTimeSeriesPoint
+	// Time-bucketed event counts by skill
+	SkillTimeSeries []*SkillTimeSeriesPoint
+	// Per-user skill breakdown
+	SkillBreakdown []*SkillBreakdownRow
 }
 
 // GetMetricsSummaryResult is the result type of the telemetry service
@@ -273,6 +285,8 @@ type HookTraceSummary struct {
 	LogCount uint64
 	// Hook execution status
 	HookStatus *string
+	// Reason set when hook_status is 'blocked' (e.g. shadow-MCP guard rejection)
+	BlockReason *string
 	// Gram URN associated with this hook trace
 	GramUrn string
 	// Tool name (from materialized column)
@@ -289,6 +303,23 @@ type HookTraceSummary struct {
 	SkillName *string
 }
 
+// Cross-dimensional aggregation row: one entry per unique (user, server,
+// hook_source, tool) combination
+type HooksBreakdownRow struct {
+	// User email address
+	UserEmail string
+	// Server name ('local' for non-MCP tools)
+	ServerName string
+	// Hook source (e.g. claude-desktop, cursor)
+	HookSource string
+	// Tool name
+	ToolName string
+	// Total events for this combination
+	EventCount int64
+	// Number of failures for this combination
+	FailureCount int64
+}
+
 // Aggregated hooks metrics for a single server
 type HooksServerSummary struct {
 	// Server name (extracted from tool name, or 'local' for non-MCP tools)
@@ -303,6 +334,20 @@ type HooksServerSummary struct {
 	FailureCount int64
 	// Failure rate as a decimal (0.0 to 1.0)
 	FailureRate float64
+}
+
+// A single time-series bucket for hooks activity
+type HooksTimeSeriesPoint struct {
+	// Bucket start time in Unix nanoseconds (string for JS int64 precision)
+	BucketStartNs string
+	// Server name
+	ServerName string
+	// User email address
+	UserEmail string
+	// Number of events in this bucket
+	EventCount int64
+	// Number of failed hook events in this bucket
+	FailureCount int64
 }
 
 // Aggregated hooks metrics for a single user
@@ -434,6 +479,18 @@ type ObservabilitySummary struct {
 	AvgSessionDurationMs float64
 	// Average time to resolution in milliseconds
 	AvgResolutionTimeMs float64
+	// Sum of input tokens used
+	TotalInputTokens int64
+	// Sum of output tokens used
+	TotalOutputTokens int64
+	// Sum of all tokens used
+	TotalTokens int64
+	// Sum of cache read input tokens
+	CacheReadInputTokens int64
+	// Sum of cache creation input tokens
+	CacheCreationInputTokens int64
+	// Total cost of all requests
+	TotalCost float64
 	// Total number of tool calls
 	TotalToolCalls int64
 	// Number of failed tool calls
@@ -479,8 +536,14 @@ type ProjectSummary struct {
 	TotalOutputTokens int64
 	// Sum of all tokens used
 	TotalTokens int64
+	// Sum of cache read input tokens
+	CacheReadInputTokens int64
+	// Sum of cache creation input tokens
+	CacheCreationInputTokens int64
 	// Average tokens per chat request
 	AvgTokensPerRequest float64
+	// Total cost of all requests
+	TotalCost float64
 	// Total number of chat requests
 	TotalChatRequests int64
 	// Average chat request duration in milliseconds
@@ -713,6 +776,16 @@ type ServiceInfo struct {
 	Version *string
 }
 
+// Per-(skill, user) aggregated counts
+type SkillBreakdownRow struct {
+	// Skill name
+	SkillName string
+	// User email address
+	UserEmail string
+	// Use count for this skill/user combination
+	UseCount int64
+}
+
 // Aggregated skills metrics for a single skill
 type SkillSummary struct {
 	// Skill name (extracted from tool name)
@@ -721,6 +794,16 @@ type SkillSummary struct {
 	UseCount int64
 	// Number of unique users who used this skill
 	UniqueUsers int64
+}
+
+// A single time-series bucket for skill usage activity
+type SkillTimeSeriesPoint struct {
+	// Bucket start time in Unix nanoseconds (string for JS int64 precision)
+	BucketStartNs string
+	// Skill name
+	SkillName string
+	// Number of skill use events in this bucket
+	EventCount int64
 }
 
 // OpenTelemetry log record
@@ -762,6 +845,18 @@ type TimeSeriesBucket struct {
 	PartialChats int64
 	// Abandoned chat sessions in this bucket
 	AbandonedChats int64
+	// Sum of input tokens in this bucket
+	TotalInputTokens int64
+	// Sum of output tokens in this bucket
+	TotalOutputTokens int64
+	// Sum of all tokens in this bucket
+	TotalTokens int64
+	// Sum of cache read input tokens in this bucket
+	CacheReadInputTokens int64
+	// Sum of cache creation input tokens in this bucket
+	CacheCreationInputTokens int64
+	// Total cost in this bucket
+	TotalCost float64
 	// Total tool calls in this bucket
 	TotalToolCalls int64
 	// Failed tool calls in this bucket
@@ -856,8 +951,14 @@ type UserSummary struct {
 	TotalOutputTokens int64
 	// Sum of all tokens used
 	TotalTokens int64
+	// Sum of cache read input tokens
+	CacheReadInputTokens int64
+	// Sum of cache creation input tokens
+	CacheCreationInputTokens int64
 	// Average tokens per chat request
 	AvgTokensPerRequest float64
+	// Total cost of all requests
+	TotalCost float64
 	// Total number of tool calls
 	TotalToolCalls int64
 	// Successful tool calls (2xx status)

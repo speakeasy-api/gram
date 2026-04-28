@@ -15,9 +15,11 @@ import {
   setFrontendToolApprovalConfig,
   toAISDKTools,
   wrapToolsWithApproval,
+  wrapToolsWithByteCap,
   type ApprovalHelpers,
   type FrontendTool,
 } from "@/lib/tools";
+import { compactForModel } from "@/lib/contextCompaction";
 import { cn } from "@/lib/utils";
 import { recommended } from "@/plugins";
 import { ElementsConfig, Model } from "@/types";
@@ -37,6 +39,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   convertToModelMessages,
   createUIMessageStream,
+  lastAssistantMessageIsCompleteWithToolCalls,
   LanguageModel,
   smoothStream,
   stepCountIs,
@@ -187,6 +190,12 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
     plugins,
     toolsWithCustomComponents,
   );
+
+  // Read inside `sendMessages` via ref so prompt changes don't churn the
+  // transport useMemo identity. Same pattern as ensureValidHeadersRef /
+  // approvalHelpersRef below.
+  const systemPromptRef = useRef(systemPrompt);
+  systemPromptRef.current = systemPrompt;
 
   // Initialize error tracking on mount
   useEffect(() => {
@@ -366,10 +375,17 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
         } as ToolSet;
 
         // Wrap tools that require approval
-        const tools = wrapToolsWithApproval(
+        const approvedTools = wrapToolsWithApproval(
           combinedTools,
           config.tools?.toolsRequiringApproval,
           getApprovalHelpers(),
+        );
+
+        // Cap oversized tool results so one greedy tool call (e.g. a wide log
+        // search) can't fill the context window in a single step.
+        const tools = wrapToolsWithByteCap(
+          approvedTools,
+          config.tools?.maxOutputBytes,
         );
 
         // Stream the response
@@ -387,10 +403,32 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
           const nonSystemMessages = cleanedMessages.filter(
             (m) => m.role !== "system",
           );
-          const modelMessages = convertToModelMessages(nonSystemMessages);
+          const rawModelMessages = convertToModelMessages(nonSystemMessages);
+
+          // Auto-compact older turns if the estimated input is approaching
+          // the model's context window. System prompt + last few turns are
+          // always preserved. No-op when the conversation is small.
+          const compaction = config.contextCompaction?.disabled
+            ? {
+                messages: rawModelMessages,
+                droppedCount: 0,
+                estimatedTokensBefore: 0,
+                estimatedTokensAfter: 0,
+              }
+            : compactForModel(rawModelMessages, model, {
+                maxTokens: config.contextCompaction?.maxTokens,
+                compactAtFraction: config.contextCompaction?.compactAtFraction,
+                keepRecent: config.contextCompaction?.keepRecent,
+              });
+          if (compaction.droppedCount > 0) {
+            console.warn(
+              `[elements] compacted ${compaction.droppedCount} older turn(s) from ${compaction.estimatedTokensBefore} → ${compaction.estimatedTokensAfter} est. tokens (model ${model})`,
+            );
+          }
+          const modelMessages = compaction.messages;
 
           const result = streamText({
-            system: systemPrompt,
+            system: systemPromptRef.current,
             model: modelToUse,
             messages: modelMessages,
             tools,
@@ -456,8 +494,12 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
     [
       config.languageModel,
       config.tools?.toolsRequiringApproval,
+      config.tools?.maxOutputBytes,
+      config.contextCompaction?.disabled,
+      config.contextCompaction?.maxTokens,
+      config.contextCompaction?.compactAtFraction,
+      config.contextCompaction?.keepRecent,
       model,
-      systemPrompt,
       mcpTools,
       getApprovalHelpers,
       apiUrl,
@@ -606,9 +648,14 @@ const ElementsProviderWithHistory = ({
   });
   const initialThreadId = contextValue?.config.history?.initialThreadId;
 
-  // Hook factory for creating the base chat runtime
+  // Without `sendAutomaticallyWhen`, client-side frontend tools leave the turn
+  // half-finished: the tool-result is patched in but the agent never resumes,
+  // so the next user message lands on top of an unresolved tool-call sequence.
   const useChatRuntimeHook = useCallback(() => {
-    return useChatRuntime({ transport });
+    return useChatRuntime({
+      transport,
+      sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
+    });
   }, [transport]);
 
   const runtime = useRemoteThreadListRuntime({
@@ -691,7 +738,10 @@ const ElementsProviderWithoutHistory = ({
   executableTools,
   currentChatId,
 }: ElementsProviderWithoutHistoryProps) => {
-  const runtime = useChatRuntime({ transport });
+  const runtime = useChatRuntime({
+    transport,
+    sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
+  });
 
   // Populate runtimeRef so transport can access thread context
   useEffect(() => {

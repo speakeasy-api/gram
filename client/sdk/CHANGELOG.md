@@ -1,5 +1,35 @@
 # @gram/client
 
+## 0.33.6
+
+### Patch Changes
+
+- 2b2d423: added per-skill time series data to the hooks summary API to power skill usage charts.
+
+## 0.34.0
+
+### Minor Changes
+
+- d8c6ce1: add support for publishing external servers into collections.
+- 1ee9f95: Improved Hooks dashboard with new charts, refined visuals, and smarter default filters.
+
+## 0.32.65
+
+### Patch Changes
+
+- e56314e: Captures token and cost metrics for Claude agent sessions
+
+## 0.33.0
+
+### Minor Changes
+
+- f749a53: Add plugins feature for distributing MCP server bundles to teams and allowing zip distribution
+
+### Patch Changes
+
+- d2bf604: Adds a new project metrics summary endpoint containing new data to power the new homepage
+- be476e6: feat: use pre-aggregated summary endpoint for hooks analytics charts and KPIs
+
 ## 0.33.0
 
 ### Minor Changes
