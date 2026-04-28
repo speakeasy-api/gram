@@ -110,6 +110,13 @@ func Launch(ctx context.Context, opts LaunchOptions) (*Environment, func() error
 	}
 
 	if err := launchEg.Wait(); err != nil {
+		for _, c := range []terminateable{pgcontainer, rediscontainer, clickhousecontainer, presidiocontainer} {
+			if c != nil {
+				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+				_ = c.Terminate(ctx)
+				cancel()
+			}
+		}
 		return nil, nil, fmt.Errorf("start containers: %w", err)
 	}
 
