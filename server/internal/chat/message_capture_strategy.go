@@ -433,24 +433,14 @@ func (s *ChatMessageCaptureStrategy) resolveSession(ctx context.Context, raw ope
 	}
 }
 
-// flushTurnAtomically writes the pending user rows (via storeMessages, which
-// also handles asset-storage upload) and the assistant rows inside a single
-// Postgres transaction. Observer notification is handled by RunInTx after commit.
+// flushTurnAtomically writes the pending user rows and the assistant rows in
+// a single transaction so the turn lands as a unit.
 func (s *ChatMessageCaptureStrategy) flushTurnAtomically(ctx context.Context, projectID uuid.UUID, pending []chatMessageRow, assistants []repo.CreateChatMessageParams) error {
-	return s.writer.RunInTx(ctx, projectID, func(tx pgx.Tx) (int64, error) {
-		if err := s.writer.storeMessages(ctx, tx, pending); err != nil {
-			return 0, fmt.Errorf("store pending chat messages: %w", err)
-		}
-
-		txRepo := repo.New(tx)
-		n, err := txRepo.CreateChatMessage(ctx, assistants)
-		if err != nil {
-			s.logger.ErrorContext(ctx, "failed to store assistant chat message", attr.SlogError(err))
-			return 0, fmt.Errorf("store assistant chat message: %w", err)
-		}
-
-		return int64(len(pending)) + n, nil
-	})
+	if err := s.writer.WriteTurn(ctx, projectID, pending, assistants); err != nil {
+		s.logger.ErrorContext(ctx, "failed to flush chat turn", attr.SlogError(err))
+		return fmt.Errorf("flush chat turn: %w", err)
+	}
+	return nil
 }
 
 // NoOpCaptureStrategy is a message capture strategy that does nothing.

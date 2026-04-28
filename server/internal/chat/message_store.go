@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/assets"
@@ -17,8 +16,8 @@ import (
 
 // ChatMessageWriter is the only sanctioned way to persist chat messages.
 // It wraps repo.CreateChatMessage and notifies observers after a successful
-// write that stored at least one message. External packages must use Write
-// or RunInTx.
+// write that stored at least one message. External packages must use Write,
+// WriteTurn, or WriteWithAssets.
 type ChatMessageWriter struct {
 	db           *pgxpool.Pool
 	logger       *slog.Logger
@@ -61,27 +60,36 @@ func (w *ChatMessageWriter) Write(ctx context.Context, projectID uuid.UUID, para
 	return n, nil
 }
 
-// RunInTx runs fn inside a transaction. fn returns the number of messages it
-// stored; if that count is positive and the transaction commits, observers are
-// notified. The caller cannot forget notification because it is handled by
-// RunInTx itself.
-func (w *ChatMessageWriter) RunInTx(ctx context.Context, projectID uuid.UUID, fn func(tx pgx.Tx) (int64, error)) error {
+// WriteTurn persists a complete chat turn atomically: pending user/tool rows
+// (with asset upload) and pre-built assistant rows in a single transaction.
+// Observers are notified after commit if anything was stored. A partial write
+// would orphan the assistant row and force divergence detection to open a new
+// generation on the next turn, so atomicity is required.
+func (w *ChatMessageWriter) WriteTurn(ctx context.Context, projectID uuid.UUID, pending []chatMessageRow, assistants []repo.CreateChatMessageParams) error {
+	if len(pending) == 0 && len(assistants) == 0 {
+		return nil
+	}
+
 	tx, err := w.db.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	stored, err := fn(tx)
+	if err := w.storeMessages(ctx, tx, pending); err != nil {
+		return fmt.Errorf("store pending chat messages: %w", err)
+	}
+
+	n, err := repo.New(tx).CreateChatMessage(ctx, assistants)
 	if err != nil {
-		return err
+		return fmt.Errorf("store assistant chat messages: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit transaction: %w", err)
 	}
 
-	if stored > 0 {
+	if int64(len(pending))+n > 0 {
 		w.notifyMessagesStored(ctx, projectID)
 	}
 	return nil
