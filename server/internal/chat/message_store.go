@@ -10,33 +10,31 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
 )
 
 // ChatMessageWriter is the only sanctioned way to persist chat messages.
 // It wraps repo.CreateChatMessage and ensures observers are always notified
-// after a successful write.
-//
-// External packages must use Write or RunInTx. The unexported
-// notifyMessagesStored method is available to the chat package's own
-// internal helpers (e.g. storeMessages) where the insert and notification
-// are managed separately.
+// after a successful write. External packages must use Write or RunInTx.
 type ChatMessageWriter struct {
-	db          *pgxpool.Pool
-	logger      *slog.Logger
-	observers   []MessageObserver
-	shutdownCtx context.Context //nolint:containedctx // must outlive any single request
-	cancel      context.CancelFunc
+	db           *pgxpool.Pool
+	logger       *slog.Logger
+	assetStorage assets.BlobStore
+	observers    []MessageObserver
+	shutdownCtx  context.Context //nolint:containedctx // must outlive any single request
+	cancel       context.CancelFunc
 }
 
-func NewChatMessageWriter(logger *slog.Logger, db *pgxpool.Pool) (w *ChatMessageWriter, shutdown func(context.Context) error) {
+func NewChatMessageWriter(logger *slog.Logger, db *pgxpool.Pool, assetStorage assets.BlobStore) (w *ChatMessageWriter, shutdown func(context.Context) error) {
 	ctx, cancel := context.WithCancel(context.Background()) //nolint:contextcheck,gosec
 	w = &ChatMessageWriter{
-		db:          db,
-		logger:      logger,
-		shutdownCtx: ctx,
-		cancel:      cancel,
+		db:           db,
+		logger:       logger,
+		assetStorage: assetStorage,
+		shutdownCtx:  ctx,
+		cancel:       cancel,
 	}
 	shutdown = func(_ context.Context) error {
 		cancel()
@@ -81,10 +79,26 @@ func (w *ChatMessageWriter) RunInTx(ctx context.Context, projectID uuid.UUID, fn
 	return nil
 }
 
+// WriteWithAssets uploads message content to asset storage, inserts the
+// messages via the pool, and notifies observers on success. This is the
+// full pipeline for the OpenRouter proxy path where messages carry rich
+// content that needs asset storage.
+func (w *ChatMessageWriter) WriteWithAssets(ctx context.Context, projectID uuid.UUID, rows []chatMessageRow) error {
+	if err := w.storeMessages(ctx, w.db, rows); err != nil {
+		return err
+	}
+	w.notifyMessagesStored(ctx, projectID)
+	return nil
+}
+
+// storeMessages uploads message content to asset storage in parallel, then
+// batch-inserts the messages via the given DBTX. Used by WriteWithAssets
+// (with the pool) and inside RunInTx callbacks (with a transaction).
+func (w *ChatMessageWriter) storeMessages(ctx context.Context, tx repo.DBTX, rows []chatMessageRow) error {
+	return storeMessages(ctx, w.logger, tx, w.assetStorage, rows)
+}
+
 // notifyMessagesStored fires all registered observers asynchronously.
-// Unexported so that external packages are forced through Write or RunInTx.
-// The chat package uses this directly only when the insert is performed by
-// a private helper (e.g. storeMessages) where Write/RunInTx cannot be used.
 func (w *ChatMessageWriter) notifyMessagesStored(ctx context.Context, projectID uuid.UUID) {
 	if w == nil || len(w.observers) == 0 {
 		return

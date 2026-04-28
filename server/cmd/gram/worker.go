@@ -463,10 +463,10 @@ func newWorkerCommand() *cli.Command {
 			 * BEGIN -- MCP service setup for agent client
 			 */
 
-			chatWriter, chatWriterShutdown := chat.NewChatMessageWriter(logger, db)
+			chatWriter, chatWriterShutdown := chat.NewChatMessageWriter(logger, db, assetStorage)
 			shutdownFuncs = append(shutdownFuncs, chatWriterShutdown)
 
-			captureStrategy := chat.NewChatMessageCaptureStrategy(logger, db, assetStorage, chatWriter)
+			captureStrategy := chat.NewChatMessageCaptureStrategy(logger, db, chatWriter)
 
 			riskSignaler := background.NewThrottledSignaler(
 				&background.TemporalRiskAnalysisSignaler{TemporalEnv: temporalEnv, Logger: logger},

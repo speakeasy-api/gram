@@ -78,7 +78,7 @@ func newTestHooksService(t *testing.T) (context.Context, *testInstance) {
 
 	// Pass nil for telemetry logger, temporalEnv, productFeatures, and chatTitleGenerator in tests
 	authzEngine := authz.NewEngine(logger, conn, authztest.RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
-	chatWriter, chatWriterShutdown := chat.NewChatMessageWriter(logger, conn)
+	chatWriter, chatWriterShutdown := chat.NewChatMessageWriter(logger, conn, nil)
 	t.Cleanup(func() { _ = chatWriterShutdown(t.Context()) })
 	svc := NewService(logger, conn, tracerProvider, nil, sessionManager, cacheAdapter, nil, nil, authzEngine, nil, nil, chatWriter)
 

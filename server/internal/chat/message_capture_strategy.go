@@ -13,7 +13,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -24,11 +23,10 @@ import (
 // ChatMessageCaptureStrategy captures completion messages to the database.
 // It implements the MessageCaptureStrategy interface.
 type ChatMessageCaptureStrategy struct {
-	logger       *slog.Logger
-	db           *pgxpool.Pool
-	repo         *repo.Queries
-	assetStorage assets.BlobStore
-	writer       *ChatMessageWriter
+	logger *slog.Logger
+	db     *pgxpool.Pool
+	repo   *repo.Queries
+	writer *ChatMessageWriter
 }
 
 var _ openrouter.MessageCaptureStrategy = (*ChatMessageCaptureStrategy)(nil)
@@ -49,15 +47,13 @@ type chatCaptureSession struct {
 func NewChatMessageCaptureStrategy(
 	logger *slog.Logger,
 	db *pgxpool.Pool,
-	assetStorage assets.BlobStore,
 	writer *ChatMessageWriter,
 ) *ChatMessageCaptureStrategy {
 	return &ChatMessageCaptureStrategy{
-		logger:       logger,
-		db:           db,
-		repo:         repo.New(db),
-		assetStorage: assetStorage,
-		writer:       writer,
+		logger: logger,
+		db:     db,
+		repo:   repo.New(db),
+		writer: writer,
 	}
 }
 
@@ -118,7 +114,7 @@ func (s *ChatMessageCaptureStrategy) StartOrResumeChat(ctx context.Context, requ
 	// parentHash after the last new message becomes the chain tip for the assistant.
 	tipHash := rows[len(rows)-1].contentHash
 
-	if err := storeMessages(ctx, s.logger, s.db, s.assetStorage, rows); err != nil {
+	if err := s.writer.WriteWithAssets(ctx, projectID, rows); err != nil {
 		s.logger.ErrorContext(ctx, "failed to store chat messages", attr.SlogError(err))
 		// Keep the rows on the session so CaptureMessage can flush them atomically
 		// with the assistant response. We deliberately do not fail the request —
@@ -129,8 +125,6 @@ func (s *ChatMessageCaptureStrategy) StartOrResumeChat(ctx context.Context, requ
 			pendingRows: rows,
 		}, nil
 	}
-
-	s.writer.notifyMessagesStored(ctx, projectID)
 
 	return &chatCaptureSession{
 		generation:  generation,
@@ -444,7 +438,7 @@ func (s *ChatMessageCaptureStrategy) resolveSession(ctx context.Context, raw ope
 // Postgres transaction. Observer notification is handled by RunInTx after commit.
 func (s *ChatMessageCaptureStrategy) flushTurnAtomically(ctx context.Context, projectID uuid.UUID, pending []chatMessageRow, assistants []repo.CreateChatMessageParams) error {
 	return s.writer.RunInTx(ctx, projectID, func(tx pgx.Tx) error {
-		if err := storeMessages(ctx, s.logger, tx, s.assetStorage, pending); err != nil {
+		if err := s.writer.storeMessages(ctx, tx, pending); err != nil {
 			return fmt.Errorf("store pending chat messages: %w", err)
 		}
 
