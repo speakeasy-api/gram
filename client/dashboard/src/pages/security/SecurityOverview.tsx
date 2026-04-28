@@ -299,7 +299,7 @@ function SecurityOverviewContent() {
                         <TableHead>Rule</TableHead>
                         <TableHead>Chat</TableHead>
                         <TableHead>User</TableHead>
-                        <TableHead>Match</TableHead>
+                        <TableHead className="w-[200px]">Match</TableHead>
                         <TableHead>Detected</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -332,7 +332,7 @@ function SecurityOverviewContent() {
                           <TableCell className="text-muted-foreground text-xs">
                             {result.userId ?? "-"}
                           </TableCell>
-                          <TableCell className="max-w-xs truncate">
+                          <TableCell className="w-[200px] max-w-[200px] truncate">
                             <MaskedMatch value={result.match} />
                           </TableCell>
                           <TableCell className="text-muted-foreground text-xs">
