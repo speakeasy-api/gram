@@ -679,21 +679,23 @@ func (s *Service) ListGrants(ctx context.Context, _ *gen.ListGrantsPayload) (*ge
 		return nil, err
 	}
 	if !enforce {
-		return &gen.ListUserGrantsResult{Grants: []*gen.ListRoleGrant{
-			{Scope: string(authz.ScopeOrgRead), Selectors: nil},
-			{Scope: string(authz.ScopeOrgAdmin), Selectors: nil},
-			{Scope: string(authz.ScopeProjectRead), Selectors: nil},
-			{Scope: string(authz.ScopeProjectWrite), Selectors: nil},
-			{Scope: string(authz.ScopeMCPRead), Selectors: nil},
-			{Scope: string(authz.ScopeMCPWrite), Selectors: nil},
-			{Scope: string(authz.ScopeMCPConnect), Selectors: nil},
-		}}, nil
+		return &gen.ListUserGrantsResult{Grants: allScopesGrants()}, nil
 	}
 
 	ac, workosOrgID, err := s.roleOrgContext(ctx)
 	if err != nil {
 		return nil, err
 	}
+
+	// Admins impersonating a customer org won't have an organization_users row
+	// (the Info endpoint intentionally skips that upsert). Return full scopes so
+	// the MembershipSyncGuard doesn't block the dashboard.
+	if ac.IsAdmin {
+		if _, hasOverride := contextvalues.GetAdminOverrideFromContext(ctx); hasOverride {
+			return &gen.ListUserGrantsResult{Grants: allScopesGrants()}, nil
+		}
+	}
+
 	logger := s.logger.With(
 		attr.SlogOrganizationID(ac.ActiveOrganizationID),
 		attr.SlogUserID(ac.UserID),
@@ -1090,6 +1092,20 @@ func scopedGrantToGenRoleGrant(g *authz.ScopedGrant) *gen.RoleGrant {
 		selectors = append(selectors, authzSelectorToGen(sel))
 	}
 	return &gen.RoleGrant{Scope: g.Scope, Selectors: selectors}
+}
+
+// allScopesGrants returns unrestricted grants for every known scope.
+// Used when RBAC is not enforced or for admin impersonation.
+func allScopesGrants() []*gen.ListRoleGrant {
+	return []*gen.ListRoleGrant{
+		{Scope: string(authz.ScopeOrgRead), Selectors: nil},
+		{Scope: string(authz.ScopeOrgAdmin), Selectors: nil},
+		{Scope: string(authz.ScopeProjectRead), Selectors: nil},
+		{Scope: string(authz.ScopeProjectWrite), Selectors: nil},
+		{Scope: string(authz.ScopeMCPRead), Selectors: nil},
+		{Scope: string(authz.ScopeMCPWrite), Selectors: nil},
+		{Scope: string(authz.ScopeMCPConnect), Selectors: nil},
+	}
 }
 
 func listRoleGrantsFromGrants(grants []authz.Grant) []*gen.ListRoleGrant {

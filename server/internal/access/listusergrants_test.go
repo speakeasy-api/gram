@@ -105,6 +105,37 @@ func TestService_ListGrants_NotConnected(t *testing.T) {
 	require.Contains(t, err.Error(), "current user has not joined this organization")
 }
 
+func TestService_ListGrants_AdminImpersonatingReturnsFullAccess(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+
+	// Enterprise org with RBAC enforced, admin user, admin override set,
+	// but NO organization_users row — mirrors real impersonation.
+	authCtx.AccountType = "enterprise"
+	authCtx.IsAdmin = true
+	ctx = contextvalues.SetAuthContext(ctx, authCtx)
+	ctx = contextvalues.SetAdminOverrideInContext(ctx, "customer-org")
+
+	result, err := ti.service.ListGrants(ctx, &gen.ListGrantsPayload{})
+	require.NoError(t, err)
+	require.Len(t, result.Grants, len(expectedFullAccessScopes))
+
+	byScope := make(map[string]*gen.ListRoleGrant, len(result.Grants))
+	for _, grant := range result.Grants {
+		byScope[grant.Scope] = grant
+	}
+
+	for _, scope := range expectedFullAccessScopes {
+		grant, ok := byScope[scope]
+		require.True(t, ok)
+		require.Nil(t, grant.Selectors)
+	}
+}
+
 func TestService_ListGrants_NonEnterpriseReturnsFullAccess(t *testing.T) {
 	t.Parallel()
 
