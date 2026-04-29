@@ -2,7 +2,7 @@ import { Icon, IconName, IconProps } from "@speakeasy-api/moonshine";
 import React, { useMemo } from "react";
 import { Link, Navigate, useLocation, useNavigate } from "react-router";
 import {
-  RedirectToInsightsHooks,
+  RedirectToInsightsTools,
   RedirectToLogAgents,
 } from "./components/observe/ObserveRedirects";
 import { useSlugs } from "./contexts/Sdk";
@@ -333,11 +333,11 @@ const ROUTE_STRUCTURE = {
     url: "insights",
     icon: "layout-dashboard",
     component: InsightsRoot,
-    indexComponent: () => <Navigate to="hooks" replace />,
+    indexComponent: () => <Navigate to="tools" replace />,
     subPages: {
-      hooks: {
-        title: "Hooks",
-        url: "hooks",
+      tools: {
+        title: "Tools",
+        url: "tools",
         component: InsightsHooksPage,
       },
       "mcp-servers": {
@@ -353,21 +353,21 @@ const ROUTE_STRUCTURE = {
     },
   },
   hooks: {
-    // redirect to insights/hooks
+    // redirect to insights/tools
     title: "Hooks",
     url: "hooks",
-    component: RedirectToInsightsHooks,
+    component: RedirectToInsightsTools,
   },
   logs: {
     title: "Logs",
     url: "logs",
     icon: "logs",
     component: LogsRoot,
-    indexComponent: () => <Navigate to="mcp" replace />, // redirect from older /logs route
+    indexComponent: () => <Navigate to="tools" replace />,
     subPages: {
-      hooks: {
-        title: "Hooks",
-        url: "hooks",
+      tools: {
+        title: "Tools",
+        url: "tools",
         component: LogsHooksPage,
       },
       mcp: {

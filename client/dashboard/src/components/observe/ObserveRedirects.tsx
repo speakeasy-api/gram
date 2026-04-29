@@ -1,12 +1,12 @@
 import { Navigate, useLocation } from "react-router";
 import { useRoutes } from "@/routes";
 
-export function RedirectToInsightsHooks() {
+export function RedirectToInsightsTools() {
   const routes = useRoutes();
   const location = useLocation();
   return (
     <Navigate
-      to={`${routes.insights.hooks.href()}${location.search}${location.hash}`}
+      to={`${routes.insights.tools.href()}${location.search}${location.hash}`}
       replace
     />
   );

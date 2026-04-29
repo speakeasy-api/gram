@@ -8,7 +8,7 @@ export function ObserveTabNav({ base }: { base: "insights" | "logs" }) {
 
   const baseSlug = `/${orgSlug}/projects/${projectSlug}/${base}`;
   const tabs = [
-    { label: "Hooks", href: `${baseSlug}/hooks` },
+    { label: "Tools", href: `${baseSlug}/tools` },
     { label: "MCP Servers", href: `${baseSlug}/mcp` },
     { label: "Agents", href: `${baseSlug}/agents` },
   ];

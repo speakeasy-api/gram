@@ -889,7 +889,7 @@ function InsightsPageHeader({
       )}
     >
       <div className="flex min-w-0 flex-col gap-1">
-        <h1 className="text-xl font-semibold">Insights</h1>
+        <h1 className="text-xl font-semibold">MCP Servers</h1>
         <p className="text-muted-foreground text-sm">
           Monitor agent sessions, tool performance, and system health
         </p>

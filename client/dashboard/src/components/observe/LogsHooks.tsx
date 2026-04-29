@@ -469,16 +469,16 @@ export function LogsHooks() {
     <>
       <InsightsConfig
         mcpConfig={mcpConfig}
-        title="Explore Logs for Hooks"
-        subtitle="Ask me about your hook logs! Powered by Elements + Gram MCP"
+        title="Explore Tool Logs"
+        subtitle="Ask me about your tool logs! Powered by Elements + Gram MCP"
         hideTrigger={isLogsDisabled}
       />
       {isLogsDisabled ? (
         <div className="min-h-0 w-full flex-1 space-y-6 overflow-y-auto p-8 pb-24">
           <div className="flex min-w-0 flex-col gap-1">
-            <h1 className="text-xl font-semibold">Hooks</h1>
+            <h1 className="text-xl font-semibold">Tool Logs</h1>
             <p className="text-muted-foreground text-sm">
-              Monitor hook events and tool executions across all servers
+              Monitor tool traces across all servers
             </p>
           </div>
           <div className="relative flex-1">
@@ -494,7 +494,7 @@ export function LogsHooks() {
       ) : (
         <EnterpriseGate
           icon="workflow"
-          description="Hooks are available on the Enterprise plan. Book a time to get started."
+          description="Tools are available on the Enterprise plan. Book a time to get started."
         >
           <HooksInnerContent
             isLogsDisabled={isLogsDisabled}
@@ -605,9 +605,9 @@ function HooksInnerContent({
         <div className="flex min-h-0 flex-1 flex-col gap-6 px-8 pt-8">
           <div className="flex shrink-0 items-start justify-between gap-4">
             <div className="flex min-w-0 flex-col gap-1">
-              <h1 className="text-xl font-semibold">Hooks</h1>
+              <h1 className="text-xl font-semibold">Tool Logs</h1>
               <p className="text-muted-foreground text-sm">
-                Monitor hook events and tool executions across all servers
+                Monitor tool traces across all servers
               </p>
             </div>
             <div className="flex items-center gap-2">
