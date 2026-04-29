@@ -42,7 +42,7 @@ import type {
   Selector,
 } from "./types";
 import { DISPOSITION_TO_ANNOTATION } from "./types";
-import { grantsFingerprint, isSaveDisabled } from "./roleDialogState";
+import { isSaveDisabled } from "./roleDialogState";
 
 interface CreateRoleDialogProps {
   open: boolean;
@@ -100,7 +100,7 @@ export function CreateRoleDialog({
   const [initialMembers, setInitialMembers] = useState<Set<string>>(new Set());
   const [initialName, setInitialName] = useState("");
   const [initialDescription, setInitialDescription] = useState("");
-  const [initialGrantsFingerprint, setInitialGrantsFingerprint] = useState("");
+  const [initialGrantKeys, setInitialGrantKeys] = useState("");
   const [showMembers, setShowMembers] = useState(false);
   const [showPermissions, setShowPermissions] = useState(true);
   const [initialized, setInitialized] = useState(false);
@@ -156,7 +156,7 @@ export function CreateRoleDialog({
     setGrants(roleGrants);
     setInitialName(editingRole.name);
     setInitialDescription(editingRole.description);
-    setInitialGrantsFingerprint(grantsFingerprint(roleGrants));
+    setInitialGrantKeys(Object.keys(roleGrants).sort().join(","));
     const assignedIds = new Set(
       members.filter((m) => m.roleId === editingRole.id).map((m) => m.id),
     );
@@ -205,7 +205,7 @@ export function CreateRoleDialog({
     initial: {
       name: initialName,
       description: initialDescription,
-      grantsFingerprint: initialGrantsFingerprint,
+      grantKeys: initialGrantKeys,
       members: initialMembers,
     },
   });
@@ -330,7 +330,7 @@ export function CreateRoleDialog({
     setInitialMembers(new Set());
     setInitialName("");
     setInitialDescription("");
-    setInitialGrantsFingerprint("");
+    setInitialGrantKeys("");
     setShowMembers(false);
     setShowPermissions(true);
     setInitialized(false);
