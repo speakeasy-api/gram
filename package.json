@@ -16,7 +16,7 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "packageManager": "pnpm@10.30.2",
+  "packageManager": "pnpm@10.33.2",
   "devDependencies": {
     "@changesets/cli": "^2.29.7",
     "@clack/prompts": "1.0.0-alpha.6",

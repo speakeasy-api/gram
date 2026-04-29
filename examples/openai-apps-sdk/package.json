@@ -15,7 +15,7 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "packageManager": "pnpm@10.30.2",
+  "packageManager": "pnpm@10.33.2",
   "devDependencies": {
     "@tailwindcss/vite": "^4.1.11",
     "@types/lodash": "^4.17.20",
