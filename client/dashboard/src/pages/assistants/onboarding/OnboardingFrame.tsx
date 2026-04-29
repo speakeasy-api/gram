@@ -21,7 +21,7 @@ export function OnboardingFrame({
           <GramLogo className="w-25" />
         </Link>
         <Button variant="tertiary" size="sm" onClick={onExit}>
-          Exit to dashboard
+          Exit to AI control plane
         </Button>
       </Stack>
       <div className="flex-1 overflow-hidden">{children}</div>
