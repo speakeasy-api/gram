@@ -8,8 +8,8 @@ function LogsTabNav() {
 
   const base = `/${orgSlug}/${projectSlug}/logs`;
   const tabs = [
-    { label: "MCP", href: `${base}/mcp` },
     { label: "Hooks", href: `${base}/hooks` },
+    { label: "MCP Servers", href: `${base}/mcp` },
     { label: "Agents", href: `${base}/agents` },
   ];
 

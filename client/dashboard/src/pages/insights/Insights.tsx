@@ -1,4 +1,5 @@
 import { Link, Outlet, useLocation } from "react-router";
+import { AgentInsights } from "@/components/observe/AgentInsights";
 import { InsightsHooksContent } from "@/components/observe/InsightsHooksContent";
 import { MCPInsights } from "@/components/observe/MCPInsights";
 import { Page } from "@/components/page-layout";
@@ -67,6 +68,14 @@ export function InsightsMCPPage() {
   return (
     <RequireScope scope="project:read" level="page">
       <MCPInsights />
+    </RequireScope>
+  );
+}
+
+export function InsightsAgentsPage() {
+  return (
+    <RequireScope scope="project:read" level="page">
+      <AgentInsights />
     </RequireScope>
   );
 }
