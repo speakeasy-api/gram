@@ -851,7 +851,7 @@ type PrincipalGrant struct {
 	Scope string
 	// Deprecated. Formerly '*' = unrestricted. Nullable, scheduled for removal.
 	DropResource pgtype.Text
-	// Optional JSON selector constraints refining when the grant applies. NULL means the grant has no selector constraints.
+	// JSON selector constraints attached to a grant. Must be a non-empty JSONB object. Wildcard/unrestricted grants use {"resource_kind":"*","resource_id":"*"}.
 	Selectors []byte
 	CreatedAt pgtype.Timestamptz
 	UpdatedAt pgtype.Timestamptz
