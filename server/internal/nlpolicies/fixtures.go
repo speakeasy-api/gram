@@ -8,10 +8,13 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 )
 
+// Fixture UUIDs are real RFC4122 v4 UUIDs (version=4, variant=b) so the
+// goa-generated FormatUUID validators accept them. The pattern keeps a
+// memorable digit prefix per policy.
 var (
-	fixturePolicy1ID = uuid.MustParse("11111111-1111-1111-1111-111111111111")
-	fixturePolicy2ID = uuid.MustParse("22222222-2222-2222-2222-222222222222")
-	fixturePolicy3ID = uuid.MustParse("33333333-3333-3333-3333-333333333333")
+	fixturePolicy1ID = uuid.MustParse("11111111-1111-4111-b111-111111111111")
+	fixturePolicy2ID = uuid.MustParse("22222222-2222-4222-b222-222222222222")
+	fixturePolicy3ID = uuid.MustParse("33333333-3333-4333-b333-333333333333")
 )
 
 // fixturePolicies is the canned policy list every org sees in PR 1.
@@ -131,7 +134,7 @@ func fixtureReplayRun() *types.NLPolicyReplayRun {
 	startedAt := now.Add(-5 * time.Minute).Format(time.RFC3339)
 	completedAt := now.Add(-5*time.Minute + 18*time.Second).Format(time.RFC3339)
 	return &types.NLPolicyReplayRun{
-		ID:              "00000000-0000-0000-0000-00000000a8f2",
+		ID:              "00000000-0000-4000-a000-00000000a8f2",
 		NlPolicyID:      fixturePolicy1ID.String(),
 		NlPolicyVersion: 1,
 		Status:          "completed",

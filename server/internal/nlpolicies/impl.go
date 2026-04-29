@@ -182,7 +182,7 @@ func (s *Service) ListReplayResults(_ context.Context, _ *gen.ListReplayResultsP
 		}
 		results = append(results, &types.NLPolicyReplayResult{
 			ID:          uuid.New().String(),
-			ReplayRunID: "00000000-0000-0000-0000-00000000a8f2",
+			ReplayRunID: "00000000-0000-4000-a000-00000000a8f2",
 			Decision:    decision,
 			CreatedAt:   now,
 		})
