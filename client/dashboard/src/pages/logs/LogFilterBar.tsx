@@ -1,4 +1,5 @@
 import { QuerySamplesPopover } from "@/components/QuerySamplesPopover";
+import { Button } from "@/components/ui/button";
 import {
   CommandEmpty,
   CommandGroup,
@@ -9,7 +10,15 @@ import {
   Popover,
   PopoverAnchor,
   PopoverContent,
+  PopoverTrigger,
 } from "@/components/ui/popover";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { Operator as Op } from "@gram/client/models/components/logfilter";
 import { Command as CmdkRoot } from "cmdk";
@@ -19,6 +28,7 @@ import {
   type ActiveLogFilter,
   OP_LABELS,
   applyFilterAdd,
+  applyFilterEdit,
   parseOperatorSymbol,
   tryParseFilterExpression,
 } from "./log-filter-types";
@@ -131,9 +141,19 @@ export function LogFilterBar({
     [filters, onChange, onSearchInputChange, resetFlow],
   );
 
-  const removeFilter = (id: string) => {
-    onChange(filters.filter((f) => f.id !== id));
-  };
+  const removeFilter = useCallback(
+    (id: string) => {
+      onChange(filters.filter((f) => f.id !== id));
+    },
+    [filters, onChange],
+  );
+
+  const editFilter = useCallback(
+    (id: string, op: Op, value?: string) => {
+      onChange(applyFilterEdit(filters, id, { op, value }));
+    },
+    [filters, onChange],
+  );
 
   const clearAll = () => {
     onChange([]);
@@ -285,17 +305,12 @@ export function LogFilterBar({
           >
             <Search className="text-muted-foreground size-4 shrink-0" />
             {filters.map((filter) => (
-              <button
+              <EditableFilterChip
                 key={filter.id}
-                onClick={() => removeFilter(filter.id)}
-                className="border-border bg-accent text-accent-foreground hover:bg-accent/80 group inline-flex shrink-0 items-center gap-1 rounded-md border px-2 py-0.5 font-mono text-xs transition-colors"
-              >
-                <span>
-                  {filter.path} {OP_LABELS[filter.op]}
-                  {filter.value !== undefined ? ` ${filter.value}` : ""}
-                </span>
-                <X className="text-muted-foreground group-hover:text-foreground size-3" />
-              </button>
+                filter={filter}
+                onEdit={editFilter}
+                onRemove={removeFilter}
+              />
             ))}
             {step === "operator" && (
               <span className="border-ring bg-accent text-accent-foreground inline-flex shrink-0 items-center gap-1 rounded-md border px-2 py-0.5 font-mono text-xs">
@@ -456,5 +471,144 @@ export function LogFilterBar({
         </PopoverContent>
       </Popover>
     </CmdkRoot>
+  );
+}
+
+interface EditableFilterChipProps {
+  filter: ActiveLogFilter;
+  onEdit: (id: string, op: Op, value?: string) => void;
+  onRemove: (id: string) => void;
+}
+
+function EditableFilterChip({
+  filter,
+  onEdit,
+  onRemove,
+}: EditableFilterChipProps) {
+  const [open, setOpen] = useState(false);
+  const [op, setOp] = useState<Op>(filter.op);
+  const [value, setValue] = useState(filter.value ?? "");
+
+  useEffect(() => {
+    if (open) {
+      setOp(filter.op);
+      setValue(filter.value ?? "");
+    }
+  }, [open, filter.op, filter.value]);
+
+  const save = () => {
+    const trimmed = value.trim();
+    if (!trimmed) return;
+    onEdit(filter.id, op, trimmed);
+    setOpen(false);
+  };
+
+  const valuePlaceholder = op === Op.In ? "value1, value2, ..." : "value";
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <span className="border-border bg-accent text-accent-foreground inline-flex shrink-0 items-center rounded-md border font-mono text-xs">
+        <PopoverTrigger asChild>
+          <button
+            type="button"
+            aria-label={`Edit filter ${filter.path}`}
+            className="hover:bg-accent/60 cursor-pointer rounded-l-md py-0.5 pr-1 pl-2 transition-colors"
+          >
+            {filter.path} {OP_LABELS[filter.op]}
+            {filter.value !== undefined ? ` ${filter.value}` : ""}
+          </button>
+        </PopoverTrigger>
+        <button
+          type="button"
+          aria-label={`Remove filter ${filter.path}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            onRemove(filter.id);
+          }}
+          className="text-muted-foreground hover:text-foreground hover:bg-accent/60 rounded-r-md px-1.5 py-0.5 transition-colors"
+        >
+          <X className="size-3" />
+        </button>
+      </span>
+      <PopoverContent
+        align="start"
+        className="w-[320px] p-3"
+        onOpenAutoFocus={(e) => e.preventDefault()}
+      >
+        <div
+          className="text-muted-foreground mb-2 font-mono text-xs break-all"
+          title={filter.path}
+        >
+          {filter.path}
+        </div>
+        <div className="mb-3 flex gap-2">
+          <Select value={op} onValueChange={(v) => setOp(v as Op)}>
+            <SelectTrigger className="!h-8 w-[120px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {OP_OPTIONS.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  <span className="font-mono text-xs">
+                    {OP_LABELS[option.value]}
+                  </span>
+                  <span className="text-muted-foreground ml-2 text-xs">
+                    {option.label}
+                  </span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <input
+            type="text"
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                save();
+              } else if (e.key === "Escape") {
+                e.preventDefault();
+                setOpen(false);
+              }
+            }}
+            placeholder={valuePlaceholder}
+            className="border-border focus-visible:border-ring focus-visible:ring-ring/50 h-8 min-w-0 flex-1 rounded-md border bg-transparent px-2 font-mono text-xs outline-none focus-visible:ring-[3px]"
+            autoFocus
+          />
+        </div>
+        <div className="flex items-center justify-between">
+          <Button
+            type="button"
+            variant="destructiveGhost"
+            size="sm"
+            onClick={() => {
+              onRemove(filter.id);
+              setOpen(false);
+            }}
+          >
+            Remove
+          </Button>
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              onClick={save}
+              disabled={!value.trim()}
+            >
+              Save
+            </Button>
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
