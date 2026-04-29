@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   effectiveGrantCount,
-  grantKeysString,
+  grantsFingerprint,
   hasFormChanges,
   isSaveDisabled,
   membersHaveChanged,
@@ -15,6 +15,11 @@ function grant(scope: Scope, selectors: Selector[] | null = null): RoleGrant {
   return { scope, selectors };
 }
 
+const defaultGrants: Record<string, RoleGrant> = {
+  "project:read": grant("project:read"),
+  "project:write": grant("project:write"),
+};
+
 function makeInput(overrides: Partial<SaveButtonInput> = {}): SaveButtonInput {
   return {
     isMutating: false,
@@ -22,15 +27,12 @@ function makeInput(overrides: Partial<SaveButtonInput> = {}): SaveButtonInput {
     isSystemRole: false,
     name: "Engineer",
     description: "Can build things",
-    grants: {
-      "project:read": grant("project:read"),
-      "project:write": grant("project:write"),
-    },
+    grants: defaultGrants,
     selectedMembers: new Set(["m1", "m2"]),
     initial: {
       name: "Engineer",
       description: "Can build things",
-      grantKeys: "project:read,project:write",
+      grantsFingerprint: grantsFingerprint(defaultGrants),
       members: new Set(["m1", "m2"]),
     },
     ...overrides,
@@ -93,20 +95,41 @@ describe("membersHaveChanged", () => {
   });
 });
 
-// --- grantKeysString ---
+// --- grantsFingerprint ---
 
-describe("grantKeysString", () => {
-  it("sorts keys and joins", () => {
-    expect(
-      grantKeysString({
-        "mcp:write": grant("mcp:write"),
-        "project:read": grant("project:read"),
-      }),
-    ).toBe("mcp:write,project:read");
+describe("grantsFingerprint", () => {
+  it("sorts keys and includes selectors", () => {
+    const fp = grantsFingerprint({
+      "mcp:write": grant("mcp:write"),
+      "project:read": grant("project:read"),
+    });
+    expect(fp).toContain("mcp:write");
+    expect(fp).toContain("project:read");
+    // mcp:write should come before project:read (sorted)
+    expect(fp.indexOf("mcp:write")).toBeLessThan(fp.indexOf("project:read"));
   });
 
   it("empty grants → empty string", () => {
-    expect(grantKeysString({})).toBe("");
+    expect(grantsFingerprint({})).toBe("");
+  });
+
+  it("different selectors on same scope produce different fingerprints", () => {
+    const fpA = grantsFingerprint({
+      "mcp:connect": grant("mcp:connect", null),
+    });
+    const fpB = grantsFingerprint({
+      "mcp:connect": grant("mcp:connect", [
+        { resourceKind: "mcp", resourceId: "srv-1" },
+      ]),
+    });
+    expect(fpA).not.toBe(fpB);
+  });
+
+  it("same scope and selectors produce identical fingerprints", () => {
+    const sel: Selector[] = [{ resourceKind: "mcp", resourceId: "srv-1" }];
+    const fpA = grantsFingerprint({ "mcp:connect": grant("mcp:connect", sel) });
+    const fpB = grantsFingerprint({ "mcp:connect": grant("mcp:connect", sel) });
+    expect(fpA).toBe(fpB);
   });
 });
 
@@ -135,6 +158,21 @@ describe("hasFormChanges", () => {
             "project:read": grant("project:read"),
             "project:write": grant("project:write"),
             "mcp:read": grant("mcp:read"),
+          },
+        }),
+      ),
+    ).toBe(true);
+  });
+
+  it("selector changed on existing grant → true", () => {
+    expect(
+      hasFormChanges(
+        makeInput({
+          grants: {
+            "project:read": grant("project:read", [
+              { resourceKind: "mcp", resourceId: "srv-1" },
+            ]),
+            "project:write": grant("project:write"),
           },
         }),
       ),
@@ -220,6 +258,21 @@ describe("isSaveDisabled", () => {
       ).toBe(false);
     });
 
+    it("selector changed on existing grant → enabled", () => {
+      expect(
+        isSaveDisabled(
+          makeInput({
+            grants: {
+              "project:read": grant("project:read", [
+                { resourceKind: "mcp", resourceId: "srv-1" },
+              ]),
+              "project:write": grant("project:write"),
+            },
+          }),
+        ),
+      ).toBe(false);
+    });
+
     it("member added → enabled", () => {
       expect(
         isSaveDisabled(
@@ -242,7 +295,7 @@ describe("isSaveDisabled", () => {
       ).toBe(false);
     });
 
-    it("member added on role with zero grants → enabled (role already exists)", () => {
+    it("member added on role with zero grants → enabled (member-only change)", () => {
       expect(
         isSaveDisabled(
           makeInput({
@@ -251,7 +304,7 @@ describe("isSaveDisabled", () => {
             initial: {
               name: "Engineer",
               description: "Can build things",
-              grantKeys: "",
+              grantsFingerprint: "",
               members: new Set(["m1", "m2"]),
             },
           }),
@@ -259,15 +312,12 @@ describe("isSaveDisabled", () => {
       ).toBe(false);
     });
 
-    it("grants removed to zero AND member changed → enabled (backend validates)", () => {
-      expect(
-        isSaveDisabled(
-          makeInput({
-            grants: {},
-            selectedMembers: new Set(["m1", "m2", "m3"]),
-          }),
-        ),
-      ).toBe(false);
+    it("name blanked out → disabled (form invalid)", () => {
+      expect(isSaveDisabled(makeInput({ name: "" }))).toBe(true);
+    });
+
+    it("grants removed to zero → disabled (form invalid)", () => {
+      expect(isSaveDisabled(makeInput({ grants: {} }))).toBe(true);
     });
 
     it("mutating → disabled even with changes", () => {

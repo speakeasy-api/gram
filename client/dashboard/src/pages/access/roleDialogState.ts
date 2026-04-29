@@ -16,7 +16,7 @@ export interface SaveButtonInput {
   initial: {
     name: string;
     description: string;
-    grantKeys: string;
+    grantsFingerprint: string;
     members: Set<string>;
   };
 }
@@ -40,9 +40,15 @@ export function membersHaveChanged(
   return false;
 }
 
-/** Sorted, comma-joined grant keys for cheap equality check */
-export function grantKeysString(grants: Record<string, RoleGrant>): string {
-  return Object.keys(grants).sort().join(",");
+/** Stable fingerprint of grants including selectors for dirty-checking */
+export function grantsFingerprint(grants: Record<string, RoleGrant>): string {
+  const entries = Object.keys(grants)
+    .sort()
+    .map((key) => {
+      const g = grants[key];
+      return `${key}:${JSON.stringify(g.selectors)}`;
+    });
+  return entries.join("|");
 }
 
 /** Whether any field has changed from the initial state */
@@ -52,7 +58,7 @@ export function hasFormChanges(input: SaveButtonInput): boolean {
     membersHaveChanged(input.selectedMembers, input.initial.members) ||
     input.name !== input.initial.name ||
     input.description !== input.initial.description ||
-    grantKeysString(input.grants) !== input.initial.grantKeys
+    grantsFingerprint(input.grants) !== input.initial.grantsFingerprint
   );
 }
 
@@ -71,7 +77,7 @@ export function hasNonMemberChanges(input: SaveButtonInput): boolean {
   return (
     input.name !== input.initial.name ||
     input.description !== input.initial.description ||
-    grantKeysString(input.grants) !== input.initial.grantKeys
+    grantsFingerprint(input.grants) !== input.initial.grantsFingerprint
   );
 }
 
@@ -80,7 +86,9 @@ export function isSaveDisabled(input: SaveButtonInput): boolean {
   if (input.isMutating) return true;
   // Create mode: full form validation always applies
   if (!input.isEditing) return !isFormValid(input);
-  // Edit mode: just require something to have changed.
-  // The role already exists and was valid — backend validates on submit.
-  return !hasFormChanges(input);
+  // Edit mode: require something changed AND form stays valid.
+  // Member-only changes skip form validation (role already exists with its current fields).
+  if (!hasFormChanges(input)) return true;
+  if (hasNonMemberChanges(input) && !isFormValid(input)) return true;
+  return false;
 }
