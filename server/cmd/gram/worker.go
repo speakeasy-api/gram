@@ -556,7 +556,7 @@ func newWorkerCommand() *cli.Command {
 
 			var piiScanner risk_analysis.PIIScanner = &risk_analysis.StubPIIScanner{}
 			if presidioURL := c.String("presidio-analyzer-url"); presidioURL != "" {
-				piiScanner = risk_analysis.NewPresidioClient(presidioURL, tracerProvider, meterProvider, guardianPolicy, logger)
+				piiScanner = risk_analysis.NewPresidioClient(presidioURL, tracerProvider, meterProvider, logger)
 				logger.InfoContext(ctx, "presidio PII scanner enabled", attr.SlogURL(presidioURL))
 			}
 
