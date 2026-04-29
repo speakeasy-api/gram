@@ -1039,17 +1039,19 @@ type chatMessageRow struct {
 	messageID      string
 	toolCallID     string
 
-	role             string
-	model            string
-	content          or.ChatMessages
-	finishReason     *string
-	toolCalls        []string
+	role         string
+	model        string
+	content      or.ChatMessages
+	finishReason *string
+	// toolCalls is the replay JSONB blob written to chat_messages.tool_calls.
+	// The content hash is computed from a typed projection instead of these raw
+	// bytes so equivalent tool calls can arrive through different wire shapes.
+	toolCalls        []byte
 	promptTokens     int64
 	completionTokens int64
 	totalTokens      int64
 
-	contentHash []byte
-	generation  int32
+	generation int32
 
 	metadata httpMetadata
 }
@@ -1151,12 +1153,6 @@ func storeMessages(ctx context.Context, logger *slog.Logger, tx repo.DBTX, asset
 			contentRaw = res.jsonData
 		}
 
-		// Marshal tool calls to JSON if present.
-		var toolCallsJSON []byte
-		if len(row.toolCalls) > 0 {
-			toolCallsJSON, _ = json.Marshal(row.toolCalls)
-		}
-
 		dbrows[i] = repo.CreateChatMessageParams{
 			ChatID:           row.chatID,
 			ProjectID:        row.projectID,
@@ -1171,7 +1167,7 @@ func storeMessages(ctx context.Context, logger *slog.Logger, tx repo.DBTX, asset
 			UserID:           conv.ToPGText(row.userID),
 			ExternalUserID:   conv.ToPGText(row.externalUserID),
 			FinishReason:     conv.PtrToPGText(row.finishReason),
-			ToolCalls:        toolCallsJSON,
+			ToolCalls:        row.toolCalls,
 			PromptTokens:     row.promptTokens,
 			CompletionTokens: row.completionTokens,
 			TotalTokens:      row.totalTokens,
@@ -1179,7 +1175,7 @@ func storeMessages(ctx context.Context, logger *slog.Logger, tx repo.DBTX, asset
 			UserAgent:        conv.ToPGText(row.metadata.UserAgent),
 			IpAddress:        conv.ToPGText(row.metadata.IPAddress),
 			Source:           conv.ToPGText(row.metadata.Source),
-			ContentHash:      row.contentHash,
+			ContentHash:      nil,
 			Generation:       row.generation,
 		}
 	}

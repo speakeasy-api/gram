@@ -30,6 +30,14 @@ export type TraceSummary = ToolCallSummary & {
 };
 
 function getGroupKey(log: TelemetryLogRecord): string | undefined {
+  const correlationId = getNestedAttr(
+    log.attributes,
+    "gram.trigger.correlation_id",
+  );
+  if (typeof correlationId === "string" && correlationId.length > 0) {
+    return `corr:${correlationId}`;
+  }
+
   const eventSource = getNestedAttr(log.attributes, "gram.event.source");
   if (typeof eventSource === "string" && eventSource === "trigger") {
     const triggerEventId = getNestedAttr(
@@ -74,8 +82,19 @@ export function logsToTraceSummaries(
     let httpStatusCode: number | undefined;
     let eventSource: string | undefined;
     let triggerEventId: string | undefined;
+    let triggerLog: TelemetryLogRecord | undefined;
+    let triggerLogTime: bigint | undefined;
 
     for (const log of group.logs) {
+      const src = getNestedAttr(log.attributes, "gram.event.source");
+      if (typeof src === "string" && src === "trigger") {
+        const ts = BigInt(log.timeUnixNano);
+        if (triggerLogTime === undefined || ts < triggerLogTime) {
+          triggerLog = log;
+          triggerLogTime = ts;
+        }
+      }
+
       if (!gramUrn) {
         const urn = getNestedAttr(log.attributes, "gram.tool.urn");
         if (typeof urn === "string") gramUrn = urn;
@@ -85,22 +104,20 @@ export function logsToTraceSummaries(
         if (typeof code === "number") httpStatusCode = code;
       }
       if (!eventSource) {
-        const src = getNestedAttr(log.attributes, "gram.event.source");
         if (typeof src === "string") eventSource = src;
       }
       if (!triggerEventId) {
         const eventId = getNestedAttr(log.attributes, "gram.trigger.event_id");
         if (typeof eventId === "string") triggerEventId = eventId;
       }
-      if (
-        gramUrn &&
-        httpStatusCode !== undefined &&
-        eventSource &&
-        (eventSource !== "trigger" || triggerEventId)
-      ) {
-        break;
-      }
     }
+
+    // Prefer the trigger row as the group header when a correlated trigger
+    // exists: a correlation-id group may also contain assistant-execution
+    // rows, and the user expects the originating trigger to represent the
+    // group.
+    const headerSource = triggerLog ? "trigger" : eventSource;
+    const headerLog = triggerLog ?? group.logs[0];
 
     summaries.push({
       traceId,
@@ -108,9 +125,9 @@ export function logsToTraceSummaries(
       startTimeUnixNano: group.minTime,
       logCount: group.logs.length,
       ...(httpStatusCode !== undefined ? { httpStatusCode } : {}),
-      ...(eventSource ? { eventSource } : {}),
+      ...(headerSource ? { eventSource: headerSource } : {}),
       ...(triggerEventId ? { triggerEventId } : {}),
-      ...(eventSource === "trigger" ? { log: group.logs[0] } : {}),
+      ...(headerSource === "trigger" ? { log: headerLog } : {}),
     });
   }
 

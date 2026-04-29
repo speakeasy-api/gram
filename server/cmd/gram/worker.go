@@ -16,6 +16,7 @@ import (
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 
+	"github.com/speakeasy-api/gram/server/internal/assistants"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
@@ -277,6 +278,7 @@ func newWorkerCommand() *cli.Command {
 	flags = append(flags, clickHouseFlags...)
 	flags = append(flags, functionsFlags...)
 	flags = append(flags, pulseMCPFlags...)
+	flags = append(flags, assistantRuntimeFlags...)
 
 	return &cli.Command{
 		Name:  "worker",
@@ -550,6 +552,14 @@ func newWorkerCommand() *cli.Command {
 				mcpclient.NewInternalMCPClient(mcpService),
 			)
 
+			assistantRuntime, err := newAssistantRuntime(ctx, logger, c, guardianPolicy, db, serverURL)
+			if err != nil {
+				return err
+			}
+			assistantsCore := assistants.NewServiceCore(logger, db, assistantRuntime, slackClient, assistantTokenManager, serverURL, telemetryLogger)
+			assistantsSvc := assistants.NewService(logger, tracerProvider, db, sessionManager, authzEngine, assistantsCore, &background.AssistantWorkflowSignaler{TemporalEnv: temporalEnv})
+			triggerApp.RegisterDispatcher(assistantsSvc)
+
 			/**
 			 * END -- Agent client
 			 */
@@ -582,6 +592,8 @@ func newWorkerCommand() *cli.Command {
 				TelemetryLogger:     telemetryLogger,
 				TriggersApp:         triggerApp,
 				CacheAdapter:        cache.NewRedisCacheAdapter(redisClient),
+				AssistantsCore:      assistantsCore,
+				TemporalEnv:         temporalEnv,
 				PIIScanner:          piiScanner,
 			})
 

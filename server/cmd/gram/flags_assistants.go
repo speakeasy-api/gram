@@ -7,6 +7,7 @@ import (
 	"net/url"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/superfly/fly-go/tokens"
 	"github.com/urfave/cli/v2"
 
 	"github.com/speakeasy-api/gram/server/internal/assistants"
@@ -114,13 +115,33 @@ var assistantRuntimeFlags = []cli.Flag{
 		EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_NETWORK_BASE_CIDR"},
 	},
 	&cli.StringFlag{
+		Name:    "assistant-runtime-flyio-api-token",
+		Usage:   "An organization-scoped API token to use when provisioning assistant runtimes on fly.io.",
+		EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_FLYIO_API_TOKEN"},
+	},
+	&cli.StringFlag{
+		Name:    "assistant-runtime-flyio-org",
+		Usage:   "The default fly.io organization to deploy assistant runtimes to.",
+		EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_FLYIO_ORG"},
+	},
+	&cli.StringFlag{
+		Name:    "assistant-runtime-flyio-region",
+		Usage:   "The default fly.io region to deploy assistant runtimes to.",
+		EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_FLYIO_REGION"},
+	},
+	&cli.StringFlag{
+		Name:    "assistant-runtime-flyio-app-name-prefix",
+		Usage:   "Prefix for fly.io assistant runtime app names.",
+		EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_FLYIO_APP_NAME_PREFIX"},
+	},
+	&cli.StringFlag{
 		Name:    "assistant-runtime-oci-image",
-		Usage:   "Reserved for remote assistant runtimes.",
+		Usage:   "The OCI image repository for the assistant runtime image. It must not include a tag.",
 		EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_OCI_IMAGE"},
 	},
 	&cli.StringFlag{
 		Name:    "assistant-runtime-image-version",
-		Usage:   "Reserved for remote assistant runtimes.",
+		Usage:   "The assistant runtime image tag/version to run on fly.io.",
 		EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_IMAGE_VERSION"},
 	},
 }
@@ -166,14 +187,14 @@ func assistantRuntimeConfigFromCLI(c *cli.Context) (assistants.RuntimeBackendCon
 		Fly: assistants.FlyRuntimeConfig{
 			ServiceName:        "gram",
 			ServiceVersion:     GitSHA,
-			FlyTokens:          nil,
+			FlyTokens:          tokens.Parse(c.String("assistant-runtime-flyio-api-token")),
 			FlyAPIURL:          "",
 			FlyMachinesBaseURL: "",
-			DefaultFlyOrg:      "",
-			DefaultFlyRegion:   "",
+			DefaultFlyOrg:      c.String("assistant-runtime-flyio-org"),
+			DefaultFlyRegion:   c.String("assistant-runtime-flyio-region"),
 			OCIImage:           c.String("assistant-runtime-oci-image"),
 			ImageVersion:       c.String("assistant-runtime-image-version"),
-			AppNamePrefix:      "",
+			AppNamePrefix:      c.String("assistant-runtime-flyio-app-name-prefix"),
 			ServerURLOverride:  override,
 		},
 	}, nil
@@ -199,6 +220,11 @@ func newAssistantRuntime(
 	}
 	if cfg.Provider == assistants.RuntimeProviderLocal {
 		cfg.Local.OnUnexpectedExit = assistants.NewUnexpectedRuntimeExitHandler(logger, db)
+	}
+	if cfg.Provider == assistants.RuntimeProviderFlyIO {
+		if err := cfg.Fly.Validate(); err != nil {
+			return nil, fmt.Errorf("invalid fly assistant runtime config: %w", err)
+		}
 	}
 	rb := assistants.NewRuntimeBackend(logger, guardianPolicy, cfg)
 	if err := assistants.ValidateRuntimeBackendServerURL(ctx, rb, serverURL); err != nil {

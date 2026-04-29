@@ -53,7 +53,8 @@ func TestServiceCoreAdmitPendingThreadsUsesFlyBackend(t *testing.T) {
 
 	admitted, err := core.AdmitPendingThreads(t.Context(), assistantID)
 	require.NoError(t, err)
-	require.Equal(t, []uuid.UUID{threadID}, admitted)
+	require.Equal(t, []uuid.UUID{threadID}, admitted.ThreadIDs)
+	require.Equal(t, projectID, admitted.ProjectID)
 
 	var backend string
 	err = conn.QueryRow(t.Context(), `
@@ -358,7 +359,8 @@ func TestServiceCoreProcessThreadEventsCompletesEvent(t *testing.T) {
 
 	admitted, err := core.AdmitPendingThreads(t.Context(), assistantID)
 	require.NoError(t, err)
-	require.Equal(t, []uuid.UUID{threadID}, admitted)
+	require.Equal(t, []uuid.UUID{threadID}, admitted.ThreadIDs)
+	require.Equal(t, projectID, admitted.ProjectID)
 
 	result, err := core.ProcessThreadEvents(t.Context(), projectID, threadID)
 	require.NoError(t, err)
@@ -405,7 +407,8 @@ func TestServiceCoreProcessThreadEventsRequeuesOnTurnFailure(t *testing.T) {
 
 	admitted, err := core.AdmitPendingThreads(t.Context(), assistantID)
 	require.NoError(t, err)
-	require.Equal(t, []uuid.UUID{threadID}, admitted)
+	require.Equal(t, []uuid.UUID{threadID}, admitted.ThreadIDs)
+	require.Equal(t, projectID, admitted.ProjectID)
 
 	result, err := core.ProcessThreadEvents(t.Context(), projectID, threadID)
 	require.NoError(t, err)

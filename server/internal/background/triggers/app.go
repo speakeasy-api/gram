@@ -565,7 +565,7 @@ func (a *App) validateInstance(ctx context.Context, projectID uuid.UUID, environ
 	}
 	env := toolconfig.CIEnvFrom(envMap)
 	for _, requirement := range definition.EnvRequirements {
-		if requirement.Required && env.Get(requirement.Name) == "" {
+		if requirement.Required && !env.Has(requirement.Name) {
 			return Definition{}, nil, fmt.Errorf("missing required environment variable %q", requirement.Name)
 		}
 	}

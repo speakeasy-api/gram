@@ -4,6 +4,9 @@ import React, { useMemo } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
 import { useSlugs } from "./contexts/Sdk";
 import { cn } from "./lib/utils";
+import AssistantPage from "./pages/assistants/Assistant";
+import AssistantsIndex, { AssistantsRoot } from "./pages/assistants/Assistants";
+import NewAssistantPage from "./pages/assistants/NewAssistant";
 import Billing from "./pages/billing/Billing";
 import Catalog, { CatalogRoot } from "./pages/catalog/Catalog";
 import CatalogDetail, {
@@ -260,15 +263,34 @@ const ROUTE_STRUCTURE = {
       },
     },
   },
-  slackApps: {
+  assistants: {
     title: "Assistants",
+    url: "assistants",
+    icon: "bot",
+    component: AssistantsRoot,
+    indexComponent: AssistantsIndex,
+    subPages: {
+      newAssistant: {
+        title: "New Assistant",
+        url: "new",
+        component: NewAssistantPage,
+      },
+      detail: {
+        title: "Assistant",
+        url: ":assistantId",
+        component: AssistantPage,
+      },
+    },
+  },
+  slackApps: {
+    title: "Slack Apps",
     url: "slack",
     icon: "bot",
     component: SlackAppsRoot,
     indexComponent: SlackAppsIndex,
     subPages: {
       detail: {
-        title: "Assistant",
+        title: "Slack App",
         url: ":slackAppId",
         component: SlackAppDetailPage,
       },
