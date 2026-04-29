@@ -273,14 +273,6 @@ run();
 * [revokeById](docs/sdks/keys/README.md#revokebyid) - revokeKey keys
 * [validate](docs/sdks/keys/README.md#validate) - verifyKey keys
 
-### [McpEndpoints](docs/sdks/mcpendpoints/README.md)
-
-* [create](docs/sdks/mcpendpoints/README.md#create) - createMcpEndpoint mcpEndpoints
-* [delete](docs/sdks/mcpendpoints/README.md#delete) - deleteMcpEndpoint mcpEndpoints
-* [get](docs/sdks/mcpendpoints/README.md#get) - getMcpEndpoint mcpEndpoints
-* [list](docs/sdks/mcpendpoints/README.md#list) - listMcpEndpoints mcpEndpoints
-* [update](docs/sdks/mcpendpoints/README.md#update) - updateMcpEndpoint mcpEndpoints
-
 ### [McpMetadata](docs/sdks/mcpmetadata/README.md)
 
 * [export](docs/sdks/mcpmetadata/README.md#export) - exportMcpMetadata mcpMetadata
@@ -294,13 +286,20 @@ run();
 * [listCatalog](docs/sdks/mcpregistries/README.md#listcatalog) - listCatalog mcpRegistries
 * [listRegistries](docs/sdks/mcpregistries/README.md#listregistries) - listRegistries mcpRegistries
 
-### [McpServers](docs/sdks/mcpservers/README.md)
+### [Nlpolicies](docs/sdks/nlpolicies/README.md)
 
-* [create](docs/sdks/mcpservers/README.md#create) - createMcpServer mcpServers
-* [delete](docs/sdks/mcpservers/README.md#delete) - deleteMcpServer mcpServers
-* [get](docs/sdks/mcpservers/README.md#get) - getMcpServer mcpServers
-* [list](docs/sdks/mcpservers/README.md#list) - listMcpServers mcpServers
-* [update](docs/sdks/mcpservers/README.md#update) - updateMcpServer mcpServers
+* [clearSessionVerdict](docs/sdks/nlpolicies/README.md#clearsessionverdict) - clearSessionVerdict nlpolicies
+* [create](docs/sdks/nlpolicies/README.md#create) - createPolicy nlpolicies
+* [delete](docs/sdks/nlpolicies/README.md#delete) - deletePolicy nlpolicies
+* [get](docs/sdks/nlpolicies/README.md#get) - getPolicy nlpolicies
+* [getReplayRun](docs/sdks/nlpolicies/README.md#getreplayrun) - getReplayRun nlpolicies
+* [list](docs/sdks/nlpolicies/README.md#list) - listPolicies nlpolicies
+* [listDecisions](docs/sdks/nlpolicies/README.md#listdecisions) - listDecisions nlpolicies
+* [listReplayResults](docs/sdks/nlpolicies/README.md#listreplayresults) - listReplayResults nlpolicies
+* [listSessionVerdicts](docs/sdks/nlpolicies/README.md#listsessionverdicts) - listSessionVerdicts nlpolicies
+* [replay](docs/sdks/nlpolicies/README.md#replay) - replay nlpolicies
+* [setMode](docs/sdks/nlpolicies/README.md#setmode) - setMode nlpolicies
+* [update](docs/sdks/nlpolicies/README.md#update) - updatePolicy nlpolicies
 
 ### [Organizations](docs/sdks/organizations/README.md)
 
@@ -324,7 +323,6 @@ run();
 * [addPluginServer](docs/sdks/plugins/README.md#addpluginserver) - addPluginServer plugins
 * [createPlugin](docs/sdks/plugins/README.md#createplugin) - createPlugin plugins
 * [deletePlugin](docs/sdks/plugins/README.md#deleteplugin) - deletePlugin plugins
-* [downloadObservabilityPlugin](docs/sdks/plugins/README.md#downloadobservabilityplugin) - downloadObservabilityPlugin plugins
 * [downloadPluginPackage](docs/sdks/plugins/README.md#downloadpluginpackage) - downloadPluginPackage plugins
 * [getPlugin](docs/sdks/plugins/README.md#getplugin) - getPlugin plugins
 * [getPublishStatus](docs/sdks/plugins/README.md#getpublishstatus) - getPublishStatus plugins
@@ -559,11 +557,6 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`keysList`](docs/sdks/keys/README.md#list) - listKeys keys
 - [`keysRevokeById`](docs/sdks/keys/README.md#revokebyid) - revokeKey keys
 - [`keysValidate`](docs/sdks/keys/README.md#validate) - verifyKey keys
-- [`mcpEndpointsCreate`](docs/sdks/mcpendpoints/README.md#create) - createMcpEndpoint mcpEndpoints
-- [`mcpEndpointsDelete`](docs/sdks/mcpendpoints/README.md#delete) - deleteMcpEndpoint mcpEndpoints
-- [`mcpEndpointsGet`](docs/sdks/mcpendpoints/README.md#get) - getMcpEndpoint mcpEndpoints
-- [`mcpEndpointsList`](docs/sdks/mcpendpoints/README.md#list) - listMcpEndpoints mcpEndpoints
-- [`mcpEndpointsUpdate`](docs/sdks/mcpendpoints/README.md#update) - updateMcpEndpoint mcpEndpoints
 - [`mcpMetadataExport`](docs/sdks/mcpmetadata/README.md#export) - exportMcpMetadata mcpMetadata
 - [`mcpMetadataGet`](docs/sdks/mcpmetadata/README.md#get) - getMcpMetadata mcpMetadata
 - [`mcpMetadataSet`](docs/sdks/mcpmetadata/README.md#set) - setMcpMetadata mcpMetadata
@@ -571,11 +564,18 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`mcpRegistriesGetServerDetails`](docs/sdks/mcpregistries/README.md#getserverdetails) - getServerDetails mcpRegistries
 - [`mcpRegistriesListCatalog`](docs/sdks/mcpregistries/README.md#listcatalog) - listCatalog mcpRegistries
 - [`mcpRegistriesListRegistries`](docs/sdks/mcpregistries/README.md#listregistries) - listRegistries mcpRegistries
-- [`mcpServersCreate`](docs/sdks/mcpservers/README.md#create) - createMcpServer mcpServers
-- [`mcpServersDelete`](docs/sdks/mcpservers/README.md#delete) - deleteMcpServer mcpServers
-- [`mcpServersGet`](docs/sdks/mcpservers/README.md#get) - getMcpServer mcpServers
-- [`mcpServersList`](docs/sdks/mcpservers/README.md#list) - listMcpServers mcpServers
-- [`mcpServersUpdate`](docs/sdks/mcpservers/README.md#update) - updateMcpServer mcpServers
+- [`nlpoliciesClearSessionVerdict`](docs/sdks/nlpolicies/README.md#clearsessionverdict) - clearSessionVerdict nlpolicies
+- [`nlpoliciesCreate`](docs/sdks/nlpolicies/README.md#create) - createPolicy nlpolicies
+- [`nlpoliciesDelete`](docs/sdks/nlpolicies/README.md#delete) - deletePolicy nlpolicies
+- [`nlpoliciesGet`](docs/sdks/nlpolicies/README.md#get) - getPolicy nlpolicies
+- [`nlpoliciesGetReplayRun`](docs/sdks/nlpolicies/README.md#getreplayrun) - getReplayRun nlpolicies
+- [`nlpoliciesList`](docs/sdks/nlpolicies/README.md#list) - listPolicies nlpolicies
+- [`nlpoliciesListDecisions`](docs/sdks/nlpolicies/README.md#listdecisions) - listDecisions nlpolicies
+- [`nlpoliciesListReplayResults`](docs/sdks/nlpolicies/README.md#listreplayresults) - listReplayResults nlpolicies
+- [`nlpoliciesListSessionVerdicts`](docs/sdks/nlpolicies/README.md#listsessionverdicts) - listSessionVerdicts nlpolicies
+- [`nlpoliciesReplay`](docs/sdks/nlpolicies/README.md#replay) - replay nlpolicies
+- [`nlpoliciesSetMode`](docs/sdks/nlpolicies/README.md#setmode) - setMode nlpolicies
+- [`nlpoliciesUpdate`](docs/sdks/nlpolicies/README.md#update) - updatePolicy nlpolicies
 - [`organizationsGetInviteByToken`](docs/sdks/organizations/README.md#getinvitebytoken) - getInviteByToken organizations
 - [`organizationsListInvites`](docs/sdks/organizations/README.md#listinvites) - listInvites organizations
 - [`organizationsListUsers`](docs/sdks/organizations/README.md#listusers) - listUsers organizations
@@ -590,7 +590,6 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`pluginsAddPluginServer`](docs/sdks/plugins/README.md#addpluginserver) - addPluginServer plugins
 - [`pluginsCreatePlugin`](docs/sdks/plugins/README.md#createplugin) - createPlugin plugins
 - [`pluginsDeletePlugin`](docs/sdks/plugins/README.md#deleteplugin) - deletePlugin plugins
-- [`pluginsDownloadObservabilityPlugin`](docs/sdks/plugins/README.md#downloadobservabilityplugin) - downloadObservabilityPlugin plugins
 - [`pluginsDownloadPluginPackage`](docs/sdks/plugins/README.md#downloadpluginpackage) - downloadPluginPackage plugins
 - [`pluginsGetPlugin`](docs/sdks/plugins/README.md#getplugin) - getPlugin plugins
 - [`pluginsGetPublishStatus`](docs/sdks/plugins/README.md#getpublishstatus) - getPublishStatus plugins
@@ -733,8 +732,6 @@ To learn about this feature and how to get started, check
 - [`useCreateCustomerSessionMutation`](docs/sdks/usage/README.md#createcustomersession) - createCustomerSession usage
 - [`useCreateDeploymentMutation`](docs/sdks/deployments/README.md#create) - createDeployment deployments
 - [`useCreateEnvironmentMutation`](docs/sdks/environments/README.md#create) - createEnvironment environments
-- [`useCreateMcpEndpointMutation`](docs/sdks/mcpendpoints/README.md#create) - createMcpEndpoint mcpEndpoints
-- [`useCreateMcpServerMutation`](docs/sdks/mcpservers/README.md#create) - createMcpServer mcpServers
 - [`useCreatePackageMutation`](docs/sdks/packages/README.md#create) - createPackage packages
 - [`useCreatePluginMutation`](docs/sdks/plugins/README.md#createplugin) - createPlugin plugins
 - [`useCreateProjectMutation`](docs/sdks/projects/README.md#create) - createProject projects
@@ -748,8 +745,6 @@ To learn about this feature and how to get started, check
 - [`useDeleteDomainMutation`](docs/sdks/domains/README.md#deletedomain) - deleteDomain domains
 - [`useDeleteEnvironmentMutation`](docs/sdks/environments/README.md#deletebyslug) - deleteEnvironment environments
 - [`useDeleteGlobalVariationMutation`](docs/sdks/variations/README.md#deleteglobal) - deleteGlobal variations
-- [`useDeleteMcpEndpointMutation`](docs/sdks/mcpendpoints/README.md#delete) - deleteMcpEndpoint mcpEndpoints
-- [`useDeleteMcpServerMutation`](docs/sdks/mcpservers/README.md#delete) - deleteMcpServer mcpServers
 - [`useDeletePluginMutation`](docs/sdks/plugins/README.md#deleteplugin) - deletePlugin plugins
 - [`useDeleteProjectMutation`](docs/sdks/projects/README.md#deletebyid) - deleteProject projects
 - [`useDeleteRemoteMcpServerMutation`](docs/sdks/remotemcp/README.md#deleteserver) - deleteServer remoteMcp
@@ -773,9 +768,7 @@ To learn about this feature and how to get started, check
 - [`useGetDomain`](docs/sdks/domains/README.md#getdomain) - getDomain domains
 - [`useGetHooksSummary`](docs/sdks/telemetry/README.md#gethookssummary) - getHooksSummary telemetry
 - [`useGetInviteByToken`](docs/sdks/organizations/README.md#getinvitebytoken) - getInviteByToken organizations
-- [`useGetMcpEndpoint`](docs/sdks/mcpendpoints/README.md#get) - getMcpEndpoint mcpEndpoints
 - [`useGetMcpMetadata`](docs/sdks/mcpmetadata/README.md#get) - getMcpMetadata mcpMetadata
-- [`useGetMcpServer`](docs/sdks/mcpservers/README.md#get) - getMcpServer mcpServers
 - [`useGetObservabilityOverview`](docs/sdks/telemetry/README.md#getobservabilityoverview) - getObservabilityOverview telemetry
 - [`useGetPeriodUsage`](docs/sdks/usage/README.md#getperiodusage) - getPeriodUsage usage
 - [`useGetProjectMetricsSummary`](docs/sdks/telemetry/README.md#getprojectmetricssummary) - getProjectMetricsSummary telemetry
@@ -825,16 +818,25 @@ To learn about this feature and how to get started, check
 - [`useListVersions`](docs/sdks/packages/README.md#listversions) - listVersions packages
 - [`useLoadChat`](docs/sdks/chat/README.md#load) - loadChat chat
 - [`useLogoutMutation`](docs/sdks/auth/README.md#logout) - logout auth
-- [`useMcpEndpoints`](docs/sdks/mcpendpoints/README.md#list) - listMcpEndpoints mcpEndpoints
 - [`useMcpMetadataSetMutation`](docs/sdks/mcpmetadata/README.md#set) - setMcpMetadata mcpMetadata
 - [`useMcpRegistriesClearCacheMutation`](docs/sdks/mcpregistries/README.md#clearcache) - clearCache mcpRegistries
 - [`useMcpRegistriesGetServerDetails`](docs/sdks/mcpregistries/README.md#getserverdetails) - getServerDetails mcpRegistries
-- [`useMcpServers`](docs/sdks/mcpservers/README.md#list) - listMcpServers mcpServers
 - [`useMembers`](docs/sdks/access/README.md#listmembers) - listMembers access
+- [`useNlPoliciesClearSessionVerdictMutation`](docs/sdks/nlpolicies/README.md#clearsessionverdict) - clearSessionVerdict nlpolicies
+- [`useNlPoliciesCreateMutation`](docs/sdks/nlpolicies/README.md#create) - createPolicy nlpolicies
+- [`useNlPoliciesDeleteMutation`](docs/sdks/nlpolicies/README.md#delete) - deletePolicy nlpolicies
+- [`useNlPoliciesGet`](docs/sdks/nlpolicies/README.md#get) - getPolicy nlpolicies
+- [`useNlPoliciesGetReplayRun`](docs/sdks/nlpolicies/README.md#getreplayrun) - getReplayRun nlpolicies
+- [`useNlPoliciesList`](docs/sdks/nlpolicies/README.md#list) - listPolicies nlpolicies
+- [`useNlPoliciesListDecisions`](docs/sdks/nlpolicies/README.md#listdecisions) - listDecisions nlpolicies
+- [`useNlPoliciesListReplayResults`](docs/sdks/nlpolicies/README.md#listreplayresults) - listReplayResults nlpolicies
+- [`useNlPoliciesListSessionVerdicts`](docs/sdks/nlpolicies/README.md#listsessionverdicts) - listSessionVerdicts nlpolicies
+- [`useNlPoliciesReplayMutation`](docs/sdks/nlpolicies/README.md#replay) - replay nlpolicies
+- [`useNlPoliciesSetModeMutation`](docs/sdks/nlpolicies/README.md#setmode) - setMode nlpolicies
+- [`useNlPoliciesUpdateMutation`](docs/sdks/nlpolicies/README.md#update) - updatePolicy nlpolicies
 - [`usePauseTriggerMutation`](docs/sdks/triggers/README.md#pause) - pauseTriggerInstance triggers
 - [`usePlugin`](docs/sdks/plugins/README.md#getplugin) - getPlugin plugins
 - [`usePlugins`](docs/sdks/plugins/README.md#listplugins) - listPlugins plugins
-- [`usePluginsDownloadObservabilityPlugin`](docs/sdks/plugins/README.md#downloadobservabilityplugin) - downloadObservabilityPlugin plugins
 - [`usePluginsDownloadPluginPackage`](docs/sdks/plugins/README.md#downloadpluginpackage) - downloadPluginPackage plugins
 - [`useProject`](docs/sdks/projects/README.md#read) - getProject projects
 - [`useProjectsSetOrganizationWhitelistMutation`](docs/sdks/projects/README.md#setorganizationwhitelist) - setOrganizationWhitelist projects
@@ -889,8 +891,6 @@ To learn about this feature and how to get started, check
 - [`useTriggerDefinitions`](docs/sdks/triggers/README.md#listdefinitions) - listTriggerDefinitions triggers
 - [`useTriggers`](docs/sdks/triggers/README.md#list) - listTriggerInstances triggers
 - [`useUpdateEnvironmentMutation`](docs/sdks/environments/README.md#updatebyslug) - updateEnvironment environments
-- [`useUpdateMcpEndpointMutation`](docs/sdks/mcpendpoints/README.md#update) - updateMcpEndpoint mcpEndpoints
-- [`useUpdateMcpServerMutation`](docs/sdks/mcpservers/README.md#update) - updateMcpServer mcpServers
 - [`useUpdateMemberRoleMutation`](docs/sdks/access/README.md#updatememberrole) - updateMemberRole access
 - [`useUpdateOAuthProxyServerMutation`](docs/sdks/toolsets/README.md#updateoauthproxyserver) - updateOAuthProxyServer toolsets
 - [`useUpdatePackageMutation`](docs/sdks/packages/README.md#update) - updatePackage packages

@@ -20,10 +20,9 @@ import { HooksServerNames } from "./hooksservernames.js";
 import { Instances } from "./instances.js";
 import { Integrations } from "./integrations.js";
 import { Keys } from "./keys.js";
-import { McpEndpoints } from "./mcpendpoints.js";
 import { McpMetadata } from "./mcpmetadata.js";
 import { McpRegistries } from "./mcpregistries.js";
-import { McpServers } from "./mcpservers.js";
+import { Nlpolicies } from "./nlpolicies.js";
 import { Organizations } from "./organizations.js";
 import { Packages } from "./packages.js";
 import { Plugins } from "./plugins.js";
@@ -121,11 +120,6 @@ export class Gram extends ClientSDK {
     return (this._keys ??= new Keys(this._options));
   }
 
-  private _mcpEndpoints?: McpEndpoints;
-  get mcpEndpoints(): McpEndpoints {
-    return (this._mcpEndpoints ??= new McpEndpoints(this._options));
-  }
-
   private _mcpMetadata?: McpMetadata;
   get mcpMetadata(): McpMetadata {
     return (this._mcpMetadata ??= new McpMetadata(this._options));
@@ -136,9 +130,9 @@ export class Gram extends ClientSDK {
     return (this._mcpRegistries ??= new McpRegistries(this._options));
   }
 
-  private _mcpServers?: McpServers;
-  get mcpServers(): McpServers {
-    return (this._mcpServers ??= new McpServers(this._options));
+  private _nlpolicies?: Nlpolicies;
+  get nlpolicies(): Nlpolicies {
+    return (this._nlpolicies ??= new Nlpolicies(this._options));
   }
 
   private _organizations?: Organizations;
