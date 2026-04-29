@@ -9,14 +9,13 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/chat"
-	"github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
 
 // If StartOrResumeChat's upfront user-message persistence fails, the session
 // carries the pending rows. CaptureMessage must flush them atomically
 // alongside the assistant row so the chat history lands as a consistent unit
-// — no orphan assistant with a stale parent hash.
+// — no orphaned assistant row.
 func TestCaptureMessage_FlushesPendingRowsAtomically(t *testing.T) {
 	t.Parallel()
 
@@ -33,7 +32,6 @@ func TestCaptureMessage_FlushesPendingRowsAtomically(t *testing.T) {
 
 	before := listAllMessages(t, ctx, conn, chatID, projectID)
 	require.Len(t, before, 2)
-	tipHash := before[len(before)-1].ContentHash
 
 	// Simulate the "StartOrResumeChat persisted nothing this turn" state: a
 	// poisoned session whose pendingRows is the new tail the client sent.
@@ -41,8 +39,7 @@ func TestCaptureMessage_FlushesPendingRowsAtomically(t *testing.T) {
 	sess := chat.TestingNewPoisonedSession(
 		chatID, projectID, "", "", "test-model",
 		billing.ModelUsageSourcePlayground,
-		0,       // generation
-		tipHash, // parent hash = previous assistant tip
+		0, // generation
 		pending,
 	)
 
@@ -59,7 +56,6 @@ func TestCaptureMessage_FlushesPendingRowsAtomically(t *testing.T) {
 	require.Equal(t, []string{"user", "assistant", "user", "assistant"}, roles(rows))
 	for i, r := range rows {
 		require.Equal(t, int32(0), r.Generation, "row %d stays on gen 0", i)
-		require.NotEmpty(t, r.ContentHash, "row %d hashed", i)
 	}
 
 	// Follow-up turn: walk finds full history matching, no divergence, stays on
@@ -161,10 +157,10 @@ func TestCaptureMessage_BothWritesFailed_SelfHealsOnNextTurn(t *testing.T) {
 	}
 }
 
-// CaptureMessage called with a nil session falls back to a chain-tip lookup
-// and still chains the assistant correctly. Covers callers that predate the
-// session threading.
-func TestCaptureMessage_NilSessionFallsBackToChainTip(t *testing.T) {
+// CaptureMessage called with a nil session falls back to a generation lookup
+// and still lands the assistant on the current generation. Covers callers that
+// predate the session threading.
+func TestCaptureMessage_NilSessionFallsBackToCurrentGeneration(t *testing.T) {
 	t.Parallel()
 
 	ctx, conn, projectID, orgID := newTestChatContext(t)
@@ -191,10 +187,7 @@ func TestCaptureMessage_NilSessionFallsBackToChainTip(t *testing.T) {
 	rows := listAllMessages(t, ctx, conn, chatID, projectID)
 	require.Len(t, rows, 4)
 	require.Equal(t, []string{"user", "assistant", "user", "assistant"}, roles(rows))
-
-	// The assistant row should chain off the previous row's hash.
-	var chatRepo = repo.New(conn)
-	tip, err := chatRepo.GetChatChainTip(ctx, chatID)
-	require.NoError(t, err)
-	require.Equal(t, rows[len(rows)-1].ContentHash, tip.ContentHash)
+	for i, r := range rows {
+		require.Equal(t, int32(0), r.Generation, "row %d stays on gen 0", i)
+	}
 }

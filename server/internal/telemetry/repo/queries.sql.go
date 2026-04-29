@@ -1955,7 +1955,7 @@ func (q *Queries) ListHooksTraces(ctx context.Context, arg ListHooksTracesParams
 		"hook_source",
 		"skill_name",
 		"multiIf(max(has_block) = 1, 'blocked', max(has_error) = 1, 'failure', max(has_result) = 1, 'success', 'pending') as hook_status",
-		"anyIf(block_reason, block_reason != '') as block_reason",
+		"max(block_reason) as block_reason",
 	).
 		From("trace_summaries").
 		Where("gram_project_id = ?", arg.GramProjectID).

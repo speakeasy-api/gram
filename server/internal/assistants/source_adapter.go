@@ -32,12 +32,22 @@ type slackSourceRef struct {
 }
 
 type slackEventPayload struct {
-	TeamID    string `json:"team_id"`
-	ChannelID string `json:"channel_id"`
-	ThreadID  string `json:"thread_id"`
-	UserID    string `json:"user_id,omitempty"`
-	Text      string `json:"text"`
-	Timestamp string `json:"timestamp,omitempty"`
+	EnvelopeType string `json:"envelope_type,omitempty"`
+	EventType    string `json:"event_type,omitempty"`
+	Subtype      string `json:"subtype,omitempty"`
+	TeamID       string `json:"team_id"`
+	ChannelID    string `json:"channel_id"`
+	ThreadID     string `json:"thread_id"`
+	UserID       string `json:"user_id,omitempty"`
+	BotID        string `json:"bot_id,omitempty"`
+	AppID        string `json:"app_id,omitempty"`
+	Text         string `json:"text"`
+	Timestamp    string `json:"timestamp,omitempty"`
+	Reaction     string `json:"reaction,omitempty"`
+	ItemUserID   string `json:"item_user_id,omitempty"`
+	ItemChannel  string `json:"item_channel,omitempty"`
+	ItemTs       string `json:"item_ts,omitempty"`
+	ItemType     string `json:"item_type,omitempty"`
 }
 
 type slackAdapter struct{}
@@ -70,14 +80,35 @@ func (slackAdapter) DecodeTurn(event assistantThreadEventRecord) (string, error)
 	if err := json.Unmarshal(event.NormalizedPayloadJSON, &payload); err != nil {
 		return "", fmt.Errorf("decode slack event payload: %w", err)
 	}
-	if payload.Text == "" {
-		return "", fmt.Errorf("slack event %s has empty text", event.EventID)
-	}
 	var b bytes.Buffer
 	b.WriteString("<message-context>\n")
 	fmt.Fprintf(&b, "EventID: %s\n", event.EventID)
+	if payload.EventType != "" {
+		fmt.Fprintf(&b, "EventType: %s\n", payload.EventType)
+	}
+	if payload.Subtype != "" {
+		fmt.Fprintf(&b, "Subtype: %s\n", payload.Subtype)
+	}
+	if payload.UserID != "" {
+		fmt.Fprintf(&b, "UserID: %s\n", payload.UserID)
+	}
 	if payload.Timestamp != "" {
 		fmt.Fprintf(&b, "Timestamp: %s\n", payload.Timestamp)
+	}
+	if payload.Reaction != "" {
+		fmt.Fprintf(&b, "Reaction: :%s:\n", payload.Reaction)
+	}
+	if payload.ItemUserID != "" {
+		fmt.Fprintf(&b, "ItemUserID: %s\n", payload.ItemUserID)
+	}
+	if payload.ItemChannel != "" {
+		fmt.Fprintf(&b, "ItemChannel: %s\n", payload.ItemChannel)
+	}
+	if payload.ItemTs != "" {
+		fmt.Fprintf(&b, "ItemTs: %s\n", payload.ItemTs)
+	}
+	if payload.ItemType != "" {
+		fmt.Fprintf(&b, "ItemType: %s\n", payload.ItemType)
 	}
 	b.WriteString("</message-context>\n\n")
 	b.WriteString(payload.Text)

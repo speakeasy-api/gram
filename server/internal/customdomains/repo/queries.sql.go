@@ -122,6 +122,42 @@ func (q *Queries) GetCustomDomainByID(ctx context.Context, id uuid.UUID) (Custom
 	return i, err
 }
 
+const getCustomDomainByIDAndOrganization = `-- name: GetCustomDomainByIDAndOrganization :one
+SELECT id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, created_at, updated_at, deleted_at, deleted
+FROM custom_domains
+WHERE id = $1
+  AND organization_id = $2
+  AND deleted IS FALSE
+`
+
+type GetCustomDomainByIDAndOrganizationParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+// Organization-scoped variant of GetCustomDomainByID. Use this when the caller
+// has an organization context and needs to enforce that the custom domain
+// belongs to it (e.g. ownership checks on referenced custom_domain_id columns
+// in other tables).
+func (q *Queries) GetCustomDomainByIDAndOrganization(ctx context.Context, arg GetCustomDomainByIDAndOrganizationParams) (CustomDomain, error) {
+	row := q.db.QueryRow(ctx, getCustomDomainByIDAndOrganization, arg.ID, arg.OrganizationID)
+	var i CustomDomain
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.Domain,
+		&i.Verified,
+		&i.Activated,
+		&i.IngressName,
+		&i.CertSecretName,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const getCustomDomainByOrganization = `-- name: GetCustomDomainByOrganization :one
 SELECT id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, created_at, updated_at, deleted_at, deleted
 FROM custom_domains

@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	customdomains_repo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
+	"github.com/speakeasy-api/gram/server/internal/oauthtest"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
@@ -913,6 +914,43 @@ func TestServeInstallPage_ClaudeDesktop_WithSecurityInputs(t *testing.T) {
 	assert.Contains(t, body, "does not yet support custom HTTP headers", "should explain why the workaround is needed")
 	assert.NotContains(t, body, `"Add custom connector"`, "should not render the simple Add custom connector flow")
 	assert.NotContains(t, body, "For Teams &amp; Enterprise", "should not render the Teams & Enterprise admin connector footer")
+}
+
+// TestServeInstallPage_PrivateWithGramOAuth_NoAuthorizationHeader regression-tests
+// AGE-1962: a private MCP server with a Gram OAuth proxy attached must not render
+// the GRAM_KEY Authorization header (or gram-environment) in the install snippets.
+// OAuth handles identity auth at the HTTP layer, so the install command must not
+// instruct users to set those headers manually.
+func TestServeInstallPage_PrivateWithGramOAuth_NoAuthorizationHeader(t *testing.T) {
+	t.Parallel()
+	ctx, testInstance := newTestMCPMetadataService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	result := oauthtest.CreateProxyToolset(t, ctx, testInstance.conn, authCtx, oauthtest.ProxyToolsetOpts{
+		Slug:         "private-gram-oauth",
+		IsPublic:     false,
+		ProviderType: "",
+	})
+	mcpSlug := result.Toolset.McpSlug.String
+
+	req := httptest.NewRequest("GET", "/mcp/"+mcpSlug+"/install", nil)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("mcpSlug", mcpSlug)
+	req = req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, rctx))
+
+	rr := httptest.NewRecorder()
+	err := testInstance.service.ServeInstallPage(rr, req)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, rr.Code)
+
+	body := rr.Body.String()
+	assert.NotContains(t, body, "Authorization", "OAuth-protected install command must not reference an Authorization header")
+	assert.NotContains(t, body, "gram-key", "OAuth-protected install command must not reference the gram-key input")
+	assert.NotContains(t, body, "gram-environment", "OAuth-protected install command must not reference the gram-environment input")
+	assert.NotContains(t, body, "GRAM_KEY", "OAuth-protected install command must not reference the GRAM_KEY env var")
 }
 
 // TestServeInstallPage_NoDomain_AuthedUserWithOrgDomain verifies that a toolset

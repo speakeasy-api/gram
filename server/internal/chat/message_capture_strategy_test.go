@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	or "github.com/OpenRouterTeam/go-sdk/models/components"
+	"github.com/OpenRouterTeam/go-sdk/optionalnullable"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
@@ -19,13 +20,13 @@ import (
 
 func newCaptureStrategy(t *testing.T, conn *pgxpool.Pool) *chat.ChatMessageCaptureStrategy {
 	t.Helper()
-	strategy, shutdown := chat.NewChatMessageCaptureStrategy(
+	writer, writerShutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), conn, assetstest.NewTestBlobStore(t))
+	t.Cleanup(func() { _ = writerShutdown(t.Context()) })
+	return chat.NewChatMessageCaptureStrategy(
 		testenv.NewLogger(t),
 		conn,
-		assetstest.NewTestBlobStore(t),
+		writer,
 	)
-	t.Cleanup(func() { _ = shutdown(t.Context()) })
-	return strategy
 }
 
 func makeRequest(chatID, projectID uuid.UUID, orgID string, msgs ...or.ChatMessages) openrouter.CompletionRequest {
@@ -45,6 +46,21 @@ func makeResponse(content string) openrouter.CompletionResponse {
 		Model:     "test-model",
 		MessageID: "msg-" + content,
 	}
+}
+
+func makeAssistantToolOnly(toolCalls ...or.ChatToolCall) or.ChatMessages {
+	empty := or.CreateChatAssistantMessageContentStr("")
+	return or.CreateChatMessagesAssistant(or.ChatAssistantMessage{
+		Role:             or.ChatAssistantMessageRoleAssistant,
+		Content:          optionalnullable.From(&empty),
+		Name:             nil,
+		ToolCalls:        toolCalls,
+		Refusal:          nil,
+		Reasoning:        nil,
+		ReasoningDetails: nil,
+		Images:           nil,
+		Audio:            nil,
+	})
 }
 
 // runTurn threads a single request through StartOrResumeChat + CaptureMessage
@@ -93,7 +109,6 @@ func TestMatcher_CleanAppend(t *testing.T) {
 	require.Len(t, rows, 4)
 	for i, r := range rows {
 		require.Equal(t, int32(0), r.Generation, "row %d on generation 0", i)
-		require.NotEmpty(t, r.ContentHash, "row %d hashed", i)
 	}
 	require.Equal(t, []string{"user", "assistant", "user", "assistant"}, roles(rows))
 }
@@ -161,9 +176,83 @@ func TestMatcher_EditBumpsGeneration(t *testing.T) {
 	require.Equal(t, int32(1), rows[3].Generation)
 }
 
-// Legacy rows have no content_hash. Matcher backfills them on read and should
-// still detect a matching prefix.
-func TestMatcher_LazyBackfillsMissingHash(t *testing.T) {
+func TestMatcher_ToolCallsMatchAcrossIndexAndOrderVariations(t *testing.T) {
+	t.Parallel()
+
+	ctx, conn, projectID, orgID := newTestChatContext(t)
+	s := newCaptureStrategy(t, conn)
+	chatID := uuid.New()
+
+	callA := openrouter.ToolCall{
+		Index: 0,
+		ID:    "call_a",
+		Type:  "function",
+		Function: openrouter.ToolCallFunction{
+			Name:      "first_tool",
+			Arguments: `{"value": "a", "other": 1}`,
+		},
+	}
+	callB := openrouter.ToolCall{
+		Index: 1,
+		ID:    "call_b",
+		Type:  "function",
+		Function: openrouter.ToolCallFunction{
+			Name:      "second_tool",
+			Arguments: `{"value":"b"}`,
+		},
+	}
+
+	runTurn(t, ctx, s,
+		makeRequest(chatID, projectID, orgID, openrouter.CreateMessageUser("use tools")),
+		openrouter.CompletionResponse{
+			Content:   "",
+			Model:     "test-model",
+			MessageID: "msg-tools",
+			// Streaming capture used to range over map[int]ToolCall, so the
+			// stored JSON order can differ from replayed request order.
+			ToolCalls: []openrouter.ToolCall{callB, callA},
+		},
+	)
+
+	runTurn(t, ctx, s,
+		makeRequest(chatID, projectID, orgID,
+			openrouter.CreateMessageUser("use tools"),
+			makeAssistantToolOnly(
+				or.ChatToolCall{
+					ID:   callA.ID,
+					Type: or.ChatToolCallTypeFunction,
+					Function: or.ChatToolCallFunction{
+						Name:      callA.Function.Name,
+						Arguments: `{"other":1,"value":"a"}`,
+					},
+				},
+				or.ChatToolCall{
+					ID:   callB.ID,
+					Type: or.ChatToolCallTypeFunction,
+					Function: or.ChatToolCallFunction{
+						Name:      callB.Function.Name,
+						Arguments: callB.Function.Arguments,
+					},
+				},
+			),
+			openrouter.CreateMessageUser("next"),
+		),
+		makeResponse("done"),
+	)
+
+	rows := listAllMessages(t, ctx, conn, chatID, projectID)
+	require.Len(t, rows, 4)
+	require.Equal(t, []string{"user", "assistant", "user", "assistant"}, roles(rows))
+	for i, r := range rows {
+		require.Equal(t, int32(0), r.Generation, "row %d stays on gen 0", i)
+	}
+}
+
+// Tool-call identity is the model-issued ID, not the args. If the same call
+// id replays with mutated args (different runners or middleware reformatting
+// the JSON, lossy round-trips, etc.) the slot must still match — anything
+// else trips a generation bump on every turn that issued a tool call.
+func TestMatcher_ToolCallArgumentMutationDoesNotBumpGeneration(t *testing.T) {
 	t.Parallel()
 
 	ctx, conn, projectID, orgID := newTestChatContext(t)
@@ -171,27 +260,125 @@ func TestMatcher_LazyBackfillsMissingHash(t *testing.T) {
 	chatID := uuid.New()
 
 	runTurn(t, ctx, s,
-		makeRequest(chatID, projectID, orgID, openrouter.CreateMessageUser("hi")),
-		makeResponse("hello"),
+		makeRequest(chatID, projectID, orgID, openrouter.CreateMessageUser("weather")),
+		openrouter.CompletionResponse{
+			Content:   "",
+			Model:     "test-model",
+			MessageID: "msg-tools",
+			ToolCalls: []openrouter.ToolCall{{
+				Index: 0,
+				ID:    "call_weather",
+				Type:  "function",
+				Function: openrouter.ToolCallFunction{
+					Name:      "get_weather",
+					Arguments: `{"city":"SF"}`,
+				},
+			}},
+		},
 	)
 
-	// Simulate pre-migration rows by nulling out the hashes.
-	_, err := conn.Exec(ctx, "UPDATE chat_messages SET content_hash = NULL WHERE chat_id = $1", chatID)
-	require.NoError(t, err)
-
-	// Reload with full history + new message. Should backfill hashes and clean-append.
-	_, err = s.StartOrResumeChat(ctx, makeRequest(chatID, projectID, orgID,
-		openrouter.CreateMessageUser("hi"),
-		openrouter.CreateMessageAssistant("hello"),
-		openrouter.CreateMessageUser("follow up"),
-	))
-	require.NoError(t, err)
+	runTurn(t, ctx, s,
+		makeRequest(chatID, projectID, orgID,
+			openrouter.CreateMessageUser("weather"),
+			makeAssistantToolOnly(or.ChatToolCall{
+				ID:   "call_weather",
+				Type: or.ChatToolCallTypeFunction,
+				Function: or.ChatToolCallFunction{
+					Name:      "get_weather_v2",
+					Arguments: `{"city":"NYC","unit":"f"}`,
+				},
+			}),
+			openrouter.CreateMessageUser("next"),
+		),
+		makeResponse("done"),
+	)
 
 	rows := listAllMessages(t, ctx, conn, chatID, projectID)
-	require.Len(t, rows, 3)
+	require.Len(t, rows, 4)
 	for i, r := range rows {
-		require.Equal(t, int32(0), r.Generation, "row %d still gen 0", i)
-		require.NotEmpty(t, r.ContentHash, "row %d hash backfilled", i)
+		require.Equal(t, int32(0), r.Generation, "row %d stays on gen 0 — same call id", i)
+	}
+}
+
+// A tool result whose body re-serializes with different whitespace, key
+// ordering, or wrapper shape on replay (e.g. UI hydrates → parses JSON →
+// re-stringifies through the AI SDK) must still match the stored row by
+// tool_call_id alone. Including the body in the slot would force a generation
+// bump on every turn that follows a tool call.
+func TestMatcher_ToolResultBodyDriftDoesNotBumpGeneration(t *testing.T) {
+	t.Parallel()
+
+	ctx, conn, projectID, orgID := newTestChatContext(t)
+	s := newCaptureStrategy(t, conn)
+	chatID := uuid.New()
+
+	runTurn(t, ctx, s,
+		makeRequest(chatID, projectID, orgID, openrouter.CreateMessageUser("weather")),
+		openrouter.CompletionResponse{
+			Content:   "",
+			Model:     "test-model",
+			MessageID: "msg-tools",
+			ToolCalls: []openrouter.ToolCall{{
+				Index: 0,
+				ID:    "call_weather",
+				Type:  "function",
+				Function: openrouter.ToolCallFunction{
+					Name:      "get_weather",
+					Arguments: `{"city":"SF"}`,
+				},
+			}},
+		},
+	)
+
+	storedToolResult := `{"temp":72,"unit":"f"}`
+	runTurn(t, ctx, s,
+		makeRequest(chatID, projectID, orgID,
+			openrouter.CreateMessageUser("weather"),
+			makeAssistantToolOnly(or.ChatToolCall{
+				ID:   "call_weather",
+				Type: or.ChatToolCallTypeFunction,
+				Function: or.ChatToolCallFunction{
+					Name:      "get_weather",
+					Arguments: `{"city":"SF"}`,
+				},
+			}),
+			or.CreateChatMessagesTool(or.ChatToolMessage{
+				Role:       or.ChatToolMessageRoleTool,
+				Content:    or.CreateChatToolMessageContentStr(storedToolResult),
+				ToolCallID: "call_weather",
+			}),
+			openrouter.CreateMessageUser("next"),
+		),
+		makeResponse("ok"),
+	)
+
+	driftedToolResult := `{"unit": "f", "temp": 72}`
+	runTurn(t, ctx, s,
+		makeRequest(chatID, projectID, orgID,
+			openrouter.CreateMessageUser("weather"),
+			makeAssistantToolOnly(or.ChatToolCall{
+				ID:   "call_weather",
+				Type: or.ChatToolCallTypeFunction,
+				Function: or.ChatToolCallFunction{
+					Name:      "get_weather",
+					Arguments: `{"city":"SF"}`,
+				},
+			}),
+			or.CreateChatMessagesTool(or.ChatToolMessage{
+				Role:       or.ChatToolMessageRoleTool,
+				Content:    or.CreateChatToolMessageContentStr(driftedToolResult),
+				ToolCallID: "call_weather",
+			}),
+			openrouter.CreateMessageUser("next"),
+			openrouter.CreateMessageAssistant("ok"),
+			openrouter.CreateMessageUser("again"),
+		),
+		makeResponse("done"),
+	)
+
+	rows := listAllMessages(t, ctx, conn, chatID, projectID)
+	for i, r := range rows {
+		require.Equal(t, int32(0), r.Generation, "row %d stays on gen 0 — tool result body drift is not part of identity", i)
 	}
 }
 
@@ -204,8 +391,8 @@ func roles(rows []repo.ChatMessage) []string {
 }
 
 // An assistant response that carries both narrative text and tool_calls must
-// land as two chained rows — text-only then tool-calls-only — so the stored
-// shape matches what NormalizeAssistantMessages produces on replay.
+// land as two rows — text-only then tool-calls-only — so the stored shape
+// matches what NormalizeAssistantMessages produces on replay.
 func TestCaptureMessage_SplitsAssistantResponseWithBothTextAndToolCalls(t *testing.T) {
 	t.Parallel()
 
@@ -252,8 +439,6 @@ func TestCaptureMessage_SplitsAssistantResponseWithBothTextAndToolCalls(t *testi
 	require.Equal(t, int64(10), tools.PromptTokens)
 	require.Equal(t, int64(5), tools.CompletionTokens)
 	require.Equal(t, int64(15), tools.TotalTokens)
-
-	require.NotEqual(t, text.ContentHash, tools.ContentHash, "chained hashes differ")
 }
 
 // Whitespace-only content must be treated as "no text" on both sides of the

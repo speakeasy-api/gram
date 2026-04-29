@@ -28,7 +28,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useParams } from "react-router";
 import type { PluginServer } from "@gram/client/models/components";
-import { useFetcher } from "@/contexts/Fetcher";
+import { useSdkClient } from "@/contexts/Sdk";
+import { toast } from "sonner";
 
 export default function PluginDetail() {
   const { pluginId } = useParams<{ pluginId: string }>();
@@ -39,7 +40,7 @@ export default function PluginDetail() {
 
   const { data: plugin } = usePluginSuspense({ id: pluginId! });
 
-  const { fetch: authFetch } = useFetcher();
+  const client = useSdkClient();
   const { data: toolsetsData, isLoading: isLoadingToolsets } =
     useListToolsets();
   const toolsets = toolsetsData?.toolsets ?? [];
@@ -110,20 +111,23 @@ export default function PluginDetail() {
 
   const handleDownload = async (platform: "claude" | "cursor" | "codex") => {
     setIsDownloadMenuOpen(false);
-    const resp = await authFetch(
-      `/rpc/plugins.downloadPluginPackage?plugin_id=${pluginId}&platform=${platform}`,
-      {},
-    );
-    if (!resp.ok) return;
-    const blob = await resp.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download =
-      resp.headers.get("Content-Disposition")?.match(/filename="(.+)"/)?.[1] ??
-      "plugin.zip";
-    a.click();
-    URL.revokeObjectURL(url);
+    try {
+      const { headers, result } = await client.plugins.downloadPluginPackage({
+        pluginId: pluginId!,
+        platform,
+      });
+      const blob = await new Response(result).blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download =
+        headers["content-disposition"]?.[0]?.match(/filename="(.+)"/)?.[1] ??
+        "plugin.zip";
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (_err) {
+      toast.error("Failed to download plugin package");
+    }
   };
 
   const serverColumns: Column<PluginServer>[] = [

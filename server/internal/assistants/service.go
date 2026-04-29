@@ -264,7 +264,7 @@ func NewServiceCore(
 	return &ServiceCore{
 		logger:          logger,
 		db:              db,
-		runtime:         runtime,
+		runtime:         newTelemetryRuntimeBackend(runtime, telemetryLogger),
 		slackClient:     slackClient,
 		assistantTokens: assistantTokens,
 		serverURL:       serverURL,
@@ -983,18 +983,23 @@ func buildAssistantEventPayload(task bgtriggers.Task) (string, []byte, []byte, [
 	}
 }
 
-func (s *ServiceCore) AdmitPendingThreads(ctx context.Context, assistantID uuid.UUID) ([]uuid.UUID, error) {
+type AdmitPendingThreadsResult struct {
+	ProjectID uuid.UUID
+	ThreadIDs []uuid.UUID
+}
+
+func (s *ServiceCore) AdmitPendingThreads(ctx context.Context, assistantID uuid.UUID) (AdmitPendingThreadsResult, error) {
 	assistant, err := s.getAssistantForDispatch(ctx, assistantID)
 	if err != nil {
-		return nil, err
+		return AdmitPendingThreadsResult{}, err
 	}
 	if assistant.Status != StatusActive {
-		return nil, nil
+		return AdmitPendingThreadsResult{ProjectID: assistant.ProjectID, ThreadIDs: nil}, nil
 	}
 
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("begin assistant admit tx: %w", err)
+		return AdmitPendingThreadsResult{}, fmt.Errorf("begin assistant admit tx: %w", err)
 	}
 	defer func() {
 		_ = tx.Rollback(ctx)
@@ -1008,7 +1013,7 @@ func (s *ServiceCore) AdmitPendingThreads(ctx context.Context, assistantID uuid.
 		PendingStatus: eventStatusPending,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("query warm assistant threads: %w", err)
+		return AdmitPendingThreadsResult{}, fmt.Errorf("query warm assistant threads: %w", err)
 	}
 
 	admitted := append([]uuid.UUID{}, warmThreadIDs...)
@@ -1020,7 +1025,7 @@ func (s *ServiceCore) AdmitPendingThreads(ctx context.Context, assistantID uuid.
 		ActiveState:   runtimeStateActive,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("count active assistant runtimes: %w", err)
+		return AdmitPendingThreadsResult{}, fmt.Errorf("count active assistant runtimes: %w", err)
 	}
 
 	available := max(assistant.MaxConcurrency-conv.SafeInt(activeCount), 0)
@@ -1034,7 +1039,7 @@ func (s *ServiceCore) AdmitPendingThreads(ctx context.Context, assistantID uuid.
 			LimitCount:    conv.SafeInt32(available),
 		})
 		if err != nil {
-			return nil, fmt.Errorf("select cold assistant threads: %w", err)
+			return AdmitPendingThreadsResult{}, fmt.Errorf("select cold assistant threads: %w", err)
 		}
 
 		for _, coldThread := range coldThreads {
@@ -1045,16 +1050,16 @@ func (s *ServiceCore) AdmitPendingThreads(ctx context.Context, assistantID uuid.
 				Backend:           s.runtime.Backend(),
 				State:             runtimeStateStarting,
 			}); err != nil {
-				return nil, fmt.Errorf("reserve assistant runtime: %w", err)
+				return AdmitPendingThreadsResult{}, fmt.Errorf("reserve assistant runtime: %w", err)
 			}
 			admitted = append(admitted, coldThread.ID)
 		}
 	}
 
 	if err := tx.Commit(ctx); err != nil {
-		return nil, fmt.Errorf("commit assistant admit tx: %w", err)
+		return AdmitPendingThreadsResult{}, fmt.Errorf("commit assistant admit tx: %w", err)
 	}
-	return admitted, nil
+	return AdmitPendingThreadsResult{ProjectID: assistant.ProjectID, ThreadIDs: admitted}, nil
 }
 
 func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, threadID uuid.UUID) (ProcessThreadEventsResult, error) {
@@ -1173,6 +1178,29 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 					WarmUntil:         time.Time{},
 					RuntimeActive:     false,
 					RetryAdmission:    true,
+					ProcessedAnyEvent: processedAny,
+				}, nil
+			}
+
+			// Upstream completion provider rejected the request (Anthropic 400
+			// on a malformed message, OpenRouter rate limit, etc). The runtime
+			// is fine — replaying the same input would just produce the same
+			// failure, so terminally fail the event and keep the VM warm for
+			// subsequent ones rather than churning Fly on every retry.
+			if errors.Is(runErr, ErrCompletionFailed) {
+				s.emitAssistantTelemetry(turnCtx, assistant, thread, &runtimeRecord, &event, "event_terminal", "assistant event failed at completion provider", "ERROR", runErr)
+				if err := s.failEvent(ctx, thread.ProjectID, event.ID, runErr); err != nil {
+					return ProcessThreadEventsResult{}, err
+				}
+				warmUntil := time.Now().UTC().Add(time.Duration(assistant.WarmTTLSeconds) * time.Second)
+				if err := s.setRuntimeActive(ctx, thread.ProjectID, runtimeRecord.ID, warmUntil); err != nil {
+					return ProcessThreadEventsResult{}, err
+				}
+				return ProcessThreadEventsResult{
+					AssistantID:       assistant.ID,
+					WarmUntil:         warmUntil,
+					RuntimeActive:     true,
+					RetryAdmission:    false,
 					ProcessedAnyEvent: processedAny,
 				}, nil
 			}
@@ -1434,13 +1462,16 @@ func resolveAssistantMCPServers(serverURL *url.URL, toolsets []assistantToolsetR
 	return servers, nil
 }
 
-func (s *ServiceCore) ExpireThreadRuntime(ctx context.Context, threadID uuid.UUID) error {
-	projectID, err := assistantrepo.New(s.db).ResolveThreadProjectID(ctx, threadID)
-	if err != nil {
-		return fmt.Errorf("resolve assistant thread project id: %w", err)
-	}
+func (s *ServiceCore) ProcessThreadEventsByThreadID(ctx context.Context, projectID, threadID uuid.UUID) (ProcessThreadEventsResult, error) {
+	return s.ProcessThreadEvents(ctx, projectID, threadID)
+}
+
+func (s *ServiceCore) ExpireThreadRuntime(ctx context.Context, projectID, threadID uuid.UUID) error {
 	runtimeRecord, err := s.loadActiveRuntimeRecord(ctx, projectID, threadID)
-	if err != nil {
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil
+	case err != nil:
 		return err
 	}
 	if err := s.runtime.Stop(ctx, runtimeRecord); err != nil {

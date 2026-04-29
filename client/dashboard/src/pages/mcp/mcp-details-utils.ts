@@ -2,11 +2,10 @@ import { useSdkClient } from "@/contexts/Sdk";
 import { useListTools } from "@/hooks/toolTypes";
 import { useToolsetEnvVars } from "@/hooks/useToolsetEnvVars";
 import { useMcpUrl } from "@/hooks/useToolsetUrl";
-import { isHttpTool } from "@/lib/toolTypes";
-import { ToolsetEntry } from "@gram/client/models/components";
+import { isHttpTool, Toolset } from "@/lib/toolTypes";
 import { useEffect, useState } from "react";
 
-export const useMcpConfigs = (toolset: ToolsetEntry | undefined) => {
+export const useMcpConfigs = (toolset: Toolset | undefined) => {
   const { url: mcpUrl } = useMcpUrl(toolset);
   const { data: tools } = useListTools();
 
@@ -23,7 +22,13 @@ export const useMcpConfigs = (toolset: ToolsetEntry | undefined) => {
     (header) => !header.toLowerCase().includes("token_url"),
   );
 
-  if (!toolset) return { public: "", internal: "" };
+  if (!toolset)
+    return {
+      public: "",
+      internal: "",
+      requiresGramKey: false,
+      hasOAuth: false,
+    };
 
   // Build header names using display names when available
   // Display names make the config more user-friendly (e.g., "API-Key" instead of "X-RAPIDAPI-KEY")
@@ -42,6 +47,13 @@ export const useMcpConfigs = (toolset: ToolsetEntry | undefined) => {
     return envVar.replace(/_/g, "-");
   };
 
+  // OAuth (Gram or external) handles identity auth at the HTTP layer, so the
+  // install snippet must not ask the user for a GRAM_KEY Authorization header.
+  const hasOAuth = Boolean(
+    toolset.oauthProxyServer || toolset.externalOauthServer,
+  );
+  const requiresGramKey = !toolset.mcpIsPublic && !hasOAuth;
+
   // Build the args array for public MCP config
   const mcpJsonPublicArgs = [
     "mcp-remote@0.1.25",
@@ -52,7 +64,7 @@ export const useMcpConfigs = (toolset: ToolsetEntry | undefined) => {
     ]),
   ];
 
-  if (!toolset.mcpIsPublic) {
+  if (requiresGramKey) {
     mcpJsonPublicArgs.push("--header", "Authorization:${GRAM_KEY}");
   }
 
@@ -68,7 +80,7 @@ export const useMcpConfigs = (toolset: ToolsetEntry | undefined) => {
     "Gram${toolset.slug.replace(/-/g, "").replace(/^./, (c) => c.toUpperCase())}": {
       "command": "npx",
       "args": ${argsStringIndented}${
-        !toolset.mcpIsPublic
+        requiresGramKey
           ? `,
       "env": {
         "GRAM_KEY": "Bearer <your-key-here>"
@@ -98,7 +110,12 @@ export const useMcpConfigs = (toolset: ToolsetEntry | undefined) => {
   }
 }`;
 
-  return { public: mcpJsonPublic, internal: mcpJsonInternal };
+  return {
+    public: mcpJsonPublic,
+    internal: mcpJsonInternal,
+    requiresGramKey,
+    hasOAuth,
+  };
 };
 
 export function useMcpSlugValidation(

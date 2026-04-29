@@ -1,24 +1,19 @@
 package chat
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strings"
-	"time"
 
 	or "github.com/OpenRouterTeam/go-sdk/models/components"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
@@ -26,22 +21,19 @@ import (
 // ChatMessageCaptureStrategy captures completion messages to the database.
 // It implements the MessageCaptureStrategy interface.
 type ChatMessageCaptureStrategy struct {
-	logger       *slog.Logger
-	db           *pgxpool.Pool
-	repo         *repo.Queries
-	assetStorage assets.BlobStore
-	observers    []MessageObserver
-	shutdownCtx  context.Context //nolint:containedctx // shutdown context must outlive any single request
+	logger *slog.Logger
+	db     *pgxpool.Pool
+	repo   *repo.Queries
+	writer *ChatMessageWriter
 }
 
 var _ openrouter.MessageCaptureStrategy = (*ChatMessageCaptureStrategy)(nil)
 
 // chatCaptureSession carries state between StartOrResumeChat and CaptureMessage
-// so the happy path skips a redundant chain-tip lookup and the sad path can
-// flush the user messages atomically alongside the assistant response.
+// so the sad path can flush user messages atomically alongside the assistant
+// response.
 type chatCaptureSession struct {
 	generation int32
-	parentHash []byte
 	// pendingRows are the user/tool rows that the walk built but that upfront
 	// persistence failed to store. CaptureMessage flushes these atomically with
 	// the assistant row. Empty on the happy path.
@@ -52,45 +44,14 @@ type chatCaptureSession struct {
 func NewChatMessageCaptureStrategy(
 	logger *slog.Logger,
 	db *pgxpool.Pool,
-	assetStorage assets.BlobStore,
-) (strategy *ChatMessageCaptureStrategy, shutdown func(context.Context) error) {
-	ctx, cancel := context.WithCancel(context.Background()) //nolint:contextcheck,gosec // this context must be tied to the lifetime of the application; cancel is called via the returned shutdown function
-	shutdown = func(_ context.Context) error {
-		cancel()
-		return nil
-	}
-
+	writer *ChatMessageWriter,
+) *ChatMessageCaptureStrategy {
 	return &ChatMessageCaptureStrategy{
-		logger:       logger,
-		db:           db,
-		repo:         repo.New(db),
-		assetStorage: assetStorage,
-		observers:    nil,
-		shutdownCtx:  ctx,
-	}, shutdown
-}
-
-// AddObserver registers a MessageObserver to be notified when messages are stored.
-func (s *ChatMessageCaptureStrategy) AddObserver(obs MessageObserver) {
-	s.observers = append(s.observers, obs)
-}
-
-func (s *ChatMessageCaptureStrategy) notifyObservers(ctx context.Context, projectID uuid.UUID) {
-	go func() {
-		ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
-		defer cancel()
-		stop := context.AfterFunc(s.shutdownCtx, cancel)
-		defer stop()
-
-		s.logger.DebugContext(ctx, "notifying message observers",
-			attr.SlogProjectID(projectID.String()),
-			attr.SlogMessageObserverCount(len(s.observers)),
-		)
-
-		for _, obs := range s.observers {
-			obs.OnMessagesStored(ctx, projectID)
-		}
-	}()
+		logger: logger,
+		db:     db,
+		repo:   repo.New(db),
+		writer: writer,
+	}
 }
 
 func (s *ChatMessageCaptureStrategy) StartOrResumeChat(ctx context.Context, request openrouter.CompletionRequest) (openrouter.CaptureSession, error) {
@@ -121,67 +82,63 @@ func (s *ChatMessageCaptureStrategy) StartOrResumeChat(ctx context.Context, requ
 		return nil, oops.E(oops.CodeUnexpected, err, "create chat")
 	}
 
-	matchResult, err := s.matchIncomingAgainstStored(ctx, chatID, request.Messages)
+	// Normalize incoming to the same canonical (text-row, tools-row) shape
+	// buildAssistantRows uses for stored rows. Without this, a single combined
+	// assistant message from the runner hashes differently than the two stored
+	// rows it splits into, forcing a new generation on every multi-step turn.
+	normalized := slices.Collect(openrouter.NormalizeAssistantMessages(request.Messages))
+
+	matchResult, err := s.matchIncomingAgainstStored(ctx, chatID, normalized)
 	if err != nil {
 		return nil, err
 	}
 
 	generation := matchResult.generation
-	parentHash := matchResult.parentHash
 	matchedPrefix := matchResult.matchedPrefix
 	if matchResult.diverged {
-		// Compaction or edit: start a fresh chain at a new generation. Old rows
-		// stay as audit history.
+		// Compaction or edit: start a fresh generation. Old rows stay as
+		// audit history.
 		generation = matchResult.generation + 1
-		parentHash = nil
 		matchedPrefix = 0
 	}
 
-	newMessages := request.Messages[matchedPrefix:]
+	newMessages := normalized[matchedPrefix:]
 	if len(newMessages) == 0 {
 		return &chatCaptureSession{
 			generation:  generation,
-			parentHash:  parentHash,
 			pendingRows: nil,
 		}, nil
 	}
 
-	rows := buildPendingRows(request, projectID, userID, externalUserID, newMessages, parentHash, generation)
-	// parentHash after the last new message becomes the chain tip for the assistant.
-	tipHash := rows[len(rows)-1].contentHash
+	rows := buildPendingRows(request, projectID, userID, externalUserID, newMessages, generation)
 
-	if err := storeMessages(ctx, s.logger, s.db, s.assetStorage, rows); err != nil {
+	if err := s.writer.WriteWithAssets(ctx, projectID, rows); err != nil {
 		s.logger.ErrorContext(ctx, "failed to store chat messages", attr.SlogError(err))
 		// Keep the rows on the session so CaptureMessage can flush them atomically
 		// with the assistant response. We deliberately do not fail the request —
 		// the proxy must still return a completion to the downstream client.
 		return &chatCaptureSession{
 			generation:  generation,
-			parentHash:  tipHash,
 			pendingRows: rows,
 		}, nil
 	}
 
-	s.notifyObservers(ctx, projectID)
-
 	return &chatCaptureSession{
 		generation:  generation,
-		parentHash:  tipHash,
 		pendingRows: nil,
 	}, nil
 }
 
 type matchResult struct {
 	generation    int32
-	parentHash    []byte
 	matchedPrefix int
 	diverged      bool
 }
 
 // matchIncomingAgainstStored walks the current generation's stored messages
-// against the incoming request to find the longest matching prefix. It also
-// lazily backfills content hashes on pre-migration rows. Returns the match
-// state needed to decide whether to extend the chain or open a new generation.
+// against the incoming request to find the longest matching prefix by message
+// slot identity. The first slot mismatch (or a stored row past the end of
+// incoming) signals divergence and triggers a new generation.
 func (s *ChatMessageCaptureStrategy) matchIncomingAgainstStored(ctx context.Context, chatID uuid.UUID, incoming []or.ChatMessages) (matchResult, error) {
 	currentGen, err := s.repo.GetMaxGenerationForChat(ctx, chatID)
 	if err != nil {
@@ -198,7 +155,6 @@ func (s *ChatMessageCaptureStrategy) matchIncomingAgainstStored(ctx context.Cont
 		return matchResult{}, oops.E(oops.CodeUnexpected, err, "list chat messages for match")
 	}
 
-	var parentHash []byte
 	matchedPrefix := 0
 	diverged := false
 	for i, row := range stored {
@@ -206,51 +162,44 @@ func (s *ChatMessageCaptureStrategy) matchIncomingAgainstStored(ctx context.Cont
 			diverged = true
 			break
 		}
-		storedHash := row.ContentHash
-		if len(storedHash) == 0 {
-			// Lazy backfill: historical rows have no hash. Compute from stored
-			// fields and persist so subsequent turns skip this path.
-			storedHash = chainMessageHash(parentHash, row.Role, row.Content, row.ToolCallID.String)
-			if err := s.repo.BackfillChatMessageHash(ctx, repo.BackfillChatMessageHashParams{
-				ID:          row.ID,
-				ContentHash: storedHash,
-			}); err != nil {
-				s.logger.WarnContext(ctx, "failed to backfill chat message hash", attr.SlogError(err))
-			}
-		}
-		if !bytes.Equal(storedHash, hashIncomingMessage(parentHash, incoming[i])) {
+		if slotFromStored(row.Role, row.Content, row.ToolCallID.String, row.ToolCalls) != slotFromIncoming(incoming[i]) {
 			diverged = true
 			break
 		}
-		parentHash = storedHash
 		matchedPrefix = i + 1
 	}
 
 	return matchResult{
 		generation:    currentGen,
-		parentHash:    parentHash,
 		matchedPrefix: matchedPrefix,
 		diverged:      diverged,
 	}, nil
 }
 
 // buildPendingRows turns the tail of the incoming messages into chatMessageRow
-// values with hashes chained off parentHash. The caller supplies the starting
-// parent hash and generation.
+// values for the given generation.
 func buildPendingRows(
 	request openrouter.CompletionRequest,
 	projectID uuid.UUID,
 	userID, externalUserID string,
 	newMessages []or.ChatMessages,
-	parentHash []byte,
 	generation int32,
 ) []chatMessageRow {
 	rows := make([]chatMessageRow, len(newMessages))
-	chain := parentHash
 	for i, msg := range newMessages {
 		var toolCallID string
 		if tc := openrouter.GetToolCallID(msg); tc != nil {
 			toolCallID = *tc
+		}
+
+		// Persist assistant tool_use blocks alongside the row so the replay
+		// path (loadChatHistory → runner normalize_history) reconstructs the
+		// tool_use that pairs with the following tool_result. Dropping these
+		// produces orphaned tool_results which Anthropic rejects with
+		// "tool_use_id has no corresponding tool_use block".
+		toolCallsJSON, err := assistantToolCallsJSON(msg)
+		if err != nil {
+			toolCallsJSON = nil
 		}
 
 		metadata := httpMetadata{
@@ -266,7 +215,6 @@ func buildPendingRows(
 			metadata.IPAddress = request.HTTPMetadata.IPAddress
 		}
 
-		h := hashIncomingMessage(chain, msg)
 		rows[i] = chatMessageRow{
 			projectID:        projectID,
 			chatID:           request.ChatID,
@@ -279,14 +227,12 @@ func buildPendingRows(
 			content:          msg,
 			metadata:         metadata,
 			finishReason:     nil,
-			toolCalls:        nil,
+			toolCalls:        toolCallsJSON,
 			promptTokens:     0,
 			completionTokens: 0,
 			totalTokens:      0,
-			contentHash:      h,
 			generation:       generation,
 		}
-		chain = h
 	}
 	return rows
 }
@@ -333,14 +279,13 @@ func (s *ChatMessageCaptureStrategy) CaptureMessage(
 		return err
 	}
 
-	assistantRows := buildAssistantRows(request, response, projectID, toolCallsJSON, origin, userAgent, ipAddress, session.parentHash, session.generation)
+	assistantRows := buildAssistantRows(request, response, projectID, toolCallsJSON, origin, userAgent, ipAddress, session.generation)
 
 	if len(session.pendingRows) == 0 {
-		if _, err := s.repo.CreateChatMessage(ctx, assistantRows); err != nil {
+		if _, err := s.writer.Write(ctx, projectID, assistantRows); err != nil {
 			s.logger.ErrorContext(ctx, "failed to store chat message", attr.SlogError(err))
 			return fmt.Errorf("store chat message: %w", err)
 		}
-		s.notifyObservers(ctx, projectID)
 		return nil
 	}
 
@@ -348,31 +293,29 @@ func (s *ChatMessageCaptureStrategy) CaptureMessage(
 	// assistant row atomically so either the whole turn lands or none of it
 	// does. A partial write would orphan the assistant and force divergence
 	// detection to open a new generation on the next turn.
-	if err := s.flushTurnAtomically(ctx, session.pendingRows, assistantRows); err != nil {
+	if err := s.flushTurnAtomically(ctx, projectID, session.pendingRows, assistantRows); err != nil {
 		return err
 	}
-	s.notifyObservers(ctx, projectID)
 	return nil
 }
 
-// buildAssistantRows turns a single completion response into 1 or 2 chained
-// assistant rows. When the response carries both text content and tool_calls,
-// it splits into a text-only row followed by a tool-calls-only row so the
-// stored shape matches what NormalizeAssistantMessages produces on replay.
-// Tokens and finish_reason land on the final row to keep per-turn accounting
-// on a single row.
+// buildAssistantRows turns a single completion response into 1 or 2 assistant
+// rows. When the response carries both text content and tool_calls, it splits
+// into a text-only row followed by a tool-calls-only row so the stored shape
+// matches what NormalizeAssistantMessages produces on replay. Tokens and
+// finish_reason land on the final row to keep per-turn accounting on a single
+// row.
 func buildAssistantRows(
 	request openrouter.CompletionRequest,
 	response openrouter.CompletionResponse,
 	projectID uuid.UUID,
 	toolCallsJSON []byte,
 	origin, userAgent, ipAddress string,
-	parentHash []byte,
 	generation int32,
 ) []repo.CreateChatMessageParams {
 	// Whitespace-only content is treated as "no text" to stay in sync with
 	// NormalizeAssistantMessages, which trims before deciding whether to split
-	// a replayed combined message. Any divergence here would hash the stored
+	// a replayed combined message. Any divergence here would slot the stored
 	// rows against a different incoming shape and bump generation every turn.
 	content := response.Content
 	if strings.TrimSpace(content) == "" {
@@ -415,7 +358,6 @@ func buildAssistantRows(
 	if hasText && hasTools {
 		text := base
 		text.Content = content
-		text.ContentHash = hashAssistantResponse(parentHash, content)
 
 		tools := base
 		tools.ToolCalls = toolCallsJSON
@@ -423,7 +365,6 @@ func buildAssistantRows(
 		tools.PromptTokens = promptTokens
 		tools.CompletionTokens = completionTokens
 		tools.TotalTokens = totalTokens
-		tools.ContentHash = hashAssistantResponse(text.ContentHash, "")
 
 		return []repo.CreateChatMessageParams{text, tools}
 	}
@@ -435,15 +376,13 @@ func buildAssistantRows(
 	only.PromptTokens = promptTokens
 	only.CompletionTokens = completionTokens
 	only.TotalTokens = totalTokens
-	only.ContentHash = hashAssistantResponse(parentHash, content)
 
 	return []repo.CreateChatMessageParams{only}
 }
 
 // resolveSession returns the session produced by StartOrResumeChat. If the
 // caller did not supply one (older callers, unexpected nil), it falls back to
-// a chain-tip lookup so CaptureMessage remains correct. The fallback path
-// preserves the pre-session behavior.
+// a generation lookup so CaptureMessage remains correct.
 func (s *ChatMessageCaptureStrategy) resolveSession(ctx context.Context, raw openrouter.CaptureSession, request openrouter.CompletionRequest) (*chatCaptureSession, error) {
 	if raw != nil {
 		sess, ok := raw.(*chatCaptureSession)
@@ -453,49 +392,23 @@ func (s *ChatMessageCaptureStrategy) resolveSession(ctx context.Context, raw ope
 		return sess, nil
 	}
 
-	tip, err := s.repo.GetChatChainTip(ctx, request.ChatID)
-	switch {
-	case err == nil:
-		return &chatCaptureSession{
-			generation:  tip.Generation,
-			parentHash:  tip.ContentHash,
-			pendingRows: nil,
-		}, nil
-	case errors.Is(err, pgx.ErrNoRows):
-		return &chatCaptureSession{
-			generation:  0,
-			parentHash:  nil,
-			pendingRows: nil,
-		}, nil
-	default:
-		s.logger.ErrorContext(ctx, "failed to get chat chain tip", attr.SlogError(err))
-		return nil, fmt.Errorf("get chat chain tip: %w", err)
+	generation, err := s.repo.GetMaxGenerationForChat(ctx, request.ChatID)
+	if err != nil {
+		s.logger.ErrorContext(ctx, "failed to get chat generation", attr.SlogError(err))
+		return nil, fmt.Errorf("get chat generation: %w", err)
 	}
+	return &chatCaptureSession{
+		generation:  generation,
+		pendingRows: nil,
+	}, nil
 }
 
-// flushTurnAtomically writes the pending user rows (via storeMessages, which
-// also handles asset-storage upload) and the assistant rows inside a single
-// Postgres transaction.
-func (s *ChatMessageCaptureStrategy) flushTurnAtomically(ctx context.Context, pending []chatMessageRow, assistants []repo.CreateChatMessageParams) error {
-	dbtx, err := s.db.Begin(ctx)
-	if err != nil {
-		s.logger.ErrorContext(ctx, "failed to begin transaction for catch-up flush", attr.SlogError(err))
-		return fmt.Errorf("begin transaction: %w", err)
-	}
-	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
-
-	if err := storeMessages(ctx, s.logger, dbtx, s.assetStorage, pending); err != nil {
-		return fmt.Errorf("store pending chat messages: %w", err)
-	}
-
-	txRepo := repo.New(dbtx)
-	if _, err := txRepo.CreateChatMessage(ctx, assistants); err != nil {
-		s.logger.ErrorContext(ctx, "failed to store assistant chat message", attr.SlogError(err))
-		return fmt.Errorf("store assistant chat message: %w", err)
-	}
-
-	if err := dbtx.Commit(ctx); err != nil {
-		return fmt.Errorf("commit catch-up transaction: %w", err)
+// flushTurnAtomically writes the pending user rows and the assistant rows in
+// a single transaction so the turn lands as a unit.
+func (s *ChatMessageCaptureStrategy) flushTurnAtomically(ctx context.Context, projectID uuid.UUID, pending []chatMessageRow, assistants []repo.CreateChatMessageParams) error {
+	if err := s.writer.WriteTurn(ctx, projectID, pending, assistants); err != nil {
+		s.logger.ErrorContext(ctx, "failed to flush chat turn", attr.SlogError(err))
+		return fmt.Errorf("flush chat turn: %w", err)
 	}
 	return nil
 }

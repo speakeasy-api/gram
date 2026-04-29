@@ -60,8 +60,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/keys"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpclient"
+	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oauth"
@@ -617,8 +619,10 @@ func newStartCommand() *cli.Command {
 				hooksCache = hooks.NewLocalSessionCache(hooksCache, db)
 			}
 
-			captureStrategy, shutdown := chat.NewChatMessageCaptureStrategy(logger, db, assetStorage)
-			shutdownFuncs = append(shutdownFuncs, shutdown)
+			chatWriter, chatWriterShutdown := chat.NewChatMessageWriter(logger, db, assetStorage)
+			shutdownFuncs = append(shutdownFuncs, chatWriterShutdown)
+
+			captureStrategy := chat.NewChatMessageCaptureStrategy(logger, db, chatWriter)
 
 			completionsClient := openrouter.NewUnifiedClient(
 				logger,
@@ -695,7 +699,8 @@ func newStartCommand() *cli.Command {
 				mcpclient.NewInternalMCPClient(mcpService),
 			)
 			chatService := chat.NewService(logger, tracerProvider, db, sessionManager, chatSessionsManager, openRouter, chatClient, posthogClient, telemSvc, assetStorage, authzEngine, assistantTokenManager)
-			assistantsSvc := assistants.NewService(logger, tracerProvider, db, sessionManager, authzEngine, assistantTokenManager, serverURL, slackClient, assistantRuntime, temporalEnv, telemLogger)
+			assistantsCore := assistants.NewServiceCore(logger, db, assistantRuntime, slackClient, assistantTokenManager, serverURL, telemLogger)
+			assistantsSvc := assistants.NewService(logger, tracerProvider, db, sessionManager, authzEngine, assistantsCore, &background.AssistantWorkflowSignaler{TemporalEnv: temporalEnv})
 			triggerApp.RegisterDispatcher(assistantsSvc)
 
 			toolsetsSvc := toolsets.NewService(logger, tracerProvider, db, sessionManager, cache.NewRedisCacheAdapter(redisClient), authzEngine)
@@ -726,7 +731,7 @@ func newStartCommand() *cli.Command {
 			about.Attach(mux, about.NewService(logger, tracerProvider))
 			access.Attach(mux, access.NewService(logger, tracerProvider, db, sessionManager, roleClient, authzEngine, productFeatures))
 			assistants.Attach(mux, assistantsSvc)
-			hooks.Attach(mux, hooks.NewService(logger, db, tracerProvider, telemLogger, sessionManager, hooksCache, chatClient, temporalEnv, authzEngine, productFeatures, &background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv}))
+			hooks.Attach(mux, hooks.NewService(logger, db, tracerProvider, telemLogger, sessionManager, hooksCache, chatClient, temporalEnv, authzEngine, productFeatures, &background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv}, chatWriter))
 			audit.Attach(mux, audit.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
 			auth.Attach(mux, auth.NewService(
 				logger,
@@ -770,6 +775,8 @@ func newStartCommand() *cli.Command {
 			keys.Attach(mux, keys.NewService(logger, tracerProvider, db, sessionManager, c.String("environment"), authzEngine))
 			chatsessionssvc.Attach(mux, chatsessionssvc.NewService(logger, tracerProvider, db, sessionManager, chatSessionsManager, authzEngine))
 			environments.Attach(mux, environments.NewService(logger, tracerProvider, db, sessionManager, encryptionClient, authzEngine))
+			mcpservers.Attach(mux, mcpservers.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
+			mcpendpoints.Attach(mux, mcpendpoints.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
 			remotemcp.Attach(mux, remotemcp.NewService(logger, tracerProvider, db, sessionManager, encryptionClient, authzEngine))
 			triggers.Attach(mux, triggers.NewService(logger, tracerProvider, db, sessionManager, authzEngine, triggerApp))
 			tools.Attach(mux, tools.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
@@ -795,7 +802,7 @@ func newStartCommand() *cli.Command {
 			)
 			shutdownFuncs = append(shutdownFuncs, riskSignaler.Shutdown)
 			riskService := risk.NewService(logger, tracerProvider, db, sessionManager, authzEngine, riskSignaler)
-			captureStrategy.AddObserver(riskService)
+			chatWriter.AddObserver(riskService)
 			risk.Attach(mux, riskService)
 
 			slack.Attach(mux, slack.NewService(logger, tracerProvider, db, sessionManager, encryptionClient, redisClient, slackClient, temporalEnv, slack.Configurations{
@@ -852,6 +859,8 @@ func newStartCommand() *cli.Command {
 						TelemetryLogger:     telemLogger,
 						TriggersApp:         triggerApp,
 						CacheAdapter:        cache.NewRedisCacheAdapter(redisClient),
+						AssistantsCore:      assistantsCore,
+						TemporalEnv:         temporalEnv,
 						PIIScanner:          piiScanner,
 					})
 					if err := temporalWorker.Run(workerInterruptCh); err != nil {

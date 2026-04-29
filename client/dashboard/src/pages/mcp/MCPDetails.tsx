@@ -54,7 +54,7 @@ import { PromptsTabContent } from "@/pages/toolsets/PromptsTab";
 import { ResourcesTabContent } from "@/pages/toolsets/resources/ResourcesTab";
 import { ServerTabContent } from "@/pages/toolsets/ServerTab";
 import { useRoutes } from "@/routes";
-import { Confirm, ToolsetEntry } from "@gram/client/models/components";
+import { Confirm } from "@gram/client/models/components";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
 import {
   invalidateAllGetPeriodUsage,
@@ -1878,14 +1878,18 @@ export function MCPJson({
   fullWidth = false,
   className,
 }: {
-  toolset: ToolsetEntry;
+  toolset: Toolset;
   fullWidth?: boolean; // If true, the code block will take up the full width of the page even when there's only one
   className?: string;
 }) {
   const telemetry = useTelemetry();
 
-  const { public: mcpJsonPublic, internal: mcpJsonInternal } =
-    useMcpConfigs(toolset);
+  const {
+    public: mcpJsonPublic,
+    internal: mcpJsonInternal,
+    requiresGramKey,
+    hasOAuth,
+  } = useMcpConfigs(toolset);
 
   const onCopy = () => {
     telemetry.capture("mcp_event", {
@@ -1894,38 +1898,53 @@ export function MCPJson({
     });
   };
 
+  const showManagedAuth = !hasOAuth;
+
   return (
     <Grid
       gap={4}
       className={cn("my-4!", className)}
-      columns={!fullWidth ? { xs: 1, md: 2, lg: 2, xl: 2, "2xl": 2 } : 1}
+      columns={
+        !fullWidth && showManagedAuth
+          ? { xs: 1, md: 2, lg: 2, xl: 2, "2xl": 2 }
+          : 1
+      }
     >
-      <Grid.Item>
-        <Type className="font-medium">Pass-through Authentication</Type>
-        <Type muted small className="mb-2! max-w-3xl">
-          Pass API credentials directly to the MCP server.
-          <br />
-          <span
-            className={
-              !toolset.mcpIsPublic
-                ? "text-warning-foreground font-medium"
-                : "italic"
-            }
-          >
-            Requires a Gram API key if the server is not public.
-          </span>
-        </Type>
-        <CodeBlock onCopy={onCopy}>{mcpJsonPublic}</CodeBlock>
-      </Grid.Item>
-      <Grid.Item>
-        <Type className="font-medium">Managed Authentication</Type>
-        <Type muted small className="mb-2! max-w-3xl">
-          Manage API authentication with Gram environments.
-          <br />
-          Users need a single Gram API Key rather than bringing their own keys.
-        </Type>
-        <CodeBlock onCopy={onCopy}>{mcpJsonInternal}</CodeBlock>
-      </Grid.Item>
+      {[
+        <Grid.Item key="passthrough">
+          <Type className="font-medium">Pass-through Authentication</Type>
+          <Type muted small className="mb-2! max-w-3xl">
+            Pass API credentials directly to the MCP server.
+            <br />
+            <span
+              className={
+                requiresGramKey
+                  ? "text-warning-foreground font-medium"
+                  : "italic"
+              }
+            >
+              {requiresGramKey
+                ? "Requires a Gram API key."
+                : "No Gram API key required."}
+            </span>
+          </Type>
+          <CodeBlock onCopy={onCopy}>{mcpJsonPublic}</CodeBlock>
+        </Grid.Item>,
+        ...(showManagedAuth
+          ? [
+              <Grid.Item key="managed">
+                <Type className="font-medium">Managed Authentication</Type>
+                <Type muted small className="mb-2! max-w-3xl">
+                  Manage API authentication with Gram environments.
+                  <br />
+                  Users need a single Gram API Key rather than bringing their
+                  own keys.
+                </Type>
+                <CodeBlock onCopy={onCopy}>{mcpJsonInternal}</CodeBlock>
+              </Grid.Item>,
+            ]
+          : []),
+      ]}
     </Grid>
   );
 }

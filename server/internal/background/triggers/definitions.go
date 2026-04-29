@@ -160,6 +160,19 @@ type slackEventRequestBody struct {
 	Channel  string `json:"channel,omitempty"`
 	ThreadTs string `json:"thread_ts,omitempty"`
 	Ts       string `json:"ts,omitempty"`
+
+	// Reaction-event fields. Slack puts the channel + ts of the reacted-to
+	// message inside `item`, not on the event body itself, so reaction_added
+	// / reaction_removed arrive with empty top-level Channel/Ts.
+	Reaction string              `json:"reaction,omitempty"`
+	ItemUser string              `json:"item_user,omitempty"`
+	Item     *slackEventItemBody `json:"item,omitempty"`
+}
+
+type slackEventItemBody struct {
+	Type    string `json:"type,omitempty"`
+	Channel string `json:"channel,omitempty"`
+	Ts      string `json:"ts,omitempty"`
 }
 
 type slackTriggerEvent struct {
@@ -174,6 +187,14 @@ type slackTriggerEvent struct {
 	AppID        string `json:"app_id,omitempty" cel:"app_id"`
 	Text         string `json:"text,omitempty" cel:"text"`
 	Timestamp    string `json:"timestamp,omitempty" cel:"timestamp"`
+
+	// Reaction-event fields exposed to CEL filters and the assistant adapter.
+	// Empty for non-reaction events.
+	Reaction    string `json:"reaction,omitempty" cel:"reaction"`
+	ItemUserID  string `json:"item_user_id,omitempty" cel:"item_user_id"`
+	ItemChannel string `json:"item_channel,omitempty" cel:"item_channel"`
+	ItemTs      string `json:"item_ts,omitempty" cel:"item_ts"`
+	ItemType    string `json:"item_type,omitempty" cel:"item_type"`
 }
 
 type cronTriggerEvent struct {
@@ -354,23 +375,51 @@ func newSlackDefinition() Definition {
 				eventID = uuid.NewSHA1(uuid.NameSpaceURL, body).String()
 			}
 
+			// Reaction events carry the channel + ts of the reacted-to message
+			// in `item`. Fall back to those so threading aligns with the
+			// originating message and CEL filters / correlation work.
+			channelID := req.Event.Channel
+			timestamp := req.Event.Ts
+			var (
+				itemType, itemChannel, itemTs string
+			)
+			if req.Event.Item != nil {
+				itemType = req.Event.Item.Type
+				itemChannel = req.Event.Item.Channel
+				itemTs = req.Event.Item.Ts
+				if channelID == "" {
+					channelID = itemChannel
+				}
+				if threadID == "" {
+					threadID = itemTs
+				}
+				if timestamp == "" {
+					timestamp = itemTs
+				}
+			}
+
 			normalizedEvent := slackTriggerEvent{
 				EnvelopeType: req.Type,
 				EventType:    req.Event.Type,
 				Subtype:      req.Event.Subtype,
 				TeamID:       req.TeamID,
-				ChannelID:    req.Event.Channel,
+				ChannelID:    channelID,
 				ThreadID:     threadID,
 				UserID:       req.Event.User,
 				BotID:        req.Event.BotID,
 				AppID:        req.Event.AppID,
 				Text:         req.Event.Text,
-				Timestamp:    req.Event.Ts,
+				Timestamp:    timestamp,
+				Reaction:     req.Event.Reaction,
+				ItemUserID:   req.Event.ItemUser,
+				ItemChannel:  itemChannel,
+				ItemTs:       itemTs,
+				ItemType:     itemType,
 			}
 
-			correlationID := req.Event.Channel
-			if req.Event.Channel != "" && threadID != "" {
-				correlationID = req.Event.Channel + ":" + threadID
+			correlationID := channelID
+			if channelID != "" && threadID != "" {
+				correlationID = channelID + ":" + threadID
 			}
 			if correlationID == "" {
 				correlationID = req.TeamID

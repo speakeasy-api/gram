@@ -29,6 +29,7 @@ type ruleSettings struct {
 	AuditEventTypedSnapshot    auditEventTypedSnapshotSettings    `json:"audit-event-typed-snapshot"`
 	AuditEventURNNaming        auditEventURNNamingSettings        `json:"audit-event-urn-naming"`
 	AuditEventURNTyping        auditEventURNTypingSettings        `json:"audit-event-urn-typing"`
+	NoDirectChatMessageInsert  noDirectChatMessageInsertSettings  `json:"no-direct-chat-message-insert"`
 }
 
 type plugin struct {
@@ -72,6 +73,9 @@ func (p *plugin) BuildAnalyzers() ([]*analysis.Analyzer, error) {
 	}
 	if !p.settings.Rules.AuditEventURNTyping.Disabled {
 		analyzers = append(analyzers, newAuditEventURNTypingAnalyzer(p.settings.Rules.AuditEventURNTyping))
+	}
+	if !p.settings.Rules.NoDirectChatMessageInsert.Disabled {
+		analyzers = append(analyzers, newNoDirectChatMessageInsertAnalyzer(p.settings.Rules.NoDirectChatMessageInsert))
 	}
 
 	return analyzers, nil

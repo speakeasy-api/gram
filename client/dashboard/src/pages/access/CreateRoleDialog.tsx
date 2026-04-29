@@ -26,7 +26,12 @@ import { useListScopes } from "@gram/client/react-query/listScopes.js";
 import { useUpdateRoleMutation } from "@gram/client/react-query/updateRole.js";
 import { Button } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, ChevronRight, Loader2 } from "lucide-react";
+import { ArrowRight, ChevronRight, Info, Loader2 } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useMemo, useState } from "react";
 import { ScopePickerPopover } from "./ScopePickerPopover";
 import type {
@@ -37,6 +42,7 @@ import type {
   Selector,
 } from "./types";
 import { DISPOSITION_TO_ANNOTATION } from "./types";
+import { isSaveDisabled } from "./roleDialogState";
 
 interface CreateRoleDialogProps {
   open: boolean;
@@ -91,6 +97,10 @@ export function CreateRoleDialog({
   const [selectedMembers, setSelectedMembers] = useState<Set<string>>(
     new Set(),
   );
+  const [initialMembers, setInitialMembers] = useState<Set<string>>(new Set());
+  const [initialName, setInitialName] = useState("");
+  const [initialDescription, setInitialDescription] = useState("");
+  const [initialGrantKeys, setInitialGrantKeys] = useState("");
   const [showMembers, setShowMembers] = useState(false);
   const [showPermissions, setShowPermissions] = useState(true);
   const [initialized, setInitialized] = useState(false);
@@ -118,7 +128,7 @@ export function CreateRoleDialog({
   }, [scopesData]);
 
   // Pre-populate fields when editing — wait for async data so autoExpanded works correctly.
-  if (editingRole && !initialized && scopesData) {
+  if (editingRole && !initialized && scopesData && membersData) {
     setName(editingRole.name);
     setDescription(editingRole.description);
     const roleGrants = grantsFromRole(editingRole);
@@ -144,10 +154,14 @@ export function CreateRoleDialog({
       };
     }
     setGrants(roleGrants);
+    setInitialName(editingRole.name);
+    setInitialDescription(editingRole.description);
+    setInitialGrantKeys(Object.keys(roleGrants).sort().join(","));
     const assignedIds = new Set(
       members.filter((m) => m.roleId === editingRole.id).map((m) => m.id),
     );
     setSelectedMembers(assignedIds);
+    setInitialMembers(new Set(assignedIds));
     setInitialized(true);
   }
   if (!editingRole && initialized) {
@@ -179,6 +193,22 @@ export function CreateRoleDialog({
   const grantCount = Object.values(grants).filter(
     (g) => g.selectors === null || g.selectors.length > 0,
   ).length;
+
+  const saveDisabled = isSaveDisabled({
+    isMutating,
+    isEditing,
+    isSystemRole,
+    name,
+    description,
+    grants,
+    selectedMembers,
+    initial: {
+      name: initialName,
+      description: initialDescription,
+      grantKeys: initialGrantKeys,
+      members: initialMembers,
+    },
+  });
 
   const toggleScope = (scope: Scope) => {
     setGrants((prev) => {
@@ -297,6 +327,10 @@ export function CreateRoleDialog({
     setGrants({});
     setExpandedGroups(new Set());
     setSelectedMembers(new Set());
+    setInitialMembers(new Set());
+    setInitialName("");
+    setInitialDescription("");
+    setInitialGrantKeys("");
     setShowMembers(false);
     setShowPermissions(true);
     setInitialized(false);
@@ -363,6 +397,13 @@ export function CreateRoleDialog({
 
             {showPermissions && (
               <div className="mt-3 space-y-3">
+                {isSystemRole && (
+                  <div className="bg-muted/60 text-muted-foreground flex items-center gap-2 rounded-md px-3 py-2 text-xs">
+                    <Info className="h-3.5 w-3.5 shrink-0" />
+                    System role permissions are managed by Gram and cannot be
+                    changed.
+                  </div>
+                )}
                 {scopeGroups.map((group) => {
                   const selectedInGroup = group.scopes.filter(
                     (s) => grants[s.slug],
@@ -432,12 +473,22 @@ export function CreateRoleDialog({
                             const grant = grants[scopeDef.slug];
                             const isChecked = !!grant;
 
-                            return (
+                            const row = (
                               <div
                                 key={scopeDef.slug}
-                                className="hover:bg-muted/50 flex items-start gap-3 px-3 py-2.5"
+                                className={cn(
+                                  "hover:bg-muted/50 flex items-start gap-3 px-3 py-2.5",
+                                  isSystemRole && "cursor-default",
+                                )}
                               >
-                                <label className="flex min-w-0 flex-1 cursor-pointer items-start gap-3">
+                                <label
+                                  className={cn(
+                                    "flex min-w-0 flex-1 items-start gap-3",
+                                    isSystemRole
+                                      ? "cursor-default"
+                                      : "cursor-pointer",
+                                  )}
+                                >
                                   <Checkbox
                                     disabled={isSystemRole}
                                     checked={isChecked}
@@ -496,6 +547,22 @@ export function CreateRoleDialog({
                                 </div>
                               </div>
                             );
+
+                            if (isSystemRole) {
+                              return (
+                                <Tooltip key={scopeDef.slug}>
+                                  <TooltipTrigger asChild>{row}</TooltipTrigger>
+                                  <TooltipContent
+                                    side="right"
+                                    className="max-w-48"
+                                  >
+                                    Cannot edit system role permissions
+                                  </TooltipContent>
+                                </Tooltip>
+                              );
+                            }
+
+                            return row;
                           })}
                         </div>
                       )}
@@ -621,15 +688,7 @@ export function CreateRoleDialog({
           <Button variant="secondary" onClick={handleClose}>
             Cancel
           </Button>
-          <Button
-            onClick={handleSubmit}
-            disabled={
-              isMutating ||
-              (isSystemRole
-                ? selectedMembers.size === 0
-                : !name.trim() || !description.trim() || grantCount === 0)
-            }
-          >
+          <Button onClick={handleSubmit} disabled={saveDisabled}>
             {isMutating && (
               <Button.LeftIcon>
                 <Loader2 className="h-4 w-4 animate-spin" />
