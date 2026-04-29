@@ -1857,35 +1857,41 @@ export function MCPJson({
           : 1
       }
     >
-      <Grid.Item>
-        <Type className="font-medium">Pass-through Authentication</Type>
-        <Type muted small className="mb-2! max-w-3xl">
-          Pass API credentials directly to the MCP server.
-          <br />
-          <span
-            className={
-              requiresGramKey ? "text-warning-foreground font-medium" : "italic"
-            }
-          >
-            {requiresGramKey
-              ? "Requires a Gram API key."
-              : "No Gram API key required."}
-          </span>
-        </Type>
-        <CodeBlock onCopy={onCopy}>{mcpJsonPublic}</CodeBlock>
-      </Grid.Item>
-      {showManagedAuth && (
-        <Grid.Item>
-          <Type className="font-medium">Managed Authentication</Type>
+      {[
+        <Grid.Item key="passthrough">
+          <Type className="font-medium">Pass-through Authentication</Type>
           <Type muted small className="mb-2! max-w-3xl">
-            Manage API authentication with Gram environments.
+            Pass API credentials directly to the MCP server.
             <br />
-            Users need a single Gram API Key rather than bringing their own
-            keys.
+            <span
+              className={
+                requiresGramKey
+                  ? "text-warning-foreground font-medium"
+                  : "italic"
+              }
+            >
+              {requiresGramKey
+                ? "Requires a Gram API key."
+                : "No Gram API key required."}
+            </span>
           </Type>
-          <CodeBlock onCopy={onCopy}>{mcpJsonInternal}</CodeBlock>
-        </Grid.Item>
-      )}
+          <CodeBlock onCopy={onCopy}>{mcpJsonPublic}</CodeBlock>
+        </Grid.Item>,
+        ...(showManagedAuth
+          ? [
+              <Grid.Item key="managed">
+                <Type className="font-medium">Managed Authentication</Type>
+                <Type muted small className="mb-2! max-w-3xl">
+                  Manage API authentication with Gram environments.
+                  <br />
+                  Users need a single Gram API Key rather than bringing their
+                  own keys.
+                </Type>
+                <CodeBlock onCopy={onCopy}>{mcpJsonInternal}</CodeBlock>
+              </Grid.Item>,
+            ]
+          : []),
+      ]}
     </Grid>
   );
 }
