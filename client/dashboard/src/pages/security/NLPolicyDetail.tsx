@@ -26,9 +26,26 @@ export default function NLPolicyDetail() {
 
 function NLPolicyDetailContent() {
   const { policyId } = useParams<{ policyId: string }>();
-  const { data: policy, isLoading } = useNlPoliciesGet({
-    policyId: policyId ?? "",
-  });
+  const { data: policy, isLoading } = useNlPoliciesGet(
+    { policyId: policyId ?? "" },
+    undefined,
+    { enabled: !!policyId },
+  );
+
+  if (!policyId) {
+    return (
+      <Page>
+        <Page.Header>
+          <Page.Header.Breadcrumbs />
+        </Page.Header>
+        <Page.Body>
+          <div className="text-muted-foreground py-20 text-center text-sm">
+            Policy not found.
+          </div>
+        </Page.Body>
+      </Page>
+    );
+  }
 
   if (isLoading || !policy) {
     return (
