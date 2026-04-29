@@ -1766,14 +1766,14 @@ CREATE TABLE IF NOT EXISTS principal_grants (
   principal_type TEXT NOT NULL GENERATED ALWAYS AS (split_part(principal_urn, ':', 1)) STORED,
   scope TEXT NOT NULL,
   drop_resource TEXT,
-  selectors JSONB,
+  selectors JSONB NOT NULL,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
   CONSTRAINT principal_grants_pkey PRIMARY KEY (id),
   CONSTRAINT principal_grants_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
-  CONSTRAINT principal_grants_selectors_check CHECK (selectors IS NULL OR jsonb_typeof(selectors) = 'object')
+  CONSTRAINT principal_grants_selectors_check CHECK (jsonb_typeof(selectors) = 'object' AND selectors != '{}')
 );
 
 COMMENT ON TABLE principal_grants IS 'RBAC grants. Normalized: one row per (org, principal, scope). Selectors can further constrain applicability.';

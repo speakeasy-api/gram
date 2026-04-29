@@ -1,4 +1,4 @@
-h1:PQQhOJoEvIk4DmVye1P98HTWTEbomGDFqkakv5wyjuY=
+h1:IRDesKKtbKVMf0Q9KXQDgu2z1DjN1F+lZNMPZ/259yo=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -145,3 +145,4 @@ h1:PQQhOJoEvIk4DmVye1P98HTWTEbomGDFqkakv5wyjuY=
 20260424180559_risk-policies-default-pii.sql h1:A+qKEtwSff7+mi6l0vTGLqv8kvIzStw9A98ydQjmJc0=
 20260427000002_remove-noisy-pii-entities.sql h1:t4PebqHsToQv2WWEAiHCSnY3zaB5hGUSYHd1k2pfayk=
 20260428000001_deprecate-grant-resource-column.sql h1:6IJguq8/DX4gfSF4kP4DewDIIC2dOmP1macUDBSTubI=
+20260429084759_selector-indexes.sql h1:F50TJhn2zpcbu9XnXLUp8d5a4f+OHb4762Oq1z0xRRg=
