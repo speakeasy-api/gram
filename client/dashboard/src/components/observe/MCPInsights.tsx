@@ -1007,7 +1007,7 @@ function InsightsOverviewContent({
 
   const navigateToLogs = useCallback(
     (toolUrn?: string) => {
-      const logsUrl = routes.logs.href();
+      const logsUrl = routes.logs.mcp.href();
       const params = new URLSearchParams();
 
       if (toolUrn) {
