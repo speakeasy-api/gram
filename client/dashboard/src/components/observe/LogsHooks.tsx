@@ -473,68 +473,64 @@ export function LogsHooks() {
         subtitle="Ask me about your hook logs! Powered by Elements + Gram MCP"
         hideTrigger={isLogsDisabled}
       />
-      <div className="flex h-full flex-col overflow-hidden">
-        {isLogsDisabled ? (
-          <div className="min-h-0 w-full flex-1 space-y-6 overflow-y-auto p-8 pb-24">
-            <div className="flex min-w-0 flex-col gap-1">
-              <h1 className="text-xl font-semibold">Hooks</h1>
-              <p className="text-muted-foreground text-sm">
-                Monitor hook events and tool executions across all servers
-              </p>
-            </div>
-            <div className="relative flex-1">
-              <div
-                className="pointer-events-none h-full select-none"
-                aria-hidden="true"
-              >
-                <ObservabilitySkeleton />
-              </div>
-              <EnableLoggingOverlay onEnabled={refetch} />
-            </div>
+      {isLogsDisabled ? (
+        <div className="min-h-0 w-full flex-1 space-y-6 overflow-y-auto p-8 pb-24">
+          <div className="flex min-w-0 flex-col gap-1">
+            <h1 className="text-xl font-semibold">Hooks</h1>
+            <p className="text-muted-foreground text-sm">
+              Monitor hook events and tool executions across all servers
+            </p>
           </div>
-        ) : (
-          <div className="min-h-0 w-full flex-1">
-            <EnterpriseGate
-              icon="workflow"
-              description="Hooks are available on the Enterprise plan. Book a time to get started."
+          <div className="relative flex-1">
+            <div
+              className="pointer-events-none h-full select-none"
+              aria-hidden="true"
             >
-              <HooksInnerContent
-                isLogsDisabled={isLogsDisabled}
-                isLoading={isLoading}
-                isFetching={isFetching}
-                error={error}
-                groupedTraces={groupedTraces}
-                serverInput={serverInput}
-                setServerInput={setServerInput}
-                userEmailInput={userEmailInput}
-                setUserEmailInput={setUserEmailInput}
-                activeFilters={activeFilters}
-                addFilter={addFilter}
-                removeFilter={removeFilter}
-                selectedHookTypes={selectedHookTypes}
-                onHookTypesChange={handleHookTypesChange}
-                expandedTraceId={expandedTraceId}
-                toggleExpand={toggleExpand}
-                selectedLog={selectedLog}
-                handleLogClick={handleLogClick}
-                setSelectedLog={setSelectedLog}
-                containerRef={containerRef}
-                handleScroll={handleScroll}
-                hasNextPage={hasNextPage}
-                isFetchingNextPage={isFetchingNextPage}
-                dateRange={dateRange}
-                customRange={customRange}
-                customRangeLabel={urlLabel}
-                onDateRangeChange={setDateRangeParam}
-                onCustomRangeChange={setCustomRangeParam}
-                onClearCustomRange={clearCustomRange}
-                projectSlug={projectSlug}
-                serverNameMappings={serverNameMappings}
-              />
-            </EnterpriseGate>
+              <ObservabilitySkeleton />
+            </div>
+            <EnableLoggingOverlay onEnabled={refetch} />
           </div>
-        )}
-      </div>
+        </div>
+      ) : (
+        <EnterpriseGate
+          icon="workflow"
+          description="Hooks are available on the Enterprise plan. Book a time to get started."
+        >
+          <HooksInnerContent
+            isLogsDisabled={isLogsDisabled}
+            isLoading={isLoading}
+            isFetching={isFetching}
+            error={error}
+            groupedTraces={groupedTraces}
+            serverInput={serverInput}
+            setServerInput={setServerInput}
+            userEmailInput={userEmailInput}
+            setUserEmailInput={setUserEmailInput}
+            activeFilters={activeFilters}
+            addFilter={addFilter}
+            removeFilter={removeFilter}
+            selectedHookTypes={selectedHookTypes}
+            onHookTypesChange={handleHookTypesChange}
+            expandedTraceId={expandedTraceId}
+            toggleExpand={toggleExpand}
+            selectedLog={selectedLog}
+            handleLogClick={handleLogClick}
+            setSelectedLog={setSelectedLog}
+            containerRef={containerRef}
+            handleScroll={handleScroll}
+            hasNextPage={hasNextPage}
+            isFetchingNextPage={isFetchingNextPage}
+            dateRange={dateRange}
+            customRange={customRange}
+            customRangeLabel={urlLabel}
+            onDateRangeChange={setDateRangeParam}
+            onCustomRangeChange={setCustomRangeParam}
+            onClearCustomRange={clearCustomRange}
+            projectSlug={projectSlug}
+            serverNameMappings={serverNameMappings}
+          />
+        </EnterpriseGate>
+      )}
     </>
   );
 }
@@ -606,7 +602,7 @@ function HooksInnerContent({
   return (
     <>
       <div className="flex min-h-0 w-full flex-1 flex-col">
-        <div className="flex min-h-0 flex-1 flex-col gap-6 px-8 pt-8 pb-4">
+        <div className="flex min-h-0 flex-1 flex-col gap-6 px-8 pt-8">
           <div className="flex shrink-0 items-start justify-between gap-4">
             <div className="flex min-w-0 flex-col gap-1">
               <h1 className="text-xl font-semibold">Hooks</h1>

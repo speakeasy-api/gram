@@ -8,15 +8,18 @@ import { ObserveTabNav } from "@/components/observe/ObserveTabNav";
 
 export function InsightsRoot() {
   return (
-    <Page>
-      <Page.Header>
-        <Page.Header.Breadcrumbs fullWidth />
-      </Page.Header>
-      <ObserveTabNav base="insights" />
-      <Page.Body fullWidth noPadding>
-        <Outlet />
-      </Page.Body>
-    </Page>
+    <div className="flex h-full flex-col">
+      {/* ^ Wrapper needed to fill page height, allow inner content scrolls. */}
+      <Page>
+        <Page.Header>
+          <Page.Header.Breadcrumbs fullWidth />
+        </Page.Header>
+        <ObserveTabNav base="insights" />
+        <Page.Body fullWidth overflowHidden noPadding>
+          <Outlet />
+        </Page.Body>
+      </Page>
+    </div>
   );
 }
 

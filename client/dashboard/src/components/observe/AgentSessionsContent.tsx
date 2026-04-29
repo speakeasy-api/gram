@@ -464,23 +464,21 @@ function AgentSessionsPageContent({
 }) {
   if (isLogsDisabled) {
     return (
-      <div className="flex h-full flex-col overflow-hidden">
-        <div className="min-h-0 w-full flex-1 space-y-6 overflow-y-auto p-8 pb-24">
-          <div className="flex min-w-0 flex-col gap-1">
-            <h1 className="text-xl font-semibold">Agent Sessions</h1>
-            <p className="text-muted-foreground text-sm">
-              View and debug individual agent sessions
-            </p>
+      <div className="min-h-0 w-full flex-1 space-y-6 overflow-y-auto p-8 pb-24">
+        <div className="flex min-w-0 flex-col gap-1">
+          <h1 className="text-xl font-semibold">Agent Sessions</h1>
+          <p className="text-muted-foreground text-sm">
+            View and debug individual agent sessions
+          </p>
+        </div>
+        <div className="relative flex-1">
+          <div
+            className="pointer-events-none h-full select-none"
+            aria-hidden="true"
+          >
+            <ObservabilitySkeleton />
           </div>
-          <div className="relative flex-1">
-            <div
-              className="pointer-events-none h-full select-none"
-              aria-hidden="true"
-            >
-              <ObservabilitySkeleton />
-            </div>
-            <EnableLoggingOverlay onEnabled={onLogsEnabled} />
-          </div>
+          <EnableLoggingOverlay onEnabled={onLogsEnabled} />
         </div>
       </div>
     );
@@ -488,124 +486,120 @@ function AgentSessionsPageContent({
 
   return (
     <>
-      <div className="flex h-full flex-col overflow-hidden">
-        <>
-          <div className="flex min-h-0 w-full flex-1 flex-col">
-            <div className="shrink-0 space-y-4 px-8 py-4">
-              <div className="flex min-w-0 flex-col gap-1">
-                <h1 className="text-xl font-semibold">Agent Sessions</h1>
-                <p className="text-muted-foreground text-sm">
-                  View and debug individual agent sessions
-                </p>
-              </div>
-              <div className="flex items-center gap-3">
-                <ChatLogsFilters
-                  searchQuery={searchQuery}
-                  onSearchQueryChange={setSearchQuery}
-                  resolutionStatus={resolutionStatus}
-                  onResolutionStatusChange={setResolutionStatus}
-                />
-                <div className="ml-auto flex shrink-0 items-center gap-3">
-                  <div className="border-border flex h-10 items-center rounded-md border">
-                    <span className="text-muted-foreground px-3 text-sm font-medium">
-                      Sort
-                    </span>
-                    <div className="bg-border h-5 w-px" />
-                    <Select
-                      value={sortField}
-                      onValueChange={(v) => setSortField(v as SortField)}
+      <div className="flex min-h-0 w-full flex-1 flex-col">
+        <div className="shrink-0 space-y-4 px-8 py-4">
+          <div className="flex min-w-0 flex-col gap-1">
+            <h1 className="text-xl font-semibold">Agent Sessions</h1>
+            <p className="text-muted-foreground text-sm">
+              View and debug individual agent sessions
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            <ChatLogsFilters
+              searchQuery={searchQuery}
+              onSearchQueryChange={setSearchQuery}
+              resolutionStatus={resolutionStatus}
+              onResolutionStatusChange={setResolutionStatus}
+            />
+            <div className="ml-auto flex shrink-0 items-center gap-3">
+              <div className="border-border flex h-10 items-center rounded-md border">
+                <span className="text-muted-foreground px-3 text-sm font-medium">
+                  Sort
+                </span>
+                <div className="bg-border h-5 w-px" />
+                <Select
+                  value={sortField}
+                  onValueChange={(v) => setSortField(v as SortField)}
+                >
+                  <SelectTrigger className="h-full min-w-[100px] rounded-none border-0 shadow-none">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="w-[280px]">
+                    <SelectItem
+                      value="chronological"
+                      description="Sort by when the chat was created"
                     >
-                      <SelectTrigger className="h-full min-w-[100px] rounded-none border-0 shadow-none">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent className="w-[280px]">
-                        <SelectItem
-                          value="chronological"
-                          description="Sort by when the chat was created"
-                        >
-                          Date
-                        </SelectItem>
-                        <SelectItem
-                          value="messageCount"
-                          description="Sort by number of messages in the chat"
-                        >
-                          Messages
-                        </SelectItem>
-                        <SelectItem
-                          value="score"
-                          description="Sort by resolution score"
-                        >
-                          Score
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <div className="bg-border h-5 w-px" />
-                    <div className="flex items-center px-1.5">
-                      <SimpleTooltip tooltip="Sort direction">
-                        <button
-                          type="button"
-                          onClick={toggleSortOrder}
-                          className="text-muted-foreground hover:text-foreground hover:bg-accent flex size-7 items-center justify-center rounded transition-colors"
-                        >
-                          {sortOrder === "desc" ? (
-                            <ArrowDownIcon className="size-4" />
-                          ) : (
-                            <ArrowUpIcon className="size-4" />
-                          )}
-                        </button>
-                      </SimpleTooltip>
-                    </div>
-                  </div>
-                  <TimeRangePicker
-                    preset={customRange ? null : dateRange}
-                    customRange={customRange}
-                    onPresetChange={setDateRangeParam}
-                    onCustomRangeChange={setCustomRangeParam}
-                    onClearCustomRange={clearCustomRange}
-                  />
+                      Date
+                    </SelectItem>
+                    <SelectItem
+                      value="messageCount"
+                      description="Sort by number of messages in the chat"
+                    >
+                      Messages
+                    </SelectItem>
+                    <SelectItem
+                      value="score"
+                      description="Sort by resolution score"
+                    >
+                      Score
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+                <div className="bg-border h-5 w-px" />
+                <div className="flex items-center px-1.5">
+                  <SimpleTooltip tooltip="Sort direction">
+                    <button
+                      type="button"
+                      onClick={toggleSortOrder}
+                      className="text-muted-foreground hover:text-foreground hover:bg-accent flex size-7 items-center justify-center rounded transition-colors"
+                    >
+                      {sortOrder === "desc" ? (
+                        <ArrowDownIcon className="size-4" />
+                      ) : (
+                        <ArrowUpIcon className="size-4" />
+                      )}
+                    </button>
+                  </SimpleTooltip>
                 </div>
               </div>
-            </div>
-
-            <div className="min-h-0 flex-1 overflow-hidden border-t">
-              <div className="bg-background flex h-full flex-col overflow-hidden">
-                <div className="shrink-0">
-                  <ScoreLegend />
-                </div>
-                <div className="flex-1 overflow-y-auto">
-                  <ChatLogsTable
-                    chats={chats}
-                    selectedChatId={selectedChat?.id}
-                    onSelectChat={setSelectedChat}
-                    onDeleteChat={onDeleteChat}
-                    isLoading={isLoading}
-                    error={error}
-                  />
-                </div>
-                {(hasMore || offset > 0) && (
-                  <div className="bg-background flex shrink-0 items-center justify-center gap-4 border-t p-4">
-                    <Button
-                      onClick={() => setOffset(Math.max(0, offset - limit))}
-                      disabled={offset === 0}
-                    >
-                      Previous
-                    </Button>
-                    <span className="text-muted-foreground text-sm tabular-nums">
-                      Page {Math.floor(offset / limit) + 1}
-                      {total > 0 && ` of ${Math.ceil(total / limit)}`}
-                    </span>
-                    <Button
-                      onClick={() => setOffset(offset + limit)}
-                      disabled={!hasMore}
-                    >
-                      Next
-                    </Button>
-                  </div>
-                )}
-              </div>
+              <TimeRangePicker
+                preset={customRange ? null : dateRange}
+                customRange={customRange}
+                onPresetChange={setDateRangeParam}
+                onCustomRangeChange={setCustomRangeParam}
+                onClearCustomRange={clearCustomRange}
+              />
             </div>
           </div>
-        </>
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-hidden border-t">
+          <div className="bg-background flex h-full flex-col overflow-hidden">
+            <div className="shrink-0">
+              <ScoreLegend />
+            </div>
+            <div className="flex-1 overflow-y-auto">
+              <ChatLogsTable
+                chats={chats}
+                selectedChatId={selectedChat?.id}
+                onSelectChat={setSelectedChat}
+                onDeleteChat={onDeleteChat}
+                isLoading={isLoading}
+                error={error}
+              />
+            </div>
+            {(hasMore || offset > 0) && (
+              <div className="bg-background flex shrink-0 items-center justify-center gap-4 border-t p-4">
+                <Button
+                  onClick={() => setOffset(Math.max(0, offset - limit))}
+                  disabled={offset === 0}
+                >
+                  Previous
+                </Button>
+                <span className="text-muted-foreground text-sm tabular-nums">
+                  Page {Math.floor(offset / limit) + 1}
+                  {total > 0 && ` of ${Math.ceil(total / limit)}`}
+                </span>
+                <Button
+                  onClick={() => setOffset(offset + limit)}
+                  disabled={!hasMore}
+                >
+                  Next
+                </Button>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
       <Drawer

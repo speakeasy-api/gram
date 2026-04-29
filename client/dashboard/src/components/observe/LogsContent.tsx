@@ -675,134 +675,132 @@ function LogsInnerContent({
 
   return (
     <>
-      <div className="flex h-full flex-col overflow-hidden">
-        {isLogsDisabled ? (
-          <div className="min-h-0 w-full flex-1 space-y-6 overflow-y-auto p-8 pb-24">
-            {pageTitle}
-            <div className="relative flex-1">
-              <div
-                className="pointer-events-none h-full select-none"
-                aria-hidden="true"
-              >
-                <ObservabilitySkeleton />
+      {isLogsDisabled ? (
+        <div className="min-h-0 w-full flex-1 space-y-6 overflow-y-auto p-8 pb-24">
+          {pageTitle}
+          <div className="relative flex-1">
+            <div
+              className="pointer-events-none h-full select-none"
+              aria-hidden="true"
+            >
+              <ObservabilitySkeleton />
+            </div>
+            <EnableLoggingOverlay onEnabled={refetch} />
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className="flex min-h-0 w-full flex-1 flex-col">
+            <div className="shrink-0 px-8 py-4">
+              <div className="mb-4 flex items-start justify-between gap-4">
+                {pageTitle}
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleRefreshClick}
+                    disabled={isRefreshing}
+                    aria-label="Refresh logs"
+                    className={cn(
+                      "min-w-[110px] justify-center transition-all",
+                      isRefreshing && "ring-primary/30 ring-2 ring-offset-1",
+                    )}
+                  >
+                    {isRefreshing ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        <span className="text-muted-foreground">
+                          Refreshing…
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <RefreshCw className="h-4 w-4" />
+                        Refresh
+                      </>
+                    )}
+                  </Button>
+                  <Button variant="outline" size="sm" asChild>
+                    <Link to={orgRoutes.logs.href()}>
+                      <Settings className="h-4 w-4" />
+                      Configure settings
+                    </Link>
+                  </Button>
+                </div>
               </div>
-              <EnableLoggingOverlay onEnabled={refetch} />
+              <div className="flex flex-wrap items-center gap-4">
+                <MCPServerFilter
+                  selectedServer={selectedServer}
+                  onServerChange={onServerChange}
+                  toolsets={toolsets}
+                  isLoading={isLoadingToolsets}
+                />
+                <div className="flex-1">
+                  <LogFilterBar
+                    filters={logFilters}
+                    onChange={onLogFiltersChange}
+                    attributeKeys={attributeKeys}
+                    isLoadingKeys={isLoadingAttributeKeys}
+                    searchInput={searchInput}
+                    onSearchInputChange={setSearchInput}
+                    onSearchSubmit={onSearchSubmit}
+                  />
+                </div>
+                <div className="ml-auto">
+                  <TimeRangePicker
+                    preset={customRange ? null : dateRange}
+                    customRange={customRange}
+                    customRangeLabel={customRangeLabel}
+                    onPresetChange={onDateRangeChange}
+                    onCustomRangeChange={onCustomRangeChange}
+                    onClearCustomRange={onClearCustomRange}
+                    projectSlug={projectSlug}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-hidden border-t">
+              <div className="bg-background flex h-full flex-col">
+                <div className="bg-muted/30 text-muted-foreground flex shrink-0 items-center gap-3 border-b px-8 py-2.5 text-xs font-medium tracking-wide uppercase">
+                  <div className="w-1.5 shrink-0" />
+                  <div className="w-[150px] shrink-0">Timestamp</div>
+                  <div className="w-5 shrink-0" />
+                  <div className="flex-1">Source / Tool</div>
+                  <div className="w-16 shrink-0 text-right">Status</div>
+                </div>
+
+                <div
+                  ref={containerRef}
+                  className="flex-1 overflow-y-auto"
+                  onScroll={handleScroll}
+                >
+                  <TraceListContent
+                    error={error}
+                    isLoading={isLoading}
+                    allTraces={allTraces}
+                    hasActiveFilters={hasActiveFilters}
+                    expandedTraceId={expandedTraceId}
+                    isFetchingNextPage={isFetchingNextPage}
+                    onToggleExpand={toggleExpand}
+                    onLogClick={handleLogClick}
+                  />
+                </div>
+
+                {allTraces.length > 0 && (
+                  <div className="bg-muted/30 text-muted-foreground flex shrink-0 items-center gap-4 border-t px-8 py-3 text-sm">
+                    <span>
+                      {allTraces.length}{" "}
+                      {allTraces.length === 1 ? "trace" : "traces"}
+                      {hasNextPage && " • Scroll to load more"}
+                    </span>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
-        ) : (
-          <>
-            <div className="flex min-h-0 w-full flex-1 flex-col">
-              <div className="shrink-0 px-8 py-4">
-                <div className="mb-4 flex items-start justify-between gap-4">
-                  {pageTitle}
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleRefreshClick}
-                      disabled={isRefreshing}
-                      aria-label="Refresh logs"
-                      className={cn(
-                        "min-w-[110px] justify-center transition-all",
-                        isRefreshing && "ring-primary/30 ring-2 ring-offset-1",
-                      )}
-                    >
-                      {isRefreshing ? (
-                        <>
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                          <span className="text-muted-foreground">
-                            Refreshing…
-                          </span>
-                        </>
-                      ) : (
-                        <>
-                          <RefreshCw className="h-4 w-4" />
-                          Refresh
-                        </>
-                      )}
-                    </Button>
-                    <Button variant="outline" size="sm" asChild>
-                      <Link to={orgRoutes.logs.href()}>
-                        <Settings className="h-4 w-4" />
-                        Configure settings
-                      </Link>
-                    </Button>
-                  </div>
-                </div>
-                <div className="flex flex-wrap items-center gap-4">
-                  <MCPServerFilter
-                    selectedServer={selectedServer}
-                    onServerChange={onServerChange}
-                    toolsets={toolsets}
-                    isLoading={isLoadingToolsets}
-                  />
-                  <div className="flex-1">
-                    <LogFilterBar
-                      filters={logFilters}
-                      onChange={onLogFiltersChange}
-                      attributeKeys={attributeKeys}
-                      isLoadingKeys={isLoadingAttributeKeys}
-                      searchInput={searchInput}
-                      onSearchInputChange={setSearchInput}
-                      onSearchSubmit={onSearchSubmit}
-                    />
-                  </div>
-                  <div className="ml-auto">
-                    <TimeRangePicker
-                      preset={customRange ? null : dateRange}
-                      customRange={customRange}
-                      customRangeLabel={customRangeLabel}
-                      onPresetChange={onDateRangeChange}
-                      onCustomRangeChange={onCustomRangeChange}
-                      onClearCustomRange={onClearCustomRange}
-                      projectSlug={projectSlug}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className="min-h-0 flex-1 overflow-hidden border-t">
-                <div className="bg-background flex h-full flex-col">
-                  <div className="bg-muted/30 text-muted-foreground flex shrink-0 items-center gap-3 border-b px-8 py-2.5 text-xs font-medium tracking-wide uppercase">
-                    <div className="w-1.5 shrink-0" />
-                    <div className="w-[150px] shrink-0">Timestamp</div>
-                    <div className="w-5 shrink-0" />
-                    <div className="flex-1">Source / Tool</div>
-                    <div className="w-16 shrink-0 text-right">Status</div>
-                  </div>
-
-                  <div
-                    ref={containerRef}
-                    className="flex-1 overflow-y-auto"
-                    onScroll={handleScroll}
-                  >
-                    <TraceListContent
-                      error={error}
-                      isLoading={isLoading}
-                      allTraces={allTraces}
-                      hasActiveFilters={hasActiveFilters}
-                      expandedTraceId={expandedTraceId}
-                      isFetchingNextPage={isFetchingNextPage}
-                      onToggleExpand={toggleExpand}
-                      onLogClick={handleLogClick}
-                    />
-                  </div>
-
-                  {allTraces.length > 0 && (
-                    <div className="bg-muted/30 text-muted-foreground flex shrink-0 items-center gap-4 border-t px-8 py-3 text-sm">
-                      <span>
-                        {allTraces.length}{" "}
-                        {allTraces.length === 1 ? "trace" : "traces"}
-                        {hasNextPage && " • Scroll to load more"}
-                      </span>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          </>
-        )}
-      </div>
+        </>
+      )}
 
       <LogDetailSheet
         log={selectedLog}
