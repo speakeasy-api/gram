@@ -91,6 +91,21 @@ func seedGrant(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizati
 	require.NoError(t, err)
 }
 
+func seedGrantWithSelector(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, principal urn.Principal, scope Scope, sel Selector) {
+	t.Helper()
+
+	selectors, err := sel.MarshalJSON()
+	require.NoError(t, err)
+
+	_, err = accessrepo.New(conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{
+		OrganizationID: organizationID,
+		PrincipalUrn:   principal,
+		Scope:          string(scope),
+		Selectors:      selectors,
+	})
+	require.NoError(t, err)
+}
+
 func seedConnectedUser(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, userID string, email string, displayName string, workosUserID string, workosMembershipID string) {
 	t.Helper()
 
