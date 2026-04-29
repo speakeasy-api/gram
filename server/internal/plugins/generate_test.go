@@ -471,3 +471,47 @@ func TestRenderHookScriptCursorOmitsProjectHeaderWhenSlugMissing(t *testing.T) {
 	require.Contains(t, script, "Gram-Key: gram_local_secret_xyz", "key still emitted without a slug")
 	require.NotContains(t, script, "Gram-Project")
 }
+
+// Claude only invokes hook.sh for events listed in hooks.json. The Claude()
+// handler in server/internal/hooks/claude_hooks.go records PostToolUseFailure,
+// so dropping it from the registered events would silently lose all tool
+// failure telemetry. Cursor's parallel list already carries postToolUseFailure;
+// keep parity to make sure the failure signal isn't dropped on the Claude side.
+func TestClaudeBaseHookEventsRegistersToolFailureEvent(t *testing.T) {
+	t.Parallel()
+	require.Contains(t, ClaudeBaseHookEvents, "PostToolUseFailure")
+}
+
+func TestGenerateClaudeBasePluginHooksJSONIncludesAllRegisteredEvents(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{
+		OrgName:     "Acme",
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+	}
+	files, err := GeneratePluginPackages(nil, cfg)
+	require.NoError(t, err)
+
+	hooksJSON := files[ClaudeBaseSlug(cfg)+"/hooks.json"]
+	require.NotNil(t, hooksJSON, "claude base hooks.json missing")
+
+	var parsed claudeHooksConfig
+	require.NoError(t, json.Unmarshal(hooksJSON, &parsed))
+
+	for _, event := range ClaudeBaseHookEvents {
+		require.Contains(t, parsed.Hooks, event, "event %q must be registered in hooks.json or Claude will silently drop it", event)
+	}
+}
+
+func TestGenerateReadmeIncludesCodexInstallation(t *testing.T) {
+	t.Parallel()
+	files, err := GeneratePluginPackages(nil, GenerateConfig{
+		OrgName:   "Acme",
+		ServerURL: "https://app.getgram.ai",
+	})
+	require.NoError(t, err)
+
+	readme := string(files["README.md"])
+	require.Contains(t, readme, "### Codex", "Codex installation section must be present — Codex packages are still generated and listed in the marketplace")
+	require.Contains(t, readme, "codex plugin marketplace add")
+}

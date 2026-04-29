@@ -54,10 +54,14 @@ type GenerateConfig struct {
 }
 
 // ClaudeBaseHookEvents are the Claude Code hook events the base plugin
-// registers against. Names match Claude's hooks.json schema.
+// registers against. Names match Claude's hooks.json schema. Claude only
+// invokes hook.sh for events listed here, so any event the Claude() handler
+// in server/internal/hooks/claude_hooks.go expects to record must appear
+// in this list — otherwise it is silently dropped on the client side.
 var ClaudeBaseHookEvents = []string{
 	"PreToolUse",
 	"PostToolUse",
+	"PostToolUseFailure",
 	"SessionStart",
 	"UserPromptSubmit",
 	"Stop",
@@ -247,6 +251,12 @@ func generateReadme(plugins []PluginInfo, cfg GenerateConfig) []byte {
 	if cfg.HooksAPIKey != "" {
 		fmt.Fprintf(&b, "\nIn Cursor's team marketplace settings, mark the `%s` plugin as required so observability is on by default for all team members.\n", CursorBaseSlug(cfg))
 	}
+
+	b.WriteString("\n### Codex\n\n")
+	b.WriteString("Add this repository as a plugin marketplace from the Codex CLI:\n\n")
+	b.WriteString("```\ncodex plugin marketplace add <this-repo-url>\n```\n\n")
+	b.WriteString("Then list available plugins with `codex /plugins` and install the ones you want.\n")
+	b.WriteString("Plugins that need authentication will prompt for any required environment variables on install.\n")
 
 	return []byte(b.String())
 }
