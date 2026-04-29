@@ -269,8 +269,9 @@ func (e *Engine) Require(ctx context.Context, checks ...Check) error {
 				operation:       "require",
 				outcome:         "denied",
 				reason:          "no_matching_grant",
-				matchingGrants:  nil,
-				requestedChecks: []Check{check},
+				failedCheck:     &check,
+				matchingGrants:  matchingGrants,
+				requestedChecks: checks,
 				filter:          nil,
 			}.LogChallenge(ctx)
 			return e.mapError(ctx, Denied(check.Scope, check.selector()))

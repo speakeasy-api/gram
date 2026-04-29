@@ -19,6 +19,7 @@ type challengeLogger struct {
 	operation       string
 	outcome         string
 	reason          string
+	failedCheck     *Check
 	matchingGrants  []grantMatch
 	requestedChecks []Check
 	filter          *filterLog
@@ -32,10 +33,13 @@ func (l challengeLogger) LogChallenge(ctx context.Context) {
 	)
 
 	var focus *Check
-	if len(l.matchingGrants) > 0 {
+	switch {
+	case l.failedCheck != nil:
+		focus = l.failedCheck
+	case len(l.matchingGrants) > 0:
 		c := l.matchingGrants[0].ViaCheck
 		focus = &c
-	} else if len(l.requestedChecks) > 0 {
+	case len(l.requestedChecks) > 0:
 		focus = &l.requestedChecks[0]
 	}
 	if focus != nil {
