@@ -4,27 +4,18 @@ import { Link } from "@/components/ui/link";
 import { Type } from "@/components/ui/type";
 import { Button, Stack } from "@speakeasy-api/moonshine";
 
-import type { DiscoveredOAuth, WizardDispatch, WizardState } from "./types";
+import { WizardContext } from "./machine";
+import type { ProxyFormKey } from "./machine-types";
 
-export function ProxyMetadataForm({
-  state,
-  dispatch,
-  discoveredOAuth,
-  editMode,
-  isEditPending,
-  onNext,
-  onEditSubmit,
-  onClose,
-}: {
-  state: Extract<WizardState, { step: "oauth_proxy_server_metadata_form" }>;
-  dispatch: WizardDispatch;
-  discoveredOAuth: DiscoveredOAuth | null;
-  editMode: boolean;
-  isEditPending: boolean;
-  onNext: () => void;
-  onEditSubmit: () => void;
-  onClose: () => void;
-}) {
+export function ProxyMetadataForm() {
+  const send = WizardContext.useActorRef().send;
+  const proxy = WizardContext.useSelector((s) => s.context.proxy);
+  const error = WizardContext.useSelector((s) => s.context.error);
+  const discovered = WizardContext.useSelector((s) => s.context.discovered);
+
+  const setField = (key: ProxyFormKey, value: string) =>
+    send({ type: "FIELD_PROXY", key, value });
+
   return (
     <>
       <div className="max-h-[60vh] space-y-4 overflow-auto">
@@ -44,32 +35,27 @@ export function ProxyMetadataForm({
             </Link>
           </Type>
 
-          {discoveredOAuth && !state.prefilled && (
+          {discovered && !proxy.prefilled && (
             <div className="border-border bg-muted/50 mb-4 flex items-start justify-between gap-4 rounded-md border p-4">
               <div>
                 <Type small className="font-medium">
-                  OAuth detected from {discoveredOAuth.name}
+                  OAuth detected from {discovered.name}
                 </Type>
                 <Type muted small className="mt-1">
-                  We discovered OAuth {discoveredOAuth.version} metadata from
-                  this server. You can use it to pre-fill the endpoints below.
+                  We discovered OAuth {discovered.version} metadata from this
+                  server. You can use it to pre-fill the endpoints below.
                 </Type>
               </div>
               <Button
                 size="sm"
                 variant="secondary"
-                onClick={() =>
-                  dispatch({
-                    type: "APPLY_DISCOVERED",
-                    discoveredOAuth,
-                  })
-                }
+                onClick={() => send({ type: "APPLY_DISCOVERED" })}
               >
                 Apply
               </Button>
             </div>
           )}
-          {state.prefilled && (
+          {proxy.prefilled && (
             <div className="border-border bg-muted/50 mb-4 rounded-md border p-4">
               <Type small className="font-medium">
                 Pre-filled from detected OAuth metadata
@@ -83,21 +69,16 @@ export function ProxyMetadataForm({
             </div>
           )}
 
-          {state.error && (
-            <Type className="mb-4 text-sm text-red-500!">{state.error}</Type>
-          )}
+          {error && <Type className="mb-4 text-sm text-red-500!">{error}</Type>}
 
           <Stack gap={4}>
             <div>
               <Type className="mb-2 font-medium">OAuth Proxy Server Slug</Type>
               <Input
                 placeholder="my-oauth-proxy"
-                value={state.slug}
-                onChange={(v: string) =>
-                  dispatch({ type: "UPDATE_FIELD", field: "slug", value: v })
-                }
+                value={proxy.slug}
+                onChange={(v: string) => setField("slug", v)}
                 maxLength={40}
-                disabled={editMode}
               />
             </div>
 
@@ -105,14 +86,8 @@ export function ProxyMetadataForm({
               <Type className="mb-2 font-medium">Authorization Endpoint</Type>
               <Input
                 placeholder="https://provider.com/oauth/authorize"
-                value={state.authorizationEndpoint}
-                onChange={(v: string) =>
-                  dispatch({
-                    type: "UPDATE_FIELD",
-                    field: "authorizationEndpoint",
-                    value: v,
-                  })
-                }
+                value={proxy.authorizationEndpoint}
+                onChange={(v: string) => setField("authorizationEndpoint", v)}
               />
             </div>
 
@@ -120,14 +95,8 @@ export function ProxyMetadataForm({
               <Type className="mb-2 font-medium">Token Endpoint</Type>
               <Input
                 placeholder="https://provider.com/oauth/token"
-                value={state.tokenEndpoint}
-                onChange={(v: string) =>
-                  dispatch({
-                    type: "UPDATE_FIELD",
-                    field: "tokenEndpoint",
-                    value: v,
-                  })
-                }
+                value={proxy.tokenEndpoint}
+                onChange={(v: string) => setField("tokenEndpoint", v)}
               />
             </div>
 
@@ -135,14 +104,8 @@ export function ProxyMetadataForm({
               <Type className="mb-2 font-medium">Scopes (comma-separated)</Type>
               <Input
                 placeholder="read, write, openid"
-                value={state.scopes}
-                onChange={(v: string) =>
-                  dispatch({
-                    type: "UPDATE_FIELD",
-                    field: "scopes",
-                    value: v,
-                  })
-                }
+                value={proxy.scopes}
+                onChange={(v: string) => setField("scopes", v)}
               />
             </div>
 
@@ -150,14 +113,8 @@ export function ProxyMetadataForm({
               <Type className="mb-2 font-medium">Audience (optional)</Type>
               <Input
                 placeholder="https://api.example.com"
-                value={state.audience}
-                onChange={(v: string) =>
-                  dispatch({
-                    type: "UPDATE_FIELD",
-                    field: "audience",
-                    value: v,
-                  })
-                }
+                value={proxy.audience}
+                onChange={(v: string) => setField("audience", v)}
               />
               <Type muted small className="mt-1">
                 The audience parameter sent to the upstream OAuth provider.
@@ -172,14 +129,8 @@ export function ProxyMetadataForm({
               </Type>
               <select
                 className="bg-background w-full rounded border px-3 py-2"
-                value={state.tokenAuthMethod}
-                onChange={(e) =>
-                  dispatch({
-                    type: "UPDATE_FIELD",
-                    field: "tokenAuthMethod",
-                    value: e.target.value,
-                  })
-                }
+                value={proxy.tokenAuthMethod}
+                onChange={(e) => setField("tokenAuthMethod", e.target.value)}
               >
                 <option value="client_secret_post">client_secret_post</option>
                 <option value="client_secret_basic">client_secret_basic</option>
@@ -191,29 +142,19 @@ export function ProxyMetadataForm({
       </div>
 
       <Dialog.Footer className="flex justify-between">
-        <Button
-          variant="secondary"
-          onClick={() => {
-            if (editMode) {
-              onClose();
-            } else {
-              dispatch({ type: "BACK" });
-            }
-          }}
-        >
-          {editMode ? "Cancel" : "Back"}
+        <Button variant="secondary" onClick={() => send({ type: "BACK" })}>
+          Back
         </Button>
         <div className="ml-auto">
           <Button
-            onClick={editMode ? onEditSubmit : onNext}
+            onClick={() => send({ type: "NEXT" })}
             disabled={
-              (editMode && isEditPending) ||
-              !state.slug.trim() ||
-              !state.authorizationEndpoint.trim() ||
-              !state.tokenEndpoint.trim()
+              !proxy.slug.trim() ||
+              !proxy.authorizationEndpoint.trim() ||
+              !proxy.tokenEndpoint.trim()
             }
           >
-            {editMode ? (isEditPending ? "Saving..." : "Save changes") : "Next"}
+            Next
           </Button>
         </div>
       </Dialog.Footer>

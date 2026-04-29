@@ -108,7 +108,7 @@ export default function PluginDetail() {
     });
   };
 
-  const handleDownload = async (platform: "claude" | "cursor") => {
+  const handleDownload = async (platform: "claude" | "cursor" | "codex") => {
     setIsDownloadMenuOpen(false);
     const resp = await authFetch(
       `/rpc/plugins.downloadPluginPackage?plugin_id=${pluginId}&platform=${platform}`,
@@ -259,6 +259,9 @@ export default function PluginDetail() {
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => handleDownload("cursor")}>
                 Cursor
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleDownload("codex")}>
+                Codex
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

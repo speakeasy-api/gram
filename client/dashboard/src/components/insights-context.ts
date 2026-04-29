@@ -31,6 +31,11 @@ export interface InsightsContextValue {
    *  Fires once per call — intended for "Explore with AI" CTAs that should
    *  drop the user straight into a running conversation. */
   sendPrompt: (prompt: string) => void;
+  /** Monotonically incrementing counter the provider bumps when the
+   *  trigger should play its one-shot spin animation (e.g. when the
+   *  keyboard shortcut fires). Starts at 0 — consumers should ignore the
+   *  initial value and only react to changes. */
+  triggerSpinKey: number;
 }
 
 export const InsightsContext = createContext<InsightsContextValue>({
@@ -39,6 +44,7 @@ export const InsightsContext = createContext<InsightsContextValue>({
   setIsExpanded: () => {},
   setOverride: () => {},
   sendPrompt: () => {},
+  triggerSpinKey: 0,
 });
 
 /**

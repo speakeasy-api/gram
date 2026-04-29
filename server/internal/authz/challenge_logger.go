@@ -56,7 +56,6 @@ func (l challengeLogger) LogChallenge(ctx context.Context) {
 }
 
 type filterLog struct {
-	Scope          Scope
 	CandidateCount int
 	AllowedCount   int
 }
@@ -68,8 +67,6 @@ func (l challengeLogger) LogFilter(ctx context.Context) {
 
 	attrs := authzLogAttrs(ctx, l.operation, l.outcome, l.reason)
 	attrs = append(attrs,
-		attr.SlogAuthzScope(string(l.filter.Scope)),
-		attr.SlogAuthzResourceKind(ResourceKindForScope(l.filter.Scope)),
 		attr.SlogAuthzCandidateCount(l.filter.CandidateCount),
 		attr.SlogAuthzAllowedCount(l.filter.AllowedCount),
 		attr.SlogAuthzDeniedCount(l.filter.CandidateCount-l.filter.AllowedCount),

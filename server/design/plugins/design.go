@@ -246,7 +246,7 @@ var _ = Service("plugins", func() {
 			})
 			Attribute("platform", String, func() {
 				Description("Target platform to download plugins for.")
-				Enum("claude", "cursor")
+				Enum("claude", "cursor", "codex")
 			})
 			Required("plugin_id", "platform")
 			security.SessionPayload()

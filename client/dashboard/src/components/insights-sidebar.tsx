@@ -44,6 +44,17 @@ function InsightsRainbowStyles() {
         animation: insights-ai-rainbow 2.5s linear infinite;
       }
 
+      /* One-shot spin used when the trigger is clicked (or fired via the
+         keyboard shortcut). Single iteration so the icon settles back to
+         rest position; the class is removed after the timeout in JS. */
+      @keyframes insights-trigger-spin {
+        from { transform: rotate(0deg); }
+        to   { transform: rotate(360deg); }
+      }
+      .insights-trigger-spinning {
+        animation: insights-trigger-spin 600ms ease-in-out;
+      }
+
       /* Gradient border via a masked pseudo-element. Mask cuts the interior
          so only the 1px ring shows; border-radius is inherited so rounded
          corners stay intact. Fades in on hover; the underlying border goes
@@ -76,30 +87,124 @@ function InsightsRainbowStyles() {
   );
 }
 
+/** Single source of truth for the trigger's keyboard shortcut. Cmd+W is
+ *  reserved by the browser (closes the tab before JS sees the event), so we
+ *  use Option+Shift+W which matches common app conventions and mirrors the
+ *  reference design. */
+const INSIGHTS_SHORTCUT_LABEL_MAC = ["⌥", "⇧", "W"]; // ⌥ ⇧ W
+const INSIGHTS_SHORTCUT_LABEL_PC = ["Alt", "Shift", "W"];
+
+function isMacPlatform(): boolean {
+  if (typeof navigator === "undefined") return true;
+  return /mac|iphone|ipad|ipod/i.test(
+    navigator.platform || navigator.userAgent,
+  );
+}
+
 /**
  * Header-bar trigger for opening the AI Insights sidebar. Renders only
  * when inside an InsightsProvider so it can be slotted globally (e.g. into
  * PageHeaderBreadcrumbs) without appearing on pages that opt out via
  * hideTrigger.
+ *
+ * Hover behavior: the kbd hint is collapsed to zero width by default and
+ * expands via a CSS grid `grid-template-columns: 0fr -> 1fr` transition on
+ * hover. The button is anchored to the right edge of the page header, so
+ * the growth pushes the left edge outward — matching the reference design.
+ *
+ * Click / shortcut behavior: when the trigger fires (mouse click or the
+ * `triggerSpinKey` from the provider increments), the wand icon plays a
+ * single 600ms rotation. Implemented by mounting/unmounting the spin class
+ * with a setTimeout rather than `animate-spin` (which is infinite).
  */
 export function InsightsTrigger({ className }: { className?: string }) {
-  const { available, isExpanded, setIsExpanded } = useInsightsState();
+  const { available, isExpanded, setIsExpanded, triggerSpinKey } =
+    useInsightsState();
+  const [spinning, setSpinning] = useState(false);
+  const spinTimeoutRef = useRef<number | null>(null);
+
+  const startSpin = useCallback(() => {
+    if (spinTimeoutRef.current !== null) {
+      window.clearTimeout(spinTimeoutRef.current);
+    }
+    setSpinning(true);
+    spinTimeoutRef.current = window.setTimeout(() => {
+      setSpinning(false);
+      spinTimeoutRef.current = null;
+    }, 600);
+  }, []);
+
+  // Re-trigger spin whenever the provider bumps `triggerSpinKey` — this fires
+  // for the keyboard shortcut path so the icon animates even when the click
+  // didn't originate from this button.
+  useEffect(() => {
+    if (triggerSpinKey === 0) return;
+    startSpin();
+  }, [triggerSpinKey, startSpin]);
+
+  // Clean up the timeout if the trigger unmounts mid-spin.
+  useEffect(
+    () => () => {
+      if (spinTimeoutRef.current !== null) {
+        window.clearTimeout(spinTimeoutRef.current);
+      }
+    },
+    [],
+  );
+
+  const shortcutKeys = isMacPlatform()
+    ? INSIGHTS_SHORTCUT_LABEL_MAC
+    : INSIGHTS_SHORTCUT_LABEL_PC;
+  const shortcutAria = isMacPlatform() ? "Option Shift W" : "Alt Shift W";
+
   if (!available) return null;
+
   return (
     <button
       type="button"
-      onClick={() => setIsExpanded(!isExpanded)}
+      onClick={() => {
+        startSpin();
+        setIsExpanded(!isExpanded);
+      }}
       aria-label={isExpanded ? "Close AI Insights" : "Open AI Insights"}
+      aria-keyshortcuts={shortcutAria}
       aria-pressed={isExpanded}
+      title={`AI Insights (${shortcutKeys.join("+")})`}
       className={cn(
-        "border-border hover:bg-accent hover:text-accent-foreground inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2.5 py-1 text-sm transition-colors",
+        "group border-border hover:bg-accent hover:text-accent-foreground inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2.5 py-1 text-sm transition-colors",
         isExpanded && "bg-accent text-accent-foreground",
         INSIGHTS_AI_RAINBOW_BORDER_CLASS,
         className,
       )}
     >
-      <Wand2 className="size-3.5" />
+      <Wand2
+        className={cn("size-3.5", spinning && "insights-trigger-spinning")}
+      />
       <span className="font-medium">AI Insights</span>
+      {/* Hover-revealed shortcut hint. The outer wrapper animates between
+          0fr and 1fr grid columns so the contents transition cleanly from
+          width 0 to their natural width without us hardcoding a pixel value.
+          The inner div needs `overflow-hidden` so the kbd row isn't visible
+          while the column is collapsed. */}
+      <span
+        aria-hidden="true"
+        className={cn(
+          "ml-0 grid grid-cols-[0fr] opacity-0 transition-[grid-template-columns,opacity,margin-left] duration-200 ease-out",
+          "group-hover:ml-1 group-hover:grid-cols-[1fr] group-hover:opacity-100",
+          "group-focus-visible:ml-1 group-focus-visible:grid-cols-[1fr] group-focus-visible:opacity-100",
+        )}
+      >
+        <span className="flex items-center gap-1 overflow-hidden">
+          {shortcutKeys.map((key) => (
+            <kbd
+              key={key}
+              className="border-border bg-muted text-muted-foreground pointer-events-none inline-flex h-4 min-w-4 items-center justify-center rounded border px-1 font-mono text-[10px] leading-none font-medium select-none"
+            >
+              {key}
+            </kbd>
+          ))}
+        </span>
+      </span>
     </button>
   );
 }
@@ -153,6 +258,10 @@ export function InsightsProvider({
 }: InsightsProviderProps) {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
   const [override, setOverride] = useState<InsightsConfigOptions | null>(null);
+  // Bumped whenever the keyboard shortcut fires so the trigger plays its
+  // one-shot spin animation even when the click didn't originate from the
+  // button itself. Starts at 0; consumers ignore the initial value.
+  const [triggerSpinKey, setTriggerSpinKey] = useState(0);
   const [pendingPrompt, setPendingPrompt] = useState<{
     text: string;
     nonce: number;
@@ -262,6 +371,32 @@ When the user asks about "current period", "selected period", "this timeframe", 
 
   const consumePendingPrompt = useCallback(() => setPendingPrompt(null), []);
 
+  // Global keyboard shortcut: Option+Shift+W (Mac) / Alt+Shift+W (PC) toggles
+  // the sidebar. Cmd+W is reserved by the browser (closes the tab before JS
+  // sees the event), so we deliberately don't bind it here.
+  //
+  // Skips when the trigger is hidden via `hideTrigger`, when a modifier
+  // mismatch is detected (extra Cmd/Ctrl), or when the user is typing in a
+  // contentEditable region — letting Alt+Shift+W still work in plain inputs
+  // since modifier-heavy combos rarely conflict with text entry.
+  useEffect(() => {
+    if (hideTrigger) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!e.altKey || !e.shiftKey) return;
+      if (e.metaKey || e.ctrlKey) return;
+      // KeyboardEvent.code is layout-independent; e.key on Mac with Option
+      // held returns "∑" (the Option+w glyph), which would never match "w".
+      if (e.code !== "KeyW") return;
+      const target = e.target as HTMLElement | null;
+      if (target?.isContentEditable) return;
+      e.preventDefault();
+      setIsExpanded((prev) => !prev);
+      setTriggerSpinKey((k) => k + 1);
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [hideTrigger]);
+
   const contextValue = useMemo(
     () => ({
       available: !hideTrigger,
@@ -269,8 +404,15 @@ When the user asks about "current period", "selected period", "this timeframe", 
       setIsExpanded,
       setOverride: handleSetOverride,
       sendPrompt: handleSendPrompt,
+      triggerSpinKey,
     }),
-    [hideTrigger, isExpanded, handleSetOverride, handleSendPrompt],
+    [
+      hideTrigger,
+      isExpanded,
+      handleSetOverride,
+      handleSendPrompt,
+      triggerSpinKey,
+    ],
   );
 
   return (

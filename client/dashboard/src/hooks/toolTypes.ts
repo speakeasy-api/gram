@@ -24,7 +24,11 @@ import {
   ListToolsQueryError,
   useListTools as useListToolsQuery,
 } from "@gram/client/react-query/listTools.js";
-import { useToolset as useToolsetQuery } from "@gram/client/react-query/toolset.js";
+import {
+  ToolsetQueryData,
+  ToolsetQueryError,
+  useToolset as useToolsetQuery,
+} from "@gram/client/react-query/toolset.js";
 
 export type ToolsetKind = "default" | "external-mcp-proxy";
 
@@ -37,9 +41,13 @@ function detectToolsetKind(tools: GeneratedTool[]): ToolsetKind {
   return hasExternalMcpProxy ? "external-mcp-proxy" : "default";
 }
 
-export function useToolset(toolsetSlug: string | undefined) {
+export function useToolset(
+  toolsetSlug: string | undefined,
+  options?: QueryHookOptions<ToolsetQueryData, ToolsetQueryError>,
+) {
   const result = useToolsetQuery({ slug: toolsetSlug! }, undefined, {
-    enabled: !!toolsetSlug,
+    ...options,
+    enabled: !!toolsetSlug && (options?.enabled ?? true),
   });
 
   const kind = detectToolsetKind(result.data?.tools ?? []);

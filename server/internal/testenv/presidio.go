@@ -3,6 +3,7 @@ package testenv
 import (
 	"context"
 	"fmt"
+	"log"
 	"testing"
 	"time"
 
@@ -14,11 +15,14 @@ import (
 type PresidioClientFunc func(t *testing.T) *risk_analysis.PresidioClient
 
 func NewTestPresidio(ctx context.Context) (testcontainers.Container, PresidioClientFunc, error) {
+	startedAt := time.Now()
 	container, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
 		ContainerRequest: testcontainers.ContainerRequest{
 			Image:        "mcr.microsoft.com/presidio-analyzer:2.2.362",
 			ExposedPorts: []string{"3000/tcp"},
-			WaitingFor:   wait.ForHTTP("/health").WithPort("3000/tcp").WithStartupTimeout(120 * time.Second),
+			WaitingFor: wait.ForHTTP("/health").
+				WithPort("3000/tcp").
+				WithStartupTimeout(300 * time.Second),
 		},
 		Started: true,
 		Logger:  NewTestcontainersLogger(),
@@ -26,6 +30,7 @@ func NewTestPresidio(ctx context.Context) (testcontainers.Container, PresidioCli
 	if err != nil {
 		return nil, nil, fmt.Errorf("start presidio container: %w", err)
 	}
+	log.Printf("presidio container ready in %s", time.Since(startedAt).Round(time.Millisecond))
 
 	return container, newPresidioClientFunc(container), nil
 }
