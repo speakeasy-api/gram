@@ -284,7 +284,8 @@ func newTestAssistantRuntimeServer(t *testing.T, configured bool) *httptest.Serv
 		w.WriteHeader(http.StatusNoContent)
 	})
 	mux.HandleFunc("/turn", func(w http.ResponseWriter, _ *http.Request) {
-		_ = json.NewEncoder(w).Encode(runtimeTurnResponse{FinalText: "ok"})
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"finish_reason":"accepted","final_text":""}`))
 	})
 
 	server := httptest.NewServer(mux)

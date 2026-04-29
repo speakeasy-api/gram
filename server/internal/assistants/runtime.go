@@ -103,15 +103,6 @@ type runtimeTurnRequest struct {
 	AuthToken string           `json:"auth_token,omitempty"`
 }
 
-type runtimeTurnResponse struct {
-	FinishReason string `json:"finish_reason"`
-	FinalText    string `json:"final_text"`
-	Error        string `json:"error,omitempty"`
-	Stderr       string `json:"stderr,omitempty"`
-	Items        any    `json:"items,omitempty"`
-	Usage        any    `json:"usage,omitempty"`
-}
-
 type runtimeHTTPRequest struct {
 	Method      string
 	Path        string
@@ -545,24 +536,15 @@ func (m *RuntimeManager) RunTurn(
 		return fmt.Errorf("marshal assistant runtime turn request: %w", err)
 	}
 
-	body, err := m.runtimeRequest(ctx, state, runtimeHTTPRequest{
+	if _, err := m.runtimeRequest(ctx, state, runtimeHTTPRequest{
 		Method:         http.MethodPost,
 		Path:           "/turn",
 		ContentType:    "application/json",
 		Body:           reqBody,
 		MaxTimeSeconds: 30 * 60,
 		IdempotencyKey: idempotencyKey,
-	})
-	if err != nil {
+	}); err != nil {
 		return fmt.Errorf("%w: execute turn request: %w", ErrRuntimeUnhealthy, err)
-	}
-
-	var turnResp runtimeTurnResponse
-	if err := json.Unmarshal(body, &turnResp); err != nil {
-		return fmt.Errorf("decode assistant runtime turn response: %w; body=%s", err, truncateForMetadata(string(body), 16*1024))
-	}
-	if turnResp.Error != "" {
-		return fmt.Errorf("assistant runtime turn error: %s", turnResp.Error)
 	}
 	return nil
 }

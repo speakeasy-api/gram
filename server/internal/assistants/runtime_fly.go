@@ -474,24 +474,15 @@ func (f *FlyRuntimeBackend) RunTurn(ctx context.Context, runtime assistantRuntim
 		return fmt.Errorf("marshal assistant fly runtime turn request: %w", err)
 	}
 
-	body, err := f.runtimeRequest(ctx, targetFromMetadata(metadata), runtimeHTTPRequest{
+	if _, err := f.runtimeRequest(ctx, targetFromMetadata(metadata), runtimeHTTPRequest{
 		Method:         http.MethodPost,
 		Path:           "/turn",
 		ContentType:    "application/json",
 		Body:           reqBody,
 		IdempotencyKey: idempotencyKey,
 		MaxTimeSeconds: 30 * 60,
-	})
-	if err != nil {
+	}); err != nil {
 		return fmt.Errorf("%w: execute fly turn request: %w", classifyTurnError(err), err)
-	}
-
-	var turnResp runtimeTurnResponse
-	if err := json.Unmarshal(body, &turnResp); err != nil {
-		return fmt.Errorf("decode assistant fly runtime turn response: %w; body=%s", err, truncateForMetadata(string(body), 16*1024))
-	}
-	if turnResp.Error != "" {
-		return fmt.Errorf("assistant fly runtime turn error: %s", turnResp.Error)
 	}
 	return nil
 }
