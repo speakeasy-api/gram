@@ -5,7 +5,6 @@ import { useSlugs } from "@/contexts/Sdk";
 export function ObserveTabNav({ base }: { base: "insights" | "logs" }) {
   const { orgSlug, projectSlug } = useSlugs();
   const location = useLocation();
-  console.log(location);
 
   const baseSlug = `/${orgSlug}/projects/${projectSlug}/${base}`;
   const tabs = [
