@@ -98,26 +98,10 @@ func handleToolsList(
 		}
 	}
 
-	// Filter tools by RBAC grants. Private authenticated MCPs enforce
-	// per-tool mcp:connect checks — the same dimensions used by tools/call.
-	// Public MCPs skip this (open to everyone, matching the connection guard).
-	if payload.authenticated && authzEngine != nil && (toolset.McpIsPublic == nil || !*toolset.McpIsPublic) {
-		allowed := make([]*toolListEntry, 0, len(tools))
-		for _, t := range tools {
-			disposition := dispositionFromAnnotations(t.Annotations)
-			if err := authzEngine.Require(ctx, authz.MCPToolCallCheck(toolset.ID, authz.MCPToolCallDimensions{
-				Tool:        t.Name,
-				Disposition: disposition,
-			})); err != nil {
-				var oopsErr *oops.ShareableError
-				if errors.As(err, &oopsErr) && oopsErr.Code == oops.CodeForbidden {
-					continue
-				}
-				return nil, oops.E(oops.CodeUnexpected, err, "check tool-level authz for tools/list").Log(ctx, logger)
-			}
-			allowed = append(allowed, t)
-		}
-		tools = allowed
+	isPublic := toolset.McpIsPublic != nil && *toolset.McpIsPublic
+	tools, err = filterToolsByAuthz(ctx, logger, authzEngine, toolset.ID, isPublic, payload.authenticated, tools)
+	if err != nil {
+		return nil, err
 	}
 
 	if blockShadowMCPEnabled(ctx, logger, features, toolset.OrganizationID) {
@@ -253,6 +237,41 @@ func convertConvAnnotations(c *conv.ToolAnnotations) *externalmcp.ToolAnnotation
 		IdempotentHint:  c.IdempotentHint,
 		OpenWorldHint:   c.OpenWorldHint,
 	}
+}
+
+// filterToolsByAuthz drops tools the caller does not have mcp:connect on,
+// using the same per-tool dimensions as tools/call. Public MCPs and
+// unauthenticated callers bypass filtering — they're either open to everyone
+// or already rejected before reaching this point.
+func filterToolsByAuthz(
+	ctx context.Context,
+	logger *slog.Logger,
+	authzEngine *authz.Engine,
+	toolsetID string,
+	isPublic bool,
+	authenticated bool,
+	tools []*toolListEntry,
+) ([]*toolListEntry, error) {
+	if !authenticated || authzEngine == nil || isPublic {
+		return tools, nil
+	}
+
+	allowed := make([]*toolListEntry, 0, len(tools))
+	for _, t := range tools {
+		disposition := dispositionFromAnnotations(t.Annotations)
+		if err := authzEngine.Require(ctx, authz.MCPToolCallCheck(toolsetID, authz.MCPToolCallDimensions{
+			Tool:        t.Name,
+			Disposition: disposition,
+		})); err != nil {
+			var oopsErr *oops.ShareableError
+			if errors.As(err, &oopsErr) && oopsErr.Code == oops.CodeForbidden {
+				continue
+			}
+			return nil, oops.E(oops.CodeUnexpected, err, "check tool-level authz for tools/list").Log(ctx, logger)
+		}
+		allowed = append(allowed, t)
+	}
+	return allowed, nil
 }
 
 // dispositionFromAnnotations derives a disposition string from tool annotations.

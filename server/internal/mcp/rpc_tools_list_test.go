@@ -180,8 +180,10 @@ func TestServePublic_RBAC_ToolsList_PublicMCPSkipsFiltering(t *testing.T) {
 // RBAC tools/list filtering tests (engine-level, matching rbac_test.go pattern)
 //
 // Private MCP auth through ServePublic requires a real bearer token (JWT/API
-// key/OAuth), and API keys bypass RBAC. Testing RBAC filtering at the engine
-// level is the established pattern — see rbac_test.go.
+// key/OAuth), and API keys bypass RBAC, so end-to-end RBAC coverage through
+// the HTTP path is impractical here. The tests below pin engine semantics
+// against the same selectors the filter uses; the filter loop itself is
+// covered by package-internal tests in rpc_tools_list_filter_test.go.
 // ---------------------------------------------------------------------------
 
 func TestServePublic_RBAC_ToolsList_FiltersToGrantedTools(t *testing.T) {
