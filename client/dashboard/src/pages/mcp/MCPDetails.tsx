@@ -1831,8 +1831,11 @@ export function MCPJson({
 }) {
   const telemetry = useTelemetry();
 
-  const { public: mcpJsonPublic, internal: mcpJsonInternal } =
-    useMcpConfigs(toolset);
+  const {
+    public: mcpJsonPublic,
+    internal: mcpJsonInternal,
+    requiresGramKey,
+  } = useMcpConfigs(toolset);
 
   const onCopy = () => {
     telemetry.capture("mcp_event", {
@@ -1854,12 +1857,12 @@ export function MCPJson({
           <br />
           <span
             className={
-              !toolset.mcpIsPublic
-                ? "text-warning-foreground font-medium"
-                : "italic"
+              requiresGramKey ? "text-warning-foreground font-medium" : "italic"
             }
           >
-            Requires a Gram API key if the server is not public.
+            {requiresGramKey
+              ? "Requires a Gram API key."
+              : "No Gram API key required."}
           </span>
         </Type>
         <CodeBlock onCopy={onCopy}>{mcpJsonPublic}</CodeBlock>
