@@ -1914,8 +1914,8 @@ CREATE TABLE IF NOT EXISTS mcp_servers (
   CONSTRAINT mcp_servers_environment_id_fkey FOREIGN KEY (environment_id) REFERENCES environments (id) ON DELETE SET NULL,
   CONSTRAINT mcp_servers_external_oauth_server_id_fkey FOREIGN KEY (external_oauth_server_id) REFERENCES external_oauth_server_metadata (id) ON DELETE SET NULL,
   CONSTRAINT mcp_servers_oauth_proxy_server_id_fkey FOREIGN KEY (oauth_proxy_server_id) REFERENCES oauth_proxy_servers (id) ON DELETE SET NULL,
-  CONSTRAINT mcp_servers_remote_mcp_server_id_fkey FOREIGN KEY (remote_mcp_server_id) REFERENCES remote_mcp_servers (id) ON DELETE SET NULL,
-  CONSTRAINT mcp_servers_toolset_id_fkey FOREIGN KEY (toolset_id) REFERENCES toolsets (id) ON DELETE SET NULL,
+  CONSTRAINT mcp_servers_remote_mcp_server_id_fkey FOREIGN KEY (remote_mcp_server_id) REFERENCES remote_mcp_servers (id) ON DELETE RESTRICT,
+  CONSTRAINT mcp_servers_toolset_id_fkey FOREIGN KEY (toolset_id) REFERENCES toolsets (id) ON DELETE RESTRICT,
   -- Exactly one backend must be set: either a remote MCP server or a toolset.
   CONSTRAINT mcp_servers_backend_exclusivity_check CHECK ((remote_mcp_server_id IS NULL) != (toolset_id IS NULL))
 );
