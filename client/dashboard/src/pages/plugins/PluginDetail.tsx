@@ -28,8 +28,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useParams } from "react-router";
 import type { PluginServer } from "@gram/client/models/components";
-import { getServerURL } from "@/lib/utils";
-import { useSlugs } from "@/contexts/Sdk";
+import { useSdkClient } from "@/contexts/Sdk";
 
 export default function PluginDetail() {
   const { pluginId } = useParams<{ pluginId: string }>();
@@ -40,7 +39,7 @@ export default function PluginDetail() {
 
   const { data: plugin } = usePluginSuspense({ id: pluginId! });
 
-  const { projectSlug } = useSlugs();
+  const client = useSdkClient();
   const { data: toolsetsData, isLoading: isLoadingToolsets } =
     useListToolsets();
   const toolsets = toolsetsData?.toolsets ?? [];
@@ -111,20 +110,16 @@ export default function PluginDetail() {
 
   const handleDownload = async (platform: "claude" | "cursor" | "codex") => {
     setIsDownloadMenuOpen(false);
-    const resp = await fetch(
-      `${getServerURL()}/rpc/plugins.downloadPluginPackage?plugin_id=${pluginId}&platform=${platform}`,
-      {
-        credentials: "include",
-        headers: { "gram-project": projectSlug ?? "" },
-      },
-    );
-    if (!resp.ok) return;
-    const blob = await resp.blob();
+    const { headers, result } = await client.plugins.downloadPluginPackage({
+      pluginId: pluginId!,
+      platform,
+    });
+    const blob = await new Response(result).blob();
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
     a.download =
-      resp.headers.get("Content-Disposition")?.match(/filename="(.+)"/)?.[1] ??
+      headers["Content-Disposition"]?.[0]?.match(/filename="(.+)"/)?.[1] ??
       "plugin.zip";
     a.click();
     URL.revokeObjectURL(url);
