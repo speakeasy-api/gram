@@ -146,8 +146,12 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
     return <Navigate to={newPath + location.search + location.hash} replace />;
   }
 
-  // Handle initial navigation
-  const redirectParam = searchParams.get("redirect");
+  // Handle initial navigation. Honor `returnTo` first, fall back to the legacy
+  // `redirect` query param, so existing internal callers (CLI callback, Slack
+  // register) keep working while the assistants growth-hack flow can use the
+  // new `returnTo` name documented in its design diagram.
+  const redirectParam =
+    searchParams.get("returnTo") ?? searchParams.get("redirect");
   if (redirectParam) {
     return <Navigate to={redirectParam} replace />;
   } else if (isSlugExempt) {
