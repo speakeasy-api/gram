@@ -101,6 +101,7 @@ func AssistantCoordinatorWorkflow(ctx workflow.Context, input AssistantCoordinat
 		}
 	}
 
+	drainSignals(signalCh)
 	return workflow.NewContinueAsNewError(ctx, AssistantCoordinatorWorkflow, input)
 }
 
@@ -187,6 +188,7 @@ func AssistantThreadWorkflow(ctx workflow.Context, input AssistantThreadWorkflow
 		return nil
 	}
 
+	drainSignals(signalCh)
 	return workflow.NewContinueAsNewError(ctx, AssistantThreadWorkflow, input)
 }
 
