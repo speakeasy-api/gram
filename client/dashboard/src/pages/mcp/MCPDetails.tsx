@@ -10,6 +10,10 @@ import { Textarea } from "@/components/moon/textarea";
 import { Page } from "@/components/page-layout";
 import { PublicMcpWarningDialog } from "@/components/public-mcp-warning-dialog";
 import { ServerEnableDialog } from "@/components/server-enable-dialog";
+import {
+  RouteNotFoundState,
+  SecondaryRouteAction,
+} from "@/components/route-not-found-state";
 import { useExternalMcpOAuthConfigStatus } from "@/components/sources/sources-hooks";
 import { ToolList } from "@/components/tool-list";
 import { Dialog } from "@/components/ui/dialog";
@@ -38,6 +42,7 @@ import { FeatureRequestModal } from "@/components/FeatureRequestModal";
 import { useMissingRequiredEnvVars } from "@/hooks/useMissingEnvironmentVariables";
 import { useProductTier } from "@/hooks/useProductTier";
 import { useCustomDomain, useMcpUrl } from "@/hooks/useToolsetUrl";
+import { isNotFoundError } from "@/lib/route-errors";
 import { Tool, Toolset, useGroupedTools } from "@/lib/toolTypes";
 import { cn, getServerURL } from "@/lib/utils";
 import {
@@ -165,11 +170,63 @@ export function MCPDetailPage() {
 
 function MCPDetailPageInner() {
   const { toolsetSlug } = useParams();
+
+  const {
+    data: toolset,
+    error: toolsetError,
+    isLoading,
+  } = useToolset(toolsetSlug, { throwOnError: false });
+
+  if (!toolsetSlug || isNotFoundError(toolsetError)) {
+    return <MCPRouteNotFound />;
+  }
+
+  if (toolsetError) {
+    throw toolsetError;
+  }
+
+  if (isLoading || !toolset) {
+    return <MCPLoading />;
+  }
+
+  return <MCPDetailPageContent toolset={toolset} toolsetSlug={toolsetSlug} />;
+}
+
+function MCPRouteNotFound() {
+  const routes = useRoutes();
+
+  return (
+    <Page>
+      <Page.Header>
+        <Page.Header.Breadcrumbs />
+      </Page.Header>
+      <Page.Body>
+        <RouteNotFoundState
+          title="MCP server not found"
+          description="This MCP server may have been deleted, renamed, or moved out of this project."
+          action={
+            <routes.mcp.Link>
+              <SecondaryRouteAction>Back to MCP servers</SecondaryRouteAction>
+            </routes.mcp.Link>
+          }
+        />
+      </Page.Body>
+    </Page>
+  );
+}
+
+type LoadedMcpToolset = NonNullable<ReturnType<typeof useToolset>["data"]>;
+
+function MCPDetailPageContent({
+  toolset,
+  toolsetSlug,
+}: {
+  toolset: LoadedMcpToolset;
+  toolsetSlug: string;
+}) {
   const routes = useRoutes();
   const telemetry = useTelemetry();
   const isRbacEnabled = telemetry.isFeatureEnabled("gram-rbac") ?? false;
-
-  const { data: toolset, isLoading } = useToolset(toolsetSlug);
 
   // Call hooks before any conditional returns
   const { url: mcpUrl } = useMcpUrl(toolset);
@@ -229,10 +286,6 @@ function MCPDetailPageInner() {
     useExternalMcpOAuthConfigStatus(toolsetSlug);
   const oauthRequiredUnconfigured =
     externalMcpOAuthConfigStatus === "required-unconfigured";
-
-  if (isLoading || !toolset) {
-    return <MCPLoading />;
-  }
 
   let statusBadge = null;
   if (!toolset.mcpEnabled) {
@@ -2232,4 +2285,4 @@ export function GramOAuthProxyModal({
   );
 }
 
-export { ConnectOAuthModal } from "./oauth-wizard";
+export { ConnectOAuthModal, EditOAuthProxyModal } from "./oauth-wizard";

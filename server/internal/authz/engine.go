@@ -300,13 +300,20 @@ func (e *Engine) RequireAny(ctx context.Context, checks ...Check) error {
 	return e.mapError(ctx, Denied(checks[0].Scope, checks[0].selector()))
 }
 
-func (e *Engine) Filter(ctx context.Context, scope Scope, resourceIDs []string) ([]string, error) {
+// Filter evaluates each check and returns the resource IDs of those the caller
+// is authorized for. When RBAC is not enforced all resource IDs are returned.
+func (e *Engine) Filter(ctx context.Context, checks []Check) ([]string, error) {
 	enforce, err := e.ShouldEnforce(ctx)
 	if err != nil {
 		return nil, err
 	}
+
 	if !enforce {
-		return resourceIDs, nil
+		ids := make([]string, len(checks))
+		for i, c := range checks {
+			ids[i] = c.ResourceID
+		}
+		return ids, nil
 	}
 
 	grants, ok := GrantsFromContext(ctx)
@@ -314,15 +321,13 @@ func (e *Engine) Filter(ctx context.Context, scope Scope, resourceIDs []string) 
 		return nil, e.mapError(ctx, ErrMissingGrants)
 	}
 
-	allowed := make([]string, 0, len(resourceIDs))
-	for _, resourceID := range resourceIDs {
-		c := Check{Scope: scope, ResourceKind: "", ResourceID: resourceID, Dimensions: nil}
+	allowed := make([]string, 0, len(checks))
+	for _, c := range checks {
 		if err := validateInput(c); err != nil {
 			return nil, e.mapError(ctx, err)
 		}
-
 		if grantsSatisfy(grants, c.expand()) {
-			allowed = append(allowed, resourceID)
+			allowed = append(allowed, c.ResourceID)
 		}
 	}
 

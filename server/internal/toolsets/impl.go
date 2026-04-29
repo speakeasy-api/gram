@@ -242,7 +242,11 @@ func (s *Service) ListToolsets(ctx context.Context, payload *gen.ListToolsetsPay
 		toolsetIDs[i] = ts.ID.String()
 	}
 
-	allowedIDs, err := s.authz.Filter(ctx, authz.ScopeMCPRead, toolsetIDs)
+	checks := make([]authz.Check, len(toolsetIDs))
+	for i, id := range toolsetIDs {
+		checks[i] = authz.Check{Scope: authz.ScopeMCPRead, ResourceID: id, ResourceKind: "", Dimensions: nil}
+	}
+	allowedIDs, err := s.authz.Filter(ctx, checks)
 	if err != nil {
 		return nil, err
 	}

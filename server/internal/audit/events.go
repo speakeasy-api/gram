@@ -15,6 +15,7 @@ const (
 	subjectTypeCustomDomain    subjectType = "custom_domain"
 	subjectTypeDeployment      subjectType = "deployment"
 	subjectTypeEnvironment     subjectType = "environment"
+	subjectTypePlugin          subjectType = "plugin"
 	subjectTypeProject         subjectType = "project"
 	subjectTypeTemplate        subjectType = "template"
 	subjectTypeRemoteMcpServer subjectType = "remote_mcp_server"

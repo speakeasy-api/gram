@@ -8,6 +8,7 @@ import {
   KeyRound,
   Link2,
   Package,
+  Puzzle,
   Rocket,
   Shield,
   Sparkles,
@@ -116,7 +117,11 @@ export function ActivityTimelineCard({ logs, isPending, viewAllHref }: Props) {
 type ActionMeta = { icon: LucideIcon; bg: string; fg: string };
 
 function getActionMeta(action: string): ActionMeta {
-  if (action.includes(":delete") || action.includes(":revoke")) {
+  if (
+    action.includes(":delete") ||
+    action.includes(":revoke") ||
+    action.includes(":remove")
+  ) {
     return {
       icon: Trash2,
       bg: "bg-red-100 dark:bg-red-950",
@@ -199,6 +204,13 @@ function getActionMeta(action: string): ActionMeta {
       fg: "text-violet-600 dark:text-violet-400",
     };
   }
+  if (action.startsWith("plugin:")) {
+    return {
+      icon: Puzzle,
+      bg: "bg-pink-100 dark:bg-pink-950",
+      fg: "text-pink-600 dark:text-pink-400",
+    };
+  }
   return {
     icon: Clock,
     bg: "bg-muted",
@@ -238,6 +250,14 @@ const ACTION_LABELS: Record<string, string> = {
   "asset:create": "created asset",
   "variation:update_global": "updated variation",
   "variation:delete_global": "deleted variation",
+  "plugin:create": "created plugin",
+  "plugin:update": "updated plugin",
+  "plugin:delete": "deleted plugin",
+  "plugin:server_add": "added server to plugin",
+  "plugin:server_update": "updated plugin server",
+  "plugin:server_remove": "removed server from plugin",
+  "plugin:assignments_set": "updated plugin access",
+  "plugin:publish": "published plugins",
 };
 
 function getActionLabel(action: string): string {

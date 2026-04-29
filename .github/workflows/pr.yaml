@@ -20,7 +20,7 @@ env:
 jobs:
   changes:
     name: Tag branch changes
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     permissions:
       contents: "read"
       pull-requests: read
@@ -48,71 +48,72 @@ jobs:
         name: Set outputs
         env:
           HAS_PREVIEW_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'preview') }}
+          HAS_FULL_CI_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'ci:full') }}
         run: |
-          if [[ "${{ steps.filter.outputs.server }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "$HAS_PREVIEW_LABEL" == "true" ]]; then
+          if [[ "${{ steps.filter.outputs.server }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "$HAS_PREVIEW_LABEL" == "true" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
             echo "server=true" >> $GITHUB_OUTPUT
             echo "Server jobs will run."
           else
             echo "Server jobs will be skipped."
           fi
 
-          if [[ "${{ steps.filter.outputs.client }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "$HAS_PREVIEW_LABEL" == "true" ]]; then
+          if [[ "${{ steps.filter.outputs.client }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "$HAS_PREVIEW_LABEL" == "true" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
             echo "client=true" >> $GITHUB_OUTPUT
             echo "Client jobs will run."
           else
             echo "Client jobs will be skipped."
           fi
 
-          if [[ "${{ steps.filter.outputs.cli }}" == "true" || "${{ github.ref }}" ==  "refs/heads/main" ]]; then
+          if [[ "${{ steps.filter.outputs.cli }}" == "true" || "${{ github.ref }}" ==  "refs/heads/main" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
             echo "cli=true" >> $GITHUB_OUTPUT
             echo "CLI jobs will run."
           else
             echo "CLI jobs will be skipped."
           fi
 
-          if [[ "${{ steps.filter.outputs.functions }}" == "true" || "${{ github.ref }}" ==  "refs/heads/main" ]]; then
+          if [[ "${{ steps.filter.outputs.functions }}" == "true" || "${{ github.ref }}" ==  "refs/heads/main" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
             echo "functions=true" >> $GITHUB_OUTPUT
             echo "Functions jobs will run."
           else
             echo "Functions jobs will be skipped."
           fi
 
-          if [[ "${{ steps.filter.outputs.tsframework }}" == "true" || "${{ github.ref }}" ==  "refs/heads/main" ]]; then
+          if [[ "${{ steps.filter.outputs.tsframework }}" == "true" || "${{ github.ref }}" ==  "refs/heads/main" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
             echo "tsframework=true" >> $GITHUB_OUTPUT
             echo "TypeScript framework jobs will run."
           else
             echo "TypeScript framework jobs will be skipped."
           fi
 
-          if [[ "${{ steps.filter.outputs.elements }}" == "true" || "${{ github.ref }}" ==  "refs/heads/main" ]]; then
+          if [[ "${{ steps.filter.outputs.elements }}" == "true" || "${{ github.ref }}" ==  "refs/heads/main" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
             echo "elements=true" >> $GITHUB_OUTPUT
             echo "Elements jobs will run."
           else
             echo "Elements jobs will be skipped."
           fi
 
-          if [[ "${{ steps.filter.outputs.migrations }}" == "true" ]]; then
+          if [[ "${{ steps.filter.outputs.migrations }}" == "true" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
             echo "migrations=true" >> $GITHUB_OUTPUT
             echo "Migrations jobs will run."
           else
             echo "Migrations jobs will be skipped."
           fi
 
-          if [[ "${{ steps.filter.outputs.plog }}" == "true" || "${{ github.ref }}" == "refs/heads/main" ]]; then
+          if [[ "${{ steps.filter.outputs.plog }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
             echo "plog=true" >> $GITHUB_OUTPUT
             echo "Plog jobs will run."
           else
             echo "Plog jobs will be skipped."
           fi
 
-          if [[ "${{ steps.filter.outputs.sdk }}" == "true" || "${{ github.ref }}" == "refs/heads/main" ]]; then
+          if [[ "${{ steps.filter.outputs.sdk }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
             echo "sdk=true" >> $GITHUB_OUTPUT
             echo "SDK jobs will run."
           else
             echo "SDK jobs will be skipped."
           fi
 
-          if [[ "${{ steps.filter.outputs.sdk-gen }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "$HAS_PREVIEW_LABEL" == "true" ]]; then
+          if [[ "${{ steps.filter.outputs.sdk-gen }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "$HAS_PREVIEW_LABEL" == "true" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
             echo "sdk-gen=true" >> $GITHUB_OUTPUT
             echo "SDK generation check will run."
           else
@@ -334,6 +335,13 @@ jobs:
         with:
           cloud-token: ${{ secrets.ATLAS_TOKEN }}
 
+      - name: Run gram migration static checks
+        shell: bash
+        env:
+          usage_git_base: origin/main
+          usage_no_atlas: "true"
+        run: bash .mise-tasks/lint/migrations.sh
+
       - name: Lint PostgreSQL migrations
         uses: ariga/atlas-action/migrate/lint@v1.14.5
         with:
@@ -419,11 +427,11 @@ jobs:
           tag: ${{ steps.tag.outputs.tag }}
 
   server-build-lint:
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: blacksmith-16vcpu-ubuntu-2404
     needs: changes
     if: needs.changes.outputs.server == 'true'
     env:
-      GOMAXPROCS: 4
+      GOMAXPROCS: 16
     services:
       postgres:
         image: pgvector/pgvector:pg17
@@ -627,11 +635,11 @@ jobs:
         run: mise run git:porcelain
 
   server-test:
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: blacksmith-8vcpu-ubuntu-2404
     needs: changes
     if: needs.changes.outputs.server == 'true'
     env:
-      GOMAXPROCS: 4
+      GOMAXPROCS: 8
     steps:
       - name: Checkout
         uses: actions/checkout@ff7abcd0c3c05ccf6adc123a8cd1fd4fb30fb493 # v5.0.0
@@ -657,8 +665,11 @@ jobs:
             ${{ env.GOCACHE }}
             ${{ env.GOMODCACHE }}
 
-      - name: Install Go deps
-        run: mise run install:go
+      - name: Install Go deps & pre-pull test images
+        run: |
+          docker pull mcr.microsoft.com/presidio-analyzer:2.2.362 &
+          mise run install:go
+          wait
 
       - name: Test
         run: mise run test:server

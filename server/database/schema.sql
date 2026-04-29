@@ -1766,14 +1766,14 @@ CREATE TABLE IF NOT EXISTS principal_grants (
   principal_type TEXT NOT NULL GENERATED ALWAYS AS (split_part(principal_urn, ':', 1)) STORED,
   scope TEXT NOT NULL,
   drop_resource TEXT,
-  selectors JSONB,
+  selectors JSONB NOT NULL,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
   CONSTRAINT principal_grants_pkey PRIMARY KEY (id),
   CONSTRAINT principal_grants_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
-  CONSTRAINT principal_grants_selectors_check CHECK (selectors IS NULL OR jsonb_typeof(selectors) = 'object')
+  CONSTRAINT principal_grants_selectors_check CHECK (jsonb_typeof(selectors) = 'object' AND selectors != '{}')
 );
 
 COMMENT ON TABLE principal_grants IS 'RBAC grants. Normalized: one row per (org, principal, scope). Selectors can further constrain applicability.';
@@ -1782,7 +1782,7 @@ COMMENT ON COLUMN principal_grants.principal_urn IS 'URN identifying the princip
 COMMENT ON COLUMN principal_grants.principal_type IS 'Derived from principal_urn. The type prefix, e.g. "user", "role".';
 COMMENT ON COLUMN principal_grants.scope IS 'The scope being granted, e.g. "build:read". Validated in application code, not via FK.';
 COMMENT ON COLUMN principal_grants.drop_resource IS 'Deprecated. Formerly ''*'' = unrestricted. Nullable, scheduled for removal.';
-COMMENT ON COLUMN principal_grants.selectors IS 'Optional JSON selector constraints refining when the grant applies. NULL means the grant has no selector constraints.';
+COMMENT ON COLUMN principal_grants.selectors IS 'JSON selector constraints attached to a grant. Must be a non-empty JSONB object. Wildcard/unrestricted grants use {"resource_kind":"*","resource_id":"*"}.';
 
 CREATE UNIQUE INDEX IF NOT EXISTS principal_grants_org_principal_scope_selector_key
 ON principal_grants (organization_id, principal_urn, scope, selectors);
@@ -1890,10 +1890,10 @@ CREATE UNIQUE INDEX IF NOT EXISTS remote_mcp_server_headers_remote_mcp_server_id
 ON remote_mcp_server_headers (remote_mcp_server_id, name)
 WHERE deleted IS FALSE;
 
--- MCP Frontends: user-facing MCP server configurations that link an MCP
+-- MCP Servers: user-facing MCP server configurations that link an MCP
 -- backend (either a toolset or a remote MCP server) to environment and
--- OAuth settings. Each frontend is addressable via one or more mcp_slugs.
-CREATE TABLE IF NOT EXISTS mcp_frontends (
+-- OAuth settings. Each server is addressable via one or more mcp_endpoints.
+CREATE TABLE IF NOT EXISTS mcp_servers (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   project_id uuid NOT NULL,
 
@@ -1909,31 +1909,31 @@ CREATE TABLE IF NOT EXISTS mcp_frontends (
   deleted_at timestamptz,
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
 
-  CONSTRAINT mcp_frontends_pkey PRIMARY KEY (id),
-  CONSTRAINT mcp_frontends_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
-  CONSTRAINT mcp_frontends_environment_id_fkey FOREIGN KEY (environment_id) REFERENCES environments (id) ON DELETE SET NULL,
-  CONSTRAINT mcp_frontends_external_oauth_server_id_fkey FOREIGN KEY (external_oauth_server_id) REFERENCES external_oauth_server_metadata (id) ON DELETE SET NULL,
-  CONSTRAINT mcp_frontends_oauth_proxy_server_id_fkey FOREIGN KEY (oauth_proxy_server_id) REFERENCES oauth_proxy_servers (id) ON DELETE SET NULL,
-  CONSTRAINT mcp_frontends_remote_mcp_server_id_fkey FOREIGN KEY (remote_mcp_server_id) REFERENCES remote_mcp_servers (id) ON DELETE SET NULL,
-  CONSTRAINT mcp_frontends_toolset_id_fkey FOREIGN KEY (toolset_id) REFERENCES toolsets (id) ON DELETE SET NULL,
+  CONSTRAINT mcp_servers_pkey PRIMARY KEY (id),
+  CONSTRAINT mcp_servers_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT mcp_servers_environment_id_fkey FOREIGN KEY (environment_id) REFERENCES environments (id) ON DELETE SET NULL,
+  CONSTRAINT mcp_servers_external_oauth_server_id_fkey FOREIGN KEY (external_oauth_server_id) REFERENCES external_oauth_server_metadata (id) ON DELETE SET NULL,
+  CONSTRAINT mcp_servers_oauth_proxy_server_id_fkey FOREIGN KEY (oauth_proxy_server_id) REFERENCES oauth_proxy_servers (id) ON DELETE SET NULL,
+  CONSTRAINT mcp_servers_remote_mcp_server_id_fkey FOREIGN KEY (remote_mcp_server_id) REFERENCES remote_mcp_servers (id) ON DELETE RESTRICT,
+  CONSTRAINT mcp_servers_toolset_id_fkey FOREIGN KEY (toolset_id) REFERENCES toolsets (id) ON DELETE RESTRICT,
   -- Exactly one backend must be set: either a remote MCP server or a toolset.
-  CONSTRAINT mcp_frontends_backend_exclusivity_check CHECK ((remote_mcp_server_id IS NULL) != (toolset_id IS NULL))
+  CONSTRAINT mcp_servers_backend_exclusivity_check CHECK ((remote_mcp_server_id IS NULL) != (toolset_id IS NULL))
 );
 
-CREATE INDEX IF NOT EXISTS mcp_frontends_project_id_idx
-ON mcp_frontends (project_id)
+CREATE INDEX IF NOT EXISTS mcp_servers_project_id_idx
+ON mcp_servers (project_id)
 WHERE deleted IS FALSE;
 
--- MCP Slugs: addressable slugs for an MCP frontend. A NULL custom_domain_id
--- represents a Gram-hosted slug (resolved by slug alone); a non-NULL
--- custom_domain_id represents a custom-domain slug (resolved by the
+-- MCP Endpoints: addressable slugs for an MCP server. A NULL custom_domain_id
+-- represents a Gram-hosted endpoint (resolved by slug alone); a non-NULL
+-- custom_domain_id represents a custom-domain endpoint (resolved by the
 -- composite (custom_domain_id, slug)).
-CREATE TABLE IF NOT EXISTS mcp_slugs (
+CREATE TABLE IF NOT EXISTS mcp_endpoints (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   project_id uuid NOT NULL,
 
   custom_domain_id uuid,
-  mcp_frontend_id uuid NOT NULL,
+  mcp_server_id uuid NOT NULL,
   slug TEXT NOT NULL CHECK (slug <> '' AND CHAR_LENGTH(slug) <= 128),
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -1941,30 +1941,30 @@ CREATE TABLE IF NOT EXISTS mcp_slugs (
   deleted_at timestamptz,
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
 
-  CONSTRAINT mcp_slugs_pkey PRIMARY KEY (id),
-  CONSTRAINT mcp_slugs_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
-  CONSTRAINT mcp_slugs_mcp_frontend_id_fkey FOREIGN KEY (mcp_frontend_id) REFERENCES mcp_frontends (id) ON DELETE CASCADE,
-  CONSTRAINT mcp_slugs_custom_domain_id_fkey FOREIGN KEY (custom_domain_id) REFERENCES custom_domains (id) ON DELETE SET NULL
+  CONSTRAINT mcp_endpoints_pkey PRIMARY KEY (id),
+  CONSTRAINT mcp_endpoints_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT mcp_endpoints_mcp_server_id_fkey FOREIGN KEY (mcp_server_id) REFERENCES mcp_servers (id) ON DELETE CASCADE,
+  CONSTRAINT mcp_endpoints_custom_domain_id_fkey FOREIGN KEY (custom_domain_id) REFERENCES custom_domains (id) ON DELETE SET NULL
 );
 
-CREATE INDEX IF NOT EXISTS mcp_slugs_project_id_idx
-ON mcp_slugs (project_id)
+CREATE INDEX IF NOT EXISTS mcp_endpoints_project_id_idx
+ON mcp_endpoints (project_id)
 WHERE deleted IS FALSE;
 
-CREATE INDEX IF NOT EXISTS mcp_slugs_mcp_frontend_id_idx
-ON mcp_slugs (mcp_frontend_id)
+CREATE INDEX IF NOT EXISTS mcp_endpoints_mcp_server_id_idx
+ON mcp_endpoints (mcp_server_id)
 WHERE deleted IS FALSE;
 
-CREATE INDEX IF NOT EXISTS mcp_slugs_custom_domain_id_idx
-ON mcp_slugs (custom_domain_id)
+CREATE INDEX IF NOT EXISTS mcp_endpoints_custom_domain_id_idx
+ON mcp_endpoints (custom_domain_id)
 WHERE deleted IS FALSE;
 
-CREATE UNIQUE INDEX IF NOT EXISTS mcp_slugs_custom_domain_id_slug_key
-ON mcp_slugs (custom_domain_id, slug)
+CREATE UNIQUE INDEX IF NOT EXISTS mcp_endpoints_custom_domain_id_slug_key
+ON mcp_endpoints (custom_domain_id, slug)
 WHERE custom_domain_id IS NOT NULL AND deleted IS FALSE;
 
-CREATE UNIQUE INDEX IF NOT EXISTS mcp_slugs_slug_null_custom_domain_id_key
-ON mcp_slugs (slug)
+CREATE UNIQUE INDEX IF NOT EXISTS mcp_endpoints_slug_null_custom_domain_id_key
+ON mcp_endpoints (slug)
 WHERE custom_domain_id IS NULL AND deleted IS FALSE;
 
 -- Plugin definitions: project-scoped distributable bundles of MCP servers.
