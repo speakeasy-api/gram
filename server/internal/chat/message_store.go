@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
 
 // ChatMessageWriter is the only sanctioned way to persist chat messages.
@@ -74,7 +75,7 @@ func (w *ChatMessageWriter) WriteTurn(ctx context.Context, projectID uuid.UUID, 
 	if err != nil {
 		return fmt.Errorf("begin transaction: %w", err)
 	}
-	defer func() { _ = tx.Rollback(ctx) }()
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
 	if err := w.storeMessages(ctx, tx, pending); err != nil {
 		return fmt.Errorf("store pending chat messages: %w", err)
@@ -112,7 +113,7 @@ func (w *ChatMessageWriter) WriteWithAssets(ctx context.Context, projectID uuid.
 
 // storeMessages uploads message content to asset storage in parallel, then
 // batch-inserts the messages via the given DBTX. Used by WriteWithAssets
-// (with the pool) and inside RunInTx callbacks (with a transaction).
+// (with the pool) and WriteTurn (with a transaction).
 func (w *ChatMessageWriter) storeMessages(ctx context.Context, tx repo.DBTX, rows []chatMessageRow) error {
 	return storeMessages(ctx, w.logger, tx, w.assetStorage, rows)
 }

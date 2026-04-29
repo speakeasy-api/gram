@@ -9,7 +9,7 @@ import (
 
 const (
 	noDirectChatMessageInsertAnalyzer = "nodirectchatmessageinsert"
-	noDirectChatMessageInsertMessage  = "do not call CreateChatMessage directly; use chat.ChatMessageWriter.Write() or .RunInTx() to ensure risk analysis observers are notified"
+	noDirectChatMessageInsertMessage  = "do not call CreateChatMessage directly; use chat.ChatMessageWriter.Write() or .WriteTurn() to ensure risk analysis observers are notified"
 
 	chatRepoPkgPath = "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	chatPkgPath     = "github.com/speakeasy-api/gram/server/internal/chat"
