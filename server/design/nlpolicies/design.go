@@ -186,13 +186,19 @@ var _ = Service("nlpolicies", func() {
 			Attribute("policy_id", String, "The policy ID.", func() {
 				Format(FormatUUID)
 			})
-			Attribute("decision", String, "Filter by decision (ALLOW | BLOCK | JUDGE_ERROR).")
+			Attribute("decision", String, "Filter by decision (ALLOW | BLOCK | JUDGE_ERROR).", func() {
+				Enum("ALLOW", "BLOCK", "JUDGE_ERROR")
+			})
 			Attribute("enforced", Boolean, "Filter by whether the decision was enforced.")
-			Attribute("decided_by", String, "Filter by decider (static_rule | llm_judge | fail_mode | session_quarantine).")
-			Attribute("since", String, "Only include decisions at or after this RFC3339 timestamp.")
+			Attribute("decided_by", String, "Filter by decider (static_rule | llm_judge | fail_mode | session_quarantine).", func() {
+				Enum("static_rule", "llm_judge", "fail_mode", "session_quarantine")
+			})
+			Attribute("since", String, "Only include decisions at or after this RFC3339 timestamp.", func() {
+				Format(FormatDateTime)
+			})
 			Attribute("session_id", String, "Filter by source MCP session ID.")
 			Attribute("cursor", String, "Cursor to fetch the next page of results.")
-			Attribute("page_limit", Int, "Maximum number of results to return per page.", func() {
+			Attribute("limit", Int, "Maximum number of results to return per page.", func() {
 				Minimum(1)
 				Maximum(200)
 			})
@@ -215,7 +221,7 @@ var _ = Service("nlpolicies", func() {
 			Param("since")
 			Param("session_id")
 			Param("cursor")
-			Param("page_limit")
+			Param("limit")
 			Response(StatusOK)
 		})
 		Meta("openapi:operationId", "listNLPolicyDecisions")
@@ -235,7 +241,7 @@ var _ = Service("nlpolicies", func() {
 			})
 			Attribute("active_only", Boolean, "If true, only return currently quarantined sessions.")
 			Attribute("cursor", String, "Cursor to fetch the next page of results.")
-			Attribute("page_limit", Int, "Maximum number of results to return per page.", func() {
+			Attribute("limit", Int, "Maximum number of results to return per page.", func() {
 				Minimum(1)
 				Maximum(200)
 			})
@@ -254,7 +260,7 @@ var _ = Service("nlpolicies", func() {
 			Param("policy_id")
 			Param("active_only")
 			Param("cursor")
-			Param("page_limit")
+			Param("limit")
 			Response(StatusOK)
 		})
 		Meta("openapi:operationId", "listNLPolicySessionVerdicts")
@@ -349,9 +355,11 @@ var _ = Service("nlpolicies", func() {
 			Attribute("run_id", String, "The replay run ID.", func() {
 				Format(FormatUUID)
 			})
-			Attribute("decision", String, "Filter by decision (ALLOW | BLOCK | JUDGE_ERROR).")
+			Attribute("decision", String, "Filter by decision (ALLOW | BLOCK | JUDGE_ERROR).", func() {
+				Enum("ALLOW", "BLOCK", "JUDGE_ERROR")
+			})
 			Attribute("cursor", String, "Cursor to fetch the next page of results.")
-			Attribute("page_limit", Int, "Maximum number of results to return per page.", func() {
+			Attribute("limit", Int, "Maximum number of results to return per page.", func() {
 				Minimum(1)
 				Maximum(200)
 			})
@@ -370,7 +378,7 @@ var _ = Service("nlpolicies", func() {
 			Param("run_id")
 			Param("decision")
 			Param("cursor")
-			Param("page_limit")
+			Param("limit")
 			Response(StatusOK)
 		})
 		Meta("openapi:operationId", "listNLPolicyReplayResults")

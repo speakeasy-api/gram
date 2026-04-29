@@ -145,7 +145,7 @@ type ListDecisionsPayload struct {
 	// Cursor to fetch the next page of results.
 	Cursor *string
 	// Maximum number of results to return per page.
-	PageLimit *int
+	Limit *int
 }
 
 // ListDecisionsResult is the result type of the nlpolicies service
@@ -183,7 +183,7 @@ type ListReplayResultsPayload struct {
 	// Cursor to fetch the next page of results.
 	Cursor *string
 	// Maximum number of results to return per page.
-	PageLimit *int
+	Limit *int
 }
 
 // ListReplayResultsResult is the result type of the nlpolicies service
@@ -207,7 +207,7 @@ type ListSessionVerdictsPayload struct {
 	// Cursor to fetch the next page of results.
 	Cursor *string
 	// Maximum number of results to return per page.
-	PageLimit *int
+	Limit *int
 }
 
 // ListSessionVerdictsResult is the result type of the nlpolicies service

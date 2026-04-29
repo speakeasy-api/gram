@@ -1509,8 +1509,8 @@ func EncodeListDecisionsRequest(encoder func(*http.Request) goahttp.Encoder) fun
 		if p.Cursor != nil {
 			values.Add("cursor", *p.Cursor)
 		}
-		if p.PageLimit != nil {
-			values.Add("page_limit", fmt.Sprintf("%v", *p.PageLimit))
+		if p.Limit != nil {
+			values.Add("limit", fmt.Sprintf("%v", *p.Limit))
 		}
 		req.URL.RawQuery = values.Encode()
 		return nil
@@ -1760,8 +1760,8 @@ func EncodeListSessionVerdictsRequest(encoder func(*http.Request) goahttp.Encode
 		if p.Cursor != nil {
 			values.Add("cursor", *p.Cursor)
 		}
-		if p.PageLimit != nil {
-			values.Add("page_limit", fmt.Sprintf("%v", *p.PageLimit))
+		if p.Limit != nil {
+			values.Add("limit", fmt.Sprintf("%v", *p.Limit))
 		}
 		req.URL.RawQuery = values.Encode()
 		return nil
@@ -2736,8 +2736,8 @@ func EncodeListReplayResultsRequest(encoder func(*http.Request) goahttp.Encoder)
 		if p.Cursor != nil {
 			values.Add("cursor", *p.Cursor)
 		}
-		if p.PageLimit != nil {
-			values.Add("page_limit", fmt.Sprintf("%v", *p.PageLimit))
+		if p.Limit != nil {
+			values.Add("limit", fmt.Sprintf("%v", *p.Limit))
 		}
 		req.URL.RawQuery = values.Encode()
 		return nil

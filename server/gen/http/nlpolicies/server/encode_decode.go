@@ -1435,7 +1435,7 @@ func DecodeListDecisionsRequest(mux goahttp.Muxer, decoder func(*http.Request) g
 			since            *string
 			sessionID        *string
 			cursor           *string
-			pageLimit        *int
+			limit            *int
 			apikeyToken      *string
 			sessionToken     *string
 			projectSlugInput *string
@@ -1451,6 +1451,11 @@ func DecodeListDecisionsRequest(mux goahttp.Muxer, decoder func(*http.Request) g
 		if decisionRaw != "" {
 			decision = &decisionRaw
 		}
+		if decision != nil {
+			if !(*decision == "ALLOW" || *decision == "BLOCK" || *decision == "JUDGE_ERROR") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("decision", *decision, []any{"ALLOW", "BLOCK", "JUDGE_ERROR"}))
+			}
+		}
 		{
 			enforcedRaw := qp.Get("enforced")
 			if enforcedRaw != "" {
@@ -1465,9 +1470,17 @@ func DecodeListDecisionsRequest(mux goahttp.Muxer, decoder func(*http.Request) g
 		if decidedByRaw != "" {
 			decidedBy = &decidedByRaw
 		}
+		if decidedBy != nil {
+			if !(*decidedBy == "static_rule" || *decidedBy == "llm_judge" || *decidedBy == "fail_mode" || *decidedBy == "session_quarantine") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("decided_by", *decidedBy, []any{"static_rule", "llm_judge", "fail_mode", "session_quarantine"}))
+			}
+		}
 		sinceRaw := qp.Get("since")
 		if sinceRaw != "" {
 			since = &sinceRaw
+		}
+		if since != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("since", *since, goa.FormatDateTime))
 		}
 		sessionIDRaw := qp.Get("session_id")
 		if sessionIDRaw != "" {
@@ -1478,24 +1491,24 @@ func DecodeListDecisionsRequest(mux goahttp.Muxer, decoder func(*http.Request) g
 			cursor = &cursorRaw
 		}
 		{
-			pageLimitRaw := qp.Get("page_limit")
-			if pageLimitRaw != "" {
-				v, err2 := strconv.ParseInt(pageLimitRaw, 10, strconv.IntSize)
+			limitRaw := qp.Get("limit")
+			if limitRaw != "" {
+				v, err2 := strconv.ParseInt(limitRaw, 10, strconv.IntSize)
 				if err2 != nil {
-					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("page_limit", pageLimitRaw, "integer"))
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("limit", limitRaw, "integer"))
 				}
 				pv := int(v)
-				pageLimit = &pv
+				limit = &pv
 			}
 		}
-		if pageLimit != nil {
-			if *pageLimit < 1 {
-				err = goa.MergeErrors(err, goa.InvalidRangeError("page_limit", *pageLimit, 1, true))
+		if limit != nil {
+			if *limit < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", *limit, 1, true))
 			}
 		}
-		if pageLimit != nil {
-			if *pageLimit > 200 {
-				err = goa.MergeErrors(err, goa.InvalidRangeError("page_limit", *pageLimit, 200, false))
+		if limit != nil {
+			if *limit > 200 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", *limit, 200, false))
 			}
 		}
 		apikeyTokenRaw := r.Header.Get("Gram-Key")
@@ -1513,7 +1526,7 @@ func DecodeListDecisionsRequest(mux goahttp.Muxer, decoder func(*http.Request) g
 		if err != nil {
 			return payload, err
 		}
-		payload = NewListDecisionsPayload(policyID, decision, enforced, decidedBy, since, sessionID, cursor, pageLimit, apikeyToken, sessionToken, projectSlugInput)
+		payload = NewListDecisionsPayload(policyID, decision, enforced, decidedBy, since, sessionID, cursor, limit, apikeyToken, sessionToken, projectSlugInput)
 		if payload.ApikeyToken != nil {
 			if strings.Contains(*payload.ApikeyToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -1717,7 +1730,7 @@ func DecodeListSessionVerdictsRequest(mux goahttp.Muxer, decoder func(*http.Requ
 			policyID         string
 			activeOnly       *bool
 			cursor           *string
-			pageLimit        *int
+			limit            *int
 			apikeyToken      *string
 			sessionToken     *string
 			projectSlugInput *string
@@ -1744,24 +1757,24 @@ func DecodeListSessionVerdictsRequest(mux goahttp.Muxer, decoder func(*http.Requ
 			cursor = &cursorRaw
 		}
 		{
-			pageLimitRaw := qp.Get("page_limit")
-			if pageLimitRaw != "" {
-				v, err2 := strconv.ParseInt(pageLimitRaw, 10, strconv.IntSize)
+			limitRaw := qp.Get("limit")
+			if limitRaw != "" {
+				v, err2 := strconv.ParseInt(limitRaw, 10, strconv.IntSize)
 				if err2 != nil {
-					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("page_limit", pageLimitRaw, "integer"))
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("limit", limitRaw, "integer"))
 				}
 				pv := int(v)
-				pageLimit = &pv
+				limit = &pv
 			}
 		}
-		if pageLimit != nil {
-			if *pageLimit < 1 {
-				err = goa.MergeErrors(err, goa.InvalidRangeError("page_limit", *pageLimit, 1, true))
+		if limit != nil {
+			if *limit < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", *limit, 1, true))
 			}
 		}
-		if pageLimit != nil {
-			if *pageLimit > 200 {
-				err = goa.MergeErrors(err, goa.InvalidRangeError("page_limit", *pageLimit, 200, false))
+		if limit != nil {
+			if *limit > 200 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", *limit, 200, false))
 			}
 		}
 		apikeyTokenRaw := r.Header.Get("Gram-Key")
@@ -1779,7 +1792,7 @@ func DecodeListSessionVerdictsRequest(mux goahttp.Muxer, decoder func(*http.Requ
 		if err != nil {
 			return payload, err
 		}
-		payload = NewListSessionVerdictsPayload(policyID, activeOnly, cursor, pageLimit, apikeyToken, sessionToken, projectSlugInput)
+		payload = NewListSessionVerdictsPayload(policyID, activeOnly, cursor, limit, apikeyToken, sessionToken, projectSlugInput)
 		if payload.ApikeyToken != nil {
 			if strings.Contains(*payload.ApikeyToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -2684,7 +2697,7 @@ func DecodeListReplayResultsRequest(mux goahttp.Muxer, decoder func(*http.Reques
 			runID            string
 			decision         *string
 			cursor           *string
-			pageLimit        *int
+			limit            *int
 			apikeyToken      *string
 			sessionToken     *string
 			projectSlugInput *string
@@ -2700,29 +2713,34 @@ func DecodeListReplayResultsRequest(mux goahttp.Muxer, decoder func(*http.Reques
 		if decisionRaw != "" {
 			decision = &decisionRaw
 		}
+		if decision != nil {
+			if !(*decision == "ALLOW" || *decision == "BLOCK" || *decision == "JUDGE_ERROR") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("decision", *decision, []any{"ALLOW", "BLOCK", "JUDGE_ERROR"}))
+			}
+		}
 		cursorRaw := qp.Get("cursor")
 		if cursorRaw != "" {
 			cursor = &cursorRaw
 		}
 		{
-			pageLimitRaw := qp.Get("page_limit")
-			if pageLimitRaw != "" {
-				v, err2 := strconv.ParseInt(pageLimitRaw, 10, strconv.IntSize)
+			limitRaw := qp.Get("limit")
+			if limitRaw != "" {
+				v, err2 := strconv.ParseInt(limitRaw, 10, strconv.IntSize)
 				if err2 != nil {
-					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("page_limit", pageLimitRaw, "integer"))
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("limit", limitRaw, "integer"))
 				}
 				pv := int(v)
-				pageLimit = &pv
+				limit = &pv
 			}
 		}
-		if pageLimit != nil {
-			if *pageLimit < 1 {
-				err = goa.MergeErrors(err, goa.InvalidRangeError("page_limit", *pageLimit, 1, true))
+		if limit != nil {
+			if *limit < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", *limit, 1, true))
 			}
 		}
-		if pageLimit != nil {
-			if *pageLimit > 200 {
-				err = goa.MergeErrors(err, goa.InvalidRangeError("page_limit", *pageLimit, 200, false))
+		if limit != nil {
+			if *limit > 200 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", *limit, 200, false))
 			}
 		}
 		apikeyTokenRaw := r.Header.Get("Gram-Key")
@@ -2740,7 +2758,7 @@ func DecodeListReplayResultsRequest(mux goahttp.Muxer, decoder func(*http.Reques
 		if err != nil {
 			return payload, err
 		}
-		payload = NewListReplayResultsPayload(runID, decision, cursor, pageLimit, apikeyToken, sessionToken, projectSlugInput)
+		payload = NewListReplayResultsPayload(runID, decision, cursor, limit, apikeyToken, sessionToken, projectSlugInput)
 		if payload.ApikeyToken != nil {
 			if strings.Contains(*payload.ApikeyToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")

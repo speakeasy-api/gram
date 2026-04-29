@@ -4731,6 +4731,22 @@ func ValidateCreatePolicyResponseBody(body *CreatePolicyResponseBody) (err error
 	if body.ProjectID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
 	}
+	if body.Mode != nil {
+		if !(*body.Mode == "audit" || *body.Mode == "enforce" || *body.Mode == "disabled") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.mode", *body.Mode, []any{"audit", "enforce", "disabled"}))
+		}
+	}
+	if body.FailMode != nil {
+		if !(*body.FailMode == "fail_open" || *body.FailMode == "fail_closed") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.fail_mode", *body.FailMode, []any{"fail_open", "fail_closed"}))
+		}
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.UpdatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
 	return
 }
 
@@ -4792,6 +4808,22 @@ func ValidateGetPolicyResponseBody(body *GetPolicyResponseBody) (err error) {
 	if body.ProjectID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
 	}
+	if body.Mode != nil {
+		if !(*body.Mode == "audit" || *body.Mode == "enforce" || *body.Mode == "disabled") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.mode", *body.Mode, []any{"audit", "enforce", "disabled"}))
+		}
+	}
+	if body.FailMode != nil {
+		if !(*body.FailMode == "fail_open" || *body.FailMode == "fail_closed") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.fail_mode", *body.FailMode, []any{"fail_open", "fail_closed"}))
+		}
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.UpdatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
 	return
 }
 
@@ -4837,6 +4869,22 @@ func ValidateUpdatePolicyResponseBody(body *UpdatePolicyResponseBody) (err error
 	if body.ProjectID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
 	}
+	if body.Mode != nil {
+		if !(*body.Mode == "audit" || *body.Mode == "enforce" || *body.Mode == "disabled") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.mode", *body.Mode, []any{"audit", "enforce", "disabled"}))
+		}
+	}
+	if body.FailMode != nil {
+		if !(*body.FailMode == "fail_open" || *body.FailMode == "fail_closed") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.fail_mode", *body.FailMode, []any{"fail_open", "fail_closed"}))
+		}
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.UpdatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
 	return
 }
 
@@ -4881,6 +4929,22 @@ func ValidateSetModeResponseBody(body *SetModeResponseBody) (err error) {
 	}
 	if body.ProjectID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
+	}
+	if body.Mode != nil {
+		if !(*body.Mode == "audit" || *body.Mode == "enforce" || *body.Mode == "disabled") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.mode", *body.Mode, []any{"audit", "enforce", "disabled"}))
+		}
+	}
+	if body.FailMode != nil {
+		if !(*body.FailMode == "fail_open" || *body.FailMode == "fail_closed") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.fail_mode", *body.FailMode, []any{"fail_open", "fail_closed"}))
+		}
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.UpdatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
 	}
 	return
 }
@@ -4947,8 +5011,22 @@ func ValidateClearSessionVerdictResponseBody(body *ClearSessionVerdictResponseBo
 	if body.NlPolicyID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.nl_policy_id", *body.NlPolicyID, goa.FormatUUID))
 	}
+	if body.Verdict != nil {
+		if !(*body.Verdict == "OK" || *body.Verdict == "QUARANTINED") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.verdict", *body.Verdict, []any{"OK", "QUARANTINED"}))
+		}
+	}
+	if body.QuarantinedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.quarantined_at", *body.QuarantinedAt, goa.FormatDateTime))
+	}
+	if body.ClearedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.cleared_at", *body.ClearedAt, goa.FormatDateTime))
+	}
 	if body.ClearedBy != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.cleared_by", *body.ClearedBy, goa.FormatUUID))
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
 	}
 	return
 }
@@ -4979,6 +5057,17 @@ func ValidateReplayResponseBody(body *ReplayResponseBody) (err error) {
 	if body.NlPolicyID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.nl_policy_id", *body.NlPolicyID, goa.FormatUUID))
 	}
+	if body.Status != nil {
+		if !(*body.Status == "pending" || *body.Status == "running" || *body.Status == "completed" || *body.Status == "failed") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"pending", "running", "completed", "failed"}))
+		}
+	}
+	if body.StartedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.started_at", *body.StartedAt, goa.FormatDateTime))
+	}
+	if body.CompletedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.completed_at", *body.CompletedAt, goa.FormatDateTime))
+	}
 	return
 }
 
@@ -5008,6 +5097,17 @@ func ValidateGetReplayRunResponseBody(body *GetReplayRunResponseBody) (err error
 	}
 	if body.NlPolicyID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.nl_policy_id", *body.NlPolicyID, goa.FormatUUID))
+	}
+	if body.Status != nil {
+		if !(*body.Status == "pending" || *body.Status == "running" || *body.Status == "completed" || *body.Status == "failed") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"pending", "running", "completed", "failed"}))
+		}
+	}
+	if body.StartedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.started_at", *body.StartedAt, goa.FormatDateTime))
+	}
+	if body.CompletedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.completed_at", *body.CompletedAt, goa.FormatDateTime))
 	}
 	return
 }
@@ -7950,6 +8050,22 @@ func ValidateNLPolicyResponseBody(body *NLPolicyResponseBody) (err error) {
 	if body.ProjectID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
 	}
+	if body.Mode != nil {
+		if !(*body.Mode == "audit" || *body.Mode == "enforce" || *body.Mode == "disabled") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.mode", *body.Mode, []any{"audit", "enforce", "disabled"}))
+		}
+	}
+	if body.FailMode != nil {
+		if !(*body.FailMode == "fail_open" || *body.FailMode == "fail_closed") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.fail_mode", *body.FailMode, []any{"fail_open", "fail_closed"}))
+		}
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.UpdatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
 	return
 }
 
@@ -7992,6 +8108,24 @@ func ValidateNLPolicyDecisionResponseBody(body *NLPolicyDecisionResponseBody) (e
 	if body.ChatID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.chat_id", *body.ChatID, goa.FormatUUID))
 	}
+	if body.Decision != nil {
+		if !(*body.Decision == "ALLOW" || *body.Decision == "BLOCK" || *body.Decision == "JUDGE_ERROR") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.decision", *body.Decision, []any{"ALLOW", "BLOCK", "JUDGE_ERROR"}))
+		}
+	}
+	if body.DecidedBy != nil {
+		if !(*body.DecidedBy == "static_rule" || *body.DecidedBy == "llm_judge" || *body.DecidedBy == "fail_mode" || *body.DecidedBy == "session_quarantine") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.decided_by", *body.DecidedBy, []any{"static_rule", "llm_judge", "fail_mode", "session_quarantine"}))
+		}
+	}
+	if body.Mode != nil {
+		if !(*body.Mode == "audit" || *body.Mode == "enforce" || *body.Mode == "disabled") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.mode", *body.Mode, []any{"audit", "enforce", "disabled"}))
+		}
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
 	return
 }
 
@@ -8025,8 +8159,22 @@ func ValidateNLPolicySessionVerdictResponseBody(body *NLPolicySessionVerdictResp
 	if body.NlPolicyID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.nl_policy_id", *body.NlPolicyID, goa.FormatUUID))
 	}
+	if body.Verdict != nil {
+		if !(*body.Verdict == "OK" || *body.Verdict == "QUARANTINED") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.verdict", *body.Verdict, []any{"OK", "QUARANTINED"}))
+		}
+	}
+	if body.QuarantinedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.quarantined_at", *body.QuarantinedAt, goa.FormatDateTime))
+	}
+	if body.ClearedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.cleared_at", *body.ClearedAt, goa.FormatDateTime))
+	}
 	if body.ClearedBy != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.cleared_by", *body.ClearedBy, goa.FormatUUID))
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
 	}
 	return
 }
@@ -8054,6 +8202,14 @@ func ValidateNLPolicyReplayResultResponseBody(body *NLPolicyReplayResultResponse
 	}
 	if body.ChatMessageID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.chat_message_id", *body.ChatMessageID, goa.FormatUUID))
+	}
+	if body.Decision != nil {
+		if !(*body.Decision == "ALLOW" || *body.Decision == "BLOCK" || *body.Decision == "JUDGE_ERROR") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.decision", *body.Decision, []any{"ALLOW", "BLOCK", "JUDGE_ERROR"}))
+		}
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
 	}
 	return
 }
