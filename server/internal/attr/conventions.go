@@ -97,6 +97,22 @@ const (
 	AuthUserEmailKey        = attribute.Key("gram.auth.user_email")
 	AuthUserIDKey           = attribute.Key("gram.auth.user_id")
 	AuthUserExternalIDKey   = attribute.Key("gram.auth.external_user_id")
+	AuthzAllowedCountKey    = attribute.Key("gram.authz.allowed_count")
+	AuthzAssistantIDKey     = attribute.Key("gram.authz.assistant_id")
+	AuthzAssistantThreadKey = attribute.Key("gram.authz.assistant_thread_id")
+	AuthzCandidateCountKey  = attribute.Key("gram.authz.candidate_count")
+	AuthzDeniedCountKey     = attribute.Key("gram.authz.denied_count")
+	AuthzExpandedScopesKey  = attribute.Key("gram.authz.expanded_scopes")
+	AuthzMatchingRuleKey    = attribute.Key("gram.authz.matching_rule")
+	AuthzMatchingRulesKey   = attribute.Key("gram.authz.matching_rules")
+	AuthzOperationKey       = attribute.Key("gram.authz.operation")
+	AuthzPrincipalKey       = attribute.Key("gram.authz.principal")
+	AuthzRequestedChecksKey = attribute.Key("gram.authz.requested_checks")
+	AuthzRequestCheckCntKey = attribute.Key("gram.authz.requested_check_count")
+	AuthzResourceIDKey      = attribute.Key("gram.authz.resource_id")
+	AuthzResourceKindKey    = attribute.Key("gram.authz.resource_kind")
+	AuthzScopeKey           = attribute.Key("gram.authz.scope")
+	AuthzSelectorKey        = attribute.Key("gram.authz.selector")
 
 	AssetIDKey                     = attribute.Key("gram.asset.id")
 	AssetURLKey                    = attribute.Key("gram.asset.url")
@@ -541,6 +557,39 @@ func SlogAuthUserID(v string) slog.Attr      { return slog.String(string(AuthUse
 
 func AuthUserExternalID(v string) attribute.KeyValue { return AuthUserExternalIDKey.String(v) }
 func SlogAuthUserExternalID(v string) slog.Attr      { return slog.String(string(AuthUserExternalIDKey), v) }
+
+func SlogAuthzAllowedCount(v int) slog.Attr { return slog.Int(string(AuthzAllowedCountKey), v) }
+func SlogAuthzAssistantID(v string) slog.Attr {
+	return slog.String(string(AuthzAssistantIDKey), v)
+}
+func SlogAuthzAssistantThreadID(v string) slog.Attr {
+	return slog.String(string(AuthzAssistantThreadKey), v)
+}
+func SlogAuthzCandidateCount(v int) slog.Attr { return slog.Int(string(AuthzCandidateCountKey), v) }
+func SlogAuthzDeniedCount(v int) slog.Attr    { return slog.Int(string(AuthzDeniedCountKey), v) }
+func SlogAuthzExpandedScopes(v any) slog.Attr {
+	return slog.Any(string(AuthzExpandedScopesKey), v)
+}
+func SlogAuthzMatchingRule(v any) slog.Attr { return slog.Any(string(AuthzMatchingRuleKey), v) }
+func SlogAuthzMatchingRules(v any) slog.Attr {
+	return slog.Any(string(AuthzMatchingRulesKey), v)
+}
+func SlogAuthzOperation(v string) slog.Attr { return slog.String(string(AuthzOperationKey), v) }
+func SlogAuthzPrincipal(v string) slog.Attr { return slog.String(string(AuthzPrincipalKey), v) }
+func SlogAuthzRequestedCheckCount(v int) slog.Attr {
+	return slog.Int(string(AuthzRequestCheckCntKey), v)
+}
+func SlogAuthzRequestedChecks(v any) slog.Attr {
+	return slog.Any(string(AuthzRequestedChecksKey), v)
+}
+func SlogAuthzResourceID(v string) slog.Attr {
+	return slog.String(string(AuthzResourceIDKey), v)
+}
+func SlogAuthzResourceKind(v string) slog.Attr {
+	return slog.String(string(AuthzResourceKindKey), v)
+}
+func SlogAuthzScope(v string) slog.Attr { return slog.String(string(AuthzScopeKey), v) }
+func SlogAuthzSelector(v any) slog.Attr { return slog.Any(string(AuthzSelectorKey), v) }
 
 func AssetID(v string) attribute.KeyValue { return AssetIDKey.String(v) }
 func SlogAssetID(v string) slog.Attr      { return slog.String(string(AssetIDKey), v) }

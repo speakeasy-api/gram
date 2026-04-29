@@ -68,15 +68,17 @@ type ScopedGrant struct {
 	Selectors []Selector
 }
 
-func grantsSatisfy(grants []Grant, checks []Check) bool {
+func matchingGrant(grants []Grant, checks []Check) (*Grant, *Check) {
 	for _, grant := range grants {
 		for _, check := range checks {
 			if grant.Scope == check.Scope && grant.Selector.Matches(check.selector()) {
-				return true
+				g, c := grant, check
+				return &g, &c
 			}
 		}
 	}
-	return false
+
+	return nil, nil
 }
 
 func SyncGrants(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, orgID string, roleSlug string, grants []*RoleGrant) error {

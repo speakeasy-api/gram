@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"slices"
 	"time"
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
@@ -257,15 +256,37 @@ func (e *Engine) Require(ctx context.Context, checks ...Check) error {
 		return e.mapError(ctx, ErrMissingGrants)
 	}
 
+	matchingGrants := make([]grantMatch, 0, len(checks))
 	for _, check := range checks {
 		if err := validateInput(check); err != nil {
 			return e.mapError(ctx, err)
 		}
 
-		if !grantsSatisfy(grants, check.expand()) {
+		grant, via := matchingGrant(grants, check.expand())
+		if grant == nil {
+			challengeLogger{
+				logger:          e.logger,
+				operation:       "require",
+				outcome:         "denied",
+				reason:          "no_matching_grant",
+				matchingGrants:  nil,
+				requestedChecks: []Check{check},
+				filter:          nil,
+			}.LogChallenge(ctx)
 			return e.mapError(ctx, Denied(check.Scope, check.selector()))
 		}
+		matchingGrants = append(matchingGrants, grantMatch{Grant: *grant, ViaCheck: *via})
 	}
+
+	challengeLogger{
+		logger:          e.logger,
+		operation:       "require",
+		outcome:         "allowed",
+		reason:          "matching_grants",
+		matchingGrants:  matchingGrants,
+		requestedChecks: checks,
+		filter:          nil,
+	}.LogChallenge(ctx)
 
 	return nil
 }
@@ -293,10 +314,31 @@ func (e *Engine) RequireAny(ctx context.Context, checks ...Check) error {
 		}
 	}
 
-	if slices.ContainsFunc(checks, func(c Check) bool { return grantsSatisfy(grants, c.expand()) }) {
-		return nil
+	for _, check := range checks {
+		grant, via := matchingGrant(grants, check.expand())
+		if grant != nil {
+			challengeLogger{
+				logger:          e.logger,
+				operation:       "require_any",
+				outcome:         "allowed",
+				reason:          "matching_grant",
+				matchingGrants:  []grantMatch{{Grant: *grant, ViaCheck: *via}},
+				requestedChecks: checks,
+				filter:          nil,
+			}.LogChallenge(ctx)
+			return nil
+		}
 	}
 
+	challengeLogger{
+		logger:          e.logger,
+		operation:       "require_any",
+		outcome:         "denied",
+		reason:          "no_matching_grant",
+		matchingGrants:  nil,
+		requestedChecks: checks,
+		filter:          nil,
+	}.LogChallenge(ctx)
 	return e.mapError(ctx, Denied(checks[0].Scope, checks[0].selector()))
 }
 
@@ -321,11 +363,25 @@ func (e *Engine) Filter(ctx context.Context, scope Scope, resourceIDs []string) 
 			return nil, e.mapError(ctx, err)
 		}
 
-		if grantsSatisfy(grants, c.expand()) {
+		grant, _ := matchingGrant(grants, c.expand())
+		if grant != nil {
 			allowed = append(allowed, resourceID)
 		}
 	}
 
+	challengeLogger{
+		logger:          e.logger,
+		operation:       "filter",
+		outcome:         "allowed",
+		reason:          "matching_grants",
+		matchingGrants:  nil,
+		requestedChecks: nil,
+		filter: &filterLog{
+			Scope:          scope,
+			CandidateCount: len(resourceIDs),
+			AllowedCount:   len(allowed),
+		},
+	}.LogFilter(ctx)
 	return allowed, nil
 }
 
