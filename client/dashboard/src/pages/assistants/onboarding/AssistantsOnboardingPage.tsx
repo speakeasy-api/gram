@@ -37,7 +37,7 @@ export function AssistantsOnboardingPage() {
 
   return (
     <OnboardingFrame onExit={() => routes.assistants.goTo()}>
-      <NewAssistantOnboarding onAssistantSaved={handleDone} />
+      <NewAssistantOnboarding onAssistantSaved={handleDone} chromeless />
     </OnboardingFrame>
   );
 }
