@@ -1,7 +1,7 @@
 import { Outlet } from "react-router";
-import { AgentInsights } from "@/components/observe/AgentInsights";
-import { InsightsHooksContent } from "@/components/observe/InsightsHooksContent";
-import { MCPInsights } from "@/components/observe/MCPInsights";
+import { InsightsAgentsContent } from "@/components/observe/InsightsAgents";
+import { InsightsToolsContent } from "@/components/observe/InsightsTools";
+import { InsightsMCPContent } from "@/components/observe/InsightsMCP";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { ObserveTabNav } from "@/components/observe/ObserveTabNav";
@@ -26,7 +26,7 @@ export function InsightsRoot() {
 export function InsightsHooksPage() {
   return (
     <RequireScope scope={["project:read", "project:write"]} level="page">
-      <InsightsHooksContent />
+      <InsightsToolsContent />
     </RequireScope>
   );
 }
@@ -34,7 +34,7 @@ export function InsightsHooksPage() {
 export function InsightsMCPPage() {
   return (
     <RequireScope scope="project:read" level="page">
-      <MCPInsights />
+      <InsightsMCPContent />
     </RequireScope>
   );
 }
@@ -42,7 +42,7 @@ export function InsightsMCPPage() {
 export function InsightsAgentsPage() {
   return (
     <RequireScope scope="project:read" level="page">
-      <AgentInsights />
+      <InsightsAgentsContent />
     </RequireScope>
   );
 }

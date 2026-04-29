@@ -6,17 +6,17 @@ import {
   ResolvedChatsChart,
   ResolutionStatusChart,
   SessionDurationChart,
-} from "./MCPInsights";
+} from "./InsightsMCP";
 
-export function AgentInsights() {
+export function InsightsAgentsContent() {
   return (
     <InsightsOverviewShell noDataKind="chats" showMcpFilter={false}>
-      {(props) => <AgentInsightsContent {...props} />}
+      {(props) => <InsightsAgentsInner {...props} />}
     </InsightsOverviewShell>
   );
 }
 
-function AgentInsightsContent({
+function InsightsAgentsInner({
   summary,
   comparison,
   timeSeries,

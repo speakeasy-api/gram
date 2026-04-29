@@ -507,7 +507,7 @@ function parseLocalDate(dateStr: string): Date {
   return new Date(dateStr);
 }
 
-export function MCPInsights() {
+export function InsightsMCPContent() {
   return (
     <InsightsOverviewShell noDataKind="tools" showMcpFilter>
       {(props) => <ToolsInsightsContent {...props} />}

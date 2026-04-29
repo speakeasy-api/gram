@@ -1,10 +1,10 @@
 import { RequireScope } from "@/components/require-scope";
-import { AgentSessionsContent } from "@/components/observe/AgentSessionsContent";
+import { LogsAgentsContent } from "@/components/observe/LogsAgents";
 
 export default function ChatLogs() {
   return (
     <RequireScope scope="project:read" level="page">
-      <AgentSessionsContent />
+      <LogsAgentsContent />
     </RequireScope>
   );
 }

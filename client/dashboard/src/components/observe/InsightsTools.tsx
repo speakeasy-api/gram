@@ -219,7 +219,7 @@ function safeBase64Decode(str: string): string | null {
 
 const perPage = 100;
 
-export function InsightsHooksContent() {
+export function InsightsToolsContent() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { projectSlug } = useSlugs();
 

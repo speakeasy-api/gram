@@ -114,7 +114,7 @@ function safeBase64Decode(str: string): string | null {
 
 const perPage = 100;
 
-export function LogsHooks() {
+export function LogsTools() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { projectSlug } = useSlugs();
 
@@ -684,7 +684,7 @@ function HooksInnerContent({
                   className="flex-1 overflow-y-auto"
                   onScroll={handleScroll}
                 >
-                  <HooksTraceContent
+                  <LogsToolsContent
                     error={error}
                     isLoading={isLoading}
                     groupedTraces={groupedTraces}
@@ -807,7 +807,7 @@ function HookTypeFilter({
   );
 }
 
-export function HooksTraceContent({
+export function LogsToolsContent({
   error,
   isLoading,
   groupedTraces,
@@ -874,7 +874,7 @@ export function HooksTraceContent({
   return (
     <>
       {groupedTraces.map((trace) => (
-        <HookTraceRow
+        <LogsToolsTraceRow
           key={trace.traceId}
           trace={trace}
           isExpanded={expandedTraceId === trace.traceId}
@@ -894,7 +894,7 @@ export function HooksTraceContent({
   );
 }
 
-function HookTraceRow({
+function LogsToolsTraceRow({
   trace,
   isExpanded,
   onToggle,

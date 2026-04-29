@@ -1,8 +1,8 @@
 import { Outlet } from "react-router";
-import { LogsContent } from "@/components/observe/LogsContent";
+import { LogsMCPContent } from "@/components/observe/LogsMCP";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
-import { LogsHooks } from "@/components/observe/LogsHooks";
+import { LogsTools } from "@/components/observe/LogsTools";
 import { ObserveTabNav } from "@/components/observe/ObserveTabNav";
 
 export function LogsRoot() {
@@ -22,10 +22,10 @@ export function LogsRoot() {
   );
 }
 
-export function LogsHooksPage() {
+export function LogsToolsPage() {
   return (
     <RequireScope scope={["project:read", "project:write"]} level="page">
-      <LogsHooks />
+      <LogsTools />
     </RequireScope>
   );
 }
@@ -33,7 +33,7 @@ export function LogsHooksPage() {
 export function LogsMCPPage() {
   return (
     <RequireScope scope="project:read" level="page">
-      <LogsContent />
+      <LogsMCPContent />
     </RequireScope>
   );
 }

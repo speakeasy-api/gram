@@ -29,7 +29,7 @@ import Home from "./pages/home/Home";
 import Integrations from "./pages/integrations/Integrations";
 import Login from "./pages/login/Login";
 import Register from "./pages/login/Register";
-import { LogsRoot, LogsMCPPage, LogsHooksPage } from "./pages/logs/Logs";
+import { LogsRoot, LogsMCPPage, LogsToolsPage } from "./pages/logs/Logs";
 import { BuiltInMCPDetailPage } from "./pages/mcp/BuiltInMCPDetailPage";
 import { MCPDetailPage, MCPDetailsRoot } from "./pages/mcp/MCPDetails";
 import { MCPPage, MCPRoot } from "./pages/mcp/MCP";
@@ -363,7 +363,7 @@ const ROUTE_STRUCTURE = {
         url: "tools",
         component: InsightsHooksPage,
       },
-      "mcp-servers": {
+      mcp: {
         title: "MCP Servers",
         url: "mcp",
         component: InsightsMCPPage,
@@ -376,7 +376,7 @@ const ROUTE_STRUCTURE = {
     },
   },
   hooks: {
-    // redirect to insights/tools
+    // redirect to insights/tools. TODO: remove this in a month
     title: "Hooks",
     url: "hooks",
     component: RedirectToInsightsTools,
@@ -391,7 +391,7 @@ const ROUTE_STRUCTURE = {
       tools: {
         title: "Tools",
         url: "tools",
-        component: LogsHooksPage,
+        component: LogsToolsPage,
       },
       mcp: {
         title: "MCP Servers",
@@ -406,7 +406,7 @@ const ROUTE_STRUCTURE = {
     },
   },
   chatSessions: {
-    // redirect to logs/agents
+    // redirect to logs/agents. TODO: remove this in a month
     title: "Agent Sessions",
     url: "agent-sessions",
     component: RedirectToLogAgents,
