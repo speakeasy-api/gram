@@ -117,7 +117,11 @@ export function ActivityTimelineCard({ logs, isPending, viewAllHref }: Props) {
 type ActionMeta = { icon: LucideIcon; bg: string; fg: string };
 
 function getActionMeta(action: string): ActionMeta {
-  if (action.includes(":delete") || action.includes(":revoke")) {
+  if (
+    action.includes(":delete") ||
+    action.includes(":revoke") ||
+    action.includes(":remove")
+  ) {
     return {
       icon: Trash2,
       bg: "bg-red-100 dark:bg-red-950",
