@@ -7,7 +7,7 @@ import { Chat, GramElementsProvider, type Model } from "@gram-ai/elements";
 import { useChatSessionsCreateMutation } from "@gram/client/react-query/chatSessionsCreate.js";
 import { ResizablePanel, useMoonshineConfig } from "@speakeasy-api/moonshine";
 import { Loader2 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { AssistantDraftProvider } from "./AssistantDraftContext";
@@ -20,9 +20,14 @@ import {
 } from "./systemPrompt";
 import { useOnboardingTools } from "./tools/useOnboardingTools";
 
-export function NewAssistantOnboarding() {
+export function NewAssistantOnboarding({
+  onAssistantSaved,
+}: {
+  onAssistantSaved?: (assistantId: string) => void;
+} = {}) {
   const [searchParams, setSearchParams] = useSearchParams();
   const initialId = searchParams.get("id");
+  const hasFiredSavedRef = useRef(false);
 
   const handleAssistantCreated = useCallback(
     (id: string) => {
@@ -34,8 +39,12 @@ export function NewAssistantOnboarding() {
         },
         { replace: true },
       );
+      if (!hasFiredSavedRef.current) {
+        hasFiredSavedRef.current = true;
+        onAssistantSaved?.(id);
+      }
     },
-    [setSearchParams],
+    [setSearchParams, onAssistantSaved],
   );
 
   return (
