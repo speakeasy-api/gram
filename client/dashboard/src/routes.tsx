@@ -71,7 +71,8 @@ import SlackAppsIndex, { SlackAppsRoot } from "./pages/slackapp/SlackApp";
 import TriggersIndex, { TriggersRoot } from "./pages/triggers/Triggers";
 import SlackAppDetailPage from "./pages/slackapp/SlackAppDetail";
 import SecurityOverview from "./pages/security/SecurityOverview";
-import PolicyCenter from "./pages/security/PolicyCenter";
+import PolicyCenter, { PolicyCenterRoot } from "./pages/security/PolicyCenter";
+import NLPolicyDetail from "./pages/security/NLPolicyDetail";
 import Team from "./pages/team/Team";
 import SourceDetails from "./pages/sources/SourceDetails";
 import {
@@ -446,7 +447,15 @@ const ROUTE_STRUCTURE = {
     url: "risk-policies",
     icon: "shield-check",
     stage: "beta",
-    component: PolicyCenter,
+    component: PolicyCenterRoot,
+    indexComponent: PolicyCenter,
+    subPages: {
+      nlDetail: {
+        title: "NL Policy",
+        url: "nl/:policyId",
+        component: NLPolicyDetail,
+      },
+    },
   },
   sdks: {
     title: "SDKs",
