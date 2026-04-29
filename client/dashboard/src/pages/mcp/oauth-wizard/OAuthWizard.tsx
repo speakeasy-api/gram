@@ -1,6 +1,7 @@
 import { FeatureRequestModal } from "@/components/FeatureRequestModal";
 import { Dialog } from "@/components/ui/dialog";
 import { useSession } from "@/contexts/Auth";
+import { useFetcher } from "@/contexts/Fetcher";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { Toolset } from "@/lib/toolTypes";
 import { getServerURL } from "@/lib/utils";
@@ -15,6 +16,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Globe } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
+import { AutoRegisterChoice } from "./AutoRegisterChoice";
+import { AutoRegisterFailedStep } from "./AutoRegisterFailedStep";
 import { ExternalOAuthForm } from "./ExternalOAuthForm";
 import { FatalErrorStep } from "./FatalErrorStep";
 import {
@@ -87,13 +90,14 @@ function WizardBody({
   const queryClient = useQueryClient();
   const telemetry = useTelemetry();
   const session = useSession();
+  const { fetch: authedFetch } = useFetcher();
 
   const discovered = useDiscoveredOAuth(toolset);
 
   const provided = useMemo(
     () =>
       oauthWizardMachine.provide({
-        actors: createWizardServices(client, queryClient),
+        actors: createWizardServices(client, queryClient, authedFetch),
         actions: {
           invalidateOnExternalSuccess: () => invalidateAllToolset(queryClient),
           invalidateOnProxyCreate: () => {
@@ -113,7 +117,7 @@ function WizardBody({
             }),
         },
       }),
-    [client, queryClient, telemetry, toolsetSlug],
+    [client, queryClient, telemetry, toolsetSlug, authedFetch],
   );
 
   const input: Input = {
@@ -143,6 +147,7 @@ function WizardSteps({
   const hasMultipleOAuth2AuthCode = oauth2SecurityCount > 1;
 
   const isProxyCreating = state.matches({ proxy: "submitting" });
+  const isAutoRegistering = state.context.autoRegistering;
 
   return (
     <>
@@ -161,9 +166,16 @@ function WizardSteps({
 
       {state.matches({ proxy: "metadata" }) && <ProxyMetadataForm />}
 
-      {(state.matches({ proxy: "credentials" }) || isProxyCreating) && (
-        <ProxyCredentialsForm />
+      {(state.matches({ proxy: "autoRegisterChoice" }) ||
+        state.matches({ proxy: "registering" }) ||
+        (isProxyCreating && isAutoRegistering)) && <AutoRegisterChoice />}
+
+      {state.matches({ proxy: "autoRegisterFailed" }) && (
+        <AutoRegisterFailedStep error={state.context.error} onClose={onClose} />
       )}
+
+      {(state.matches({ proxy: "credentials" }) ||
+        (isProxyCreating && !isAutoRegistering)) && <ProxyCredentialsForm />}
 
       {state.matches({ proxy: "fatalError" }) && (
         <FatalErrorStep error={state.context.error} onClose={onClose} />

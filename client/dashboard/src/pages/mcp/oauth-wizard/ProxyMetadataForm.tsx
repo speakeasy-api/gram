@@ -132,8 +132,8 @@ export function ProxyMetadataForm() {
                 value={proxy.tokenAuthMethod}
                 onChange={(e) => setField("tokenAuthMethod", e.target.value)}
               >
-                <option value="client_secret_post">client_secret_post</option>
                 <option value="client_secret_basic">client_secret_basic</option>
+                <option value="client_secret_post">client_secret_post</option>
                 <option value="none">none</option>
               </select>
             </div>

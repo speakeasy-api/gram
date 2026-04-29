@@ -14,6 +14,8 @@ import {
   type CreateEnvironmentInput,
   type CreateEnvironmentOutput,
   type DeleteEnvironmentInput,
+  type RegisterClientInput,
+  type RegisterClientOutput,
 } from "./services";
 
 function initialProxy(): Context["proxy"] {
@@ -23,7 +25,7 @@ function initialProxy(): Context["proxy"] {
     tokenEndpoint: "",
     scopes: "",
     audience: "",
-    tokenAuthMethod: "client_secret_post",
+    tokenAuthMethod: "client_secret_basic",
     environmentSlug: "",
     clientId: "",
     clientSecret: "",
@@ -38,6 +40,7 @@ function initialContext(input: Input): Context {
     proxy: initialProxy(),
     envSlug: null,
     error: null,
+    autoRegistering: false,
     result: null,
     toolsetSlug: input.toolsetSlug,
     toolsetName: input.toolsetName,
@@ -77,6 +80,18 @@ function errorMessage(err: unknown, fallback: string): string {
   return err instanceof Error ? err.message : fallback;
 }
 
+function discoveredRegistrationEndpoint(
+  d: DiscoveredOAuth | null,
+): string | null {
+  const v = d?.metadata.registration_endpoint;
+  return typeof v === "string" && v.length > 0 ? v : null;
+}
+
+function discoveredAuthMethods(d: DiscoveredOAuth | null): string[] {
+  const v = d?.metadata.token_endpoint_auth_methods_supported;
+  return Array.isArray(v) ? (v as string[]) : [];
+}
+
 function placeholder<TInput, TOutput = void>(name: string) {
   return fromPromise<TOutput, TInput>(async () => {
     throw new Error(
@@ -100,11 +115,17 @@ export const oauthWizardMachine = setup({
     >("createEnvironment"),
     addOAuthProxy: placeholder<AddOAuthProxyInput>("addOAuthProxy"),
     deleteEnvironment: placeholder<DeleteEnvironmentInput>("deleteEnvironment"),
+    registerClient: placeholder<RegisterClientInput, RegisterClientOutput>(
+      "registerClient",
+    ),
   },
   guards: {
     validExternal: ({ context }) => checkExternal(context).ok,
     validProxyMeta: ({ context }) => checkProxyMeta(context).ok,
     validCreds: ({ context }) => checkCreds(context).ok,
+    canAutoRegister: ({ context }) =>
+      checkProxyMeta(context).ok &&
+      discoveredRegistrationEndpoint(context.discovered) !== null,
   },
   actions: {
     invalidateOnExternalSuccess: () => {},
@@ -271,6 +292,11 @@ export const oauthWizardMachine = setup({
             },
             NEXT: [
               {
+                guard: "canAutoRegister",
+                target: "autoRegisterChoice",
+                actions: assign({ error: () => null }),
+              },
+              {
                 guard: "validProxyMeta",
                 target: "credentials",
                 actions: assign({ error: () => null }),
@@ -287,8 +313,62 @@ export const oauthWizardMachine = setup({
             BACK: "#oauthWizard.pathSelection",
           },
         },
+        autoRegisterChoice: {
+          meta: { title: "Configure OAuth Proxy" },
+          on: {
+            AUTO_REGISTER: {
+              target: "registering",
+              actions: assign({ autoRegistering: () => true }),
+            },
+            MANUAL_CREDENTIALS: "credentials",
+            BACK: "metadata",
+          },
+        },
+        registering: {
+          meta: { title: "Configure OAuth Proxy" },
+          invoke: {
+            src: "registerClient",
+            input: ({ context }): RegisterClientInput => ({
+              registrationEndpoint:
+                discoveredRegistrationEndpoint(context.discovered) ?? "",
+              scopesSupported: context.proxy.scopes
+                .split(",")
+                .map((s) => s.trim())
+                .filter((s) => s.length > 0),
+              tokenEndpointAuthMethodsSupported: discoveredAuthMethods(
+                context.discovered,
+              ),
+            }),
+            onDone: {
+              target: "submitting",
+              actions: assign({
+                proxy: ({ context, event }) => ({
+                  ...context.proxy,
+                  clientId: event.output.clientId,
+                  clientSecret: event.output.clientSecret,
+                  tokenAuthMethod:
+                    event.output.tokenAuthMethod ??
+                    context.proxy.tokenAuthMethod,
+                }),
+                error: () => null,
+              }),
+            },
+            onError: {
+              target: "autoRegisterFailed",
+              actions: assign({
+                error: ({ event }) =>
+                  errorMessage(event.error, "Failed to fetch credentials"),
+              }),
+            },
+          },
+        },
+        autoRegisterFailed: {
+          meta: { title: "Couldn't Fetch Credentials" },
+          type: "final",
+        },
         credentials: {
           meta: { title: "OAuth Client Credentials" },
+          entry: assign({ autoRegistering: () => false }),
           on: {
             FIELD_PROXY: {
               actions: assign({
