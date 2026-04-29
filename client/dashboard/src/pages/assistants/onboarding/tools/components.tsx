@@ -332,7 +332,6 @@ export function ShowSlackAppGuideComponent({ args }: ToolCallMessagePartProps) {
       buildSlackManifest({
         appName: a.app_name ?? assistantName ?? "Gram Assistant",
         toolUrns: derived.toolUrns,
-        eventTypes: derived.eventTypes,
         webhookUrl: a.webhook_url,
         extraScopes: a.bot_scopes,
         extraBotEvents: a.bot_events,
@@ -344,7 +343,6 @@ export function ShowSlackAppGuideComponent({ args }: ToolCallMessagePartProps) {
       a.bot_events,
       assistantName,
       derived.toolUrns,
-      derived.eventTypes,
     ],
   );
 

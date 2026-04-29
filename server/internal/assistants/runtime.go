@@ -72,6 +72,8 @@ type runtimeStartupConfig struct {
 	CompletionsURL *string            `json:"completions_url,omitempty"`
 	ChatID         string             `json:"chat_id"`
 	MCPServers     []runtimeMCPServer `json:"mcp_servers"`
+	History        []runtimeMessage   `json:"history,omitempty"`
+	WarmTTLSeconds int                `json:"warm_ttl_seconds"`
 }
 
 type runtimeMCPServer struct {
@@ -98,9 +100,8 @@ type runtimeToolCall struct {
 }
 
 type runtimeTurnRequest struct {
-	History   []runtimeMessage `json:"history,omitempty"`
-	Input     string           `json:"input"`
-	AuthToken string           `json:"auth_token,omitempty"`
+	Input     string `json:"input"`
+	AuthToken string `json:"auth_token,omitempty"`
 }
 
 type runtimeHTTPRequest struct {
@@ -509,7 +510,6 @@ func (m *RuntimeManager) RunTurn(
 	runtime assistantRuntimeRecord,
 	idempotencyKey string,
 	authToken string,
-	history []runtimeMessage,
 	prompt string,
 ) error {
 	if err := validateRuntimeBackend(m, runtime.Backend); err != nil {
@@ -528,7 +528,6 @@ func (m *RuntimeManager) RunTurn(
 	}
 
 	reqBody, err := json.Marshal(runtimeTurnRequest{
-		History:   history,
 		Input:     prompt,
 		AuthToken: authToken,
 	})

@@ -453,7 +453,7 @@ func (f *FlyRuntimeBackend) Configure(ctx context.Context, runtime assistantRunt
 	return nil
 }
 
-func (f *FlyRuntimeBackend) RunTurn(ctx context.Context, runtime assistantRuntimeRecord, idempotencyKey string, authToken string, history []runtimeMessage, prompt string) error {
+func (f *FlyRuntimeBackend) RunTurn(ctx context.Context, runtime assistantRuntimeRecord, idempotencyKey string, authToken string, prompt string) error {
 	if err := validateRuntimeBackend(f, runtime.Backend); err != nil {
 		return err
 	}
@@ -466,7 +466,6 @@ func (f *FlyRuntimeBackend) RunTurn(ctx context.Context, runtime assistantRuntim
 	}
 
 	reqBody, err := json.Marshal(runtimeTurnRequest{
-		History:   history,
 		Input:     prompt,
 		AuthToken: authToken,
 	})
