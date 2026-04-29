@@ -13,6 +13,7 @@ import {
 import { createPortal } from "react-dom";
 
 const STORAGE_KEY = "gram-rbac-dev-override";
+const HIDDEN_KEY = "gram-dev-toolbar-hidden";
 
 type ResourceType = "org" | "project" | "mcp";
 
@@ -162,15 +163,48 @@ const GROUP_ORDER: { key: ResourceType; label: string }[] = [
 export function RBACDevToolbar() {
   const { session } = useSession();
   const isAdmin = useIsAdmin();
+  const [hidden, setHidden] = useState(
+    () => localStorage.getItem(HIDDEN_KEY) === "1",
+  );
+
+  // Ctrl+Shift+D toggles toolbar visibility back
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.ctrlKey && e.shiftKey && e.key === "D") {
+        e.preventDefault();
+        setHidden((prev) => {
+          const next = !prev;
+          if (next) {
+            localStorage.setItem(HIDDEN_KEY, "1");
+          } else {
+            localStorage.removeItem(HIDDEN_KEY);
+          }
+          return next;
+        });
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   // Don't render when unauthenticated (e.g. login page) to avoid firing
   // API calls like toolsets.listForOrg that will 401 and trigger the error boundary.
   if (!session) return null;
   // Always visible in dev; in other environments, restricted to superadmins.
-  if (import.meta.env.DEV || isAdmin) return <RBACDevToolbarInner />;
-  return null;
+  if (!(import.meta.env.DEV || isAdmin)) return null;
+  if (hidden) return null;
+
+  return (
+    <RBACDevToolbarInner
+      onHide={() => {
+        localStorage.setItem(HIDDEN_KEY, "1");
+        setHidden(true);
+      }}
+    />
+  );
 }
 
-function RBACDevToolbarInner() {
+function RBACDevToolbarInner({ onHide }: { onHide: () => void }) {
   const [state, setState] = useState<OverrideState>(loadState);
   const [collapsed, setCollapsed] = useState(true);
   const [activeTab, setActiveTab] = useState("rbac");
@@ -350,38 +384,69 @@ function RBACDevToolbarInner() {
           duration-200
           ${state.enabled ? "bg-background/98 border-foreground/15 dark:border-foreground/15 dark:bg-gray-950/98" : "border-border bg-white/98 dark:bg-gray-950/98"}
         `}>
-        {/* Header – drag handle */}
-        <button
-          type="button"
-          onPointerDown={onPointerDown}
-          onClick={() => {
-            if (hasDragged.current) {
-              hasDragged.current = false;
-              return;
-            }
-            setCollapsed((c) => !c);
-          }}
-          className={`
-            flex w-full cursor-grab items-center gap-2.5 px-3.5 py-2.5 transition-colors active:cursor-grabbing
+        {/* Header row */}
+        <div className={`
+            flex w-full items-center gap-2.5 px-3.5 py-2.5
             ${collapsed ? "rounded-xl" : "rounded-t-xl"}
-            hover:bg-black/[0.03] dark:hover:bg-white/[0.03]
-          `}
-        >
-          <GripVertical className="text-muted-foreground/40 h-3.5 w-3.5 shrink-0" />
-          <span className="rounded bg-amber-100 px-1.5 py-0.5 font-mono text-[10px] font-semibold tracking-widest text-amber-700 dark:bg-amber-900/40 dark:text-amber-400">
-            DEV
-          </span>
-          <span className="text-muted-foreground text-xs font-semibold">
-            Developer Toolkit
-          </span>
-          <div className="text-muted-foreground ml-auto">
-            {collapsed ? (
-              <ChevronUp className="h-3.5 w-3.5" />
-            ) : (
-              <ChevronDown className="h-3.5 w-3.5" />
-            )}
+          `}>
+          <button
+            type="button"
+            onPointerDown={onPointerDown}
+            onClick={() => {
+              if (hasDragged.current) {
+                hasDragged.current = false;
+                return;
+              }
+              setCollapsed((c) => !c);
+            }}
+            className="flex flex-1 cursor-grab items-center gap-2.5 active:cursor-grabbing"
+          >
+            <GripVertical className="text-muted-foreground/40 h-3.5 w-3.5 shrink-0" />
+            <span className="rounded bg-amber-100 px-1.5 py-0.5 font-mono text-[10px] font-semibold tracking-widest text-amber-700 dark:bg-amber-900/40 dark:text-amber-400">
+              DEV
+            </span>
+            <span className="text-muted-foreground text-xs font-semibold">
+              Developer Toolkit
+            </span>
+          </button>
+          <div className="ml-auto flex items-center gap-0.5">
+            <button
+              type="button"
+              onClick={() => {
+                if (hasDragged.current) {
+                  hasDragged.current = false;
+                  return;
+                }
+                setCollapsed((c) => !c);
+              }}
+              className="text-muted-foreground hover:bg-accent hover:text-foreground rounded-full p-1 transition-colors"
+            >
+              {collapsed ? (
+                <ChevronUp className="h-3.5 w-3.5" />
+              ) : (
+                <ChevronDown className="h-3.5 w-3.5" />
+              )}
+            </button>
+            <button
+              type="button"
+              title="Hide toolbar (Ctrl+Shift+D to restore)"
+              onClick={onHide}
+              className="text-muted-foreground hover:bg-accent hover:text-foreground rounded-full p-1 transition-colors"
+            >
+              <svg
+                width="10"
+                height="10"
+                viewBox="0 0 10 10"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+              >
+                <path d="M2 2l6 6M8 2l-6 6" />
+              </svg>
+            </button>
           </div>
-        </button>
+        </div>
 
         {/* Panel */}
         {!collapsed && (
