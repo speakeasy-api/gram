@@ -1,4 +1,3 @@
-import { Page } from "@/components/page-layout";
 import { InsightsConfig } from "@/components/insights-sidebar";
 import { useInsightsState } from "@/components/insights-context";
 import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
@@ -766,50 +765,45 @@ export function MCPInsights() {
           },
         ]}
       />
-      <Page>
-        <Page.Header>
-          <Page.Header.Breadcrumbs fullWidth />
-        </Page.Header>
-        <Page.Body fullWidth className="space-y-6">
-          <InsightsPageHeader
-            filterDimension={filterDimension}
-            onFilterDimensionChange={setFilterDimensionParam}
-            selectedFilterValue={selectedFilterValue}
-            onSelectedFilterValueChange={setSelectedFilterValueParam}
-            filterOptions={filterOptions?.options ?? []}
-            dateRange={dateRange}
-            onDateRangeChange={setDateRangeParam}
-            customRange={customRange}
-            customRangeLabel={urlLabel}
-            onCustomRangeChange={setCustomRangeParam}
-            onClearCustomRange={clearCustomRange}
-            disabled={isLogsDisabled}
-            showMcpFilter={activeTab === "tools"}
-            selectedMcpServer={selectedMcpServer}
-            onMcpServerChange={setMcpServerParam}
-            toolsets={toolsets}
-            isLoadingToolsets={isLoadingToolsets}
-          />
+      <div className="min-h-0 w-full flex-1 space-y-6 overflow-y-auto p-8 pb-24">
+        <InsightsPageHeader
+          filterDimension={filterDimension}
+          onFilterDimensionChange={setFilterDimensionParam}
+          selectedFilterValue={selectedFilterValue}
+          onSelectedFilterValueChange={setSelectedFilterValueParam}
+          filterOptions={filterOptions?.options ?? []}
+          dateRange={dateRange}
+          onDateRangeChange={setDateRangeParam}
+          customRange={customRange}
+          customRangeLabel={urlLabel}
+          onCustomRangeChange={setCustomRangeParam}
+          onClearCustomRange={clearCustomRange}
+          disabled={isLogsDisabled}
+          showMcpFilter={activeTab === "tools"}
+          selectedMcpServer={selectedMcpServer}
+          onMcpServerChange={setMcpServerParam}
+          toolsets={toolsets}
+          isLoadingToolsets={isLoadingToolsets}
+        />
 
-          <ObservabilityContent
-            isPending={isPending}
-            isFetching={isFetching}
-            error={error}
-            isLogsDisabled={isLogsDisabled}
-            data={data}
-            dateRange={dateRange}
-            customRange={customRange}
-            onTimeRangeSelect={(from, to) => {
-              setCustomRangeParam(from, to);
-            }}
-            refetch={refetch}
-            hasSeenSetupModal={hasSeenSetupModal}
-            onSetupModalSeen={markSetupModalSeen}
-            activeTab={activeTab}
-            onTabChange={setActiveTab}
-          />
-        </Page.Body>
-      </Page>
+        <ObservabilityContent
+          isPending={isPending}
+          isFetching={isFetching}
+          error={error}
+          isLogsDisabled={isLogsDisabled}
+          data={data}
+          dateRange={dateRange}
+          customRange={customRange}
+          onTimeRangeSelect={(from, to) => {
+            setCustomRangeParam(from, to);
+          }}
+          refetch={refetch}
+          hasSeenSetupModal={hasSeenSetupModal}
+          onSetupModalSeen={markSetupModalSeen}
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+        />
+      </div>
     </>
   );
 }

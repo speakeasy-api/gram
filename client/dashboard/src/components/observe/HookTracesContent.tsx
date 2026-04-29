@@ -1,7 +1,6 @@
 import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
 import { EnterpriseGate } from "@/components/enterprise-gate";
 import { ObservabilitySkeleton } from "@/components/ObservabilitySkeleton";
-import { Page } from "@/components/page-layout";
 import { MultiSearch } from "@/components/ui/multi-search";
 import {
   Popover,
@@ -450,144 +449,139 @@ export function HookTracesContent() {
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      <Page>
-        <Page.Header>
-          <Page.Header.Breadcrumbs fullWidth />
-        </Page.Header>
-        {isLogsDisabled ? (
-          <Page.Body fullWidth className="space-y-6">
-            <div className="flex min-w-0 flex-col gap-1">
-              <h1 className="text-xl font-semibold">Hook Traces</h1>
-              <p className="text-muted-foreground text-sm">
-                Raw hook events and tool executions across all servers
-              </p>
-            </div>
-            <div className="relative flex-1">
-              <div
-                className="pointer-events-none h-full select-none"
-                aria-hidden="true"
-              >
-                <ObservabilitySkeleton />
-              </div>
-              <EnableLoggingOverlay onEnabled={() => refetchLogs()} />
-            </div>
-          </Page.Body>
-        ) : (
-          <Page.Body fullWidth noPadding overflowHidden className="flex-1">
-            <EnterpriseGate
-              icon="workflow"
-              description="Hooks are available on the Enterprise plan. Book a time to get started."
+      {isLogsDisabled ? (
+        <div className="min-h-0 w-full flex-1 space-y-6 overflow-y-auto p-8 pb-24">
+          <div className="flex min-w-0 flex-col gap-1">
+            <h1 className="text-xl font-semibold">Hook Traces</h1>
+            <p className="text-muted-foreground text-sm">
+              Raw hook events and tool executions across all servers
+            </p>
+          </div>
+          <div className="relative flex-1">
+            <div
+              className="pointer-events-none h-full select-none"
+              aria-hidden="true"
             >
-              <div className="flex min-h-0 w-full flex-1 flex-col">
-                <div className="flex min-h-0 flex-1 flex-col gap-6 px-8 pt-8 pb-4">
-                  <div className="flex shrink-0 items-start justify-between gap-4">
-                    <div className="flex min-w-0 flex-col gap-1">
-                      <h1 className="text-xl font-semibold">Hook Traces</h1>
-                      <p className="text-muted-foreground text-sm">
-                        Raw hook events and tool executions across all servers
-                      </p>
-                    </div>
+              <ObservabilitySkeleton />
+            </div>
+            <EnableLoggingOverlay onEnabled={() => refetchLogs()} />
+          </div>
+        </div>
+      ) : (
+        <div className="min-h-0 w-full flex-1">
+          <EnterpriseGate
+            icon="workflow"
+            description="Hooks are available on the Enterprise plan. Book a time to get started."
+          >
+            <div className="flex min-h-0 w-full flex-1 flex-col">
+              <div className="flex min-h-0 flex-1 flex-col gap-6 px-8 pt-8 pb-4">
+                <div className="flex shrink-0 items-start justify-between gap-4">
+                  <div className="flex min-w-0 flex-col gap-1">
+                    <h1 className="text-xl font-semibold">Hook Traces</h1>
+                    <p className="text-muted-foreground text-sm">
+                      Raw hook events and tool executions across all servers
+                    </p>
                   </div>
+                </div>
 
-                  <div className="flex shrink-0 flex-wrap items-center gap-2">
-                    <MultiSearch
-                      value={serverInput}
-                      onChange={setServerInput}
-                      placeholder="Filter by server name"
-                      className="min-w-[200px] flex-1"
-                      chips={activeFilters
-                        .filter((f) => f.path === "gram.tool_call.source")
-                        .map((f) => ({ display: f.display, value: f.display }))}
-                      onRemoveChip={(display) =>
-                        removeFilter("gram.tool_call.source", display)
-                      }
+                <div className="flex shrink-0 flex-wrap items-center gap-2">
+                  <MultiSearch
+                    value={serverInput}
+                    onChange={setServerInput}
+                    placeholder="Filter by server name"
+                    className="min-w-[200px] flex-1"
+                    chips={activeFilters
+                      .filter((f) => f.path === "gram.tool_call.source")
+                      .map((f) => ({ display: f.display, value: f.display }))}
+                    onRemoveChip={(display) =>
+                      removeFilter("gram.tool_call.source", display)
+                    }
+                  />
+                  <MultiSearch
+                    value={userEmailInput}
+                    onChange={setUserEmailInput}
+                    placeholder="Filter by user email"
+                    className="min-w-[200px] flex-1"
+                    chips={activeFilters
+                      .filter((f) => f.path === "user.email")
+                      .map((f) => ({ display: f.display, value: f.display }))}
+                    onRemoveChip={(display) =>
+                      removeFilter("user.email", display)
+                    }
+                  />
+                  <HookTypeFilter
+                    selectedHookTypes={selectedHookTypes}
+                    onHookTypesChange={handleHookTypesChange}
+                  />
+                  <div className="ml-auto">
+                    <TimeRangePicker
+                      preset={customRange ? null : dateRange}
+                      customRange={customRange}
+                      onPresetChange={setDateRangeParam}
+                      onCustomRangeChange={setCustomRangeParam}
+                      onClearCustomRange={clearCustomRange}
+                      projectSlug={projectSlug}
                     />
-                    <MultiSearch
-                      value={userEmailInput}
-                      onChange={setUserEmailInput}
-                      placeholder="Filter by user email"
-                      className="min-w-[200px] flex-1"
-                      chips={activeFilters
-                        .filter((f) => f.path === "user.email")
-                        .map((f) => ({ display: f.display, value: f.display }))}
-                      onRemoveChip={(display) =>
-                        removeFilter("user.email", display)
-                      }
-                    />
-                    <HookTypeFilter
-                      selectedHookTypes={selectedHookTypes}
-                      onHookTypesChange={handleHookTypesChange}
-                    />
-                    <div className="ml-auto">
-                      <TimeRangePicker
-                        preset={customRange ? null : dateRange}
-                        customRange={customRange}
-                        onPresetChange={setDateRangeParam}
-                        onCustomRangeChange={setCustomRangeParam}
-                        onClearCustomRange={clearCustomRange}
-                        projectSlug={projectSlug}
-                      />
-                    </div>
                   </div>
+                </div>
 
-                  <div className="flex min-h-0 flex-1 overflow-hidden">
-                    <div className="min-h-0 flex-1 overflow-y-auto border">
-                      <div className="bg-background flex h-full flex-col">
-                        {isFetching && groupedTraces.length > 0 && (
-                          <div className="bg-primary/20 absolute top-0 right-0 left-0 z-20 h-1">
-                            <div className="bg-primary h-full animate-pulse" />
-                          </div>
-                        )}
-
-                        <div className="bg-muted/30 text-muted-foreground flex shrink-0 items-center gap-3 border-b px-5 py-2.5 text-xs font-medium tracking-wide uppercase">
-                          <div className="w-[150px] shrink-0">Timestamp</div>
-                          <div className="w-5 shrink-0" />
-                          <div className="min-w-0 flex-1">Server / Tool</div>
-                          <div className="w-[260px] shrink-0">User</div>
-                          <div className="w-[120px] shrink-0">Source</div>
-                          <div className="w-24 shrink-0 text-right">Status</div>
+                <div className="flex min-h-0 flex-1 overflow-hidden">
+                  <div className="min-h-0 flex-1 overflow-y-auto border">
+                    <div className="bg-background flex h-full flex-col">
+                      {isFetching && groupedTraces.length > 0 && (
+                        <div className="bg-primary/20 absolute top-0 right-0 left-0 z-20 h-1">
+                          <div className="bg-primary h-full animate-pulse" />
                         </div>
+                      )}
 
-                        <div
-                          ref={containerRef}
-                          className="flex-1 overflow-y-auto"
-                          onScroll={handleScroll}
-                        >
-                          <HooksTraceContent
-                            error={error}
-                            isLoading={isLoading}
-                            groupedTraces={groupedTraces as HookTrace[]}
-                            activeFilters={activeFilters}
-                            expandedTraceId={expandedTraceId}
-                            isFetchingNextPage={isFetchingNextPage}
-                            onToggleExpand={(traceId) =>
-                              setExpandedTraceId((prev) =>
-                                prev === traceId ? null : traceId,
-                              )
-                            }
-                            onLogClick={(log) => setSelectedLog(log)}
-                            serverNameMappings={serverNameMappings}
-                          />
-                        </div>
-
-                        {groupedTraces.length > 0 && (
-                          <div className="bg-muted/30 text-muted-foreground flex shrink-0 items-center gap-4 border-t px-5 py-3 text-sm">
-                            <span>
-                              {groupedTraces.length}{" "}
-                              {groupedTraces.length === 1 ? "trace" : "traces"}
-                              {hasNextPage && " • Scroll to load more"}
-                            </span>
-                          </div>
-                        )}
+                      <div className="bg-muted/30 text-muted-foreground flex shrink-0 items-center gap-3 border-b px-5 py-2.5 text-xs font-medium tracking-wide uppercase">
+                        <div className="w-[150px] shrink-0">Timestamp</div>
+                        <div className="w-5 shrink-0" />
+                        <div className="min-w-0 flex-1">Server / Tool</div>
+                        <div className="w-[260px] shrink-0">User</div>
+                        <div className="w-[120px] shrink-0">Source</div>
+                        <div className="w-24 shrink-0 text-right">Status</div>
                       </div>
+
+                      <div
+                        ref={containerRef}
+                        className="flex-1 overflow-y-auto"
+                        onScroll={handleScroll}
+                      >
+                        <HooksTraceContent
+                          error={error}
+                          isLoading={isLoading}
+                          groupedTraces={groupedTraces as HookTrace[]}
+                          activeFilters={activeFilters}
+                          expandedTraceId={expandedTraceId}
+                          isFetchingNextPage={isFetchingNextPage}
+                          onToggleExpand={(traceId) =>
+                            setExpandedTraceId((prev) =>
+                              prev === traceId ? null : traceId,
+                            )
+                          }
+                          onLogClick={(log) => setSelectedLog(log)}
+                          serverNameMappings={serverNameMappings}
+                        />
+                      </div>
+
+                      {groupedTraces.length > 0 && (
+                        <div className="bg-muted/30 text-muted-foreground flex shrink-0 items-center gap-4 border-t px-5 py-3 text-sm">
+                          <span>
+                            {groupedTraces.length}{" "}
+                            {groupedTraces.length === 1 ? "trace" : "traces"}
+                            {hasNextPage && " • Scroll to load more"}
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
               </div>
-            </EnterpriseGate>
-          </Page.Body>
-        )}
-      </Page>
+            </div>
+          </EnterpriseGate>
+        </div>
+      )}
 
       <LogDetailSheet
         log={selectedLog}

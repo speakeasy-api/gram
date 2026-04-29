@@ -1,5 +1,6 @@
 import { Link, Outlet, useLocation } from "react-router";
 import { LogsContent } from "@/components/observe/LogsContent";
+import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { useSlugs } from "@/contexts/Sdk";
 import { cn } from "@/lib/utils";
@@ -42,12 +43,15 @@ function LogsTabNav() {
 
 export function LogsRoot() {
   return (
-    <div className="flex h-full flex-col">
+    <Page>
+      <Page.Header>
+        <Page.Header.Breadcrumbs fullWidth />
+      </Page.Header>
       <LogsTabNav />
-      <div className="min-h-0 flex-1 overflow-auto">
+      <Page.Body fullWidth noPadding>
         <Outlet />
-      </div>
-    </div>
+      </Page.Body>
+    </Page>
   );
 }
 

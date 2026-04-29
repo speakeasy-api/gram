@@ -205,7 +205,7 @@ export function ProjectDashboard() {
                           })
                         }
                       />
-                      <ViewAllLink to={routes.hooks.href()} />
+                      <ViewAllLink to={routes.insights.hooks.href()} />
                     </CardActions>
                   }
                 >
@@ -249,7 +249,7 @@ export function ProjectDashboard() {
                           })
                         }
                       />
-                      <ViewAllLink to={routes.hooks.href()} />
+                      <ViewAllLink to={routes.insights.hooks.href()} />
                     </CardActions>
                   }
                 >
@@ -371,7 +371,7 @@ export function ProjectDashboard() {
                           })
                         }
                       />
-                      <ViewAllLink to={routes.hooks.href()} />
+                      <ViewAllLink to={routes.insights.hooks.href()} />
                     </CardActions>
                   }
                 >

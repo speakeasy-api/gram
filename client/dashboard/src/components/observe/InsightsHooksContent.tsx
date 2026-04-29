@@ -3,7 +3,6 @@ import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
 import { EnterpriseGate } from "@/components/enterprise-gate";
 import { InsightsConfig } from "@/components/insights-sidebar";
 import { ObservabilitySkeleton } from "@/components/ObservabilitySkeleton";
-import { Page } from "@/components/page-layout";
 import { ErrorAlert } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
@@ -579,66 +578,61 @@ export function InsightsHooksContent() {
         hideTrigger={isLogsDisabled}
       />
       <div className="flex h-full flex-col overflow-hidden">
-        <Page>
-          <Page.Header>
-            <Page.Header.Breadcrumbs fullWidth />
-          </Page.Header>
-          {isLogsDisabled ? (
-            <Page.Body fullWidth className="space-y-6">
-              <div className="flex min-w-0 flex-col gap-1">
-                <h1 className="text-xl font-semibold">Hooks</h1>
-                <p className="text-muted-foreground text-sm">
-                  Monitor hook events and tool executions across all servers
-                </p>
-              </div>
-              <div className="relative flex-1">
-                <div
-                  className="pointer-events-none h-full select-none"
-                  aria-hidden="true"
-                >
-                  <ObservabilitySkeleton />
-                </div>
-                <EnableLoggingOverlay onEnabled={refetch} />
-              </div>
-            </Page.Body>
-          ) : (
-            <Page.Body fullWidth noPadding overflowHidden className="flex-1">
-              <EnterpriseGate
-                icon="workflow"
-                description="Hooks are available on the Enterprise plan. Book a time to get started."
+        {isLogsDisabled ? (
+          <div className="min-h-0 w-full flex-1 space-y-6 overflow-y-auto p-8 pb-24">
+            <div className="flex min-w-0 flex-col gap-1">
+              <h1 className="text-xl font-semibold">Hooks</h1>
+              <p className="text-muted-foreground text-sm">
+                Monitor hook events and tool executions across all servers
+              </p>
+            </div>
+            <div className="relative flex-1">
+              <div
+                className="pointer-events-none h-full select-none"
+                aria-hidden="true"
               >
-                <HooksInnerContent
-                  isLogsDisabled={isLogsDisabled}
-                  isLoading={isLoading}
-                  error={error}
-                  groupedTraces={groupedTraces}
-                  serverInput={serverInput}
-                  setServerInput={setServerInput}
-                  userEmailInput={userEmailInput}
-                  setUserEmailInput={setUserEmailInput}
-                  activeFilters={activeFilters}
-                  addFilter={addFilter}
-                  removeFilter={removeFilter}
-                  selectedHookTypes={selectedHookTypes}
-                  onHookTypesChange={handleHookTypesChange}
-                  selectedLog={selectedLog}
-                  setSelectedLog={setSelectedLog}
-                  dateRange={dateRange}
-                  customRange={customRange}
-                  customRangeLabel={urlLabel}
-                  onDateRangeChange={setDateRangeParam}
-                  onCustomRangeChange={setCustomRangeParam}
-                  onClearCustomRange={clearCustomRange}
-                  projectSlug={projectSlug}
-                  serverNameMappings={serverNameMappings}
-                  summaryData={summaryData}
-                  summaryPending={summaryPending}
-                  summaryIsError={summaryIsError}
-                />
-              </EnterpriseGate>
-            </Page.Body>
-          )}
-        </Page>
+                <ObservabilitySkeleton />
+              </div>
+              <EnableLoggingOverlay onEnabled={refetch} />
+            </div>
+          </div>
+        ) : (
+          <div className="min-h-0 w-full flex-1">
+            <EnterpriseGate
+              icon="workflow"
+              description="Hooks are available on the Enterprise plan. Book a time to get started."
+            >
+              <HooksInnerContent
+                isLogsDisabled={isLogsDisabled}
+                isLoading={isLoading}
+                error={error}
+                groupedTraces={groupedTraces}
+                serverInput={serverInput}
+                setServerInput={setServerInput}
+                userEmailInput={userEmailInput}
+                setUserEmailInput={setUserEmailInput}
+                activeFilters={activeFilters}
+                addFilter={addFilter}
+                removeFilter={removeFilter}
+                selectedHookTypes={selectedHookTypes}
+                onHookTypesChange={handleHookTypesChange}
+                selectedLog={selectedLog}
+                setSelectedLog={setSelectedLog}
+                dateRange={dateRange}
+                customRange={customRange}
+                customRangeLabel={urlLabel}
+                onDateRangeChange={setDateRangeParam}
+                onCustomRangeChange={setCustomRangeParam}
+                onClearCustomRange={clearCustomRange}
+                projectSlug={projectSlug}
+                serverNameMappings={serverNameMappings}
+                summaryData={summaryData}
+                summaryPending={summaryPending}
+                summaryIsError={summaryIsError}
+              />
+            </EnterpriseGate>
+          </div>
+        )}
       </div>
     </>
   );
