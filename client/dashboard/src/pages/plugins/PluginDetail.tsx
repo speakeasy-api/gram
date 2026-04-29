@@ -29,6 +29,7 @@ import { useState } from "react";
 import { useParams } from "react-router";
 import type { PluginServer } from "@gram/client/models/components";
 import { useSdkClient } from "@/contexts/Sdk";
+import { toast } from "sonner";
 
 export default function PluginDetail() {
   const { pluginId } = useParams<{ pluginId: string }>();
@@ -110,19 +111,23 @@ export default function PluginDetail() {
 
   const handleDownload = async (platform: "claude" | "cursor" | "codex") => {
     setIsDownloadMenuOpen(false);
-    const { headers, result } = await client.plugins.downloadPluginPackage({
-      pluginId: pluginId!,
-      platform,
-    });
-    const blob = await new Response(result).blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download =
-      headers["Content-Disposition"]?.[0]?.match(/filename="(.+)"/)?.[1] ??
-      "plugin.zip";
-    a.click();
-    URL.revokeObjectURL(url);
+    try {
+      const { headers, result } = await client.plugins.downloadPluginPackage({
+        pluginId: pluginId!,
+        platform,
+      });
+      const blob = await new Response(result).blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download =
+        headers["content-disposition"]?.[0]?.match(/filename="(.+)"/)?.[1] ??
+        "plugin.zip";
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (_err) {
+      toast.error("Failed to download plugin package");
+    }
   };
 
   const serverColumns: Column<PluginServer>[] = [
