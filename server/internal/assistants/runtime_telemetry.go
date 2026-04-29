@@ -121,11 +121,10 @@ func (t *telemetryRuntimeBackend) RunTurn(
 	runtime assistantRuntimeRecord,
 	idempotencyKey string,
 	authToken string,
-	history []runtimeMessage,
 	prompt string,
 ) error {
 	t.emit(ctx, runtime, "runtime_turn", "runtime turn dispatched", "INFO", nil)
-	if err := t.inner.RunTurn(ctx, runtime, idempotencyKey, authToken, history, prompt); err != nil {
+	if err := t.inner.RunTurn(ctx, runtime, idempotencyKey, authToken, prompt); err != nil {
 		t.emit(ctx, runtime, "runtime_turn", "runtime turn errored", "ERROR", err)
 		return fmt.Errorf("runtime run turn: %w", err)
 	}

@@ -17,7 +17,7 @@ type RuntimeBackend interface {
 	SupportsBackend(backend string) bool
 	Ensure(ctx context.Context, runtime assistantRuntimeRecord) (RuntimeBackendEnsureResult, error)
 	Configure(ctx context.Context, runtime assistantRuntimeRecord, config runtimeStartupConfig) error
-	RunTurn(ctx context.Context, runtime assistantRuntimeRecord, idempotencyKey string, authToken string, history []runtimeMessage, prompt string) error
+	RunTurn(ctx context.Context, runtime assistantRuntimeRecord, idempotencyKey string, authToken string, prompt string) error
 	ServerURL(ctx context.Context, runtime assistantRuntimeRecord, raw *url.URL) (*url.URL, error)
 	Stop(ctx context.Context, runtime assistantRuntimeRecord) error
 }
