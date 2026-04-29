@@ -8,14 +8,14 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 )
 
-// fixturePolicies is the canned policy list every org sees in PR 1.
-// Replaced by DB-backed queries in PR 3.
 var (
 	fixturePolicy1ID = uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	fixturePolicy2ID = uuid.MustParse("22222222-2222-2222-2222-222222222222")
 	fixturePolicy3ID = uuid.MustParse("33333333-3333-3333-3333-333333333333")
 )
 
+// fixturePolicies is the canned policy list every org sees in PR 1.
+// Replaced by DB-backed queries in PR 3.
 func fixturePolicies() []*types.NLPolicy {
 	now := time.Now().UTC().Format(time.RFC3339)
 	return []*types.NLPolicy{
@@ -141,9 +141,3 @@ func fixtureReplayRun() *types.NLPolicyReplayRun {
 		CompletedAt:     &completedAt,
 	}
 }
-
-//go:fix inline
-func ptrString(s string) *string { return new(s) }
-
-//go:fix inline
-func ptrInt(i int) *int { return new(i) }
