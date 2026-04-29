@@ -11,3 +11,5 @@ ALTER TABLE principal_grants ADD CONSTRAINT principal_grants_selectors_not_null 
 ALTER TABLE principal_grants VALIDATE CONSTRAINT principal_grants_selectors_not_null;
 ALTER TABLE principal_grants ALTER COLUMN selectors SET NOT NULL;
 ALTER TABLE principal_grants DROP CONSTRAINT principal_grants_selectors_not_null;
+
+COMMENT ON COLUMN principal_grants.selectors IS 'JSON selector constraints attached to a grant. Must be a non-empty JSONB object. Wildcard/unrestricted grants use {"resource_kind":"*","resource_id":"*"}.';
