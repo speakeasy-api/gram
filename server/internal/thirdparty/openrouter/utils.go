@@ -37,9 +37,11 @@ func NormalizeAssistantMessages(msgs []or.ChatMessages) iter.Seq[or.ChatMessages
 				continue
 			}
 
+			empty := or.CreateChatAssistantMessageContentStr("")
+
 			if !assistantHasContent(asst) {
 				normalized := *asst
-				normalized.Content = optionalnullable.From[or.ChatAssistantMessageContent](nil)
+				normalized.Content = optionalnullable.From(&empty)
 				if !yield(or.CreateChatMessagesAssistant(normalized)) {
 					return
 				}
@@ -51,7 +53,7 @@ func NormalizeAssistantMessages(msgs []or.ChatMessages) iter.Seq[or.ChatMessages
 
 			toolOnly := or.ChatAssistantMessage{
 				Role:             asst.Role,
-				Content:          optionalnullable.From[or.ChatAssistantMessageContent](nil),
+				Content:          optionalnullable.From(&empty),
 				Name:             nil,
 				ToolCalls:        asst.ToolCalls,
 				Refusal:          nil,

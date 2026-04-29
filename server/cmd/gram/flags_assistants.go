@@ -221,6 +221,11 @@ func newAssistantRuntime(
 	if cfg.Provider == assistants.RuntimeProviderLocal {
 		cfg.Local.OnUnexpectedExit = assistants.NewUnexpectedRuntimeExitHandler(logger, db)
 	}
+	if cfg.Provider == assistants.RuntimeProviderFlyIO {
+		if err := cfg.Fly.Validate(); err != nil {
+			return nil, fmt.Errorf("invalid fly assistant runtime config: %w", err)
+		}
+	}
 	rb := assistants.NewRuntimeBackend(logger, guardianPolicy, cfg)
 	if err := assistants.ValidateRuntimeBackendServerURL(ctx, rb, serverURL); err != nil {
 		return nil, fmt.Errorf("validate assistant runtime server url: %w", err)

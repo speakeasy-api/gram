@@ -20,7 +20,6 @@ func TestingNewPoisonedSession(
 	userID, externalUserID, model string,
 	source billing.ModelUsageSource,
 	generation int32,
-	parentHash []byte,
 	newMessages []or.ChatMessages,
 ) openrouter.CaptureSession {
 	req := openrouter.CompletionRequest{
@@ -41,15 +40,10 @@ func TestingNewPoisonedSession(
 		JSONSchema:     nil,
 	}
 
-	rows := buildPendingRows(req, projectID, userID, externalUserID, newMessages, parentHash, generation)
-	tip := parentHash
-	if len(rows) > 0 {
-		tip = rows[len(rows)-1].contentHash
-	}
+	rows := buildPendingRows(req, projectID, userID, externalUserID, newMessages, generation)
 
 	return &chatCaptureSession{
 		generation:  generation,
-		parentHash:  tip,
 		pendingRows: rows,
 	}
 }

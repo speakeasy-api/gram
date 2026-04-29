@@ -98,10 +98,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                   scope="project:read"
                 />
               )}
-              <ScopeGatedNavItem
-                item={routes.slackApps}
-                scope={["mcp:read", "mcp:write"]}
-              />
               <ScopeGatedNavItem item={routes.clis} scope="project:read" />
               <ScopeGatedNavItem
                 item={routes.plugins}

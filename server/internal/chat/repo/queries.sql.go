@@ -28,20 +28,6 @@ func (q *Queries) AddUserFeedbackChatResolution(ctx context.Context, arg AddUser
 	return err
 }
 
-const backfillChatMessageHash = `-- name: BackfillChatMessageHash :exec
-UPDATE chat_messages SET content_hash = $1 WHERE id = $2 AND content_hash IS NULL
-`
-
-type BackfillChatMessageHashParams struct {
-	ContentHash []byte
-	ID          uuid.UUID
-}
-
-func (q *Queries) BackfillChatMessageHash(ctx context.Context, arg BackfillChatMessageHashParams) error {
-	_, err := q.db.Exec(ctx, backfillChatMessageHash, arg.ContentHash, arg.ID)
-	return err
-}
-
 const countChatMessages = `-- name: CountChatMessages :one
 SELECT COUNT(*) FROM chat_messages
 WHERE chat_id = $1 AND (project_id IS NULL OR project_id = $2::uuid)
@@ -218,25 +204,6 @@ func (q *Queries) GetChat(ctx context.Context, id uuid.UUID) (Chat, error) {
 		&i.DeletedAt,
 		&i.Deleted,
 	)
-	return i, err
-}
-
-const getChatChainTip = `-- name: GetChatChainTip :one
-SELECT generation, content_hash FROM chat_messages
-WHERE chat_id = $1
-ORDER BY seq DESC
-LIMIT 1
-`
-
-type GetChatChainTipRow struct {
-	Generation  int32
-	ContentHash []byte
-}
-
-func (q *Queries) GetChatChainTip(ctx context.Context, chatID uuid.UUID) (GetChatChainTipRow, error) {
-	row := q.db.QueryRow(ctx, getChatChainTip, chatID)
-	var i GetChatChainTipRow
-	err := row.Scan(&i.Generation, &i.ContentHash)
 	return i, err
 }
 
@@ -814,7 +781,7 @@ func (q *Queries) ListChatMessages(ctx context.Context, arg ListChatMessagesPara
 }
 
 const listChatMessagesForMatch = `-- name: ListChatMessagesForMatch :many
-SELECT id, role, content, tool_call_id, tool_calls, content_hash
+SELECT id, role, content, tool_call_id, tool_calls
 FROM chat_messages
 WHERE chat_id = $1 AND generation = $2
 ORDER BY seq ASC
@@ -826,12 +793,11 @@ type ListChatMessagesForMatchParams struct {
 }
 
 type ListChatMessagesForMatchRow struct {
-	ID          uuid.UUID
-	Role        string
-	Content     string
-	ToolCallID  pgtype.Text
-	ToolCalls   []byte
-	ContentHash []byte
+	ID         uuid.UUID
+	Role       string
+	Content    string
+	ToolCallID pgtype.Text
+	ToolCalls  []byte
 }
 
 func (q *Queries) ListChatMessagesForMatch(ctx context.Context, arg ListChatMessagesForMatchParams) ([]ListChatMessagesForMatchRow, error) {
@@ -849,7 +815,6 @@ func (q *Queries) ListChatMessagesForMatch(ctx context.Context, arg ListChatMess
 			&i.Content,
 			&i.ToolCallID,
 			&i.ToolCalls,
-			&i.ContentHash,
 		); err != nil {
 			return nil, err
 		}

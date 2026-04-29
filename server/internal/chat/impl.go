@@ -1051,8 +1051,7 @@ type chatMessageRow struct {
 	completionTokens int64
 	totalTokens      int64
 
-	contentHash []byte
-	generation  int32
+	generation int32
 
 	metadata httpMetadata
 }
@@ -1094,19 +1093,6 @@ func storeMessages(ctx context.Context, logger *slog.Logger, tx repo.DBTX, asset
 			if err != nil {
 				results[i] = uploadResult{assetURL: "", jsonData: nil, err: fmt.Errorf("marshal message content: %w", err)}
 				return nil // Don't abort other uploads
-			}
-
-			// Tool-only assistant messages legitimately carry no content
-			// payload (NormalizeAssistantMessages splits combined text+tools
-			// responses into a text row followed by a tools row whose Content
-			// is null OptionalNullable). Persisting the bytes "null" into
-			// content_raw would surface as JSON null on /chat.load and break
-			// the dashboard's string-typed schema. Match buildAssistantRows'
-			// behavior: leave content_raw empty and let loadMessageContent
-			// fall back to "" via the plain Content column.
-			if bytes.Equal(bytes.TrimSpace(jsonData), []byte("null")) {
-				results[i] = uploadResult{assetURL: "", jsonData: nil, err: nil}
-				return nil
 			}
 
 			// Compute SHA256 hash for the content-addressable path.
@@ -1189,7 +1175,7 @@ func storeMessages(ctx context.Context, logger *slog.Logger, tx repo.DBTX, asset
 			UserAgent:        conv.ToPGText(row.metadata.UserAgent),
 			IpAddress:        conv.ToPGText(row.metadata.IPAddress),
 			Source:           conv.ToPGText(row.metadata.Source),
-			ContentHash:      row.contentHash,
+			ContentHash:      nil,
 			Generation:       row.generation,
 		}
 	}

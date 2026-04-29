@@ -7,37 +7,29 @@ export const CRON_DOCS: IntegrationDoc = {
     "Run an assistant on a recurring schedule (every N minutes, daily, weekly, etc.).",
   body: `# Cron schedule trigger
 
-Cron triggers fire the assistant on a recurring schedule. Useful for daily summaries, periodic syncs, or anything driven by a clock rather than an external event.
+Fires the assistant on a recurring UTC schedule. No credentials required; the trigger reuses the assistant's shared environment.
 
-## Onboarding flow
+## Setup
 
-1. Cron itself needs no credentials — only the schedule. The assistant already owns a shared environment; cron triggers attach to it automatically and simply don't read from it.
-2. Call \`create_trigger\` with \`definition_slug: "cron"\` and a config like \`{ "schedule": "0 9 * * *" }\` (every day at 09:00 UTC). Do NOT pass \`environment_id\` — the assistant's env is used by default.
+\`create_trigger\` with \`definition_slug: "cron"\` and \`{ "schedule": "<cron expr>" }\`. Do NOT pass \`environment_id\`.
 
-## Cron expression cheatsheet
+## Cron expressions
 
-Standard 5-field cron: \`minute hour day-of-month month day-of-week\`. All times are UTC.
+5-field, UTC: \`minute hour day-of-month month day-of-week\`.
 
 | Schedule | Expression |
 |----------|------------|
 | Every 5 minutes | \`*/5 * * * *\` |
-| Every hour on the hour | \`0 * * * *\` |
-| Every day at 09:00 UTC | \`0 9 * * *\` |
-| Weekdays at 09:00 UTC | \`0 9 * * 1-5\` |
-| Every Monday at 14:30 UTC | \`30 14 * * 1\` |
-| First of every month at midnight UTC | \`0 0 1 * *\` |
+| Hourly | \`0 * * * *\` |
+| Daily 09:00 UTC | \`0 9 * * *\` |
+| Weekdays 09:00 UTC | \`0 9 * * 1-5\` |
+| Mondays 14:30 UTC | \`30 14 * * 1\` |
+| Monthly midnight UTC | \`0 0 1 * *\` |
 
-If the user gives a local time, ask which timezone and convert to UTC before writing the expression.
+If the user gives a local time, ask the timezone and convert to UTC.
 
-## Pattern: morning summary that DMs the user
+## Cron has no payload
 
-Cron triggers don't carry a payload — they just say "the time is now". The assistant's instructions need to do the work:
-
-1. Cron fires the assistant.
-2. Assistant calls Slack toolset tools to read recent messages.
-3. Assistant summarizes.
-4. Assistant calls Slack toolset tool to send a DM to the user.
-
-This means the assistant needs **both** a cron trigger (to fire it) **and** a toolset that includes Slack tools (to read and DM). The Slack tools read \`SLACK_BOT_TOKEN\` from the assistant's shared env — declare it with \`add_environment_keys\` and collect the value with \`request_environment_secrets\`. See \`docs("slack")\` for the credential setup, even though no Slack trigger is involved.
+The trigger only signals "now". Any work — fetching messages, summarizing, posting — must be in the assistant's instructions and toolset. For a Slack-driven summary the assistant needs both a cron trigger and Slack tools; declare \`SLACK_BOT_TOKEN\` via \`add_environment_keys\` + \`request_environment_secrets\`. See \`docs("slack")\` for the credential setup.
 `,
 };

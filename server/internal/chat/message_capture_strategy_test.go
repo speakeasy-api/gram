@@ -49,9 +49,10 @@ func makeResponse(content string) openrouter.CompletionResponse {
 }
 
 func makeAssistantToolOnly(toolCalls ...or.ChatToolCall) or.ChatMessages {
+	empty := or.CreateChatAssistantMessageContentStr("")
 	return or.CreateChatMessagesAssistant(or.ChatAssistantMessage{
 		Role:             or.ChatAssistantMessageRoleAssistant,
-		Content:          optionalnullable.From[or.ChatAssistantMessageContent](nil),
+		Content:          optionalnullable.From(&empty),
 		Name:             nil,
 		ToolCalls:        toolCalls,
 		Refusal:          nil,
@@ -108,7 +109,6 @@ func TestMatcher_CleanAppend(t *testing.T) {
 	require.Len(t, rows, 4)
 	for i, r := range rows {
 		require.Equal(t, int32(0), r.Generation, "row %d on generation 0", i)
-		require.NotEmpty(t, r.ContentHash, "row %d hashed", i)
 	}
 	require.Equal(t, []string{"user", "assistant", "user", "assistant"}, roles(rows))
 }
@@ -174,40 +174,6 @@ func TestMatcher_EditBumpsGeneration(t *testing.T) {
 	require.Equal(t, int32(0), rows[1].Generation)
 	require.Equal(t, int32(1), rows[2].Generation)
 	require.Equal(t, int32(1), rows[3].Generation)
-}
-
-// Legacy rows have no content_hash. Matcher backfills them on read and should
-// still detect a matching prefix.
-func TestMatcher_LazyBackfillsMissingHash(t *testing.T) {
-	t.Parallel()
-
-	ctx, conn, projectID, orgID := newTestChatContext(t)
-	s := newCaptureStrategy(t, conn)
-	chatID := uuid.New()
-
-	runTurn(t, ctx, s,
-		makeRequest(chatID, projectID, orgID, openrouter.CreateMessageUser("hi")),
-		makeResponse("hello"),
-	)
-
-	// Simulate pre-migration rows by nulling out the hashes.
-	_, err := conn.Exec(ctx, "UPDATE chat_messages SET content_hash = NULL WHERE chat_id = $1", chatID)
-	require.NoError(t, err)
-
-	// Reload with full history + new message. Should backfill hashes and clean-append.
-	_, err = s.StartOrResumeChat(ctx, makeRequest(chatID, projectID, orgID,
-		openrouter.CreateMessageUser("hi"),
-		openrouter.CreateMessageAssistant("hello"),
-		openrouter.CreateMessageUser("follow up"),
-	))
-	require.NoError(t, err)
-
-	rows := listAllMessages(t, ctx, conn, chatID, projectID)
-	require.Len(t, rows, 3)
-	for i, r := range rows {
-		require.Equal(t, int32(0), r.Generation, "row %d still gen 0", i)
-		require.NotEmpty(t, r.ContentHash, "row %d hash backfilled", i)
-	}
 }
 
 func TestMatcher_ToolCallsMatchAcrossIndexAndOrderVariations(t *testing.T) {
@@ -282,40 +248,9 @@ func TestMatcher_ToolCallsMatchAcrossIndexAndOrderVariations(t *testing.T) {
 	}
 }
 
-func TestMatcher_StaleStoredHashDoesNotForceGenerationBump(t *testing.T) {
-	t.Parallel()
-
-	ctx, conn, projectID, orgID := newTestChatContext(t)
-	s := newCaptureStrategy(t, conn)
-	chatID := uuid.New()
-
-	runTurn(t, ctx, s,
-		makeRequest(chatID, projectID, orgID, openrouter.CreateMessageUser("hi")),
-		makeResponse("hello"),
-	)
-
-	_, err := conn.Exec(ctx, "UPDATE chat_messages SET content_hash = decode(repeat('00', 32), 'hex') WHERE chat_id = $1", chatID)
-	require.NoError(t, err)
-
-	runTurn(t, ctx, s,
-		makeRequest(chatID, projectID, orgID,
-			openrouter.CreateMessageUser("hi"),
-			openrouter.CreateMessageAssistant("hello"),
-			openrouter.CreateMessageUser("again"),
-		),
-		makeResponse("sure"),
-	)
-
-	rows := listAllMessages(t, ctx, conn, chatID, projectID)
-	require.Len(t, rows, 4)
-	for i, r := range rows {
-		require.Equal(t, int32(0), r.Generation, "row %d stays on gen 0", i)
-	}
-}
-
 // Tool-call identity is the model-issued ID, not the args. If the same call
 // id replays with mutated args (different runners or middleware reformatting
-// the JSON, lossy round-trips, etc.) the chain must still match — anything
+// the JSON, lossy round-trips, etc.) the slot must still match — anything
 // else trips a generation bump on every turn that issued a tool call.
 func TestMatcher_ToolCallArgumentMutationDoesNotBumpGeneration(t *testing.T) {
 	t.Parallel()
@@ -368,8 +303,8 @@ func TestMatcher_ToolCallArgumentMutationDoesNotBumpGeneration(t *testing.T) {
 // A tool result whose body re-serializes with different whitespace, key
 // ordering, or wrapper shape on replay (e.g. UI hydrates → parses JSON →
 // re-stringifies through the AI SDK) must still match the stored row by
-// tool_call_id alone. Hashing the body would force a generation bump on every
-// turn that follows a tool call.
+// tool_call_id alone. Including the body in the slot would force a generation
+// bump on every turn that follows a tool call.
 func TestMatcher_ToolResultBodyDriftDoesNotBumpGeneration(t *testing.T) {
 	t.Parallel()
 
@@ -456,8 +391,8 @@ func roles(rows []repo.ChatMessage) []string {
 }
 
 // An assistant response that carries both narrative text and tool_calls must
-// land as two chained rows — text-only then tool-calls-only — so the stored
-// shape matches what NormalizeAssistantMessages produces on replay.
+// land as two rows — text-only then tool-calls-only — so the stored shape
+// matches what NormalizeAssistantMessages produces on replay.
 func TestCaptureMessage_SplitsAssistantResponseWithBothTextAndToolCalls(t *testing.T) {
 	t.Parallel()
 
@@ -504,8 +439,6 @@ func TestCaptureMessage_SplitsAssistantResponseWithBothTextAndToolCalls(t *testi
 	require.Equal(t, int64(10), tools.PromptTokens)
 	require.Equal(t, int64(5), tools.CompletionTokens)
 	require.Equal(t, int64(15), tools.TotalTokens)
-
-	require.NotEqual(t, text.ContentHash, tools.ContentHash, "chained hashes differ")
 }
 
 // Whitespace-only content must be treated as "no text" on both sides of the

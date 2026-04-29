@@ -3,8 +3,6 @@ type BehaviorRule = {
   bullets: string[];
 };
 
-const PLATFORM_PREFIX = "tools:platform:";
-
 const RULES: BehaviorRule[] = [
   {
     matches: (urn) => urn === "tools:platform:slack:send_message",
@@ -20,10 +18,9 @@ const DEFAULT_BEHAVIORS: string[] = [
 ];
 
 export function computeBehaviorSection(toolUrns: string[]): string {
-  const platformUrns = toolUrns.filter((u) => u.startsWith(PLATFORM_PREFIX));
   const bullets: string[] = [...DEFAULT_BEHAVIORS];
   for (const rule of RULES) {
-    if (platformUrns.some((u) => rule.matches(u))) {
+    if (toolUrns.some((u) => rule.matches(u))) {
       for (const b of rule.bullets) {
         if (!bullets.includes(b)) bullets.push(b);
       }

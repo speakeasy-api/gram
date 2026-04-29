@@ -141,10 +141,9 @@ func NewFlyRuntimeBackend(logger *slog.Logger, httpPolicy *guardian.Policy, conf
 			tokens:         config.FlyTokens,
 			logger:         logger,
 		},
-		// No retry wrapper — /turn is non-idempotent (each retry duplicates an
-		// LLM turn + tool calls on the runner, even if the original is still in
-		// flight). Callers that want retries wrap specific calls themselves
-		// (waitForRuntimeHealth already polls /healthz in its own loop).
+		// /turn is idempotent (runner dedupes by event-id idempotency key) but
+		// retries are driven by Temporal activity policy, not the HTTP client —
+		// double layering would just inflate attempt counts on real failures.
 		httpClient: httpPolicy.PooledClient(),
 	}
 }
@@ -388,7 +387,7 @@ func (f *FlyRuntimeBackend) launchMachineWithRetry(
 		if err == nil {
 			return machine, nil
 		}
-		if isFlyAppReady(err) {
+		if !isFlyAppPropagating(err) {
 			return nil, backoff.Permanent(fmt.Errorf("launch assistant fly runtime machine: %w", err))
 		}
 		return nil, fmt.Errorf("launch assistant fly runtime machine: %w", err)
@@ -573,7 +572,7 @@ func (f *FlyRuntimeBackend) machineConfig(runtime assistantRuntimeRecord) *fly.M
 					{
 						Type:         new("http"),
 						HTTPProtocol: new("http"),
-						HTTPMethod:   ptr(http.MethodGet),
+						HTTPMethod:   new(http.MethodGet),
 						HTTPPath:     new("/healthz"),
 						Interval:     &fly.Duration{Duration: 15 * time.Second},
 						Timeout:      &fly.Duration{Duration: 5 * time.Second},
@@ -774,14 +773,14 @@ func isFlyIPAlreadyAssigned(err error) bool {
 	return strings.Contains(msg, "already allocated") || strings.Contains(msg, "already has")
 }
 
-// isFlyAppReady reports whether the error does NOT indicate a transient Fly.io
-// propagation failure where the Machines API hasn't seen the app yet.
-func isFlyAppReady(err error) bool {
+// isFlyAppPropagating reports whether the error indicates the Machines API
+// hasn't yet seen the freshly created app — a transient state worth retrying.
+func isFlyAppPropagating(err error) bool {
 	if err == nil {
-		return true
+		return false
 	}
 	msg := strings.ToLower(err.Error())
-	return !strings.Contains(msg, "no rows in result set") && !strings.Contains(msg, "failed to get app")
+	return strings.Contains(msg, "no rows in result set") || strings.Contains(msg, "failed to get app")
 }
 
 type assistantFlyLogger struct {
@@ -795,9 +794,4 @@ func (f *assistantFlyLogger) Debug(v ...any) {
 
 func (f *assistantFlyLogger) Debugf(format string, v ...any) {
 	f.logger.DebugContext(f.contextFunc(), fmt.Sprintf(format, v...))
-}
-
-//go:fix inline
-func ptr[T any](v T) *T {
-	return new(v)
 }

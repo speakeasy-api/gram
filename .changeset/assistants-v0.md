@@ -1,5 +1,6 @@
 ---
 "dashboard": minor
+"server": minor
 ---
 
-Add Assistants v0 UI: create, edit, and manage AI assistants with model, instructions, and toolset/environment bindings.
+Assistants v0: server-side service, Temporal workflows + reaper, Fly.io / local Firecracker runtime providers, per-thread token manager, and the dashboard create/edit/onboarding UI for assistants with model, instructions, toolset and environment bindings.

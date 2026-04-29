@@ -42,6 +42,22 @@ type FlyRuntimeConfig struct {
 	ServerURLOverride  *url.URL
 }
 
+func (c FlyRuntimeConfig) Validate() error {
+	if c.FlyTokens == nil {
+		return fmt.Errorf("--assistant-runtime-flyio-api-token is required")
+	}
+	if c.DefaultFlyOrg == "" {
+		return fmt.Errorf("--assistant-runtime-flyio-org is required")
+	}
+	if c.OCIImage == "" {
+		return fmt.Errorf("--assistant-runtime-oci-image is required")
+	}
+	if c.ImageVersion == "" {
+		return fmt.Errorf("--assistant-runtime-image-version is required")
+	}
+	return nil
+}
+
 func normalizeRuntimeProvider(provider string) string {
 	switch provider {
 	case "", runtimeBackendLegacyFirecracker:

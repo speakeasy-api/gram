@@ -162,19 +162,10 @@ WHERE chat_id = @chat_id AND (project_id IS NULL OR project_id = @project_id::uu
 SELECT COALESCE(MAX(generation), 0)::integer AS generation FROM chat_messages WHERE chat_id = @chat_id;
 
 -- name: ListChatMessagesForMatch :many
-SELECT id, role, content, tool_call_id, tool_calls, content_hash
+SELECT id, role, content, tool_call_id, tool_calls
 FROM chat_messages
 WHERE chat_id = @chat_id AND generation = @generation
 ORDER BY seq ASC;
-
--- name: BackfillChatMessageHash :exec
-UPDATE chat_messages SET content_hash = @content_hash WHERE id = @id AND content_hash IS NULL;
-
--- name: GetChatChainTip :one
-SELECT generation, content_hash FROM chat_messages
-WHERE chat_id = @chat_id
-ORDER BY seq DESC
-LIMIT 1;
 
 -- name: UpdateChatTitle :exec
 UPDATE chats SET title = @title, updated_at = NOW() WHERE id = @id;

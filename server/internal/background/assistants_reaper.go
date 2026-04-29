@@ -21,11 +21,9 @@ const (
 	assistantReaperInterval   = 60 * time.Second
 )
 
-// AssistantReaperWorkflow is a singleton sweep that reclaims runtime rows
-// and events abandoned by crashed workers/servers. A Temporal Schedule
-// fires it every minute; per-assistant coordinator workflows no longer run
-// their own periodic reap. Affected assistants get a kick signal so their
-// coordinator re-admits promptly instead of waiting on organic traffic.
+// AssistantReaperWorkflow reclaims runtime rows and events abandoned by
+// crashed workers/servers, then kicks each affected assistant's coordinator
+// so it re-admits without waiting for organic traffic.
 func AssistantReaperWorkflow(ctx workflow.Context) error {
 	var a *Activities
 
