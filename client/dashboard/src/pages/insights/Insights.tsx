@@ -1,46 +1,10 @@
-import { Link, Outlet, useLocation } from "react-router";
+import { Outlet } from "react-router";
 import { AgentInsights } from "@/components/observe/AgentInsights";
 import { InsightsHooksContent } from "@/components/observe/InsightsHooksContent";
 import { MCPInsights } from "@/components/observe/MCPInsights";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
-import { useSlugs } from "@/contexts/Sdk";
-import { cn } from "@/lib/utils";
-
-function InsightsTabNav() {
-  const { orgSlug, projectSlug } = useSlugs();
-  const location = useLocation();
-
-  const base = `/${orgSlug}/${projectSlug}/insights`;
-  const tabs = [
-    { label: "Hooks", href: `${base}/hooks` },
-    { label: "MCP Servers", href: `${base}/mcp` },
-    { label: "Agents", href: `${base}/agents` },
-  ];
-
-  return (
-    <div className="border-border flex h-auto w-full items-end gap-8 border-b bg-transparent px-8 pt-2">
-      {tabs.map((tab) => {
-        const isActive = location.pathname === tab.href;
-        return (
-          <Link
-            key={tab.href}
-            to={tab.href}
-            className={cn(
-              "relative flex-none pb-3 text-sm font-medium no-underline transition-colors",
-              "after:absolute after:right-0 after:bottom-0 after:left-0 after:h-0.5",
-              isActive
-                ? "text-foreground after:bg-primary"
-                : "text-muted-foreground hover:text-foreground after:bg-transparent",
-            )}
-          >
-            {tab.label}
-          </Link>
-        );
-      })}
-    </div>
-  );
-}
+import { ObserveTabNav } from "@/components/observe/ObserveTabNav";
 
 export function InsightsRoot() {
   return (
@@ -48,7 +12,7 @@ export function InsightsRoot() {
       <Page.Header>
         <Page.Header.Breadcrumbs fullWidth />
       </Page.Header>
-      <InsightsTabNav />
+      <ObserveTabNav base="insights" />
       <Page.Body fullWidth noPadding>
         <Outlet />
       </Page.Body>
