@@ -627,86 +627,24 @@ describe("oauthWizardMachine — external happy path", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Machine — auto-register chooser flow (discovered registration_endpoint)
+// Machine — manual proxy path always prompts for credentials
 // ---------------------------------------------------------------------------
 
-describe("oauthWizardMachine — auto-register chooser", () => {
+describe("oauthWizardMachine — manual proxy path skips auto-register chooser", () => {
   const inputWithDiscovered: Input = {
     ...baseInput,
     discovered: DISCOVERED_2_1,
   };
 
-  it("NEXT from metadata routes to autoRegisterChoice when registration_endpoint discovered", () => {
+  it("NEXT from metadata routes directly to credentials even when registration_endpoint is discovered", () => {
     const actor = makeActor(inputWithDiscovered);
     actor.start();
     actor.send({ type: "SELECT_PROXY" });
     fillProxyForm(actor);
     actor.send({ type: "NEXT" });
-    expect(actor.getSnapshot().matches({ proxy: "autoRegisterChoice" })).toBe(
-      true,
-    );
-  });
-
-  it("AUTO_REGISTER walks autoRegisterChoice → registering → submitting → result.success and skips manual creds form", async () => {
-    const actor = makeActor(inputWithDiscovered);
-    actor.start();
-    actor.send({ type: "SELECT_PROXY" });
-    fillProxyForm(actor);
-    actor.send({ type: "NEXT" });
-    actor.send({ type: "AUTO_REGISTER" });
-
-    await waitFor(actor, (s) => s.matches({ result: "success" }), {
-      timeout: 1000,
-    });
-
-    const snap = actor.getSnapshot();
-    expect(snap.context.proxy.clientId).toBe("auto-cid");
-    expect(snap.context.proxy.clientSecret).toBe("auto-secret");
-    expect(snap.context.proxy.tokenAuthMethod).toBe("client_secret_basic");
-    expect(snap.context.envSlug).toBe("env-new");
-  });
-
-  it("MANUAL_CREDENTIALS routes to credentials and clears autoRegistering flag", () => {
-    const actor = makeActor(inputWithDiscovered);
-    actor.start();
-    actor.send({ type: "SELECT_PROXY" });
-    fillProxyForm(actor);
-    actor.send({ type: "NEXT" });
-    actor.send({ type: "MANUAL_CREDENTIALS" });
     const snap = actor.getSnapshot();
     expect(snap.matches({ proxy: "credentials" })).toBe(true);
     expect(snap.context.autoRegistering).toBe(false);
-  });
-
-  it("BACK from autoRegisterChoice returns to metadata", () => {
-    const actor = makeActor(inputWithDiscovered);
-    actor.start();
-    actor.send({ type: "SELECT_PROXY" });
-    fillProxyForm(actor);
-    actor.send({ type: "NEXT" });
-    actor.send({ type: "BACK" });
-    expect(actor.getSnapshot().matches({ proxy: "metadata" })).toBe(true);
-  });
-
-  it("registerClient failure routes to terminal autoRegisterFailed with error", async () => {
-    const actor = makeActor(inputWithDiscovered, servicesWithRegisterFailure());
-    actor.start();
-    actor.send({ type: "SELECT_PROXY" });
-    fillProxyForm(actor);
-    actor.send({ type: "NEXT" });
-    actor.send({ type: "AUTO_REGISTER" });
-
-    await waitFor(actor, (s) => s.matches({ proxy: "autoRegisterFailed" }), {
-      timeout: 1000,
-    });
-
-    const snap = actor.getSnapshot();
-    expect(snap.context.error).toContain("DCR boom");
-    // terminal — no further transitions
-    actor.send({ type: "BACK" });
-    expect(actor.getSnapshot().matches({ proxy: "autoRegisterFailed" })).toBe(
-      true,
-    );
   });
 });
 

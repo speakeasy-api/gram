@@ -68,8 +68,6 @@ export type WizardEvent =
   | { type: "BACK" }
   | { type: "NEXT" }
   | { type: "SUBMIT" }
-  | { type: "AUTO_REGISTER" }
-  | { type: "MANUAL_CREDENTIALS" }
   | { type: "RESET" };
 
 export function parseScopes(raw: string): string[] {

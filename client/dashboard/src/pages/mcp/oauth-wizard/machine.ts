@@ -134,9 +134,6 @@ export const oauthWizardMachine = setup({
     validExternal: ({ context }) => checkExternal(context).ok,
     validProxyMeta: ({ context }) => checkProxyMeta(context).ok,
     validCreds: ({ context }) => checkCreds(context).ok,
-    canAutoRegister: ({ context }) =>
-      checkProxyMeta(context).ok &&
-      discoveredRegistrationEndpoint(context.discovered) !== null,
     canAutoConfigure: ({ context }) =>
       canAutoConfigureFromDiscovered(context.discovered),
   },
@@ -340,11 +337,6 @@ export const oauthWizardMachine = setup({
             },
             NEXT: [
               {
-                guard: "canAutoRegister",
-                target: "autoRegisterChoice",
-                actions: assign({ error: () => null }),
-              },
-              {
                 guard: "validProxyMeta",
                 target: "credentials",
                 actions: assign({ error: () => null }),
@@ -359,17 +351,6 @@ export const oauthWizardMachine = setup({
               },
             ],
             BACK: "#oauthWizard.pathSelection",
-          },
-        },
-        autoRegisterChoice: {
-          meta: { title: "Configure OAuth Proxy" },
-          on: {
-            AUTO_REGISTER: {
-              target: "registering",
-              actions: assign({ autoRegistering: () => true }),
-            },
-            MANUAL_CREDENTIALS: "credentials",
-            BACK: "metadata",
           },
         },
         registering: {
