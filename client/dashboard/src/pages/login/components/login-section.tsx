@@ -203,7 +203,9 @@ export function RegisterSection() {
     },
 
     onSuccess: () => {
-      window.location.replace("/");
+      const destination =
+        searchParams.get("returnTo") ?? searchParams.get("redirect");
+      window.location.replace(destination ?? "/");
     },
     onError: (error) => {
       setValidationError(error.message);

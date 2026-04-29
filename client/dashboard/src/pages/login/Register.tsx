@@ -10,9 +10,10 @@ export default function Register() {
   const [searchParams] = useSearchParams();
 
   if (session.activeOrganizationId !== "") {
-    const redirect = searchParams.get("redirect");
-    if (redirect) {
-      window.location.href = redirect;
+    const destination =
+      searchParams.get("returnTo") ?? searchParams.get("redirect");
+    if (destination) {
+      window.location.href = destination;
     } else {
       routes.mcp.goTo();
     }
