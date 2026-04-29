@@ -575,21 +575,6 @@ type McpEnvironmentConfig struct {
 	UpdatedAt         pgtype.Timestamptz
 }
 
-type McpFrontend struct {
-	ID                    uuid.UUID
-	ProjectID             uuid.UUID
-	EnvironmentID         uuid.NullUUID
-	ExternalOauthServerID uuid.NullUUID
-	OauthProxyServerID    uuid.NullUUID
-	RemoteMcpServerID     uuid.NullUUID
-	ToolsetID             uuid.NullUUID
-	Visibility            string
-	CreatedAt             pgtype.Timestamptz
-	UpdatedAt             pgtype.Timestamptz
-	DeletedAt             pgtype.Timestamptz
-	Deleted               bool
-}
-
 type McpMetadatum struct {
 	ID                        uuid.UUID
 	ToolsetID                 uuid.UUID
@@ -613,18 +598,6 @@ type McpRegistry struct {
 	UpdatedAt pgtype.Timestamptz
 	DeletedAt pgtype.Timestamptz
 	Deleted   bool
-}
-
-type McpSlug struct {
-	ID             uuid.UUID
-	ProjectID      uuid.UUID
-	CustomDomainID uuid.NullUUID
-	McpFrontendID  uuid.UUID
-	Slug           string
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-	DeletedAt      pgtype.Timestamptz
-	Deleted        bool
 }
 
 type OauthProxyClientInfo struct {
