@@ -41,6 +41,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/plugins/repo"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	ghclient "github.com/speakeasy-api/gram/server/internal/thirdparty/github"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -940,6 +941,11 @@ func (s *Service) PublishPlugins(ctx context.Context, payload *gen.PublishPlugin
 		return nil, oops.E(oops.CodeBadRequest, nil, "no plugins with servers to publish")
 	}
 
+	project, err := projectsrepo.New(s.db).GetProjectByID(ctx, *ac.ProjectID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "get project").Log(ctx, s.logger)
+	}
+
 	if payload.GithubUsername != nil && *payload.GithubUsername != "" && !validGitHubUsername.MatchString(*payload.GithubUsername) {
 		return nil, oops.E(oops.CodeBadRequest, nil, "invalid github username")
 	}
@@ -1005,7 +1011,7 @@ func (s *Service) PublishPlugins(ctx context.Context, payload *gen.PublishPlugin
 	// consumer credentials when GitHub fails. If this transaction itself
 	// fails, the published repo contains a key string with no DB record —
 	// re-publish overwrites it with a fresh valid key.
-	if err := s.persistPluginAPIKey(ctx, ac, candidate, repoOwner, repoName, pluginSlugs); err != nil {
+	if err := s.persistPluginAPIKey(ctx, ac, candidate, project.Name, repoOwner, repoName, pluginSlugs); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "persist plugin api key").Log(ctx, s.logger)
 	}
 
@@ -1055,6 +1061,7 @@ func (s *Service) persistPluginAPIKey(
 	ctx context.Context,
 	ac *contextvalues.AuthContext,
 	candidate pluginAPIKeyCandidate,
+	projectName string,
 	repoOwner, repoName string,
 	pluginSlugs []string,
 ) error {
@@ -1109,6 +1116,7 @@ func (s *Service) persistPluginAPIKey(
 	if err := audit.LogPluginPublish(ctx, tx, audit.LogPluginPublishEvent{
 		OrganizationID:   ac.ActiveOrganizationID,
 		ProjectID:        *ac.ProjectID,
+		ProjectName:      projectName,
 		ProjectSlug:      projectSlug,
 		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
 		ActorDisplayName: ac.Email,

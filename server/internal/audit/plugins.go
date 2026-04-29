@@ -405,6 +405,7 @@ func LogPluginAssignmentsSet(ctx context.Context, dbtx repo.DBTX, event LogPlugi
 type LogPluginPublishEvent struct {
 	OrganizationID string
 	ProjectID      uuid.UUID
+	ProjectName    string
 	ProjectSlug    string
 
 	Actor            urn.Principal
@@ -441,7 +442,7 @@ func LogPluginPublish(ctx context.Context, dbtx repo.DBTX, event LogPluginPublis
 
 		SubjectID:          event.ProjectID.String(),
 		SubjectType:        string(subjectTypeProject),
-		SubjectDisplayName: conv.ToPGTextEmpty(event.ProjectSlug),
+		SubjectDisplayName: conv.ToPGTextEmpty(event.ProjectName),
 		SubjectSlug:        conv.ToPGTextEmpty(event.ProjectSlug),
 
 		BeforeSnapshot: nil,
