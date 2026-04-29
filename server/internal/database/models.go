@@ -564,6 +564,18 @@ type HttpToolDefinition struct {
 	Deleted             bool
 }
 
+type McpEndpoint struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	CustomDomainID uuid.NullUUID
+	McpServerID    uuid.UUID
+	Slug           string
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	DeletedAt      pgtype.Timestamptz
+	Deleted        bool
+}
+
 type McpEnvironmentConfig struct {
 	ID                uuid.UUID
 	ProjectID         uuid.UUID
@@ -598,6 +610,21 @@ type McpRegistry struct {
 	UpdatedAt pgtype.Timestamptz
 	DeletedAt pgtype.Timestamptz
 	Deleted   bool
+}
+
+type McpServer struct {
+	ID                    uuid.UUID
+	ProjectID             uuid.UUID
+	EnvironmentID         uuid.NullUUID
+	ExternalOauthServerID uuid.NullUUID
+	OauthProxyServerID    uuid.NullUUID
+	RemoteMcpServerID     uuid.NullUUID
+	ToolsetID             uuid.NullUUID
+	Visibility            string
+	CreatedAt             pgtype.Timestamptz
+	UpdatedAt             pgtype.Timestamptz
+	DeletedAt             pgtype.Timestamptz
+	Deleted               bool
 }
 
 type OauthProxyClientInfo struct {
