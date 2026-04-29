@@ -497,6 +497,14 @@ const ComposerFeedback: FC = () => {
   const { isResolved, feedbackHidden, setResolved, submitFeedback } =
     useChatResolution();
 
+  const lastMessageErrored = useAssistantState(({ thread }) => {
+    const lastMessage = thread.messages[thread.messages.length - 1];
+    return (
+      lastMessage?.role === "assistant" &&
+      lastMessage.status?.type === "incomplete"
+    );
+  });
+
   const handleFeedback = useCallback(
     async (type: "like" | "dislike") => {
       const feedback = type === "like" ? "success" : "failure";
@@ -513,7 +521,7 @@ const ComposerFeedback: FC = () => {
       </ThreadPrimitive.If>
       <ThreadPrimitive.If running={false}>
         <AnimatePresence>
-          {!isResolved && !feedbackHidden && (
+          {!isResolved && !feedbackHidden && !lastMessageErrored && (
             <m.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
