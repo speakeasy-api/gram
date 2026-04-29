@@ -2,7 +2,6 @@ package nlpolicies
 
 import (
 	"context"
-	"errors"
 	"log/slog"
 
 	"github.com/google/uuid"
@@ -12,7 +11,9 @@ import (
 	srv "github.com/speakeasy-api/gram/server/gen/http/nlpolicies/server"
 	gen "github.com/speakeasy-api/gram/server/gen/nlpolicies"
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
 var _ gen.Service = (*Service)(nil)
@@ -25,7 +26,7 @@ type Service struct {
 }
 
 func NewService(logger *slog.Logger) *Service {
-	return &Service{logger: logger.With(slog.String("component", "nlpolicies"))}
+	return &Service{logger: logger.With(attr.SlogComponent("nlpolicies"))}
 }
 
 func Attach(mux goahttp.Muxer, service *Service) {
@@ -36,6 +37,9 @@ func Attach(mux goahttp.Muxer, service *Service) {
 
 // APIKeyAuth — stubbed; real impl in PR 3 uses sessions.Manager.
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
+	s.logger.WarnContext(ctx, "nlpolicies APIKeyAuth stub: accepting any key — DO NOT MERGE PR 3 without replacing")
+	_ = key
+	_ = schema
 	return ctx, nil
 }
 
@@ -67,13 +71,13 @@ func (s *Service) ListPolicies(_ context.Context, _ *gen.ListPoliciesPayload) (*
 	return &gen.ListPoliciesResult{Policies: fixturePolicies()}, nil
 }
 
-func (s *Service) GetPolicy(_ context.Context, p *gen.GetPolicyPayload) (*types.NLPolicy, error) {
+func (s *Service) GetPolicy(ctx context.Context, p *gen.GetPolicyPayload) (*types.NLPolicy, error) {
 	for _, pol := range fixturePolicies() {
 		if pol.ID == p.PolicyID {
 			return pol, nil
 		}
 	}
-	return nil, errors.New("not found")
+	return nil, oops.E(oops.CodeNotFound, nil, "policy not found").Log(ctx, s.logger)
 }
 
 func (s *Service) UpdatePolicy(ctx context.Context, p *gen.UpdatePolicyPayload) (*types.NLPolicy, error) {
@@ -141,7 +145,7 @@ func (s *Service) ListSessionVerdicts(_ context.Context, p *gen.ListSessionVerdi
 	return &gen.ListSessionVerdictsResult{Verdicts: out}, nil
 }
 
-func (s *Service) ClearSessionVerdict(_ context.Context, p *gen.ClearSessionVerdictPayload) (*types.NLPolicySessionVerdict, error) {
+func (s *Service) ClearSessionVerdict(ctx context.Context, p *gen.ClearSessionVerdictPayload) (*types.NLPolicySessionVerdict, error) {
 	for _, v := range fixtureSessionVerdicts() {
 		if v.ID == p.VerdictID {
 			now := "2026-04-28T12:00:00Z"
@@ -149,17 +153,17 @@ func (s *Service) ClearSessionVerdict(_ context.Context, p *gen.ClearSessionVerd
 			return v, nil
 		}
 	}
-	return nil, errors.New("not found")
+	return nil, oops.E(oops.CodeNotFound, nil, "session verdict not found").Log(ctx, s.logger)
 }
 
 func (s *Service) Replay(_ context.Context, _ *gen.ReplayPayload) (*types.NLPolicyReplayRun, error) {
 	return fixtureReplayRun(), nil
 }
 
-func (s *Service) GetReplayRun(_ context.Context, p *gen.GetReplayRunPayload) (*types.NLPolicyReplayRun, error) {
+func (s *Service) GetReplayRun(ctx context.Context, p *gen.GetReplayRunPayload) (*types.NLPolicyReplayRun, error) {
 	run := fixtureReplayRun()
 	if p.RunID != run.ID {
-		return nil, errors.New("not found")
+		return nil, oops.E(oops.CodeNotFound, nil, "replay run not found").Log(ctx, s.logger)
 	}
 	return run, nil
 }
