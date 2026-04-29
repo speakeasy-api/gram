@@ -1,9 +1,10 @@
 import { Icon, IconName, IconProps } from "@speakeasy-api/moonshine";
 import React, { useMemo } from "react";
-import { Link, Navigate, useLocation, useNavigate } from "react-router";
+import { Link, useLocation, useNavigate } from "react-router";
 import {
   RedirectToInsightsTools,
   RedirectToLogAgents,
+  RedirectToLogTools,
 } from "./components/observe/ObserveRedirects";
 import { useSlugs } from "./contexts/Sdk";
 import { cn } from "./lib/utils";
@@ -333,7 +334,7 @@ const ROUTE_STRUCTURE = {
     url: "insights",
     icon: "layout-dashboard",
     component: InsightsRoot,
-    indexComponent: () => <Navigate to="tools" replace />,
+    indexComponent: RedirectToInsightsTools,
     subPages: {
       tools: {
         title: "Tools",
@@ -363,7 +364,7 @@ const ROUTE_STRUCTURE = {
     url: "logs",
     icon: "logs",
     component: LogsRoot,
-    indexComponent: () => <Navigate to="tools" replace />,
+    indexComponent: RedirectToLogTools,
     subPages: {
       tools: {
         title: "Tools",
