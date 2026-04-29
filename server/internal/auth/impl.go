@@ -417,7 +417,13 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 		}
 
 		allowedIDs := projectIDs
-		if len(projectIDs) > 0 && org.ID == authCtx.ActiveOrganizationID {
+		// Admins impersonating a customer org won't have grants resolved
+		// via the normal RBAC path (no organization_users row). Skip
+		// filtering so they see all projects, mirroring ListGrants.
+		_, hasAdminOverride := contextvalues.GetAdminOverrideFromContext(ctx)
+		skipFilter := userInfo.Admin && hasAdminOverride
+
+		if len(projectIDs) > 0 && org.ID == authCtx.ActiveOrganizationID && !skipFilter {
 			checks := make([]authz.Check, len(projectIDs))
 			for i, id := range projectIDs {
 				checks[i] = authz.Check{Scope: authz.ScopeProjectRead, ResourceID: id, ResourceKind: "", Dimensions: nil}
