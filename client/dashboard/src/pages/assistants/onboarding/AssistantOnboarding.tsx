@@ -10,10 +10,8 @@ import { Loader2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useSearchParams } from "react-router";
 import { toast } from "sonner";
-import {
-  AssistantDraftProvider,
-  useAssistantDraft,
-} from "./AssistantDraftContext";
+import { AssistantDraftProvider } from "./AssistantDraftContext";
+import { useAssistantDraft } from "./useAssistantDraft";
 import { AssistantDraftPanel } from "./AssistantDraftPanel";
 import {
   buildSystemPrompt,

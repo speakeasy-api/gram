@@ -11,34 +11,19 @@ import {
 } from "@gram/client/react-query/index.js";
 import { useQueryClient } from "@tanstack/react-query";
 import {
-  createContext,
   ReactNode,
   useCallback,
-  useContext,
   useEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
-
-type PendingResolver = (result: unknown) => void;
-
-export type AssistantEnv = { id: string; slug: string };
-
-type DraftContextValue = {
-  assistantId: string | null;
-  setAssistantId: (id: string) => void;
-  setAssistant: (assistant: Assistant) => void;
-  assistant: Assistant | undefined;
-  refetchAssistant: () => Promise<unknown>;
-  invalidateAll: () => void;
-  registerPending: (toolCallId: string, resolver: PendingResolver) => void;
-  resolvePending: (toolCallId: string, result: unknown) => boolean;
-  assistantEnv: AssistantEnv | null;
-  setAssistantEnv: (env: AssistantEnv | null) => void;
-};
-
-const Ctx = createContext<DraftContextValue | null>(null);
+import {
+  AssistantDraftCtx,
+  AssistantEnv,
+  DraftContextValue,
+  PendingResolver,
+} from "./useAssistantDraft";
 
 export function AssistantDraftProvider({
   initialAssistantId,
@@ -158,15 +143,9 @@ export function AssistantDraftProvider({
     ],
   );
 
-  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
-}
-
-export function useAssistantDraft(): DraftContextValue {
-  const v = useContext(Ctx);
-  if (!v) {
-    throw new Error(
-      "useAssistantDraft must be used inside an AssistantDraftProvider",
-    );
-  }
-  return v;
+  return (
+    <AssistantDraftCtx.Provider value={value}>
+      {children}
+    </AssistantDraftCtx.Provider>
+  );
 }

@@ -5,7 +5,7 @@ import { Gram } from "@gram/client";
 import { ToolCallMessagePartComponent } from "@assistant-ui/react";
 import { useMemo } from "react";
 import { z } from "zod";
-import { useAssistantDraft } from "../AssistantDraftContext";
+import { useAssistantDraft } from "../useAssistantDraft";
 import { computeBehaviorSection } from "../behaviors";
 import { getIntegrationDoc, listIntegrationDocs } from "../docs";
 import { setSection } from "../sections";

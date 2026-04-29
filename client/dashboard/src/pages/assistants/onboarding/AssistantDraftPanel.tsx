@@ -10,7 +10,7 @@ import {
 import { Icon, Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
-import { useAssistantDraft } from "./AssistantDraftContext";
+import { useAssistantDraft } from "./useAssistantDraft";
 
 export function AssistantDraftPanel() {
   const draft = useAssistantDraft();

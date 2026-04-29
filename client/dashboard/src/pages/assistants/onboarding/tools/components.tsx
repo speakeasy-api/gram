@@ -20,7 +20,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { useAssistantDraft } from "../AssistantDraftContext";
+import { useAssistantDraft } from "../useAssistantDraft";
 import { PERSONALITIES, getPersonality } from "../personalities";
 import { buildSlackManifest, deriveSlackContext } from "../slackManifest";
 
