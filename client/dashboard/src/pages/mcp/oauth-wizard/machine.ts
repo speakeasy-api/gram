@@ -100,7 +100,9 @@ export function canAutoConfigureFromDiscovered(
   const fields = proxyFieldsFromDiscovered(d);
   // scopes_supported is optional — many MCP servers don't advertise scopes in
   // their well-known doc. DCR and addOAuthProxy both accept empty scopes.
-  return Boolean(fields.authorizationEndpoint && fields.tokenEndpoint);
+  return Boolean(
+    fields.slug && fields.authorizationEndpoint && fields.tokenEndpoint,
+  );
 }
 
 function placeholder<TInput, TOutput = void>(name: string) {
