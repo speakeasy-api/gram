@@ -160,9 +160,10 @@ func DescribeToolsetEntry(
 			}
 
 			envQueries = append(envQueries, toolEnvLookupParams{
-				deploymentID: def.DeploymentID,
-				security:     def.Security,
-				serverEnvVar: def.ServerEnvVar,
+				deploymentID:        def.DeploymentID,
+				openapiv3DocumentID: def.Openapiv3DocumentID,
+				security:            def.Security,
+				serverEnvVar:        def.ServerEnvVar,
 			})
 
 			tools = append(tools, tool)
@@ -945,9 +946,10 @@ func readToolsetTools(
 			}
 
 			envQueries = append(envQueries, toolEnvLookupParams{
-				deploymentID: def.HttpToolDefinition.DeploymentID,
-				security:     def.HttpToolDefinition.Security,
-				serverEnvVar: def.HttpToolDefinition.ServerEnvVar,
+				deploymentID:        def.HttpToolDefinition.DeploymentID,
+				openapiv3DocumentID: def.HttpToolDefinition.Openapiv3DocumentID,
+				security:            def.HttpToolDefinition.Security,
+				serverEnvVar:        def.HttpToolDefinition.ServerEnvVar,
 			})
 
 			tools = append(tools, &types.Tool{
@@ -1318,6 +1320,9 @@ type toolEnvLookupParams struct {
 	// The deployment ID of the tool.
 	deploymentID uuid.UUID
 
+	// The OpenAPI document ID of the tool, if the tool came from an OpenAPI source.
+	openapiv3DocumentID uuid.NullUUID
+
 	// The security requirements for the tool.
 	security []byte
 
@@ -1351,13 +1356,22 @@ func environmentVariablesForTools(ctx context.Context, tx DBTX, toolsetID uuid.U
 	}
 
 	uniqueDeploymentIDs := make(map[uuid.UUID]bool)
+	uniqueOpenAPIv3DocumentIDs := make(map[uuid.UUID]bool)
 	for _, tool := range tools {
 		uniqueDeploymentIDs[tool.deploymentID] = true
+		if tool.openapiv3DocumentID.Valid {
+			uniqueOpenAPIv3DocumentIDs[tool.openapiv3DocumentID.UUID] = true
+		}
+	}
+	openapiv3DocumentIDs := slices.Collect(maps.Keys(uniqueOpenAPIv3DocumentIDs))
+	if openapiv3DocumentIDs == nil {
+		openapiv3DocumentIDs = []uuid.UUID{}
 	}
 
 	securityEntries, err := toolsetRepo.GetHTTPSecurityDefinitions(ctx, tsr.GetHTTPSecurityDefinitionsParams{
-		SecurityKeys:  slices.Collect(maps.Keys(securityKeysMap)),
-		DeploymentIds: slices.Collect(maps.Keys(uniqueDeploymentIDs)), // all selected tools share the same deployment
+		SecurityKeys:         slices.Collect(maps.Keys(securityKeysMap)),
+		DeploymentIds:        slices.Collect(maps.Keys(uniqueDeploymentIDs)), // all selected tools share the same deployment
+		Openapiv3DocumentIds: openapiv3DocumentIDs,
 	})
 	if err != nil {
 		return nil, nil, fmt.Errorf("read toolset security definitions: %w", err)
