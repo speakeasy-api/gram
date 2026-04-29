@@ -25,7 +25,7 @@ export function InsightsRoot() {
 
 export function InsightsHooksPage() {
   return (
-    <RequireScope scope="project:read" level="page">
+    <RequireScope scope={["project:read", "project:write"]} level="page">
       <InsightsHooksContent />
     </RequireScope>
   );

@@ -24,7 +24,7 @@ export function LogsRoot() {
 
 export function LogsHooksPage() {
   return (
-    <RequireScope scope="project:read" level="page">
+    <RequireScope scope={["project:read", "project:write"]} level="page">
       <LogsHooks />
     </RequireScope>
   );
