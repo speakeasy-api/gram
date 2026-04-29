@@ -934,9 +934,29 @@ func writePluginZip(w io.Writer, files map[string][]byte) error {
 	}
 	sort.Strings(paths)
 	for _, p := range paths {
+		// Mirrors zip.Writer.Create's defaults: Method=Deflate, Modified=now.
+		// SetMode below populates ExternalAttrs + CreatorVersion to mark the
+		// entry as Unix-mode so the execute bit survives extraction. The
+		// remaining fields are computed by the writer (sizes, CRC) or
+		// intentionally zero (no comments / extra metadata).
 		header := &zip.FileHeader{
-			Name:   p,
-			Method: zip.Deflate,
+			Name:               p,
+			Comment:            "",
+			NonUTF8:            false,
+			CreatorVersion:     0,
+			ReaderVersion:      0,
+			Flags:              0,
+			Method:             zip.Deflate,
+			Modified:           time.Now(),
+			ModifiedTime:       0,
+			ModifiedDate:       0,
+			CRC32:              0,
+			CompressedSize:     0,
+			UncompressedSize:   0,
+			CompressedSize64:   0,
+			UncompressedSize64: 0,
+			Extra:              nil,
+			ExternalAttrs:      0,
 		}
 		var mode os.FileMode = 0o644
 		if strings.HasSuffix(p, ".sh") {
