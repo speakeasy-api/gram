@@ -9,13 +9,13 @@ import {
 
 import { Badge } from "@speakeasy-api/moonshine";
 import { ReactNode } from "react";
-import { WizardContext } from "./machine";
+import { canAutoConfigureFromDiscovered, WizardContext } from "./machine";
 import type { DiscoveredOAuth } from "./machine-types";
 
 export function PathSelection() {
   const send = WizardContext.useActorRef().send;
   const discovered = WizardContext.useSelector((s) => s.context.discovered);
-  const isV21 = discovered?.version === "2.1";
+  const canAutoConfigure = canAutoConfigureFromDiscovered(discovered);
 
   return (
     <div className="space-y-4">
@@ -26,7 +26,7 @@ export function PathSelection() {
       </Type>
 
       <div className="flex flex-col gap-4">
-        {isV21 && (
+        {canAutoConfigure && (
           <PathOptionCard
             title="Auto-Configure"
             onClick={() => send({ type: "SELECT_PROXY_AUTO" })}
@@ -45,7 +45,7 @@ export function PathSelection() {
           onClick={() => send({ type: "SELECT_PROXY" })}
           icon={WaypointsIcon}
           badge={
-            !isV21 &&
+            !canAutoConfigure &&
             discovered?.version === "2.0" && (
               <Badge variant="information">Recommended</Badge>
             )

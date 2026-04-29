@@ -731,16 +731,14 @@ describe("oauthWizardMachine — auto-configure from path selection", () => {
     expect(snap.context.error).toContain("env boom");
   });
 
-  it("SELECT_PROXY_AUTO falls back to proxy.metadata when no discovered metadata", () => {
+  it("SELECT_PROXY_AUTO is a no-op when no discovered metadata (UI hides the card in this case)", () => {
     const actor = makeActor(baseInput);
     actor.start();
     actor.send({ type: "SELECT_PROXY_AUTO" });
-    const snap = actor.getSnapshot();
-    expect(snap.matches({ proxy: "metadata" })).toBe(true);
-    expect(snap.context.autoRegistering).toBe(false);
+    expect(actor.getSnapshot().matches("pathSelection")).toBe(true);
   });
 
-  it("SELECT_PROXY_AUTO falls back to proxy.metadata when registration_endpoint missing", () => {
+  it("SELECT_PROXY_AUTO is a no-op when registration_endpoint missing (UI hides the card in this case)", () => {
     const { registration_endpoint: _omit, ...metadataWithoutRegistration } =
       VALID_PROXY_METADATA;
     const actor = makeActor({
@@ -752,13 +750,7 @@ describe("oauthWizardMachine — auto-configure from path selection", () => {
     });
     actor.start();
     actor.send({ type: "SELECT_PROXY_AUTO" });
-    const snap = actor.getSnapshot();
-    expect(snap.matches({ proxy: "metadata" })).toBe(true);
-    expect(snap.context.proxy.authorizationEndpoint).toBe(
-      VALID_PROXY_METADATA.authorization_endpoint,
-    );
-    expect(snap.context.proxy.prefilled).toBe(true);
-    expect(snap.context.autoRegistering).toBe(false);
+    expect(actor.getSnapshot().matches("pathSelection")).toBe(true);
   });
 
   it("SELECT_PROXY_AUTO proceeds to proxy.registering even when scopes_supported missing (scopes are optional)", () => {

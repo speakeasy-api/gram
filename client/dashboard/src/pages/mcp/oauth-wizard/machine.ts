@@ -173,41 +173,22 @@ export const oauthWizardMachine = setup({
                 : context.proxy,
           }),
         },
-        SELECT_PROXY_AUTO: [
-          {
-            guard: "canAutoConfigure",
-            target: "proxy.registering",
-            actions: assign({
-              proxy: ({ context }) =>
-                context.discovered
-                  ? {
-                      ...context.proxy,
-                      ...proxyFieldsFromDiscovered(context.discovered),
-                      prefilled: true,
-                    }
-                  : context.proxy,
-              autoRegistering: () => true,
-              error: () => null,
-            }),
-          },
-          {
-            // Discovered metadata is incomplete (missing registration_endpoint,
-            // auth/token endpoints, or scopes). Drop into the manual proxy
-            // form prefilled with whatever discovery did surface so the user
-            // can fill in the gaps.
-            target: "proxy.metadata",
-            actions: assign({
-              proxy: ({ context }) =>
-                context.discovered
-                  ? {
-                      ...context.proxy,
-                      ...proxyFieldsFromDiscovered(context.discovered),
-                      prefilled: true,
-                    }
-                  : context.proxy,
-            }),
-          },
-        ],
+        SELECT_PROXY_AUTO: {
+          guard: "canAutoConfigure",
+          target: "proxy.registering",
+          actions: assign({
+            proxy: ({ context }) =>
+              context.discovered
+                ? {
+                    ...context.proxy,
+                    ...proxyFieldsFromDiscovered(context.discovered),
+                    prefilled: true,
+                  }
+                : context.proxy,
+            autoRegistering: () => true,
+            error: () => null,
+          }),
+        },
       },
     },
 
