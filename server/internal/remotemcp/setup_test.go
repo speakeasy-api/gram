@@ -83,7 +83,10 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	sessionsPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 
-	servicePolicy := guardian.NewDefaultPolicy(tracerProvider).WithResolver(newRemoteMCPMockResolver())
+	servicePolicy := guardian.NewDefaultPolicy(
+		tracerProvider,
+		guardian.WithResolver(newRemoteMCPMockResolver()),
+	)
 
 	conn, err := infra.CloneTestDatabase(t, "testdb")
 	require.NoError(t, err)

@@ -543,7 +543,10 @@ func TestPolicy_ValidateHost_HostnameResolvesToBlockedIP(t *testing.T) {
 			return []net.IP{net.ParseIP("10.0.0.1")}, nil
 		},
 	})
-	policy := guardian.NewDefaultPolicy(testenv.NewTracerProvider(t)).WithResolver(mock)
+	policy := guardian.NewDefaultPolicy(
+		testenv.NewTracerProvider(t),
+		guardian.WithResolver(mock),
+	)
 	err := policy.ValidateHost(t.Context(), "internal.example.com")
 	require.Error(t, err)
 	require.ErrorIs(t, err, guardian.ErrBlockedIP)
@@ -556,7 +559,10 @@ func TestPolicy_ValidateHost_HostnameResolvesToAllowedIP(t *testing.T) {
 			return []net.IP{net.ParseIP("1.2.3.4")}, nil
 		},
 	})
-	policy := guardian.NewDefaultPolicy(testenv.NewTracerProvider(t)).WithResolver(mock)
+	policy := guardian.NewDefaultPolicy(
+		testenv.NewTracerProvider(t),
+		guardian.WithResolver(mock),
+	)
 	err := policy.ValidateHost(t.Context(), "example.com")
 	require.NoError(t, err)
 }
@@ -568,7 +574,11 @@ func TestPolicy_ValidateHost_HostnameResolvesToMixedAddressesWithOneBlocked(t *t
 			return []net.IP{net.ParseIP("1.2.3.4"), net.ParseIP("127.0.0.1")}, nil
 		},
 	})
-	policy := guardian.NewDefaultPolicy(testenv.NewTracerProvider(t)).WithResolver(mock)
+	policy := guardian.NewDefaultPolicy(
+		testenv.NewTracerProvider(t),
+		guardian.WithResolver(mock),
+	)
+
 	err := policy.ValidateHost(t.Context(), "split.example.com")
 	require.Error(t, err)
 	require.ErrorIs(t, err, guardian.ErrBlockedIP)
@@ -582,7 +592,10 @@ func TestPolicy_ValidateHost_HostnameResolutionError(t *testing.T) {
 			return nil, resolveErr
 		},
 	})
-	policy := guardian.NewDefaultPolicy(testenv.NewTracerProvider(t)).WithResolver(mock)
+	policy := guardian.NewDefaultPolicy(
+		testenv.NewTracerProvider(t),
+		guardian.WithResolver(mock),
+	)
 	err := policy.ValidateHost(t.Context(), "broken.example.com")
 	require.Error(t, err)
 	require.ErrorIs(t, err, guardian.ErrBadHost)
@@ -596,7 +609,10 @@ func TestPolicy_ValidateHost_HostnameResolvesToNoAddresses(t *testing.T) {
 			return nil, nil
 		},
 	})
-	policy := guardian.NewDefaultPolicy(testenv.NewTracerProvider(t)).WithResolver(mock)
+	policy := guardian.NewDefaultPolicy(
+		testenv.NewTracerProvider(t),
+		guardian.WithResolver(mock),
+	)
 	err := policy.ValidateHost(t.Context(), "empty.example.com")
 	require.Error(t, err)
 	require.ErrorIs(t, err, guardian.ErrBadHost)

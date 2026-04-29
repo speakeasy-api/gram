@@ -142,33 +142,42 @@ func WithRetryConfig(config *RetryConfig) func(*htttpClientOptions) {
 	}
 }
 
-func WithResolver(resolver *net.Resolver) func(*htttpClientOptions) {
-	return func(o *htttpClientOptions) {
-		o.resolver = resolver
-	}
-}
-
 type Policy struct {
 	tracerProvider    trace.TracerProvider
 	blockedCIDRBlocks []*net.IPNet
 	resolver          dns.Resolver
 }
 
+// WithResolver is a functional option that sets the Policy's resolver.
+// This is intended for tests that need to inject a [dns.MockResolver]; production
+// code should use the default resolver supplied by the constructor.
+func WithResolver(resolver dns.Resolver) func(*Policy) {
+	return func(p *Policy) {
+		p.resolver = resolver
+	}
+}
+
 // NewDefaultPolicy creates a new Policy that blocks common private and reserved
 // IP ranges.
-func NewDefaultPolicy(tracerProvider trace.TracerProvider) *Policy {
-	return &Policy{
+func NewDefaultPolicy(tracerProvider trace.TracerProvider, options ...func(*Policy)) *Policy {
+	policy := &Policy{
 		tracerProvider:    tracerProvider,
 		blockedCIDRBlocks: defaultBlockedCIDRBlocks,
 		resolver:          dns.NewNetResolver(),
 	}
+
+	for _, option := range options {
+		option(policy)
+	}
+
+	return policy
 }
 
 // NewUnsafePolicy creates a new Policy with the provided disallowed CIDR blocks.
 // It returns an error if any of the CIDR blocks cannot be parsed.
 // Use NewDefaultPolicy for a safe default that blocks common private and
 // reserved IP ranges.
-func NewUnsafePolicy(tracerProvider trace.TracerProvider, disallowedCIDRBlocks []string) (*Policy, error) {
+func NewUnsafePolicy(tracerProvider trace.TracerProvider, disallowedCIDRBlocks []string, options ...func(*Policy)) (*Policy, error) {
 	var disallowedBlocks []*net.IPNet
 	for _, cidr := range disallowedCIDRBlocks {
 		block, err := parseCIDR(cidr)
@@ -178,20 +187,17 @@ func NewUnsafePolicy(tracerProvider trace.TracerProvider, disallowedCIDRBlocks [
 		disallowedBlocks = append(disallowedBlocks, block)
 	}
 
-	return &Policy{
+	policy := &Policy{
 		tracerProvider:    tracerProvider,
 		blockedCIDRBlocks: disallowedBlocks,
 		resolver:          dns.NewNetResolver(),
-	}, nil
-}
+	}
 
-// WithResolver mutates the Policy in place to replace its resolver and
-// returns the receiver for chaining. Intended for tests that need to inject a
-// [dns.MockResolver]; production code should use the resolver supplied by the
-// constructor.
-func (p *Policy) WithResolver(resolver dns.Resolver) *Policy {
-	p.resolver = resolver
-	return p
+	for _, option := range options {
+		option(policy)
+	}
+
+	return policy, nil
 }
 
 // PooledClient returns an [http.Client] backed by a pooled transport that
