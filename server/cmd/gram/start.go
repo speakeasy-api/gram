@@ -72,6 +72,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/memory"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
+	"github.com/speakeasy-api/gram/server/internal/nlpolicies"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oauth"
 	"github.com/speakeasy-api/gram/server/internal/organizations"
@@ -1035,6 +1036,9 @@ func newStartCommand() *cli.Command {
 			riskService := risk.NewService(logger, tracerProvider, db, sessionManager, authzEngine, riskSignaler, completionsClient, shadowMCPClient, auditLogger, cache.NewRedisCacheAdapter(redisClient), c.String("pi-classifier-url") != "")
 			chatWriter.AddObserver(riskService)
 			risk.Attach(mux, riskService)
+
+			nlPoliciesService := nlpolicies.NewService(logger)
+			nlpolicies.Attach(mux, nlPoliciesService)
 
 			slack.Attach(mux, slack.NewService(logger, tracerProvider, db, sessionManager, encryptionClient, redisClient, slackClient, temporalEnv, slack.Configurations{
 				GramServerURL:     c.String("server-url"),
