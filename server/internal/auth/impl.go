@@ -417,9 +417,12 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 		}
 
 		allowedIDs := projectIDs
-		// Admins impersonating a customer org won't have grants resolved
-		// via the normal RBAC path (no organization_users row). Skip
-		// filtering so they see all projects, mirroring ListGrants.
+		// Admins impersonating a customer org have the customer org in
+		// userInfo.Organizations (Speakeasy returns all orgs for admins),
+		// so the loop reaches it and org.ID == activeOrg is true. However
+		// the admin has no organization_users row in Gram's DB, which
+		// means authz.Filter has no grants to resolve. Skip filtering so
+		// they see all projects — mirrors ListGrants (PR #2502).
 		_, hasAdminOverride := contextvalues.GetAdminOverrideFromContext(ctx)
 		skipFilter := userInfo.Admin && hasAdminOverride
 
