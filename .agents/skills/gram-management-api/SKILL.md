@@ -66,11 +66,15 @@ The design, implementation, tests, and per-service generated code for every mana
 
 **SQLc.** Per-service queries live in `server/internal/<svc>/queries.sql`. Every new service requires a stanza in `server/database/sqlc.yaml` pointing at its queries file and writing to `server/internal/<svc>/repo/`.
 
+**Resource URNs.** Every resource owned by the service gets a URN type under `server/internal/urn/<resource>.go` (template: `server/internal/urn/api_key.go`). URN types wrap `uuid.UUID` and give callers compile-time protection against mixing ids from different subjects. Audit event structs require them for subject identifier fields (see `gram-audit-logging`); other consumers can adopt them opportunistically.
+
 **Test layout.** Tests live in `package <svc>_test` (black-box). A single `setup_test.go` per service defines `TestMain` (calling `testenv.Launch`) and a `newTestService(t)` factory that clones a fresh test database, seeds an auth context, and returns the live `*Service`. Package-local helpers typically include `withExactAccessGrants` for scope setup and `requireOopsCode` for error-shape assertions. One `<method>_test.go` per handler.
 
 ### Common code flows
 
 **Handler skeleton.** Inside each method: extract `authCtx` from context → `s.access.Require(...)` → validate inputs → repo work → return `mv.Build<Subject>View(...)`. Handlers never return `repo` types directly. For mutation handlers, wrap the repo work in a transaction — `s.db.Begin(ctx)` → `defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })` → repo writes → `audit.Log*` → `dbtx.Commit(ctx)` — so the audit row and the state it describes commit atomically. Read handlers typically don't need a transaction or audit call.
+
+**Cascading soft-deletes.** When a delete handler tombstones a parent row whose children reference it, the children have to be soft-deleted in the same handler. `ON DELETE CASCADE` foreign keys only fire on hard deletes, so a soft-deleted parent otherwise leaves orphan children that still resolve in the active set and point at a tombstone. Run the child cleanup inside the same `dbtx` as the parent write so the cascade is atomic with it. Scope the cleanup query by both the parent id and `project_id` (per the `postgresql` skill) and filter on `deleted IS FALSE` so re-deletes are no-ops. If the child subject is independently audited, make the cleanup query `:many` with `RETURNING *` and emit one `audit.Log<Verb>` per affected row before the parent's audit event — see "How to audit a cascading delete of child resources" in `gram-audit-logging`. Tests should both assert no active children remain pointing at the deleted parent and assert the expected child audit-event delta.
 
 **`Attach` wiring.** `func Attach(mux goahttp.Muxer, service *Service)` constructs `gen.NewEndpoints(service)`, layers the `middleware.MapErrors()` and `middleware.TraceMethods(tracer)` middleware, and mounts the endpoints via `srv.Mount(mux, srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil))`.
 
@@ -140,16 +144,17 @@ The server's design authors the contract; clients receive it through generated O
 1. Add a blank import for the new package in `server/design/gram.go` (alphabetised).
 2. Create `server/design/<svc>/design.go` with the service declaration, `Security(...)` calls, `shared.DeclareErrorResponses()`, and the initial set of methods.
 3. Add a stanza in `server/database/sqlc.yaml` pointing at `server/internal/<svc>/queries.sql` and writing to `server/internal/<svc>/repo`.
-4. Author `server/internal/<svc>/queries.sql`.
-5. Run `mise run gen:goa-server` and `mise run gen:sqlc-server` (or `mise run gen:server` which runs both).
-6. Implement `server/internal/<svc>/impl.go`: `Service` struct, compile-time assertions, `NewService`, `Attach`, `APIKeyAuth` (when `ByKey` is advertised), and each method handler.
-7. Add view builders in `server/internal/mv/<svc>.go`.
-8. Wire the service into `server/cmd/gram/start.go` with `<svc>.Attach(mux, <svc>.NewService(...))` near the other attachments.
-9. Add `server/internal/<svc>/setup_test.go` plus one `<method>_test.go` per handler.
-10. Add any new RBAC scopes (`gram-rbac`) and audit subjects (`gram-audit-logging`) the service needs.
-11. Run `mise run lint:server`, `mise run test:server`, and `mise run gen:sdk`.
-12. Add `.changeset/<kebab-slug>.md` with `"server": minor`.
-13. Run `mise run go:tidy` if imports changed.
+4. Add `server/internal/urn/<resource>.go` (and a test file) for each new resource the service owns, following the `server/internal/urn/api_key.go` template.
+5. Author `server/internal/<svc>/queries.sql`.
+6. Run `mise run gen:goa-server` and `mise run gen:sqlc-server` (or `mise run gen:server` which runs both).
+7. Implement `server/internal/<svc>/impl.go`: `Service` struct, compile-time assertions, `NewService`, `Attach`, `APIKeyAuth` (when `ByKey` is advertised), and each method handler.
+8. Add view builders in `server/internal/mv/<svc>.go`.
+9. Wire the service into `server/cmd/gram/start.go` with `<svc>.Attach(mux, <svc>.NewService(...))` near the other attachments.
+10. Add `server/internal/<svc>/setup_test.go` plus one `<method>_test.go` per handler.
+11. Add any new RBAC scopes (`gram-rbac`) and audit subjects (`gram-audit-logging`) the service needs.
+12. Run `mise run lint:server`, `mise run test:server`, and `mise run gen:sdk`.
+13. Add `.changeset/<kebab-slug>.md` with `"server": minor`.
+14. Run `mise run go:tidy` if imports changed.
 
 ### How to change a payload or result type
 
