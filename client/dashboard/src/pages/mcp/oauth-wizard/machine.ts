@@ -464,16 +464,33 @@ export const oauthWizardMachine = setup({
                     envSlug: ({ event }) => event.output.envSlug,
                   }),
                 },
-                onError: {
-                  target: "#oauthWizard.proxy.credentials",
-                  actions: assign({
-                    error: ({ event }) =>
-                      errorMessage(
-                        event.error,
-                        "Failed to create environment for OAuth credentials",
-                      ),
-                  }),
-                },
+                onError: [
+                  {
+                    // Auto-configure path: never drop the user back into the
+                    // manual credentials form — they didn't ask to type
+                    // anything. Surface the failure on the same screen used
+                    // by DCR errors and post-rollback proxy-creation errors.
+                    guard: ({ context }) => context.autoRegistering,
+                    target: "#oauthWizard.proxy.autoRegisterFailed",
+                    actions: assign({
+                      error: ({ event }) =>
+                        errorMessage(
+                          event.error,
+                          "Failed to create environment for OAuth credentials",
+                        ),
+                    }),
+                  },
+                  {
+                    target: "#oauthWizard.proxy.credentials",
+                    actions: assign({
+                      error: ({ event }) =>
+                        errorMessage(
+                          event.error,
+                          "Failed to create environment for OAuth credentials",
+                        ),
+                    }),
+                  },
+                ],
               },
             },
             creatingProxy: {

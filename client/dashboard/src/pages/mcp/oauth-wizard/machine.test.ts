@@ -99,6 +99,18 @@ function servicesWithProxyFailure() {
   };
 }
 
+function servicesWithEnvFailure() {
+  return {
+    ...happyServices(),
+    createEnvironment: fromPromise<
+      CreateEnvironmentOutput,
+      CreateEnvironmentInput
+    >(async () => {
+      throw new Error("env boom");
+    }),
+  };
+}
+
 function servicesWithDoubleFailure() {
   return {
     ...happyServices(),
@@ -766,6 +778,19 @@ describe("oauthWizardMachine — auto-configure from path selection", () => {
     const snap = actor.getSnapshot();
     expect(snap.context.error).toContain("proxy boom");
     expect(snap.context.envSlug).toBeNull();
+  });
+
+  it("createEnvironment failure lands on autoRegisterFailed (does not drop into manual creds form)", async () => {
+    const actor = makeActor(inputWithDiscovered, servicesWithEnvFailure());
+    actor.start();
+    actor.send({ type: "SELECT_PROXY_AUTO" });
+
+    await waitFor(actor, (s) => s.matches({ proxy: "autoRegisterFailed" }), {
+      timeout: 1000,
+    });
+
+    const snap = actor.getSnapshot();
+    expect(snap.context.error).toContain("env boom");
   });
 
   it("SELECT_PROXY_AUTO falls back to proxy.metadata when no discovered metadata", () => {
