@@ -25,7 +25,8 @@ type AssistantCoordinatorWorkflowInput struct {
 }
 
 type AssistantThreadWorkflowInput struct {
-	ThreadID string `json:"thread_id"`
+	ThreadID  string `json:"thread_id"`
+	ProjectID string `json:"project_id"`
 }
 
 // assistantCoordinatorMaxIterations bounds how many kicks a single workflow
@@ -61,7 +62,8 @@ func AssistantCoordinatorWorkflow(ctx workflow.Context, input AssistantCoordinat
 		}
 		for _, threadID := range admitted.ThreadIDs {
 			if err := workflow.ExecuteActivity(ctx, a.SignalAssistantThread, activities.SignalAssistantThreadInput{
-				ThreadID: threadID,
+				ThreadID:  threadID,
+				ProjectID: admitted.ProjectID,
 			}).Get(ctx, nil); err != nil {
 				return err
 			}
@@ -125,7 +127,8 @@ func AssistantThreadWorkflow(ctx workflow.Context, input AssistantThreadWorkflow
 	for {
 		var result activities.ProcessAssistantThreadResult
 		if err := workflow.ExecuteActivity(ctx, a.ProcessAssistantThread, activities.ProcessAssistantThreadInput{
-			ThreadID: input.ThreadID,
+			ThreadID:  input.ThreadID,
+			ProjectID: input.ProjectID,
 		}).Get(ctx, &result); err != nil {
 			return err
 		}
@@ -164,7 +167,8 @@ func AssistantThreadWorkflow(ctx workflow.Context, input AssistantThreadWorkflow
 		}
 
 		if err := workflow.ExecuteActivity(ctx, a.ExpireAssistantThreadRuntime, activities.ExpireAssistantThreadRuntimeInput{
-			ThreadID: input.ThreadID,
+			ThreadID:  input.ThreadID,
+			ProjectID: input.ProjectID,
 		}).Get(ctx, nil); err != nil {
 			return err
 		}
@@ -210,7 +214,7 @@ func (s *AssistantWorkflowSignaler) SignalCoordinator(ctx context.Context, assis
 	return nil
 }
 
-func (s *AssistantWorkflowSignaler) SignalThread(ctx context.Context, threadID uuid.UUID) error {
+func (s *AssistantWorkflowSignaler) SignalThread(ctx context.Context, threadID, projectID uuid.UUID) error {
 	wfID := assistantThreadWorkflowID(threadID)
 	_, err := s.TemporalEnv.Client().SignalWithStartWorkflow(
 		ctx,
@@ -223,7 +227,7 @@ func (s *AssistantWorkflowSignaler) SignalThread(ctx context.Context, threadID u
 			WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 		},
 		AssistantThreadWorkflow,
-		AssistantThreadWorkflowInput{ThreadID: threadID.String()},
+		AssistantThreadWorkflowInput{ThreadID: threadID.String(), ProjectID: projectID.String()},
 	)
 	if err != nil {
 		return fmt.Errorf("signal-with-start assistant thread workflow: %w", err)

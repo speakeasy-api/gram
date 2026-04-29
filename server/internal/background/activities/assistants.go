@@ -17,10 +17,12 @@ type AdmitAssistantThreadsInput struct {
 
 type AdmitAssistantThreadsResult struct {
 	ThreadIDs []string
+	ProjectID string
 }
 
 type ProcessAssistantThreadInput struct {
-	ThreadID string
+	ThreadID  string
+	ProjectID string
 }
 
 type ProcessAssistantThreadResult struct {
@@ -32,7 +34,8 @@ type ProcessAssistantThreadResult struct {
 }
 
 type ExpireAssistantThreadRuntimeInput struct {
-	ThreadID string
+	ThreadID  string
+	ProjectID string
 }
 
 type SignalAssistantCoordinatorInput struct {
@@ -40,7 +43,8 @@ type SignalAssistantCoordinatorInput struct {
 }
 
 type SignalAssistantThreadInput struct {
-	ThreadID string
+	ThreadID  string
+	ProjectID string
 }
 
 type AdmitAssistantThreads struct {
@@ -102,12 +106,15 @@ func (a *AdmitAssistantThreads) Do(ctx context.Context, input AdmitAssistantThre
 	if err != nil {
 		return nil, fmt.Errorf("parse assistant id: %w", err)
 	}
-	threadIDs, err := a.core.AdmitPendingThreads(ctx, assistantID)
+	admitted, err := a.core.AdmitPendingThreads(ctx, assistantID)
 	if err != nil {
 		return nil, fmt.Errorf("admit assistant threads: %w", err)
 	}
-	result := &AdmitAssistantThreadsResult{ThreadIDs: make([]string, 0, len(threadIDs))}
-	for _, threadID := range threadIDs {
+	result := &AdmitAssistantThreadsResult{
+		ProjectID: admitted.ProjectID.String(),
+		ThreadIDs: make([]string, 0, len(admitted.ThreadIDs)),
+	}
+	for _, threadID := range admitted.ThreadIDs {
 		result.ThreadIDs = append(result.ThreadIDs, threadID.String())
 	}
 	return result, nil
@@ -117,6 +124,10 @@ func (a *ProcessAssistantThread) Do(ctx context.Context, input ProcessAssistantT
 	threadID, err := uuid.Parse(input.ThreadID)
 	if err != nil {
 		return nil, fmt.Errorf("parse thread id: %w", err)
+	}
+	projectID, err := uuid.Parse(input.ProjectID)
+	if err != nil {
+		return nil, fmt.Errorf("parse project id: %w", err)
 	}
 
 	// Heartbeat periodically so a worker crash is detected within HeartbeatTimeout
@@ -136,7 +147,7 @@ func (a *ProcessAssistantThread) Do(ctx context.Context, input ProcessAssistantT
 		}
 	}()
 
-	result, err := a.core.ProcessThreadEventsByThreadID(ctx, threadID)
+	result, err := a.core.ProcessThreadEventsByThreadID(ctx, projectID, threadID)
 	if err != nil {
 		return nil, fmt.Errorf("process assistant thread: %w", err)
 	}
@@ -174,7 +185,11 @@ func (a *ExpireAssistantThreadRuntime) Do(ctx context.Context, input ExpireAssis
 	if err != nil {
 		return fmt.Errorf("parse thread id: %w", err)
 	}
-	if err := a.core.ExpireThreadRuntime(ctx, threadID); err != nil {
+	projectID, err := uuid.Parse(input.ProjectID)
+	if err != nil {
+		return fmt.Errorf("parse project id: %w", err)
+	}
+	if err := a.core.ExpireThreadRuntime(ctx, projectID, threadID); err != nil {
 		return fmt.Errorf("expire assistant thread runtime: %w", err)
 	}
 	return nil
@@ -196,7 +211,11 @@ func (a *SignalAssistantThread) Do(ctx context.Context, input SignalAssistantThr
 	if err != nil {
 		return fmt.Errorf("parse thread id: %w", err)
 	}
-	if err := a.signaler.SignalThread(ctx, threadID); err != nil {
+	projectID, err := uuid.Parse(input.ProjectID)
+	if err != nil {
+		return fmt.Errorf("parse project id: %w", err)
+	}
+	if err := a.signaler.SignalThread(ctx, threadID, projectID); err != nil {
 		return fmt.Errorf("signal assistant thread: %w", err)
 	}
 	return nil

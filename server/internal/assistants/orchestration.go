@@ -8,5 +8,5 @@ import (
 
 type WorkflowSignaler interface {
 	SignalCoordinator(ctx context.Context, assistantID uuid.UUID) error
-	SignalThread(ctx context.Context, threadID uuid.UUID) error
+	SignalThread(ctx context.Context, threadID, projectID uuid.UUID) error
 }
