@@ -9,6 +9,11 @@ import { Icon } from "@speakeasy-api/moonshine";
 import { useQuery } from "@tanstack/react-query";
 import { formatNanoTimestamp, formatLogBody } from "./utils";
 
+// Standalone trigger logs (no correlation_id, no event_id) are grouped under
+// `trigger-log:<log.id>` in use-attribute-logs-query.ts. The originating log
+// is already rendered as the group header, so there are no sub-spans to fetch.
+const TRIGGER_LOG_PREFIX = "trigger-log:";
+
 function buildTraceFilters(
   traceId: string,
 ): Pick<SearchLogsPayload, "filter" | "filters"> {
@@ -33,9 +38,6 @@ function buildTraceFilters(
         },
       ],
     };
-  }
-  if (traceId.startsWith("trigger-log:")) {
-    return { filters: [] };
   }
   return { filter: { traceId } };
 }
@@ -89,6 +91,7 @@ export function TraceLogsList({
   parentTimestamp,
 }: TraceLogsListProps) {
   const client = useGramContext();
+  const isStandaloneTriggerLog = traceId.startsWith(TRIGGER_LOG_PREFIX);
 
   const { data, isPending, error } = useQuery({
     queryKey: ["trace-logs", traceId],
@@ -102,11 +105,22 @@ export function TraceLogsList({
           },
         }),
       ),
-    enabled: isExpanded,
+    enabled: isExpanded && !isStandaloneTriggerLog,
   });
 
   if (!isExpanded) {
     return null;
+  }
+
+  if (isStandaloneTriggerLog) {
+    return (
+      <div className="text-muted-foreground bg-muted/30 flex items-center gap-3 px-5 py-2">
+        <div className="w-1.5 shrink-0" />
+        <div className="w-[150px] shrink-0" />
+        <div className="w-5 shrink-0" />
+        <span className="text-sm">No additional logs in this trace</span>
+      </div>
+    );
   }
 
   if (isPending) {

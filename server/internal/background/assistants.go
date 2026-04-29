@@ -35,6 +35,13 @@ type AssistantThreadWorkflowInput struct {
 // while keeping restart churn negligible.
 const assistantCoordinatorMaxIterations = 500
 
+// assistantThreadMaxIterations bounds the thread workflow's process->wait->kick
+// loop before ContinueAsNew. Each iteration adds ~6-8 events; the warm-TTL
+// expiry path normally exits the workflow before this caps, but a thread that
+// keeps receiving kicks before warm expiry would otherwise grow history
+// unbounded toward Temporal's ~51.2k limit.
+const assistantThreadMaxIterations = 500
+
 // assistantCoordinatorIdleTimeout lets a coordinator exit when nothing has
 // signalled it in a while. Prevents the workflow index from growing
 // without bound as assistants get created and abandoned. A fresh kick
@@ -124,7 +131,7 @@ func AssistantThreadWorkflow(ctx workflow.Context, input AssistantThreadWorkflow
 
 	signalCh := workflow.GetSignalChannel(ctx, SignalAssistantThreadKick)
 
-	for {
+	for range assistantThreadMaxIterations {
 		var result activities.ProcessAssistantThreadResult
 		if err := workflow.ExecuteActivity(ctx, a.ProcessAssistantThread, activities.ProcessAssistantThreadInput{
 			ThreadID:  input.ThreadID,
@@ -179,6 +186,8 @@ func AssistantThreadWorkflow(ctx workflow.Context, input AssistantThreadWorkflow
 		}
 		return nil
 	}
+
+	return workflow.NewContinueAsNewError(ctx, AssistantThreadWorkflow, input)
 }
 
 func assistantCoordinatorWorkflowID(assistantID uuid.UUID) string {
