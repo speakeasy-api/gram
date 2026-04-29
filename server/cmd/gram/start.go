@@ -619,8 +619,10 @@ func newStartCommand() *cli.Command {
 				hooksCache = hooks.NewLocalSessionCache(hooksCache, db)
 			}
 
-			captureStrategy, shutdown := chat.NewChatMessageCaptureStrategy(logger, db, assetStorage)
-			shutdownFuncs = append(shutdownFuncs, shutdown)
+			chatWriter, chatWriterShutdown := chat.NewChatMessageWriter(logger, db, assetStorage)
+			shutdownFuncs = append(shutdownFuncs, chatWriterShutdown)
+
+			captureStrategy := chat.NewChatMessageCaptureStrategy(logger, db, chatWriter)
 
 			completionsClient := openrouter.NewUnifiedClient(
 				logger,
@@ -729,7 +731,7 @@ func newStartCommand() *cli.Command {
 			about.Attach(mux, about.NewService(logger, tracerProvider))
 			access.Attach(mux, access.NewService(logger, tracerProvider, db, sessionManager, roleClient, authzEngine, productFeatures))
 			assistants.Attach(mux, assistantsSvc)
-			hooks.Attach(mux, hooks.NewService(logger, db, tracerProvider, telemLogger, sessionManager, hooksCache, chatClient, temporalEnv, authzEngine, productFeatures, &background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv}))
+			hooks.Attach(mux, hooks.NewService(logger, db, tracerProvider, telemLogger, sessionManager, hooksCache, chatClient, temporalEnv, authzEngine, productFeatures, &background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv}, chatWriter))
 			audit.Attach(mux, audit.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
 			auth.Attach(mux, auth.NewService(
 				logger,
@@ -800,7 +802,7 @@ func newStartCommand() *cli.Command {
 			)
 			shutdownFuncs = append(shutdownFuncs, riskSignaler.Shutdown)
 			riskService := risk.NewService(logger, tracerProvider, db, sessionManager, authzEngine, riskSignaler)
-			captureStrategy.AddObserver(riskService)
+			chatWriter.AddObserver(riskService)
 			risk.Attach(mux, riskService)
 
 			slack.Attach(mux, slack.NewService(logger, tracerProvider, db, sessionManager, encryptionClient, redisClient, slackClient, temporalEnv, slack.Configurations{
