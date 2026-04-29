@@ -319,15 +319,13 @@ describe("checkProxyMeta", () => {
     });
   });
 
-  it("rejects empty scopes", () => {
-    expect(checkProxyMeta(withProxy({ scopes: "" }))).toMatchObject({
-      ok: false,
-    });
+  it("accepts empty scopes (server allows zero-scope proxies)", () => {
+    expect(checkProxyMeta(withProxy({ scopes: "" }))).toEqual({ ok: true });
   });
 
-  it("rejects scopes containing only whitespace", () => {
-    expect(checkProxyMeta(withProxy({ scopes: " , , " }))).toMatchObject({
-      ok: false,
+  it("accepts scopes containing only whitespace", () => {
+    expect(checkProxyMeta(withProxy({ scopes: " , , " }))).toEqual({
+      ok: true,
     });
   });
 });
@@ -358,7 +356,7 @@ describe("guard boolean wrappers", () => {
 
   it("validProxyMeta mirrors checkProxyMeta", () => {
     expect(validProxyMeta(withProxy())).toBe(true);
-    expect(validProxyMeta(withProxy({ scopes: "" }))).toBe(false);
+    expect(validProxyMeta(withProxy({ slug: "" }))).toBe(false);
   });
 
   it("validCreds mirrors checkCreds", () => {
@@ -697,6 +695,125 @@ describe("oauthWizardMachine — auto-register chooser", () => {
     expect(actor.getSnapshot().matches({ proxy: "autoRegisterFailed" })).toBe(
       true,
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Machine — zero-click auto-configure from path selection
+// ---------------------------------------------------------------------------
+
+describe("oauthWizardMachine — auto-configure from path selection", () => {
+  const inputWithDiscovered: Input = {
+    ...baseInput,
+    discovered: DISCOVERED_2_1,
+  };
+
+  it("SELECT_PROXY_AUTO transitions to proxy.registering with prefilled proxy and autoRegistering=true", () => {
+    const actor = makeActor(inputWithDiscovered);
+    actor.start();
+    actor.send({ type: "SELECT_PROXY_AUTO" });
+    const snap = actor.getSnapshot();
+    expect(snap.matches({ proxy: "registering" })).toBe(true);
+    expect(snap.context.autoRegistering).toBe(true);
+    expect(snap.context.proxy.slug).toBe("discovered-slug");
+    expect(snap.context.proxy.authorizationEndpoint).toBe(
+      VALID_PROXY_METADATA.authorization_endpoint,
+    );
+    expect(snap.context.proxy.tokenEndpoint).toBe(
+      VALID_PROXY_METADATA.token_endpoint,
+    );
+    expect(snap.context.proxy.scopes).toBe("read, write");
+    expect(snap.context.proxy.prefilled).toBe(true);
+  });
+
+  it("walks pathSelection → registering → submitting → result.success without touching metadata or autoRegisterChoice", async () => {
+    const actor = makeActor(inputWithDiscovered);
+    actor.start();
+    actor.send({ type: "SELECT_PROXY_AUTO" });
+
+    await waitFor(actor, (s) => s.matches({ result: "success" }), {
+      timeout: 1000,
+    });
+
+    const snap = actor.getSnapshot();
+    expect(snap.context.proxy.clientId).toBe("auto-cid");
+    expect(snap.context.proxy.clientSecret).toBe("auto-secret");
+    expect(snap.context.envSlug).toBe("env-new");
+    expect(snap.context.result?.success).toBe(true);
+  });
+
+  it("registerClient failure routes to autoRegisterFailed", async () => {
+    const actor = makeActor(inputWithDiscovered, servicesWithRegisterFailure());
+    actor.start();
+    actor.send({ type: "SELECT_PROXY_AUTO" });
+
+    await waitFor(actor, (s) => s.matches({ proxy: "autoRegisterFailed" }), {
+      timeout: 1000,
+    });
+
+    expect(actor.getSnapshot().context.error).toContain("DCR boom");
+  });
+
+  it("addOAuthProxy failure rolls back env and lands on autoRegisterFailed (does not drop into manual creds form)", async () => {
+    const actor = makeActor(inputWithDiscovered, servicesWithProxyFailure());
+    actor.start();
+    actor.send({ type: "SELECT_PROXY_AUTO" });
+
+    await waitFor(actor, (s) => s.matches({ proxy: "autoRegisterFailed" }), {
+      timeout: 1000,
+    });
+
+    const snap = actor.getSnapshot();
+    expect(snap.context.error).toContain("proxy boom");
+    expect(snap.context.envSlug).toBeNull();
+  });
+
+  it("SELECT_PROXY_AUTO falls back to proxy.metadata when no discovered metadata", () => {
+    const actor = makeActor(baseInput);
+    actor.start();
+    actor.send({ type: "SELECT_PROXY_AUTO" });
+    const snap = actor.getSnapshot();
+    expect(snap.matches({ proxy: "metadata" })).toBe(true);
+    expect(snap.context.autoRegistering).toBe(false);
+  });
+
+  it("SELECT_PROXY_AUTO falls back to proxy.metadata when registration_endpoint missing", () => {
+    const { registration_endpoint: _omit, ...metadataWithoutRegistration } =
+      VALID_PROXY_METADATA;
+    const actor = makeActor({
+      ...baseInput,
+      discovered: {
+        ...DISCOVERED_2_1,
+        metadata: metadataWithoutRegistration,
+      },
+    });
+    actor.start();
+    actor.send({ type: "SELECT_PROXY_AUTO" });
+    const snap = actor.getSnapshot();
+    expect(snap.matches({ proxy: "metadata" })).toBe(true);
+    expect(snap.context.proxy.authorizationEndpoint).toBe(
+      VALID_PROXY_METADATA.authorization_endpoint,
+    );
+    expect(snap.context.proxy.prefilled).toBe(true);
+    expect(snap.context.autoRegistering).toBe(false);
+  });
+
+  it("SELECT_PROXY_AUTO proceeds to proxy.registering even when scopes_supported missing (scopes are optional)", () => {
+    const { scopes_supported: _omit, ...metadataWithoutScopes } =
+      VALID_PROXY_METADATA;
+    const actor = makeActor({
+      ...baseInput,
+      discovered: {
+        ...DISCOVERED_2_1,
+        metadata: metadataWithoutScopes,
+      },
+    });
+    actor.start();
+    actor.send({ type: "SELECT_PROXY_AUTO" });
+    const snap = actor.getSnapshot();
+    expect(snap.matches({ proxy: "registering" })).toBe(true);
+    expect(snap.context.autoRegistering).toBe(true);
+    expect(snap.context.proxy.scopes).toBe("");
   });
 });
 

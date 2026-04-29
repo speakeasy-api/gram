@@ -61,6 +61,7 @@ export type Input = {
 export type WizardEvent =
   | { type: "SELECT_EXTERNAL" }
   | { type: "SELECT_PROXY" }
+  | { type: "SELECT_PROXY_AUTO" }
   | { type: "APPLY_DISCOVERED" }
   | { type: "FIELD_EXTERNAL"; key: ExternalFormKey; value: string }
   | { type: "FIELD_PROXY"; key: ProxyFormKey; value: string }

@@ -1099,9 +1099,6 @@ func (s *Service) AddOAuthProxyServer(ctx context.Context, payload *gen.AddOAuth
 		if payload.OauthProxyServer.TokenEndpoint == nil || *payload.OauthProxyServer.TokenEndpoint == "" {
 			return nil, oops.E(oops.CodeBadRequest, nil, "token_endpoint is required for custom provider type").Log(ctx, s.logger)
 		}
-		if len(payload.OauthProxyServer.ScopesSupported) == 0 {
-			return nil, oops.E(oops.CodeBadRequest, nil, "scopes_supported is required for custom provider type").Log(ctx, s.logger)
-		}
 		if len(payload.OauthProxyServer.TokenEndpointAuthMethodsSupported) == 0 {
 			return nil, oops.E(oops.CodeBadRequest, nil, "token_endpoint_auth_methods_supported is required for custom provider type").Log(ctx, s.logger)
 		}

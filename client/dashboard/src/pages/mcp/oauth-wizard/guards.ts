@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { parseScopes, type Context } from "./machine-types";
+import { type Context } from "./machine-types";
 
 export type GuardResult = { ok: true } | { ok: false; reason: string };
 
@@ -74,9 +74,6 @@ export function checkProxyMeta(ctx: Context): GuardResult {
   }
   if (!ctx.proxy.tokenEndpoint.trim()) {
     return { ok: false, reason: "Token endpoint is required" };
-  }
-  if (parseScopes(ctx.proxy.scopes).length === 0) {
-    return { ok: false, reason: "At least one scope is required" };
   }
   return { ok: true };
 }

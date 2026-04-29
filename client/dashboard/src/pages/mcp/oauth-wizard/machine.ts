@@ -92,6 +92,17 @@ function discoveredAuthMethods(d: DiscoveredOAuth | null): string[] {
   return Array.isArray(v) ? (v as string[]) : [];
 }
 
+export function canAutoConfigureFromDiscovered(
+  d: DiscoveredOAuth | null,
+): boolean {
+  if (!d) return false;
+  if (discoveredRegistrationEndpoint(d) === null) return false;
+  const fields = proxyFieldsFromDiscovered(d);
+  // scopes_supported is optional — many MCP servers don't advertise scopes in
+  // their well-known doc. DCR and addOAuthProxy both accept empty scopes.
+  return Boolean(fields.authorizationEndpoint && fields.tokenEndpoint);
+}
+
 function placeholder<TInput, TOutput = void>(name: string) {
   return fromPromise<TOutput, TInput>(async () => {
     throw new Error(
@@ -126,6 +137,8 @@ export const oauthWizardMachine = setup({
     canAutoRegister: ({ context }) =>
       checkProxyMeta(context).ok &&
       discoveredRegistrationEndpoint(context.discovered) !== null,
+    canAutoConfigure: ({ context }) =>
+      canAutoConfigureFromDiscovered(context.discovered),
   },
   actions: {
     invalidateOnExternalSuccess: () => {},
@@ -163,6 +176,41 @@ export const oauthWizardMachine = setup({
                 : context.proxy,
           }),
         },
+        SELECT_PROXY_AUTO: [
+          {
+            guard: "canAutoConfigure",
+            target: "proxy.registering",
+            actions: assign({
+              proxy: ({ context }) =>
+                context.discovered
+                  ? {
+                      ...context.proxy,
+                      ...proxyFieldsFromDiscovered(context.discovered),
+                      prefilled: true,
+                    }
+                  : context.proxy,
+              autoRegistering: () => true,
+              error: () => null,
+            }),
+          },
+          {
+            // Discovered metadata is incomplete (missing registration_endpoint,
+            // auth/token endpoints, or scopes). Drop into the manual proxy
+            // form prefilled with whatever discovery did surface so the user
+            // can fill in the gaps.
+            target: "proxy.metadata",
+            actions: assign({
+              proxy: ({ context }) =>
+                context.discovered
+                  ? {
+                      ...context.proxy,
+                      ...proxyFieldsFromDiscovered(context.discovered),
+                      prefilled: true,
+                    }
+                  : context.proxy,
+            }),
+          },
+        ],
       },
     },
 
@@ -363,7 +411,7 @@ export const oauthWizardMachine = setup({
           },
         },
         autoRegisterFailed: {
-          meta: { title: "Couldn't Fetch Credentials" },
+          meta: { title: "OAuth Setup Failed" },
           type: "final",
         },
         credentials: {
@@ -473,10 +521,22 @@ export const oauthWizardMachine = setup({
                 input: ({ context }): DeleteEnvironmentInput => ({
                   envSlug: context.envSlug ?? "",
                 }),
-                onDone: {
-                  target: "#oauthWizard.proxy.credentials",
-                  actions: assign({ envSlug: () => null }),
-                },
+                onDone: [
+                  {
+                    // Auto-configure path: never drop the user back into the
+                    // manual credentials form — they didn't ask to type anything,
+                    // and DCR-fetched secrets aren't reusable here. Surface the
+                    // proxy-creation error on the same failure screen used by
+                    // DCR errors.
+                    guard: ({ context }) => context.autoRegistering,
+                    target: "#oauthWizard.proxy.autoRegisterFailed",
+                    actions: assign({ envSlug: () => null }),
+                  },
+                  {
+                    target: "#oauthWizard.proxy.credentials",
+                    actions: assign({ envSlug: () => null }),
+                  },
+                ],
                 onError: {
                   target: "#oauthWizard.proxy.fatalError",
                   actions: assign({
