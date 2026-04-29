@@ -153,11 +153,14 @@ func AssistantThreadWorkflow(ctx workflow.Context, input AssistantThreadWorkflow
 			return nil
 		}
 
-		warmUntil, err := time.Parse(time.RFC3339Nano, result.WarmUntil)
-		if err != nil {
-			return fmt.Errorf("parse assistant warm_until: %w", err)
+		var waitFor time.Duration
+		if result.WarmUntil != "" {
+			warmUntil, err := time.Parse(time.RFC3339Nano, result.WarmUntil)
+			if err != nil {
+				return fmt.Errorf("parse assistant warm_until: %w", err)
+			}
+			waitFor = max(warmUntil.Sub(workflow.Now(ctx).UTC()), 0)
 		}
-		waitFor := max(warmUntil.Sub(workflow.Now(ctx).UTC()), 0)
 
 		expired := false
 		selector := workflow.NewSelector(ctx)

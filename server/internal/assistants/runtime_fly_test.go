@@ -59,12 +59,16 @@ func TestFlyRuntimeBackendEnsureWarmReuse(t *testing.T) {
 	server := newTestAssistantRuntimeServer(t, true)
 	backend, apiClient, flapsClient := newTestFlyRuntimeBackend(t, server)
 
+	threadID := uuid.New()
 	apiClient.app = &fly.App{Name: "gram-asst-test"}
 	flapsClient.machine = &fly.Machine{
 		ID:         "machine-1",
 		State:      "started",
 		Region:     "iad",
 		InstanceID: "boot-1",
+		Config: &fly.MachineConfig{
+			Metadata: map[string]string{flyMachineMetadataThreadID: threadID.String()},
+		},
 	}
 
 	rawMetadata, err := json.Marshal(flyRuntimeMetadata{
@@ -77,7 +81,7 @@ func TestFlyRuntimeBackendEnsureWarmReuse(t *testing.T) {
 	require.NoError(t, err)
 
 	result, err := backend.Ensure(context.Background(), assistantRuntimeRecord{
-		AssistantThreadID:   uuid.New(),
+		AssistantThreadID:   threadID,
 		AssistantID:         uuid.New(),
 		ProjectID:           uuid.New(),
 		Backend:             runtimeBackendFlyIO,
@@ -94,12 +98,16 @@ func TestFlyRuntimeBackendEnsureMachineUnconfigured(t *testing.T) {
 	server := newTestAssistantRuntimeServer(t, false)
 	backend, apiClient, flapsClient := newTestFlyRuntimeBackend(t, server)
 
+	threadID := uuid.New()
 	apiClient.app = &fly.App{Name: "gram-asst-test"}
 	flapsClient.machine = &fly.Machine{
 		ID:         "machine-1",
 		State:      "started",
 		Region:     "iad",
 		InstanceID: "boot-1",
+		Config: &fly.MachineConfig{
+			Metadata: map[string]string{flyMachineMetadataThreadID: threadID.String()},
+		},
 	}
 
 	rawMetadata, err := json.Marshal(flyRuntimeMetadata{
@@ -112,7 +120,7 @@ func TestFlyRuntimeBackendEnsureMachineUnconfigured(t *testing.T) {
 	require.NoError(t, err)
 
 	result, err := backend.Ensure(context.Background(), assistantRuntimeRecord{
-		AssistantThreadID:   uuid.New(),
+		AssistantThreadID:   threadID,
 		AssistantID:         uuid.New(),
 		ProjectID:           uuid.New(),
 		Backend:             runtimeBackendFlyIO,

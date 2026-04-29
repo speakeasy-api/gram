@@ -1468,7 +1468,10 @@ func (s *ServiceCore) ProcessThreadEventsByThreadID(ctx context.Context, project
 
 func (s *ServiceCore) ExpireThreadRuntime(ctx context.Context, projectID, threadID uuid.UUID) error {
 	runtimeRecord, err := s.loadActiveRuntimeRecord(ctx, projectID, threadID)
-	if err != nil {
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil
+	case err != nil:
 		return err
 	}
 	if err := s.runtime.Stop(ctx, runtimeRecord); err != nil {

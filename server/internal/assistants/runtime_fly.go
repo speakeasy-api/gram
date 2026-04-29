@@ -27,6 +27,12 @@ const (
 	defaultFlyRuntimeMachinesURL    = "https://api.machines.dev"
 	defaultFlyRuntimeHealthTimeout  = 45 * time.Second
 	defaultFlyRuntimeRequestTimeout = 2 * time.Minute
+
+	flyMachineMetadataAssistantID   = "gram_assistant_id"
+	flyMachineMetadataProjectID     = "gram_assistant_project_id"
+	flyMachineMetadataThreadID      = "gram_assistant_thread_id"
+	flyMachineMetadataRole          = "gram_role"
+	flyMachineMetadataRoleAssistant = "assistant_runtime"
 )
 
 type flyRuntimeMetadata struct {
@@ -202,7 +208,7 @@ func (f *FlyRuntimeBackend) ensureExisting(
 		appIP = metadata.AppIP
 	}
 
-	machine, err := f.resolveMachine(ctx, flapsClient, appName, metadata.MachineID)
+	machine, err := f.resolveMachine(ctx, flapsClient, appName, runtime.AssistantThreadID, metadata.MachineID)
 	if err != nil {
 		return RuntimeBackendEnsureResult{}, err
 	}
@@ -325,12 +331,18 @@ func (f *FlyRuntimeBackend) resolveMachine(
 	ctx context.Context,
 	flapsClient flyRuntimeFlapsClient,
 	appName string,
+	threadID uuid.UUID,
 	machineID string,
 ) (*fly.Machine, error) {
+	wantThreadID := threadID.String()
+
 	if machineID != "" {
 		machine, err := flapsClient.Get(ctx, appName, machineID)
 		switch {
 		case err == nil:
+			if !machineBelongsToThread(machine, wantThreadID) {
+				return nil, fmt.Errorf("assistant fly runtime machine %s does not belong to thread %s", machineID, wantThreadID)
+			}
 			return machine, nil
 		case !isFlyNotFound(err):
 			return nil, fmt.Errorf("load assistant fly runtime machine: %w", err)
@@ -341,10 +353,23 @@ func (f *FlyRuntimeBackend) resolveMachine(
 	if err != nil {
 		return nil, fmt.Errorf("list assistant fly runtime machines: %w", err)
 	}
-	if len(machines) == 0 {
-		return nil, nil
+
+	for _, machine := range machines {
+		if machine == nil || !machine.IsActive() {
+			continue
+		}
+		if machineBelongsToThread(machine, wantThreadID) {
+			return machine, nil
+		}
 	}
-	return machines[0], nil
+	return nil, nil
+}
+
+func machineBelongsToThread(machine *fly.Machine, threadID string) bool {
+	if machine == nil || machine.Config == nil {
+		return false
+	}
+	return machine.Config.Metadata[flyMachineMetadataThreadID] == threadID
 }
 
 func (f *FlyRuntimeBackend) launchMachine(
@@ -549,11 +574,11 @@ func (f *FlyRuntimeBackend) machineConfig(runtime assistantRuntimeRecord) *fly.M
 		},
 		Metadata: map[string]string{
 			fly.MachineConfigMetadataKeyFlyPlatformVersion: "v2",
-			fly.MachineConfigMetadataKeyFlyProcessGroup:    "assistant_runtime",
-			"gram_assistant_id":                            runtime.AssistantID.String(),
-			"gram_assistant_project_id":                    runtime.ProjectID.String(),
-			"gram_assistant_thread_id":                     runtime.AssistantThreadID.String(),
-			"gram_role":                                    "assistant_runtime",
+			fly.MachineConfigMetadataKeyFlyProcessGroup:    flyMachineMetadataRoleAssistant,
+			flyMachineMetadataAssistantID:                  runtime.AssistantID.String(),
+			flyMachineMetadataProjectID:                    runtime.ProjectID.String(),
+			flyMachineMetadataThreadID:                     runtime.AssistantThreadID.String(),
+			flyMachineMetadataRole:                         flyMachineMetadataRoleAssistant,
 		},
 		Services: []fly.MachineService{
 			{
