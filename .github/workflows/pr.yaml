@@ -420,11 +420,11 @@ jobs:
           tag: ${{ steps.tag.outputs.tag }}
 
   server-build-lint:
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: blacksmith-16vcpu-ubuntu-2404
     needs: changes
     if: needs.changes.outputs.server == 'true'
     env:
-      GOMAXPROCS: 8
+      GOMAXPROCS: 16
     services:
       postgres:
         image: pgvector/pgvector:pg17
@@ -628,11 +628,11 @@ jobs:
         run: mise run git:porcelain
 
   server-test:
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: blacksmith-8vcpu-ubuntu-2404
     needs: changes
     if: needs.changes.outputs.server == 'true'
     env:
-      GOMAXPROCS: 4
+      GOMAXPROCS: 8
     steps:
       - name: Checkout
         uses: actions/checkout@ff7abcd0c3c05ccf6adc123a8cd1fd4fb30fb493 # v5.0.0
