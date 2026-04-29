@@ -22,6 +22,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/triggers"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -32,6 +33,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	triggerrepo "github.com/speakeasy-api/gram/server/internal/triggers/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 type Service struct {
@@ -160,6 +162,17 @@ func (s *Service) CreateTriggerInstance(ctx context.Context, payload *gen.Create
 		TargetDisplay:  payload.TargetDisplay,
 		Config:         payload.Config,
 		Status:         normalizeTriggerStatus(payload.Status),
+	}, func(ctx context.Context, dbtx pgx.Tx, instance triggerrepo.TriggerInstance) error {
+		return audit.LogTriggerInstanceCreate(ctx, dbtx, audit.LogTriggerInstanceCreateEvent{
+			OrganizationID:     authCtx.ActiveOrganizationID,
+			ProjectID:          *authCtx.ProjectID,
+			Actor:              urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+			ActorDisplayName:   authCtx.Email,
+			ActorSlug:          nil,
+			TriggerInstanceURN: urn.NewTriggerInstance(instance.ID),
+			Name:               instance.Name,
+			DefinitionSlug:     instance.DefinitionSlug,
+		})
 	})
 	if err != nil {
 		return nil, toTriggerError(ctx, s.logger, err, "create trigger instance")
@@ -238,7 +251,18 @@ func (s *Service) DeleteTriggerInstance(ctx context.Context, payload *gen.Delete
 		return oops.E(oops.CodeBadRequest, err, "invalid trigger id").Log(ctx, s.logger)
 	}
 
-	if err := s.app.Delete(ctx, *authCtx.ProjectID, triggerID); err != nil {
+	if err := s.app.Delete(ctx, *authCtx.ProjectID, triggerID, func(ctx context.Context, dbtx pgx.Tx, instance triggerrepo.TriggerInstance) error {
+		return audit.LogTriggerInstanceDelete(ctx, dbtx, audit.LogTriggerInstanceDeleteEvent{
+			OrganizationID:     authCtx.ActiveOrganizationID,
+			ProjectID:          *authCtx.ProjectID,
+			Actor:              urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+			ActorDisplayName:   authCtx.Email,
+			ActorSlug:          nil,
+			TriggerInstanceURN: urn.NewTriggerInstance(instance.ID),
+			Name:               instance.Name,
+			DefinitionSlug:     instance.DefinitionSlug,
+		})
+	}); err != nil {
 		return toTriggerError(ctx, s.logger, err, "delete trigger instance")
 	}
 
@@ -246,25 +270,52 @@ func (s *Service) DeleteTriggerInstance(ctx context.Context, payload *gen.Delete
 }
 
 func (s *Service) PauseTriggerInstance(ctx context.Context, payload *gen.PauseTriggerInstancePayload) (*types.TriggerInstance, error) {
-	return s.setTriggerStatus(ctx, payload.ID, bgtriggers.StatusPaused)
-}
-
-func (s *Service) ResumeTriggerInstance(ctx context.Context, payload *gen.ResumeTriggerInstancePayload) (*types.TriggerInstance, error) {
-	return s.setTriggerStatus(ctx, payload.ID, bgtriggers.StatusActive)
-}
-
-func (s *Service) setTriggerStatus(ctx context.Context, id string, status string) (*types.TriggerInstance, error) {
 	authCtx, err := requireProjectAuthContext(ctx)
 	if err != nil {
 		return nil, err
 	}
 
+	return s.setTriggerStatus(ctx, authCtx, payload.ID, bgtriggers.StatusPaused, func(ctx context.Context, dbtx pgx.Tx, instance triggerrepo.TriggerInstance) error {
+		return audit.LogTriggerInstancePause(ctx, dbtx, audit.LogTriggerInstancePauseEvent{
+			OrganizationID:     authCtx.ActiveOrganizationID,
+			ProjectID:          *authCtx.ProjectID,
+			Actor:              urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+			ActorDisplayName:   authCtx.Email,
+			ActorSlug:          nil,
+			TriggerInstanceURN: urn.NewTriggerInstance(instance.ID),
+			Name:               instance.Name,
+			DefinitionSlug:     instance.DefinitionSlug,
+		})
+	})
+}
+
+func (s *Service) ResumeTriggerInstance(ctx context.Context, payload *gen.ResumeTriggerInstancePayload) (*types.TriggerInstance, error) {
+	authCtx, err := requireProjectAuthContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return s.setTriggerStatus(ctx, authCtx, payload.ID, bgtriggers.StatusActive, func(ctx context.Context, dbtx pgx.Tx, instance triggerrepo.TriggerInstance) error {
+		return audit.LogTriggerInstanceResume(ctx, dbtx, audit.LogTriggerInstanceResumeEvent{
+			OrganizationID:     authCtx.ActiveOrganizationID,
+			ProjectID:          *authCtx.ProjectID,
+			Actor:              urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+			ActorDisplayName:   authCtx.Email,
+			ActorSlug:          nil,
+			TriggerInstanceURN: urn.NewTriggerInstance(instance.ID),
+			Name:               instance.Name,
+			DefinitionSlug:     instance.DefinitionSlug,
+		})
+	})
+}
+
+func (s *Service) setTriggerStatus(ctx context.Context, authCtx *contextvalues.AuthContext, id string, status string, hooks ...bgtriggers.InstanceDBHook) (*types.TriggerInstance, error) {
 	triggerID, err := uuid.Parse(id)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid trigger id").Log(ctx, s.logger)
 	}
 
-	item, err := s.app.SetStatus(ctx, *authCtx.ProjectID, triggerID, status)
+	item, err := s.app.SetStatus(ctx, *authCtx.ProjectID, triggerID, status, hooks...)
 	if err != nil {
 		return nil, toTriggerError(ctx, s.logger, err, "set trigger status")
 	}

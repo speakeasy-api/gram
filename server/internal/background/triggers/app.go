@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -113,6 +114,7 @@ func (l *triggerDeliveryLogger) LogTriggerDelivery(
 
 type App struct {
 	logger         *slog.Logger
+	db             *pgxpool.Pool
 	repo           *triggerrepo.Queries
 	envLoader      EnvironmentLoader
 	deliveryLogger DeliveryLogger
@@ -120,6 +122,11 @@ type App struct {
 	serverURL      *url.URL
 	dispatchers    map[string]Dispatcher
 }
+
+// InstanceDBHook runs inside the transaction that mutates a trigger instance,
+// after the primary repo write succeeds and before commit. Returning an error
+// rolls the entire mutation back.
+type InstanceDBHook func(ctx context.Context, dbtx pgx.Tx, instance triggerrepo.TriggerInstance) error
 
 type CreateParams struct {
 	OrganizationID string
@@ -170,6 +177,7 @@ func NewApp(
 
 	return &App{
 		logger:         logger,
+		db:             db,
 		repo:           triggerrepo.New(db),
 		envLoader:      envLoader,
 		deliveryLogger: deliveryLogger,
@@ -202,7 +210,7 @@ func (a *App) GetInstance(ctx context.Context, projectID uuid.UUID, id uuid.UUID
 	return item, nil
 }
 
-func (a *App) Create(ctx context.Context, params CreateParams) (triggerrepo.TriggerInstance, error) {
+func (a *App) Create(ctx context.Context, params CreateParams, hooks ...InstanceDBHook) (triggerrepo.TriggerInstance, error) {
 	if err := ValidateTargetKind(params.TargetKind); err != nil {
 		return triggerrepo.TriggerInstance{}, fmt.Errorf("%w: %w", ErrBadRequest, err)
 	}
@@ -220,7 +228,13 @@ func (a *App) Create(ctx context.Context, params CreateParams) (triggerrepo.Trig
 		return triggerrepo.TriggerInstance{}, fmt.Errorf("marshal trigger config: %w", err)
 	}
 
-	item, err := a.repo.CreateTriggerInstance(ctx, triggerrepo.CreateTriggerInstanceParams{
+	tx, err := a.db.Begin(ctx)
+	if err != nil {
+		return triggerrepo.TriggerInstance{}, fmt.Errorf("begin trigger create transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	item, err := triggerrepo.New(tx).CreateTriggerInstance(ctx, triggerrepo.CreateTriggerInstanceParams{
 		OrganizationID: params.OrganizationID,
 		ProjectID:      params.ProjectID,
 		DefinitionSlug: params.DefinitionSlug,
@@ -234,6 +248,16 @@ func (a *App) Create(ctx context.Context, params CreateParams) (triggerrepo.Trig
 	})
 	if err != nil {
 		return triggerrepo.TriggerInstance{}, fmt.Errorf("create trigger instance: %w", err)
+	}
+
+	for _, hook := range hooks {
+		if err := hook(ctx, tx, item); err != nil {
+			return triggerrepo.TriggerInstance{}, fmt.Errorf("trigger create hook: %w", err)
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return triggerrepo.TriggerInstance{}, fmt.Errorf("commit trigger create transaction: %w", err)
 	}
 
 	if err := a.reconcileSchedule(ctx, item, definition, config); err != nil {
@@ -296,13 +320,29 @@ func (a *App) Update(ctx context.Context, params UpdateParams) (triggerrepo.Trig
 	return item, nil
 }
 
-func (a *App) Delete(ctx context.Context, projectID uuid.UUID, id uuid.UUID) error {
-	item, err := a.repo.DeleteTriggerInstance(ctx, triggerrepo.DeleteTriggerInstanceParams{
+func (a *App) Delete(ctx context.Context, projectID uuid.UUID, id uuid.UUID, hooks ...InstanceDBHook) error {
+	tx, err := a.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin trigger delete transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	item, err := triggerrepo.New(tx).DeleteTriggerInstance(ctx, triggerrepo.DeleteTriggerInstanceParams{
 		ID:        id,
 		ProjectID: projectID,
 	})
 	if err != nil {
 		return fmt.Errorf("delete trigger instance: %w", err)
+	}
+
+	for _, hook := range hooks {
+		if err := hook(ctx, tx, item); err != nil {
+			return fmt.Errorf("trigger delete hook: %w", err)
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit trigger delete transaction: %w", err)
 	}
 
 	if err := a.deleteSchedule(ctx, item); err != nil {
@@ -312,14 +352,30 @@ func (a *App) Delete(ctx context.Context, projectID uuid.UUID, id uuid.UUID) err
 	return nil
 }
 
-func (a *App) SetStatus(ctx context.Context, projectID uuid.UUID, id uuid.UUID, status string) (triggerrepo.TriggerInstance, error) {
-	item, err := a.repo.SetTriggerInstanceStatus(ctx, triggerrepo.SetTriggerInstanceStatusParams{
+func (a *App) SetStatus(ctx context.Context, projectID uuid.UUID, id uuid.UUID, status string, hooks ...InstanceDBHook) (triggerrepo.TriggerInstance, error) {
+	tx, err := a.db.Begin(ctx)
+	if err != nil {
+		return triggerrepo.TriggerInstance{}, fmt.Errorf("begin trigger set-status transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	item, err := triggerrepo.New(tx).SetTriggerInstanceStatus(ctx, triggerrepo.SetTriggerInstanceStatusParams{
 		Status:    status,
 		ID:        id,
 		ProjectID: projectID,
 	})
 	if err != nil {
 		return triggerrepo.TriggerInstance{}, fmt.Errorf("set trigger status: %w", err)
+	}
+
+	for _, hook := range hooks {
+		if err := hook(ctx, tx, item); err != nil {
+			return triggerrepo.TriggerInstance{}, fmt.Errorf("trigger set-status hook: %w", err)
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return triggerrepo.TriggerInstance{}, fmt.Errorf("commit trigger set-status transaction: %w", err)
 	}
 
 	rawConfig, err := configJSONToMap(item.ConfigJson)
