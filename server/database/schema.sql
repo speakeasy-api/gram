@@ -1766,14 +1766,14 @@ CREATE TABLE IF NOT EXISTS principal_grants (
   principal_type TEXT NOT NULL GENERATED ALWAYS AS (split_part(principal_urn, ':', 1)) STORED,
   scope TEXT NOT NULL,
   drop_resource TEXT,
-  selectors JSONB,
+  selectors JSONB NOT NULL,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
   CONSTRAINT principal_grants_pkey PRIMARY KEY (id),
   CONSTRAINT principal_grants_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
-  CONSTRAINT principal_grants_selectors_check CHECK (selectors IS NULL OR jsonb_typeof(selectors) = 'object')
+  CONSTRAINT principal_grants_selectors_check CHECK (jsonb_typeof(selectors) = 'object' AND selectors != '{}')
 );
 
 COMMENT ON TABLE principal_grants IS 'RBAC grants. Normalized: one row per (org, principal, scope). Selectors can further constrain applicability.';
@@ -1782,7 +1782,7 @@ COMMENT ON COLUMN principal_grants.principal_urn IS 'URN identifying the princip
 COMMENT ON COLUMN principal_grants.principal_type IS 'Derived from principal_urn. The type prefix, e.g. "user", "role".';
 COMMENT ON COLUMN principal_grants.scope IS 'The scope being granted, e.g. "build:read". Validated in application code, not via FK.';
 COMMENT ON COLUMN principal_grants.drop_resource IS 'Deprecated. Formerly ''*'' = unrestricted. Nullable, scheduled for removal.';
-COMMENT ON COLUMN principal_grants.selectors IS 'Optional JSON selector constraints refining when the grant applies. NULL means the grant has no selector constraints.';
+COMMENT ON COLUMN principal_grants.selectors IS 'JSON selector constraints attached to a grant. Must be a non-empty JSONB object. Wildcard/unrestricted grants use {"resource_kind":"*","resource_id":"*"}.';
 
 CREATE UNIQUE INDEX IF NOT EXISTS principal_grants_org_principal_scope_selector_key
 ON principal_grants (organization_id, principal_urn, scope, selectors);
