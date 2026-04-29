@@ -10026,6 +10026,10 @@ paths:
                   name: decision
                   schema:
                     description: Filter by decision (ALLOW | BLOCK | JUDGE_ERROR).
+                    enum:
+                        - ALLOW
+                        - BLOCK
+                        - JUDGE_ERROR
                     type: string
                 - allowEmptyValue: true
                   description: Filter by whether the decision was enforced.
@@ -10040,6 +10044,11 @@ paths:
                   name: decided_by
                   schema:
                     description: Filter by decider (static_rule | llm_judge | fail_mode | session_quarantine).
+                    enum:
+                        - static_rule
+                        - llm_judge
+                        - fail_mode
+                        - session_quarantine
                     type: string
                 - allowEmptyValue: true
                   description: Only include decisions at or after this RFC3339 timestamp.
@@ -10047,6 +10056,7 @@ paths:
                   name: since
                   schema:
                     description: Only include decisions at or after this RFC3339 timestamp.
+                    format: date-time
                     type: string
                 - allowEmptyValue: true
                   description: Filter by source MCP session ID.
@@ -10065,7 +10075,7 @@ paths:
                 - allowEmptyValue: true
                   description: Maximum number of results to return per page.
                   in: query
-                  name: page_limit
+                  name: limit
                   schema:
                     description: Maximum number of results to return per page.
                     format: int64
@@ -10187,6 +10197,10 @@ paths:
                   name: decision
                   schema:
                     description: Filter by decision (ALLOW | BLOCK | JUDGE_ERROR).
+                    enum:
+                        - ALLOW
+                        - BLOCK
+                        - JUDGE_ERROR
                     type: string
                 - allowEmptyValue: true
                   description: Cursor to fetch the next page of results.
@@ -10198,7 +10212,7 @@ paths:
                 - allowEmptyValue: true
                   description: Maximum number of results to return per page.
                   in: query
-                  name: page_limit
+                  name: limit
                   schema:
                     description: Maximum number of results to return per page.
                     format: int64
@@ -10331,7 +10345,7 @@ paths:
                 - allowEmptyValue: true
                   description: Maximum number of results to return per page.
                   in: query
-                  name: page_limit
+                  name: limit
                   schema:
                     description: Maximum number of results to return per page.
                     format: int64
@@ -25812,12 +25826,16 @@ components:
                 created_at:
                     type: string
                     description: RFC3339 timestamp.
+                    format: date-time
                 description:
                     type: string
                     description: Author-facing summary.
                 fail_mode:
                     type: string
                     description: fail_open | fail_closed — judge error/timeout behavior in enforce mode.
+                    enum:
+                        - fail_open
+                        - fail_closed
                 id:
                     type: string
                     description: The NL policy ID.
@@ -25825,6 +25843,10 @@ components:
                 mode:
                     type: string
                     description: audit | enforce | disabled.
+                    enum:
+                        - audit
+                        - enforce
+                        - disabled
                 name:
                     type: string
                     description: Policy name.
@@ -25847,6 +25869,7 @@ components:
                 updated_at:
                     type: string
                     description: RFC3339 timestamp.
+                    format: date-time
                 version:
                     type: integer
                     description: Incremented on each update.
@@ -25873,12 +25896,22 @@ components:
                 created_at:
                     type: string
                     description: RFC3339 timestamp.
+                    format: date-time
                 decided_by:
                     type: string
                     description: static_rule | llm_judge | fail_mode | session_quarantine.
+                    enum:
+                        - static_rule
+                        - llm_judge
+                        - fail_mode
+                        - session_quarantine
                 decision:
                     type: string
                     description: ALLOW | BLOCK | JUDGE_ERROR.
+                    enum:
+                        - ALLOW
+                        - BLOCK
+                        - JUDGE_ERROR
                 enforced:
                     type: boolean
                     description: True when mode=enforce AND decision=BLOCK.
@@ -25893,6 +25926,10 @@ components:
                 mode:
                     type: string
                     description: Snapshot of policy mode at decision time.
+                    enum:
+                        - audit
+                        - enforce
+                        - disabled
                 nl_policy_id:
                     type: string
                     description: Policy that produced this decision.
@@ -25930,9 +25967,14 @@ components:
                 created_at:
                     type: string
                     description: RFC3339.
+                    format: date-time
                 decision:
                     type: string
                     description: ALLOW | BLOCK | JUDGE_ERROR.
+                    enum:
+                        - ALLOW
+                        - BLOCK
+                        - JUDGE_ERROR
                 id:
                     type: string
                     description: Result row ID.
@@ -25961,6 +26003,7 @@ components:
                 completed_at:
                     type: string
                     description: RFC3339 — null until completed.
+                    format: date-time
                 counts:
                     type: string
                     description: 'JSON-encoded counts: {would_block, would_allow, judge_error}.'
@@ -25982,9 +26025,15 @@ components:
                 started_at:
                     type: string
                     description: RFC3339.
+                    format: date-time
                 status:
                     type: string
                     description: pending | running | completed | failed.
+                    enum:
+                        - pending
+                        - running
+                        - completed
+                        - failed
             required:
                 - id
                 - nl_policy_id
@@ -26002,6 +26051,7 @@ components:
                 cleared_at:
                     type: string
                     description: RFC3339 — non-null when cleared.
+                    format: date-time
                 cleared_by:
                     type: string
                     description: Clearing user ID.
@@ -26009,6 +26059,7 @@ components:
                 created_at:
                     type: string
                     description: RFC3339.
+                    format: date-time
                 id:
                     type: string
                     description: Verdict row ID.
@@ -26024,6 +26075,7 @@ components:
                 quarantined_at:
                     type: string
                     description: RFC3339 — null when verdict=OK.
+                    format: date-time
                 reason:
                     type: string
                     description: Why.
@@ -26033,6 +26085,9 @@ components:
                 verdict:
                     type: string
                     description: OK | QUARANTINED.
+                    enum:
+                        - OK
+                        - QUARANTINED
             required:
                 - id
                 - session_id

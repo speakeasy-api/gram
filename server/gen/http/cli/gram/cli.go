@@ -713,7 +713,7 @@ func ParseEndpoint(
 		nlpoliciesListDecisionsSinceFlag            = nlpoliciesListDecisionsFlags.String("since", "", "")
 		nlpoliciesListDecisionsSessionIDFlag        = nlpoliciesListDecisionsFlags.String("session-id", "", "")
 		nlpoliciesListDecisionsCursorFlag           = nlpoliciesListDecisionsFlags.String("cursor", "", "")
-		nlpoliciesListDecisionsPageLimitFlag        = nlpoliciesListDecisionsFlags.String("page-limit", "", "")
+		nlpoliciesListDecisionsLimitFlag            = nlpoliciesListDecisionsFlags.String("limit", "", "")
 		nlpoliciesListDecisionsApikeyTokenFlag      = nlpoliciesListDecisionsFlags.String("apikey-token", "", "")
 		nlpoliciesListDecisionsSessionTokenFlag     = nlpoliciesListDecisionsFlags.String("session-token", "", "")
 		nlpoliciesListDecisionsProjectSlugInputFlag = nlpoliciesListDecisionsFlags.String("project-slug-input", "", "")
@@ -722,7 +722,7 @@ func ParseEndpoint(
 		nlpoliciesListSessionVerdictsPolicyIDFlag         = nlpoliciesListSessionVerdictsFlags.String("policy-id", "REQUIRED", "")
 		nlpoliciesListSessionVerdictsActiveOnlyFlag       = nlpoliciesListSessionVerdictsFlags.String("active-only", "", "")
 		nlpoliciesListSessionVerdictsCursorFlag           = nlpoliciesListSessionVerdictsFlags.String("cursor", "", "")
-		nlpoliciesListSessionVerdictsPageLimitFlag        = nlpoliciesListSessionVerdictsFlags.String("page-limit", "", "")
+		nlpoliciesListSessionVerdictsLimitFlag            = nlpoliciesListSessionVerdictsFlags.String("limit", "", "")
 		nlpoliciesListSessionVerdictsApikeyTokenFlag      = nlpoliciesListSessionVerdictsFlags.String("apikey-token", "", "")
 		nlpoliciesListSessionVerdictsSessionTokenFlag     = nlpoliciesListSessionVerdictsFlags.String("session-token", "", "")
 		nlpoliciesListSessionVerdictsProjectSlugInputFlag = nlpoliciesListSessionVerdictsFlags.String("project-slug-input", "", "")
@@ -749,7 +749,7 @@ func ParseEndpoint(
 		nlpoliciesListReplayResultsRunIDFlag            = nlpoliciesListReplayResultsFlags.String("run-id", "REQUIRED", "")
 		nlpoliciesListReplayResultsDecisionFlag         = nlpoliciesListReplayResultsFlags.String("decision", "", "")
 		nlpoliciesListReplayResultsCursorFlag           = nlpoliciesListReplayResultsFlags.String("cursor", "", "")
-		nlpoliciesListReplayResultsPageLimitFlag        = nlpoliciesListReplayResultsFlags.String("page-limit", "", "")
+		nlpoliciesListReplayResultsLimitFlag            = nlpoliciesListReplayResultsFlags.String("limit", "", "")
 		nlpoliciesListReplayResultsApikeyTokenFlag      = nlpoliciesListReplayResultsFlags.String("apikey-token", "", "")
 		nlpoliciesListReplayResultsSessionTokenFlag     = nlpoliciesListReplayResultsFlags.String("session-token", "", "")
 		nlpoliciesListReplayResultsProjectSlugInputFlag = nlpoliciesListReplayResultsFlags.String("project-slug-input", "", "")
@@ -2949,10 +2949,10 @@ func ParseEndpoint(
 				data, err = nlpoliciesc.BuildDeletePolicyPayload(*nlpoliciesDeletePolicyBodyFlag, *nlpoliciesDeletePolicyApikeyTokenFlag, *nlpoliciesDeletePolicySessionTokenFlag, *nlpoliciesDeletePolicyProjectSlugInputFlag)
 			case "list-decisions":
 				endpoint = c.ListDecisions()
-				data, err = nlpoliciesc.BuildListDecisionsPayload(*nlpoliciesListDecisionsPolicyIDFlag, *nlpoliciesListDecisionsDecisionFlag, *nlpoliciesListDecisionsEnforcedFlag, *nlpoliciesListDecisionsDecidedByFlag, *nlpoliciesListDecisionsSinceFlag, *nlpoliciesListDecisionsSessionIDFlag, *nlpoliciesListDecisionsCursorFlag, *nlpoliciesListDecisionsPageLimitFlag, *nlpoliciesListDecisionsApikeyTokenFlag, *nlpoliciesListDecisionsSessionTokenFlag, *nlpoliciesListDecisionsProjectSlugInputFlag)
+				data, err = nlpoliciesc.BuildListDecisionsPayload(*nlpoliciesListDecisionsPolicyIDFlag, *nlpoliciesListDecisionsDecisionFlag, *nlpoliciesListDecisionsEnforcedFlag, *nlpoliciesListDecisionsDecidedByFlag, *nlpoliciesListDecisionsSinceFlag, *nlpoliciesListDecisionsSessionIDFlag, *nlpoliciesListDecisionsCursorFlag, *nlpoliciesListDecisionsLimitFlag, *nlpoliciesListDecisionsApikeyTokenFlag, *nlpoliciesListDecisionsSessionTokenFlag, *nlpoliciesListDecisionsProjectSlugInputFlag)
 			case "list-session-verdicts":
 				endpoint = c.ListSessionVerdicts()
-				data, err = nlpoliciesc.BuildListSessionVerdictsPayload(*nlpoliciesListSessionVerdictsPolicyIDFlag, *nlpoliciesListSessionVerdictsActiveOnlyFlag, *nlpoliciesListSessionVerdictsCursorFlag, *nlpoliciesListSessionVerdictsPageLimitFlag, *nlpoliciesListSessionVerdictsApikeyTokenFlag, *nlpoliciesListSessionVerdictsSessionTokenFlag, *nlpoliciesListSessionVerdictsProjectSlugInputFlag)
+				data, err = nlpoliciesc.BuildListSessionVerdictsPayload(*nlpoliciesListSessionVerdictsPolicyIDFlag, *nlpoliciesListSessionVerdictsActiveOnlyFlag, *nlpoliciesListSessionVerdictsCursorFlag, *nlpoliciesListSessionVerdictsLimitFlag, *nlpoliciesListSessionVerdictsApikeyTokenFlag, *nlpoliciesListSessionVerdictsSessionTokenFlag, *nlpoliciesListSessionVerdictsProjectSlugInputFlag)
 			case "clear-session-verdict":
 				endpoint = c.ClearSessionVerdict()
 				data, err = nlpoliciesc.BuildClearSessionVerdictPayload(*nlpoliciesClearSessionVerdictBodyFlag, *nlpoliciesClearSessionVerdictApikeyTokenFlag, *nlpoliciesClearSessionVerdictSessionTokenFlag, *nlpoliciesClearSessionVerdictProjectSlugInputFlag)
@@ -2964,7 +2964,7 @@ func ParseEndpoint(
 				data, err = nlpoliciesc.BuildGetReplayRunPayload(*nlpoliciesGetReplayRunRunIDFlag, *nlpoliciesGetReplayRunApikeyTokenFlag, *nlpoliciesGetReplayRunSessionTokenFlag, *nlpoliciesGetReplayRunProjectSlugInputFlag)
 			case "list-replay-results":
 				endpoint = c.ListReplayResults()
-				data, err = nlpoliciesc.BuildListReplayResultsPayload(*nlpoliciesListReplayResultsRunIDFlag, *nlpoliciesListReplayResultsDecisionFlag, *nlpoliciesListReplayResultsCursorFlag, *nlpoliciesListReplayResultsPageLimitFlag, *nlpoliciesListReplayResultsApikeyTokenFlag, *nlpoliciesListReplayResultsSessionTokenFlag, *nlpoliciesListReplayResultsProjectSlugInputFlag)
+				data, err = nlpoliciesc.BuildListReplayResultsPayload(*nlpoliciesListReplayResultsRunIDFlag, *nlpoliciesListReplayResultsDecisionFlag, *nlpoliciesListReplayResultsCursorFlag, *nlpoliciesListReplayResultsLimitFlag, *nlpoliciesListReplayResultsApikeyTokenFlag, *nlpoliciesListReplayResultsSessionTokenFlag, *nlpoliciesListReplayResultsProjectSlugInputFlag)
 			}
 		case "organizations":
 			c := organizationsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -6003,7 +6003,7 @@ func nlpoliciesListDecisionsUsage() {
 	fmt.Fprint(os.Stderr, " -since STRING")
 	fmt.Fprint(os.Stderr, " -session-id STRING")
 	fmt.Fprint(os.Stderr, " -cursor STRING")
-	fmt.Fprint(os.Stderr, " -page-limit INT")
+	fmt.Fprint(os.Stderr, " -limit INT")
 	fmt.Fprint(os.Stderr, " -apikey-token STRING")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
@@ -6021,14 +6021,14 @@ func nlpoliciesListDecisionsUsage() {
 	fmt.Fprintln(os.Stderr, `    -since STRING: `)
 	fmt.Fprintln(os.Stderr, `    -session-id STRING: `)
 	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
-	fmt.Fprintln(os.Stderr, `    -page-limit INT: `)
+	fmt.Fprintln(os.Stderr, `    -limit INT: `)
 	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "nlpolicies list-decisions --policy-id \"550e8400-e29b-41d4-a716-446655440000\" --decision \"abc123\" --enforced false --decided-by \"abc123\" --since \"abc123\" --session-id \"abc123\" --cursor \"abc123\" --page-limit 2 --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "nlpolicies list-decisions --policy-id \"550e8400-e29b-41d4-a716-446655440000\" --decision \"BLOCK\" --enforced false --decided-by \"llm_judge\" --since \"1970-01-01T00:00:01Z\" --session-id \"abc123\" --cursor \"abc123\" --limit 2 --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func nlpoliciesListSessionVerdictsUsage() {
@@ -6037,7 +6037,7 @@ func nlpoliciesListSessionVerdictsUsage() {
 	fmt.Fprint(os.Stderr, " -policy-id STRING")
 	fmt.Fprint(os.Stderr, " -active-only BOOL")
 	fmt.Fprint(os.Stderr, " -cursor STRING")
-	fmt.Fprint(os.Stderr, " -page-limit INT")
+	fmt.Fprint(os.Stderr, " -limit INT")
 	fmt.Fprint(os.Stderr, " -apikey-token STRING")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
@@ -6051,14 +6051,14 @@ func nlpoliciesListSessionVerdictsUsage() {
 	fmt.Fprintln(os.Stderr, `    -policy-id STRING: `)
 	fmt.Fprintln(os.Stderr, `    -active-only BOOL: `)
 	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
-	fmt.Fprintln(os.Stderr, `    -page-limit INT: `)
+	fmt.Fprintln(os.Stderr, `    -limit INT: `)
 	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "nlpolicies list-session-verdicts --policy-id \"550e8400-e29b-41d4-a716-446655440000\" --active-only false --cursor \"abc123\" --page-limit 2 --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "nlpolicies list-session-verdicts --policy-id \"550e8400-e29b-41d4-a716-446655440000\" --active-only false --cursor \"abc123\" --limit 2 --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func nlpoliciesClearSessionVerdictUsage() {
@@ -6139,7 +6139,7 @@ func nlpoliciesListReplayResultsUsage() {
 	fmt.Fprint(os.Stderr, " -run-id STRING")
 	fmt.Fprint(os.Stderr, " -decision STRING")
 	fmt.Fprint(os.Stderr, " -cursor STRING")
-	fmt.Fprint(os.Stderr, " -page-limit INT")
+	fmt.Fprint(os.Stderr, " -limit INT")
 	fmt.Fprint(os.Stderr, " -apikey-token STRING")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
@@ -6153,14 +6153,14 @@ func nlpoliciesListReplayResultsUsage() {
 	fmt.Fprintln(os.Stderr, `    -run-id STRING: `)
 	fmt.Fprintln(os.Stderr, `    -decision STRING: `)
 	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
-	fmt.Fprintln(os.Stderr, `    -page-limit INT: `)
+	fmt.Fprintln(os.Stderr, `    -limit INT: `)
 	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "nlpolicies list-replay-results --run-id \"550e8400-e29b-41d4-a716-446655440000\" --decision \"abc123\" --cursor \"abc123\" --page-limit 2 --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "nlpolicies list-replay-results --run-id \"550e8400-e29b-41d4-a716-446655440000\" --decision \"BLOCK\" --cursor \"abc123\" --limit 2 --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // organizationsUsage displays the usage of the organizations command and its

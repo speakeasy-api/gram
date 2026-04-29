@@ -271,7 +271,7 @@ func BuildDeletePolicyPayload(nlpoliciesDeletePolicyBody string, nlpoliciesDelet
 
 // BuildListDecisionsPayload builds the payload for the nlpolicies
 // listDecisions endpoint from CLI flags.
-func BuildListDecisionsPayload(nlpoliciesListDecisionsPolicyID string, nlpoliciesListDecisionsDecision string, nlpoliciesListDecisionsEnforced string, nlpoliciesListDecisionsDecidedBy string, nlpoliciesListDecisionsSince string, nlpoliciesListDecisionsSessionID string, nlpoliciesListDecisionsCursor string, nlpoliciesListDecisionsPageLimit string, nlpoliciesListDecisionsApikeyToken string, nlpoliciesListDecisionsSessionToken string, nlpoliciesListDecisionsProjectSlugInput string) (*nlpolicies.ListDecisionsPayload, error) {
+func BuildListDecisionsPayload(nlpoliciesListDecisionsPolicyID string, nlpoliciesListDecisionsDecision string, nlpoliciesListDecisionsEnforced string, nlpoliciesListDecisionsDecidedBy string, nlpoliciesListDecisionsSince string, nlpoliciesListDecisionsSessionID string, nlpoliciesListDecisionsCursor string, nlpoliciesListDecisionsLimit string, nlpoliciesListDecisionsApikeyToken string, nlpoliciesListDecisionsSessionToken string, nlpoliciesListDecisionsProjectSlugInput string) (*nlpolicies.ListDecisionsPayload, error) {
 	var err error
 	var policyID string
 	{
@@ -285,6 +285,12 @@ func BuildListDecisionsPayload(nlpoliciesListDecisionsPolicyID string, nlpolicie
 	{
 		if nlpoliciesListDecisionsDecision != "" {
 			decision = &nlpoliciesListDecisionsDecision
+			if !(*decision == "ALLOW" || *decision == "BLOCK" || *decision == "JUDGE_ERROR") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("decision", *decision, []any{"ALLOW", "BLOCK", "JUDGE_ERROR"}))
+			}
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 	var enforced *bool
@@ -302,12 +308,22 @@ func BuildListDecisionsPayload(nlpoliciesListDecisionsPolicyID string, nlpolicie
 	{
 		if nlpoliciesListDecisionsDecidedBy != "" {
 			decidedBy = &nlpoliciesListDecisionsDecidedBy
+			if !(*decidedBy == "static_rule" || *decidedBy == "llm_judge" || *decidedBy == "fail_mode" || *decidedBy == "session_quarantine") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("decided_by", *decidedBy, []any{"static_rule", "llm_judge", "fail_mode", "session_quarantine"}))
+			}
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 	var since *string
 	{
 		if nlpoliciesListDecisionsSince != "" {
 			since = &nlpoliciesListDecisionsSince
+			err = goa.MergeErrors(err, goa.ValidateFormat("since", *since, goa.FormatDateTime))
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 	var sessionID *string
@@ -322,21 +338,21 @@ func BuildListDecisionsPayload(nlpoliciesListDecisionsPolicyID string, nlpolicie
 			cursor = &nlpoliciesListDecisionsCursor
 		}
 	}
-	var pageLimit *int
+	var limit *int
 	{
-		if nlpoliciesListDecisionsPageLimit != "" {
+		if nlpoliciesListDecisionsLimit != "" {
 			var v int64
-			v, err = strconv.ParseInt(nlpoliciesListDecisionsPageLimit, 10, strconv.IntSize)
+			v, err = strconv.ParseInt(nlpoliciesListDecisionsLimit, 10, strconv.IntSize)
 			val := int(v)
-			pageLimit = &val
+			limit = &val
 			if err != nil {
-				return nil, fmt.Errorf("invalid value for pageLimit, must be INT")
+				return nil, fmt.Errorf("invalid value for limit, must be INT")
 			}
-			if *pageLimit < 1 {
-				err = goa.MergeErrors(err, goa.InvalidRangeError("page_limit", *pageLimit, 1, true))
+			if *limit < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", *limit, 1, true))
 			}
-			if *pageLimit > 200 {
-				err = goa.MergeErrors(err, goa.InvalidRangeError("page_limit", *pageLimit, 200, false))
+			if *limit > 200 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", *limit, 200, false))
 			}
 			if err != nil {
 				return nil, err
@@ -369,7 +385,7 @@ func BuildListDecisionsPayload(nlpoliciesListDecisionsPolicyID string, nlpolicie
 	v.Since = since
 	v.SessionID = sessionID
 	v.Cursor = cursor
-	v.PageLimit = pageLimit
+	v.Limit = limit
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
@@ -379,7 +395,7 @@ func BuildListDecisionsPayload(nlpoliciesListDecisionsPolicyID string, nlpolicie
 
 // BuildListSessionVerdictsPayload builds the payload for the nlpolicies
 // listSessionVerdicts endpoint from CLI flags.
-func BuildListSessionVerdictsPayload(nlpoliciesListSessionVerdictsPolicyID string, nlpoliciesListSessionVerdictsActiveOnly string, nlpoliciesListSessionVerdictsCursor string, nlpoliciesListSessionVerdictsPageLimit string, nlpoliciesListSessionVerdictsApikeyToken string, nlpoliciesListSessionVerdictsSessionToken string, nlpoliciesListSessionVerdictsProjectSlugInput string) (*nlpolicies.ListSessionVerdictsPayload, error) {
+func BuildListSessionVerdictsPayload(nlpoliciesListSessionVerdictsPolicyID string, nlpoliciesListSessionVerdictsActiveOnly string, nlpoliciesListSessionVerdictsCursor string, nlpoliciesListSessionVerdictsLimit string, nlpoliciesListSessionVerdictsApikeyToken string, nlpoliciesListSessionVerdictsSessionToken string, nlpoliciesListSessionVerdictsProjectSlugInput string) (*nlpolicies.ListSessionVerdictsPayload, error) {
 	var err error
 	var policyID string
 	{
@@ -406,21 +422,21 @@ func BuildListSessionVerdictsPayload(nlpoliciesListSessionVerdictsPolicyID strin
 			cursor = &nlpoliciesListSessionVerdictsCursor
 		}
 	}
-	var pageLimit *int
+	var limit *int
 	{
-		if nlpoliciesListSessionVerdictsPageLimit != "" {
+		if nlpoliciesListSessionVerdictsLimit != "" {
 			var v int64
-			v, err = strconv.ParseInt(nlpoliciesListSessionVerdictsPageLimit, 10, strconv.IntSize)
+			v, err = strconv.ParseInt(nlpoliciesListSessionVerdictsLimit, 10, strconv.IntSize)
 			val := int(v)
-			pageLimit = &val
+			limit = &val
 			if err != nil {
-				return nil, fmt.Errorf("invalid value for pageLimit, must be INT")
+				return nil, fmt.Errorf("invalid value for limit, must be INT")
 			}
-			if *pageLimit < 1 {
-				err = goa.MergeErrors(err, goa.InvalidRangeError("page_limit", *pageLimit, 1, true))
+			if *limit < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", *limit, 1, true))
 			}
-			if *pageLimit > 200 {
-				err = goa.MergeErrors(err, goa.InvalidRangeError("page_limit", *pageLimit, 200, false))
+			if *limit > 200 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", *limit, 200, false))
 			}
 			if err != nil {
 				return nil, err
@@ -449,7 +465,7 @@ func BuildListSessionVerdictsPayload(nlpoliciesListSessionVerdictsPolicyID strin
 	v.PolicyID = policyID
 	v.ActiveOnly = activeOnly
 	v.Cursor = cursor
-	v.PageLimit = pageLimit
+	v.Limit = limit
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
@@ -585,7 +601,7 @@ func BuildGetReplayRunPayload(nlpoliciesGetReplayRunRunID string, nlpoliciesGetR
 
 // BuildListReplayResultsPayload builds the payload for the nlpolicies
 // listReplayResults endpoint from CLI flags.
-func BuildListReplayResultsPayload(nlpoliciesListReplayResultsRunID string, nlpoliciesListReplayResultsDecision string, nlpoliciesListReplayResultsCursor string, nlpoliciesListReplayResultsPageLimit string, nlpoliciesListReplayResultsApikeyToken string, nlpoliciesListReplayResultsSessionToken string, nlpoliciesListReplayResultsProjectSlugInput string) (*nlpolicies.ListReplayResultsPayload, error) {
+func BuildListReplayResultsPayload(nlpoliciesListReplayResultsRunID string, nlpoliciesListReplayResultsDecision string, nlpoliciesListReplayResultsCursor string, nlpoliciesListReplayResultsLimit string, nlpoliciesListReplayResultsApikeyToken string, nlpoliciesListReplayResultsSessionToken string, nlpoliciesListReplayResultsProjectSlugInput string) (*nlpolicies.ListReplayResultsPayload, error) {
 	var err error
 	var runID string
 	{
@@ -599,6 +615,12 @@ func BuildListReplayResultsPayload(nlpoliciesListReplayResultsRunID string, nlpo
 	{
 		if nlpoliciesListReplayResultsDecision != "" {
 			decision = &nlpoliciesListReplayResultsDecision
+			if !(*decision == "ALLOW" || *decision == "BLOCK" || *decision == "JUDGE_ERROR") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("decision", *decision, []any{"ALLOW", "BLOCK", "JUDGE_ERROR"}))
+			}
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 	var cursor *string
@@ -607,21 +629,21 @@ func BuildListReplayResultsPayload(nlpoliciesListReplayResultsRunID string, nlpo
 			cursor = &nlpoliciesListReplayResultsCursor
 		}
 	}
-	var pageLimit *int
+	var limit *int
 	{
-		if nlpoliciesListReplayResultsPageLimit != "" {
+		if nlpoliciesListReplayResultsLimit != "" {
 			var v int64
-			v, err = strconv.ParseInt(nlpoliciesListReplayResultsPageLimit, 10, strconv.IntSize)
+			v, err = strconv.ParseInt(nlpoliciesListReplayResultsLimit, 10, strconv.IntSize)
 			val := int(v)
-			pageLimit = &val
+			limit = &val
 			if err != nil {
-				return nil, fmt.Errorf("invalid value for pageLimit, must be INT")
+				return nil, fmt.Errorf("invalid value for limit, must be INT")
 			}
-			if *pageLimit < 1 {
-				err = goa.MergeErrors(err, goa.InvalidRangeError("page_limit", *pageLimit, 1, true))
+			if *limit < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", *limit, 1, true))
 			}
-			if *pageLimit > 200 {
-				err = goa.MergeErrors(err, goa.InvalidRangeError("page_limit", *pageLimit, 200, false))
+			if *limit > 200 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", *limit, 200, false))
 			}
 			if err != nil {
 				return nil, err
@@ -650,7 +672,7 @@ func BuildListReplayResultsPayload(nlpoliciesListReplayResultsRunID string, nlpo
 	v.RunID = runID
 	v.Decision = decision
 	v.Cursor = cursor
-	v.PageLimit = pageLimit
+	v.Limit = limit
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput

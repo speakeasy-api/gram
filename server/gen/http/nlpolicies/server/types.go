@@ -4621,7 +4621,7 @@ func NewDeletePolicyPayload(body *DeletePolicyRequestBody, apikeyToken *string, 
 
 // NewListDecisionsPayload builds a nlpolicies service listDecisions endpoint
 // payload.
-func NewListDecisionsPayload(policyID string, decision *string, enforced *bool, decidedBy *string, since *string, sessionID *string, cursor *string, pageLimit *int, apikeyToken *string, sessionToken *string, projectSlugInput *string) *nlpolicies.ListDecisionsPayload {
+func NewListDecisionsPayload(policyID string, decision *string, enforced *bool, decidedBy *string, since *string, sessionID *string, cursor *string, limit *int, apikeyToken *string, sessionToken *string, projectSlugInput *string) *nlpolicies.ListDecisionsPayload {
 	v := &nlpolicies.ListDecisionsPayload{}
 	v.PolicyID = policyID
 	v.Decision = decision
@@ -4630,7 +4630,7 @@ func NewListDecisionsPayload(policyID string, decision *string, enforced *bool, 
 	v.Since = since
 	v.SessionID = sessionID
 	v.Cursor = cursor
-	v.PageLimit = pageLimit
+	v.Limit = limit
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
@@ -4640,12 +4640,12 @@ func NewListDecisionsPayload(policyID string, decision *string, enforced *bool, 
 
 // NewListSessionVerdictsPayload builds a nlpolicies service
 // listSessionVerdicts endpoint payload.
-func NewListSessionVerdictsPayload(policyID string, activeOnly *bool, cursor *string, pageLimit *int, apikeyToken *string, sessionToken *string, projectSlugInput *string) *nlpolicies.ListSessionVerdictsPayload {
+func NewListSessionVerdictsPayload(policyID string, activeOnly *bool, cursor *string, limit *int, apikeyToken *string, sessionToken *string, projectSlugInput *string) *nlpolicies.ListSessionVerdictsPayload {
 	v := &nlpolicies.ListSessionVerdictsPayload{}
 	v.PolicyID = policyID
 	v.ActiveOnly = activeOnly
 	v.Cursor = cursor
-	v.PageLimit = pageLimit
+	v.Limit = limit
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
@@ -4693,12 +4693,12 @@ func NewGetReplayRunPayload(runID string, apikeyToken *string, sessionToken *str
 
 // NewListReplayResultsPayload builds a nlpolicies service listReplayResults
 // endpoint payload.
-func NewListReplayResultsPayload(runID string, decision *string, cursor *string, pageLimit *int, apikeyToken *string, sessionToken *string, projectSlugInput *string) *nlpolicies.ListReplayResultsPayload {
+func NewListReplayResultsPayload(runID string, decision *string, cursor *string, limit *int, apikeyToken *string, sessionToken *string, projectSlugInput *string) *nlpolicies.ListReplayResultsPayload {
 	v := &nlpolicies.ListReplayResultsPayload{}
 	v.RunID = runID
 	v.Decision = decision
 	v.Cursor = cursor
-	v.PageLimit = pageLimit
+	v.Limit = limit
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
