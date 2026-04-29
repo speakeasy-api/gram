@@ -1,7 +1,10 @@
-import { McpIcon } from "@/components/ui/mcp-icon";
 import { Icon, IconName, IconProps } from "@speakeasy-api/moonshine";
 import React, { useMemo } from "react";
-import { Link, useLocation, useNavigate } from "react-router";
+import { Link, Navigate, useLocation, useNavigate } from "react-router";
+import {
+  RedirectToInsightsHooks,
+  RedirectToLogAgents,
+} from "./components/observe/ObserveRedirects";
 import { useSlugs } from "./contexts/Sdk";
 import { cn } from "./lib/utils";
 import Billing from "./pages/billing/Billing";
@@ -19,15 +22,18 @@ import Environments, {
   EnvironmentsRoot,
 } from "./pages/environments/Environments";
 import Home from "./pages/home/Home";
-import Hooks from "./pages/hooks/Hooks";
 import Integrations from "./pages/integrations/Integrations";
 import Login from "./pages/login/Login";
 import Register from "./pages/login/Register";
-import Logs from "./pages/logs/Logs";
+import { LogsRoot, LogsMCPPage, LogsHooksPage } from "./pages/logs/Logs";
 import { BuiltInMCPDetailPage } from "./pages/mcp/BuiltInMCPDetailPage";
 import { MCPDetailPage, MCPDetailsRoot } from "./pages/mcp/MCPDetails";
 import { MCPPage, MCPRoot } from "./pages/mcp/MCP";
-import ObservabilityOverview from "./pages/observability/ObservabilityOverview";
+import {
+  InsightsHooksPage,
+  InsightsMCPPage,
+  InsightsRoot,
+} from "./pages/insights/Insights";
 import FunctionsOnboarding from "./pages/onboarding/FunctionsOnboarding";
 import UploadOpenAPI from "./pages/onboarding/UploadOpenAPI";
 import { OnboardingWizard } from "./pages/onboarding/Wizard";
@@ -314,18 +320,6 @@ const ROUTE_STRUCTURE = {
       },
     },
   },
-  chatSessions: {
-    title: "Agent Sessions",
-    url: "agent-sessions",
-    icon: "messages-square",
-    component: ChatSessions,
-  },
-  logs: {
-    title: "MCP Logs",
-    url: "logs",
-    customIcon: McpIcon,
-    component: Logs,
-  },
   triggers: {
     title: "Triggers",
     url: "triggers",
@@ -333,17 +327,65 @@ const ROUTE_STRUCTURE = {
     component: TriggersRoot,
     indexComponent: TriggersIndex,
   },
+  insights: {
+    title: "Insights",
+    url: "insights",
+    icon: "layout-dashboard",
+    component: InsightsRoot,
+    indexComponent: () => <Navigate to="hooks" replace />,
+    subPages: {
+      hooks: {
+        title: "Hooks",
+        url: "hooks",
+        component: InsightsHooksPage,
+      },
+      "mcp-servers": {
+        title: "MCP Servers",
+        url: "mcp",
+        component: InsightsMCPPage,
+      },
+      agents: {
+        title: "Agents",
+        url: "agents",
+        component: InsightsMCPPage,
+      },
+    },
+  },
   hooks: {
+    // redirect to insights/hooks
     title: "Hooks",
     url: "hooks",
-    icon: "webhook",
-    component: Hooks,
+    component: RedirectToInsightsHooks,
   },
-  observability: {
-    title: "Insights",
-    url: "observability",
-    icon: "layout-dashboard",
-    component: ObservabilityOverview,
+  logs: {
+    title: "Logs",
+    url: "logs",
+    icon: "logs",
+    component: LogsRoot,
+    indexComponent: () => <Navigate to="mcp" replace />, // redirect from older /logs route
+    subPages: {
+      hooks: {
+        title: "Hooks",
+        url: "hooks",
+        component: LogsHooksPage,
+      },
+      mcp: {
+        title: "MCP Servers",
+        url: "mcp",
+        component: LogsMCPPage,
+      },
+      agents: {
+        title: "Agent Sessions",
+        url: "agents",
+        component: ChatSessions,
+      },
+    },
+  },
+  chatSessions: {
+    // redirect to logs/agents
+    title: "Agent Sessions",
+    url: "agent-sessions",
+    component: RedirectToLogAgents,
   },
   riskOverview: {
     title: "Risk Overview",

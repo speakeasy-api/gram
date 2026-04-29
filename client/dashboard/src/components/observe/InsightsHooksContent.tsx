@@ -64,7 +64,7 @@ import {
 } from "chart.js";
 import { Bar, Line } from "react-chartjs-2";
 import { Settings } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import { LogDetailSheet } from "@/pages/logs/LogDetailSheet";
 import { TraceLogsList } from "@/pages/logs/TraceLogsList";
@@ -220,7 +220,7 @@ function safeBase64Decode(str: string): string | null {
 
 const perPage = 100;
 
-export function HooksContent() {
+export function InsightsHooksContent() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { projectSlug } = useSlugs();
 
@@ -282,11 +282,9 @@ export function HooksContent() {
   const [userEmailInput, setUserEmailInput] = useState("");
   const [selectedHookTypes, setSelectedHookTypes] =
     useState<TypesToInclude[]>(parsedHookTypes);
-  const [expandedTraceId, setExpandedTraceId] = useState<string | null>(null);
   const [selectedLog, setSelectedLog] = useState<TelemetryLogRecord | null>(
     null,
   );
-  const containerRef = useRef<HTMLDivElement>(null);
 
   const client = useGramContext();
 
@@ -372,10 +370,7 @@ export function HooksContent() {
   const {
     data: tracesData,
     error,
-    fetchNextPage,
-    hasNextPage,
     isFetching,
-    isFetchingNextPage,
     refetch: refetchLogs,
     isLogsDisabled: isLogsLogsDisabled,
   } = useLogsEnabledErrorCheck(
@@ -542,29 +537,6 @@ export function HooksContent() {
     return () => clearTimeout(timeoutId);
   }, [userEmailInput, addFilter]);
 
-  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
-    const container = e.currentTarget;
-    const scrollTop = container.scrollTop;
-    const scrollHeight = container.scrollHeight;
-    const clientHeight = container.clientHeight;
-    const distanceFromBottom = scrollHeight - (scrollTop + clientHeight);
-
-    if (isFetchingNextPage || isFetching) return;
-    if (!hasNextPage) return;
-
-    if (distanceFromBottom < 200) {
-      fetchNextPage();
-    }
-  };
-
-  const handleLogClick = (log: TelemetryLogRecord) => {
-    setSelectedLog(log);
-  };
-
-  const toggleExpand = (traceId: string) => {
-    setExpandedTraceId((prev) => (prev === traceId ? null : traceId));
-  };
-
   const handleHookTypesChange = useCallback(
     (types: TypesToInclude[]) => {
       setSelectedHookTypes(types);
@@ -638,7 +610,6 @@ export function HooksContent() {
                 <HooksInnerContent
                   isLogsDisabled={isLogsDisabled}
                   isLoading={isLoading}
-                  isFetching={isFetching}
                   error={error}
                   groupedTraces={groupedTraces}
                   serverInput={serverInput}
@@ -650,15 +621,8 @@ export function HooksContent() {
                   removeFilter={removeFilter}
                   selectedHookTypes={selectedHookTypes}
                   onHookTypesChange={handleHookTypesChange}
-                  expandedTraceId={expandedTraceId}
-                  toggleExpand={toggleExpand}
                   selectedLog={selectedLog}
-                  handleLogClick={handleLogClick}
                   setSelectedLog={setSelectedLog}
-                  containerRef={containerRef}
-                  handleScroll={handleScroll}
-                  hasNextPage={hasNextPage}
-                  isFetchingNextPage={isFetchingNextPage}
                   dateRange={dateRange}
                   customRange={customRange}
                   customRangeLabel={urlLabel}
@@ -682,7 +646,6 @@ export function HooksContent() {
 
 function HooksInnerContent({
   isLoading,
-  isFetching,
   error,
   groupedTraces,
   serverInput,
@@ -694,15 +657,8 @@ function HooksInnerContent({
   removeFilter,
   selectedHookTypes,
   onHookTypesChange,
-  expandedTraceId,
-  toggleExpand,
   selectedLog,
-  handleLogClick,
   setSelectedLog,
-  containerRef,
-  handleScroll,
-  hasNextPage,
-  isFetchingNextPage,
   dateRange,
   customRange,
   customRangeLabel,
@@ -717,7 +673,6 @@ function HooksInnerContent({
 }: {
   isLogsDisabled: boolean;
   isLoading: boolean;
-  isFetching: boolean;
   error: Error | null;
   groupedTraces: HookTrace[];
   serverInput: string;
@@ -729,15 +684,8 @@ function HooksInnerContent({
   removeFilter: (path: string, display?: string) => void;
   selectedHookTypes: TypesToInclude[];
   onHookTypesChange: (types: TypesToInclude[]) => void;
-  expandedTraceId: string | null;
-  toggleExpand: (traceId: string) => void;
   selectedLog: TelemetryLogRecord | null;
-  handleLogClick: (log: TelemetryLogRecord) => void;
   setSelectedLog: (log: TelemetryLogRecord | null) => void;
-  containerRef: React.RefObject<HTMLDivElement | null>;
-  handleScroll: (e: React.UIEvent<HTMLDivElement>) => void;
-  hasNextPage: boolean;
-  isFetchingNextPage: boolean;
   dateRange: DateRangePreset;
   customRange: { from: Date; to: Date } | null;
   customRangeLabel: string | null;
@@ -751,29 +699,9 @@ function HooksInnerContent({
   summaryIsError: boolean;
 }) {
   const orgRoutes = useOrgRoutes();
-  const [searchParams, setSearchParams] = useSearchParams();
   const { from, to } = useMemo(
     () => customRange ?? getPresetRange(dateRange),
     [customRange, dateRange],
-  );
-  const activeTab: "metrics" | "logs" =
-    searchParams.get("tab") === "logs" ? "logs" : "metrics";
-  const setActiveTab = useCallback(
-    (tab: "metrics" | "logs") => {
-      setSearchParams(
-        (prev) => {
-          const next = new URLSearchParams(prev);
-          if (tab === "metrics") {
-            next.delete("tab");
-          } else {
-            next.set("tab", tab);
-          }
-          return next;
-        },
-        { replace: true },
-      );
-    },
-    [setSearchParams],
   );
   const { expandedChart, setExpandedChart } = useExpandedChart();
   useEffect(() => {
@@ -803,33 +731,6 @@ function HooksInnerContent({
           </div>
 
           <div className="flex shrink-0 flex-wrap items-center gap-2">
-            <div className="bg-muted/50 flex h-[42px] shrink-0 items-center gap-1 rounded-md border p-1">
-              <button
-                type="button"
-                onClick={() => setActiveTab("metrics")}
-                className={cn(
-                  "rounded-sm px-3 py-1.5 text-sm font-medium transition-colors",
-                  activeTab === "metrics"
-                    ? "bg-background text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                Metrics
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveTab("logs")}
-                className={cn(
-                  "rounded-sm px-3 py-1.5 text-sm font-medium transition-colors",
-                  activeTab === "logs"
-                    ? "bg-background text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                Logs
-              </button>
-            </div>
-
             <MultiSearch
               value={serverInput}
               onChange={setServerInput}
@@ -870,102 +771,53 @@ function HooksInnerContent({
           </div>
 
           <div className="flex min-h-0 flex-1 overflow-hidden">
-            {activeTab === "metrics" ? (
-              <div className="min-h-0 flex-1 overflow-y-auto">
-                {error ? (
-                  <ErrorAlert
-                    error={error}
-                    title="Error loading hook events"
-                    className="mx-auto w-full"
-                  />
-                ) : isLoading ? (
-                  <div className="text-muted-foreground flex items-center justify-center gap-2 py-12">
-                    <Spinner className="mr-0 size-5" />
-                    <span>Loading hook events...</span>
-                  </div>
-                ) : groupedTraces.length === 0 && activeFilters.length === 0 ? (
-                  <HooksEmptyState />
-                ) : groupedTraces.length === 0 ? (
-                  <div className="py-12 text-center">
-                    <div className="flex flex-col items-center gap-3">
-                      <div className="bg-muted flex size-12 items-center justify-center rounded-full">
-                        <Icon
-                          name="inbox"
-                          className="text-muted-foreground size-6"
-                        />
-                      </div>
-                      <span className="text-foreground font-medium">
-                        No matching hook events
-                      </span>
-                      <span className="text-muted-foreground max-w-sm text-sm">
-                        Try adjusting your search query or time range
-                      </span>
-                    </div>
-                  </div>
-                ) : (
-                  <HooksAnalytics
-                    serverNameMappings={serverNameMappings}
-                    from={from}
-                    to={to}
-                    compact={false}
-                    addFilter={addFilter}
-                    onHookTypesChange={onHookTypesChange}
-                    summaryData={summaryData}
-                    summaryPending={summaryPending}
-                    summaryIsError={summaryIsError}
-                    expandedChart={expandedChart}
-                    onExpandedChartChange={setExpandedChart}
-                  />
-                )}
-              </div>
-            ) : (
-              <div className="min-h-0 flex-1 overflow-y-auto border">
-                <div className="bg-background flex h-full flex-col">
-                  {isFetching && groupedTraces.length > 0 && (
-                    <div className="bg-primary/20 absolute top-0 right-0 left-0 z-20 h-1">
-                      <div className="bg-primary h-full animate-pulse" />
-                    </div>
-                  )}
-
-                  <div className="bg-muted/30 text-muted-foreground flex shrink-0 items-center gap-3 border-b px-5 py-2.5 text-xs font-medium tracking-wide uppercase">
-                    <div className="w-[150px] shrink-0">Timestamp</div>
-                    <div className="w-5 shrink-0" />
-                    <div className="min-w-0 flex-1">Server / Tool</div>
-                    <div className="w-[260px] shrink-0">User</div>
-                    <div className="w-[120px] shrink-0">Source</div>
-                    <div className="w-24 shrink-0 text-right">Status</div>
-                  </div>
-
-                  <div
-                    ref={containerRef}
-                    className="flex-1 overflow-y-auto"
-                    onScroll={handleScroll}
-                  >
-                    <HooksTraceContent
-                      error={error}
-                      isLoading={isLoading}
-                      groupedTraces={groupedTraces}
-                      activeFilters={activeFilters}
-                      expandedTraceId={expandedTraceId}
-                      isFetchingNextPage={isFetchingNextPage}
-                      onToggleExpand={toggleExpand}
-                      onLogClick={handleLogClick}
-                      serverNameMappings={serverNameMappings}
-                    />
-                  </div>
-
-                  {groupedTraces.length > 0 && (
-                    <div className="bg-muted/30 text-muted-foreground flex shrink-0 items-center gap-4 border-t px-5 py-3 text-sm">
-                      <span>
-                        {groupedTraces.length}{" "}
-                        {groupedTraces.length === 1 ? "trace" : "traces"}
-                        {hasNextPage && " • Scroll to load more"}
-                      </span>
-                    </div>
-                  )}
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              {error ? (
+                <ErrorAlert
+                  error={error}
+                  title="Error loading hook events"
+                  className="mx-auto w-full"
+                />
+              ) : isLoading ? (
+                <div className="text-muted-foreground flex items-center justify-center gap-2 py-12">
+                  <Spinner className="mr-0 size-5" />
+                  <span>Loading hook events...</span>
                 </div>
-              </div>
-            )}
+              ) : groupedTraces.length === 0 && activeFilters.length === 0 ? (
+                <HooksEmptyState />
+              ) : groupedTraces.length === 0 ? (
+                <div className="py-12 text-center">
+                  <div className="flex flex-col items-center gap-3">
+                    <div className="bg-muted flex size-12 items-center justify-center rounded-full">
+                      <Icon
+                        name="inbox"
+                        className="text-muted-foreground size-6"
+                      />
+                    </div>
+                    <span className="text-foreground font-medium">
+                      No matching hook events
+                    </span>
+                    <span className="text-muted-foreground max-w-sm text-sm">
+                      Try adjusting your search query or time range
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <HooksAnalytics
+                  serverNameMappings={serverNameMappings}
+                  from={from}
+                  to={to}
+                  compact={false}
+                  addFilter={addFilter}
+                  onHookTypesChange={onHookTypesChange}
+                  summaryData={summaryData}
+                  summaryPending={summaryPending}
+                  summaryIsError={summaryIsError}
+                  expandedChart={expandedChart}
+                  onExpandedChartChange={setExpandedChart}
+                />
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -1358,7 +1210,7 @@ function HookTraceRow({
                 <div className="text-xs font-semibold tracking-wide text-amber-700 uppercase dark:text-amber-300">
                   Blocked
                 </div>
-                <div className="text-foreground text-sm break-words">
+                <div className="text-foreground wrap-break-words text-sm">
                   {trace.blockReason || "No reason provided"}
                 </div>
               </div>

@@ -1,15 +1,19 @@
-import { cn } from "@/lib/utils";
 import { Link, Outlet, useLocation } from "react-router";
+import { InsightsHooksContent } from "@/components/observe/InsightsHooksContent";
+import { MCPInsights } from "@/components/observe/MCPInsights";
+import { RequireScope } from "@/components/require-scope";
 import { useSlugs } from "@/contexts/Sdk";
+import { cn } from "@/lib/utils";
 
-function ObservabilityTabNav() {
+function InsightsTabNav() {
   const { orgSlug, projectSlug } = useSlugs();
   const location = useLocation();
 
-  const base = `/${orgSlug}/${projectSlug}/observability`;
+  const base = `/${orgSlug}/${projectSlug}/insights`;
   const tabs = [
-    { label: "Insights", href: `${base}/insights` },
     { label: "Hooks", href: `${base}/hooks` },
+    { label: "MCP Servers", href: `${base}/mcp` },
+    { label: "Agents", href: `${base}/agents` },
   ];
 
   return (
@@ -36,13 +40,29 @@ function ObservabilityTabNav() {
   );
 }
 
-export function ObservabilityRoot() {
+export function InsightsRoot() {
   return (
     <div className="flex h-full flex-col">
-      <ObservabilityTabNav />
+      <InsightsTabNav />
       <div className="min-h-0 flex-1 overflow-auto">
         <Outlet />
       </div>
     </div>
+  );
+}
+
+export function InsightsHooksPage() {
+  return (
+    <RequireScope scope="project:read" level="page">
+      <InsightsHooksContent />
+    </RequireScope>
+  );
+}
+
+export function InsightsMCPPage() {
+  return (
+    <RequireScope scope="project:read" level="page">
+      <MCPInsights />
+    </RequireScope>
   );
 }

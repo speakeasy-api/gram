@@ -1,10 +1,10 @@
 import { RequireScope } from "@/components/require-scope";
-import { HooksContent } from "@/components/observe/HooksContent";
+import { InsightsHooksContent } from "@/components/observe/InsightsHooksContent";
 
 export default function HooksPage() {
   return (
     <RequireScope scope="project:read" level="page">
-      <HooksContent />
+      <InsightsHooksContent />
     </RequireScope>
   );
 }

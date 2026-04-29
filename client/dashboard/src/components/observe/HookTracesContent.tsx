@@ -32,7 +32,7 @@ import { useInfiniteQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
 import { LogDetailSheet } from "@/pages/logs/LogDetailSheet";
-import { HooksTraceContent } from "@/components/observe/HooksContent";
+import { HooksTraceContent } from "@/components/observe/InsightsHooksContent";
 
 const perPage = 100;
 

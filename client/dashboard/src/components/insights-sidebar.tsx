@@ -385,7 +385,6 @@ function PendingPromptBridge({
     try {
       assistantRuntime.thread.append(text);
     } catch (err) {
-      // eslint-disable-next-line no-console
       console.error("Failed to send Explore prompt:", err);
     }
 

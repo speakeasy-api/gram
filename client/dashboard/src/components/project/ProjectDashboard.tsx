@@ -300,12 +300,12 @@ export function ProjectDashboard() {
                         to={
                           // no hooks data and no chat sessions
                           isProjectEmpty && overview?.summary.totalChats === 0
-                            ? routes.hooks.href()
+                            ? routes.insights.href()
                             : // has hooks data but no chat sessions
                               !isProjectEmpty &&
                                 overview?.summary.totalChats === 0
-                              ? routes.observability.href()
-                              : routes.chatSessions.href()
+                              ? routes.insights.href()
+                              : routes.logs.agents.href()
                         }
                       />
                     </CardActions>

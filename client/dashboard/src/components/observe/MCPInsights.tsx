@@ -179,23 +179,23 @@ function SetupRequiredModal({
   );
 }
 
-function ViewChatsLink({ from, to }: { from: Date; to: Date }) {
+function ViewSessionsLink({ from, to }: { from: Date; to: Date }) {
   const routes = useRoutes();
   return (
-    <routes.chatSessions.Link
+    <routes.logs.agents.Link
       queryParams={{ from: from.toISOString(), to: to.toISOString() }}
       className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-sm no-underline transition-colors hover:no-underline"
     >
-      View chats
+      View sessions
       <ChevronRight className="size-4" />
-    </routes.chatSessions.Link>
+    </routes.logs.agents.Link>
   );
 }
 
 function ViewLogsLink({ from, to }: { from: Date; to: Date }) {
   const routes = useRoutes();
   return (
-    <routes.logs.Link
+    <routes.logs.mcp.Link
       queryParams={{
         from: toLocalISOString(from),
         to: toLocalISOString(to),
@@ -204,7 +204,7 @@ function ViewLogsLink({ from, to }: { from: Date; to: Date }) {
     >
       View logs
       <ChevronRight className="size-4" />
-    </routes.logs.Link>
+    </routes.logs.mcp.Link>
   );
 }
 
@@ -492,7 +492,7 @@ function parseLocalDate(dateStr: string): Date {
   return new Date(dateStr);
 }
 
-export function InsightsContent() {
+export function MCPInsights() {
   const [searchParams, setSearchParams] = useSearchParams();
   const client = useGramContext();
 
@@ -872,7 +872,7 @@ function InsightsPageHeader({
       <div
         className={cn(
           "flex items-center gap-3",
-          isInsightsOpen ? "justify-start" : "flex-shrink-0",
+          isInsightsOpen ? "justify-start" : "shrink-0",
         )}
       >
         {showMcpFilter ? (
@@ -1805,7 +1805,7 @@ function ResolvedChatsChart({
     <div className="border-border bg-card rounded-lg border p-6">
       <div className="mb-4 flex items-center justify-between">
         <h3 className="text-sm font-semibold">{title}</h3>
-        <ViewChatsLink from={from} to={to} />
+        <ViewSessionsLink from={from} to={to} />
       </div>
       <div className="relative">
         {isLoading && (
@@ -2030,7 +2030,7 @@ function ResolutionStatusChart({
     <div className="border-border bg-card rounded-lg border p-6">
       <div className="mb-4 flex items-center justify-between">
         <h3 className="text-sm font-semibold">{title}</h3>
-        <ViewChatsLink from={from} to={to} />
+        <ViewSessionsLink from={from} to={to} />
       </div>
       <div className="relative">
         {isLoading && (
@@ -2166,7 +2166,7 @@ function SessionDurationChart({
     <div className="border-border bg-card rounded-lg border p-6">
       <div className="mb-4 flex items-center justify-between">
         <h3 className="text-sm font-semibold">{title}</h3>
-        <ViewChatsLink from={from} to={to} />
+        <ViewSessionsLink from={from} to={to} />
       </div>
       <div className="relative">
         {isLoading && (
