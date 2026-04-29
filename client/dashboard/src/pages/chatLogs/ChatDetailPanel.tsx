@@ -104,7 +104,7 @@ function exportChatAsJson(chat: {
     a.download = `chat-${slug}.json`;
     a.click();
     URL.revokeObjectURL(url);
-  } catch (err) {
+  } catch (_err) {
     toast.error("Failed to export chat session");
   }
 }
@@ -803,21 +803,23 @@ export function ChatDetailPanel({
           </div>
           <div className="flex items-center gap-1">
             {isAdmin && (
-              <button
-                onClick={() => exportChatAsJson(chat)}
-                className="hover:bg-muted text-muted-foreground rounded-md p-1 transition-colors"
-                aria-label="Export chat as JSON"
-              >
-                <Icon name="download" className="size-5" />
-              </button>
+              <>
+                <button
+                  onClick={() => exportChatAsJson(chat)}
+                  className="hover:bg-muted text-muted-foreground rounded-md p-1 transition-colors"
+                  aria-label="Export chat as JSON"
+                >
+                  <Icon name="download" className="size-5" />
+                </button>
+                <button
+                  onClick={() => setShowDeleteConfirm(true)}
+                  className="hover:bg-destructive/10 text-muted-foreground hover:text-destructive rounded-md p-1 transition-colors"
+                  aria-label="Delete chat"
+                >
+                  <Icon name="trash-2" className="size-5" />
+                </button>
+              </>
             )}
-            <button
-              onClick={() => setShowDeleteConfirm(true)}
-              className="hover:bg-destructive/10 text-muted-foreground hover:text-destructive rounded-md p-1 transition-colors"
-              aria-label="Delete chat"
-            >
-              <Icon name="trash-2" className="size-5" />
-            </button>
             <button
               onClick={onClose}
               className="hover:bg-muted rounded-md p-1 transition-colors"
