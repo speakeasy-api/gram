@@ -41,6 +41,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { useState, useCallback } from "react";
+import { Outlet, useNavigate } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useRiskListPolicies,
@@ -49,19 +50,26 @@ import {
   useRiskPoliciesDeleteMutation,
   useRiskPoliciesTriggerMutation,
   invalidateAllRiskListPolicies,
+  useNlPoliciesList,
 } from "@gram/client/react-query/index.js";
 import {
   useRiskPoliciesStatus,
   invalidateAllRiskPoliciesStatus,
 } from "@gram/client/react-query/riskPoliciesStatus.js";
 import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
+import { useRoutes } from "@/routes";
 import {
   RULE_CATEGORY_META,
   DETECTION_RULES,
   type RuleCategory,
   type PolicyAction,
 } from "./policy-data";
+import NLPolicyCreateForm from "./NLPolicyCreateForm";
 import { cn } from "@/lib/utils";
+
+export function PolicyCenterRoot() {
+  return <Outlet />;
+}
 
 /** Presidio-backed categories */
 const PRESIDIO_CATEGORIES: RuleCategory[] = [
@@ -136,10 +144,16 @@ export default function PolicyCenter() {
 
 function PolicyCenterContent() {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const routes = useRoutes();
   const { data, isLoading } = useRiskListPolicies();
   const policies = data?.policies ?? [];
 
+  const { data: nlData, isLoading: nlLoading } = useNlPoliciesList();
+  const nlPolicies = nlData?.policies ?? [];
+
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [nlCreateOpen, setNlCreateOpen] = useState(false);
   const [editingPolicy, setEditingPolicy] = useState<RiskPolicy | null>(null);
   const [formName, setFormName] = useState("");
   const [formEnabled, setFormEnabled] = useState(true);
@@ -255,7 +269,7 @@ function PolicyCenterContent() {
     });
   };
 
-  if (isLoading) {
+  if (isLoading || nlLoading) {
     return (
       <Page>
         <Page.Header>
@@ -270,7 +284,7 @@ function PolicyCenterContent() {
     );
   }
 
-  if (policies.length === 0) {
+  if (policies.length === 0 && nlPolicies.length === 0) {
     return (
       <Page>
         <Page.Header>
@@ -282,40 +296,63 @@ function PolicyCenterContent() {
               <Shield className="text-muted-foreground h-6 w-6" />
             </div>
             <Type variant="subheading" className="mb-1">
-              No Risk Policies
+              No Policies Yet
             </Type>
             <Type small muted className="mb-4 max-w-md text-center">
               Risk policies scan your chat messages for secrets and sensitive
-              data. Create your first policy to get started.
+              data. Natural-language policies use an LLM judge to allow or block
+              tool calls. Create your first policy to get started.
             </Type>
-            <Button
-              onClick={() => {
-                const { sources, presidioEntities } = categoriesToPayload(
-                  new Set<RuleCategory>(["secrets", "pii"]),
-                );
-                createMutation.mutate({
-                  request: {
-                    createRiskPolicyRequestBody: {
-                      name: "Risk Scanner",
-                      enabled: true,
-                      sources,
-                      presidioEntities,
-                    },
-                  },
-                });
-              }}
-              disabled={createMutation.isPending}
-            >
-              {createMutation.isPending ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Creating...
-                </>
-              ) : (
-                "Get Started"
-              )}
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button disabled={createMutation.isPending}>
+                  {createMutation.isPending ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Creating...
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="mr-2 h-4 w-4" />
+                      New Policy
+                    </>
+                  )}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="center">
+                <DropdownMenuItem
+                  className="cursor-pointer"
+                  onSelect={() => {
+                    const { sources, presidioEntities } = categoriesToPayload(
+                      new Set<RuleCategory>(["secrets", "pii"]),
+                    );
+                    createMutation.mutate({
+                      request: {
+                        createRiskPolicyRequestBody: {
+                          name: "Risk Scanner",
+                          enabled: true,
+                          sources,
+                          presidioEntities,
+                        },
+                      },
+                    });
+                  }}
+                >
+                  Risk Policy
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  className="cursor-pointer"
+                  onSelect={() => setTimeout(() => setNlCreateOpen(true), 0)}
+                >
+                  Natural Language Policy
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
+          <NLPolicyCreateForm
+            open={nlCreateOpen}
+            onClose={() => setNlCreateOpen(false)}
+          />
         </Page.Body>
       </Page>
     );
@@ -329,21 +366,40 @@ function PolicyCenterContent() {
       <Page.Body>
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-lg font-semibold">Risk Policies</h2>
+            <h2 className="text-lg font-semibold">Policies</h2>
             <p className="text-muted-foreground text-sm">
-              Configure risk analysis rules to detect secrets and sensitive
-              information in chat messages.
+              Configure risk analysis and natural-language policies that govern
+              chat messages and tool calls.
             </p>
           </div>
-          <Button onClick={handleCreate}>
-            <Plus className="mr-2 h-4 w-4" />
-            New Policy
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button>
+                <Plus className="mr-2 h-4 w-4" />
+                New
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                className="cursor-pointer"
+                onSelect={() => setTimeout(() => handleCreate(), 0)}
+              >
+                Risk Policy
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                className="cursor-pointer"
+                onSelect={() => setTimeout(() => setNlCreateOpen(true), 0)}
+              >
+                Natural Language Policy
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
 
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead className="w-[80px]">Type</TableHead>
               <TableHead>Name</TableHead>
               <TableHead>Action</TableHead>
               <TableHead>Categories</TableHead>
@@ -360,10 +416,13 @@ function PolicyCenterContent() {
               );
               return (
                 <TableRow
-                  key={policy.id}
+                  key={`risk-${policy.id}`}
                   className="cursor-pointer"
                   onClick={() => handleEdit(policy)}
                 >
+                  <TableCell>
+                    <Badge variant="outline">Risk</Badge>
+                  </TableCell>
                   <TableCell className="font-medium">{policy.name}</TableCell>
                   <TableCell>
                     <ActionBadge
@@ -377,17 +436,13 @@ function PolicyCenterContent() {
                           {RULE_CATEGORY_META[cat].label}
                         </Badge>
                       ))}
+                      {policy.pendingMessages > 0 ? (
+                        <span className="text-muted-foreground text-xs">
+                          {policy.totalMessages - policy.pendingMessages}/
+                          {policy.totalMessages} analyzed
+                        </span>
+                      ) : null}
                     </div>
-                  </TableCell>
-                  <TableCell>
-                    {policy.pendingMessages > 0 ? (
-                      <span className="text-muted-foreground text-xs">
-                        {policy.totalMessages - policy.pendingMessages}/
-                        {policy.totalMessages} analyzed
-                      </span>
-                    ) : (
-                      <Badge variant="secondary">Complete</Badge>
-                    )}
                   </TableCell>
                   <TableCell onClick={(e) => e.stopPropagation()}>
                     <Switch
@@ -429,8 +484,67 @@ function PolicyCenterContent() {
                 </TableRow>
               );
             })}
+            {nlPolicies.map((p) => {
+              const scopeBits = [
+                p.scopePerCall ? "per-call" : null,
+                p.scopeSession ? "session" : null,
+              ].filter(Boolean);
+              return (
+                <TableRow
+                  key={`nl-${p.id}`}
+                  className="cursor-pointer"
+                  onClick={() =>
+                    navigate(routes.policyCenter.nlDetail.href(p.id))
+                  }
+                >
+                  <TableCell>
+                    <Badge variant="outline">NL</Badge>
+                  </TableCell>
+                  <TableCell className="font-medium">
+                    {p.name}
+                    <span className="text-muted-foreground ml-2 text-xs">
+                      v{p.version}
+                    </span>
+                  </TableCell>
+                  <TableCell>
+                    <Badge
+                      variant={
+                        p.mode === "enforce"
+                          ? "destructive"
+                          : p.mode === "audit"
+                            ? "warning"
+                            : "secondary"
+                      }
+                    >
+                      {p.mode}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex gap-1">
+                      {scopeBits.map((s) => (
+                        <Badge key={s as string} variant="secondary">
+                          {s}
+                        </Badge>
+                      ))}
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground text-xs">
+                    —
+                  </TableCell>
+                  <TableCell className="text-muted-foreground text-xs">
+                    {p.mode === "disabled" ? "off" : "on"}
+                  </TableCell>
+                  <TableCell />
+                </TableRow>
+              );
+            })}
           </TableBody>
         </Table>
+
+        <NLPolicyCreateForm
+          open={nlCreateOpen}
+          onClose={() => setNlCreateOpen(false)}
+        />
 
         {/* Edit/Create Sheet */}
         <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
