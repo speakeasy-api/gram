@@ -33,10 +33,9 @@ import (
 	instancesc "github.com/speakeasy-api/gram/server/gen/http/instances/client"
 	integrationsc "github.com/speakeasy-api/gram/server/gen/http/integrations/client"
 	keysc "github.com/speakeasy-api/gram/server/gen/http/keys/client"
-	mcpendpointsc "github.com/speakeasy-api/gram/server/gen/http/mcp_endpoints/client"
 	mcpmetadatac "github.com/speakeasy-api/gram/server/gen/http/mcp_metadata/client"
 	mcpregistriesc "github.com/speakeasy-api/gram/server/gen/http/mcp_registries/client"
-	mcpserversc "github.com/speakeasy-api/gram/server/gen/http/mcp_servers/client"
+	nlpoliciesc "github.com/speakeasy-api/gram/server/gen/http/nlpolicies/client"
 	organizationsc "github.com/speakeasy-api/gram/server/gen/http/organizations/client"
 	packagesc "github.com/speakeasy-api/gram/server/gen/http/packages/client"
 	pluginsc "github.com/speakeasy-api/gram/server/gen/http/plugins/client"
@@ -81,12 +80,11 @@ func UsageCommands() []string {
 		"instances get-instance",
 		"integrations (get|list)",
 		"keys (create-key|list-keys|revoke-key|verify-key)",
-		"mcp-endpoints (create-mcp-endpoint|get-mcp-endpoint|list-mcp-endpoints|update-mcp-endpoint|delete-mcp-endpoint)",
 		"mcp-metadata (get-mcp-metadata|set-mcp-metadata|export-mcp-metadata)",
-		"mcp-servers (create-mcp-server|get-mcp-server|list-mcp-servers|update-mcp-server|delete-mcp-server)",
+		"nlpolicies (create-policy|list-policies|get-policy|update-policy|set-mode|delete-policy|list-decisions|list-session-verdicts|clear-session-verdict|replay|get-replay-run|list-replay-results)",
 		"organizations (send-invite|revoke-invite|list-invites|get-invite-by-token|list-users|remove-user)",
 		"packages (create-package|update-package|list-packages|list-versions|publish)",
-		"plugins (list-plugins|get-plugin|create-plugin|update-plugin|delete-plugin|add-plugin-server|update-plugin-server|remove-plugin-server|set-plugin-assignments|download-plugin-package|download-observability-plugin|get-publish-status|publish-plugins)",
+		"plugins (list-plugins|get-plugin|create-plugin|update-plugin|delete-plugin|add-plugin-server|update-plugin-server|remove-plugin-server|set-plugin-assignments|download-plugin-package|get-publish-status|publish-plugins)",
 		"features (get-product-features|set-product-feature)",
 		"projects (get-project|create-project|list-projects|set-logo|list-allowed-origins|upsert-allowed-origin|delete-project|set-organization-whitelist)",
 		"remote-mcp (create-server|list-servers|get-server|update-server|delete-server)",
@@ -594,10 +592,8 @@ func ParseEndpoint(
 
 		hooksFlags = flag.NewFlagSet("hooks", flag.ContinueOnError)
 
-		hooksClaudeFlags                = flag.NewFlagSet("claude", flag.ExitOnError)
-		hooksClaudeBodyFlag             = hooksClaudeFlags.String("body", "REQUIRED", "")
-		hooksClaudeApikeyTokenFlag      = hooksClaudeFlags.String("apikey-token", "", "")
-		hooksClaudeProjectSlugInputFlag = hooksClaudeFlags.String("project-slug-input", "", "")
+		hooksClaudeFlags    = flag.NewFlagSet("claude", flag.ExitOnError)
+		hooksClaudeBodyFlag = hooksClaudeFlags.String("body", "REQUIRED", "")
 
 		hooksCursorFlags                = flag.NewFlagSet("cursor", flag.ExitOnError)
 		hooksCursorBodyFlag             = hooksCursorFlags.String("body", "REQUIRED", "")
@@ -652,40 +648,6 @@ func ParseEndpoint(
 		keysVerifyKeyFlags           = flag.NewFlagSet("verify-key", flag.ExitOnError)
 		keysVerifyKeyApikeyTokenFlag = keysVerifyKeyFlags.String("apikey-token", "", "")
 
-		mcpEndpointsFlags = flag.NewFlagSet("mcp-endpoints", flag.ContinueOnError)
-
-		mcpEndpointsCreateMcpEndpointFlags                = flag.NewFlagSet("create-mcp-endpoint", flag.ExitOnError)
-		mcpEndpointsCreateMcpEndpointBodyFlag             = mcpEndpointsCreateMcpEndpointFlags.String("body", "REQUIRED", "")
-		mcpEndpointsCreateMcpEndpointSessionTokenFlag     = mcpEndpointsCreateMcpEndpointFlags.String("session-token", "", "")
-		mcpEndpointsCreateMcpEndpointApikeyTokenFlag      = mcpEndpointsCreateMcpEndpointFlags.String("apikey-token", "", "")
-		mcpEndpointsCreateMcpEndpointProjectSlugInputFlag = mcpEndpointsCreateMcpEndpointFlags.String("project-slug-input", "", "")
-
-		mcpEndpointsGetMcpEndpointFlags                = flag.NewFlagSet("get-mcp-endpoint", flag.ExitOnError)
-		mcpEndpointsGetMcpEndpointIDFlag               = mcpEndpointsGetMcpEndpointFlags.String("id", "", "")
-		mcpEndpointsGetMcpEndpointCustomDomainIDFlag   = mcpEndpointsGetMcpEndpointFlags.String("custom-domain-id", "", "")
-		mcpEndpointsGetMcpEndpointSlugFlag             = mcpEndpointsGetMcpEndpointFlags.String("slug", "", "")
-		mcpEndpointsGetMcpEndpointSessionTokenFlag     = mcpEndpointsGetMcpEndpointFlags.String("session-token", "", "")
-		mcpEndpointsGetMcpEndpointApikeyTokenFlag      = mcpEndpointsGetMcpEndpointFlags.String("apikey-token", "", "")
-		mcpEndpointsGetMcpEndpointProjectSlugInputFlag = mcpEndpointsGetMcpEndpointFlags.String("project-slug-input", "", "")
-
-		mcpEndpointsListMcpEndpointsFlags                = flag.NewFlagSet("list-mcp-endpoints", flag.ExitOnError)
-		mcpEndpointsListMcpEndpointsMcpServerIDFlag      = mcpEndpointsListMcpEndpointsFlags.String("mcp-server-id", "", "")
-		mcpEndpointsListMcpEndpointsSessionTokenFlag     = mcpEndpointsListMcpEndpointsFlags.String("session-token", "", "")
-		mcpEndpointsListMcpEndpointsApikeyTokenFlag      = mcpEndpointsListMcpEndpointsFlags.String("apikey-token", "", "")
-		mcpEndpointsListMcpEndpointsProjectSlugInputFlag = mcpEndpointsListMcpEndpointsFlags.String("project-slug-input", "", "")
-
-		mcpEndpointsUpdateMcpEndpointFlags                = flag.NewFlagSet("update-mcp-endpoint", flag.ExitOnError)
-		mcpEndpointsUpdateMcpEndpointBodyFlag             = mcpEndpointsUpdateMcpEndpointFlags.String("body", "REQUIRED", "")
-		mcpEndpointsUpdateMcpEndpointSessionTokenFlag     = mcpEndpointsUpdateMcpEndpointFlags.String("session-token", "", "")
-		mcpEndpointsUpdateMcpEndpointApikeyTokenFlag      = mcpEndpointsUpdateMcpEndpointFlags.String("apikey-token", "", "")
-		mcpEndpointsUpdateMcpEndpointProjectSlugInputFlag = mcpEndpointsUpdateMcpEndpointFlags.String("project-slug-input", "", "")
-
-		mcpEndpointsDeleteMcpEndpointFlags                = flag.NewFlagSet("delete-mcp-endpoint", flag.ExitOnError)
-		mcpEndpointsDeleteMcpEndpointIDFlag               = mcpEndpointsDeleteMcpEndpointFlags.String("id", "REQUIRED", "")
-		mcpEndpointsDeleteMcpEndpointSessionTokenFlag     = mcpEndpointsDeleteMcpEndpointFlags.String("session-token", "", "")
-		mcpEndpointsDeleteMcpEndpointApikeyTokenFlag      = mcpEndpointsDeleteMcpEndpointFlags.String("apikey-token", "", "")
-		mcpEndpointsDeleteMcpEndpointProjectSlugInputFlag = mcpEndpointsDeleteMcpEndpointFlags.String("project-slug-input", "", "")
-
 		mcpMetadataFlags = flag.NewFlagSet("mcp-metadata", flag.ContinueOnError)
 
 		mcpMetadataGetMcpMetadataFlags                = flag.NewFlagSet("get-mcp-metadata", flag.ExitOnError)
@@ -706,36 +668,91 @@ func ParseEndpoint(
 		mcpMetadataExportMcpMetadataSessionTokenFlag     = mcpMetadataExportMcpMetadataFlags.String("session-token", "", "")
 		mcpMetadataExportMcpMetadataProjectSlugInputFlag = mcpMetadataExportMcpMetadataFlags.String("project-slug-input", "", "")
 
-		mcpServersFlags = flag.NewFlagSet("mcp-servers", flag.ContinueOnError)
+		nlpoliciesFlags = flag.NewFlagSet("nlpolicies", flag.ContinueOnError)
 
-		mcpServersCreateMcpServerFlags                = flag.NewFlagSet("create-mcp-server", flag.ExitOnError)
-		mcpServersCreateMcpServerBodyFlag             = mcpServersCreateMcpServerFlags.String("body", "REQUIRED", "")
-		mcpServersCreateMcpServerSessionTokenFlag     = mcpServersCreateMcpServerFlags.String("session-token", "", "")
-		mcpServersCreateMcpServerApikeyTokenFlag      = mcpServersCreateMcpServerFlags.String("apikey-token", "", "")
-		mcpServersCreateMcpServerProjectSlugInputFlag = mcpServersCreateMcpServerFlags.String("project-slug-input", "", "")
+		nlpoliciesCreatePolicyFlags                = flag.NewFlagSet("create-policy", flag.ExitOnError)
+		nlpoliciesCreatePolicyBodyFlag             = nlpoliciesCreatePolicyFlags.String("body", "REQUIRED", "")
+		nlpoliciesCreatePolicyApikeyTokenFlag      = nlpoliciesCreatePolicyFlags.String("apikey-token", "", "")
+		nlpoliciesCreatePolicySessionTokenFlag     = nlpoliciesCreatePolicyFlags.String("session-token", "", "")
+		nlpoliciesCreatePolicyProjectSlugInputFlag = nlpoliciesCreatePolicyFlags.String("project-slug-input", "", "")
 
-		mcpServersGetMcpServerFlags                = flag.NewFlagSet("get-mcp-server", flag.ExitOnError)
-		mcpServersGetMcpServerIDFlag               = mcpServersGetMcpServerFlags.String("id", "REQUIRED", "")
-		mcpServersGetMcpServerSessionTokenFlag     = mcpServersGetMcpServerFlags.String("session-token", "", "")
-		mcpServersGetMcpServerApikeyTokenFlag      = mcpServersGetMcpServerFlags.String("apikey-token", "", "")
-		mcpServersGetMcpServerProjectSlugInputFlag = mcpServersGetMcpServerFlags.String("project-slug-input", "", "")
+		nlpoliciesListPoliciesFlags                = flag.NewFlagSet("list-policies", flag.ExitOnError)
+		nlpoliciesListPoliciesApikeyTokenFlag      = nlpoliciesListPoliciesFlags.String("apikey-token", "", "")
+		nlpoliciesListPoliciesSessionTokenFlag     = nlpoliciesListPoliciesFlags.String("session-token", "", "")
+		nlpoliciesListPoliciesProjectSlugInputFlag = nlpoliciesListPoliciesFlags.String("project-slug-input", "", "")
 
-		mcpServersListMcpServersFlags                = flag.NewFlagSet("list-mcp-servers", flag.ExitOnError)
-		mcpServersListMcpServersSessionTokenFlag     = mcpServersListMcpServersFlags.String("session-token", "", "")
-		mcpServersListMcpServersApikeyTokenFlag      = mcpServersListMcpServersFlags.String("apikey-token", "", "")
-		mcpServersListMcpServersProjectSlugInputFlag = mcpServersListMcpServersFlags.String("project-slug-input", "", "")
+		nlpoliciesGetPolicyFlags                = flag.NewFlagSet("get-policy", flag.ExitOnError)
+		nlpoliciesGetPolicyPolicyIDFlag         = nlpoliciesGetPolicyFlags.String("policy-id", "REQUIRED", "")
+		nlpoliciesGetPolicyApikeyTokenFlag      = nlpoliciesGetPolicyFlags.String("apikey-token", "", "")
+		nlpoliciesGetPolicySessionTokenFlag     = nlpoliciesGetPolicyFlags.String("session-token", "", "")
+		nlpoliciesGetPolicyProjectSlugInputFlag = nlpoliciesGetPolicyFlags.String("project-slug-input", "", "")
 
-		mcpServersUpdateMcpServerFlags                = flag.NewFlagSet("update-mcp-server", flag.ExitOnError)
-		mcpServersUpdateMcpServerBodyFlag             = mcpServersUpdateMcpServerFlags.String("body", "REQUIRED", "")
-		mcpServersUpdateMcpServerSessionTokenFlag     = mcpServersUpdateMcpServerFlags.String("session-token", "", "")
-		mcpServersUpdateMcpServerApikeyTokenFlag      = mcpServersUpdateMcpServerFlags.String("apikey-token", "", "")
-		mcpServersUpdateMcpServerProjectSlugInputFlag = mcpServersUpdateMcpServerFlags.String("project-slug-input", "", "")
+		nlpoliciesUpdatePolicyFlags                = flag.NewFlagSet("update-policy", flag.ExitOnError)
+		nlpoliciesUpdatePolicyBodyFlag             = nlpoliciesUpdatePolicyFlags.String("body", "REQUIRED", "")
+		nlpoliciesUpdatePolicyApikeyTokenFlag      = nlpoliciesUpdatePolicyFlags.String("apikey-token", "", "")
+		nlpoliciesUpdatePolicySessionTokenFlag     = nlpoliciesUpdatePolicyFlags.String("session-token", "", "")
+		nlpoliciesUpdatePolicyProjectSlugInputFlag = nlpoliciesUpdatePolicyFlags.String("project-slug-input", "", "")
 
-		mcpServersDeleteMcpServerFlags                = flag.NewFlagSet("delete-mcp-server", flag.ExitOnError)
-		mcpServersDeleteMcpServerIDFlag               = mcpServersDeleteMcpServerFlags.String("id", "REQUIRED", "")
-		mcpServersDeleteMcpServerSessionTokenFlag     = mcpServersDeleteMcpServerFlags.String("session-token", "", "")
-		mcpServersDeleteMcpServerApikeyTokenFlag      = mcpServersDeleteMcpServerFlags.String("apikey-token", "", "")
-		mcpServersDeleteMcpServerProjectSlugInputFlag = mcpServersDeleteMcpServerFlags.String("project-slug-input", "", "")
+		nlpoliciesSetModeFlags                = flag.NewFlagSet("set-mode", flag.ExitOnError)
+		nlpoliciesSetModeBodyFlag             = nlpoliciesSetModeFlags.String("body", "REQUIRED", "")
+		nlpoliciesSetModeApikeyTokenFlag      = nlpoliciesSetModeFlags.String("apikey-token", "", "")
+		nlpoliciesSetModeSessionTokenFlag     = nlpoliciesSetModeFlags.String("session-token", "", "")
+		nlpoliciesSetModeProjectSlugInputFlag = nlpoliciesSetModeFlags.String("project-slug-input", "", "")
+
+		nlpoliciesDeletePolicyFlags                = flag.NewFlagSet("delete-policy", flag.ExitOnError)
+		nlpoliciesDeletePolicyBodyFlag             = nlpoliciesDeletePolicyFlags.String("body", "REQUIRED", "")
+		nlpoliciesDeletePolicyApikeyTokenFlag      = nlpoliciesDeletePolicyFlags.String("apikey-token", "", "")
+		nlpoliciesDeletePolicySessionTokenFlag     = nlpoliciesDeletePolicyFlags.String("session-token", "", "")
+		nlpoliciesDeletePolicyProjectSlugInputFlag = nlpoliciesDeletePolicyFlags.String("project-slug-input", "", "")
+
+		nlpoliciesListDecisionsFlags                = flag.NewFlagSet("list-decisions", flag.ExitOnError)
+		nlpoliciesListDecisionsPolicyIDFlag         = nlpoliciesListDecisionsFlags.String("policy-id", "REQUIRED", "")
+		nlpoliciesListDecisionsDecisionFlag         = nlpoliciesListDecisionsFlags.String("decision", "", "")
+		nlpoliciesListDecisionsEnforcedFlag         = nlpoliciesListDecisionsFlags.String("enforced", "", "")
+		nlpoliciesListDecisionsDecidedByFlag        = nlpoliciesListDecisionsFlags.String("decided-by", "", "")
+		nlpoliciesListDecisionsSinceFlag            = nlpoliciesListDecisionsFlags.String("since", "", "")
+		nlpoliciesListDecisionsSessionIDFlag        = nlpoliciesListDecisionsFlags.String("session-id", "", "")
+		nlpoliciesListDecisionsCursorFlag           = nlpoliciesListDecisionsFlags.String("cursor", "", "")
+		nlpoliciesListDecisionsPageLimitFlag        = nlpoliciesListDecisionsFlags.String("page-limit", "", "")
+		nlpoliciesListDecisionsApikeyTokenFlag      = nlpoliciesListDecisionsFlags.String("apikey-token", "", "")
+		nlpoliciesListDecisionsSessionTokenFlag     = nlpoliciesListDecisionsFlags.String("session-token", "", "")
+		nlpoliciesListDecisionsProjectSlugInputFlag = nlpoliciesListDecisionsFlags.String("project-slug-input", "", "")
+
+		nlpoliciesListSessionVerdictsFlags                = flag.NewFlagSet("list-session-verdicts", flag.ExitOnError)
+		nlpoliciesListSessionVerdictsPolicyIDFlag         = nlpoliciesListSessionVerdictsFlags.String("policy-id", "REQUIRED", "")
+		nlpoliciesListSessionVerdictsActiveOnlyFlag       = nlpoliciesListSessionVerdictsFlags.String("active-only", "", "")
+		nlpoliciesListSessionVerdictsCursorFlag           = nlpoliciesListSessionVerdictsFlags.String("cursor", "", "")
+		nlpoliciesListSessionVerdictsPageLimitFlag        = nlpoliciesListSessionVerdictsFlags.String("page-limit", "", "")
+		nlpoliciesListSessionVerdictsApikeyTokenFlag      = nlpoliciesListSessionVerdictsFlags.String("apikey-token", "", "")
+		nlpoliciesListSessionVerdictsSessionTokenFlag     = nlpoliciesListSessionVerdictsFlags.String("session-token", "", "")
+		nlpoliciesListSessionVerdictsProjectSlugInputFlag = nlpoliciesListSessionVerdictsFlags.String("project-slug-input", "", "")
+
+		nlpoliciesClearSessionVerdictFlags                = flag.NewFlagSet("clear-session-verdict", flag.ExitOnError)
+		nlpoliciesClearSessionVerdictBodyFlag             = nlpoliciesClearSessionVerdictFlags.String("body", "REQUIRED", "")
+		nlpoliciesClearSessionVerdictApikeyTokenFlag      = nlpoliciesClearSessionVerdictFlags.String("apikey-token", "", "")
+		nlpoliciesClearSessionVerdictSessionTokenFlag     = nlpoliciesClearSessionVerdictFlags.String("session-token", "", "")
+		nlpoliciesClearSessionVerdictProjectSlugInputFlag = nlpoliciesClearSessionVerdictFlags.String("project-slug-input", "", "")
+
+		nlpoliciesReplayFlags                = flag.NewFlagSet("replay", flag.ExitOnError)
+		nlpoliciesReplayBodyFlag             = nlpoliciesReplayFlags.String("body", "REQUIRED", "")
+		nlpoliciesReplayApikeyTokenFlag      = nlpoliciesReplayFlags.String("apikey-token", "", "")
+		nlpoliciesReplaySessionTokenFlag     = nlpoliciesReplayFlags.String("session-token", "", "")
+		nlpoliciesReplayProjectSlugInputFlag = nlpoliciesReplayFlags.String("project-slug-input", "", "")
+
+		nlpoliciesGetReplayRunFlags                = flag.NewFlagSet("get-replay-run", flag.ExitOnError)
+		nlpoliciesGetReplayRunRunIDFlag            = nlpoliciesGetReplayRunFlags.String("run-id", "REQUIRED", "")
+		nlpoliciesGetReplayRunApikeyTokenFlag      = nlpoliciesGetReplayRunFlags.String("apikey-token", "", "")
+		nlpoliciesGetReplayRunSessionTokenFlag     = nlpoliciesGetReplayRunFlags.String("session-token", "", "")
+		nlpoliciesGetReplayRunProjectSlugInputFlag = nlpoliciesGetReplayRunFlags.String("project-slug-input", "", "")
+
+		nlpoliciesListReplayResultsFlags                = flag.NewFlagSet("list-replay-results", flag.ExitOnError)
+		nlpoliciesListReplayResultsRunIDFlag            = nlpoliciesListReplayResultsFlags.String("run-id", "REQUIRED", "")
+		nlpoliciesListReplayResultsDecisionFlag         = nlpoliciesListReplayResultsFlags.String("decision", "", "")
+		nlpoliciesListReplayResultsCursorFlag           = nlpoliciesListReplayResultsFlags.String("cursor", "", "")
+		nlpoliciesListReplayResultsPageLimitFlag        = nlpoliciesListReplayResultsFlags.String("page-limit", "", "")
+		nlpoliciesListReplayResultsApikeyTokenFlag      = nlpoliciesListReplayResultsFlags.String("apikey-token", "", "")
+		nlpoliciesListReplayResultsSessionTokenFlag     = nlpoliciesListReplayResultsFlags.String("session-token", "", "")
+		nlpoliciesListReplayResultsProjectSlugInputFlag = nlpoliciesListReplayResultsFlags.String("project-slug-input", "", "")
 
 		organizationsFlags = flag.NewFlagSet("organizations", flag.ContinueOnError)
 
@@ -843,11 +860,6 @@ func ParseEndpoint(
 		pluginsDownloadPluginPackagePlatformFlag         = pluginsDownloadPluginPackageFlags.String("platform", "REQUIRED", "")
 		pluginsDownloadPluginPackageSessionTokenFlag     = pluginsDownloadPluginPackageFlags.String("session-token", "", "")
 		pluginsDownloadPluginPackageProjectSlugInputFlag = pluginsDownloadPluginPackageFlags.String("project-slug-input", "", "")
-
-		pluginsDownloadObservabilityPluginFlags                = flag.NewFlagSet("download-observability-plugin", flag.ExitOnError)
-		pluginsDownloadObservabilityPluginPlatformFlag         = pluginsDownloadObservabilityPluginFlags.String("platform", "REQUIRED", "")
-		pluginsDownloadObservabilityPluginSessionTokenFlag     = pluginsDownloadObservabilityPluginFlags.String("session-token", "", "")
-		pluginsDownloadObservabilityPluginProjectSlugInputFlag = pluginsDownloadObservabilityPluginFlags.String("project-slug-input", "", "")
 
 		pluginsGetPublishStatusFlags                = flag.NewFlagSet("get-publish-status", flag.ExitOnError)
 		pluginsGetPublishStatusSessionTokenFlag     = pluginsGetPublishStatusFlags.String("session-token", "", "")
@@ -1459,24 +1471,24 @@ func ParseEndpoint(
 	keysRevokeKeyFlags.Usage = keysRevokeKeyUsage
 	keysVerifyKeyFlags.Usage = keysVerifyKeyUsage
 
-	mcpEndpointsFlags.Usage = mcpEndpointsUsage
-	mcpEndpointsCreateMcpEndpointFlags.Usage = mcpEndpointsCreateMcpEndpointUsage
-	mcpEndpointsGetMcpEndpointFlags.Usage = mcpEndpointsGetMcpEndpointUsage
-	mcpEndpointsListMcpEndpointsFlags.Usage = mcpEndpointsListMcpEndpointsUsage
-	mcpEndpointsUpdateMcpEndpointFlags.Usage = mcpEndpointsUpdateMcpEndpointUsage
-	mcpEndpointsDeleteMcpEndpointFlags.Usage = mcpEndpointsDeleteMcpEndpointUsage
-
 	mcpMetadataFlags.Usage = mcpMetadataUsage
 	mcpMetadataGetMcpMetadataFlags.Usage = mcpMetadataGetMcpMetadataUsage
 	mcpMetadataSetMcpMetadataFlags.Usage = mcpMetadataSetMcpMetadataUsage
 	mcpMetadataExportMcpMetadataFlags.Usage = mcpMetadataExportMcpMetadataUsage
 
-	mcpServersFlags.Usage = mcpServersUsage
-	mcpServersCreateMcpServerFlags.Usage = mcpServersCreateMcpServerUsage
-	mcpServersGetMcpServerFlags.Usage = mcpServersGetMcpServerUsage
-	mcpServersListMcpServersFlags.Usage = mcpServersListMcpServersUsage
-	mcpServersUpdateMcpServerFlags.Usage = mcpServersUpdateMcpServerUsage
-	mcpServersDeleteMcpServerFlags.Usage = mcpServersDeleteMcpServerUsage
+	nlpoliciesFlags.Usage = nlpoliciesUsage
+	nlpoliciesCreatePolicyFlags.Usage = nlpoliciesCreatePolicyUsage
+	nlpoliciesListPoliciesFlags.Usage = nlpoliciesListPoliciesUsage
+	nlpoliciesGetPolicyFlags.Usage = nlpoliciesGetPolicyUsage
+	nlpoliciesUpdatePolicyFlags.Usage = nlpoliciesUpdatePolicyUsage
+	nlpoliciesSetModeFlags.Usage = nlpoliciesSetModeUsage
+	nlpoliciesDeletePolicyFlags.Usage = nlpoliciesDeletePolicyUsage
+	nlpoliciesListDecisionsFlags.Usage = nlpoliciesListDecisionsUsage
+	nlpoliciesListSessionVerdictsFlags.Usage = nlpoliciesListSessionVerdictsUsage
+	nlpoliciesClearSessionVerdictFlags.Usage = nlpoliciesClearSessionVerdictUsage
+	nlpoliciesReplayFlags.Usage = nlpoliciesReplayUsage
+	nlpoliciesGetReplayRunFlags.Usage = nlpoliciesGetReplayRunUsage
+	nlpoliciesListReplayResultsFlags.Usage = nlpoliciesListReplayResultsUsage
 
 	organizationsFlags.Usage = organizationsUsage
 	organizationsSendInviteFlags.Usage = organizationsSendInviteUsage
@@ -1504,7 +1516,6 @@ func ParseEndpoint(
 	pluginsRemovePluginServerFlags.Usage = pluginsRemovePluginServerUsage
 	pluginsSetPluginAssignmentsFlags.Usage = pluginsSetPluginAssignmentsUsage
 	pluginsDownloadPluginPackageFlags.Usage = pluginsDownloadPluginPackageUsage
-	pluginsDownloadObservabilityPluginFlags.Usage = pluginsDownloadObservabilityPluginUsage
 	pluginsGetPublishStatusFlags.Usage = pluginsGetPublishStatusUsage
 	pluginsPublishPluginsFlags.Usage = pluginsPublishPluginsUsage
 
@@ -1668,12 +1679,10 @@ func ParseEndpoint(
 			svcf = integrationsFlags
 		case "keys":
 			svcf = keysFlags
-		case "mcp-endpoints":
-			svcf = mcpEndpointsFlags
 		case "mcp-metadata":
 			svcf = mcpMetadataFlags
-		case "mcp-servers":
-			svcf = mcpServersFlags
+		case "nlpolicies":
+			svcf = nlpoliciesFlags
 		case "organizations":
 			svcf = organizationsFlags
 		case "packages":
@@ -2086,25 +2095,6 @@ func ParseEndpoint(
 
 			}
 
-		case "mcp-endpoints":
-			switch epn {
-			case "create-mcp-endpoint":
-				epf = mcpEndpointsCreateMcpEndpointFlags
-
-			case "get-mcp-endpoint":
-				epf = mcpEndpointsGetMcpEndpointFlags
-
-			case "list-mcp-endpoints":
-				epf = mcpEndpointsListMcpEndpointsFlags
-
-			case "update-mcp-endpoint":
-				epf = mcpEndpointsUpdateMcpEndpointFlags
-
-			case "delete-mcp-endpoint":
-				epf = mcpEndpointsDeleteMcpEndpointFlags
-
-			}
-
 		case "mcp-metadata":
 			switch epn {
 			case "get-mcp-metadata":
@@ -2118,22 +2108,43 @@ func ParseEndpoint(
 
 			}
 
-		case "mcp-servers":
+		case "nlpolicies":
 			switch epn {
-			case "create-mcp-server":
-				epf = mcpServersCreateMcpServerFlags
+			case "create-policy":
+				epf = nlpoliciesCreatePolicyFlags
 
-			case "get-mcp-server":
-				epf = mcpServersGetMcpServerFlags
+			case "list-policies":
+				epf = nlpoliciesListPoliciesFlags
 
-			case "list-mcp-servers":
-				epf = mcpServersListMcpServersFlags
+			case "get-policy":
+				epf = nlpoliciesGetPolicyFlags
 
-			case "update-mcp-server":
-				epf = mcpServersUpdateMcpServerFlags
+			case "update-policy":
+				epf = nlpoliciesUpdatePolicyFlags
 
-			case "delete-mcp-server":
-				epf = mcpServersDeleteMcpServerFlags
+			case "set-mode":
+				epf = nlpoliciesSetModeFlags
+
+			case "delete-policy":
+				epf = nlpoliciesDeletePolicyFlags
+
+			case "list-decisions":
+				epf = nlpoliciesListDecisionsFlags
+
+			case "list-session-verdicts":
+				epf = nlpoliciesListSessionVerdictsFlags
+
+			case "clear-session-verdict":
+				epf = nlpoliciesClearSessionVerdictFlags
+
+			case "replay":
+				epf = nlpoliciesReplayFlags
+
+			case "get-replay-run":
+				epf = nlpoliciesGetReplayRunFlags
+
+			case "list-replay-results":
+				epf = nlpoliciesListReplayResultsFlags
 
 			}
 
@@ -2209,9 +2220,6 @@ func ParseEndpoint(
 
 			case "download-plugin-package":
 				epf = pluginsDownloadPluginPackageFlags
-
-			case "download-observability-plugin":
-				epf = pluginsDownloadObservabilityPluginFlags
 
 			case "get-publish-status":
 				epf = pluginsGetPublishStatusFlags
@@ -2861,7 +2869,7 @@ func ParseEndpoint(
 			switch epn {
 			case "claude":
 				endpoint = c.Claude()
-				data, err = hooksc.BuildClaudePayload(*hooksClaudeBodyFlag, *hooksClaudeApikeyTokenFlag, *hooksClaudeProjectSlugInputFlag)
+				data, err = hooksc.BuildClaudePayload(*hooksClaudeBodyFlag)
 			case "cursor":
 				endpoint = c.Cursor()
 				data, err = hooksc.BuildCursorPayload(*hooksCursorBodyFlag, *hooksCursorApikeyTokenFlag, *hooksCursorProjectSlugInputFlag)
@@ -2905,25 +2913,6 @@ func ParseEndpoint(
 				endpoint = c.VerifyKey()
 				data, err = keysc.BuildVerifyKeyPayload(*keysVerifyKeyApikeyTokenFlag)
 			}
-		case "mcp-endpoints":
-			c := mcpendpointsc.NewClient(scheme, host, doer, enc, dec, restore)
-			switch epn {
-			case "create-mcp-endpoint":
-				endpoint = c.CreateMcpEndpoint()
-				data, err = mcpendpointsc.BuildCreateMcpEndpointPayload(*mcpEndpointsCreateMcpEndpointBodyFlag, *mcpEndpointsCreateMcpEndpointSessionTokenFlag, *mcpEndpointsCreateMcpEndpointApikeyTokenFlag, *mcpEndpointsCreateMcpEndpointProjectSlugInputFlag)
-			case "get-mcp-endpoint":
-				endpoint = c.GetMcpEndpoint()
-				data, err = mcpendpointsc.BuildGetMcpEndpointPayload(*mcpEndpointsGetMcpEndpointIDFlag, *mcpEndpointsGetMcpEndpointCustomDomainIDFlag, *mcpEndpointsGetMcpEndpointSlugFlag, *mcpEndpointsGetMcpEndpointSessionTokenFlag, *mcpEndpointsGetMcpEndpointApikeyTokenFlag, *mcpEndpointsGetMcpEndpointProjectSlugInputFlag)
-			case "list-mcp-endpoints":
-				endpoint = c.ListMcpEndpoints()
-				data, err = mcpendpointsc.BuildListMcpEndpointsPayload(*mcpEndpointsListMcpEndpointsMcpServerIDFlag, *mcpEndpointsListMcpEndpointsSessionTokenFlag, *mcpEndpointsListMcpEndpointsApikeyTokenFlag, *mcpEndpointsListMcpEndpointsProjectSlugInputFlag)
-			case "update-mcp-endpoint":
-				endpoint = c.UpdateMcpEndpoint()
-				data, err = mcpendpointsc.BuildUpdateMcpEndpointPayload(*mcpEndpointsUpdateMcpEndpointBodyFlag, *mcpEndpointsUpdateMcpEndpointSessionTokenFlag, *mcpEndpointsUpdateMcpEndpointApikeyTokenFlag, *mcpEndpointsUpdateMcpEndpointProjectSlugInputFlag)
-			case "delete-mcp-endpoint":
-				endpoint = c.DeleteMcpEndpoint()
-				data, err = mcpendpointsc.BuildDeleteMcpEndpointPayload(*mcpEndpointsDeleteMcpEndpointIDFlag, *mcpEndpointsDeleteMcpEndpointSessionTokenFlag, *mcpEndpointsDeleteMcpEndpointApikeyTokenFlag, *mcpEndpointsDeleteMcpEndpointProjectSlugInputFlag)
-			}
 		case "mcp-metadata":
 			c := mcpmetadatac.NewClient(scheme, host, doer, enc, dec, restore)
 			switch epn {
@@ -2937,24 +2926,45 @@ func ParseEndpoint(
 				endpoint = c.ExportMcpMetadata()
 				data, err = mcpmetadatac.BuildExportMcpMetadataPayload(*mcpMetadataExportMcpMetadataBodyFlag, *mcpMetadataExportMcpMetadataApikeyTokenFlag, *mcpMetadataExportMcpMetadataSessionTokenFlag, *mcpMetadataExportMcpMetadataProjectSlugInputFlag)
 			}
-		case "mcp-servers":
-			c := mcpserversc.NewClient(scheme, host, doer, enc, dec, restore)
+		case "nlpolicies":
+			c := nlpoliciesc.NewClient(scheme, host, doer, enc, dec, restore)
 			switch epn {
-			case "create-mcp-server":
-				endpoint = c.CreateMcpServer()
-				data, err = mcpserversc.BuildCreateMcpServerPayload(*mcpServersCreateMcpServerBodyFlag, *mcpServersCreateMcpServerSessionTokenFlag, *mcpServersCreateMcpServerApikeyTokenFlag, *mcpServersCreateMcpServerProjectSlugInputFlag)
-			case "get-mcp-server":
-				endpoint = c.GetMcpServer()
-				data, err = mcpserversc.BuildGetMcpServerPayload(*mcpServersGetMcpServerIDFlag, *mcpServersGetMcpServerSessionTokenFlag, *mcpServersGetMcpServerApikeyTokenFlag, *mcpServersGetMcpServerProjectSlugInputFlag)
-			case "list-mcp-servers":
-				endpoint = c.ListMcpServers()
-				data, err = mcpserversc.BuildListMcpServersPayload(*mcpServersListMcpServersSessionTokenFlag, *mcpServersListMcpServersApikeyTokenFlag, *mcpServersListMcpServersProjectSlugInputFlag)
-			case "update-mcp-server":
-				endpoint = c.UpdateMcpServer()
-				data, err = mcpserversc.BuildUpdateMcpServerPayload(*mcpServersUpdateMcpServerBodyFlag, *mcpServersUpdateMcpServerSessionTokenFlag, *mcpServersUpdateMcpServerApikeyTokenFlag, *mcpServersUpdateMcpServerProjectSlugInputFlag)
-			case "delete-mcp-server":
-				endpoint = c.DeleteMcpServer()
-				data, err = mcpserversc.BuildDeleteMcpServerPayload(*mcpServersDeleteMcpServerIDFlag, *mcpServersDeleteMcpServerSessionTokenFlag, *mcpServersDeleteMcpServerApikeyTokenFlag, *mcpServersDeleteMcpServerProjectSlugInputFlag)
+			case "create-policy":
+				endpoint = c.CreatePolicy()
+				data, err = nlpoliciesc.BuildCreatePolicyPayload(*nlpoliciesCreatePolicyBodyFlag, *nlpoliciesCreatePolicyApikeyTokenFlag, *nlpoliciesCreatePolicySessionTokenFlag, *nlpoliciesCreatePolicyProjectSlugInputFlag)
+			case "list-policies":
+				endpoint = c.ListPolicies()
+				data, err = nlpoliciesc.BuildListPoliciesPayload(*nlpoliciesListPoliciesApikeyTokenFlag, *nlpoliciesListPoliciesSessionTokenFlag, *nlpoliciesListPoliciesProjectSlugInputFlag)
+			case "get-policy":
+				endpoint = c.GetPolicy()
+				data, err = nlpoliciesc.BuildGetPolicyPayload(*nlpoliciesGetPolicyPolicyIDFlag, *nlpoliciesGetPolicyApikeyTokenFlag, *nlpoliciesGetPolicySessionTokenFlag, *nlpoliciesGetPolicyProjectSlugInputFlag)
+			case "update-policy":
+				endpoint = c.UpdatePolicy()
+				data, err = nlpoliciesc.BuildUpdatePolicyPayload(*nlpoliciesUpdatePolicyBodyFlag, *nlpoliciesUpdatePolicyApikeyTokenFlag, *nlpoliciesUpdatePolicySessionTokenFlag, *nlpoliciesUpdatePolicyProjectSlugInputFlag)
+			case "set-mode":
+				endpoint = c.SetMode()
+				data, err = nlpoliciesc.BuildSetModePayload(*nlpoliciesSetModeBodyFlag, *nlpoliciesSetModeApikeyTokenFlag, *nlpoliciesSetModeSessionTokenFlag, *nlpoliciesSetModeProjectSlugInputFlag)
+			case "delete-policy":
+				endpoint = c.DeletePolicy()
+				data, err = nlpoliciesc.BuildDeletePolicyPayload(*nlpoliciesDeletePolicyBodyFlag, *nlpoliciesDeletePolicyApikeyTokenFlag, *nlpoliciesDeletePolicySessionTokenFlag, *nlpoliciesDeletePolicyProjectSlugInputFlag)
+			case "list-decisions":
+				endpoint = c.ListDecisions()
+				data, err = nlpoliciesc.BuildListDecisionsPayload(*nlpoliciesListDecisionsPolicyIDFlag, *nlpoliciesListDecisionsDecisionFlag, *nlpoliciesListDecisionsEnforcedFlag, *nlpoliciesListDecisionsDecidedByFlag, *nlpoliciesListDecisionsSinceFlag, *nlpoliciesListDecisionsSessionIDFlag, *nlpoliciesListDecisionsCursorFlag, *nlpoliciesListDecisionsPageLimitFlag, *nlpoliciesListDecisionsApikeyTokenFlag, *nlpoliciesListDecisionsSessionTokenFlag, *nlpoliciesListDecisionsProjectSlugInputFlag)
+			case "list-session-verdicts":
+				endpoint = c.ListSessionVerdicts()
+				data, err = nlpoliciesc.BuildListSessionVerdictsPayload(*nlpoliciesListSessionVerdictsPolicyIDFlag, *nlpoliciesListSessionVerdictsActiveOnlyFlag, *nlpoliciesListSessionVerdictsCursorFlag, *nlpoliciesListSessionVerdictsPageLimitFlag, *nlpoliciesListSessionVerdictsApikeyTokenFlag, *nlpoliciesListSessionVerdictsSessionTokenFlag, *nlpoliciesListSessionVerdictsProjectSlugInputFlag)
+			case "clear-session-verdict":
+				endpoint = c.ClearSessionVerdict()
+				data, err = nlpoliciesc.BuildClearSessionVerdictPayload(*nlpoliciesClearSessionVerdictBodyFlag, *nlpoliciesClearSessionVerdictApikeyTokenFlag, *nlpoliciesClearSessionVerdictSessionTokenFlag, *nlpoliciesClearSessionVerdictProjectSlugInputFlag)
+			case "replay":
+				endpoint = c.Replay()
+				data, err = nlpoliciesc.BuildReplayPayload(*nlpoliciesReplayBodyFlag, *nlpoliciesReplayApikeyTokenFlag, *nlpoliciesReplaySessionTokenFlag, *nlpoliciesReplayProjectSlugInputFlag)
+			case "get-replay-run":
+				endpoint = c.GetReplayRun()
+				data, err = nlpoliciesc.BuildGetReplayRunPayload(*nlpoliciesGetReplayRunRunIDFlag, *nlpoliciesGetReplayRunApikeyTokenFlag, *nlpoliciesGetReplayRunSessionTokenFlag, *nlpoliciesGetReplayRunProjectSlugInputFlag)
+			case "list-replay-results":
+				endpoint = c.ListReplayResults()
+				data, err = nlpoliciesc.BuildListReplayResultsPayload(*nlpoliciesListReplayResultsRunIDFlag, *nlpoliciesListReplayResultsDecisionFlag, *nlpoliciesListReplayResultsCursorFlag, *nlpoliciesListReplayResultsPageLimitFlag, *nlpoliciesListReplayResultsApikeyTokenFlag, *nlpoliciesListReplayResultsSessionTokenFlag, *nlpoliciesListReplayResultsProjectSlugInputFlag)
 			}
 		case "organizations":
 			c := organizationsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -3030,9 +3040,6 @@ func ParseEndpoint(
 			case "download-plugin-package":
 				endpoint = c.DownloadPluginPackage()
 				data, err = pluginsc.BuildDownloadPluginPackagePayload(*pluginsDownloadPluginPackagePluginIDFlag, *pluginsDownloadPluginPackagePlatformFlag, *pluginsDownloadPluginPackageSessionTokenFlag, *pluginsDownloadPluginPackageProjectSlugInputFlag)
-			case "download-observability-plugin":
-				endpoint = c.DownloadObservabilityPlugin()
-				data, err = pluginsc.BuildDownloadObservabilityPluginPayload(*pluginsDownloadObservabilityPluginPlatformFlag, *pluginsDownloadObservabilityPluginSessionTokenFlag, *pluginsDownloadObservabilityPluginProjectSlugInputFlag)
 			case "get-publish-status":
 				endpoint = c.GetPublishStatus()
 				data, err = pluginsc.BuildGetPublishStatusPayload(*pluginsGetPublishStatusSessionTokenFlag, *pluginsGetPublishStatusProjectSlugInputFlag)
@@ -5473,8 +5480,6 @@ func hooksClaudeUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] hooks claude", os.Args[0])
 	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
 	fmt.Fprintln(os.Stderr)
 
 	// Description
@@ -5483,12 +5488,10 @@ func hooksClaudeUsage() {
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "hooks claude --body '{\n      \"additional_data\": {\n         \"abc123\": \"abc123\"\n      },\n      \"cwd\": \"abc123\",\n      \"error\": \"abc123\",\n      \"hook_event_name\": \"PreToolUse\",\n      \"is_interrupt\": false,\n      \"last_assistant_message\": \"abc123\",\n      \"message\": \"abc123\",\n      \"model\": \"abc123\",\n      \"notification_type\": \"abc123\",\n      \"prompt\": \"abc123\",\n      \"reason\": \"abc123\",\n      \"session_id\": \"abc123\",\n      \"source\": \"abc123\",\n      \"stop_hook_active\": false,\n      \"title\": \"abc123\",\n      \"tool_input\": \"abc123\",\n      \"tool_name\": \"abc123\",\n      \"tool_response\": \"abc123\",\n      \"tool_use_id\": \"abc123\",\n      \"transcript_path\": \"abc123\"\n   }' --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "hooks claude --body '{\n      \"additional_data\": {\n         \"abc123\": \"abc123\"\n      },\n      \"cwd\": \"abc123\",\n      \"error\": \"abc123\",\n      \"hook_event_name\": \"PreToolUse\",\n      \"is_interrupt\": false,\n      \"last_assistant_message\": \"abc123\",\n      \"message\": \"abc123\",\n      \"model\": \"abc123\",\n      \"notification_type\": \"abc123\",\n      \"prompt\": \"abc123\",\n      \"reason\": \"abc123\",\n      \"session_id\": \"abc123\",\n      \"source\": \"abc123\",\n      \"stop_hook_active\": false,\n      \"title\": \"abc123\",\n      \"tool_input\": \"abc123\",\n      \"tool_name\": \"abc123\",\n      \"tool_response\": \"abc123\",\n      \"tool_use_id\": \"abc123\",\n      \"transcript_path\": \"abc123\"\n   }'")
 }
 
 func hooksCursorUsage() {
@@ -5741,145 +5744,6 @@ func keysVerifyKeyUsage() {
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "keys verify-key --apikey-token \"abc123\"")
 }
 
-// mcpEndpointsUsage displays the usage of the mcp-endpoints command and its
-// subcommands.
-func mcpEndpointsUsage() {
-	fmt.Fprintln(os.Stderr, `Managing MCP endpoints, the url-friendly slug identifiers that address MCP servers.`)
-	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] mcp-endpoints COMMAND [flags]\n\n", os.Args[0])
-	fmt.Fprintln(os.Stderr, "COMMAND:")
-	fmt.Fprintln(os.Stderr, `    create-mcp-endpoint: Create a new MCP endpoint for an MCP server`)
-	fmt.Fprintln(os.Stderr, `    get-mcp-endpoint: Get an MCP endpoint by id or by (custom_domain_id, slug). Provide either id, or slug with an optional custom_domain_id — not both.`)
-	fmt.Fprintln(os.Stderr, `    list-mcp-endpoints: List MCP endpoints for a project. Optionally filter to only those associated with a specific MCP server.`)
-	fmt.Fprintln(os.Stderr, `    update-mcp-endpoint: Update an MCP endpoint. This is a full-record replace: fields omitted from the request become null on the stored record. The id, mcp_server_id, and slug fields are required.`)
-	fmt.Fprintln(os.Stderr, `    delete-mcp-endpoint: Delete an MCP endpoint`)
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Additional help:")
-	fmt.Fprintf(os.Stderr, "    %s mcp-endpoints COMMAND --help\n", os.Args[0])
-}
-func mcpEndpointsCreateMcpEndpointUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] mcp-endpoints create-mcp-endpoint", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Create a new MCP endpoint for an MCP server`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-endpoints create-mcp-endpoint --body '{\n      \"custom_domain_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"slug\": \"aaa\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
-}
-
-func mcpEndpointsGetMcpEndpointUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] mcp-endpoints get-mcp-endpoint", os.Args[0])
-	fmt.Fprint(os.Stderr, " -id STRING")
-	fmt.Fprint(os.Stderr, " -custom-domain-id STRING")
-	fmt.Fprint(os.Stderr, " -slug STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Get an MCP endpoint by id or by (custom_domain_id, slug). Provide either id, or slug with an optional custom_domain_id — not both.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -id STRING: `)
-	fmt.Fprintln(os.Stderr, `    -custom-domain-id STRING: `)
-	fmt.Fprintln(os.Stderr, `    -slug STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-endpoints get-mcp-endpoint --id \"550e8400-e29b-41d4-a716-446655440000\" --custom-domain-id \"550e8400-e29b-41d4-a716-446655440000\" --slug \"aaa\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
-}
-
-func mcpEndpointsListMcpEndpointsUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] mcp-endpoints list-mcp-endpoints", os.Args[0])
-	fmt.Fprint(os.Stderr, " -mcp-server-id STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List MCP endpoints for a project. Optionally filter to only those associated with a specific MCP server.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -mcp-server-id STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-endpoints list-mcp-endpoints --mcp-server-id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
-}
-
-func mcpEndpointsUpdateMcpEndpointUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] mcp-endpoints update-mcp-endpoint", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Update an MCP endpoint. This is a full-record replace: fields omitted from the request become null on the stored record. The id, mcp_server_id, and slug fields are required.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-endpoints update-mcp-endpoint --body '{\n      \"custom_domain_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"slug\": \"aaa\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
-}
-
-func mcpEndpointsDeleteMcpEndpointUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] mcp-endpoints delete-mcp-endpoint", os.Args[0])
-	fmt.Fprint(os.Stderr, " -id STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Delete an MCP endpoint`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -id STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-endpoints delete-mcp-endpoint --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
-}
-
 // mcpMetadataUsage displays the usage of the mcp-metadata command and its
 // subcommands.
 func mcpMetadataUsage() {
@@ -5965,137 +5829,338 @@ func mcpMetadataExportMcpMetadataUsage() {
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-metadata export-mcp-metadata --body '{\n      \"mcp_slug\": \"aaa\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
-// mcpServersUsage displays the usage of the mcp-servers command and its
+// nlpoliciesUsage displays the usage of the nlpolicies command and its
 // subcommands.
-func mcpServersUsage() {
-	fmt.Fprintln(os.Stderr, `Managing MCP servers, which configure authentication, environment, and backend selection for an MCP server.`)
-	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] mcp-servers COMMAND [flags]\n\n", os.Args[0])
+func nlpoliciesUsage() {
+	fmt.Fprintln(os.Stderr, `Manage natural-language session policies and view their decisions, quarantines, and replay runs.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] nlpolicies COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
-	fmt.Fprintln(os.Stderr, `    create-mcp-server: Create a new MCP server`)
-	fmt.Fprintln(os.Stderr, `    get-mcp-server: Get an MCP server by ID`)
-	fmt.Fprintln(os.Stderr, `    list-mcp-servers: List all MCP servers for a project`)
-	fmt.Fprintln(os.Stderr, `    update-mcp-server: Update an MCP server. This is a full-record replace: fields omitted from the request become null on the stored record. The id and visibility fields are required; exactly one of remote_mcp_server_id or toolset_id must be provided; at most one of external_oauth_server_id or oauth_proxy_server_id may be provided.`)
-	fmt.Fprintln(os.Stderr, `    delete-mcp-server: Delete an MCP server`)
+	fmt.Fprintln(os.Stderr, `    create-policy: Create a new natural-language policy.`)
+	fmt.Fprintln(os.Stderr, `    list-policies: List all NL policies for the current project (or org-wide).`)
+	fmt.Fprintln(os.Stderr, `    get-policy: Get a natural-language policy by ID.`)
+	fmt.Fprintln(os.Stderr, `    update-policy: Update a natural-language policy.`)
+	fmt.Fprintln(os.Stderr, `    set-mode: Set the mode of a natural-language policy (audit | enforce | disabled).`)
+	fmt.Fprintln(os.Stderr, `    delete-policy: Delete a natural-language policy.`)
+	fmt.Fprintln(os.Stderr, `    list-decisions: List recorded decisions produced by a natural-language policy.`)
+	fmt.Fprintln(os.Stderr, `    list-session-verdicts: List session verdicts for a natural-language policy.`)
+	fmt.Fprintln(os.Stderr, `    clear-session-verdict: Clear an active session verdict, releasing the session from quarantine.`)
+	fmt.Fprintln(os.Stderr, `    replay: Start a replay run for a natural-language policy over historical chat samples.`)
+	fmt.Fprintln(os.Stderr, `    get-replay-run: Get a replay run by ID.`)
+	fmt.Fprintln(os.Stderr, `    list-replay-results: List per-sample results for a replay run.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
-	fmt.Fprintf(os.Stderr, "    %s mcp-servers COMMAND --help\n", os.Args[0])
+	fmt.Fprintf(os.Stderr, "    %s nlpolicies COMMAND --help\n", os.Args[0])
 }
-func mcpServersCreateMcpServerUsage() {
+func nlpoliciesCreatePolicyUsage() {
 	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] mcp-servers create-mcp-server", os.Args[0])
+	fmt.Fprintf(os.Stderr, "%s [flags] nlpolicies create-policy", os.Args[0])
 	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
 	fmt.Fprintln(os.Stderr)
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Create a new MCP server`)
+	fmt.Fprintln(os.Stderr, `Create a new natural-language policy.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-servers create-mcp-server --body '{\n      \"environment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"external_oauth_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"oauth_proxy_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"remote_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"visibility\": \"private\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "nlpolicies create-policy --body '{\n      \"description\": \"abc123\",\n      \"fail_mode\": \"abc123\",\n      \"name\": \"abc123\",\n      \"nl_prompt\": \"abc123\",\n      \"scope_per_call\": false,\n      \"scope_session\": false,\n      \"static_rules\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
-func mcpServersGetMcpServerUsage() {
+func nlpoliciesListPoliciesUsage() {
 	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] mcp-servers get-mcp-server", os.Args[0])
-	fmt.Fprint(os.Stderr, " -id STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintf(os.Stderr, "%s [flags] nlpolicies list-policies", os.Args[0])
 	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
 	fmt.Fprintln(os.Stderr)
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Get an MCP server by ID`)
+	fmt.Fprintln(os.Stderr, `List all NL policies for the current project (or org-wide).`)
 
 	// Flags list
-	fmt.Fprintln(os.Stderr, `    -id STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-servers get-mcp-server --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "nlpolicies list-policies --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
-func mcpServersListMcpServersUsage() {
+func nlpoliciesGetPolicyUsage() {
 	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] mcp-servers list-mcp-servers", os.Args[0])
-	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintf(os.Stderr, "%s [flags] nlpolicies get-policy", os.Args[0])
+	fmt.Fprint(os.Stderr, " -policy-id STRING")
 	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
 	fmt.Fprintln(os.Stderr)
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List all MCP servers for a project`)
+	fmt.Fprintln(os.Stderr, `Get a natural-language policy by ID.`)
 
 	// Flags list
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -policy-id STRING: `)
 	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-servers list-mcp-servers --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "nlpolicies get-policy --policy-id \"550e8400-e29b-41d4-a716-446655440000\" --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
-func mcpServersUpdateMcpServerUsage() {
+func nlpoliciesUpdatePolicyUsage() {
 	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] mcp-servers update-mcp-server", os.Args[0])
+	fmt.Fprintf(os.Stderr, "%s [flags] nlpolicies update-policy", os.Args[0])
 	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
 	fmt.Fprintln(os.Stderr)
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Update an MCP server. This is a full-record replace: fields omitted from the request become null on the stored record. The id and visibility fields are required; exactly one of remote_mcp_server_id or toolset_id must be provided; at most one of external_oauth_server_id or oauth_proxy_server_id may be provided.`)
+	fmt.Fprintln(os.Stderr, `Update a natural-language policy.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-servers update-mcp-server --body '{\n      \"environment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"external_oauth_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"oauth_proxy_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"remote_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"visibility\": \"private\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "nlpolicies update-policy --body '{\n      \"description\": \"abc123\",\n      \"fail_mode\": \"abc123\",\n      \"name\": \"abc123\",\n      \"nl_prompt\": \"abc123\",\n      \"policy_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"scope_per_call\": false,\n      \"scope_session\": false,\n      \"static_rules\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
-func mcpServersDeleteMcpServerUsage() {
+func nlpoliciesSetModeUsage() {
 	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] mcp-servers delete-mcp-server", os.Args[0])
-	fmt.Fprint(os.Stderr, " -id STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintf(os.Stderr, "%s [flags] nlpolicies set-mode", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
 	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
 	fmt.Fprintln(os.Stderr)
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Delete an MCP server`)
+	fmt.Fprintln(os.Stderr, `Set the mode of a natural-language policy (audit | enforce | disabled).`)
 
 	// Flags list
-	fmt.Fprintln(os.Stderr, `    -id STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
 	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-servers delete-mcp-server --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "nlpolicies set-mode --body '{\n      \"mode\": \"enforce\",\n      \"policy_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func nlpoliciesDeletePolicyUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] nlpolicies delete-policy", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Delete a natural-language policy.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "nlpolicies delete-policy --body '{\n      \"policy_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func nlpoliciesListDecisionsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] nlpolicies list-decisions", os.Args[0])
+	fmt.Fprint(os.Stderr, " -policy-id STRING")
+	fmt.Fprint(os.Stderr, " -decision STRING")
+	fmt.Fprint(os.Stderr, " -enforced BOOL")
+	fmt.Fprint(os.Stderr, " -decided-by STRING")
+	fmt.Fprint(os.Stderr, " -since STRING")
+	fmt.Fprint(os.Stderr, " -session-id STRING")
+	fmt.Fprint(os.Stderr, " -cursor STRING")
+	fmt.Fprint(os.Stderr, " -page-limit INT")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List recorded decisions produced by a natural-language policy.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -policy-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -decision STRING: `)
+	fmt.Fprintln(os.Stderr, `    -enforced BOOL: `)
+	fmt.Fprintln(os.Stderr, `    -decided-by STRING: `)
+	fmt.Fprintln(os.Stderr, `    -since STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
+	fmt.Fprintln(os.Stderr, `    -page-limit INT: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "nlpolicies list-decisions --policy-id \"550e8400-e29b-41d4-a716-446655440000\" --decision \"abc123\" --enforced false --decided-by \"abc123\" --since \"abc123\" --session-id \"abc123\" --cursor \"abc123\" --page-limit 2 --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func nlpoliciesListSessionVerdictsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] nlpolicies list-session-verdicts", os.Args[0])
+	fmt.Fprint(os.Stderr, " -policy-id STRING")
+	fmt.Fprint(os.Stderr, " -active-only BOOL")
+	fmt.Fprint(os.Stderr, " -cursor STRING")
+	fmt.Fprint(os.Stderr, " -page-limit INT")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List session verdicts for a natural-language policy.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -policy-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -active-only BOOL: `)
+	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
+	fmt.Fprintln(os.Stderr, `    -page-limit INT: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "nlpolicies list-session-verdicts --policy-id \"550e8400-e29b-41d4-a716-446655440000\" --active-only false --cursor \"abc123\" --page-limit 2 --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func nlpoliciesClearSessionVerdictUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] nlpolicies clear-session-verdict", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Clear an active session verdict, releasing the session from quarantine.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "nlpolicies clear-session-verdict --body '{\n      \"verdict_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func nlpoliciesReplayUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] nlpolicies replay", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Start a replay run for a natural-language policy over historical chat samples.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "nlpolicies replay --body '{\n      \"policy_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"sample_filter\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func nlpoliciesGetReplayRunUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] nlpolicies get-replay-run", os.Args[0])
+	fmt.Fprint(os.Stderr, " -run-id STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get a replay run by ID.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -run-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "nlpolicies get-replay-run --run-id \"550e8400-e29b-41d4-a716-446655440000\" --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func nlpoliciesListReplayResultsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] nlpolicies list-replay-results", os.Args[0])
+	fmt.Fprint(os.Stderr, " -run-id STRING")
+	fmt.Fprint(os.Stderr, " -decision STRING")
+	fmt.Fprint(os.Stderr, " -cursor STRING")
+	fmt.Fprint(os.Stderr, " -page-limit INT")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List per-sample results for a replay run.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -run-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -decision STRING: `)
+	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
+	fmt.Fprintln(os.Stderr, `    -page-limit INT: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "nlpolicies list-replay-results --run-id \"550e8400-e29b-41d4-a716-446655440000\" --decision \"abc123\" --cursor \"abc123\" --page-limit 2 --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // organizationsUsage displays the usage of the organizations command and its
@@ -6375,7 +6440,6 @@ func pluginsUsage() {
 	fmt.Fprintln(os.Stderr, `    remove-plugin-server: Remove a server from a plugin.`)
 	fmt.Fprintln(os.Stderr, `    set-plugin-assignments: Replace all assignments for a plugin with the given list of principal URNs.`)
 	fmt.Fprintln(os.Stderr, `    download-plugin-package: Download a ZIP of a single plugin package for direct installation.`)
-	fmt.Fprintln(os.Stderr, `    download-observability-plugin: Download a ZIP of the per-org observability plugin (Gram hooks). Mints a fresh hooks-scoped API key on each download and embeds it in the plugin's hook script.`)
 	fmt.Fprintln(os.Stderr, `    get-publish-status: Check whether GitHub publishing is configured and connected for this project.`)
 	fmt.Fprintln(os.Stderr, `    publish-plugins: Generate and publish all plugin packages to a GitHub repository.`)
 	fmt.Fprintln(os.Stderr)
@@ -6602,28 +6666,6 @@ func pluginsDownloadPluginPackageUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "plugins download-plugin-package --plugin-id \"550e8400-e29b-41d4-a716-446655440000\" --platform \"cursor\" --session-token \"abc123\" --project-slug-input \"abc123\"")
-}
-
-func pluginsDownloadObservabilityPluginUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] plugins download-observability-plugin", os.Args[0])
-	fmt.Fprint(os.Stderr, " -platform STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Download a ZIP of the per-org observability plugin (Gram hooks). Mints a fresh hooks-scoped API key on each download and embeds it in the plugin's hook script.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -platform STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "plugins download-observability-plugin --platform \"cursor\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func pluginsGetPublishStatusUsage() {
@@ -7121,7 +7163,7 @@ func riskCreateRiskPolicyUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk create-risk-policy --body '{\n      \"action\": \"block\",\n      \"auto_name\": false,\n      \"enabled\": false,\n      \"name\": \"abc123\",\n      \"presidio_entities\": [\n         \"abc123\"\n      ],\n      \"sources\": [\n         \"abc123\"\n      ]\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk create-risk-policy --body '{\n      \"enabled\": false,\n      \"name\": \"abc123\",\n      \"presidio_entities\": [\n         \"abc123\"\n      ],\n      \"sources\": [\n         \"abc123\"\n      ]\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func riskListRiskPoliciesUsage() {
@@ -7191,7 +7233,7 @@ func riskUpdateRiskPolicyUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk update-risk-policy --body '{\n      \"action\": \"block\",\n      \"auto_name\": false,\n      \"enabled\": false,\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"presidio_entities\": [\n         \"abc123\"\n      ],\n      \"sources\": [\n         \"abc123\"\n      ]\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk update-risk-policy --body '{\n      \"enabled\": false,\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"presidio_entities\": [\n         \"abc123\"\n      ],\n      \"sources\": [\n         \"abc123\"\n      ]\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func riskDeleteRiskPolicyUsage() {
