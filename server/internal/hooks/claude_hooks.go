@@ -378,18 +378,42 @@ func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePaylo
 		}
 		return result, nil
 	}
-	metadata, err := s.getSessionMetadata(ctx, sessionID)
-	if err != nil {
-		// Session metadata not yet validated — allow this call; the buffered
-		// hook will be re-persisted once metadata arrives.
-		s.logger.WarnContext(ctx, "claude PreToolUse fired before session metadata available; allowing tool call",
-			attr.SlogEvent("claude_hook_pretooluse_no_metadata"),
-			attr.SlogError(err),
-		)
-		if output != nil {
-			output.PermissionDecision = &allow
+	// Plugin path: when the request authenticated via Gram-Key + Gram-Project,
+	// org/project come from the auth context — same pattern as recordHook.
+	// This lets the shadow-MCP guard run on the very first PreToolUse of a
+	// session, before OTEL Logs has had a chance to seed Redis. Redis is still
+	// consulted to enrich UserEmail / ServiceName / ClaudeOrgID for the
+	// downstream ClickHouse row, but absence of cached fields is non-fatal.
+	var metadata SessionMetadata
+	if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil && authCtx.ProjectID != nil {
+		metadata = SessionMetadata{
+			SessionID:   sessionID,
+			ServiceName: "",
+			UserEmail:   "",
+			ClaudeOrgID: "",
+			GramOrgID:   authCtx.ActiveOrganizationID,
+			ProjectID:   authCtx.ProjectID.String(),
 		}
-		return result, nil
+		if cached, err := s.getSessionMetadata(ctx, sessionID); err == nil {
+			metadata.ServiceName = cached.ServiceName
+			metadata.UserEmail = cached.UserEmail
+			metadata.ClaudeOrgID = cached.ClaudeOrgID
+		}
+	} else {
+		var err error
+		metadata, err = s.getSessionMetadata(ctx, sessionID)
+		if err != nil {
+			// OTEL path with no cached metadata yet — allow this call; the
+			// buffered hook will be re-persisted once metadata arrives.
+			s.logger.WarnContext(ctx, "claude PreToolUse fired before session metadata available; allowing tool call",
+				attr.SlogEvent("claude_hook_pretooluse_no_metadata"),
+				attr.SlogError(err),
+			)
+			if output != nil {
+				output.PermissionDecision = &allow
+			}
+			return result, nil
+		}
 	}
 
 	if !s.blockShadowMCPEnabled(ctx, metadata.GramOrgID) {

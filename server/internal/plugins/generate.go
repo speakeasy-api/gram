@@ -63,8 +63,10 @@ var ClaudeBaseHookEvents = []string{
 	"PostToolUse",
 	"PostToolUseFailure",
 	"SessionStart",
+	"SessionEnd",
 	"UserPromptSubmit",
 	"Stop",
+	"Notification",
 }
 
 // CursorBaseHookEvents are Cursor's native hook event names (per
