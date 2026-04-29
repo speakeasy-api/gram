@@ -22,7 +22,8 @@ func NewTestPresidio(ctx context.Context) (testcontainers.Container, PresidioCli
 			ExposedPorts: []string{"3000/tcp"},
 			WaitingFor: wait.ForHTTP("/health").
 				WithPort("3000/tcp").
-				WithStartupTimeout(300 * time.Second),
+				WithPollInterval(2 * time.Second).
+				WithStartupTimeout(480 * time.Second),
 		},
 		Started: true,
 		Logger:  NewTestcontainersLogger(),
