@@ -1,6 +1,8 @@
 package plugins
 
 import (
+	"archive/zip"
+	"bytes"
 	"encoding/json"
 	"strings"
 	"testing"
@@ -514,4 +516,32 @@ func TestGenerateReadmeIncludesCodexInstallation(t *testing.T) {
 	readme := string(files["README.md"])
 	require.Contains(t, readme, "### Codex", "Codex installation section must be present — Codex packages are still generated and listed in the marketplace")
 	require.Contains(t, readme, "codex plugin marketplace add")
+}
+
+// hook.sh in the ZIP must carry the execute bit, otherwise extracting the
+// archive leaves the script unrunnable and Claude Code / Cursor fail with
+// "permission denied" when the registered command tries `./hook.sh`. Mirrors
+// the GitHub publish path's mode 100755 in thirdparty/github/repo.go.
+func TestWritePluginZipMakesShellScriptsExecutable(t *testing.T) {
+	t.Parallel()
+	files := map[string][]byte{
+		"hook.sh":                    []byte("#!/usr/bin/env bash\necho hi\n"),
+		".claude-plugin/plugin.json": []byte("{}"),
+		"README.md":                  []byte("# readme\n"),
+	}
+
+	var buf bytes.Buffer
+	require.NoError(t, writePluginZip(&buf, files))
+
+	r, err := zip.NewReader(bytes.NewReader(buf.Bytes()), int64(buf.Len()))
+	require.NoError(t, err)
+
+	modes := make(map[string]uint32, len(r.File))
+	for _, f := range r.File {
+		modes[f.Name] = uint32(f.Mode().Perm())
+	}
+
+	require.Equal(t, uint32(0o755), modes["hook.sh"], "hook.sh must be executable so ./hook.sh works after unzip")
+	require.Equal(t, uint32(0o644), modes[".claude-plugin/plugin.json"], "non-script files keep default mode")
+	require.Equal(t, uint32(0o644), modes["README.md"], "non-script files keep default mode")
 }

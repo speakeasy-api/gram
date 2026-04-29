@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"os"
 	"regexp"
 	"sort"
 	"strings"
@@ -676,25 +677,8 @@ func (s *Service) DownloadPluginPackage(ctx context.Context, payload *gen.Downlo
 	}
 
 	var buf bytes.Buffer
-	w := zip.NewWriter(&buf)
-	// Sort paths for deterministic ZIP output.
-	paths := make([]string, 0, len(files))
-	for path := range files {
-		paths = append(paths, path)
-	}
-	sort.Strings(paths)
-	for _, path := range paths {
-		content := files[path]
-		f, err := w.Create(path)
-		if err != nil {
-			return nil, nil, oops.E(oops.CodeUnexpected, err, "create zip entry").Log(ctx, s.logger)
-		}
-		if _, err := f.Write(content); err != nil {
-			return nil, nil, oops.E(oops.CodeUnexpected, err, "write zip entry").Log(ctx, s.logger)
-		}
-	}
-	if err := w.Close(); err != nil {
-		return nil, nil, oops.E(oops.CodeUnexpected, err, "close zip writer").Log(ctx, s.logger)
+	if err := writePluginZip(&buf, files); err != nil {
+		return nil, nil, oops.E(oops.CodeUnexpected, err, "build plugin zip").Log(ctx, s.logger)
 	}
 
 	return &gen.DownloadPluginPackageResult{
@@ -741,23 +725,8 @@ func (s *Service) DownloadBasePlugin(ctx context.Context, payload *gen.DownloadB
 	}
 
 	var buf bytes.Buffer
-	w := zip.NewWriter(&buf)
-	paths := make([]string, 0, len(files))
-	for p := range files {
-		paths = append(paths, p)
-	}
-	sort.Strings(paths)
-	for _, p := range paths {
-		f, err := w.Create(p)
-		if err != nil {
-			return nil, nil, oops.E(oops.CodeUnexpected, err, "create zip entry").Log(ctx, s.logger)
-		}
-		if _, err := f.Write(files[p]); err != nil {
-			return nil, nil, oops.E(oops.CodeUnexpected, err, "write zip entry").Log(ctx, s.logger)
-		}
-	}
-	if err := w.Close(); err != nil {
-		return nil, nil, oops.E(oops.CodeUnexpected, err, "close zip writer").Log(ctx, s.logger)
+	if err := writePluginZip(&buf, files); err != nil {
+		return nil, nil, oops.E(oops.CodeUnexpected, err, "build plugin zip").Log(ctx, s.logger)
 	}
 
 	filename := "base"
@@ -768,6 +737,42 @@ func (s *Service) DownloadBasePlugin(ctx context.Context, payload *gen.DownloadB
 		ContentType:        "application/zip",
 		ContentDisposition: fmt.Sprintf(`attachment; filename="%s.zip"`, filename),
 	}, io.NopCloser(bytes.NewReader(buf.Bytes())), nil
+}
+
+// writePluginZip serializes the file map as a deterministic ZIP, marking
+// shell scripts executable so hook.sh runs after extraction. The GitHub
+// publish path applies the same rule via Tree mode 100755 in
+// thirdparty/github/repo.go; keep them in sync — without the execute bit,
+// Claude Code and Cursor silently fail on `./hook.sh: permission denied`.
+func writePluginZip(w io.Writer, files map[string][]byte) error {
+	zw := zip.NewWriter(w)
+	paths := make([]string, 0, len(files))
+	for p := range files {
+		paths = append(paths, p)
+	}
+	sort.Strings(paths)
+	for _, p := range paths {
+		header := &zip.FileHeader{
+			Name:   p,
+			Method: zip.Deflate,
+		}
+		var mode os.FileMode = 0o644
+		if strings.HasSuffix(p, ".sh") {
+			mode = 0o755
+		}
+		header.SetMode(mode)
+		f, err := zw.CreateHeader(header)
+		if err != nil {
+			return fmt.Errorf("create zip entry %q: %w", p, err)
+		}
+		if _, err := f.Write(files[p]); err != nil {
+			return fmt.Errorf("write zip entry %q: %w", p, err)
+		}
+	}
+	if err := zw.Close(); err != nil {
+		return fmt.Errorf("close zip writer: %w", err)
+	}
+	return nil
 }
 
 // persistDownloadAPIKey writes a single hooks-scoped key + its audit log
