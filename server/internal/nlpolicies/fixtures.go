@@ -131,7 +131,7 @@ func fixtureReplayRun() *types.NLPolicyReplayRun {
 	startedAt := now.Add(-5 * time.Minute).Format(time.RFC3339)
 	completedAt := now.Add(-5*time.Minute + 18*time.Second).Format(time.RFC3339)
 	return &types.NLPolicyReplayRun{
-		ID:              "r3a8f2",
+		ID:              "00000000-0000-0000-0000-00000000a8f2",
 		NlPolicyID:      fixturePolicy1ID.String(),
 		NlPolicyVersion: 1,
 		Status:          "completed",
