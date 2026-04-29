@@ -1835,6 +1835,7 @@ export function MCPJson({
     public: mcpJsonPublic,
     internal: mcpJsonInternal,
     requiresGramKey,
+    hasOAuth,
   } = useMcpConfigs(toolset);
 
   const onCopy = () => {
@@ -1844,11 +1845,17 @@ export function MCPJson({
     });
   };
 
+  const showManagedAuth = !hasOAuth;
+
   return (
     <Grid
       gap={4}
       className={cn("my-4!", className)}
-      columns={!fullWidth ? { xs: 1, md: 2, lg: 2, xl: 2, "2xl": 2 } : 1}
+      columns={
+        !fullWidth && showManagedAuth
+          ? { xs: 1, md: 2, lg: 2, xl: 2, "2xl": 2 }
+          : 1
+      }
     >
       <Grid.Item>
         <Type className="font-medium">Pass-through Authentication</Type>
@@ -1867,15 +1874,18 @@ export function MCPJson({
         </Type>
         <CodeBlock onCopy={onCopy}>{mcpJsonPublic}</CodeBlock>
       </Grid.Item>
-      <Grid.Item>
-        <Type className="font-medium">Managed Authentication</Type>
-        <Type muted small className="mb-2! max-w-3xl">
-          Manage API authentication with Gram environments.
-          <br />
-          Users need a single Gram API Key rather than bringing their own keys.
-        </Type>
-        <CodeBlock onCopy={onCopy}>{mcpJsonInternal}</CodeBlock>
-      </Grid.Item>
+      {showManagedAuth && (
+        <Grid.Item>
+          <Type className="font-medium">Managed Authentication</Type>
+          <Type muted small className="mb-2! max-w-3xl">
+            Manage API authentication with Gram environments.
+            <br />
+            Users need a single Gram API Key rather than bringing their own
+            keys.
+          </Type>
+          <CodeBlock onCopy={onCopy}>{mcpJsonInternal}</CodeBlock>
+        </Grid.Item>
+      )}
     </Grid>
   );
 }

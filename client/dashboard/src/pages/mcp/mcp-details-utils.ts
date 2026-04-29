@@ -22,7 +22,13 @@ export const useMcpConfigs = (toolset: Toolset | undefined) => {
     (header) => !header.toLowerCase().includes("token_url"),
   );
 
-  if (!toolset) return { public: "", internal: "", requiresGramKey: false };
+  if (!toolset)
+    return {
+      public: "",
+      internal: "",
+      requiresGramKey: false,
+      hasOAuth: false,
+    };
 
   // Build header names using display names when available
   // Display names make the config more user-friendly (e.g., "API-Key" instead of "X-RAPIDAPI-KEY")
@@ -104,7 +110,12 @@ export const useMcpConfigs = (toolset: Toolset | undefined) => {
   }
 }`;
 
-  return { public: mcpJsonPublic, internal: mcpJsonInternal, requiresGramKey };
+  return {
+    public: mcpJsonPublic,
+    internal: mcpJsonInternal,
+    requiresGramKey,
+    hasOAuth,
+  };
 };
 
 export function useMcpSlugValidation(
