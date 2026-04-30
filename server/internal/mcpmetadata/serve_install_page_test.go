@@ -1027,15 +1027,6 @@ func TestServeInstallPage_NoDomain_AuthedUserWithOrgDomain(t *testing.T) {
 	require.Equal(t, "text/html", rr.Header().Get("Content-Type"))
 }
 
-// TestServeInstallPage_ExternalMCP_FiltersNonUserProvidedHeaders is a regression
-// test for a customer-reported bug: an external MCP server's required headers
-// were being rendered into the install snippet even when the operator had
-// configured those variables as "system" (provided server-side) or "none"
-// (omitted entirely). The bug was in collectEnvironmentVariables, where the
-// loop over ExternalMcpHeaderDefinitions skipped the isExplicitlyNotUserProvided
-// filter that the SecurityVariables and FunctionEnvironmentVariables loops
-// already applied. Only headers whose mcp_environment_configs entry is "user"
-// (or has no entry, for backwards compat) should appear in the install snippet.
 func TestServeInstallPage_ExternalMCP_FiltersNonUserProvidedHeaders(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestMCPMetadataService(t)
