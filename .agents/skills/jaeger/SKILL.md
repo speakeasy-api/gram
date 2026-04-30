@@ -132,6 +132,6 @@ Configured in `mise.toml`:
 | `OTLP_GRPC_PORT`              | `4317`                  | OTLP receiver port (OTel Collector) |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:4317` | Full endpoint (auto-constructed)    |
 | `JAEGER_WEB_PORT`             | `16686`                 | Jaeger UI/API port (traces)         |
-| `PROMETHEUS_PORT`             | `9090`                  | Prometheus UI/API port (metrics)    |
+| `PROMETHEUS_PORT`             | `9099`                  | Prometheus UI/API port (metrics)    |
 | `GRAM_ENABLE_OTEL_TRACES`     | `1`                     | Enable/disable trace export         |
 | `GRAM_ENABLE_OTEL_METRICS`    | `1`                     | Enable/disable metrics export       |
