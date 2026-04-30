@@ -191,6 +191,15 @@ export interface AddServerDialogProps {
   projectSlug?: string;
 }
 
+function filterToHttpRemotes(server: PulseMCPServer): PulseMCPServer {
+  return {
+    ...server,
+    remotes: server.remotes?.filter(
+      (r) => r.transportType === "streamable-http",
+    ),
+  };
+}
+
 /**
  * Hook to fetch server details (including remotes) for all servers.
  * This enriches the server objects with remote endpoint data from the registry.
@@ -231,8 +240,9 @@ function useEnrichedServers(servers: PulseMCPServer[], open: boolean) {
       setError(null);
       fetchedForRef.current = serversKey;
 
+      let result: PulseMCPServer[];
       try {
-        const enriched = await Promise.all(
+        result = await Promise.all(
           servers.map(async (server) => {
             // Skip if server already has remotes populated
             if (server.remotes && server.remotes.length > 0) {
@@ -263,17 +273,15 @@ function useEnrichedServers(servers: PulseMCPServer[], open: boolean) {
             }
           }),
         );
-
-        setEnrichedServers(enriched);
       } catch (err) {
         setError(
           err instanceof Error ? err.message : "Failed to fetch details",
         );
-        // Fall back to original servers
-        setEnrichedServers(servers);
-      } finally {
-        setIsLoading(false);
+        result = servers;
       }
+
+      setEnrichedServers(result.map(filterToHttpRemotes));
+      setIsLoading(false);
     };
 
     fetchServerDetails();
