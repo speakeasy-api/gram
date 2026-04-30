@@ -130,10 +130,15 @@ func (c *ChatClient) initializeRequest(ctx context.Context, req CompletionReques
 		return nil, fmt.Errorf("model %s is not allowed and no fallback is available for its provider", model)
 	}
 
+	outboundMessages := req.Messages
+	if req.NormalizeOutboundMessages {
+		outboundMessages = slices.Collect(NormalizeAssistantMessages(req.Messages))
+	}
+
 	// Build request body
 	reqBody := OpenAIChatRequest{
 		Model:          model,
-		Messages:       slices.Collect(NormalizeAssistantMessages(req.Messages)),
+		Messages:       outboundMessages,
 		Stream:         req.Stream,
 		Tools:          req.Tools,
 		Temperature:    temp,
