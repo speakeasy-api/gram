@@ -2,7 +2,6 @@ package activities_test
 
 import (
 	"context"
-	"errors"
 	"testing"
 	"time"
 
@@ -68,7 +67,7 @@ func TestProcessWorkOSOrganizationEvents_AdvancesCursor(t *testing.T) {
 		WorkOSOrganizationID: workosOrgID,
 	})
 	require.NoError(t, err)
-	require.Equal(t, "", res.SinceEventID)
+	require.Empty(t, res.SinceEventID)
 	require.Equal(t, "event_01HZB", res.LastEventID)
 	require.False(t, res.HasMore)
 
@@ -152,11 +151,11 @@ func TestProcessWorkOSOrganizationEvents_EmptyPage(t *testing.T) {
 
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
-	require.Equal(t, "", res.LastEventID)
+	require.Empty(t, res.LastEventID)
 	require.False(t, res.HasMore)
 
 	_, err = workosrepo.New(conn).GetOrganizationSyncLastEventID(ctx, workosOrgID)
-	require.True(t, errors.Is(err, pgx.ErrNoRows))
+	require.ErrorIs(t, err, pgx.ErrNoRows)
 }
 
 func TestProcessWorkOSOrganizationEvents_RejectsMalformedEvent(t *testing.T) {

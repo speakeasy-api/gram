@@ -89,6 +89,8 @@ func (p *ProcessWorkOSOrganizationEvents) Do(ctx context.Context, params Process
 		Limit:          workosOrgEventsPageSize,
 		After:          sinceEventID,
 		OrganizationId: workOSOrgID,
+		RangeStart:     "",
+		RangeEnd:       "",
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to list WorkOS events").Log(ctx, logger)
