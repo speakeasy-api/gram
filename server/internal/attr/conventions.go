@@ -305,6 +305,10 @@ const (
 	RemoteMCPServerIDKey               = attribute.Key("gram.remote_mcp_server.id")
 	RemoteMCPServerURLKey              = attribute.Key("gram.remote_mcp_server.url")
 
+	WorkOSEventIDKey             = attribute.Key("gram.workos_event.id")
+	WorkOSEventTypeKey           = attribute.Key("gram.workos_event.type")
+	WorkOSEventOrganizationIDKey = attribute.Key("gram.workos_event.organization_id")
+
 	StatsToolCallCountKey  = attribute.Key("gram.stats.tool_call_count")
 	StatsMCPServerCountKey = attribute.Key("gram.stats.mcp_server_count")
 )
@@ -1269,6 +1273,19 @@ func SlogLogSeverityText(v string) slog.Attr      { return slog.String(string(Lo
 
 func LogBody(v string) attribute.KeyValue { return LogBodyKey.String(v) }
 func SlogLogBody(v string) slog.Attr      { return slog.String(string(LogBodyKey), v) }
+
+func WorkOSEventID(v string) attribute.KeyValue { return WorkOSEventIDKey.String(v) }
+func SlogWorkOSEventID(v string) slog.Attr      { return slog.String(string(WorkOSEventIDKey), v) }
+
+func WorkOSEventType(v string) attribute.KeyValue { return WorkOSEventTypeKey.String(v) }
+func SlogWorkOSEventType(v string) slog.Attr      { return slog.String(string(WorkOSEventTypeKey), v) }
+
+func WorkOSEventOrganizationID(v string) attribute.KeyValue {
+	return WorkOSEventOrganizationIDKey.String(v)
+}
+func SlogWorkOSEventOrganizationID(v string) slog.Attr {
+	return slog.String(string(WorkOSEventOrganizationIDKey), v)
+}
 
 func StatsToolCallCount(v int) attribute.KeyValue { return StatsToolCallCountKey.Int(v) }
 func SlogStatsToolCallCount(v int) slog.Attr      { return slog.Int(string(StatsToolCallCountKey), v) }

@@ -115,11 +115,10 @@ type workosOrgEvent struct {
 func (p *ProcessWorkOSOrganizationEvents) handlePage(ctx context.Context, logger *slog.Logger, workosOrgID string, page []events.Event) (string, error) {
 	var lastEventID string
 	for _, event := range page {
-		eventLogger := logger
-		// .With(
-		// 	attr.SlogWorkOSEventID(event.ID),
-		// 	attr.SlogWorkOSEventType(event.Event),
-		// )
+		eventLogger := logger.With(
+			attr.SlogWorkOSEventID(event.ID),
+			attr.SlogWorkOSEventType(event.Event),
+		)
 
 		var orgEvent workosOrgEvent
 		if err := json.Unmarshal(event.Data, &orgEvent); err != nil {
@@ -131,7 +130,7 @@ func (p *ProcessWorkOSOrganizationEvents) handlePage(ctx context.Context, logger
 			return lastEventID, oops.E(oops.CodeUnexpected, nil, "unexpected non-organization event object: %s", orgEvent.Object).Log(ctx, eventLogger)
 		}
 
-		// eventLogger = eventLogger.With(attr.SlogWorkOSEventOrganizationID(orgEvent.OrganizationID))
+		eventLogger = eventLogger.With(attr.SlogWorkOSEventOrganizationID(orgEvent.OrganizationID))
 
 		eventID, err := p.handleEvent(ctx, eventLogger, workosOrgID, event)
 		if err != nil {
