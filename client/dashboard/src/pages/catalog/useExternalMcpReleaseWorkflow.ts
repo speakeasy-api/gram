@@ -250,7 +250,9 @@ export function useExternalMcpReleaseWorkflow({
     const singleRemote: ServerConfig[] = [];
 
     for (const server of servers) {
-      const remotes = server.remotes ?? [];
+      const remotes = server.remotes
+        ? server.remotes.filter((r) => r.transportType === "streamable-http")
+        : [];
       const installed = isServerAlreadyInstalled(server);
       const baseName = server.title ?? server.registrySpecifier;
       if (remotes.length > 1 && !installed) {
