@@ -459,7 +459,7 @@ func (q *Queries) ListEnabledRiskPoliciesByProject(ctx context.Context, projectI
 }
 
 const listEnabledShadowMCPPoliciesByProject = `-- name: ListEnabledShadowMCPPoliciesByProject :many
-SELECT id, project_id, organization_id, enabled, name, sources, presidio_entities, action, auto_name, version, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, organization_id, enabled, name, sources, presidio_entities, action, auto_name, user_message, version, created_at, updated_at, deleted_at, deleted
 FROM risk_policies
 WHERE project_id = $1
   AND enabled IS TRUE
@@ -487,6 +487,7 @@ func (q *Queries) ListEnabledShadowMCPPoliciesByProject(ctx context.Context, pro
 			&i.PresidioEntities,
 			&i.Action,
 			&i.AutoName,
+			&i.UserMessage,
 			&i.Version,
 			&i.CreatedAt,
 			&i.UpdatedAt,
