@@ -10,7 +10,12 @@ import {
 
 export function InsightsAgentsContent() {
   return (
-    <InsightsOverviewShell noDataKind="chats" showMcpFilter={false}>
+    <InsightsOverviewShell
+      noDataKind="chats"
+      showMcpFilter={false}
+      title="Agent Sessions"
+      subtitle="Monitor agent chat activity, resolution rates, and session health"
+    >
       {(props) => <InsightsAgentsInner {...props} />}
     </InsightsOverviewShell>
   );
