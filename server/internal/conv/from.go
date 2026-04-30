@@ -163,6 +163,16 @@ func PtrToPGTimestamptz(t *time.Time) pgtype.Timestamptz {
 	return pgtype.Timestamptz{Time: *t, Valid: true, InfinityModifier: pgtype.Finite}
 }
 
+// ToPGTimestamptzEmpty converts a time to a pgtype.Timestamptz that is only
+// valid when the input is non-zero.
+func ToPGTimestamptzEmpty(t time.Time) pgtype.Timestamptz {
+	return pgtype.Timestamptz{
+		Time:             t,
+		InfinityModifier: pgtype.Finite,
+		Valid:            !t.IsZero(),
+	}
+}
+
 // PtrToPGInt8 converts an int pointer to a pgtype.Int8. If the pointer is nil,
 // the result has Valid set to false.
 func PtrToPGInt8(v *int) pgtype.Int8 {

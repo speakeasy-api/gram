@@ -202,6 +202,8 @@ const (
 	ProjectIDKey                   = attribute.Key("gram.project.id")
 	ProjectNameKey                 = attribute.Key("gram.project.name")
 	ProjectSlugKey                 = attribute.Key("gram.project.slug")
+	RoleWorkOSIDKey                = attribute.Key("gram.role.workos_id")
+	RoleWorkOSSlugKey              = attribute.Key("gram.role.workos_slug")
 	RiskPolicyCountKey             = attribute.Key("gram.risk.policy_count")
 	RiskPolicyIDKey                = attribute.Key("gram.risk.policy_id")
 	RiskRuleIDKey                  = attribute.Key("gram.risk.rule_id")
@@ -301,6 +303,10 @@ const (
 	RemoteMCPProxyRemoteStatusClassKey = attribute.Key("gram.remote_mcp.proxy.remote_status_class")
 	RemoteMCPServerIDKey               = attribute.Key("gram.remote_mcp_server.id")
 	RemoteMCPServerURLKey              = attribute.Key("gram.remote_mcp_server.url")
+
+	WorkOSEventIDKey             = attribute.Key("gram.workos_event.id")
+	WorkOSEventTypeKey           = attribute.Key("gram.workos_event.type")
+	WorkOSEventOrganizationIDKey = attribute.Key("gram.workos_event.organization_id")
 
 	StatsToolCallCountKey  = attribute.Key("gram.stats.tool_call_count")
 	StatsMCPServerCountKey = attribute.Key("gram.stats.mcp_server_count")
@@ -885,6 +891,12 @@ func SlogProjectSlug(v string) slog.Attr      { return slog.String(string(Projec
 func ProjectName(v string) attribute.KeyValue { return ProjectNameKey.String(v) }
 func SlogProjectName(v string) slog.Attr      { return slog.String(string(ProjectNameKey), v) }
 
+func RoleWorkOSID(v string) attribute.KeyValue { return RoleWorkOSIDKey.String(v) }
+func SlogRoleWorkOSID(v string) slog.Attr      { return slog.String(string(RoleWorkOSIDKey), v) }
+
+func RoleWorkOSSlug(v string) attribute.KeyValue { return RoleWorkOSSlugKey.String(v) }
+func SlogRoleWorkOSSlug(v string) slog.Attr      { return slog.String(string(RoleWorkOSSlugKey), v) }
+
 func RemoteMCPServerID(v string) attribute.KeyValue { return RemoteMCPServerIDKey.String(v) }
 func SlogRemoteMCPServerID(v string) slog.Attr {
 	return slog.String(string(RemoteMCPServerIDKey), v)
@@ -1266,6 +1278,19 @@ func SlogLogSeverityText(v string) slog.Attr      { return slog.String(string(Lo
 
 func LogBody(v string) attribute.KeyValue { return LogBodyKey.String(v) }
 func SlogLogBody(v string) slog.Attr      { return slog.String(string(LogBodyKey), v) }
+
+func WorkOSEventID(v string) attribute.KeyValue { return WorkOSEventIDKey.String(v) }
+func SlogWorkOSEventID(v string) slog.Attr      { return slog.String(string(WorkOSEventIDKey), v) }
+
+func WorkOSEventType(v string) attribute.KeyValue { return WorkOSEventTypeKey.String(v) }
+func SlogWorkOSEventType(v string) slog.Attr      { return slog.String(string(WorkOSEventTypeKey), v) }
+
+func WorkOSEventOrganizationID(v string) attribute.KeyValue {
+	return WorkOSEventOrganizationIDKey.String(v)
+}
+func SlogWorkOSEventOrganizationID(v string) slog.Attr {
+	return slog.String(string(WorkOSEventOrganizationIDKey), v)
+}
 
 func StatsToolCallCount(v int) attribute.KeyValue { return StatsToolCallCountKey.Int(v) }
 func SlogStatsToolCallCount(v int) slog.Attr      { return slog.Int(string(StatsToolCallCountKey), v) }
