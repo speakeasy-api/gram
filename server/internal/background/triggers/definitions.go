@@ -247,7 +247,21 @@ func decodeSlackEvent(raw json.RawMessage) (slackEventRequestBody, error) {
 		if err := json.Unmarshal(raw, &ev); err != nil {
 			return slackEventRequestBody{}, fmt.Errorf("%s event: %w", probe.Type, err)
 		}
-		return slackEventRequestBody{Type: ev.Type, User: ev.User.ID}, nil
+		return slackEventRequestBody{
+			Type:     ev.Type,
+			Subtype:  "",
+			Text:     "",
+			User:     ev.User.ID,
+			Inviter:  "",
+			BotID:    "",
+			AppID:    "",
+			Channel:  "",
+			ThreadTs: "",
+			Ts:       "",
+			Reaction: "",
+			ItemUser: "",
+			Item:     nil,
+		}, nil
 	case "channel_created":
 		var ev slackChannelObjectEventBody
 		if err := json.Unmarshal(raw, &ev); err != nil {
@@ -255,25 +269,81 @@ func decodeSlackEvent(raw json.RawMessage) (slackEventRequestBody, error) {
 		}
 		// channel_created carries the actor inside channel.creator; surface it
 		// as the normalized actor user so downstream consumers see a unified shape.
-		return slackEventRequestBody{Type: ev.Type, Channel: ev.Channel.ID, User: ev.Channel.Creator}, nil
+		return slackEventRequestBody{
+			Type:     ev.Type,
+			Subtype:  "",
+			Text:     "",
+			User:     ev.Channel.Creator,
+			Inviter:  "",
+			BotID:    "",
+			AppID:    "",
+			Channel:  ev.Channel.ID,
+			ThreadTs: "",
+			Ts:       "",
+			Reaction: "",
+			ItemUser: "",
+			Item:     nil,
+		}, nil
 	case "channel_rename", "group_rename":
 		var ev slackChannelObjectEventBody
 		if err := json.Unmarshal(raw, &ev); err != nil {
 			return slackEventRequestBody{}, fmt.Errorf("%s event: %w", probe.Type, err)
 		}
-		return slackEventRequestBody{Type: ev.Type, Channel: ev.Channel.ID}, nil
+		return slackEventRequestBody{
+			Type:     ev.Type,
+			Subtype:  "",
+			Text:     "",
+			User:     "",
+			Inviter:  "",
+			BotID:    "",
+			AppID:    "",
+			Channel:  ev.Channel.ID,
+			ThreadTs: "",
+			Ts:       "",
+			Reaction: "",
+			ItemUser: "",
+			Item:     nil,
+		}, nil
 	case "channel_id_changed":
 		var ev slackChannelIDChangedEventBody
 		if err := json.Unmarshal(raw, &ev); err != nil {
 			return slackEventRequestBody{}, fmt.Errorf("%s event: %w", probe.Type, err)
 		}
-		return slackEventRequestBody{Type: ev.Type, Channel: ev.NewChannelID}, nil
+		return slackEventRequestBody{
+			Type:     ev.Type,
+			Subtype:  "",
+			Text:     "",
+			User:     "",
+			Inviter:  "",
+			BotID:    "",
+			AppID:    "",
+			Channel:  ev.NewChannelID,
+			ThreadTs: "",
+			Ts:       "",
+			Reaction: "",
+			ItemUser: "",
+			Item:     nil,
+		}, nil
 	case "file_shared":
 		var ev slackFileSharedEventBody
 		if err := json.Unmarshal(raw, &ev); err != nil {
 			return slackEventRequestBody{}, fmt.Errorf("%s event: %w", probe.Type, err)
 		}
-		return slackEventRequestBody{Type: ev.Type, User: ev.UserID, Channel: ev.ChannelID}, nil
+		return slackEventRequestBody{
+			Type:     ev.Type,
+			Subtype:  "",
+			Text:     "",
+			User:     ev.UserID,
+			Inviter:  "",
+			BotID:    "",
+			AppID:    "",
+			Channel:  ev.ChannelID,
+			ThreadTs: "",
+			Ts:       "",
+			Reaction: "",
+			ItemUser: "",
+			Item:     nil,
+		}, nil
 	default:
 		var ev slackEventRequestBody
 		if err := json.Unmarshal(raw, &ev); err != nil {
