@@ -289,29 +289,13 @@ func (s *Service) recordHook(ctx context.Context, payload *gen.ClaudePayload) {
 
 	sessionID := *payload.SessionID
 
-	// Plugin path: when the request authenticated via Gram-Key + Gram-Project,
-	// org/project come from the auth context. We still consult Redis to enrich
-	// with OTEL-supplied tags (UserEmail, ServiceName, ClaudeOrgID) when
-	// available, but the auth-derived org/project always wins.
-	if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil && authCtx.ProjectID != nil {
-		metadata := SessionMetadata{
-			SessionID:   sessionID,
-			ServiceName: "",
-			UserEmail:   "",
-			ClaudeOrgID: "",
-			GramOrgID:   authCtx.ActiveOrganizationID,
-			ProjectID:   authCtx.ProjectID.String(),
-		}
-		if cached, err := s.getSessionMetadata(ctx, sessionID); err == nil {
-			metadata.ServiceName = cached.ServiceName
-			metadata.UserEmail = cached.UserEmail
-			metadata.ClaudeOrgID = cached.ClaudeOrgID
-		}
-		s.persistHook(ctx, payload, &metadata)
-		return
-	}
-
-	// OTEL path: Redis session metadata or buffer until OTEL Logs validates.
+	// Both plugin-authenticated and OTEL-only requests go through the same
+	// Redis-buffered flow: persist when session metadata is in the cache,
+	// buffer otherwise so flushPendingHooks can re-persist with full
+	// attribution once /rpc/hooks.otel.logs lands. Claude hook payloads
+	// don't carry user.email, so even plugin requests would land with an
+	// empty user_email if persisted synchronously on a cache miss — Cursor
+	// avoids this because its payload includes UserEmail directly.
 	metadata, err := s.getSessionMetadata(ctx, sessionID)
 	if err == nil {
 		s.persistHook(ctx, payload, &metadata)
