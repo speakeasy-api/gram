@@ -1,5 +1,11 @@
 # @gram-ai/elements
 
+## 1.30.1
+
+### Patch Changes
+
+- cc00be4: Fix duplicated assistant messages appearing in chat history after a stream reconnects.
+
 ## 1.30.0
 
 ### Minor Changes
