@@ -195,6 +195,101 @@ func TestSlackFilterRejectsDisabledEventType(t *testing.T) {
 	require.False(t, match)
 }
 
+func TestDecodeSlackEventStringUser(t *testing.T) {
+	t.Parallel()
+
+	raw := json.RawMessage(`{"type":"app_mention","user":"U123","channel":"C1","ts":"1.0","text":"hi"}`)
+	got, err := decodeSlackEvent(raw)
+	require.NoError(t, err)
+	require.Equal(t, "app_mention", got.Type)
+	require.Equal(t, "U123", got.User)
+	require.Equal(t, "C1", got.Channel)
+	require.Equal(t, "hi", got.Text)
+}
+
+func TestDecodeSlackEventUserObject(t *testing.T) {
+	t.Parallel()
+
+	for _, eventType := range []string{"team_join", "user_change"} {
+		t.Run(eventType, func(t *testing.T) {
+			t.Parallel()
+
+			raw := json.RawMessage(fmt.Sprintf(
+				`{"type":%q,"user":{"id":"U999","team_id":"T1","name":"alice","real_name":"Alice","is_bot":false}}`,
+				eventType,
+			))
+			got, err := decodeSlackEvent(raw)
+			require.NoError(t, err)
+			require.Equal(t, eventType, got.Type)
+			require.Equal(t, "U999", got.User)
+		})
+	}
+}
+
+func TestDecodeSlackEventChannelObject(t *testing.T) {
+	t.Parallel()
+
+	for _, eventType := range []string{"channel_rename", "group_rename"} {
+		t.Run(eventType, func(t *testing.T) {
+			t.Parallel()
+
+			raw := json.RawMessage(fmt.Sprintf(
+				`{"type":%q,"channel":{"id":"C123","name":"new-name","created":1360782804}}`,
+				eventType,
+			))
+			got, err := decodeSlackEvent(raw)
+			require.NoError(t, err)
+			require.Equal(t, eventType, got.Type)
+			require.Equal(t, "C123", got.Channel)
+			require.Empty(t, got.User)
+		})
+	}
+}
+
+func TestDecodeSlackEventChannelCreated(t *testing.T) {
+	t.Parallel()
+
+	raw := json.RawMessage(`{"type":"channel_created","channel":{"id":"C024BE91L","name":"fun","created":1360782804,"creator":"U024BE7LH"}}`)
+	got, err := decodeSlackEvent(raw)
+	require.NoError(t, err)
+	require.Equal(t, "channel_created", got.Type)
+	require.Equal(t, "C024BE91L", got.Channel)
+	require.Equal(t, "U024BE7LH", got.User)
+}
+
+func TestDecodeSlackEventChannelIDChanged(t *testing.T) {
+	t.Parallel()
+
+	raw := json.RawMessage(`{"type":"channel_id_changed","old_channel_id":"G012Y48650T","new_channel_id":"C012Y48650T","event_ts":"1612206778.000000"}`)
+	got, err := decodeSlackEvent(raw)
+	require.NoError(t, err)
+	require.Equal(t, "channel_id_changed", got.Type)
+	require.Equal(t, "C012Y48650T", got.Channel)
+}
+
+func TestDecodeSlackEventFileShared(t *testing.T) {
+	t.Parallel()
+
+	raw := json.RawMessage(`{"type":"file_shared","file_id":"F2147483862","user_id":"U0Z7K8SRH","channel_id":"C0Z7K8SRH","file":{"id":"F2147483862"},"event_ts":"1361482916.000004"}`)
+	got, err := decodeSlackEvent(raw)
+	require.NoError(t, err)
+	require.Equal(t, "file_shared", got.Type)
+	require.Equal(t, "U0Z7K8SRH", got.User)
+	require.Equal(t, "C0Z7K8SRH", got.Channel)
+}
+
+func TestDecodeSlackEventMemberJoinedChannel(t *testing.T) {
+	t.Parallel()
+
+	raw := json.RawMessage(`{"type":"member_joined_channel","user":"W123ABC456","channel":"C0698JE0H","channel_type":"C","team":"T0E2GE343","inviter":"U123456789"}`)
+	got, err := decodeSlackEvent(raw)
+	require.NoError(t, err)
+	require.Equal(t, "member_joined_channel", got.Type)
+	require.Equal(t, "W123ABC456", got.User)
+	require.Equal(t, "C0698JE0H", got.Channel)
+	require.Equal(t, "U123456789", got.Inviter)
+}
+
 func TestCronFilterAlwaysReturnsTrue(t *testing.T) {
 	t.Parallel()
 

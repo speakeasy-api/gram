@@ -142,19 +142,24 @@ type cronTriggerConfig struct {
 func (c cronTriggerConfig) Filter(_ any) (bool, error) { return true, nil }
 
 type slackEventRequest struct {
-	Type      string                `json:"type"`
-	Challenge string                `json:"challenge,omitempty"`
-	TeamID    string                `json:"team_id,omitempty"`
-	EventID   string                `json:"event_id,omitempty"`
-	EventTime int64                 `json:"event_time,omitempty"`
-	Event     slackEventRequestBody `json:"event"`
+	Type      string          `json:"type"`
+	Challenge string          `json:"challenge,omitempty"`
+	TeamID    string          `json:"team_id,omitempty"`
+	EventID   string          `json:"event_id,omitempty"`
+	EventTime int64           `json:"event_time,omitempty"`
+	Event     json.RawMessage `json:"event,omitempty"`
 }
 
+// slackEventRequestBody is the normalized intermediate shape produced by
+// decodeSlackEvent. JSON tags also let it deserialize directly from the
+// "string user / string channel" majority of Slack events; per-event-type
+// branches in decodeSlackEvent handle the polymorphic shapes.
 type slackEventRequestBody struct {
 	Type     string `json:"type"`
 	Subtype  string `json:"subtype,omitempty"`
 	Text     string `json:"text,omitempty"`
 	User     string `json:"user,omitempty"`
+	Inviter  string `json:"inviter,omitempty"`
 	BotID    string `json:"bot_id,omitempty"`
 	AppID    string `json:"app_id,omitempty"`
 	Channel  string `json:"channel,omitempty"`
@@ -169,10 +174,183 @@ type slackEventRequestBody struct {
 	Item     *slackEventItemBody `json:"item,omitempty"`
 }
 
+// slackUserChangeEventBody matches the team_join and user_change payloads,
+// where Slack sends event.user as a User object rather than a user ID.
+// See https://docs.slack.dev/reference/events/team_join and
+// https://docs.slack.dev/reference/events/user_change.
+type slackUserChangeEventBody struct {
+	Type string    `json:"type"`
+	User slackUser `json:"user"`
+}
+
+// slackUser models the subset of Slack's User object
+// (https://docs.slack.dev/reference/objects/user-object) that we surface
+// downstream.
+type slackUser struct {
+	ID string `json:"id"`
+}
+
+// slackChannelObjectEventBody matches channel_created, channel_rename, and
+// group_rename, where Slack sends event.channel as a channel object rather
+// than a channel ID. See https://docs.slack.dev/reference/events/channel_created,
+// https://docs.slack.dev/reference/events/channel_rename, and
+// https://docs.slack.dev/reference/events/group_rename.
+type slackChannelObjectEventBody struct {
+	Type    string             `json:"type"`
+	Channel slackChannelObject `json:"channel"`
+}
+
+type slackChannelObject struct {
+	ID      string `json:"id"`
+	Creator string `json:"creator,omitempty"`
+}
+
+// slackFileSharedEventBody matches file_shared, where the actor is carried in
+// `event.user_id` (not `event.user`) and the channel in `event.channel_id`.
+// See https://docs.slack.dev/reference/events/file_shared.
+type slackFileSharedEventBody struct {
+	Type      string `json:"type"`
+	UserID    string `json:"user_id,omitempty"`
+	ChannelID string `json:"channel_id,omitempty"`
+}
+
+// slackChannelIDChangedEventBody matches channel_id_changed, which carries
+// new_channel_id instead of an `event.channel` field.
+// See https://docs.slack.dev/reference/events/channel_id_changed.
+type slackChannelIDChangedEventBody struct {
+	Type         string `json:"type"`
+	OldChannelID string `json:"old_channel_id,omitempty"`
+	NewChannelID string `json:"new_channel_id,omitempty"`
+}
+
 type slackEventItemBody struct {
 	Type    string `json:"type,omitempty"`
 	Channel string `json:"channel,omitempty"`
 	Ts      string `json:"ts,omitempty"`
+}
+
+// decodeSlackEvent decodes the inner `event` payload of an event_callback,
+// dispatching by event type because Slack's `event.user` and `event.channel`
+// are sometimes objects (e.g. team_join, channel_rename) and sometimes string
+// IDs (e.g. message, app_mention). Each branch normalizes the payload back
+// into slackEventRequestBody for downstream code.
+func decodeSlackEvent(raw json.RawMessage) (slackEventRequestBody, error) {
+	var probe struct {
+		Type string `json:"type"`
+	}
+	if err := json.Unmarshal(raw, &probe); err != nil {
+		return slackEventRequestBody{}, fmt.Errorf("event type: %w", err)
+	}
+	switch probe.Type {
+	case "team_join", "user_change":
+		var ev slackUserChangeEventBody
+		if err := json.Unmarshal(raw, &ev); err != nil {
+			return slackEventRequestBody{}, fmt.Errorf("%s event: %w", probe.Type, err)
+		}
+		return slackEventRequestBody{
+			Type:     ev.Type,
+			Subtype:  "",
+			Text:     "",
+			User:     ev.User.ID,
+			Inviter:  "",
+			BotID:    "",
+			AppID:    "",
+			Channel:  "",
+			ThreadTs: "",
+			Ts:       "",
+			Reaction: "",
+			ItemUser: "",
+			Item:     nil,
+		}, nil
+	case "channel_created":
+		var ev slackChannelObjectEventBody
+		if err := json.Unmarshal(raw, &ev); err != nil {
+			return slackEventRequestBody{}, fmt.Errorf("%s event: %w", probe.Type, err)
+		}
+		// channel_created carries the actor inside channel.creator; surface it
+		// as the normalized actor user so downstream consumers see a unified shape.
+		return slackEventRequestBody{
+			Type:     ev.Type,
+			Subtype:  "",
+			Text:     "",
+			User:     ev.Channel.Creator,
+			Inviter:  "",
+			BotID:    "",
+			AppID:    "",
+			Channel:  ev.Channel.ID,
+			ThreadTs: "",
+			Ts:       "",
+			Reaction: "",
+			ItemUser: "",
+			Item:     nil,
+		}, nil
+	case "channel_rename", "group_rename":
+		var ev slackChannelObjectEventBody
+		if err := json.Unmarshal(raw, &ev); err != nil {
+			return slackEventRequestBody{}, fmt.Errorf("%s event: %w", probe.Type, err)
+		}
+		return slackEventRequestBody{
+			Type:     ev.Type,
+			Subtype:  "",
+			Text:     "",
+			User:     "",
+			Inviter:  "",
+			BotID:    "",
+			AppID:    "",
+			Channel:  ev.Channel.ID,
+			ThreadTs: "",
+			Ts:       "",
+			Reaction: "",
+			ItemUser: "",
+			Item:     nil,
+		}, nil
+	case "channel_id_changed":
+		var ev slackChannelIDChangedEventBody
+		if err := json.Unmarshal(raw, &ev); err != nil {
+			return slackEventRequestBody{}, fmt.Errorf("%s event: %w", probe.Type, err)
+		}
+		return slackEventRequestBody{
+			Type:     ev.Type,
+			Subtype:  "",
+			Text:     "",
+			User:     "",
+			Inviter:  "",
+			BotID:    "",
+			AppID:    "",
+			Channel:  ev.NewChannelID,
+			ThreadTs: "",
+			Ts:       "",
+			Reaction: "",
+			ItemUser: "",
+			Item:     nil,
+		}, nil
+	case "file_shared":
+		var ev slackFileSharedEventBody
+		if err := json.Unmarshal(raw, &ev); err != nil {
+			return slackEventRequestBody{}, fmt.Errorf("%s event: %w", probe.Type, err)
+		}
+		return slackEventRequestBody{
+			Type:     ev.Type,
+			Subtype:  "",
+			Text:     "",
+			User:     ev.UserID,
+			Inviter:  "",
+			BotID:    "",
+			AppID:    "",
+			Channel:  ev.ChannelID,
+			ThreadTs: "",
+			Ts:       "",
+			Reaction: "",
+			ItemUser: "",
+			Item:     nil,
+		}, nil
+	default:
+		var ev slackEventRequestBody
+		if err := json.Unmarshal(raw, &ev); err != nil {
+			return slackEventRequestBody{}, fmt.Errorf("event: %w", err)
+		}
+		return ev, nil
+	}
 }
 
 type slackTriggerEvent struct {
@@ -182,11 +360,18 @@ type slackTriggerEvent struct {
 	TeamID       string `json:"team_id,omitempty" cel:"team_id"`
 	ChannelID    string `json:"channel_id,omitempty" cel:"channel_id"`
 	ThreadID     string `json:"thread_id,omitempty" cel:"thread_id"`
-	UserID       string `json:"user_id,omitempty" cel:"user_id"`
-	BotID        string `json:"bot_id,omitempty" cel:"bot_id"`
-	AppID        string `json:"app_id,omitempty" cel:"app_id"`
-	Text         string `json:"text,omitempty" cel:"text"`
-	Timestamp    string `json:"timestamp,omitempty" cel:"timestamp"`
+	// UserID is the normalized actor for the event: the user who took the
+	// action that produced it. Source varies by event type (event.user,
+	// event.user.id, event.user_id, event.channel.creator).
+	UserID string `json:"user_id,omitempty" cel:"user_id"`
+	// InviterID is set on member_joined_channel when the join was the result
+	// of an invitation. Empty if the user joined themselves or was added by
+	// default channel rules.
+	InviterID string `json:"inviter_id,omitempty" cel:"inviter_id"`
+	BotID     string `json:"bot_id,omitempty" cel:"bot_id"`
+	AppID     string `json:"app_id,omitempty" cel:"app_id"`
+	Text      string `json:"text,omitempty" cel:"text"`
+	Timestamp string `json:"timestamp,omitempty" cel:"timestamp"`
 
 	// Reaction-event fields exposed to CEL filters and the assistant adapter.
 	// Empty for non-reaction events.
@@ -222,15 +407,10 @@ var supportedSlackEventTypes = []string{
 	"file_shared",
 	"file_unshared",
 	"group_archive",
-	"group_close",
 	"group_deleted",
 	"group_left",
-	"group_open",
 	"group_rename",
 	"group_unarchive",
-	"im_close",
-	"im_created",
-	"im_open",
 	"link_shared",
 	"member_joined_channel",
 	"member_left_channel",
@@ -364,11 +544,19 @@ func newSlackDefinition() Definition {
 				}, nil
 			}
 
+			if len(req.Event) == 0 {
+				return nil, fmt.Errorf("decode slack payload: missing event")
+			}
+			event, err := decodeSlackEvent(req.Event)
+			if err != nil {
+				return nil, fmt.Errorf("decode slack payload: %w", err)
+			}
+
 			// thread_ts is only set for replies inside a thread. For top-level
 			// messages we key the correlation on the channel alone so a user
 			// sending multiple standalone messages in a DM or channel lands
 			// on a single Gram thread rather than spawning one per message.
-			threadID := req.Event.ThreadTs
+			threadID := event.ThreadTs
 
 			eventID := req.EventID
 			if eventID == "" {
@@ -378,15 +566,15 @@ func newSlackDefinition() Definition {
 			// Reaction events carry the channel + ts of the reacted-to message
 			// in `item`. Fall back to those so threading aligns with the
 			// originating message and CEL filters / correlation work.
-			channelID := req.Event.Channel
-			timestamp := req.Event.Ts
+			channelID := event.Channel
+			timestamp := event.Ts
 			var (
 				itemType, itemChannel, itemTs string
 			)
-			if req.Event.Item != nil {
-				itemType = req.Event.Item.Type
-				itemChannel = req.Event.Item.Channel
-				itemTs = req.Event.Item.Ts
+			if event.Item != nil {
+				itemType = event.Item.Type
+				itemChannel = event.Item.Channel
+				itemTs = event.Item.Ts
 				if channelID == "" {
 					channelID = itemChannel
 				}
@@ -400,18 +588,19 @@ func newSlackDefinition() Definition {
 
 			normalizedEvent := slackTriggerEvent{
 				EnvelopeType: req.Type,
-				EventType:    req.Event.Type,
-				Subtype:      req.Event.Subtype,
+				EventType:    event.Type,
+				Subtype:      event.Subtype,
 				TeamID:       req.TeamID,
 				ChannelID:    channelID,
 				ThreadID:     threadID,
-				UserID:       req.Event.User,
-				BotID:        req.Event.BotID,
-				AppID:        req.Event.AppID,
-				Text:         req.Event.Text,
+				UserID:       event.User,
+				InviterID:    event.Inviter,
+				BotID:        event.BotID,
+				AppID:        event.AppID,
+				Text:         event.Text,
 				Timestamp:    timestamp,
-				Reaction:     req.Event.Reaction,
-				ItemUserID:   req.Event.ItemUser,
+				Reaction:     event.Reaction,
+				ItemUserID:   event.ItemUser,
 				ItemChannel:  itemChannel,
 				ItemTs:       itemTs,
 				ItemType:     itemType,
