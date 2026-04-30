@@ -494,6 +494,22 @@ type FunctionsAccess struct {
 	Deleted       bool
 }
 
+type GlobalRole struct {
+	ID                uuid.UUID
+	WorkosSlug        string
+	WorkosName        string
+	WorkosDescription pgtype.Text
+	WorkosCreatedAt   pgtype.Timestamptz
+	WorkosUpdatedAt   pgtype.Timestamptz
+	WorkosDeletedAt   pgtype.Timestamptz
+	WorkosDeleted     bool
+	WorkosLastEventID pgtype.Text
+	CreatedAt         pgtype.Timestamptz
+	UpdatedAt         pgtype.Timestamptz
+	DeletedAt         pgtype.Timestamptz
+	Deleted           bool
+}
+
 type HooksServerNameOverride struct {
 	ID            uuid.UUID
 	ProjectID     uuid.UUID
@@ -746,6 +762,36 @@ type OrganizationMetadatum struct {
 	CreatedAt          pgtype.Timestamptz
 	UpdatedAt          pgtype.Timestamptz
 	DisabledAt         pgtype.Timestamptz
+}
+
+type OrganizationRole struct {
+	ID                uuid.UUID
+	OrganizationID    string
+	WorkosSlug        string
+	WorkosName        string
+	WorkosDescription pgtype.Text
+	WorkosCreatedAt   pgtype.Timestamptz
+	WorkosUpdatedAt   pgtype.Timestamptz
+	WorkosDeletedAt   pgtype.Timestamptz
+	WorkosDeleted     bool
+	WorkosLastEventID pgtype.Text
+	CreatedAt         pgtype.Timestamptz
+	UpdatedAt         pgtype.Timestamptz
+	DeletedAt         pgtype.Timestamptz
+	Deleted           bool
+}
+
+type OrganizationRoleAssignment struct {
+	ID                 uuid.UUID
+	OrganizationID     string
+	WorkosUserID       string
+	UserID             pgtype.Text
+	RoleUrn            string
+	WorkosMembershipID pgtype.Text
+	WorkosUpdatedAt    pgtype.Timestamptz
+	WorkosLastEventID  pgtype.Text
+	CreatedAt          pgtype.Timestamptz
+	UpdatedAt          pgtype.Timestamptz
 }
 
 type OrganizationUserRelationship struct {
@@ -1175,4 +1221,19 @@ type UserOauthToken struct {
 	UpdatedAt             pgtype.Timestamptz
 	DeletedAt             pgtype.Timestamptz
 	Deleted               bool
+}
+
+type WorkosOrganizationSync struct {
+	ID                   uuid.UUID
+	WorkosOrganizationID string
+	LastEventID          string
+	CreatedAt            pgtype.Timestamptz
+	UpdatedAt            pgtype.Timestamptz
+}
+
+type WorkosUserSync struct {
+	ID          int64
+	LastEventID string
+	CreatedAt   pgtype.Timestamptz
+	UpdatedAt   pgtype.Timestamptz
 }
