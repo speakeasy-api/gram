@@ -55,6 +55,7 @@ type Service struct {
 	authz            *authz.Engine
 	signaler         RiskAnalysisSignaler
 	completionClient openrouter.CompletionClient
+	shadowMCPClient  *shadowmcp.Client
 }
 
 var _ chat.MessageObserver = (*Service)(nil)
@@ -72,6 +73,7 @@ func NewObserver(logger *slog.Logger, db *pgxpool.Pool, signaler RiskAnalysisSig
 		authz:            nil,
 		signaler:         signaler,
 		completionClient: nil,
+		shadowMCPClient:  nil,
 	}
 }
 
@@ -83,6 +85,7 @@ func NewService(
 	authzEngine *authz.Engine,
 	signaler RiskAnalysisSignaler,
 	completionClient openrouter.CompletionClient,
+	shadowMCPClient *shadowmcp.Client,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("risk"))
 
@@ -95,6 +98,7 @@ func NewService(
 		authz:            authzEngine,
 		signaler:         signaler,
 		completionClient: completionClient,
+		shadowMCPClient:  shadowMCPClient,
 	}
 }
 
@@ -241,6 +245,10 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit risk policy create").Log(ctx, s.logger)
+	}
+
+	if s.shadowMCPClient != nil {
+		s.shadowMCPClient.Invalidate(ctx, row.ProjectID)
 	}
 
 	// Trigger the drain workflow for the new policy.
@@ -425,6 +433,10 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		return nil, oops.E(oops.CodeUnexpected, err, "commit risk policy update").Log(ctx, s.logger)
 	}
 
+	if s.shadowMCPClient != nil {
+		s.shadowMCPClient.Invalidate(ctx, row.ProjectID)
+	}
+
 	// Signal the drain workflow — it reads the current enabled/version
 	// from the DB, so it will clean up results if the policy was disabled.
 	_ = s.signaler.SignalNewMessages(ctx, background.DrainRiskAnalysisParams{
@@ -488,6 +500,10 @@ func (s *Service) DeleteRiskPolicy(ctx context.Context, payload *gen.DeleteRiskP
 
 	if err := dbtx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "commit risk policy delete").Log(ctx, s.logger)
+	}
+
+	if s.shadowMCPClient != nil {
+		s.shadowMCPClient.Invalidate(ctx, *authCtx.ProjectID)
 	}
 
 	return nil

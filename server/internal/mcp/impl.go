@@ -61,6 +61,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	organizations_repo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	platformtoolsruntime "github.com/speakeasy-api/gram/server/internal/platformtools/runtime"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -96,6 +97,7 @@ type Service struct {
 	deploymentsRepo     *deployments_repo.Queries
 	enc                 *encryption.Client
 	authz               *authz.Engine
+	shadowMCPClient     *shadowmcp.Client
 }
 
 type oauthTokenInputs struct {
@@ -142,6 +144,7 @@ func NewService(
 	temporal *temporal.Environment,
 	authzEngine *authz.Engine,
 	assistantTokens *assistanttokens.Manager,
+	shadowMCPClient *shadowmcp.Client,
 ) *Service {
 	tracer := tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/mcp")
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/mcp")
@@ -195,6 +198,7 @@ func NewService(
 		chatSessionsManager: chatSessionsManager,
 		enc:                 enc,
 		authz:               authzEngine,
+		shadowMCPClient:     shadowMCPClient,
 	}
 }
 
@@ -881,7 +885,7 @@ func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *ra
 	case "notifications/initialized", "notifications/cancelled":
 		return nil, nil
 	case "tools/list":
-		return handleToolsList(ctx, s.logger, s.authz, s.guardianPolicy, s.db, s.env, payload, req, s.posthog, &s.toolsetCache, s.vectorToolStore, s.temporal)
+		return handleToolsList(ctx, s.logger, s.authz, s.guardianPolicy, s.db, s.env, payload, req, s.posthog, &s.toolsetCache, s.vectorToolStore, s.temporal, s.shadowMCPClient)
 	case "tools/call":
 		return handleToolsCall(ctx, s.logger, s.metrics, s.authz, s.guardianPolicy, s.db, s.env, payload, req, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache, s.telemLogger, s.vectorToolStore, s.temporal, s.mcpMetadataRepo)
 	case "prompts/list":
@@ -1056,6 +1060,7 @@ func (s *Service) HandleToolsList(
 		&s.toolsetCache,
 		s.vectorToolStore,
 		s.temporal,
+		s.shadowMCPClient,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("handle tools list: %w", err)

@@ -35,6 +35,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/oauth"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -147,7 +148,8 @@ func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
 	chatSessionsManager := chatsessions.NewManager(logger, redisClient, "test-jwt-secret")
 	assistantTokens := assistanttokens.New("test-jwt-secret", conn, authzEngine)
 	_ = featClient
-	svc := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, serverURL, enc, cacheAdapter, guardianPolicy, funcs, oauthService, billingStub, billingStub, telemLogger, telemService, vectorToolStore, nil, temporalEnv, authzEngine, assistantTokens)
+	shadowMCPClient := shadowmcp.NewClient(logger, conn, cacheAdapter)
+	svc := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, serverURL, enc, cacheAdapter, guardianPolicy, funcs, oauthService, billingStub, billingStub, telemLogger, telemService, vectorToolStore, nil, temporalEnv, authzEngine, assistantTokens, shadowMCPClient)
 
 	return ctx, &testInstance{
 		service:        svc,

@@ -75,6 +75,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/resources"
 	"github.com/speakeasy-api/gram/server/internal/risk"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/templates"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -654,6 +655,7 @@ func newStartCommand() *cli.Command {
 			}
 			oauthService := oauth.NewService(logger, tracerProvider, meterProvider, db, serverURL, cache.NewRedisCacheAdapter(redisClient), encryptionClient, env, sessionManager, guardianPolicy)
 			externalOAuthService := oauth.NewExternalOAuthService(logger, guardianPolicy, db, cache.NewRedisCacheAdapter(redisClient), authorizer, encryptionClient, externalMcpOAuthConfig)
+			shadowMCPClient := shadowmcp.NewClient(logger, db, cache.NewRedisCacheAdapter(redisClient))
 			triggerApp := newTriggersApp(logger, db, encryptionClient, temporalEnv, telemLogger, serverURL)
 
 			platformSvc := platformtoolsruntime.NewService(
@@ -688,6 +690,7 @@ func newStartCommand() *cli.Command {
 				temporalEnv,
 				authzEngine,
 				assistantTokenManager,
+				shadowMCPClient,
 			)
 
 			chatClient := chat.NewAgenticChatClient(
@@ -814,7 +817,7 @@ func newStartCommand() *cli.Command {
 				logger,
 			)
 			shutdownFuncs = append(shutdownFuncs, riskSignaler.Shutdown)
-			riskService := risk.NewService(logger, tracerProvider, db, sessionManager, authzEngine, riskSignaler, completionsClient)
+			riskService := risk.NewService(logger, tracerProvider, db, sessionManager, authzEngine, riskSignaler, completionsClient, shadowMCPClient)
 			chatWriter.AddObserver(riskService)
 			risk.Attach(mux, riskService)
 

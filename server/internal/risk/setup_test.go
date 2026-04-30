@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/risk"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -90,7 +91,9 @@ func newTestRiskService(t *testing.T) (context.Context, *testInstance) {
 
 	authzEngine := authz.NewEngine(logger, conn, authztest.RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
 
-	svc := risk.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, sig, nil)
+	shadowMCPClient := shadowmcp.NewClient(logger, conn, cache.NewRedisCacheAdapter(redisClient))
+
+	svc := risk.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, sig, nil, shadowMCPClient)
 
 	return ctx, &testInstance{
 		service:        svc,
