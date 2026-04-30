@@ -51,7 +51,7 @@ const PREFERRED_PROJECT_KEY = "preferredProject";
 
 const UNAUTHENTICATED_PATHS = ["/login", "/register", "/invite", "/book-demo"];
 
-const SLUG_EXEMPT_PATHS = ["/slack/register"];
+const SLUG_EXEMPT_PATHS = ["/slack/register", "/assistants-onboarding"];
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   return (
@@ -164,10 +164,7 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
       // elide the org/project slugs. When a logged-in user lands on these paths,
       // prepend the org+project slugs and preserve the path/query/hash so the
       // project-scoped route can mount.
-      const PROMOTABLE_BARE_PATHS = new Set<string>([
-        "/onboarding",
-        "/assistants-onboarding",
-      ]);
+      const PROMOTABLE_BARE_PATHS = new Set<string>(["/onboarding"]);
       const isPromotable = PROMOTABLE_BARE_PATHS.has(location.pathname);
       const promotedSuffix = isPromotable
         ? location.pathname + location.search + location.hash

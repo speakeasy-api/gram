@@ -170,6 +170,7 @@ const ROUTE_STRUCTURE = {
     url: "assistants-onboarding",
     component: AssistantsOnboardingPage,
     outsideMainLayout: true,
+    unauthenticated: true,
   },
   home: {
     title: "Home",

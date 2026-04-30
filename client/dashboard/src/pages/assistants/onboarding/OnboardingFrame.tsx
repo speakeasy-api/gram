@@ -3,10 +3,12 @@ import { Button, Stack } from "@speakeasy-api/moonshine";
 import { Link } from "react-router";
 
 export function OnboardingFrame({
-  onExit,
+  onPrimaryAction,
+  primaryActionLabel,
   children,
 }: {
-  onExit: () => void;
+  onPrimaryAction: () => void;
+  primaryActionLabel: string;
   children: React.ReactNode;
 }) {
   return (
@@ -20,8 +22,8 @@ export function OnboardingFrame({
         <Link className="hover:bg-accent rounded-md p-2" to="/">
           <GramLogo className="w-25" />
         </Link>
-        <Button variant="tertiary" size="sm" onClick={onExit}>
-          Exit to AI control plane
+        <Button variant="tertiary" size="sm" onClick={onPrimaryAction}>
+          {primaryActionLabel}
         </Button>
       </Stack>
       <div className="flex-1 overflow-hidden">{children}</div>
