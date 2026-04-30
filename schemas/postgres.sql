@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS client_session_issuers (
   project_id uuid NOT NULL,
 
   slug TEXT NOT NULL,
-  challenge_mode TEXT NOT NULL,  -- 'implicit' | 'interactive' (enforced at app layer)
+  challenge_mode TEXT NOT NULL,  -- 'chain' | 'interactive' (enforced at app layer)
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -138,6 +138,70 @@ CREATE TABLE IF NOT EXISTS client_session_consents (
 
 CREATE UNIQUE INDEX IF NOT EXISTS client_session_consents_user_issuer_set_key
 ON client_session_consents (user_id, client_session_issuer_id, remote_set_hash)
+WHERE deleted IS FALSE;
+
+-- ---------------------------------------------------------------------------
+-- Client sessions - the durable issued client session.
+-- Created lazily at /token exchange. Lookup at /token is by refresh_token_hash.
+-- Bookkeeping ("what active sessions does this principal have at this issuer?")
+-- is a (principal_urn, client_session_issuer_id) query.
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS client_sessions (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  client_session_issuer_id uuid NOT NULL,
+  principal_urn TEXT NOT NULL,                                -- user:<id> | apikey:<uuid> | anonymous:<mcp-session-id>
+  jti TEXT NOT NULL,                                          -- current access-token JTI
+  refresh_token_hash TEXT NOT NULL,                           -- SHA-256 of the refresh token; never persisted in the clear
+  refresh_expires_at timestamptz NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT client_sessions_pkey PRIMARY KEY (id),
+  CONSTRAINT client_sessions_client_session_issuer_id_fkey FOREIGN KEY (client_session_issuer_id) REFERENCES client_session_issuers (id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS client_sessions_refresh_token_hash_key
+ON client_sessions (refresh_token_hash)
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS client_sessions_principal_idx
+ON client_sessions (principal_urn, client_session_issuer_id)
+WHERE deleted IS FALSE;
+
+-- ---------------------------------------------------------------------------
+-- Remote sessions - the durable upstream OAuth session per (principal, remote_oauth_client).
+-- Holds upstream access + refresh tokens with INDEPENDENT expiries. Created
+-- when a remote auth dance completes; refreshed silently on the access-expiry path.
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS remote_sessions (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  principal_urn TEXT NOT NULL,
+  client_session_issuer_id uuid NOT NULL,
+  remote_oauth_client_id uuid NOT NULL,                       -- one client implies one issuer
+
+  access_token_encrypted TEXT NOT NULL,
+  access_expires_at timestamptz NOT NULL,                     -- independent of refresh expiry
+  refresh_token_encrypted TEXT,
+  refresh_expires_at timestamptz,
+  scopes TEXT[] DEFAULT ARRAY[]::TEXT[],
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT remote_sessions_pkey PRIMARY KEY (id),
+  CONSTRAINT remote_sessions_client_session_issuer_id_fkey FOREIGN KEY (client_session_issuer_id) REFERENCES client_session_issuers (id) ON DELETE CASCADE,
+  CONSTRAINT remote_sessions_remote_oauth_client_id_fkey FOREIGN KEY (remote_oauth_client_id) REFERENCES remote_oauth_clients (id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS remote_sessions_principal_client_key
+ON remote_sessions (principal_urn, remote_oauth_client_id)
 WHERE deleted IS FALSE;
 
 -- ---------------------------------------------------------------------------

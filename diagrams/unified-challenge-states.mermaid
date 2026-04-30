@@ -1,5 +1,5 @@
 ---
-title: Unified Challenge — Lifecycle (covers both implicit and interactive modes)
+title: Unified Challenge — Lifecycle (covers both chain and interactive modes)
 ---
 stateDiagram-v2
     direction LR
@@ -28,7 +28,7 @@ stateDiagram-v2
             SessionReady --> [*]: all RemoteSessions present
 
             note right of NextRemote
-                Implicit mode — transitions fire via
+                Chain mode — transitions fire via
                 automatic callback redirects.
                 Interactive mode — transitions fire via
                 user clicks on the /mcp/connect UI.

@@ -36,7 +36,6 @@ This section is the canonical glossary for the rest of the spike. Section 2a is 
 | **Client**                            | The application that requests access on behalf of a user. Synonyms: _application_, _relying party_ (in OIDC). RFC 6749 §1.1.                                                                                           |
 | **OIDC (OpenID Connect)**             | A protocol layered on OAuth that mandates a particular OAuth flow to enable external providers to solve authentication challenges. We adopt OIDC's JWT _schema_ but not its mandated public-key signing.               |
 | **DCR (Dynamic Client Registration)** | A client registers itself with an AS via `/register`. RFC 7591.                                                                                                                                                        |
-| **PKCE**                              | Public-client protection on the authorization-code grant via `code_verifier` / `code_challenge` (S256 only in this codebase). RFC 7636.                                                                                |
 
 ### 2b. Gram-specific terms
 
@@ -53,7 +52,7 @@ This RFC also deprecates the legacy `Gram-Chat-Session` header. Chat-session JWT
 
 #### Client session issuer (`client_session_issuer`)
 
-The Gram-side authorization-server configuration that issues client sessions for a toolset. Replaces today's `oauth_proxy_servers` row. A toolset that wants to gate MCP traffic with a Gram-issued session points at a `client_session_issuer`. A `client_session_issuer` may reference zero or more `remote_oauth_issuer`s — i.e. there can be multiple remote OAuth challenges to satisfy on the way to issuing a client session. (See _implicit_ vs _interactive_ below for how those challenges are presented.)
+The Gram-side authorization-server configuration that issues client sessions for a toolset. Replaces today's `oauth_proxy_servers` row. A toolset that wants to gate MCP traffic with a Gram-issued session points at a `client_session_issuer`. A `client_session_issuer` may reference zero or more `remote_oauth_issuer`s — i.e. there can be multiple remote OAuth challenges to satisfy on the way to issuing a client session. (See _chain_ vs _interactive_ below for how those challenges are presented.)
 
 #### Remote OAuth issuer (`remote_oauth_issuer`)
 
@@ -71,13 +70,13 @@ Mode where the bearer the MCP client sent us is forwarded to the upstream as-is,
 
 This is the **same concept** as Milestone #2's _passthrough authentication_. The two names are aliases.
 
-#### Implicit vs Interactive (modes on a `client_session_issuer`)
+#### Chain vs Interactive (modes on a `client_session_issuer`)
 
 Both modes describe how multi-remote OAuth challenges are presented after Gram issues a client session.
 
-- **Implicit.** From the Gram callback, redirect through each subsequent remote challenge in turn, build the entire session, then redirect back to the MCP client callback for the final token exchange. There is no intermediate UI listing the remotes. Consent must still be prompted _somewhere_ in the request stream — implicit mode does not skip consent, it just doesn't render a "click each server" screen.
+- **Chain.** From the Gram callback, redirect through each subsequent remote challenge in turn, build the entire session, then redirect back to the MCP client callback for the final token exchange. There is no intermediate UI listing the remotes. Consent must still be prompted _somewhere_ in the request stream — chain mode does not skip consent, it just doesn't render a "click each server" screen.
 - **Interactive.** Gram issues the client session up front, then renders a UX where the user clicks each remote OAuth server to authenticate. This is the same screen that Milestone #8's URL-mode elicitation points at when refreshing stale remote credentials.
-- **Just-In-Time** (out of scope). We only offer the challenge for tokens that the client is trying to use for _this_ given request. Similar behavior to _implicit_ but more aggressive.
+- **Just-In-Time** (out of scope). We only offer the challenge for tokens that the client is trying to use for _this_ given request. Similar behavior to _chain_ but more aggressive.
 
 #### Anonymous principal
 
@@ -114,7 +113,7 @@ There is no homogeneous dependency story between these packages. `mcp/` will kno
 | `remote_oauth_issuer`, `remote_oauth_client` (config) | `remotesessions/`                                                                 |
 | Remote session documents (Redis)                      | `remotesessions/`                                                                 |
 | Passthrough mode (the "no exchange" code path)        | `remotesessions/`                                                                 |
-| Implicit / Interactive challenge orchestration        | `mcp/` (orchestrates), `clientsessions/` + `remotesessions/` (execute primitives) |
+| Chain / Interactive challenge orchestration           | `mcp/` (orchestrates), `clientsessions/` + `remotesessions/` (execute primitives) |
 | MCP auth challenge translation                        | `mcp/challenge.go`                                                                |
 | Tool-call credential injection                        | Resolved by `mcp/`; presented to the backend as opaque inputs                     |
 
@@ -124,18 +123,18 @@ There is no homogeneous dependency story between these packages. `mcp/` will kno
 
 1. **Resolve the credential to an identity.** Call `clientsessions` to validate whatever the client presented (Gram-issued JWT, or nothing — in which case the supplied `mcp_session_id` becomes the id of an anonymous session). Returns a principal.
 2. **Authorize server access.** Check whether that principal is permitted to use this toolset.
-3. **Request credentials from `remotesessions` for this identity.** Materialise (or refresh) every required remote session keyed on `(session_id, client_session_issuer_id)`. If anything is missing or stale, fire the appropriate challenge (implicit / interactive / passthrough).
+3. **Request credentials from `remotesessions` for this identity.** Materialise (or refresh) every required remote session keyed on `(session_id, client_session_issuer_id)`. If anything is missing or stale, fire the appropriate challenge (chain / interactive / passthrough).
 4. **Pass credentials to the MCP backend.** The toolset receives an opaque credential bundle. `doHTTP` consumes it without any OAuth knowledge — satisfying goal #7.
 
 ### 3.4 Where consent fires
 
-Consent enforcement lives entirely in `clientsessions` at the `/authorize` endpoint. The check is: "has this user previously consented for this `client_session_issuer` to access **all** of its `remote_session_tokens`?" Only a matching consent record short-circuits the prompt. Re-prompting is the default whenever the set of `remote_oauth_issuer`s on the issuer changes (i.e. consent is bound to the _full set_, not to individual remotes).
+Consent enforcement lives entirely in `clientsessions` at the `/mcp/connect` endpoint. The check is: "has this user previously consented for this `client_session_issuer` to access **all** of its `remote_session_tokens`?" Only a matching consent record short-circuits the prompt. Re-prompting is the default whenever the set of `remote_oauth_issuer`s on the issuer changes (i.e. consent is bound to the _full set_, not to individual remotes).
 
-In implicit mode, the prompt fires somewhere in the redirect chain — typically before the first remote challenge. In interactive mode, the prompt is folded into the per-remote click-through UX.
+In both chain and interactive modes the consent prompt is the `/mcp/connect` page — interactive mode renders the per-remote Connect buttons alongside the grant-access button; chain mode lands on the page with all remotes already ✓ and only the grant-access button visible.
 
 ### 3.5 Relationship to the MCP server / backend split
 
-Everything in this RFC — `client_session_issuer`, `remote_oauth_issuer`, `remote_oauth_client`, consent records, every Redis session document — attaches at the **`mcp_servers`** level (Gram's MCP-server configuration), not on the backend. The MCP backend (a `toolsets` row or a `remote_mcp_servers` row) only consumes the credential bundle Gram has already assembled; it has no OAuth knowledge. Backends accept credentials; collecting them is the MCP server's job.
+Everything in this RFC — `client_session_issuer`, `remote_oauth_issuer`, `remote_oauth_client`, consent records, every Redis session document — attaches at the **`mcp_servers`** level (Gram's MCP-server configuration), not on the backend. The MCP backend (a `toolsets` row or a `remote_mcp_servers` row) consumes the credential bundle Gram has assembled — and that bundle absolutely includes upstream OAuth access tokens (e.g., a Linear bearer the backend forwards onto outbound calls). What the backend does **not** do is run the OAuth dance: collecting tokens, refreshing them, prompting for consent. That work stays MCP-server-level.
 
 This RFC does not require finishing the MCP runtime's migration off the legacy `toolsets.{external_oauth_server_id, oauth_proxy_server_id}` columns. We attach `client_session_issuer` at whichever level (`toolsets` row or `mcp_servers` row) is current at implementation time and migrate alongside whatever `mcp_endpoints` work is happening in parallel.
 
@@ -160,7 +159,7 @@ Open Questions:
 | `id`             | `uuid` | PK                                                  |
 | `project_id`     | `uuid` | FK → `projects`                                     |
 | `slug`           | `text` | unique per project                                  |
-| `challenge_mode` | `text` | `implicit` \| `interactive`                         |
+| `challenge_mode` | `text` | `chain` \| `interactive`                            |
 | timestamps       |        | `created_at`, `updated_at`, `deleted_at`, `deleted` |
 
 #### `remote_oauth_issuers`
@@ -214,6 +213,37 @@ Persistent consent record per (user, `client_session_issuer`).
 | `consented_at`             | `timestamptz` |                                                                                         |
 | timestamps                 |               |                                                                                         |
 
+#### `client_sessions`
+
+The issued client session. Created lazily at token exchange. Lookup at `/token` is by `refresh_token_hash`; bookkeeping ("what active sessions does this principal have at this issuer?") is a `(principal_urn, client_session_issuer_id)` query.
+
+| Column                     | Type          | Notes                                                                                      |
+| -------------------------- | ------------- | ------------------------------------------------------------------------------------------ |
+| `id`                       | `uuid`        | PK                                                                                         |
+| `client_session_issuer_id` | `uuid`        | FK                                                                                         |
+| `principal_urn`            | `text`        | resolved principal — `user:<id>` \| `apikey:<uuid>` \| `anonymous:<mcp-session-id>`        |
+| `jti`                      | `text`        | current access-token JTI; used by the revocation path                                      |
+| `refresh_token_hash`       | `text`        | SHA-256 of the refresh token; lookup key at `/token`                                       |
+| `refresh_expires_at`       | `timestamptz` |                                                                                            |
+| timestamps                 |               | unique index on `refresh_token_hash`; index on `(principal_urn, client_session_issuer_id)` |
+
+#### `remote_sessions`
+
+The remote-side OAuth session per `(principal, remote_oauth_client)`. Holds upstream access + refresh tokens with **independent** expiries. Created when a remote auth dance completes; refreshed silently on the access-expiry path.
+
+| Column                     | Type          | Notes                                                     |
+| -------------------------- | ------------- | --------------------------------------------------------- |
+| `id`                       | `uuid`        | PK                                                        |
+| `principal_urn`            | `text`        | scoping (per §3.4)                                        |
+| `client_session_issuer_id` | `uuid`        | FK                                                        |
+| `remote_oauth_client_id`   | `uuid`        | FK; one client implies one issuer                         |
+| `access_token_encrypted`   | `text`        |                                                           |
+| `access_expires_at`        | `timestamptz` | independent of `refresh_expires_at`                       |
+| `refresh_token_encrypted`  | `text`        | nullable                                                  |
+| `refresh_expires_at`       | `timestamptz` | nullable                                                  |
+| `scopes`                   | `text[]`      |                                                           |
+| timestamps                 |               | unique index on `(principal_urn, remote_oauth_client_id)` |
+
 #### Toolset link
 
 `toolsets` gains:
@@ -243,38 +273,35 @@ Each removal becomes a ticket in `project.md`.
 
 ### 4.3 Redis — new types
 
-All implement `cache.CacheableObject[T]`; values JSON-serialised by `cache.TypedCacheObject[T]`. Encrypted fields use `encryption.Client` before serialisation. Where a key segment shows `{principalURN}`, the URN is `user:<id>` | `apikey:<uuid>` | `anonymous:<mcp-session-id>`.
+Redis carries only short-TTL in-flight records. Durable session state (`client_sessions`, `remote_sessions`) lives in Postgres — see §4.1.
 
-| Type                                 | Cache key                                                                    | Holds                                                                                                               | TTL                            |
-| ------------------------------------ | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
-| `ClientSession`                      | `clientSession:{refreshTokenHash}`                                           | principal URN, `client_session_issuer_id`, jti, refresh expiry                                                      | `time.Until(RefreshExpiresAt)` |
-| `ClientSessionIndex`                 | `clientSessionByPrincipal:{principalURN}:{clientSessionIssuerID}`            | bookkeeping; list of active refresh-token hashes for this principal at this issuer (revoke-all, "who's logged in?") | `time.Until(RefreshExpiresAt)` |
-| `RemoteSession`                      | `remoteSession:{principalURN}:{clientSessionIssuerID}:{remoteOAuthIssuerID}` | access token (enc), refresh token (enc), **separate** access/refresh expiries, scopes, `remote_oauth_client_id`     | `time.Until(RefreshExpiresAt)` |
-| `ClientSessionGrant`                 | `clientSessionGrant:{clientSessionIssuerID}:{code}`                          | `client_id`, redirect_uri, scope, state, PKCE challenge, principal URN                                              | ~10 min                        |
-| `RemoteSessionAuthState`             | `remoteSessionAuthState:{stateID}`                                           | principal URN, issuer id, client id, code verifier, redirect                                                        | ~10 min                        |
-| `RemoteSessionPKCE`                  | `remoteSessionPKCE:{nonce}`                                                  | verifier                                                                                                            | 10 min fixed                   |
-| `RevokedToken` _(unchanged, reused)_ | `chat_session_revoked:{jti}`                                                 | jti, revoked_at                                                                                                     | 24h                            |
+All Redis types implement `cache.CacheableObject[T]`; values are JSON-serialised by `cache.TypedCacheObject[T]`. Encrypted fields use `encryption.Client` before serialisation.
 
-Two design notes informing this shape:
-
-- **`ClientSession` is keyed by the refresh-token hash.** That's what `/token` queries when exchanging a refresh token; it's the hot path. We don't key by session id because the operation that needs the lookup is "give me the session for this presented refresh token".
-- **`ClientSessionIndex` is the bookkeeping reverse-index.** It answers "what active sessions does this principal have at this issuer?" — needed for revoke-all, listing, and operational queries. Keyed on `principalURN` rather than a separate session-id concept; for anonymous principals the `anonymous:<mcp-session-id>` URN itself encodes the session id, so no separate id is required. Authenticated principals (`user:<id>`, `apikey:<uuid>`) are looked up directly by URN.
+| Type                                 | Cache key                                           | Holds                                                                                                                                                                     | TTL          |
+| ------------------------------------ | --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ |
+| `ChallengeState`                     | `challengeState:{id}`                               | MCP Client OAuth context (`client_id`, `redirect_uri`, `code_challenge`, original `state`, scope), `client_session_issuer_id`, resolved principal URN (set after Phase 2) | ~10 min      |
+| `ClientSessionGrant`                 | `clientSessionGrant:{clientSessionIssuerID}:{code}` | `client_id`, redirect_uri, scope, state, PKCE challenge, principal URN                                                                                                    | ~10 min      |
+| `RemoteSessionAuthState`             | `remoteSessionAuthState:{stateID}`                  | principal URN, issuer id, client id, code verifier, redirect                                                                                                              | ~10 min      |
+| `RemoteSessionPKCE`                  | `remoteSessionPKCE:{nonce}`                         | verifier                                                                                                                                                                  | 10 min fixed |
+| `RevokedToken` _(unchanged, reused)_ | `chat_session_revoked:{jti}`                        | jti, revoked_at                                                                                                                                                           | 24h          |
 
 ### 4.4 Redis — removed
 
-| What                                           | Why                                                                                                                                 |
-| ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `oauthGrant:{toolsetID}:{code}`                | Replaced by `clientSessionGrant:*` keyed on `client_session_issuer_id`.                                                             |
-| `oauthToken:{toolsetID}:{accessToken}`         | Eliminated. Access tokens are validated as JWTs (no Redis read on the validate path).                                               |
-| `oauthRefreshToken:{toolsetID}:{refreshToken}` | Replaced by `clientSession:*` keyed on `(session_id, client_session_issuer_id)`.                                                    |
-| `oauthClientInfo:{mcpURL}:{clientID}`          | TBD — pairs with the `oauth_proxy_client_info` table decision.                                                                      |
-| `upstreamPKCE:{nonce}`                         | Renamed `remoteSessionPKCE:*`.                                                                                                      |
-| `externalOAuthState:{stateID}`                 | Renamed `remoteSessionAuthState:*`.                                                                                                 |
-| `Token.ExternalSecrets` (sub-field)            | The whole "tunnel upstream credentials through the AS token" pattern is gone. Remote credentials live in `RemoteSession` documents. |
+| What                                           | Why                                                                                                                                            |
+| ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `oauthGrant:{toolsetID}:{code}`                | Replaced by `clientSessionGrant:*` keyed on `client_session_issuer_id`.                                                                        |
+| `oauthToken:{toolsetID}:{accessToken}`         | Eliminated. Access tokens are validated as JWTs (no Redis read on the validate path).                                                          |
+| `oauthRefreshToken:{toolsetID}:{refreshToken}` | Replaced by the Postgres `client_sessions` table (lookup by `refresh_token_hash`).                                                             |
+| `oauthClientInfo:{mcpURL}:{clientID}`          | TBD — pairs with the `oauth_proxy_client_info` table decision.                                                                                 |
+| `upstreamPKCE:{nonce}`                         | Renamed `remoteSessionPKCE:*`.                                                                                                                 |
+| `externalOAuthState:{stateID}`                 | Renamed `remoteSessionAuthState:*`.                                                                                                            |
+| `Token.ExternalSecrets` (sub-field)            | The whole "tunnel upstream credentials through the AS token" pattern is gone. Remote credentials live in the Postgres `remote_sessions` table. |
 
 ### 4.5 JWT — unified `SessionClaims`
 
 One claim shape for chat sessions and client sessions. Same signing key (`GRAM_JWT_SIGNING_KEY`), same algorithm (HS256), same revocation cache (`chat_session_revoked:{jti}`). Differs only in `sub` and `aud`.
+
+The JWT carries **only the standard OIDC registered claims** — no Gram-specific extras. Anything else (org, project, etc.) is resolved from the session record in Redis.
 
 ```go
 type SessionClaims struct {
@@ -285,22 +312,12 @@ type SessionClaims struct {
     ExpiresAt int64    `json:"exp"`
     IssuedAt  int64    `json:"iat"`
     JTI       string   `json:"jti"`           // UUIDv4
-
-    // Gram-specific
-    OrgID            string  `json:"org_id"`
-    ProjectID        string  `json:"project_id"`
-    OrganizationSlug string  `json:"organization_slug"`
-    ProjectSlug      string  `json:"project_slug"`
-    ExternalUserID   *string `json:"external_user_id,omitempty"` // chat-session only
 }
 ```
 
 Notes:
 
-- No more `api_key_id` claim — it's encoded in `sub` (`apikey:<uuid>`) when applicable.
-- `Subject` MUST be one of the three valid URN shapes; `role:<slug>` is rejected at sign time.
-- `Audience` is the seam validators use to refuse a chat-session JWT presented as a client-session token (and vice versa).
-- Tokens are delivered via the standard `Authorization: Bearer <token>` header. The legacy `Gram-Chat-Session` header is deprecated.
+We take this opportunity to unify all of Gram Elements' authentication schemes with the MCP authentication scheme. There is no longer a distinct header for Elements — it uses the same JWT as the rest of `/mcp/*`.
 
 ### 4.6 SDL artifacts
 
@@ -310,45 +327,21 @@ The schemas above are the rationale; the canonical artifacts live in `/schemas/`
 - `/schemas/redis.go` — Go-SDL definitions for each Redis type.
 - `/schemas/jwt.go` — `SessionClaims` and the valid `sub` URN shapes.
 
-The legacy state (the `oauth_proxy_*` / `external_oauth_server_metadata` / legacy-`Token` shape) is captured for reference in the `gram-legacy-oauth` skill draft.
-
 ---
 
 ## 5. Flows
 
-This section captures the flows we plan to ship: the per-request state machine that orchestrates a single MCP call (§5.1), and the two challenge sequences that establish a client session in the first place (§5.2 implicit, §5.3 interactive). Per §3.5, all of this is MCP-server-level — the backend never sees an OAuth token.
-
-We deliberately don't break out separate `client-session-challenge` and `remote-session-challenge` diagrams. The interesting design lives in the unified flow; per-component sub-flows would hide that. If either of the unified diagrams gets too dense we'll factor.
-
-> Backend errors and their relationship to OAuth are **out of scope** for this section. The state machine in §5.1 treats backend invocation as a single transition; how a backend's failure response surfaces to the MCP client is a separate concern.
-
-Diagrams are sources of truth in `/diagrams/*.mermaid`; sections below link rather than embed. Open the file in any mermaid renderer to view.
+> Backend errors and their relationship to OAuth are **out of scope** for this project. We may allow semantics for backends to reject and request new tokens, but we will consider this problem in a separate scope of work.
 
 ### 5.1 `mcp-handler` — state machine
 
-The per-request lifecycle. Fires _every_ time a request lands on `/mcp/{slug}`, separately from the one-time challenge flow that gets the client a JWT in the first place. The challenge flow (§5.2/§5.3) is what a client runs in response to one of the terminal challenge states below.
+[`diagrams/mcp-handler-states.mermaid`](diagrams/mcp-handler-states.mermaid)
 
-**Diagram:** [`diagrams/mcp-handler-states.mermaid`](diagrams/mcp-handler-states.mermaid)
+The Token Managers return a generic `ChallengeRequiredError`. `mcp/challenge.go` is responsible for coercing system state into the OAuth dance required to resolve this challenge.
 
-State summary:
+### 5.2 Auth Challenge - Chain Mode
 
-- **PolicyGate.** First check: does this server have a Gram authorization policy? If no policy (public server), skip identity + authz and head straight for credential collection. If a policy exists, the server is private — and **private always implies RBAC**.
-- **ResolvingPrincipal.** `clientsessions/` validates the `Authorization: Bearer <JWT>` _and_ resolves whether the principal still exists. The `sub` is one of `user:<id>`, `apikey:<uuid>`, or `anonymous:<mcp-session-id>`. Anonymous principals are _not_ provisioned at request time — they are minted only during a §5.2 / §5.3 challenge. If the JWT is invalid OR the principal can't be resolved, `ClientSessionManager` raises a `ChallengeRequiredError`.
-- **Authorizing.** RBAC scope check. Failure raises `Forbidden`.
-- **CollectingRemoteCredentials.** `remotesessions/` ensures every required `RemoteSession` for `(principal, remote_oauth_client)` is current. Stale-but-refreshable sessions are silently refreshed inline. A session that's missing or expired beyond refresh causes `RemoteSessionManager` to raise a `ChallengeRequiredError`.
-- **MergingCredentials.** Resolved OAuth credentials are merged with the toolset's static environment. The merged bundle is what `DispatchToBackend` hands to the backend.
-- **DispatchToBackend.** Backend invoked with the credential bundle. Backend errors and their interaction with OAuth are **out of scope** for this section (see §7).
-- **Terminal states:**
-  - `Success` — 200 with the backend's response.
-  - `ClientSessionChallenge` — `ClientSessionManager` raised `ChallengeRequiredError`. The handler coerces this to a 401 + `WWW-Authenticate` pointing at `/mcp/authorize`. Client runs §5.2 / §5.3 to acquire a JWT, then retries.
-  - `RemoteSessionChallenge` — `RemoteSessionManager` raised `ChallengeRequiredError`. The handler coerces this to a URL-mode elicitation pointing at `/mcp/connect` (Milestone #8) — otherwise falls back to a 401 auth challenge identical to `ClientSessionChallenge`.
-  - `Forbidden` — 403. Not a challenge — no client action will fix it.
-
-The two `ChallengeRequiredError` paths are the only mechanism by which the per-request handler triggers the challenge flow. The handler's coercion logic — `ClientSessionManager` → 401, `RemoteSessionManager` → URL-elicitation-or-401 — is what `mcp/challenge.go` (§3.1) is for.
-
-### 5.2 `unified-challenge` — implicit mode
-
-**Pre-condition.** The toolset is configured with a single `client_session_issuer` whose `remote_set` contains one `remote_oauth_issuer` pointing at Linear:
+**Initial State.** The toolset is configured with a single `client_session_issuer` whose `remote_set` contains one `remote_oauth_issuer` pointing at Linear:
 
 | Field                    | Value                                      |
 | ------------------------ | ------------------------------------------ |
@@ -358,62 +351,15 @@ The two `ChallengeRequiredError` paths are the only mechanism by which the per-r
 | `oidc`                   | `false`                                    |
 | `passthrough`            | `false`                                    |
 
-A `remote_oauth_client` registered with Linear (`client_id` + `client_secret_encrypted`) is already on file. In a multi-remote configuration, Phase 3 would loop once per `remote_oauth_client`; this example shows a single iteration.
+- Sequence: [`diagrams/unified-challenge-chain.mermaid`](diagrams/unified-challenge-chain.mermaid)
+- State machine (shared with §5.3): [`diagrams/unified-challenge-states.mermaid`](diagrams/unified-challenge-states.mermaid)
 
-Gram exposes the following URLs in this flow. Each callback handler re-loads ChallengeState by `state` and runs `buildRequiredChallenge` to decide what 302 comes next.
+### 5.3 Auth Challenge - Interactive Mode
 
-| Path                                               | Method     | Role                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| -------------------------------------------------- | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `https://app.getgram.ai/mcp/authorize`             | GET        | AS authorize endpoint (entry — sets up ChallengeState)                                                                                                                                                                                                                                                                                                                                                                                                      |
-| `https://app.getgram.ai/mcp/client_login_callback` | GET        | Speakeasy returns here after Gram login (`clientsessions/`)                                                                                                                                                                                                                                                                                                                                                                                                 |
-| `https://app.getgram.ai/mcp/remote_login_callback` | GET        | Remote AS returns here after upstream login (`remotesessions/`)                                                                                                                                                                                                                                                                                                                                                                                             |
-| `https://app.getgram.ai/mcp/connect`               | GET / POST | Connect UI (`clientsessions/`) — GET renders the per-remote + grant-access page; POST disambiguates from the form body alone — a `remote_oauth_client` selector means "start that remote's auth flow", absence means "Give Access click" (server runs `buildRequiredChallenge` to confirm all remotes are connected before minting the grant). In implicit mode only the no-selector path is exercised, since remotes are completed via the redirect chain. |
-| `https://app.getgram.ai/mcp/token`                 | POST       | AS token endpoint (`clientsessions/`)                                                                                                                                                                                                                                                                                                                                                                                                                       |
+Same Initial State as §5.2.
 
-**Diagrams.**
-
-- Sequence (actor view — MCP Client, Browser, `clientsessions/`, `remotesessions/`, Speakeasy, Linear): [`diagrams/unified-challenge-implicit.mermaid`](diagrams/unified-challenge-implicit.mermaid)
-- State machine (lifecycle view — abstracts the auth handshakes; covers both implicit and interactive modes; left-to-right): [`diagrams/unified-challenge-states.mermaid`](diagrams/unified-challenge-states.mermaid)
-
-Design notes:
-
-- **ChallengeState is the through-line.** Phase 1 writes a thin Redis doc holding the MCP Client's OAuth request context. Each subsequent callback re-loads it by handle. `buildRequiredChallenge` is **idempotent** — every step runs it again, observing live state (RemoteSession docs, consent records) to decide the next 302. We deliberately don't accumulate progress markers on ChallengeState; the existence of a `RemoteSession(principal, remote_oauth_client)` IS the completion marker.
-- **Phase 2 reads identity level from ChallengeState** (`authenticated` | `anonymous`) and three-way branches: reuse the principal, issue an anonymous session, or run the Speakeasy login chain. Speakeasy is today's upstream IDP — wrapped in `activate`/`deactivate` to mark the dependency. Open: register Gram MCP Gateway as a true OIDC app so we drop the Speakeasy-as-IDP middleman.
-- **Phase 3 short-circuits on `ensure session`.** If `remotesessions/` finds a current `RemoteSession` (or can silently refresh), no redirect. The Linear dance only runs when the session is missing or expired. RemoteSessions are scoped by `(principal, remote_oauth_client)` — not by MCP server. First-iteration constraints: one MCP server per `remote_oauth_client`, one issuer per `remote_oauth_client` (so the client implies its issuer); both may relax later.
-- **Phase 4 mints `ClientSessionGrant` only after consent**, then redirects to the MCP Client's `redirect_uri`. The `ClientSession` Redis doc is created **lazily at token exchange** — minting a JWT and storing a refresh-token hash should not happen until the MCP Client actually exchanges the code.
-- **Two real callback URLs, plus a unified connect UI.** `/mcp/client_login_callback` (clientsessions, Speakeasy returns here) and `/mcp/remote_login_callback` (remotesessions, remote ASes return here) are the OAuth callbacks. `/mcp/connect` is shared with §5.3 interactive — it is the page where the user grants access (and, in interactive mode, drives per-remote connections). Each handler runs `buildRequiredChallenge` and 302s to the next required step. No `?finalize=` query-param hack.
-- **ChallengeState contents are deliberately unpinned here.** At minimum: the MCP Client's OAuth request fields and (after Phase 2) the resolved principal URN. Schema lands in §4 once flows are stable.
-- **Browser absorbs the user.** No separate `User` lane.
-
-#### Parameter reference
-
-The opaque-looking `state`, `code`, and `verifier` parameters in the sequence diagram each map to specific records. This table tracks what's in each:
-
-| Param                                                          | Where it appears | Contents / Redis reference                                                                                                                      |
-| -------------------------------------------------------------- | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| `state` (MCP Client → `/mcp/authorize`)                        | URL query        | MCP Client's anti-CSRF state — echoed verbatim in Phase 4's redirect to `redirect_uri`                                                          |
-| `code_challenge` (MCP Client → `/mcp/authorize`)               | URL query        | MCP Client's PKCE challenge — kept on ChallengeState, then on `ClientSessionGrant`                                                              |
-| `return_url` (Gram → Speakeasy `/v1/speakeasy_provider/login`) | URL query        | `https://app.getgram.ai/mcp/client_login_callback`                                                                                              |
-| `state` (Gram → Speakeasy `/v1/speakeasy_provider/login`)      | URL query        | ChallengeState id                                                                                                                               |
-| `code` (Speakeasy → `/mcp/client_login_callback`)              | URL query        | Speakeasy-issued one-time auth code (consumed in Phase 2)                                                                                       |
-| `state` (Speakeasy → `/mcp/client_login_callback`)             | URL query        | echoed ChallengeState id                                                                                                                        |
-| `state` (Gram → Linear `/oauth/authorize`)                     | URL query        | `RemoteSessionAuthState.StateID` → Redis `remoteSessionAuthState:{stateID}`                                                                     |
-| `code_challenge` (Gram → Linear `/oauth/authorize`)            | URL query        | hash of `RemoteSessionPKCE.Verifier` → Redis `remoteSessionPKCE:{nonce}` (nonce encoded in `state`)                                             |
-| `code` (Linear → `/mcp/remote_login_callback`)                 | URL query        | Linear-issued one-time auth code (consumed in Phase 3)                                                                                          |
-| `state` (Linear → `/mcp/remote_login_callback`)                | URL query        | echoed `RemoteSessionAuthState.StateID`                                                                                                         |
-| `verifier` (Gram → Linear `/oauth/token`)                      | request body     | `RemoteSessionPKCE.Verifier`                                                                                                                    |
-| `state` (`/mcp/remote_login_callback` → `/mcp/connect`)        | URL query        | ChallengeState id                                                                                                                               |
-| `state` (`/mcp/connect` GET ↔ POST)                            | URL query        | ChallengeState id (same value passed through render → submit)                                                                                   |
-| `remote_oauth_client` (`/mcp/connect` POST body, optional)     | form field       | when present, the id of the remote whose Connect button was clicked — server starts that remote's auth flow. Absent on Give Access submissions. |
-| `code` (Gram → MCP Client `redirect_uri`)                      | URL query        | `ClientSessionGrant.Code` → Redis `clientSessionGrant:{clientSessionIssuerID}:{code}`                                                           |
-| `state` (Gram → MCP Client `redirect_uri`)                     | URL query        | echoed MCP Client's original `state` — read from ChallengeState                                                                                 |
-| `verifier` (MCP Client → `/mcp/token`)                         | request body     | MCP Client's PKCE verifier — matches `code_challenge` from Phase 1                                                                              |
-| `access_token` (Phase 4 response)                              | response body    | freshly-minted `SessionClaims` JWT — no Redis row                                                                                               |
-| `refresh_token` (Phase 4 response)                             | response body    | opaque token — SHA-256 hash keys `ClientSession` and appears in `ClientSessionIndex.ActiveRefreshHashes`                                        |
-
-### 5.3 `unified-challenge` — interactive mode
-
-_[To draft after §5.2 is locked.]_
+- Sequence: [`diagrams/unified-challenge-interactive.mermaid`](diagrams/unified-challenge-interactive.mermaid)
+- State machine (shared with §5.2): [`diagrams/unified-challenge-states.mermaid`](diagrams/unified-challenge-states.mermaid)
 
 ---
 

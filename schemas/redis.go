@@ -1,7 +1,8 @@
 // /schemas/redis.go
 //
-// Redis types for the new clientsessions / remotesessions surface.
-// See spike.md §4.3 for rationale.
+// Redis types — short-TTL in-flight records only. Durable session state
+// (client_sessions, remote_sessions) lives in Postgres — see schemas/postgres.sql
+// and spike.md §4.1.
 //
 // All types implement cache.CacheableObject[T]; values are JSON-serialised by
 // cache.TypedCacheObject[T]. Encrypted fields use encryption.Client before persist.
@@ -21,97 +22,40 @@ import (
 )
 
 // ---------------------------------------------------------------------------
-// 1. ClientSession — the Redis record /token reads when exchanging a refresh token.
-//    Cache key: "clientSession:{refreshTokenHash}"
-//    TTL: time.Until(RefreshExpiresAt)
+// 1. ChallengeState — thin re-entry handle for the challenge flow.
+//    Cache key: "challengeState:{id}"
+//    TTL: time.Until(ExpiresAt) (~10 min)
 //
-// Keyed by refresh-token hash because that's the operation that actually needs
-// the lookup. The bookkeeping reverse-index lives on ClientSessionIndex.
+// Holds the MCP Client's OAuth request context plus the resolved principal
+// (set after Phase 2). Each callback in the challenge flow re-loads it by id
+// and re-runs buildRequiredChallenge to decide the next 302.
 // ---------------------------------------------------------------------------
 
-type ClientSession struct {
+type ChallengeState struct {
+	ID                    string    `json:"id"`
 	ClientSessionIssuerID uuid.UUID `json:"client_session_issuer_id"`
-	PrincipalURN          string    `json:"principal_urn"`
-	RefreshTokenHash      string    `json:"-"` // SHA-256 of the refresh token; never persisted in the clear
-	JTI                   string    `json:"jti"`
-	RefreshExpiresAt      time.Time `json:"refresh_expires_at"`
-	CreatedAt             time.Time `json:"created_at"`
-}
+	PrincipalURN          string    `json:"principal_urn,omitempty"` // resolved after Phase 2
 
-func ClientSessionCacheKey(refreshTokenHash string) string {
-	return "clientSession:" + refreshTokenHash
-}
+	// MCP Client's OAuth request context — needed to complete the code grant in Phase 4.
+	MCPClientID            string `json:"mcp_client_id"`
+	MCPClientRedirectURI   string `json:"mcp_client_redirect_uri"`
+	MCPClientCodeChallenge string `json:"mcp_client_code_challenge"`
+	MCPClientState         string `json:"mcp_client_state"`
+	Scope                  string `json:"scope"`
 
-func (c ClientSession) CacheKey() string              { return ClientSessionCacheKey(c.RefreshTokenHash) }
-func (c ClientSession) AdditionalCacheKeys() []string { return nil }
-func (c ClientSession) TTL() time.Duration            { return time.Until(c.RefreshExpiresAt) }
-
-// ---------------------------------------------------------------------------
-// 2. ClientSessionIndex — bookkeeping reverse-index by principal.
-//    Cache key: "clientSessionByPrincipal:{principalURN}:{clientSessionIssuerID}"
-//    TTL: time.Until(LatestRefreshExpiresAt)
-//
-// Answers "what active sessions does this principal have at this issuer?" —
-// the lookup needed for revoke-all, listing, and operational queries.
-// Anonymous principals encode their session id in the URN itself
-// (anonymous:<mcp-session-id>), so no separate session-id concept is required.
-// ---------------------------------------------------------------------------
-
-type ClientSessionIndex struct {
-	PrincipalURN           string    `json:"principal_urn"`
-	ClientSessionIssuerID  uuid.UUID `json:"client_session_issuer_id"`
-	ActiveRefreshHashes    []string  `json:"active_refresh_hashes"` // pointers into ClientSession docs
-	LatestRefreshExpiresAt time.Time `json:"latest_refresh_expires_at"`
-	UpdatedAt              time.Time `json:"updated_at"`
-}
-
-func ClientSessionIndexCacheKey(principalURN string, clientSessionIssuerID uuid.UUID) string {
-	return "clientSessionByPrincipal:" + principalURN + ":" + clientSessionIssuerID.String()
-}
-
-func (c ClientSessionIndex) CacheKey() string {
-	return ClientSessionIndexCacheKey(c.PrincipalURN, c.ClientSessionIssuerID)
-}
-func (c ClientSessionIndex) AdditionalCacheKeys() []string { return nil }
-func (c ClientSessionIndex) TTL() time.Duration            { return time.Until(c.LatestRefreshExpiresAt) }
-
-// ---------------------------------------------------------------------------
-// 3. RemoteSession — one per remote_oauth_issuer attached to a client session.
-//    Cache key: "remoteSession:{principalURN}:{clientSessionIssuerID}:{remoteOAuthIssuerID}"
-//    TTL: time.Until(RefreshExpiresAt)
-//
-// Holds upstream access and refresh tokens with INDEPENDENT expiries —
-// access can lapse without invalidating the refresh path. The TTL on the
-// document itself is governed by the (longer) refresh expiry.
-// ---------------------------------------------------------------------------
-
-type RemoteSession struct {
-	PrincipalURN          string    `json:"principal_urn"`
-	ClientSessionIssuerID uuid.UUID `json:"client_session_issuer_id"`
-	RemoteOAuthIssuerID   uuid.UUID `json:"remote_oauth_issuer_id"`
-	RemoteOAuthClientID   uuid.UUID `json:"remote_oauth_client_id"`
-
-	AccessTokenEncrypted  string    `json:"access_token_encrypted"`
-	AccessExpiresAt       time.Time `json:"access_expires_at"` // independent of refresh expiry
-	RefreshTokenEncrypted string    `json:"refresh_token_encrypted,omitempty"`
-	RefreshExpiresAt      time.Time `json:"refresh_expires_at"` // controls Redis TTL
-
-	Scopes    []string  `json:"scopes,omitempty"`
 	CreatedAt time.Time `json:"created_at"`
+	ExpiresAt time.Time `json:"expires_at"`
 }
 
-func RemoteSessionCacheKey(principalURN string, clientSessionIssuerID, remoteOAuthIssuerID uuid.UUID) string {
-	return "remoteSession:" + principalURN + ":" + clientSessionIssuerID.String() + ":" + remoteOAuthIssuerID.String()
+func ChallengeStateCacheKey(id string) string {
+	return "challengeState:" + id
 }
 
-func (r RemoteSession) CacheKey() string {
-	return RemoteSessionCacheKey(r.PrincipalURN, r.ClientSessionIssuerID, r.RemoteOAuthIssuerID)
-}
-func (r RemoteSession) AdditionalCacheKeys() []string { return nil }
-func (r RemoteSession) TTL() time.Duration            { return time.Until(r.RefreshExpiresAt) }
+func (c ChallengeState) CacheKey() string   { return ChallengeStateCacheKey(c.ID) }
+func (c ChallengeState) TTL() time.Duration { return time.Until(c.ExpiresAt) }
 
 // ---------------------------------------------------------------------------
-// 4. ClientSessionGrant — short-lived authorization-code grant on the AS path.
+// 2. ClientSessionGrant — short-lived authorization-code grant on the AS path.
 //    Cache key: "clientSessionGrant:{clientSessionIssuerID}:{code}"
 //    TTL: time.Until(ExpiresAt) (~10 min)
 // ---------------------------------------------------------------------------
@@ -137,11 +81,10 @@ func ClientSessionGrantCacheKey(clientSessionIssuerID uuid.UUID, code string) st
 func (g ClientSessionGrant) CacheKey() string {
 	return ClientSessionGrantCacheKey(g.ClientSessionIssuerID, g.Code)
 }
-func (g ClientSessionGrant) AdditionalCacheKeys() []string { return nil }
-func (g ClientSessionGrant) TTL() time.Duration            { return time.Until(g.ExpiresAt) }
+func (g ClientSessionGrant) TTL() time.Duration { return time.Until(g.ExpiresAt) }
 
 // ---------------------------------------------------------------------------
-// 5. RemoteSessionAuthState — in-flight remote OAuth authorization state.
+// 3. RemoteSessionAuthState — in-flight remote OAuth authorization state.
 //    Cache key: "remoteSessionAuthState:{stateID}"
 //    TTL: time.Until(ExpiresAt) (~10 min)
 //
@@ -169,11 +112,10 @@ func RemoteSessionAuthStateCacheKey(stateID string) string {
 func (s RemoteSessionAuthState) CacheKey() string {
 	return RemoteSessionAuthStateCacheKey(s.StateID)
 }
-func (s RemoteSessionAuthState) AdditionalCacheKeys() []string { return nil }
-func (s RemoteSessionAuthState) TTL() time.Duration            { return time.Until(s.ExpiresAt) }
+func (s RemoteSessionAuthState) TTL() time.Duration { return time.Until(s.ExpiresAt) }
 
 // ---------------------------------------------------------------------------
-// 6. RemoteSessionPKCE — verifier storage during a remote authorize redirect.
+// 4. RemoteSessionPKCE — verifier storage during a remote authorize redirect.
 //    Cache key: "remoteSessionPKCE:{nonce}"
 //    TTL: 10 minutes fixed
 //
@@ -185,6 +127,5 @@ type RemoteSessionPKCE struct {
 	Verifier string `json:"verifier"`
 }
 
-func (v RemoteSessionPKCE) CacheKey() string              { return "remoteSessionPKCE:" + v.Nonce }
-func (v RemoteSessionPKCE) AdditionalCacheKeys() []string { return nil }
-func (v RemoteSessionPKCE) TTL() time.Duration            { return 10 * time.Minute }
+func (v RemoteSessionPKCE) CacheKey() string   { return "remoteSessionPKCE:" + v.Nonce }
+func (v RemoteSessionPKCE) TTL() time.Duration { return 10 * time.Minute }

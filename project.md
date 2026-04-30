@@ -2,6 +2,12 @@
 
 Tickets and milestones tracking the work to land the design in `spike.md`. Milestones are described in `prompt.md` under "Structure → project.md"; this file is the live tracker.
 
+## Milestones (placeholders)
+
+To be fleshed out per `prompt.md`'s milestone breakdown. Notable additions captured during design:
+
+- **Milestone #9 — Grant Remote Sessions to other principals.** Lets a principal share or delegate a remote session record so multiple Gram principals can use the same upstream credentials (e.g., a shared customer-provided OAuth client credential). Out of initial scope but worth its own milestone.
+
 ## Cleanup
 
 Tickets to remove dead or about-to-be-dead structure that the new design no longer needs. Each ticket should land as its own PR (separate from feature work).

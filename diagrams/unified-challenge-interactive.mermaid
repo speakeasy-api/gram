@@ -8,21 +8,21 @@ sequenceDiagram
 
     Note over Client, Linear: Preamble — initial 401, MCP-spec discovery, DCR (abstracted)
 
-    Note over Client, Linear: Phase 1 — Resolve Challenges (same as §5.2 implicit)
+    Note over Client, Linear: Phase 1 — Resolve Challenges (same as §5.2 chain)
     Client->>Browser: open https://app.getgram.ai/mcp/authorize?client_id=…&code_challenge=…&state=…
     Browser->>clientsessions: GET /mcp/authorize?…
     clientsessions->>clientsessions: buildRequiredChallenge → required challenges
     Note over clientsessions: idempotent — every callback re-runs it. Full state space in §5.1.
     clientsessions->>clientsessions: write ChallengeState (MCP Client OAuth context: client_id, redirect_uri, code_challenge, original state, scope)
 
-    Note over Client, Linear: Phase 2 — Establish Client Session (same as §5.2 implicit)
+    Note over Client, Linear: Phase 2 — Establish Client Session (same as §5.2 chain)
     clientsessions->>clientsessions: read required identity level from ChallengeState (authenticated | anonymous)
     alt authentication passes AND has sufficient identity level
         Note over clientsessions: reuse the resolved principal
     else authentication insufficient AND anonymous allowed
         clientsessions->>clientsessions: issue new anonymous session for subject anonymous:<mcp-session-id>
     else authentication insufficient AND user authentication required
-        Note over Browser, Speakeasy: Documented as a Speakeasy IDP Challenge. (Same shape as §5.2 implicit Phase 2.)
+        Note over Browser, Speakeasy: Documented as a Speakeasy IDP Challenge. (Same shape as §5.2 chain Phase 2.)
         activate Speakeasy
         clientsessions-->>Browser: 302 → https://app.speakeasyapi.dev/v1/speakeasy_provider/login?return_url=https://app.getgram.ai/mcp/client_login_callback&state=<challenge-state-id>
         Browser->>Speakeasy: GET /v1/speakeasy_provider/login
