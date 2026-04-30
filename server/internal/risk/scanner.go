@@ -97,7 +97,7 @@ type Scanner struct {
 // state and should never realistically fail, but propagating the error
 // keeps startup honest).
 func NewScanner(logger *slog.Logger, db *pgxpool.Pool, piiScanner ra.PIIScanner, meterProvider metric.MeterProvider) (*Scanner, error) {
-	det, err := ra.NewDetector()
+	det, err := ra.SharedDetector()
 	if err != nil {
 		return nil, fmt.Errorf("create gitleaks detector: %w", err)
 	}

@@ -56,6 +56,27 @@ func NewDetector() (*detect.Detector, error) {
 	return detector, nil
 }
 
+// sharedDetectorOnce / sharedDetector cache a single process-wide detector
+// for callers that want one long-lived instance (e.g. the real-time hook
+// path). Batch fan-out paths still build their own pool of detectors so
+// scans can run in parallel.
+var (
+	sharedDetectorOnce sync.Once
+	sharedDetector     *detect.Detector
+	errSharedDetector  error
+)
+
+// SharedDetector returns a process-wide cached gitleaks detector. The
+// detector is created lazily on first call (under detectorInitMu) and
+// reused across all callers. Callers must serialize their own DetectString
+// calls because the detector mutates internal state on every call.
+func SharedDetector() (*detect.Detector, error) {
+	sharedDetectorOnce.Do(func() {
+		sharedDetector, errSharedDetector = NewDetector()
+	})
+	return sharedDetector, errSharedDetector
+}
+
 // ScanBatchParallel scans multiple messages concurrently. Creates NumCPU
 // detectors (serialized to avoid viper race), then fans out scanning.
 // Each goroutine gets its own detector because DetectString is not safe
