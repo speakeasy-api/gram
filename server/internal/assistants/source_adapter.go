@@ -39,6 +39,7 @@ type slackEventPayload struct {
 	ChannelID    string `json:"channel_id"`
 	ThreadID     string `json:"thread_id"`
 	UserID       string `json:"user_id,omitempty"`
+	InviterID    string `json:"inviter_id,omitempty"`
 	BotID        string `json:"bot_id,omitempty"`
 	AppID        string `json:"app_id,omitempty"`
 	Text         string `json:"text"`
@@ -91,6 +92,9 @@ func (slackAdapter) DecodeTurn(event assistantThreadEventRecord) (string, error)
 	}
 	if payload.UserID != "" {
 		fmt.Fprintf(&b, "UserID: %s\n", payload.UserID)
+	}
+	if payload.InviterID != "" {
+		fmt.Fprintf(&b, "InviterID: %s\n", payload.InviterID)
 	}
 	if payload.Timestamp != "" {
 		fmt.Fprintf(&b, "Timestamp: %s\n", payload.Timestamp)
