@@ -1203,6 +1203,9 @@ func (s *Service) collectEnvironmentVariables(mode securityMode, toolsetDetails 
 			if !headerDef.Required {
 				continue
 			}
+			if isExplicitlyNotUserProvided(headerDef.Name) {
+				continue
+			}
 			if !seen[headerDef.Name] {
 				seen[headerDef.Name] = true
 				inputs = append(inputs, securityInput{

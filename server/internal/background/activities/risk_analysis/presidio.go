@@ -104,11 +104,51 @@ func NewPresidioClientWithWorkers(baseURL string, tracerProvider trace.TracerPro
 	return c
 }
 
+// presidioEntityBlacklist is the set of Presidio entity types we refuse to
+// scan for regardless of what's stored on the policy.
+//
+//   - PERSON: Presidio's NER-backed person detection trips on common
+//     capitalized words ("Bash", "Read", proper nouns inside code
+//     identifiers, etc.) and would deny legitimate tool calls / pollute
+//     batch findings. Re-enable once we have a confidence threshold or a
+//     scoped allow-list.
+var presidioEntityBlacklist = map[string]struct{}{
+	"PERSON": {},
+}
+
+// filterEntities removes blacklisted entity types from the caller's list.
+// Returns nil unchanged so Presidio's default entity set still applies for
+// callers that didn't pin a list. Returns an empty (non-nil) slice when the
+// caller pinned a list and every entry was blacklisted, so AnalyzeBatch can
+// short-circuit instead of falling back to the unbounded default scan.
+func filterEntities(entities []string) []string {
+	if entities == nil {
+		return nil
+	}
+	out := make([]string, 0, len(entities))
+	for _, e := range entities {
+		if _, blocked := presidioEntityBlacklist[e]; blocked {
+			continue
+		}
+		out = append(out, e)
+	}
+	return out
+}
+
 func (p *PresidioClient) AnalyzeBatch(ctx context.Context, texts []string, entities []string, onProgress func()) (_ [][]Finding, err error) {
 	n := len(texts)
 	if n == 0 {
 		return nil, nil
 	}
+
+	// Apply the entity blacklist at the lowest level so every caller (hook
+	// scanner + Temporal drain activity) inherits the same policy.
+	filtered := filterEntities(entities)
+	if len(entities) > 0 && len(filtered) == 0 {
+		// Caller pinned only blacklisted entities; nothing to scan for.
+		return make([][]Finding, n), nil
+	}
+	entities = filtered
 
 	ctx, span := p.tracer.Start(ctx, "presidio.analyzeBatch", trace.WithAttributes(
 		attribute.Int("presidio.batch_size", n),

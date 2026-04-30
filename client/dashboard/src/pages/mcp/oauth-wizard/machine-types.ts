@@ -40,6 +40,11 @@ export type Context = {
   };
   envSlug: string | null;
   error: string | null;
+  // True when the user picked "Fetch Credentials" so submission is driven by
+  // auto-registration. Lets the rendering layer keep the chooser/loading UI
+  // visible during creatingEnvironment + creatingProxy instead of flashing
+  // the manual credentials form.
+  autoRegistering: boolean;
   result: { success: boolean; message: string } | null;
   toolsetSlug: string;
   toolsetName: string;
@@ -56,6 +61,7 @@ export type Input = {
 export type WizardEvent =
   | { type: "SELECT_EXTERNAL" }
   | { type: "SELECT_PROXY" }
+  | { type: "SELECT_PROXY_AUTO" }
   | { type: "APPLY_DISCOVERED" }
   | { type: "FIELD_EXTERNAL"; key: ExternalFormKey; value: string }
   | { type: "FIELD_PROXY"; key: ProxyFormKey; value: string }

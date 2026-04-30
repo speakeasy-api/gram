@@ -101,7 +101,9 @@ export function ProxyMetadataForm() {
             </div>
 
             <div>
-              <Type className="mb-2 font-medium">Scopes (comma-separated)</Type>
+              <Type className="mb-2 font-medium">
+                Scopes (comma-separated, optional)
+              </Type>
               <Input
                 placeholder="read, write, openid"
                 value={proxy.scopes}
@@ -132,8 +134,8 @@ export function ProxyMetadataForm() {
                 value={proxy.tokenAuthMethod}
                 onChange={(e) => setField("tokenAuthMethod", e.target.value)}
               >
-                <option value="client_secret_post">client_secret_post</option>
                 <option value="client_secret_basic">client_secret_basic</option>
+                <option value="client_secret_post">client_secret_post</option>
                 <option value="none">none</option>
               </select>
             </div>

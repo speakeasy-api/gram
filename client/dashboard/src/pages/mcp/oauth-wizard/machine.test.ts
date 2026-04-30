@@ -23,6 +23,8 @@ import {
   type CreateEnvironmentInput,
   type CreateEnvironmentOutput,
   type DeleteEnvironmentInput,
+  type RegisterClientInput,
+  type RegisterClientOutput,
 } from "./services";
 
 // ---------------------------------------------------------------------------
@@ -67,6 +69,24 @@ function happyServices() {
     deleteEnvironment: fromPromise<void, DeleteEnvironmentInput>(
       async () => {},
     ),
+    registerClient: fromPromise<RegisterClientOutput, RegisterClientInput>(
+      async () => ({
+        clientId: "auto-cid",
+        clientSecret: "auto-secret",
+        tokenAuthMethod: "client_secret_basic",
+      }),
+    ),
+  };
+}
+
+function servicesWithRegisterFailure() {
+  return {
+    ...happyServices(),
+    registerClient: fromPromise<RegisterClientOutput, RegisterClientInput>(
+      async () => {
+        throw new Error("DCR boom");
+      },
+    ),
   };
 }
 
@@ -75,6 +95,18 @@ function servicesWithProxyFailure() {
     ...happyServices(),
     addOAuthProxy: fromPromise<void, AddOAuthProxyInput>(async () => {
       throw new Error("proxy boom");
+    }),
+  };
+}
+
+function servicesWithEnvFailure() {
+  return {
+    ...happyServices(),
+    createEnvironment: fromPromise<
+      CreateEnvironmentOutput,
+      CreateEnvironmentInput
+    >(async () => {
+      throw new Error("env boom");
     }),
   };
 }
@@ -192,6 +224,7 @@ function withExternal(over: Partial<Context["external"]> = {}): Context {
     },
     envSlug: null,
     error: null,
+    autoRegistering: false,
     result: null,
     toolsetSlug: "",
     toolsetName: "",
@@ -298,15 +331,13 @@ describe("checkProxyMeta", () => {
     });
   });
 
-  it("rejects empty scopes", () => {
-    expect(checkProxyMeta(withProxy({ scopes: "" }))).toMatchObject({
-      ok: false,
-    });
+  it("accepts empty scopes (server allows zero-scope proxies)", () => {
+    expect(checkProxyMeta(withProxy({ scopes: "" }))).toEqual({ ok: true });
   });
 
-  it("rejects scopes containing only whitespace", () => {
-    expect(checkProxyMeta(withProxy({ scopes: " , , " }))).toMatchObject({
-      ok: false,
+  it("accepts scopes containing only whitespace", () => {
+    expect(checkProxyMeta(withProxy({ scopes: " , , " }))).toEqual({
+      ok: true,
     });
   });
 });
@@ -337,7 +368,7 @@ describe("guard boolean wrappers", () => {
 
   it("validProxyMeta mirrors checkProxyMeta", () => {
     expect(validProxyMeta(withProxy())).toBe(true);
-    expect(validProxyMeta(withProxy({ scopes: "" }))).toBe(false);
+    expect(validProxyMeta(withProxy({ slug: "" }))).toBe(false);
   });
 
   it("validCreds mirrors checkCreds", () => {
@@ -592,6 +623,152 @@ describe("oauthWizardMachine — external happy path", () => {
     actor.send({ type: "FIELD_EXTERNAL", key: "slug", value: "" });
     actor.send({ type: "APPLY_DISCOVERED" });
     expect(actor.getSnapshot().context.external.slug).toBe("discovered-slug");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Machine — manual proxy path always prompts for credentials
+// ---------------------------------------------------------------------------
+
+describe("oauthWizardMachine — manual proxy path skips auto-register chooser", () => {
+  const inputWithDiscovered: Input = {
+    ...baseInput,
+    discovered: DISCOVERED_2_1,
+  };
+
+  it("NEXT from metadata routes directly to credentials even when registration_endpoint is discovered", () => {
+    const actor = makeActor(inputWithDiscovered);
+    actor.start();
+    actor.send({ type: "SELECT_PROXY" });
+    fillProxyForm(actor);
+    actor.send({ type: "NEXT" });
+    const snap = actor.getSnapshot();
+    expect(snap.matches({ proxy: "credentials" })).toBe(true);
+    expect(snap.context.autoRegistering).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Machine — zero-click auto-configure from path selection
+// ---------------------------------------------------------------------------
+
+describe("oauthWizardMachine — auto-configure from path selection", () => {
+  const inputWithDiscovered: Input = {
+    ...baseInput,
+    discovered: DISCOVERED_2_1,
+  };
+
+  it("SELECT_PROXY_AUTO transitions to proxy.registering with prefilled proxy and autoRegistering=true", () => {
+    const actor = makeActor(inputWithDiscovered);
+    actor.start();
+    actor.send({ type: "SELECT_PROXY_AUTO" });
+    const snap = actor.getSnapshot();
+    expect(snap.matches({ proxy: "registering" })).toBe(true);
+    expect(snap.context.autoRegistering).toBe(true);
+    expect(snap.context.proxy.slug).toBe("discovered-slug");
+    expect(snap.context.proxy.authorizationEndpoint).toBe(
+      VALID_PROXY_METADATA.authorization_endpoint,
+    );
+    expect(snap.context.proxy.tokenEndpoint).toBe(
+      VALID_PROXY_METADATA.token_endpoint,
+    );
+    expect(snap.context.proxy.scopes).toBe("read, write");
+    expect(snap.context.proxy.prefilled).toBe(true);
+  });
+
+  it("walks pathSelection → registering → submitting → result.success without touching metadata or autoRegisterChoice", async () => {
+    const actor = makeActor(inputWithDiscovered);
+    actor.start();
+    actor.send({ type: "SELECT_PROXY_AUTO" });
+
+    await waitFor(actor, (s) => s.matches({ result: "success" }), {
+      timeout: 1000,
+    });
+
+    const snap = actor.getSnapshot();
+    expect(snap.context.proxy.clientId).toBe("auto-cid");
+    expect(snap.context.proxy.clientSecret).toBe("auto-secret");
+    expect(snap.context.envSlug).toBe("env-new");
+    expect(snap.context.result?.success).toBe(true);
+  });
+
+  it("registerClient failure routes to autoRegisterFailed", async () => {
+    const actor = makeActor(inputWithDiscovered, servicesWithRegisterFailure());
+    actor.start();
+    actor.send({ type: "SELECT_PROXY_AUTO" });
+
+    await waitFor(actor, (s) => s.matches({ proxy: "autoRegisterFailed" }), {
+      timeout: 1000,
+    });
+
+    expect(actor.getSnapshot().context.error).toContain("DCR boom");
+  });
+
+  it("addOAuthProxy failure rolls back env and lands on autoRegisterFailed (does not drop into manual creds form)", async () => {
+    const actor = makeActor(inputWithDiscovered, servicesWithProxyFailure());
+    actor.start();
+    actor.send({ type: "SELECT_PROXY_AUTO" });
+
+    await waitFor(actor, (s) => s.matches({ proxy: "autoRegisterFailed" }), {
+      timeout: 1000,
+    });
+
+    const snap = actor.getSnapshot();
+    expect(snap.context.error).toContain("proxy boom");
+    expect(snap.context.envSlug).toBeNull();
+  });
+
+  it("createEnvironment failure lands on autoRegisterFailed (does not drop into manual creds form)", async () => {
+    const actor = makeActor(inputWithDiscovered, servicesWithEnvFailure());
+    actor.start();
+    actor.send({ type: "SELECT_PROXY_AUTO" });
+
+    await waitFor(actor, (s) => s.matches({ proxy: "autoRegisterFailed" }), {
+      timeout: 1000,
+    });
+
+    const snap = actor.getSnapshot();
+    expect(snap.context.error).toContain("env boom");
+  });
+
+  it("SELECT_PROXY_AUTO is a no-op when no discovered metadata (UI hides the card in this case)", () => {
+    const actor = makeActor(baseInput);
+    actor.start();
+    actor.send({ type: "SELECT_PROXY_AUTO" });
+    expect(actor.getSnapshot().matches("pathSelection")).toBe(true);
+  });
+
+  it("SELECT_PROXY_AUTO is a no-op when registration_endpoint missing (UI hides the card in this case)", () => {
+    const { registration_endpoint: _omit, ...metadataWithoutRegistration } =
+      VALID_PROXY_METADATA;
+    const actor = makeActor({
+      ...baseInput,
+      discovered: {
+        ...DISCOVERED_2_1,
+        metadata: metadataWithoutRegistration,
+      },
+    });
+    actor.start();
+    actor.send({ type: "SELECT_PROXY_AUTO" });
+    expect(actor.getSnapshot().matches("pathSelection")).toBe(true);
+  });
+
+  it("SELECT_PROXY_AUTO proceeds to proxy.registering even when scopes_supported missing (scopes are optional)", () => {
+    const { scopes_supported: _omit, ...metadataWithoutScopes } =
+      VALID_PROXY_METADATA;
+    const actor = makeActor({
+      ...baseInput,
+      discovered: {
+        ...DISCOVERED_2_1,
+        metadata: metadataWithoutScopes,
+      },
+    });
+    actor.start();
+    actor.send({ type: "SELECT_PROXY_AUTO" });
+    const snap = actor.getSnapshot();
+    expect(snap.matches({ proxy: "registering" })).toBe(true);
+    expect(snap.context.autoRegistering).toBe(true);
+    expect(snap.context.proxy.scopes).toBe("");
   });
 });
 

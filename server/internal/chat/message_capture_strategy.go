@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"slices"
 	"strings"
 
 	or "github.com/OpenRouterTeam/go-sdk/models/components"
@@ -82,13 +81,7 @@ func (s *ChatMessageCaptureStrategy) StartOrResumeChat(ctx context.Context, requ
 		return nil, oops.E(oops.CodeUnexpected, err, "create chat")
 	}
 
-	// Normalize incoming to the same canonical (text-row, tools-row) shape
-	// buildAssistantRows uses for stored rows. Without this, a single combined
-	// assistant message from the runner hashes differently than the two stored
-	// rows it splits into, forcing a new generation on every multi-step turn.
-	normalized := slices.Collect(openrouter.NormalizeAssistantMessages(request.Messages))
-
-	matchResult, err := s.matchIncomingAgainstStored(ctx, chatID, normalized)
+	matchResult, err := s.matchIncomingAgainstStored(ctx, chatID, request.Messages)
 	if err != nil {
 		return nil, err
 	}
@@ -102,7 +95,7 @@ func (s *ChatMessageCaptureStrategy) StartOrResumeChat(ctx context.Context, requ
 		matchedPrefix = 0
 	}
 
-	newMessages := normalized[matchedPrefix:]
+	newMessages := request.Messages[matchedPrefix:]
 	if len(newMessages) == 0 {
 		return &chatCaptureSession{
 			generation:  generation,
@@ -299,12 +292,9 @@ func (s *ChatMessageCaptureStrategy) CaptureMessage(
 	return nil
 }
 
-// buildAssistantRows turns a single completion response into 1 or 2 assistant
-// rows. When the response carries both text content and tool_calls, it splits
-// into a text-only row followed by a tool-calls-only row so the stored shape
-// matches what NormalizeAssistantMessages produces on replay. Tokens and
-// finish_reason land on the final row to keep per-turn accounting on a single
-// row.
+// buildAssistantRows turns a single completion response into one assistant row.
+// The row preserves any narrative text and tool_calls from the model response;
+// provider-specific replay normalization happens at the OpenRouter boundary.
 func buildAssistantRows(
 	request openrouter.CompletionRequest,
 	response openrouter.CompletionResponse,
@@ -313,17 +303,12 @@ func buildAssistantRows(
 	origin, userAgent, ipAddress string,
 	generation int32,
 ) []repo.CreateChatMessageParams {
-	// Whitespace-only content is treated as "no text" to stay in sync with
-	// NormalizeAssistantMessages, which trims before deciding whether to split
-	// a replayed combined message. Any divergence here would slot the stored
-	// rows against a different incoming shape and bump generation every turn.
+	// Whitespace-only content is treated as no text; preserving invisible
+	// assistant narrative around tool calls does not add useful replay context.
 	content := response.Content
 	if strings.TrimSpace(content) == "" {
 		content = ""
 	}
-	hasText := content != ""
-	hasTools := len(toolCallsJSON) > 0
-
 	base := repo.CreateChatMessageParams{
 		ChatID:           request.ChatID,
 		Role:             "assistant",
@@ -354,20 +339,6 @@ func buildAssistantRows(
 	promptTokens := int64(response.Usage.PromptTokens)
 	completionTokens := int64(response.Usage.CompletionTokens)
 	totalTokens := int64(response.Usage.TotalTokens)
-
-	if hasText && hasTools {
-		text := base
-		text.Content = content
-
-		tools := base
-		tools.ToolCalls = toolCallsJSON
-		tools.FinishReason = finishReason
-		tools.PromptTokens = promptTokens
-		tools.CompletionTokens = completionTokens
-		tools.TotalTokens = totalTokens
-
-		return []repo.CreateChatMessageParams{text, tools}
-	}
 
 	only := base
 	only.Content = content

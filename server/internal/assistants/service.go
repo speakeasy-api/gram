@@ -1104,7 +1104,6 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 		return ProcessThreadEventsResult{}, err
 	}
 
-	coldStart := ensureResult.ColdStart
 	if ensureResult.NeedsConfigure {
 		startupConfig, err := s.buildRuntimeStartupConfig(ctx, thread, runtimeRecord, assistant)
 		if err != nil {
@@ -1153,7 +1152,7 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 		s.emitAssistantTelemetry(turnCtx, assistant, thread, &runtimeRecord, &event, "turn_start", "assistant turn started", "INFO", nil)
 
 		stopLeaseHeartbeat := s.startProcessingLeaseHeartbeat(turnCtx, thread.ProjectID, runtimeRecord.ID, event.ID)
-		runErr := s.processEventTurn(turnCtx, thread, assistant, runtimeRecord, event, coldStart)
+		runErr := s.processEventTurn(turnCtx, thread, assistant, runtimeRecord, event)
 		stopLeaseHeartbeat()
 		if runErr != nil {
 			s.logger.WarnContext(ctx, "assistant turn failed",
@@ -1249,7 +1248,6 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 		}
 		s.emitAssistantTelemetry(turnCtx, assistant, thread, &runtimeRecord, &event, "event_completed", "assistant event completed", "INFO", nil)
 		processedAny = true
-		coldStart = false
 	}
 
 	warmUntil := time.Now().UTC().Add(time.Duration(assistant.WarmTTLSeconds) * time.Second)
@@ -1271,7 +1269,6 @@ func (s *ServiceCore) processEventTurn(
 	assistant assistantRecord,
 	runtime assistantRuntimeRecord,
 	event assistantThreadEventRecord,
-	includeHistory bool,
 ) error {
 	adapter, err := getSourceAdapter(thread.SourceKind)
 	if err != nil {
@@ -1281,18 +1278,11 @@ func (s *ServiceCore) processEventTurn(
 	if err != nil {
 		return fmt.Errorf("decode assistant turn: %w", err)
 	}
-	var history []runtimeMessage
-	if includeHistory {
-		history, err = s.loadChatHistory(ctx, thread.ChatID, thread.ProjectID)
-		if err != nil {
-			return err
-		}
-	}
 	turnToken, err := s.mintAssistantRuntimeToken(assistant, thread)
 	if err != nil {
 		return err
 	}
-	if err := s.runtime.RunTurn(ctx, runtime, event.ID.String(), turnToken, history, prompt); err != nil {
+	if err := s.runtime.RunTurn(ctx, runtime, event.ID.String(), turnToken, prompt); err != nil {
 		return fmt.Errorf("run assistant turn: %w", err)
 	}
 	return nil
@@ -1369,7 +1359,16 @@ func (s *ServiceCore) buildRuntimeStartupConfig(
 		return runtimeStartupConfig{}, fmt.Errorf("compose assistant instructions: %w", err)
 	}
 
-	completionsURL := runtimeServerURL.JoinPath("chat", "completions").String()
+	history, err := s.loadChatHistory(ctx, thread.ChatID, thread.ProjectID)
+	if err != nil {
+		return runtimeStartupConfig{}, err
+	}
+
+	completionsEndpoint := runtimeServerURL.JoinPath("chat", "completions")
+	completionsQuery := completionsEndpoint.Query()
+	completionsQuery.Set("unstable_normalizeOutboundMessages", "1")
+	completionsEndpoint.RawQuery = completionsQuery.Encode()
+	completionsURL := completionsEndpoint.String()
 	return runtimeStartupConfig{
 		Model:          assistant.Model,
 		Instructions:   conv.PtrEmpty(instructions),
@@ -1377,6 +1376,8 @@ func (s *ServiceCore) buildRuntimeStartupConfig(
 		CompletionsURL: &completionsURL,
 		ChatID:         thread.ChatID.String(),
 		MCPServers:     mcpServers,
+		History:        history,
+		WarmTTLSeconds: assistant.WarmTTLSeconds,
 	}, nil
 }
 

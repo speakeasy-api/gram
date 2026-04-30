@@ -14,6 +14,8 @@ import {
   type CreateEnvironmentInput,
   type CreateEnvironmentOutput,
   type DeleteEnvironmentInput,
+  type RegisterClientInput,
+  type RegisterClientOutput,
 } from "./services";
 
 function initialProxy(): Context["proxy"] {
@@ -23,7 +25,7 @@ function initialProxy(): Context["proxy"] {
     tokenEndpoint: "",
     scopes: "",
     audience: "",
-    tokenAuthMethod: "client_secret_post",
+    tokenAuthMethod: "client_secret_basic",
     environmentSlug: "",
     clientId: "",
     clientSecret: "",
@@ -38,6 +40,7 @@ function initialContext(input: Input): Context {
     proxy: initialProxy(),
     envSlug: null,
     error: null,
+    autoRegistering: false,
     result: null,
     toolsetSlug: input.toolsetSlug,
     toolsetName: input.toolsetName,
@@ -77,6 +80,31 @@ function errorMessage(err: unknown, fallback: string): string {
   return err instanceof Error ? err.message : fallback;
 }
 
+function discoveredRegistrationEndpoint(
+  d: DiscoveredOAuth | null,
+): string | null {
+  const v = d?.metadata.registration_endpoint;
+  return typeof v === "string" && v.length > 0 ? v : null;
+}
+
+function discoveredAuthMethods(d: DiscoveredOAuth | null): string[] {
+  const v = d?.metadata.token_endpoint_auth_methods_supported;
+  return Array.isArray(v) ? (v as string[]) : [];
+}
+
+export function canAutoConfigureFromDiscovered(
+  d: DiscoveredOAuth | null,
+): boolean {
+  if (!d) return false;
+  if (discoveredRegistrationEndpoint(d) === null) return false;
+  const fields = proxyFieldsFromDiscovered(d);
+  // scopes_supported is optional — many MCP servers don't advertise scopes in
+  // their well-known doc. DCR and addOAuthProxy both accept empty scopes.
+  return Boolean(
+    fields.slug && fields.authorizationEndpoint && fields.tokenEndpoint,
+  );
+}
+
 function placeholder<TInput, TOutput = void>(name: string) {
   return fromPromise<TOutput, TInput>(async () => {
     throw new Error(
@@ -100,11 +128,16 @@ export const oauthWizardMachine = setup({
     >("createEnvironment"),
     addOAuthProxy: placeholder<AddOAuthProxyInput>("addOAuthProxy"),
     deleteEnvironment: placeholder<DeleteEnvironmentInput>("deleteEnvironment"),
+    registerClient: placeholder<RegisterClientInput, RegisterClientOutput>(
+      "registerClient",
+    ),
   },
   guards: {
     validExternal: ({ context }) => checkExternal(context).ok,
     validProxyMeta: ({ context }) => checkProxyMeta(context).ok,
     validCreds: ({ context }) => checkCreds(context).ok,
+    canAutoConfigure: ({ context }) =>
+      canAutoConfigureFromDiscovered(context.discovered),
   },
   actions: {
     invalidateOnExternalSuccess: () => {},
@@ -140,6 +173,22 @@ export const oauthWizardMachine = setup({
                     prefilled: true,
                   }
                 : context.proxy,
+          }),
+        },
+        SELECT_PROXY_AUTO: {
+          guard: "canAutoConfigure",
+          target: "proxy.registering",
+          actions: assign({
+            proxy: ({ context }) =>
+              context.discovered
+                ? {
+                    ...context.proxy,
+                    ...proxyFieldsFromDiscovered(context.discovered),
+                    prefilled: true,
+                  }
+                : context.proxy,
+            autoRegistering: () => true,
+            error: () => null,
           }),
         },
       },
@@ -287,8 +336,51 @@ export const oauthWizardMachine = setup({
             BACK: "#oauthWizard.pathSelection",
           },
         },
+        registering: {
+          meta: { title: "Configure OAuth Proxy" },
+          invoke: {
+            src: "registerClient",
+            input: ({ context }): RegisterClientInput => ({
+              registrationEndpoint:
+                discoveredRegistrationEndpoint(context.discovered) ?? "",
+              scopesSupported: context.proxy.scopes
+                .split(",")
+                .map((s) => s.trim())
+                .filter((s) => s.length > 0),
+              tokenEndpointAuthMethodsSupported: discoveredAuthMethods(
+                context.discovered,
+              ),
+            }),
+            onDone: {
+              target: "submitting",
+              actions: assign({
+                proxy: ({ context, event }) => ({
+                  ...context.proxy,
+                  clientId: event.output.clientId,
+                  clientSecret: event.output.clientSecret,
+                  tokenAuthMethod:
+                    event.output.tokenAuthMethod ??
+                    context.proxy.tokenAuthMethod,
+                }),
+                error: () => null,
+              }),
+            },
+            onError: {
+              target: "autoRegisterFailed",
+              actions: assign({
+                error: ({ event }) =>
+                  errorMessage(event.error, "Failed to fetch credentials"),
+              }),
+            },
+          },
+        },
+        autoRegisterFailed: {
+          meta: { title: "OAuth Setup Failed" },
+          type: "final",
+        },
         credentials: {
           meta: { title: "OAuth Client Credentials" },
+          entry: assign({ autoRegistering: () => false }),
           on: {
             FIELD_PROXY: {
               actions: assign({
@@ -336,16 +428,33 @@ export const oauthWizardMachine = setup({
                     envSlug: ({ event }) => event.output.envSlug,
                   }),
                 },
-                onError: {
-                  target: "#oauthWizard.proxy.credentials",
-                  actions: assign({
-                    error: ({ event }) =>
-                      errorMessage(
-                        event.error,
-                        "Failed to create environment for OAuth credentials",
-                      ),
-                  }),
-                },
+                onError: [
+                  {
+                    // Auto-configure path: never drop the user back into the
+                    // manual credentials form — they didn't ask to type
+                    // anything. Surface the failure on the same screen used
+                    // by DCR errors and post-rollback proxy-creation errors.
+                    guard: ({ context }) => context.autoRegistering,
+                    target: "#oauthWizard.proxy.autoRegisterFailed",
+                    actions: assign({
+                      error: ({ event }) =>
+                        errorMessage(
+                          event.error,
+                          "Failed to create environment for OAuth credentials",
+                        ),
+                    }),
+                  },
+                  {
+                    target: "#oauthWizard.proxy.credentials",
+                    actions: assign({
+                      error: ({ event }) =>
+                        errorMessage(
+                          event.error,
+                          "Failed to create environment for OAuth credentials",
+                        ),
+                    }),
+                  },
+                ],
               },
             },
             creatingProxy: {
@@ -393,10 +502,22 @@ export const oauthWizardMachine = setup({
                 input: ({ context }): DeleteEnvironmentInput => ({
                   envSlug: context.envSlug ?? "",
                 }),
-                onDone: {
-                  target: "#oauthWizard.proxy.credentials",
-                  actions: assign({ envSlug: () => null }),
-                },
+                onDone: [
+                  {
+                    // Auto-configure path: never drop the user back into the
+                    // manual credentials form — they didn't ask to type anything,
+                    // and DCR-fetched secrets aren't reusable here. Surface the
+                    // proxy-creation error on the same failure screen used by
+                    // DCR errors.
+                    guard: ({ context }) => context.autoRegistering,
+                    target: "#oauthWizard.proxy.autoRegisterFailed",
+                    actions: assign({ envSlug: () => null }),
+                  },
+                  {
+                    target: "#oauthWizard.proxy.credentials",
+                    actions: assign({ envSlug: () => null }),
+                  },
+                ],
                 onError: {
                   target: "#oauthWizard.proxy.fatalError",
                   actions: assign({

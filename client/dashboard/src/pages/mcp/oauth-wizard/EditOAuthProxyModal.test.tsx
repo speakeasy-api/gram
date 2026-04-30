@@ -186,7 +186,7 @@ describe("EditOAuthProxyModal", () => {
     expect(body.authorizationEndpoint).toBe("https://e.example/new-auth");
   });
 
-  it("shows a validation error and does not submit when scopes are emptied", () => {
+  it("submits with empty scopes when the field is cleared (scopes are optional)", async () => {
     renderModal();
 
     fireEvent.change(screen.getByPlaceholderText("read, write, openid"), {
@@ -194,7 +194,12 @@ describe("EditOAuthProxyModal", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
 
-    expect(screen.getByText(/at least one scope/i)).toBeTruthy();
-    expect(mocks.updateOAuthProxy).not.toHaveBeenCalled();
+    await waitFor(() => {
+      expect(mocks.updateOAuthProxy).toHaveBeenCalledTimes(1);
+    });
+    const body =
+      mocks.updateOAuthProxy.mock.calls[0][0].request
+        .updateOAuthProxyServerRequestBody.oauthProxyServer;
+    expect(body.scopesSupported).toEqual([]);
   });
 });

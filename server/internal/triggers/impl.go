@@ -397,6 +397,8 @@ func toTriggerError(ctx context.Context, logger *slog.Logger, err error, message
 		// self-correct. The chain is already user-actionable: it's only
 		// reached when the input fails validation.
 		public = fmt.Sprintf("%s: %s", message, err.Error())
+	case errors.Is(err, bgtriggers.ErrAuthFailed):
+		code = oops.CodeUnauthorized
 	case errors.Is(err, sql.ErrNoRows):
 		code = oops.CodeNotFound
 	}

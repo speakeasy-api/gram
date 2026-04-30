@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Switch } from "@/components/ui/switch";
 import {
   Sheet,
@@ -58,6 +59,7 @@ import {
   RULE_CATEGORY_META,
   DETECTION_RULES,
   type RuleCategory,
+  type PolicyAction,
 } from "./policy-data";
 import { cn } from "@/lib/utils";
 
@@ -144,6 +146,8 @@ function PolicyCenterContent() {
   const [selectedCategories, setSelectedCategories] = useState<
     Set<RuleCategory>
   >(new Set<RuleCategory>(["secrets", "pii"]));
+  const [formAction, setFormAction] = useState<PolicyAction>("flag");
+  const [formAutoName, setFormAutoName] = useState(true);
 
   const [runPanelPolicy, setRunPanelPolicy] = useState<RiskPolicy | null>(null);
 
@@ -179,6 +183,8 @@ function PolicyCenterContent() {
     setFormName("");
     setFormEnabled(true);
     setSelectedCategories(new Set<RuleCategory>(["secrets", "pii"]));
+    setFormAction("flag");
+    setFormAutoName(true);
     setSheetOpen(true);
   };
 
@@ -189,6 +195,8 @@ function PolicyCenterContent() {
     setSelectedCategories(
       policyToCategories(policy.sources, policy.presidioEntities),
     );
+    setFormAction((policy.action as PolicyAction) ?? "flag");
+    setFormAutoName(policy.autoName ?? true);
     setSheetOpen(true);
   };
 
@@ -204,6 +212,8 @@ function PolicyCenterContent() {
             enabled: formEnabled,
             sources,
             presidioEntities,
+            action: formAction,
+            autoName: formAutoName,
           },
         },
       });
@@ -211,10 +221,12 @@ function PolicyCenterContent() {
       createMutation.mutate({
         request: {
           createRiskPolicyRequestBody: {
-            name: formName,
+            ...(formAutoName ? {} : { name: formName }),
             enabled: formEnabled,
             sources,
             presidioEntities,
+            action: formAction,
+            autoName: formAutoName,
           },
         },
       });
@@ -323,18 +335,17 @@ function PolicyCenterContent() {
               information in chat messages.
             </p>
           </div>
-          {policies.length === 0 && (
-            <Button onClick={handleCreate}>
-              <Plus className="mr-2 h-4 w-4" />
-              New Policy
-            </Button>
-          )}
+          <Button onClick={handleCreate}>
+            <Plus className="mr-2 h-4 w-4" />
+            New Policy
+          </Button>
         </div>
 
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>Name</TableHead>
+              <TableHead>Action</TableHead>
               <TableHead>Categories</TableHead>
               <TableHead>Progress</TableHead>
               <TableHead>Status</TableHead>
@@ -354,6 +365,11 @@ function PolicyCenterContent() {
                   onClick={() => handleEdit(policy)}
                 >
                   <TableCell className="font-medium">{policy.name}</TableCell>
+                  <TableCell>
+                    <ActionBadge
+                      action={(policy.action as PolicyAction) ?? "flag"}
+                    />
+                  </TableCell>
                   <TableCell>
                     <div className="flex gap-1">
                       {categories.map((cat) => (
@@ -437,13 +453,17 @@ function PolicyCenterContent() {
                 setFormEnabled={setFormEnabled}
                 selectedCategories={selectedCategories}
                 setSelectedCategories={setSelectedCategories}
+                formAction={formAction}
+                setFormAction={setFormAction}
+                formAutoName={formAutoName}
+                setFormAutoName={setFormAutoName}
               />
             </div>
             <SheetFooter className="px-6 pb-6">
               <Button
                 onClick={handleSave}
                 disabled={
-                  !formName.trim() ||
+                  (!formAutoName && !formName.trim()) ||
                   createMutation.isPending ||
                   updateMutation.isPending
                 }
@@ -496,6 +516,10 @@ function PolicySheetBody({
   setFormEnabled,
   selectedCategories,
   setSelectedCategories,
+  formAction,
+  setFormAction,
+  formAutoName,
+  setFormAutoName,
 }: {
   formName: string;
   setFormName: (v: string) => void;
@@ -503,6 +527,10 @@ function PolicySheetBody({
   setFormEnabled: (v: boolean) => void;
   selectedCategories: Set<RuleCategory>;
   setSelectedCategories: (v: Set<RuleCategory>) => void;
+  formAction: PolicyAction;
+  setFormAction: (v: PolicyAction) => void;
+  formAutoName: boolean;
+  setFormAutoName: (v: boolean) => void;
 }) {
   const [expandedCategory, setExpandedCategory] = useState<RuleCategory | null>(
     null,
@@ -512,12 +540,25 @@ function PolicySheetBody({
     <div className="space-y-6 py-4">
       {/* Policy Name */}
       <div className="space-y-2">
-        <Label className="text-sm font-medium">Policy Name</Label>
-        <Input
-          value={formName}
-          onChange={(value) => setFormName(value)}
-          placeholder="e.g. Secret Detection"
-        />
+        <div className="flex items-center justify-between">
+          <Label className="text-sm font-medium">Policy Name</Label>
+          <div className="flex items-center gap-2">
+            <span className="text-muted-foreground text-xs">Auto</span>
+            <Switch checked={formAutoName} onCheckedChange={setFormAutoName} />
+          </div>
+        </div>
+        {formAutoName ? (
+          <p className="text-muted-foreground text-xs">
+            Name will be generated automatically based on detection rules and
+            action.
+          </p>
+        ) : (
+          <Input
+            value={formName}
+            onChange={(value) => setFormName(value)}
+            placeholder="e.g. Secret Detection"
+          />
+        )}
       </div>
 
       {/* Detection Rules */}
@@ -622,6 +663,39 @@ function PolicySheetBody({
             );
           })}
         </div>
+      </div>
+
+      {/* Action */}
+      <div className="space-y-2">
+        <Label className="text-sm font-medium">Action</Label>
+        <RadioGroup
+          value={formAction}
+          onValueChange={(v) => setFormAction(v as PolicyAction)}
+        >
+          <div className="border-border divide-border divide-y rounded-lg border">
+            {ACTION_OPTIONS.map((opt) => (
+              <label
+                key={opt.value}
+                htmlFor={`action-${opt.value}`}
+                className="hover:bg-muted/50 flex cursor-pointer items-start gap-3 p-3"
+              >
+                <RadioGroupItem
+                  value={opt.value}
+                  id={`action-${opt.value}`}
+                  className="mt-0.5"
+                />
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <ActionBadge action={opt.value} />
+                  </div>
+                  <div className="text-muted-foreground mt-1 text-xs">
+                    {opt.description}
+                  </div>
+                </div>
+              </label>
+            ))}
+          </div>
+        </RadioGroup>
       </div>
 
       {/* Enabled toggle */}
@@ -783,4 +857,32 @@ function RunPanel({
       </SheetFooter>
     </>
   );
+}
+
+/* -------------------------------------------------------------------------- */
+/*  ActionBadge                                                               */
+/* -------------------------------------------------------------------------- */
+
+const ACTION_BADGE_CONFIG: Record<
+  PolicyAction,
+  { label: string; variant: "secondary" | "destructive" }
+> = {
+  flag: { label: "Flag", variant: "secondary" },
+  block: { label: "Block", variant: "destructive" },
+};
+
+const ACTION_OPTIONS: { value: PolicyAction; description: string }[] = [
+  {
+    value: "flag",
+    description: "Log findings for review without interrupting the session",
+  },
+  {
+    value: "block",
+    description: "Deny prompts and tool calls that match detection rules",
+  },
+];
+
+function ActionBadge({ action }: { action: PolicyAction }) {
+  const config = ACTION_BADGE_CONFIG[action] ?? ACTION_BADGE_CONFIG.flag;
+  return <Badge variant={config.variant}>{config.label}</Badge>;
 }

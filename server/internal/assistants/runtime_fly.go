@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -34,6 +35,13 @@ const (
 	flyMachineMetadataRole          = "gram_role"
 	flyMachineMetadataRoleAssistant = "assistant_runtime"
 )
+
+// errFlyAppCorrupted signals the Fly Machines API reports the app missing on
+// an established runtime — i.e. flaps 404s after we previously launched a
+// machine on this app. GraphQL/orchestrator and the Machines backend have
+// drifted; the only reliable recovery is to destroy + recreate. Distinct from
+// the create-time propagation lag covered by isFlyAppPropagating.
+var errFlyAppCorrupted = errors.New("assistant fly runtime app corrupted")
 
 type flyRuntimeMetadata struct {
 	AppName    string `json:"app_name"`
@@ -208,8 +216,22 @@ func (f *FlyRuntimeBackend) ensureExisting(
 		appIP = metadata.AppIP
 	}
 
-	machine, err := f.resolveMachine(ctx, flapsClient, appName, runtime.AssistantThreadID, metadata.MachineID)
+	machine, err := f.resolveMachine(ctx, flapsClient, appName, runtime.AssistantThreadID, metadata.MachineID, metadata.LastBootID)
 	if err != nil {
+		if errors.Is(err, errFlyAppCorrupted) {
+			f.logger.WarnContext(ctx,
+				"assistant fly runtime app corrupted, tearing down for recreate",
+				attr.SlogFlyAppName(appName),
+				attr.SlogAssistantThreadID(runtime.AssistantThreadID.String()),
+			)
+			if delErr := f.deleteApp(ctx, appName); delErr != nil && !isFlyNotFound(delErr) {
+				f.logger.WarnContext(ctx,
+					"delete corrupted assistant fly runtime app failed",
+					attr.SlogFlyAppName(appName),
+					attr.SlogError(delErr),
+				)
+			}
+		}
 		return RuntimeBackendEnsureResult{}, err
 	}
 
@@ -333,8 +355,10 @@ func (f *FlyRuntimeBackend) resolveMachine(
 	appName string,
 	threadID uuid.UUID,
 	machineID string,
+	lastBootID string,
 ) (*fly.Machine, error) {
 	wantThreadID := threadID.String()
+	hadPriorBoot := lastBootID != "" || machineID != ""
 
 	if machineID != "" {
 		machine, err := flapsClient.Get(ctx, appName, machineID)
@@ -351,6 +375,12 @@ func (f *FlyRuntimeBackend) resolveMachine(
 
 	machines, err := flapsClient.List(ctx, appName, "")
 	if err != nil {
+		// Established runtime + flaps notFound = backend drift, not propagation
+		// lag. ensureApp just confirmed the app via GraphQL, so the two Fly
+		// backends disagree and only a destroy+recreate clears it.
+		if isFlyNotFound(err) && hadPriorBoot {
+			return nil, errFlyAppCorrupted
+		}
 		return nil, fmt.Errorf("list assistant fly runtime machines: %w", err)
 	}
 
@@ -453,7 +483,7 @@ func (f *FlyRuntimeBackend) Configure(ctx context.Context, runtime assistantRunt
 	return nil
 }
 
-func (f *FlyRuntimeBackend) RunTurn(ctx context.Context, runtime assistantRuntimeRecord, idempotencyKey string, authToken string, history []runtimeMessage, prompt string) error {
+func (f *FlyRuntimeBackend) RunTurn(ctx context.Context, runtime assistantRuntimeRecord, idempotencyKey string, authToken string, prompt string) error {
 	if err := validateRuntimeBackend(f, runtime.Backend); err != nil {
 		return err
 	}
@@ -466,7 +496,6 @@ func (f *FlyRuntimeBackend) RunTurn(ctx context.Context, runtime assistantRuntim
 	}
 
 	reqBody, err := json.Marshal(runtimeTurnRequest{
-		History:   history,
 		Input:     prompt,
 		AuthToken: authToken,
 	})

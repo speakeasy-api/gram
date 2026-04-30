@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 361a8d999e7e8498a9a87963c777deea
+  docChecksum: 87051366f68a2d3f897c767b012873f6
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -74,6 +74,8 @@ trackedFiles:
     last_write_checksum: sha1:bc4454e196fcd219f5a78da690375a884f5ed07b
   docs/models/components/accessmember.md:
     last_write_checksum: sha1:3054da106d66228a7be03e78be7f69086768e701
+  docs/models/components/action.md:
+    last_write_checksum: sha1:66ce1fb4ea555bc6494786b035454529d311d883
   docs/models/components/adddeploymentpackageform.md:
     last_write_checksum: sha1:893ed1c5b9fd0c952d99e696e197096e4219b740
   docs/models/components/addexternalmcpform.md:
@@ -181,7 +183,7 @@ trackedFiles:
   docs/models/components/createresponsebody.md:
     last_write_checksum: sha1:0c12f06a5d161fb9fa2c04fed3bb05965bd77b3d
   docs/models/components/createriskpolicyrequestbody.md:
-    last_write_checksum: sha1:a0361416c9f4804c64d55fe98122bc3febe71b7c
+    last_write_checksum: sha1:3fcf7d7d79e874e2b548ebc54ace1851a73e1201
   docs/models/components/createroleform.md:
     last_write_checksum: sha1:6b116b64b9fb3618d9d78d1476b5d47d99580176
   docs/models/components/createserverform.md:
@@ -623,7 +625,9 @@ trackedFiles:
   docs/models/components/riskchatsummary.md:
     last_write_checksum: sha1:63b23b161264d0bacab921bbde2e8e590477e71f
   docs/models/components/riskpolicy.md:
-    last_write_checksum: sha1:f96dc76d9bb8894e847d6169470edd38b941939e
+    last_write_checksum: sha1:26a4c9e8b1031acd735992ed1ec305039c576ca7
+  docs/models/components/riskpolicyaction.md:
+    last_write_checksum: sha1:3729eadfe620fd4d1c367a384ab82ea55ab8b2d3
   docs/models/components/riskpolicystatus.md:
     last_write_checksum: sha1:516633e7ddae4a15c8060c4cbcccbab4f9485352
   docs/models/components/riskresult.md:
@@ -823,7 +827,9 @@ trackedFiles:
   docs/models/components/updaterequestbodyvisibility.md:
     last_write_checksum: sha1:13e67a9c7df67df83d191831827d14324b2fd409
   docs/models/components/updateriskpolicyrequestbody.md:
-    last_write_checksum: sha1:43e16619311e16132725cfcc62787c17b5d77c4c
+    last_write_checksum: sha1:00d12ab4e64e916abd95821144f602d52d4dfc82
+  docs/models/components/updateriskpolicyrequestbodyaction.md:
+    last_write_checksum: sha1:d0440dea4e7b2af3804fd303de46f1f8c1472d10
   docs/models/components/updateroleform.md:
     last_write_checksum: sha1:a2e7d4338d85add91d869f353a5c2ce20f2fb1e7
   docs/models/components/updateserverform.md:
@@ -1027,7 +1033,7 @@ trackedFiles:
   docs/models/operations/createremotemcpserversecurityoption2.md:
     last_write_checksum: sha1:7acc6adb78f7a75f1f210d9a18b3c792c3c585f1
   docs/models/operations/createriskpolicyrequest.md:
-    last_write_checksum: sha1:1c37de86c4a3fe8e10bbd2c2e79fa64c3eb0b6f4
+    last_write_checksum: sha1:592fb64809e121a6f4e0910c20a409fb4b23859f
   docs/models/operations/createriskpolicysecurity.md:
     last_write_checksum: sha1:9e9e0c917d5380ed7608b70991c6cc9743071d7c
   docs/models/operations/createriskpolicysecurityoption1.md:
@@ -2193,7 +2199,7 @@ trackedFiles:
   docs/sdks/plugins/README.md:
     last_write_checksum: sha1:67f4f336e805b9c02a5bf38449200e4aba1ce8aa
   docs/sdks/policies/README.md:
-    last_write_checksum: sha1:0dd358f042ee2b57f15bba45c841c718c201abbb
+    last_write_checksum: sha1:d611fbfbc8f551d796c65b23ce4fecd2cce69aa1
   docs/sdks/projects/README.md:
     last_write_checksum: sha1:69eaa9d9ecba768b0e979a00aa5e77ebe1a4e23b
   docs/sdks/remotemcp/README.md:
@@ -3087,7 +3093,7 @@ trackedFiles:
     last_write_checksum: sha1:69fe2ce5ad8c1c2a848b034b6cd47f7b3012087c
     pristine_git_object: 59d40731a206fedf13bc1e48693dd594593a8b41
   src/models/components/createriskpolicyrequestbody.ts:
-    last_write_checksum: sha1:0ce29177bd5175bebc90ce1539374a69c16d8db0
+    last_write_checksum: sha1:4c2c9d9ead113a2802dd05da0d4673fa1a2a427f
   src/models/components/createroleform.ts:
     last_write_checksum: sha1:85aeb0cf9b2bcc28284e482e51fc8b2d97ca4a1e
   src/models/components/createserverform.ts:
@@ -3649,7 +3655,7 @@ trackedFiles:
   src/models/components/riskchatsummary.ts:
     last_write_checksum: sha1:b4c96b9a2e839bef57233d471be967ecfd80279a
   src/models/components/riskpolicy.ts:
-    last_write_checksum: sha1:b64d8b6b2b4acf7279e6ce84baaa5abae58bac84
+    last_write_checksum: sha1:4926d2fafbe886cf4838ddb8f5368297535f7203
   src/models/components/riskpolicystatus.ts:
     last_write_checksum: sha1:478a39101a4d8c9d51b31417839ef68b5b727e77
   src/models/components/riskresult.ts:
@@ -3855,7 +3861,7 @@ trackedFiles:
   src/models/components/updaterequestbody.ts:
     last_write_checksum: sha1:504b230ade27ef53b7f8a825b4fb8da9feead7f8
   src/models/components/updateriskpolicyrequestbody.ts:
-    last_write_checksum: sha1:5762e1eb85f070902263d01b1669834aa323361f
+    last_write_checksum: sha1:036676d6f2e25110b54dfec58b916c8b4e6f14d6
   src/models/components/updateroleform.ts:
     last_write_checksum: sha1:72e1a4589c1f3deeadc165d0e00491e2cde9e068
   src/models/components/updateserverform.ts:
@@ -7827,10 +7833,10 @@ examples:
   createRiskPolicy:
     speakeasy-default-create-risk-policy:
       requestBody:
-        application/json: {"name": "<value>"}
+        application/json: {"action": "flag"}
       responses:
         "200":
-          application/json: {"created_at": "2026-04-25T00:09:19.554Z", "enabled": false, "id": "38fa1564-d044-4ec6-a19b-87bbe97a778c", "name": "<value>", "pending_messages": 170691, "project_id": "4e48ffff-04e0-4169-805b-9223e3363e5a", "sources": ["<value 1>", "<value 2>"], "total_messages": 386175, "updated_at": "2025-03-31T13:20:52.423Z", "version": 697295}
+          application/json: {"action": "flag", "auto_name": false, "created_at": "2026-04-25T00:09:19.554Z", "enabled": false, "id": "38fa1564-d044-4ec6-a19b-87bbe97a778c", "name": "<value>", "pending_messages": 170691, "project_id": "4e48ffff-04e0-4169-805b-9223e3363e5a", "sources": ["<value 1>", "<value 2>"], "total_messages": 386175, "updated_at": "2025-03-31T13:20:52.423Z", "version": 697295}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
@@ -7852,7 +7858,7 @@ examples:
           id: "8fbf5ca1-aa4d-403a-a226-2071123a9a6b"
       responses:
         "200":
-          application/json: {"created_at": "2024-01-08T16:12:24.822Z", "enabled": true, "id": "10f8bca1-d18d-4771-af40-85b7191c93c9", "name": "<value>", "pending_messages": 166600, "project_id": "47b79acf-3929-4f81-84cd-aff0d4f950b7", "sources": ["<value 1>"], "total_messages": 601333, "updated_at": "2026-04-04T09:47:31.850Z", "version": 930692}
+          application/json: {"action": "flag", "auto_name": false, "created_at": "2024-01-08T16:12:24.822Z", "enabled": true, "id": "10f8bca1-d18d-4771-af40-85b7191c93c9", "name": "<value>", "pending_messages": 166600, "project_id": "47b79acf-3929-4f81-84cd-aff0d4f950b7", "sources": ["<value 1>"], "total_messages": 601333, "updated_at": "2026-04-04T09:47:31.850Z", "version": 930692}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
@@ -7861,7 +7867,7 @@ examples:
     speakeasy-default-list-risk-policies:
       responses:
         "200":
-          application/json: {"policies": [{"created_at": "2025-10-30T21:18:12.306Z", "enabled": false, "id": "a7b0becd-e53b-4f68-9574-f3cb84422ca2", "name": "<value>", "pending_messages": 597186, "project_id": "3198766c-c028-4de7-a0fc-4d9ef15fb1a6", "sources": [], "total_messages": 528613, "updated_at": "2024-10-30T02:43:56.706Z", "version": 546275}]}
+          application/json: {"policies": [{"action": "flag", "auto_name": false, "created_at": "2025-10-30T21:18:12.306Z", "enabled": false, "id": "a7b0becd-e53b-4f68-9574-f3cb84422ca2", "name": "<value>", "pending_messages": 597186, "project_id": "3198766c-c028-4de7-a0fc-4d9ef15fb1a6", "sources": [], "total_messages": 528613, "updated_at": "2024-10-30T02:43:56.706Z", "version": 546275}]}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -7893,7 +7899,7 @@ examples:
         application/json: {"id": "843674e6-50ce-48e3-8373-0f97e164413d", "name": "<value>"}
       responses:
         "200":
-          application/json: {"created_at": "2025-01-21T00:43:44.408Z", "enabled": true, "id": "b8cfa981-a1dc-4ea6-b03a-5be6272d6685", "name": "<value>", "pending_messages": 931327, "project_id": "a7cc9a5e-04ef-4ae6-817a-d977f4945e43", "sources": [], "total_messages": 829281, "updated_at": "2024-10-25T20:39:57.898Z", "version": 611121}
+          application/json: {"action": "flag", "auto_name": false, "created_at": "2025-01-21T00:43:44.408Z", "enabled": true, "id": "b8cfa981-a1dc-4ea6-b03a-5be6272d6685", "name": "<value>", "pending_messages": 931327, "project_id": "a7cc9a5e-04ef-4ae6-817a-d977f4945e43", "sources": [], "total_messages": 829281, "updated_at": "2024-10-25T20:39:57.898Z", "version": 611121}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -8213,19 +8219,6 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
-  downloadBasePlugin:
-    speakeasy-default-download-base-plugin:
-      parameters:
-        query:
-          platform: "claude"
-      responses:
-        "200":
-          application/json: "x-file: example.file"
-          application/zip: "x-file: example.file"
-        "400":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
-        "500":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   downloadObservabilityPlugin:
     speakeasy-default-download-observability-plugin:
       parameters:

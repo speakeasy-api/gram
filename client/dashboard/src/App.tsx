@@ -189,7 +189,7 @@ const RouteProvider = () => {
             id: "go-insights",
             label: "Go to Insights",
             icon: "layout-dashboard",
-            onSelect: () => routes.observability.goTo(),
+            onSelect: () => routes.insights.goTo(),
             group: "Navigation",
           },
         ]

@@ -256,10 +256,12 @@
   --radius: 9999px;
 }
 
-/* assistant-ui loading dot styles (from @assistant-ui/react-markdown/styles/dot.css) */
-@keyframes aui-pulse {
-  50% {
-    opacity: 0.5;
+/* assistant-ui streaming indicator — rainbow gradient ring matches the
+   Speakeasy brand palette used elsewhere (see `INSIGHTS_AI_RAINBOW_BORDER_CLASS`
+   and the login page's BrandGradientBar). */
+@keyframes aui-rainbow-spin {
+  to {
+    transform: rotate(360deg);
   }
 }
 
@@ -289,14 +291,38 @@
   > :where(li:last-child)
   > :where(:is(ol, ul):last-child)
   > :where(li:last-child)::after {
-  animation: aui-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-  font-family:
-    ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji",
-    "Segoe UI Symbol", "Noto Color Emoji";
-  --aui-content: "\25cf";
-  content: var(--aui-content);
-  margin-left: 0.25rem;
-  margin-right: 0.25rem;
+  content: "";
+  display: inline-block;
+  box-sizing: border-box;
+  vertical-align: -0.2em;
+  width: 1.1em;
+  height: 1.1em;
+  margin-left: 0.35rem;
+  margin-right: 0.15rem;
+  padding: 3px;
+  border-radius: 50%;
+  background: conic-gradient(
+    from 0deg,
+    #320f1e,
+    #c83228,
+    #fb873f,
+    #d2dc91,
+    #5a8250,
+    #002314,
+    #00143c,
+    #2873d7,
+    #9bc3ff,
+    #320f1e
+  );
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  animation: aui-rainbow-spin 1.6s linear infinite;
 }
 
 /* Simple shimmer animation for title text */

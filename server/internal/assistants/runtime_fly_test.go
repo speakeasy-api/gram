@@ -131,6 +131,69 @@ func TestFlyRuntimeBackendEnsureMachineUnconfigured(t *testing.T) {
 	require.True(t, result.NeedsConfigure)
 }
 
+func TestFlyRuntimeBackendEnsureFlapsNotFoundEstablishedTearsDown(t *testing.T) {
+	t.Parallel()
+
+	server := newTestAssistantRuntimeServer(t, true)
+	backend, apiClient, flapsClient := newTestFlyRuntimeBackend(t, server)
+
+	// ensureApp succeeds (GraphQL says app exists) but flaps Get + List both
+	// 404. Established runtime — LastBootID + MachineID set from a prior boot.
+	apiClient.app = &fly.App{Name: "gram-asst-test"}
+	flapsClient.getErr = errors.New("not found")
+	flapsClient.listErr = errors.New("app not found")
+
+	rawMetadata, err := json.Marshal(flyRuntimeMetadata{
+		AppName:    "gram-asst-test",
+		AppURL:     server.URL,
+		MachineID:  "machine-1",
+		Region:     "iad",
+		LastBootID: "boot-1",
+	})
+	require.NoError(t, err)
+
+	_, err = backend.Ensure(context.Background(), assistantRuntimeRecord{
+		AssistantThreadID:   uuid.New(),
+		AssistantID:         uuid.New(),
+		ProjectID:           uuid.New(),
+		Backend:             runtimeBackendFlyIO,
+		BackendMetadataJSON: rawMetadata,
+	})
+	require.ErrorIs(t, err, errFlyAppCorrupted)
+	require.Equal(t, 1, apiClient.deleteCalls, "corrupted app must be torn down so the next ensure recreates it")
+}
+
+func TestFlyRuntimeBackendEnsureFlapsNotFoundFreshAppPropagates(t *testing.T) {
+	t.Parallel()
+
+	server := newTestAssistantRuntimeServer(t, true)
+	backend, apiClient, flapsClient := newTestFlyRuntimeBackend(t, server)
+
+	// Fresh app — no prior boot recorded. flaps List 404 here is the
+	// propagation case isFlyAppPropagating + launchMachineWithRetry already
+	// cover; corruption detection must NOT trigger and tear the app down.
+	apiClient.app = &fly.App{Name: "gram-asst-test"}
+	flapsClient.listErr = errors.New("app not found")
+
+	rawMetadata, err := json.Marshal(flyRuntimeMetadata{
+		AppName: "gram-asst-test",
+		AppURL:  server.URL,
+		Region:  "iad",
+	})
+	require.NoError(t, err)
+
+	_, err = backend.Ensure(context.Background(), assistantRuntimeRecord{
+		AssistantThreadID:   uuid.New(),
+		AssistantID:         uuid.New(),
+		ProjectID:           uuid.New(),
+		Backend:             runtimeBackendFlyIO,
+		BackendMetadataJSON: rawMetadata,
+	})
+	require.Error(t, err)
+	require.NotErrorIs(t, err, errFlyAppCorrupted)
+	require.Equal(t, 0, apiClient.deleteCalls, "fresh app must not be torn down on a propagation 404")
+}
+
 func TestFlyRuntimeBackendStopIgnoresMissingApp(t *testing.T) {
 	t.Parallel()
 
@@ -166,6 +229,7 @@ type testFlyRuntimeAPIClient struct {
 	app          *fly.App
 	getAppErr    error
 	deleteErr    error
+	deleteCalls  int
 	createAppErr error
 	organization *fly.Organization
 }
@@ -191,6 +255,7 @@ func (c *testFlyRuntimeAPIClient) CreateApp(_ context.Context, input fly.CreateA
 }
 
 func (c *testFlyRuntimeAPIClient) DeleteApp(_ context.Context, _ string) error {
+	c.deleteCalls++
 	return c.deleteErr
 }
 
@@ -215,6 +280,7 @@ type testFlyRuntimeFlapsClient struct {
 	machine       *fly.Machine
 	getErr        error
 	listMachines  []*fly.Machine
+	listErr       error
 	launchMachine *fly.Machine
 	launchErr     error
 	startErr      error
@@ -243,6 +309,9 @@ func (c *testFlyRuntimeFlapsClient) Launch(_ context.Context, _ string, _ fly.La
 }
 
 func (c *testFlyRuntimeFlapsClient) List(_ context.Context, _ string, _ string) ([]*fly.Machine, error) {
+	if c.listErr != nil {
+		return nil, c.listErr
+	}
 	return c.listMachines, nil
 }
 

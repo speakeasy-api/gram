@@ -170,7 +170,7 @@ func newOAuthServiceTestEnv(t *testing.T) *oauthServiceTestEnv {
 	// The oauth.Service is created with nil DB / sessions / environments because
 	// RefreshProxyToken only needs the cache and the CustomProvider (which
 	// resolves credentials from provider.Secrets directly).
-	svc := oauth.NewService(logger, tracerProvider, meterProvider, nil, serverURL, cacheAdapter, enc, nil, nil)
+	svc := oauth.NewService(logger, tracerProvider, meterProvider, nil, serverURL, cacheAdapter, enc, nil, nil, nil)
 
 	// Build a token test env on the SAME cache so tokens issued here are
 	// visible to the service's internal TokenService.

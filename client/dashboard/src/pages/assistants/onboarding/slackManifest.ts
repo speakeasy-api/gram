@@ -29,9 +29,60 @@ export type SlackEventBinding = {
 };
 
 export const SLACK_EVENT_BINDINGS: Record<string, SlackEventBinding> = {
+  app_home_opened: { bot_events: ["app_home_opened"], scopes: [] },
   app_mention: {
     bot_events: ["app_mention"],
     scopes: ["app_mentions:read"],
+  },
+  app_uninstalled: { bot_events: ["app_uninstalled"], scopes: [] },
+  channel_archive: {
+    bot_events: ["channel_archive"],
+    scopes: ["channels:read"],
+  },
+  channel_created: {
+    bot_events: ["channel_created"],
+    scopes: ["channels:read"],
+  },
+  channel_deleted: {
+    bot_events: ["channel_deleted"],
+    scopes: ["channels:read"],
+  },
+  channel_id_changed: {
+    bot_events: ["channel_id_changed"],
+    scopes: ["channels:read"],
+  },
+  channel_left: { bot_events: ["channel_left"], scopes: ["channels:read"] },
+  channel_rename: {
+    bot_events: ["channel_rename"],
+    scopes: ["channels:read"],
+  },
+  channel_unarchive: {
+    bot_events: ["channel_unarchive"],
+    scopes: ["channels:read"],
+  },
+  emoji_changed: { bot_events: ["emoji_changed"], scopes: ["emoji:read"] },
+  file_change: { bot_events: ["file_change"], scopes: ["files:read"] },
+  file_created: { bot_events: ["file_created"], scopes: ["files:read"] },
+  file_deleted: { bot_events: ["file_deleted"], scopes: ["files:read"] },
+  file_public: { bot_events: ["file_public"], scopes: ["files:read"] },
+  file_shared: { bot_events: ["file_shared"], scopes: ["files:read"] },
+  file_unshared: { bot_events: ["file_unshared"], scopes: ["files:read"] },
+  group_archive: { bot_events: ["group_archive"], scopes: ["groups:read"] },
+  group_deleted: { bot_events: ["group_deleted"], scopes: ["groups:read"] },
+  group_left: { bot_events: ["group_left"], scopes: ["groups:read"] },
+  group_rename: { bot_events: ["group_rename"], scopes: ["groups:read"] },
+  group_unarchive: {
+    bot_events: ["group_unarchive"],
+    scopes: ["groups:read"],
+  },
+  link_shared: { bot_events: ["link_shared"], scopes: ["links:read"] },
+  member_joined_channel: {
+    bot_events: ["member_joined_channel"],
+    scopes: ["channels:read", "groups:read"],
+  },
+  member_left_channel: {
+    bot_events: ["member_left_channel"],
+    scopes: ["channels:read", "groups:read"],
   },
   message: {
     bot_events: [
@@ -47,10 +98,19 @@ export const SLACK_EVENT_BINDINGS: Record<string, SlackEventBinding> = {
       "mpim:history",
     ],
   },
+  pin_added: { bot_events: ["pin_added"], scopes: ["pins:read"] },
+  pin_removed: { bot_events: ["pin_removed"], scopes: ["pins:read"] },
   reaction_added: {
     bot_events: ["reaction_added"],
     scopes: ["reactions:read"],
   },
+  reaction_removed: {
+    bot_events: ["reaction_removed"],
+    scopes: ["reactions:read"],
+  },
+  team_join: { bot_events: ["team_join"], scopes: ["users:read"] },
+  tokens_revoked: { bot_events: ["tokens_revoked"], scopes: [] },
+  user_change: { bot_events: ["user_change"], scopes: ["users:read"] },
 };
 
 const BASELINE_BOT_SCOPES: readonly string[] = [
@@ -59,12 +119,27 @@ const BASELINE_BOT_SCOPES: readonly string[] = [
   "users:read",
 ];
 
+// Slack manifests are static and the user can't easily edit them after
+// install, so subscribe to every event the trigger service supports up
+// front. The trigger config's `event_types` filters at delivery time.
+const ALL_EVENT_BOT_EVENTS: readonly string[] = Array.from(
+  new Set(
+    Object.values(SLACK_EVENT_BINDINGS).flatMap((b) =>
+      Array.from(b.bot_events),
+    ),
+  ),
+).sort();
+const ALL_EVENT_SCOPES: readonly string[] = Array.from(
+  new Set(
+    Object.values(SLACK_EVENT_BINDINGS).flatMap((b) => Array.from(b.scopes)),
+  ),
+).sort();
+
 const SLACK_DISPLAY_NAME_LIMIT = 35;
 
 export type SlackManifestInput = {
   appName: string;
   toolUrns?: readonly string[];
-  eventTypes?: readonly string[];
   webhookUrl?: string | undefined;
   extraScopes?: readonly string[];
   extraBotEvents?: readonly string[];
@@ -78,7 +153,6 @@ export type SlackManifestResult = {
   scopes: string[];
   botEvents: string[];
   unmappedToolUrns: string[];
-  unmappedEventTypes: string[];
   searchToolNeedsUserToken: boolean;
 };
 
@@ -99,10 +173,9 @@ export function buildSlackManifest(
     SLACK_DISPLAY_NAME_LIMIT,
   );
 
-  const scopes = new Set<string>(BASELINE_BOT_SCOPES);
-  const botEvents = new Set<string>();
+  const scopes = new Set<string>([...BASELINE_BOT_SCOPES, ...ALL_EVENT_SCOPES]);
+  const botEvents = new Set<string>(ALL_EVENT_BOT_EVENTS);
   const unmappedToolUrns: string[] = [];
-  const unmappedEventTypes: string[] = [];
   let searchToolNeedsUserToken = false;
 
   for (const urn of input.toolUrns ?? []) {
@@ -118,16 +191,6 @@ export function buildSlackManifest(
       continue;
     }
     unmappedToolUrns.push(urn);
-  }
-
-  for (const eventType of input.eventTypes ?? []) {
-    const binding = SLACK_EVENT_BINDINGS[eventType];
-    if (!binding) {
-      unmappedEventTypes.push(eventType);
-      continue;
-    }
-    for (const e of binding.bot_events) botEvents.add(e);
-    for (const s of binding.scopes) scopes.add(s);
   }
 
   for (const s of input.extraScopes ?? []) scopes.add(s);
@@ -168,7 +231,6 @@ export function buildSlackManifest(
     scopes: sortedScopes,
     botEvents: sortedEvents,
     unmappedToolUrns,
-    unmappedEventTypes,
     searchToolNeedsUserToken,
   };
 }

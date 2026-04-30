@@ -1,15 +1,21 @@
 import { Type } from "@/components/ui/type";
 import { cn } from "@/lib/utils";
-import { Globe, LockIcon } from "lucide-react";
+import {
+  ServerIcon,
+  WaypointsIcon,
+  ZapIcon,
+  type LucideIcon,
+} from "lucide-react";
 
 import { Badge } from "@speakeasy-api/moonshine";
 import { ReactNode } from "react";
-import { WizardContext } from "./machine";
+import { canAutoConfigureFromDiscovered, WizardContext } from "./machine";
 import type { DiscoveredOAuth } from "./machine-types";
 
 export function PathSelection() {
   const send = WizardContext.useActorRef().send;
   const discovered = WizardContext.useSelector((s) => s.context.discovered);
+  const canAutoConfigure = canAutoConfigureFromDiscovered(discovered);
 
   return (
     <div className="space-y-4">
@@ -19,38 +25,54 @@ export function PathSelection() {
         Choose how you want to configure OAuth for this MCP server.
       </Type>
 
-      <div className="grid grid-cols-2 gap-4">
-        <button
-          type="button"
-          className={cn(
-            "border-border flex flex-col items-start gap-2 rounded-lg border p-6 text-left transition-colors",
-            "hover:border-primary hover:bg-muted/50",
-          )}
+      <div className="flex flex-col gap-4">
+        {canAutoConfigure && (
+          <PathOptionCard
+            title="Auto-Configure"
+            onClick={() => send({ type: "SELECT_PROXY_AUTO" })}
+            icon={ZapIcon}
+            badges={<Badge variant="information">Recommended</Badge>}
+          >
+            <Type muted small>
+              Automatically set up OAuth Proxy based on pre-discovered details
+              about this MCP server.
+            </Type>
+          </PathOptionCard>
+        )}
+
+        <PathOptionCard
+          title="OAuth Proxy"
           onClick={() => send({ type: "SELECT_PROXY" })}
+          icon={WaypointsIcon}
+          badges={[
+            !canAutoConfigure && discovered?.version === "2.0" && (
+              <Badge variant="information">Recommended</Badge>
+            ),
+            discovered && <Badge variant="neutral">Discovered</Badge>,
+          ]}
         >
-          <LockIcon className="text-muted-foreground h-6 w-6" />
-          <Type className="font-medium">OAuth Proxy</Type>
-          <Badge variant="neutral">Recommended</Badge>
           <Type muted small>
-            For internal servers that don't natively support MCP OAuth. Gram
-            proxies OAuth on behalf of your server.
+            Use existing OAuth credentials from the upstream service to
+            authenticate users. Best for internal MCP servers or when the
+            upstream service doesn’t support MCP-native OAuth.
           </Type>
-        </button>
-        <button
-          type="button"
-          className={cn(
-            "border-border flex flex-col items-start gap-2 rounded-lg border p-6 text-left transition-colors",
-            "hover:border-primary hover:bg-muted/50",
-          )}
+        </PathOptionCard>
+        <PathOptionCard
+          title="External OAuth"
           onClick={() => send({ type: "SELECT_EXTERNAL" })}
+          icon={ServerIcon}
+          badges={
+            discovered?.version === "2.1" && (
+              <Badge variant="neutral">Discovered</Badge>
+            )
+          }
         >
-          <Globe className="text-muted-foreground h-6 w-6" />
-          <Type className="font-medium">External OAuth</Type>
           <Type muted small>
-            For APIs that meet the MCP OAuth spec. Uses authorization code flow
-            with your external authorization server.
+            Allow MCP clients to interact directly with an external OAuth
+            provider. The external provider must support dynamic client
+            registration (DCR).
           </Type>
-        </button>
+        </PathOptionCard>
       </div>
     </div>
   );
@@ -89,3 +111,31 @@ const OAuthDetectedCallout = ({
     </div>
   );
 };
+
+function PathOptionCard(props: {
+  title: string;
+  badges?: React.ReactNode;
+  onClick: () => void;
+  icon: LucideIcon;
+  children: React.ReactNode;
+}) {
+  const { icon: Icon } = props;
+
+  return (
+    <button
+      type="button"
+      className={cn(
+        "border-border flex flex-col items-start gap-2 rounded-lg border p-6 text-left transition-colors",
+        "hover:border-primary hover:bg-muted/50",
+      )}
+      onClick={props.onClick}
+    >
+      <div className="flex items-center gap-2">
+        <Icon className="text-muted-foreground w-5" />
+        <Type className="font-medium">{props.title}</Type>
+      </div>
+      <div className="flex gap-2">{props.badges}</div>
+      {props.children}
+    </button>
+  );
+}

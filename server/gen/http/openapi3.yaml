@@ -22230,12 +22230,22 @@ components:
         CreateRiskPolicyRequestBody:
             type: object
             properties:
+                action:
+                    type: string
+                    description: 'Policy action: flag or block.'
+                    default: flag
+                    enum:
+                        - flag
+                        - block
+                auto_name:
+                    type: boolean
+                    description: Whether the policy name should be auto-generated.
                 enabled:
                     type: boolean
                     description: Whether the policy is active.
                 name:
                     type: string
-                    description: The policy name.
+                    description: The policy name. If omitted, a name will be auto-generated.
                 presidio_entities:
                     type: array
                     items:
@@ -22246,8 +22256,6 @@ components:
                     items:
                         type: string
                     description: Detection sources to enable.
-            required:
-                - name
         CreateRoleForm:
             type: object
             properties:
@@ -27281,6 +27289,16 @@ components:
         RiskPolicy:
             type: object
             properties:
+                action:
+                    type: string
+                    description: 'Policy action: flag (log only) or block (deny in real-time).'
+                    default: flag
+                    enum:
+                        - flag
+                        - block
+                auto_name:
+                    type: boolean
+                    description: Whether the policy name is auto-generated. When true, the name is regenerated on each update.
                 created_at:
                     type: string
                     description: When the policy was created.
@@ -27331,6 +27349,8 @@ components:
                 - name
                 - sources
                 - enabled
+                - action
+                - auto_name
                 - version
                 - created_at
                 - updated_at
@@ -29667,6 +29687,15 @@ components:
         UpdateRiskPolicyRequestBody:
             type: object
             properties:
+                action:
+                    type: string
+                    description: 'Policy action: flag or block.'
+                    enum:
+                        - flag
+                        - block
+                auto_name:
+                    type: boolean
+                    description: Whether the policy name should be auto-generated.
                 enabled:
                     type: boolean
                     description: Whether the policy is active.

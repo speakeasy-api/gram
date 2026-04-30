@@ -56,6 +56,7 @@ type mockMessageCaptureStrategy struct {
 	captureMessageCalled bool
 	startOrResumeError   error
 	captureError         error
+	startRequest         *CompletionRequest
 	capturedRequest      *CompletionRequest
 	capturedResponse     *CompletionResponse
 }
@@ -64,6 +65,7 @@ func (m *mockMessageCaptureStrategy) StartOrResumeChat(ctx context.Context, requ
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.startOrResumeCalled = true
+	m.startRequest = &request
 	return nil, m.startOrResumeError
 }
 
@@ -505,6 +507,161 @@ func TestChatClient_GetCompletion_WithToolCalls(t *testing.T) {
 	// Verify telemetry includes tool calls
 	assert.True(t, telemetryService.called)
 	assert.NotEmpty(t, telemetryService.logs)
+}
+
+func TestChatClient_NormalizesMixedAssistantOnlyForOpenRouterRequest(t *testing.T) {
+	t.Parallel()
+
+	var reqBody OpenAIChatRequest
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&reqBody); err != nil {
+			t.Errorf("decode request body: %v", err)
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"id": "msg_123",
+			"model": "anthropic/claude-sonnet-4.6",
+			"choices": [{
+				"message": {
+					"role": "assistant",
+					"content": "done"
+				},
+				"finish_reason": "stop"
+			}],
+			"usage": {
+				"prompt_tokens": 20,
+				"completion_tokens": 10,
+				"total_tokens": 30
+			}
+		}`))
+	}))
+	defer server.Close()
+
+	captureStrategy := &mockMessageCaptureStrategy{}
+
+	tracerProvider := testenv.NewTracerProvider(t)
+	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+	require.NoError(t, err)
+
+	client := NewUnifiedClient(
+		slog.Default(),
+		guardianPolicy,
+		&mockProvisioner{apiKey: "test-api-key"},
+		captureStrategy,
+		nil,
+		nil,
+		nil,
+		nil,
+	)
+	client.httpClient = &http.Client{
+		Transport: &testTransport{server: server},
+	}
+
+	mixed := combinedAssistant("I'll check the weather.", "call_1")
+	req := CompletionRequest{
+		OrgID:     "test-org",
+		ProjectID: uuid.New().String(),
+		Model:     "anthropic/claude-sonnet-4.6",
+		Messages: []or.ChatMessages{
+			CreateMessageUser("weather?"),
+			mixed,
+		},
+		ChatID:                    uuid.New(),
+		UsageSource:               billing.ModelUsageSourcePlayground,
+		NormalizeOutboundMessages: true,
+	}
+
+	_, err = client.GetCompletion(context.Background(), req)
+	require.NoError(t, err)
+
+	require.Len(t, reqBody.Messages, 2)
+	require.Equal(t, "weather?", GetText(reqBody.Messages[0]))
+	require.Empty(t, GetText(reqBody.Messages[1]))
+	require.Len(t, reqBody.Messages[1].ChatAssistantMessage.ToolCalls, 1)
+	require.Equal(t, "call_1", reqBody.Messages[1].ChatAssistantMessage.ToolCalls[0].ID)
+
+	require.NotNil(t, captureStrategy.startRequest)
+	require.Len(t, captureStrategy.startRequest.Messages, 2)
+	require.Equal(t, "I'll check the weather.", GetText(captureStrategy.startRequest.Messages[1]))
+	require.Len(t, captureStrategy.startRequest.Messages[1].ChatAssistantMessage.ToolCalls, 1)
+
+	require.NotNil(t, captureStrategy.capturedRequest)
+	require.Equal(t, "I'll check the weather.", GetText(captureStrategy.capturedRequest.Messages[1]))
+}
+
+func TestChatClient_PassesMixedAssistantThroughWhenNormalizeFlagUnset(t *testing.T) {
+	t.Parallel()
+
+	var reqBody OpenAIChatRequest
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&reqBody); err != nil {
+			t.Errorf("decode request body: %v", err)
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"id": "msg_123",
+			"model": "anthropic/claude-sonnet-4.6",
+			"choices": [{
+				"message": {
+					"role": "assistant",
+					"content": "done"
+				},
+				"finish_reason": "stop"
+			}],
+			"usage": {
+				"prompt_tokens": 20,
+				"completion_tokens": 10,
+				"total_tokens": 30
+			}
+		}`))
+	}))
+	defer server.Close()
+
+	tracerProvider := testenv.NewTracerProvider(t)
+	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+	require.NoError(t, err)
+
+	client := NewUnifiedClient(
+		slog.Default(),
+		guardianPolicy,
+		&mockProvisioner{apiKey: "test-api-key"},
+		&mockMessageCaptureStrategy{},
+		nil,
+		nil,
+		nil,
+		nil,
+	)
+	client.httpClient = &http.Client{
+		Transport: &testTransport{server: server},
+	}
+
+	mixed := combinedAssistant("I'll check the weather.", "call_1")
+	req := CompletionRequest{
+		OrgID:     "test-org",
+		ProjectID: uuid.New().String(),
+		Model:     "anthropic/claude-sonnet-4.6",
+		Messages: []or.ChatMessages{
+			CreateMessageUser("weather?"),
+			mixed,
+		},
+		ChatID:      uuid.New(),
+		UsageSource: billing.ModelUsageSourcePlayground,
+	}
+
+	_, err = client.GetCompletion(context.Background(), req)
+	require.NoError(t, err)
+
+	require.Len(t, reqBody.Messages, 2)
+	require.Equal(t, "I'll check the weather.", GetText(reqBody.Messages[1]),
+		"narrative text must be preserved when NormalizeOutboundMessages is false")
+	require.Len(t, reqBody.Messages[1].ChatAssistantMessage.ToolCalls, 1)
+	require.Equal(t, "call_1", reqBody.Messages[1].ChatAssistantMessage.ToolCalls[0].ID)
 }
 
 func TestChatClient_ErrorHandling(t *testing.T) {

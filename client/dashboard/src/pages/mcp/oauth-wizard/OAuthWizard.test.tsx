@@ -65,6 +65,12 @@ vi.mock("@/contexts/Auth", () => ({
   useSession: () => ({ activeOrganizationId: "org-1" }),
 }));
 
+vi.mock("@/contexts/Fetcher", () => ({
+  useFetcher: () => ({
+    fetch: vi.fn().mockResolvedValue(new Response("{}", { status: 200 })),
+  }),
+}));
+
 vi.mock("@/contexts/Telemetry", () => ({
   useTelemetry: () => ({ capture: mocks.capture }),
 }));

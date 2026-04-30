@@ -451,7 +451,7 @@ func (t testRuntimeBackend) Configure(context.Context, assistantRuntimeRecord, r
 	return nil
 }
 
-func (t testRuntimeBackend) RunTurn(context.Context, assistantRuntimeRecord, string, string, []runtimeMessage, string) error {
+func (t testRuntimeBackend) RunTurn(context.Context, assistantRuntimeRecord, string, string, string) error {
 	return t.runTurnErr
 }
 

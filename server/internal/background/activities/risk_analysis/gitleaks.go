@@ -40,6 +40,13 @@ func NewScanner() *Scanner {
 
 // newDetector creates a gitleaks detector, serialized by detectorInitMu.
 func (s *Scanner) newDetector() (*detect.Detector, error) {
+	return NewDetector()
+}
+
+// NewDetector creates a gitleaks detector using the package-level mutex
+// to serialize viper initialization. Use this from any package that needs
+// to construct a long-lived detector outside the Scanner abstraction.
+func NewDetector() (*detect.Detector, error) {
 	detectorInitMu.Lock()
 	defer detectorInitMu.Unlock()
 	detector, err := detect.NewDetectorDefaultConfig()
@@ -47,6 +54,27 @@ func (s *Scanner) newDetector() (*detect.Detector, error) {
 		return nil, fmt.Errorf("create gitleaks detector: %w", err)
 	}
 	return detector, nil
+}
+
+// sharedDetectorOnce / sharedDetector cache a single process-wide detector
+// for callers that want one long-lived instance (e.g. the real-time hook
+// path). Batch fan-out paths still build their own pool of detectors so
+// scans can run in parallel.
+var (
+	sharedDetectorOnce sync.Once
+	sharedDetector     *detect.Detector
+	errSharedDetector  error
+)
+
+// SharedDetector returns a process-wide cached gitleaks detector. The
+// detector is created lazily on first call (under detectorInitMu) and
+// reused across all callers. Callers must serialize their own DetectString
+// calls because the detector mutates internal state on every call.
+func SharedDetector() (*detect.Detector, error) {
+	sharedDetectorOnce.Do(func() {
+		sharedDetector, errSharedDetector = NewDetector()
+	})
+	return sharedDetector, errSharedDetector
 }
 
 // ScanBatchParallel scans multiple messages concurrently. Creates NumCPU
@@ -84,7 +112,7 @@ func (s *Scanner) ScanBatchParallel(messages []string) ([][]Finding, error) {
 		wg.Go(func() {
 			for idx := range ch {
 				findings := d.DetectString(messages[idx])
-				results[idx] = convertFindings(messages[idx], findings)
+				results[idx] = ConvertFindings(messages[idx], findings)
 			}
 		})
 	}
@@ -100,7 +128,7 @@ func (s *Scanner) Scan(content string) ([]Finding, error) {
 		return nil, fmt.Errorf("create gitleaks detector: %w", err)
 	}
 	findings := d.DetectString(content)
-	return convertFindings(content, findings), nil
+	return ConvertFindings(content, findings), nil
 }
 
 // ScanWithGitleaks is a package-level convenience for scanning a single message.
@@ -108,7 +136,8 @@ func ScanWithGitleaks(content string) ([]Finding, error) {
 	return NewScanner().Scan(content)
 }
 
-func convertFindings(content string, raw []report.Finding) []Finding {
+// ConvertFindings converts raw gitleaks findings to the internal Finding type.
+func ConvertFindings(content string, raw []report.Finding) []Finding {
 	out := make([]Finding, 0, len(raw))
 	for _, f := range raw {
 		tags := parseTags(f.Tags)
