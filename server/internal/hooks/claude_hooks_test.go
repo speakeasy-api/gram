@@ -1,6 +1,7 @@
 package hooks
 
 import (
+	"context"
 	"testing"
 
 	"github.com/google/uuid"
@@ -9,7 +10,25 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/risk"
 )
+
+// stubBlockingShadowMCPScanner is a RiskScanner that always reports a
+// non-nil shadow-MCP blocking policy. Used to exercise the hook deny path
+// without standing up the real risk-policy stack.
+type stubBlockingShadowMCPScanner struct{}
+
+func (stubBlockingShadowMCPScanner) ScanForEnforcement(_ context.Context, _ uuid.UUID, _ string) (*risk.ScanResult, error) {
+	return nil, nil
+}
+
+func (stubBlockingShadowMCPScanner) LookupShadowMCPBlockingPolicy(_ context.Context, _ uuid.UUID) (*risk.ShadowMCPPolicy, error) {
+	return &risk.ShadowMCPPolicy{ID: "stub-policy-id", Name: "shadow-mcp-block"}, nil
+}
+
+func (stubBlockingShadowMCPScanner) HasEnabledShadowMCPPolicy(_ context.Context, _ uuid.UUID) (bool, error) {
+	return true, nil
+}
 
 // When the request authenticated via Gram-Key + Gram-Project, handlePreToolUse
 // must build SessionMetadata from the auth context instead of short-circuiting
@@ -21,6 +40,10 @@ func TestClaude_PreToolUse_UsesAuthContextWhenNoCachedMetadata(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
 	ti.service.productFeatures = alwaysEnabledFeatures{}
+	// lookupShadowMCPBlockingPolicy needs a non-nil scanner that reports a
+	// blocking shadow-MCP policy, otherwise the handler short-circuits to
+	// allow before the toolset validator runs.
+	ti.service.riskScanner = stubBlockingShadowMCPScanner{}
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
