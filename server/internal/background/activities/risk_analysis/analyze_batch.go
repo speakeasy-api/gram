@@ -276,8 +276,9 @@ func (a *AnalyzeBatch) scanMessageToolCalls(ctx context.Context, orgID string, r
 // "mcp__<server>__<tool>" convention used by Claude Code or the "MCP:..."
 // prefix used by Cursor for MCP-routed tools.
 func isMCPToolName(name string) bool {
-	if len(name) >= 5 && name[:5] == "mcp__" {
-		return true
+	if strings.HasPrefix(name, "mcp__") {
+		parts := strings.SplitN(name, "__", 3)
+		return len(parts) == 3 && parts[2] != ""
 	}
 	if len(name) >= 4 && name[:4] == "MCP:" {
 		return true
