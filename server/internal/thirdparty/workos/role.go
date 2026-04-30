@@ -6,18 +6,20 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"time"
 
 	"github.com/workos/workos-go/v6/pkg/organizations"
 )
 
 // Role represents an organization role as returned by WorkOS.
 type Role struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Slug        string `json:"slug"`
-	Description string `json:"description"`
-	CreatedAt   string `json:"created_at"`
-	UpdatedAt   string `json:"updated_at"`
+	ID          string    `json:"id"`
+	Name        string    `json:"name"`
+	Slug        string    `json:"slug"`
+	Type        string    `json:"type"` // "EnvironmentRole" or "OrganizationRole"
+	Description string    `json:"description"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
 }
 
 type CreateRoleOpts struct {
@@ -41,7 +43,24 @@ func (wc *Client) ListRoles(ctx context.Context, orgID string) ([]Role, error) {
 
 	out := make([]Role, len(resp.Data))
 	for i, r := range resp.Data {
-		out[i] = Role{ID: r.ID, Name: r.Name, Slug: r.Slug, Description: r.Description, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt}
+		createdAt, err := time.Parse(time.RFC3339, r.CreatedAt)
+		if err != nil {
+			return nil, fmt.Errorf("parse role created_at: %w", err)
+		}
+		updatedAt, err := time.Parse(time.RFC3339, r.UpdatedAt)
+		if err != nil {
+			return nil, fmt.Errorf("parse role updated_at: %w", err)
+		}
+
+		out[i] = Role{
+			ID:          r.ID,
+			Name:        r.Name,
+			Slug:        r.Slug,
+			Type:        string(r.Type),
+			Description: r.Description,
+			CreatedAt:   createdAt,
+			UpdatedAt:   updatedAt,
+		}
 	}
 	return out, nil
 }

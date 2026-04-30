@@ -8,6 +8,7 @@ package repo
 import (
 	"context"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -42,6 +43,24 @@ func (q *Queries) AttachWorkOSUserToOrg(ctx context.Context, arg AttachWorkOSUse
 	return err
 }
 
+const deleteOrganizationRoleAssignmentsByWorkosUser = `-- name: DeleteOrganizationRoleAssignmentsByWorkosUser :exec
+DELETE FROM organization_role_assignments
+WHERE organization_id = $1
+  AND workos_user_id = $2
+`
+
+type DeleteOrganizationRoleAssignmentsByWorkosUserParams struct {
+	OrganizationID string
+	WorkosUserID   string
+}
+
+// Removes all role assignments for a WorkOS user within an org.
+// Called on membership deleted events.
+func (q *Queries) DeleteOrganizationRoleAssignmentsByWorkosUser(ctx context.Context, arg DeleteOrganizationRoleAssignmentsByWorkosUserParams) error {
+	_, err := q.db.Exec(ctx, deleteOrganizationRoleAssignmentsByWorkosUser, arg.OrganizationID, arg.WorkosUserID)
+	return err
+}
+
 const deleteOrganizationUserRelationship = `-- name: DeleteOrganizationUserRelationship :exec
 UPDATE organization_user_relationships
 SET deleted_at = clock_timestamp()
@@ -57,6 +76,36 @@ type DeleteOrganizationUserRelationshipParams struct {
 func (q *Queries) DeleteOrganizationUserRelationship(ctx context.Context, arg DeleteOrganizationUserRelationshipParams) error {
 	_, err := q.db.Exec(ctx, deleteOrganizationUserRelationship, arg.OrganizationID, arg.UserID)
 	return err
+}
+
+const disableOrganizationByWorkosID = `-- name: DisableOrganizationByWorkosID :execrows
+UPDATE organization_metadata
+SET disabled_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE workos_id = $1
+  AND disabled_at IS NULL
+`
+
+func (q *Queries) DisableOrganizationByWorkosID(ctx context.Context, workosID pgtype.Text) (int64, error) {
+	result, err := q.db.Exec(ctx, disableOrganizationByWorkosID, workosID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const getOrganizationIDByWorkosID = `-- name: GetOrganizationIDByWorkosID :one
+SELECT id
+FROM organization_metadata
+WHERE workos_id = $1
+LIMIT 1
+`
+
+func (q *Queries) GetOrganizationIDByWorkosID(ctx context.Context, workosID pgtype.Text) (string, error) {
+	row := q.db.QueryRow(ctx, getOrganizationIDByWorkosID, workosID)
+	var id string
+	err := row.Scan(&id)
+	return id, err
 }
 
 const getOrganizationMetadata = `-- name: GetOrganizationMetadata :one
@@ -126,6 +175,62 @@ func (q *Queries) GetOrganizationUserRelationship(ctx context.Context, arg GetOr
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const getOrganizationUserRoles = `-- name: GetOrganizationUserRoles :many
+SELECT ora.id, ora.organization_id, ora.workos_user_id, ora.user_id, ora.role_urn,
+       COALESCE(r.workos_slug, gr.workos_slug) AS workos_slug,
+       COALESCE(r.workos_name, gr.workos_name) AS workos_name
+FROM organization_role_assignments ora
+LEFT JOIN organization_roles r ON ora.role_urn LIKE 'role:organization:%'
+    AND r.id = split_part(ora.role_urn, ':', 3)::uuid
+LEFT JOIN global_roles gr ON ora.role_urn LIKE 'role:global:%'
+    AND gr.id = split_part(ora.role_urn, ':', 3)::uuid
+WHERE ora.organization_id = $1
+  AND ora.user_id = $2
+`
+
+type GetOrganizationUserRolesParams struct {
+	OrganizationID string
+	UserID         pgtype.Text
+}
+
+type GetOrganizationUserRolesRow struct {
+	ID             uuid.UUID
+	OrganizationID string
+	WorkosUserID   string
+	UserID         pgtype.Text
+	RoleUrn        string
+	WorkosSlug     string
+	WorkosName     string
+}
+
+func (q *Queries) GetOrganizationUserRoles(ctx context.Context, arg GetOrganizationUserRolesParams) ([]GetOrganizationUserRolesRow, error) {
+	rows, err := q.db.Query(ctx, getOrganizationUserRoles, arg.OrganizationID, arg.UserID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetOrganizationUserRolesRow
+	for rows.Next() {
+		var i GetOrganizationUserRolesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.WorkosUserID,
+			&i.UserID,
+			&i.RoleUrn,
+			&i.WorkosSlug,
+			&i.WorkosName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const hasOrganizationUserRelationship = `-- name: HasOrganizationUserRelationship :one
@@ -201,6 +306,32 @@ func (q *Queries) ListOrganizationUsers(ctx context.Context, organizationID stri
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOrganizationsWithWorkosID = `-- name: ListOrganizationsWithWorkosID :many
+SELECT workos_id::text AS workos_id
+FROM organization_metadata
+WHERE workos_id IS NOT NULL
+`
+
+func (q *Queries) ListOrganizationsWithWorkosID(ctx context.Context) ([]string, error) {
+	rows, err := q.db.Query(ctx, listOrganizationsWithWorkosID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var workos_id string
+		if err := rows.Scan(&workos_id); err != nil {
+			return nil, err
+		}
+		items = append(items, workos_id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -307,6 +438,71 @@ func (q *Queries) SetUserWorkOSMemberships(ctx context.Context, arg SetUserWorkO
 	return err
 }
 
+const syncUserOrganizationRoleAssignments = `-- name: SyncUserOrganizationRoleAssignments :exec
+WITH input_role_urns AS (
+    SELECT 'role:organization:' || id::text AS role_urn
+    FROM organization_roles
+    WHERE organization_id = $1
+      AND workos_slug = ANY($3::text[])
+      AND deleted IS FALSE
+      AND workos_deleted IS FALSE
+    UNION ALL
+    SELECT 'role:global:' || id::text AS role_urn
+    FROM global_roles
+    WHERE workos_slug = ANY($3::text[])
+      AND deleted IS FALSE
+      AND workos_deleted IS FALSE
+),
+upserted AS (
+    INSERT INTO organization_role_assignments (
+        organization_id, workos_user_id, user_id, role_urn,
+        workos_membership_id, workos_updated_at, workos_last_event_id
+    )
+    SELECT $1, $2, $4::text, iru.role_urn,
+           $5, $6, $7
+    FROM input_role_urns iru
+    ON CONFLICT (organization_id, workos_user_id, role_urn)
+    DO UPDATE SET
+        user_id = COALESCE(EXCLUDED.user_id, organization_role_assignments.user_id),
+        workos_membership_id = EXCLUDED.workos_membership_id,
+        workos_updated_at = EXCLUDED.workos_updated_at,
+        workos_last_event_id = EXCLUDED.workos_last_event_id,
+        updated_at = clock_timestamp()
+    WHERE organization_role_assignments.workos_updated_at < EXCLUDED.workos_updated_at
+)
+DELETE FROM organization_role_assignments
+WHERE organization_id = $1::text
+  AND workos_user_id = $2::text
+  AND role_urn NOT IN (SELECT role_urn FROM input_role_urns)
+`
+
+type SyncUserOrganizationRoleAssignmentsParams struct {
+	OrganizationID     string
+	WorkosUserID       string
+	WorkosRoleSlugs    []string
+	UserID             pgtype.Text
+	WorkosMembershipID pgtype.Text
+	WorkosUpdatedAt    pgtype.Timestamptz
+	WorkosLastEventID  pgtype.Text
+}
+
+// Declaratively set all WorkOS role assignments for a user (identified by workos_user_id) in an org.
+// Resolves slugs to IDs in organization_roles and global_roles, builds role URNs, and upserts.
+// Removes stale assignments for this workos_user_id that are no longer in the resolved set.
+// workos_updated_at guards against replaying stale events (only updates when event is newer).
+func (q *Queries) SyncUserOrganizationRoleAssignments(ctx context.Context, arg SyncUserOrganizationRoleAssignmentsParams) error {
+	_, err := q.db.Exec(ctx, syncUserOrganizationRoleAssignments,
+		arg.OrganizationID,
+		arg.WorkosUserID,
+		arg.WorkosRoleSlugs,
+		arg.UserID,
+		arg.WorkosMembershipID,
+		arg.WorkosUpdatedAt,
+		arg.WorkosLastEventID,
+	)
+	return err
+}
+
 const upsertOrganizationMetadata = `-- name: UpsertOrganizationMetadata :one
 INSERT INTO organization_metadata (
     id,
@@ -368,6 +564,59 @@ func (q *Queries) UpsertOrganizationMetadata(ctx context.Context, arg UpsertOrga
 	return i, err
 }
 
+const upsertOrganizationMetadataFromWorkOS = `-- name: UpsertOrganizationMetadataFromWorkOS :one
+INSERT INTO organization_metadata (
+    id,
+    name,
+    slug,
+    workos_id
+) VALUES (
+    $1,
+    $2,
+    $3,
+    $4
+)
+ON CONFLICT (id) DO UPDATE SET
+    name = EXCLUDED.name,
+    slug = COALESCE(organization_metadata.slug, EXCLUDED.slug),
+    workos_id = EXCLUDED.workos_id,
+    disabled_at = NULL,
+    updated_at = clock_timestamp()
+RETURNING id, name, slug, gram_account_type, sso_connection_id, workos_id, whitelisted, free_trial_started_at, free_trial_ends_at, created_at, updated_at, disabled_at
+`
+
+type UpsertOrganizationMetadataFromWorkOSParams struct {
+	ID       string
+	Name     string
+	Slug     string
+	WorkosID pgtype.Text
+}
+
+func (q *Queries) UpsertOrganizationMetadataFromWorkOS(ctx context.Context, arg UpsertOrganizationMetadataFromWorkOSParams) (OrganizationMetadatum, error) {
+	row := q.db.QueryRow(ctx, upsertOrganizationMetadataFromWorkOS,
+		arg.ID,
+		arg.Name,
+		arg.Slug,
+		arg.WorkosID,
+	)
+	var i OrganizationMetadatum
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.GramAccountType,
+		&i.SsoConnectionID,
+		&i.WorkosID,
+		&i.Whitelisted,
+		&i.FreeTrialStartedAt,
+		&i.FreeTrialEndsAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DisabledAt,
+	)
+	return i, err
+}
+
 const upsertOrganizationUserRelationship = `-- name: UpsertOrganizationUserRelationship :one
 INSERT INTO organization_user_relationships (
     organization_id,
@@ -400,4 +649,31 @@ func (q *Queries) UpsertOrganizationUserRelationship(ctx context.Context, arg Up
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const upsertWorkOSMembership = `-- name: UpsertWorkOSMembership :exec
+INSERT INTO organization_user_relationships (
+    organization_id,
+    user_id,
+    workos_membership_id
+) VALUES (
+    $1,
+    $2,
+    $3
+)
+ON CONFLICT (organization_id, user_id) DO UPDATE SET
+    workos_membership_id = EXCLUDED.workos_membership_id,
+    deleted_at = NULL,
+    updated_at = clock_timestamp()
+`
+
+type UpsertWorkOSMembershipParams struct {
+	OrganizationID     string
+	UserID             string
+	WorkosMembershipID pgtype.Text
+}
+
+func (q *Queries) UpsertWorkOSMembership(ctx context.Context, arg UpsertWorkOSMembershipParams) error {
+	_, err := q.db.Exec(ctx, upsertWorkOSMembership, arg.OrganizationID, arg.UserID, arg.WorkosMembershipID)
+	return err
 }

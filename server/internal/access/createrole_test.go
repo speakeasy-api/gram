@@ -4,6 +4,7 @@ import (
 	"errors"
 	mockidp "github.com/speakeasy-api/gram/mock-speakeasy-idp"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/mock"
@@ -50,14 +51,14 @@ func TestService_CreateRole(t *testing.T) {
 		UserID:         "user_1",
 		OrganizationID: mockidp.MockOrgID,
 		RoleSlug:       "org-custom-builder",
-		CreatedAt:      mockMembershipTimestamp,
+		CreatedAt:      mockMembershipTimestamp.Format(time.RFC3339),
 	}, nil).Once()
 	ti.roles.On("UpdateMemberRole", mock.Anything, "membership_2", "org-custom-builder").Return(&thirdpartyworkos.Member{
 		ID:             "membership_2",
 		UserID:         "user_2",
 		OrganizationID: mockidp.MockOrgID,
 		RoleSlug:       "org-custom-builder",
-		CreatedAt:      mockMembershipTimestamp,
+		CreatedAt:      mockMembershipTimestamp.Format(time.RFC3339),
 	}, nil).Once()
 
 	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_user_1", "user1@test.com", "User 1", "user_1", "membership_1")
@@ -77,8 +78,8 @@ func TestService_CreateRole(t *testing.T) {
 	require.Equal(t, "Can build selected resources", role.Description)
 	require.False(t, role.IsSystem)
 	require.Equal(t, 2, role.MemberCount)
-	require.Equal(t, mockRoleTimestamp, role.CreatedAt)
-	require.Equal(t, mockRoleTimestamp, role.UpdatedAt)
+	require.Equal(t, mockRoleTimestamp.Format(time.RFC3339), role.CreatedAt)
+	require.Equal(t, mockRoleTimestamp.Format(time.RFC3339), role.UpdatedAt)
 	require.Len(t, role.Grants, 2)
 
 	grants := listPrincipalGrants(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "org-custom-builder"))

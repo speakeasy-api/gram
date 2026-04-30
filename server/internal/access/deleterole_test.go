@@ -4,6 +4,7 @@ import (
 	"errors"
 	mockidp "github.com/speakeasy-api/gram/mock-speakeasy-idp"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -61,14 +62,14 @@ func TestService_DeleteRole_ReassignsMembersToDefault(t *testing.T) {
 		UserID:         "user_1",
 		OrganizationID: mockidp.MockOrgID,
 		RoleSlug:       authz.SystemRoleMember,
-		CreatedAt:      mockMembershipTimestamp,
+		CreatedAt:      mockMembershipTimestamp.Format(time.RFC3339),
 	}, nil).Once()
 	ti.roles.On("UpdateMemberRole", mock.Anything, "membership_2", authz.SystemRoleMember).Return(&thirdpartyworkos.Member{
 		ID:             "membership_2",
 		UserID:         "user_2",
 		OrganizationID: mockidp.MockOrgID,
 		RoleSlug:       authz.SystemRoleMember,
-		CreatedAt:      mockMembershipTimestamp,
+		CreatedAt:      mockMembershipTimestamp.Format(time.RFC3339),
 	}, nil).Once()
 	ti.roles.On("DeleteRole", mock.Anything, mockidp.MockOrgID, "custom-builder").Return(nil).Once()
 
@@ -124,7 +125,7 @@ func TestService_DeleteRole_PartialReassignFailureStopsLoop(t *testing.T) {
 		UserID:         "user_1",
 		OrganizationID: mockidp.MockOrgID,
 		RoleSlug:       authz.SystemRoleMember,
-		CreatedAt:      mockMembershipTimestamp,
+		CreatedAt:      mockMembershipTimestamp.Format(time.RFC3339),
 	}, nil).Once()
 	ti.roles.On("UpdateMemberRole", mock.Anything, "membership_2", authz.SystemRoleMember).Return((*thirdpartyworkos.Member)(nil), errors.New("workos unavailable")).Once()
 	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), authz.ScopeProjectRead, "project-1")

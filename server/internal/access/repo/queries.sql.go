@@ -150,6 +150,136 @@ func (q *Queries) ListPrincipalGrantsByOrg(ctx context.Context, arg ListPrincipa
 	return items, nil
 }
 
+const markGlobalRoleDeleted = `-- name: MarkGlobalRoleDeleted :execrows
+UPDATE global_roles
+SET workos_deleted_at = $1,
+    workos_last_event_id = $2,
+    updated_at = clock_timestamp()
+WHERE workos_slug = $3
+  AND (
+    workos_deleted_at IS NULL
+    OR workos_deleted_at < $1
+  )
+`
+
+type MarkGlobalRoleDeletedParams struct {
+	WorkosDeletedAt   pgtype.Timestamptz
+	WorkosLastEventID pgtype.Text
+	WorkosSlug        string
+}
+
+func (q *Queries) MarkGlobalRoleDeleted(ctx context.Context, arg MarkGlobalRoleDeletedParams) (int64, error) {
+	result, err := q.db.Exec(ctx, markGlobalRoleDeleted, arg.WorkosDeletedAt, arg.WorkosLastEventID, arg.WorkosSlug)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const markRoleDeleted = `-- name: MarkRoleDeleted :execrows
+UPDATE organization_roles
+SET workos_deleted_at = $1,
+    workos_last_event_id = $2,
+    updated_at = clock_timestamp()
+WHERE organization_id = $3
+  AND workos_slug = $4
+  AND (
+    workos_deleted_at IS NULL
+    OR workos_deleted_at < $1
+  )
+`
+
+type MarkRoleDeletedParams struct {
+	WorkosDeletedAt   pgtype.Timestamptz
+	WorkosLastEventID pgtype.Text
+	OrganizationID    string
+	WorkosSlug        string
+}
+
+func (q *Queries) MarkRoleDeleted(ctx context.Context, arg MarkRoleDeletedParams) (int64, error) {
+	result, err := q.db.Exec(ctx, markRoleDeleted,
+		arg.WorkosDeletedAt,
+		arg.WorkosLastEventID,
+		arg.OrganizationID,
+		arg.WorkosSlug,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const removeResourceFromGrants = `-- name: RemoveResourceFromGrants :execrows
+DELETE FROM principal_grants
+WHERE organization_id = $1
+  AND selectors @> ARRAY[$2::text]
+`
+
+type RemoveResourceFromGrantsParams struct {
+	OrganizationID string
+	Selector       string
+}
+
+// Deletes all grant rows referencing a specific selector within an org.
+// Called when a resource (project, MCP server) is deleted.
+func (q *Queries) RemoveResourceFromGrants(ctx context.Context, arg RemoveResourceFromGrantsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, removeResourceFromGrants, arg.OrganizationID, arg.Selector)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const upsertGlobalRole = `-- name: UpsertGlobalRole :exec
+INSERT INTO global_roles (
+    workos_slug,
+    workos_name,
+    workos_description,
+    workos_created_at,
+    workos_updated_at,
+    workos_last_event_id
+)
+VALUES (
+    $1,
+    $2,
+    $3,
+    $4,
+    $5,
+    $6
+)
+ON CONFLICT (workos_slug)
+DO UPDATE SET
+  workos_name = EXCLUDED.workos_name,
+  workos_description = EXCLUDED.workos_description,
+  workos_created_at = EXCLUDED.workos_created_at,
+  workos_updated_at = EXCLUDED.workos_updated_at,
+  workos_deleted_at = NULL,
+  workos_last_event_id = EXCLUDED.workos_last_event_id,
+  updated_at = clock_timestamp()
+  WHERE global_roles.workos_updated_at < EXCLUDED.workos_updated_at
+`
+
+type UpsertGlobalRoleParams struct {
+	WorkosSlug        string
+	WorkosName        string
+	WorkosDescription pgtype.Text
+	WorkosCreatedAt   pgtype.Timestamptz
+	WorkosUpdatedAt   pgtype.Timestamptz
+	WorkosLastEventID pgtype.Text
+}
+
+func (q *Queries) UpsertGlobalRole(ctx context.Context, arg UpsertGlobalRoleParams) error {
+	_, err := q.db.Exec(ctx, upsertGlobalRole,
+		arg.WorkosSlug,
+		arg.WorkosName,
+		arg.WorkosDescription,
+		arg.WorkosCreatedAt,
+		arg.WorkosUpdatedAt,
+		arg.WorkosLastEventID,
+	)
+	return err
+}
+
 const upsertPrincipalGrant = `-- name: UpsertPrincipalGrant :one
 INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
 VALUES ($1, $2, $3, $4)
@@ -197,4 +327,58 @@ func (q *Queries) UpsertPrincipalGrant(ctx context.Context, arg UpsertPrincipalG
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const upsertRole = `-- name: UpsertRole :exec
+INSERT INTO organization_roles (
+    organization_id,
+    workos_slug,
+    workos_name,
+    workos_description,
+    workos_created_at,
+    workos_updated_at,
+    workos_last_event_id
+)
+VALUES (
+    $1,
+    $2,
+    $3,
+    $4,
+    $5,
+    $6,
+    $7
+)
+ON CONFLICT (organization_id, workos_slug)
+DO UPDATE SET
+  workos_name = EXCLUDED.workos_name,
+  workos_description = EXCLUDED.workos_description,
+  workos_created_at = EXCLUDED.workos_created_at,
+  workos_updated_at = EXCLUDED.workos_updated_at,
+  workos_deleted_at = NULL,
+  workos_last_event_id = EXCLUDED.workos_last_event_id,
+  updated_at = clock_timestamp()
+  WHERE organization_roles.workos_updated_at < EXCLUDED.workos_updated_at
+`
+
+type UpsertRoleParams struct {
+	OrganizationID    string
+	WorkosSlug        string
+	WorkosName        string
+	WorkosDescription pgtype.Text
+	WorkosCreatedAt   pgtype.Timestamptz
+	WorkosUpdatedAt   pgtype.Timestamptz
+	WorkosLastEventID pgtype.Text
+}
+
+func (q *Queries) UpsertRole(ctx context.Context, arg UpsertRoleParams) error {
+	_, err := q.db.Exec(ctx, upsertRole,
+		arg.OrganizationID,
+		arg.WorkosSlug,
+		arg.WorkosName,
+		arg.WorkosDescription,
+		arg.WorkosCreatedAt,
+		arg.WorkosUpdatedAt,
+		arg.WorkosLastEventID,
+	)
+	return err
 }
