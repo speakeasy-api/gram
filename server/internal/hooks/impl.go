@@ -5,7 +5,6 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
-	"fmt"
 	"log/slog"
 
 	"github.com/google/uuid"
@@ -20,7 +19,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
@@ -29,7 +27,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
-	tsr "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	srv "github.com/speakeasy-api/gram/server/gen/http/hooks/server"
@@ -153,85 +150,26 @@ func generateSpanID() string {
 	return hex.EncodeToString(b)
 }
 
-// blockShadowMCPEnabled reports whether the FeatureBlockShadowMCP gate is on
-// for the given org. A nil productFeatures client (test setups) or any lookup
-// failure returns false so hooks default to permissive behaviour.
-func (s *Service) blockShadowMCPEnabled(ctx context.Context, orgID string) bool {
-	if s.productFeatures == nil || orgID == "" {
-		return false
+// lookupShadowMCPBlockingPolicy returns the first enabled shadow_mcp policy
+// with action=block for the given project, or nil when no such policy exists.
+// A nil scanner (test setups) or lookup failure returns nil so the hook falls
+// back to permissive behaviour. Flag-action policies are intentionally ignored
+// here — they surface as findings via the batch scanner instead of denying at
+// the hook layer.
+func (s *Service) lookupShadowMCPBlockingPolicy(ctx context.Context, projectID string) *risk.ShadowMCPPolicy {
+	if s.riskScanner == nil || projectID == "" {
+		return nil
 	}
-	enabled, err := s.productFeatures.IsFeatureEnabled(ctx, orgID, productfeatures.FeatureBlockShadowMCP)
+	pid, err := uuid.Parse(projectID)
 	if err != nil {
-		s.logger.WarnContext(ctx, "failed to check block_shadow_mcp feature; defaulting to off",
+		return nil
+	}
+	policy, err := s.riskScanner.LookupShadowMCPBlockingPolicy(ctx, pid)
+	if err != nil {
+		s.logger.WarnContext(ctx, "failed to look up shadow_mcp policy; defaulting to off",
 			attr.SlogError(err),
 		)
-		return false
+		return nil
 	}
-	return enabled
-}
-
-// validateGramToolsetCall enforces that a Gram-hosted tool call carries the
-// required "x-gram-toolset-id" property in its input, that the referenced
-// toolset exists in the calling organization, and that the toolset contains a
-// tool whose post-variation name matches toolName. Returns (reason, true) when
-// the call must be denied. The reason is wrapped with a user-facing prefix so
-// the underlying detail is preserved without leaking implementation jargon.
-func (s *Service) validateGramToolsetCall(
-	ctx context.Context,
-	toolInput any,
-	toolName string,
-	orgID string,
-) (string, bool) {
-	deny := func(detail string) (string, bool) {
-		return fmt.Sprintf("MCP server not managed through Speakeasy (%s)", detail), true
-	}
-
-	inputMap, ok := toolInput.(map[string]any)
-	if !ok {
-		return deny(fmt.Sprintf("missing required %q property in tool input", xGramToolsetIDField))
-	}
-	rawID, ok := inputMap[xGramToolsetIDField].(string)
-	if !ok || rawID == "" {
-		return deny(fmt.Sprintf("missing required %q property in tool input", xGramToolsetIDField))
-	}
-	toolsetID, err := uuid.Parse(rawID)
-	if err != nil {
-		return deny(fmt.Sprintf("invalid %q value: not a UUID", xGramToolsetIDField))
-	}
-
-	toolsetRow, err := tsr.New(s.db).GetToolsetByIDAndOrganization(ctx, tsr.GetToolsetByIDAndOrganizationParams{
-		ID:             toolsetID,
-		OrganizationID: orgID,
-	})
-	if err != nil {
-		return deny(fmt.Sprintf("toolset %s not found in this organization", toolsetID))
-	}
-
-	if toolName == "" {
-		return deny("tool call missing tool name")
-	}
-
-	described, err := mv.DescribeToolset(
-		ctx,
-		s.logger,
-		s.db,
-		mv.ProjectID(toolsetRow.ProjectID),
-		mv.ToolsetSlug(toolsetRow.Slug),
-		&s.toolsetCache,
-	)
-	if err != nil {
-		return deny(fmt.Sprintf("failed to load toolset %s", toolsetID))
-	}
-
-	for _, tool := range described.Tools {
-		base, err := conv.ToBaseTool(tool)
-		if err != nil {
-			continue
-		}
-		if base.Name == toolName {
-			return "", false
-		}
-	}
-
-	return deny(fmt.Sprintf("tool %q is not part of toolset %s", toolName, toolsetID))
+	return policy
 }

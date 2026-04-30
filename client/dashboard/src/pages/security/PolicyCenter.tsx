@@ -75,12 +75,14 @@ const PRESIDIO_CATEGORIES: RuleCategory[] = [
 const AVAILABLE_CATEGORIES: Set<RuleCategory> = new Set([
   "secrets",
   ...PRESIDIO_CATEGORIES,
+  "shadow_mcp",
 ]);
 
 /** All rule categories in display order */
 const ALL_CATEGORIES: RuleCategory[] = [
   "secrets",
   ...PRESIDIO_CATEGORIES,
+  "shadow_mcp",
   "prompt_attacks",
   "prompt_injection",
   "off_policy",
@@ -93,6 +95,7 @@ function policyToCategories(
 ): Set<RuleCategory> {
   const cats = new Set<RuleCategory>();
   if (sources.includes("gitleaks")) cats.add("secrets");
+  if (sources.includes("shadow_mcp")) cats.add("shadow_mcp");
   for (const cat of PRESIDIO_CATEGORIES) {
     const catEntityIds = DETECTION_RULES[cat].map((r) => r.id);
     if (catEntityIds.some((id) => presidioEntities?.includes(id))) {
@@ -107,6 +110,7 @@ function categoriesToPayload(cats: Set<RuleCategory>) {
   const sources: string[] = [];
   const presidioEntities: string[] = [];
   if (cats.has("secrets")) sources.push("gitleaks");
+  if (cats.has("shadow_mcp")) sources.push("shadow_mcp");
   for (const cat of PRESIDIO_CATEGORIES) {
     if (cats.has(cat)) {
       for (const rule of DETECTION_RULES[cat]) {

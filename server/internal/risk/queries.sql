@@ -126,7 +126,7 @@ WHERE cm.project_id = @project_id
 LIMIT @batch_limit;
 
 -- name: GetMessageContentBatch :many
-SELECT id, content
+SELECT id, content, tool_calls
 FROM chat_messages
 WHERE id = ANY(@ids::uuid[])
   AND project_id = @project_id;
@@ -236,3 +236,12 @@ WHERE project_id = @project_id
   AND enabled IS TRUE
   AND action = 'block'
   AND deleted IS FALSE;
+
+-- name: ListEnabledShadowMCPPoliciesByProject :many
+SELECT *
+FROM risk_policies
+WHERE project_id = @project_id
+  AND enabled IS TRUE
+  AND deleted IS FALSE
+  AND 'shadow_mcp' = ANY(sources)
+ORDER BY id;

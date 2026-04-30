@@ -537,7 +537,6 @@ func newWorkerCommand() *cli.Command {
 				billingRepo,
 				telemetryLogger,
 				telemetryService,
-				productFeatures,
 				ragService,
 				triggerApp,
 				temporalEnv,

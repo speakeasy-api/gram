@@ -24151,9 +24151,6 @@ components:
         GramProductFeatures:
             type: object
             properties:
-                block_shadow_mcp_enabled:
-                    type: boolean
-                    description: Whether shadow-MCP guarding is enabled (injects required toolset id and rejects unsigned tool calls)
                 logs_enabled:
                     type: boolean
                     description: Whether logging is enabled
@@ -24168,7 +24165,6 @@ components:
                 - logs_enabled
                 - tool_io_logs_enabled
                 - session_capture_enabled
-                - block_shadow_mcp_enabled
         HTTPToolDefinition:
             type: object
             properties:
@@ -28230,7 +28226,6 @@ components:
                         - logs
                         - tool_io_logs
                         - session_capture
-                        - block_shadow_mcp
                     maxLength: 60
             required:
                 - feature_name

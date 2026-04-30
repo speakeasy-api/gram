@@ -683,7 +683,6 @@ func newStartCommand() *cli.Command {
 				billingRepo,
 				telemLogger,
 				telemSvc,
-				productFeatures,
 				ragService,
 				triggerApp,
 				temporalEnv,

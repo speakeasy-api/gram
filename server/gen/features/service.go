@@ -60,9 +60,6 @@ type GramProductFeatures struct {
 	ToolIoLogsEnabled bool
 	// Whether Claude Code session capture is enabled
 	SessionCaptureEnabled bool
-	// Whether shadow-MCP guarding is enabled (injects required toolset id and
-	// rejects unsigned tool calls)
-	BlockShadowMcpEnabled bool
 }
 
 // SetProductFeaturePayload is the payload type of the features service
@@ -152,9 +149,6 @@ func newGramProductFeatures(vres *featuresviews.GramProductFeaturesView) *GramPr
 	if vres.SessionCaptureEnabled != nil {
 		res.SessionCaptureEnabled = *vres.SessionCaptureEnabled
 	}
-	if vres.BlockShadowMcpEnabled != nil {
-		res.BlockShadowMcpEnabled = *vres.BlockShadowMcpEnabled
-	}
 	return res
 }
 
@@ -165,7 +159,6 @@ func newGramProductFeaturesView(res *GramProductFeatures) *featuresviews.GramPro
 		LogsEnabled:           &res.LogsEnabled,
 		ToolIoLogsEnabled:     &res.ToolIoLogsEnabled,
 		SessionCaptureEnabled: &res.SessionCaptureEnabled,
-		BlockShadowMcpEnabled: &res.BlockShadowMcpEnabled,
 	}
 	return vres
 }

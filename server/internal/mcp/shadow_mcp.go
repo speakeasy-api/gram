@@ -7,9 +7,12 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
+
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	risk_repo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 )
 
 // xGramToolsetIDPropName is the JSON-schema property the MCP server injects
@@ -18,26 +21,28 @@ import (
 // Strip it from the call payload before forwarding to the underlying tool.
 const xGramToolsetIDPropName = "x-gram-toolset-id"
 
-// blockShadowMCPEnabled reports whether the FeatureBlockShadowMCP gate is on
-// for the given org. A nil features client (e.g. in some tests) or a lookup
-// failure returns false so the schema-injection / hook-denial path stays off.
-func blockShadowMCPEnabled(
+// hasEnabledShadowMCPPolicy reports whether the project has at least one
+// enabled shadow_mcp risk policy (any action). This drives whether the MCP
+// server injects the x-gram-toolset-id constant into tool input schemas.
+// A lookup failure returns false so schema injection stays off rather than
+// breaking otherwise-valid tool calls.
+func hasEnabledShadowMCPPolicy(
 	ctx context.Context,
 	logger *slog.Logger,
-	features *productfeatures.Client,
-	orgID string,
+	db *pgxpool.Pool,
+	projectID uuid.UUID,
 ) bool {
-	if features == nil || orgID == "" {
+	if projectID == uuid.Nil {
 		return false
 	}
-	enabled, err := features.IsFeatureEnabled(ctx, orgID, productfeatures.FeatureBlockShadowMCP)
+	policies, err := risk_repo.New(db).ListEnabledShadowMCPPoliciesByProject(ctx, projectID)
 	if err != nil {
-		logger.WarnContext(ctx, "failed to check block_shadow_mcp feature; defaulting to off",
+		logger.WarnContext(ctx, "failed to list shadow_mcp policies; defaulting to off",
 			attr.SlogError(err),
 		)
 		return false
 	}
-	return enabled
+	return len(policies) > 0
 }
 
 // injectToolsetIDConstant injects an "x-gram-toolset-id" property into the tool's

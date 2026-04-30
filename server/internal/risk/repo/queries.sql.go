@@ -276,7 +276,7 @@ func (q *Queries) FetchUnanalyzedMessageIDs(ctx context.Context, arg FetchUnanal
 }
 
 const getMessageContentBatch = `-- name: GetMessageContentBatch :many
-SELECT id, content
+SELECT id, content, tool_calls
 FROM chat_messages
 WHERE id = ANY($1::uuid[])
   AND project_id = $2
@@ -288,8 +288,9 @@ type GetMessageContentBatchParams struct {
 }
 
 type GetMessageContentBatchRow struct {
-	ID      uuid.UUID
-	Content string
+	ID        uuid.UUID
+	Content   string
+	ToolCalls []byte
 }
 
 func (q *Queries) GetMessageContentBatch(ctx context.Context, arg GetMessageContentBatchParams) ([]GetMessageContentBatchRow, error) {
@@ -301,7 +302,7 @@ func (q *Queries) GetMessageContentBatch(ctx context.Context, arg GetMessageCont
 	var items []GetMessageContentBatchRow
 	for rows.Next() {
 		var i GetMessageContentBatchRow
-		if err := rows.Scan(&i.ID, &i.Content); err != nil {
+		if err := rows.Scan(&i.ID, &i.Content, &i.ToolCalls); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -419,6 +420,51 @@ WHERE project_id = $1
 
 func (q *Queries) ListEnabledRiskPoliciesByProject(ctx context.Context, projectID uuid.UUID) ([]RiskPolicy, error) {
 	rows, err := q.db.Query(ctx, listEnabledRiskPoliciesByProject, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RiskPolicy
+	for rows.Next() {
+		var i RiskPolicy
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.OrganizationID,
+			&i.Enabled,
+			&i.Name,
+			&i.Sources,
+			&i.PresidioEntities,
+			&i.Action,
+			&i.AutoName,
+			&i.Version,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listEnabledShadowMCPPoliciesByProject = `-- name: ListEnabledShadowMCPPoliciesByProject :many
+SELECT id, project_id, organization_id, enabled, name, sources, presidio_entities, action, auto_name, version, created_at, updated_at, deleted_at, deleted
+FROM risk_policies
+WHERE project_id = $1
+  AND enabled IS TRUE
+  AND deleted IS FALSE
+  AND 'shadow_mcp' = ANY(sources)
+ORDER BY id
+`
+
+func (q *Queries) ListEnabledShadowMCPPoliciesByProject(ctx context.Context, projectID uuid.UUID) ([]RiskPolicy, error) {
+	rows, err := q.db.Query(ctx, listEnabledShadowMCPPoliciesByProject, projectID)
 	if err != nil {
 		return nil, err
 	}

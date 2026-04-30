@@ -57,7 +57,7 @@ func TestUpdateRiskPolicy_BumpsVersionOnSourcesChange(t *testing.T) {
 	updated, err := ti.service.UpdateRiskPolicy(ctx, &gen.UpdateRiskPolicyPayload{
 		ID:      created.ID,
 		Name:    "Version Test",
-		Sources: []string{"gitleaks", "llm"},
+		Sources: []string{"gitleaks", "presidio"},
 	})
 	require.NoError(t, err)
 	require.Equal(t, int64(2), updated.Version, "sources change should bump version")

@@ -33,6 +33,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -173,6 +174,9 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 	sources := payload.Sources
 	if sources == nil {
 		sources = []string{"gitleaks"}
+	}
+	if err := validateSources(sources); err != nil {
+		return nil, err
 	}
 
 	enabled := true
@@ -334,6 +338,9 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 	sources := current.Sources
 	if payload.Sources != nil {
 		sources = payload.Sources
+		if err := validateSources(sources); err != nil {
+			return nil, err
+		}
 	}
 
 	presidioEntities := current.PresidioEntities
@@ -881,6 +888,8 @@ func (s *Service) fallbackPolicyName(sources []string, action string) string {
 			parts = append(parts, "Secret")
 		case "presidio":
 			parts = append(parts, "PII")
+		case shadowmcp.SourceShadowMCP:
+			parts = append(parts, "Shadow MCP")
 		}
 	}
 	if len(parts) == 0 {
@@ -902,6 +911,17 @@ func validateAction(action string) error {
 	default:
 		return oops.E(oops.CodeInvalid, nil, "action must be one of: flag, block")
 	}
+}
+
+func validateSources(sources []string) error {
+	for _, src := range sources {
+		switch src {
+		case "gitleaks", "presidio", shadowmcp.SourceShadowMCP:
+		default:
+			return oops.E(oops.CodeInvalid, nil, "source %q is not a recognized policy source", src)
+		}
+	}
+	return nil
 }
 
 func validatePolicyName(name string) error {

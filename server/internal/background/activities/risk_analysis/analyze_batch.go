@@ -2,6 +2,7 @@ package risk_analysis
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"slices"
@@ -22,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 )
 
 // AnalyzeBatch scans a batch of messages against enabled detection sources
@@ -92,12 +94,7 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 		return nil, err
 	}
 
-	contents := make([]string, len(messages))
-	for i, msg := range messages {
-		contents[i] = msg.Content
-	}
-
-	findings, err := a.scan(ctx, args.Sources, args.PresidioEntities, contents)
+	findings, err := a.scan(ctx, args, messages)
 	if err != nil {
 		return nil, err
 	}
@@ -137,19 +134,27 @@ func (a *AnalyzeBatch) fetchContent(ctx context.Context, args AnalyzeBatchArgs) 
 
 // scan runs enabled scanners concurrently. Gitleaks is CPU-bound, presidio is
 // IO-bound, so they parallelize well and avoid exceeding the heartbeat timeout.
-func (a *AnalyzeBatch) scan(ctx context.Context, sources []string, presidioEntities []string, contents []string) ([][]Finding, error) {
+// shadow_mcp scanning runs serially after the parallel scans because it makes
+// per-message DB calls.
+func (a *AnalyzeBatch) scan(ctx context.Context, args AnalyzeBatchArgs, messages []repo.GetMessageContentBatchRow) ([][]Finding, error) {
 	ctx, scanSpan := a.tracer.Start(ctx, "risk.scanMessages")
 	defer scanSpan.End()
 	activity.RecordHeartbeat(ctx, 0)
 
-	n := len(contents)
+	n := len(messages)
+	contents := make([]string, n)
+	for i, msg := range messages {
+		contents[i] = msg.Content
+	}
+
 	gitleaksFindings := make([][]Finding, n)
 	presidioFindings := make([][]Finding, n)
+	shadowMCPFindings := make([][]Finding, n)
 
 	var wg sync.WaitGroup
 	var gitleaksErr error
 
-	if slices.Contains(sources, "gitleaks") {
+	if slices.Contains(args.Sources, "gitleaks") {
 		wg.Go(func() {
 			results, err := a.scanner.ScanBatchParallel(contents)
 			if err != nil {
@@ -160,9 +165,9 @@ func (a *AnalyzeBatch) scan(ctx context.Context, sources []string, presidioEntit
 		})
 	}
 
-	if slices.Contains(sources, "presidio") {
+	if slices.Contains(args.Sources, "presidio") {
 		wg.Go(func() {
-			results, err := a.piiScanner.AnalyzeBatch(ctx, contents, presidioEntities, func() {
+			results, err := a.piiScanner.AnalyzeBatch(ctx, contents, args.PresidioEntities, func() {
 				activity.RecordHeartbeat(ctx, "presidio")
 			})
 			if err != nil {
@@ -183,14 +188,120 @@ func (a *AnalyzeBatch) scan(ctx context.Context, sources []string, presidioEntit
 		return nil, fmt.Errorf("gitleaks scan batch: %w", gitleaksErr)
 	}
 
+	if slices.Contains(args.Sources, shadowmcp.SourceShadowMCP) {
+		shadowMCPFindings = a.scanShadowMCP(ctx, args.OrganizationID, messages)
+		activity.RecordHeartbeat(ctx, "shadow_mcp")
+	}
+
 	merged := make([][]Finding, n)
 	for i := range n {
 		// Gitleaks findings come first so they take priority over presidio
-		// when both scanners match the same text region.
-		combined := slices.Concat(gitleaksFindings[i], presidioFindings[i])
+		// when both scanners match the same text region. shadow_mcp findings
+		// are non-overlapping with content scanners (they apply to tool_calls,
+		// not content), so they always pass through dedup.
+		combined := slices.Concat(gitleaksFindings[i], presidioFindings[i], shadowMCPFindings[i])
 		merged[i] = dedup(combined)
 	}
 	return merged, nil
+}
+
+// scanShadowMCP validates each message's tool_calls against the shadow-MCP
+// guard. Messages without tool_calls (user prompts, assistant text, tool
+// results) are skipped. Each unsigned or mismatched call produces one Finding.
+func (a *AnalyzeBatch) scanShadowMCP(ctx context.Context, orgID string, messages []repo.GetMessageContentBatchRow) [][]Finding {
+	out := make([][]Finding, len(messages))
+	for i, msg := range messages {
+		if len(msg.ToolCalls) == 0 {
+			continue
+		}
+		out[i] = a.scanMessageToolCalls(ctx, orgID, msg.ToolCalls)
+	}
+	return out
+}
+
+// scanMessageToolCalls iterates the tool_calls JSON array stored on a chat
+// message and runs shadowmcp.ValidateGramToolsetCall against each call. The
+// expected payload mirrors what hooks/session_capture.go writes:
+// [{"id": "...", "type": "function", "function": {"name": "...", "arguments": "<json>"}}]
+func (a *AnalyzeBatch) scanMessageToolCalls(ctx context.Context, orgID string, raw []byte) []Finding {
+	var calls []struct {
+		Function struct {
+			Name      string `json:"name"`
+			Arguments string `json:"arguments"`
+		} `json:"function"`
+	}
+	if err := json.Unmarshal(raw, &calls); err != nil {
+		a.logger.WarnContext(ctx, "shadow_mcp scan: failed to parse tool_calls", attr.SlogError(err))
+		return nil
+	}
+
+	var findings []Finding
+	for _, call := range calls {
+		toolName := call.Function.Name
+		if toolName == "" {
+			continue
+		}
+		// Native (non-MCP) tools don't carry the x-gram-toolset-id property
+		// and are out of scope for shadow-MCP enforcement.
+		if !isMCPToolName(toolName) {
+			continue
+		}
+		var toolInput any
+		if call.Function.Arguments != "" {
+			if err := json.Unmarshal([]byte(call.Function.Arguments), &toolInput); err != nil {
+				// Treat unparseable args as a missing toolset id.
+				toolInput = nil
+			}
+		}
+		bareName := stripMCPToolPrefix(toolName)
+		detail, denied := shadowmcp.ValidateGramToolsetCall(ctx, a.logger, a.db, nil, toolInput, bareName, orgID)
+		if !denied {
+			continue
+		}
+		findings = append(findings, Finding{
+			Source:      shadowmcp.SourceShadowMCP,
+			RuleID:      "shadow_mcp.unverified_call",
+			Description: detail,
+			Match:       toolName,
+			StartPos:    0,
+			EndPos:      0,
+			Tags:        nil,
+			Confidence:  1.0,
+		})
+	}
+	return findings
+}
+
+// isMCPToolName reports whether a tool-call name follows either the
+// "mcp__<server>__<tool>" convention used by Claude Code or the "MCP:..."
+// prefix used by Cursor for MCP-routed tools.
+func isMCPToolName(name string) bool {
+	if len(name) >= 5 && name[:5] == "mcp__" {
+		return true
+	}
+	if len(name) >= 4 && name[:4] == "MCP:" {
+		return true
+	}
+	return false
+}
+
+// stripMCPToolPrefix returns the bare tool name with any MCP routing prefix
+// removed so it can be compared against the toolset's tool list.
+func stripMCPToolPrefix(name string) string {
+	if len(name) >= 5 && name[:5] == "mcp__" {
+		// mcp__<server>__<tool>
+		rest := name[5:]
+		for i := 0; i+1 < len(rest); i++ {
+			if rest[i] == '_' && rest[i+1] == '_' {
+				return rest[i+2:]
+			}
+		}
+		return rest
+	}
+	if len(name) >= 4 && name[:4] == "MCP:" {
+		return name[4:]
+	}
+	return name
 }
 
 // dedup removes findings that overlap the same text region. Earlier entries
