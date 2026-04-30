@@ -27,7 +27,10 @@ const (
 	StatusPaused        = "paused"
 )
 
-var ErrBadRequest = errors.New("trigger bad request")
+var (
+	ErrBadRequest = errors.New("trigger bad request")
+	ErrAuthFailed = errors.New("trigger webhook authentication failed")
+)
 
 type DeliveryStatus string
 
@@ -372,7 +375,7 @@ func (a *App) ProcessWebhook(ctx context.Context, instanceID uuid.UUID, body []b
 	}
 
 	if err := definition.AuthenticateWebhook(body, headers, envMap, config); err != nil {
-		return nil, fmt.Errorf("authenticate webhook: %w", err)
+		return nil, fmt.Errorf("%w: %w", ErrAuthFailed, err)
 	}
 
 	result, err := definition.HandleWebhook(body, headers, config)
