@@ -52,21 +52,22 @@ export default function Plugins() {
   const { data } = usePluginsSuspense();
   const { data: publishStatus } = usePublishStatusSuspense();
   const { fetch: authFetch } = useFetcher();
-  const [isBaseDownloadMenuOpen, setIsBaseDownloadMenuOpen] = useState(false);
-  const [isDownloadingBase, setIsDownloadingBase] = useState<
+  const [isObservabilityDownloadMenuOpen, setIsObservabilityDownloadMenuOpen] =
+    useState(false);
+  const [isDownloadingObservability, setIsDownloadingObservability] = useState<
     "claude" | "cursor" | null
   >(null);
 
-  const handleBaseDownload = async (platform: "claude" | "cursor") => {
-    setIsBaseDownloadMenuOpen(false);
-    setIsDownloadingBase(platform);
+  const handleObservabilityDownload = async (platform: "claude" | "cursor") => {
+    setIsObservabilityDownloadMenuOpen(false);
+    setIsDownloadingObservability(platform);
     try {
       const resp = await authFetch(
-        `/rpc/plugins.downloadBasePlugin?platform=${platform}`,
+        `/rpc/plugins.downloadObservabilityPlugin?platform=${platform}`,
         {},
       );
       if (!resp.ok) {
-        toast.error("Failed to download base plugin");
+        toast.error("Failed to download observability plugin");
         return;
       }
       const blob = await resp.blob();
@@ -76,11 +77,11 @@ export default function Plugins() {
       a.download =
         resp.headers
           .get("Content-Disposition")
-          ?.match(/filename="(.+)"/)?.[1] ?? `base-${platform}.zip`;
+          ?.match(/filename="(.+)"/)?.[1] ?? `observability-${platform}.zip`;
       a.click();
       URL.revokeObjectURL(url);
     } finally {
-      setIsDownloadingBase(null);
+      setIsDownloadingObservability(null);
     }
   };
 
@@ -335,11 +336,12 @@ export default function Plugins() {
         <Page.Section>
           <Page.Section.Title>Observability hooks</Page.Section.Title>
           <Page.Section.Description className="w-3/4">
-            The base plugin forwards tool events from your team's Claude Code
-            and Cursor installs to your Gram dashboard. When you publish to
-            GitHub, it ships first in your marketplace marked Required. You can
-            also download a single-plugin ZIP per platform here for direct
-            install — each download mints a fresh hooks-scoped API key.
+            The observability plugin forwards tool events from your team's
+            Claude Code and Cursor installs to your Gram dashboard. When you
+            publish to GitHub, it ships first in your marketplace marked
+            Required. You can also download a single-plugin ZIP per platform
+            here for direct install — each download mints a fresh hooks-scoped
+            API key.
           </Page.Section.Description>
           <Page.Section.Body>
             <Stack direction="horizontal" gap={3} align="center">
@@ -348,7 +350,7 @@ export default function Plugins() {
               </div>
               <Stack direction="vertical" gap={1} className="flex-1">
                 <Type variant="body" className="font-medium">
-                  Base plugin
+                  Observability plugin
                 </Type>
                 <Type small muted>
                   {publishStatus?.connected
@@ -357,22 +359,22 @@ export default function Plugins() {
                 </Type>
               </Stack>
               <DropdownMenu
-                open={isBaseDownloadMenuOpen}
-                onOpenChange={setIsBaseDownloadMenuOpen}
+                open={isObservabilityDownloadMenuOpen}
+                onOpenChange={setIsObservabilityDownloadMenuOpen}
               >
                 <DropdownMenuTrigger asChild>
                   <Button
                     variant="secondary"
                     size="sm"
-                    disabled={isDownloadingBase !== null}
+                    disabled={isDownloadingObservability !== null}
                   >
                     <Button.LeftIcon>
                       <Icon name="download" className="h-4 w-4" />
                     </Button.LeftIcon>
                     <Button.Text>
-                      {isDownloadingBase
+                      {isDownloadingObservability
                         ? "Downloading..."
-                        : "Download Base Plugin"}
+                        : "Download Observability Plugin"}
                     </Button.Text>
                     <Button.RightIcon>
                       <Icon name="chevron-down" className="h-4 w-4" />
@@ -381,12 +383,12 @@ export default function Plugins() {
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
                   <DropdownMenuItem
-                    onClick={() => handleBaseDownload("claude")}
+                    onClick={() => handleObservabilityDownload("claude")}
                   >
                     Claude
                   </DropdownMenuItem>
                   <DropdownMenuItem
-                    onClick={() => handleBaseDownload("cursor")}
+                    onClick={() => handleObservabilityDownload("cursor")}
                   >
                     Cursor
                   </DropdownMenuItem>

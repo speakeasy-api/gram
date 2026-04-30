@@ -2375,14 +2375,14 @@ func DecodeDownloadPluginPackageResponse(decoder func(*http.Response) goahttp.De
 	}
 }
 
-// BuildDownloadBasePluginRequest instantiates a HTTP request object with
-// method and path set to call the "plugins" service "downloadBasePlugin"
-// endpoint
-func (c *Client) BuildDownloadBasePluginRequest(ctx context.Context, v any) (*http.Request, error) {
-	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: DownloadBasePluginPluginsPath()}
+// BuildDownloadObservabilityPluginRequest instantiates a HTTP request object
+// with method and path set to call the "plugins" service
+// "downloadObservabilityPlugin" endpoint
+func (c *Client) BuildDownloadObservabilityPluginRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: DownloadObservabilityPluginPluginsPath()}
 	req, err := http.NewRequest("GET", u.String(), nil)
 	if err != nil {
-		return nil, goahttp.ErrInvalidURL("plugins", "downloadBasePlugin", u.String(), err)
+		return nil, goahttp.ErrInvalidURL("plugins", "downloadObservabilityPlugin", u.String(), err)
 	}
 	if ctx != nil {
 		req = req.WithContext(ctx)
@@ -2391,13 +2391,13 @@ func (c *Client) BuildDownloadBasePluginRequest(ctx context.Context, v any) (*ht
 	return req, nil
 }
 
-// EncodeDownloadBasePluginRequest returns an encoder for requests sent to the
-// plugins downloadBasePlugin server.
-func EncodeDownloadBasePluginRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+// EncodeDownloadObservabilityPluginRequest returns an encoder for requests
+// sent to the plugins downloadObservabilityPlugin server.
+func EncodeDownloadObservabilityPluginRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
 	return func(req *http.Request, v any) error {
-		p, ok := v.(*plugins.DownloadBasePluginPayload)
+		p, ok := v.(*plugins.DownloadObservabilityPluginPayload)
 		if !ok {
-			return goahttp.ErrInvalidType("plugins", "downloadBasePlugin", "*plugins.DownloadBasePluginPayload", v)
+			return goahttp.ErrInvalidType("plugins", "downloadObservabilityPlugin", "*plugins.DownloadObservabilityPluginPayload", v)
 		}
 		if p.SessionToken != nil {
 			head := *p.SessionToken
@@ -2414,10 +2414,10 @@ func EncodeDownloadBasePluginRequest(encoder func(*http.Request) goahttp.Encoder
 	}
 }
 
-// DecodeDownloadBasePluginResponse returns a decoder for responses returned by
-// the plugins downloadBasePlugin endpoint. restoreBody controls whether the
-// response body should be restored after having been read.
-// DecodeDownloadBasePluginResponse may return the following errors:
+// DecodeDownloadObservabilityPluginResponse returns a decoder for responses
+// returned by the plugins downloadObservabilityPlugin endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeDownloadObservabilityPluginResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
@@ -2429,7 +2429,7 @@ func EncodeDownloadBasePluginRequest(encoder func(*http.Request) goahttp.Encoder
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
 //   - error: internal error
-func DecodeDownloadBasePluginResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+func DecodeDownloadObservabilityPluginResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
 		if restoreBody {
 			b, err := io.ReadAll(resp.Body)
@@ -2459,160 +2459,160 @@ func DecodeDownloadBasePluginResponse(decoder func(*http.Response) goahttp.Decod
 			}
 			contentDisposition = contentDispositionRaw
 			if err != nil {
-				return nil, goahttp.ErrValidationError("plugins", "downloadBasePlugin", err)
+				return nil, goahttp.ErrValidationError("plugins", "downloadObservabilityPlugin", err)
 			}
-			res := NewDownloadBasePluginResultOK(contentType, contentDisposition)
+			res := NewDownloadObservabilityPluginResultOK(contentType, contentDisposition)
 			return res, nil
 		case http.StatusUnauthorized:
 			var (
-				body DownloadBasePluginUnauthorizedResponseBody
+				body DownloadObservabilityPluginUnauthorizedResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("plugins", "downloadBasePlugin", err)
+				return nil, goahttp.ErrDecodingError("plugins", "downloadObservabilityPlugin", err)
 			}
-			err = ValidateDownloadBasePluginUnauthorizedResponseBody(&body)
+			err = ValidateDownloadObservabilityPluginUnauthorizedResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("plugins", "downloadBasePlugin", err)
+				return nil, goahttp.ErrValidationError("plugins", "downloadObservabilityPlugin", err)
 			}
-			return nil, NewDownloadBasePluginUnauthorized(&body)
+			return nil, NewDownloadObservabilityPluginUnauthorized(&body)
 		case http.StatusForbidden:
 			var (
-				body DownloadBasePluginForbiddenResponseBody
+				body DownloadObservabilityPluginForbiddenResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("plugins", "downloadBasePlugin", err)
+				return nil, goahttp.ErrDecodingError("plugins", "downloadObservabilityPlugin", err)
 			}
-			err = ValidateDownloadBasePluginForbiddenResponseBody(&body)
+			err = ValidateDownloadObservabilityPluginForbiddenResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("plugins", "downloadBasePlugin", err)
+				return nil, goahttp.ErrValidationError("plugins", "downloadObservabilityPlugin", err)
 			}
-			return nil, NewDownloadBasePluginForbidden(&body)
+			return nil, NewDownloadObservabilityPluginForbidden(&body)
 		case http.StatusBadRequest:
 			var (
-				body DownloadBasePluginBadRequestResponseBody
+				body DownloadObservabilityPluginBadRequestResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("plugins", "downloadBasePlugin", err)
+				return nil, goahttp.ErrDecodingError("plugins", "downloadObservabilityPlugin", err)
 			}
-			err = ValidateDownloadBasePluginBadRequestResponseBody(&body)
+			err = ValidateDownloadObservabilityPluginBadRequestResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("plugins", "downloadBasePlugin", err)
+				return nil, goahttp.ErrValidationError("plugins", "downloadObservabilityPlugin", err)
 			}
-			return nil, NewDownloadBasePluginBadRequest(&body)
+			return nil, NewDownloadObservabilityPluginBadRequest(&body)
 		case http.StatusNotFound:
 			var (
-				body DownloadBasePluginNotFoundResponseBody
+				body DownloadObservabilityPluginNotFoundResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("plugins", "downloadBasePlugin", err)
+				return nil, goahttp.ErrDecodingError("plugins", "downloadObservabilityPlugin", err)
 			}
-			err = ValidateDownloadBasePluginNotFoundResponseBody(&body)
+			err = ValidateDownloadObservabilityPluginNotFoundResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("plugins", "downloadBasePlugin", err)
+				return nil, goahttp.ErrValidationError("plugins", "downloadObservabilityPlugin", err)
 			}
-			return nil, NewDownloadBasePluginNotFound(&body)
+			return nil, NewDownloadObservabilityPluginNotFound(&body)
 		case http.StatusConflict:
 			var (
-				body DownloadBasePluginConflictResponseBody
+				body DownloadObservabilityPluginConflictResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("plugins", "downloadBasePlugin", err)
+				return nil, goahttp.ErrDecodingError("plugins", "downloadObservabilityPlugin", err)
 			}
-			err = ValidateDownloadBasePluginConflictResponseBody(&body)
+			err = ValidateDownloadObservabilityPluginConflictResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("plugins", "downloadBasePlugin", err)
+				return nil, goahttp.ErrValidationError("plugins", "downloadObservabilityPlugin", err)
 			}
-			return nil, NewDownloadBasePluginConflict(&body)
+			return nil, NewDownloadObservabilityPluginConflict(&body)
 		case http.StatusUnsupportedMediaType:
 			var (
-				body DownloadBasePluginUnsupportedMediaResponseBody
+				body DownloadObservabilityPluginUnsupportedMediaResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("plugins", "downloadBasePlugin", err)
+				return nil, goahttp.ErrDecodingError("plugins", "downloadObservabilityPlugin", err)
 			}
-			err = ValidateDownloadBasePluginUnsupportedMediaResponseBody(&body)
+			err = ValidateDownloadObservabilityPluginUnsupportedMediaResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("plugins", "downloadBasePlugin", err)
+				return nil, goahttp.ErrValidationError("plugins", "downloadObservabilityPlugin", err)
 			}
-			return nil, NewDownloadBasePluginUnsupportedMedia(&body)
+			return nil, NewDownloadObservabilityPluginUnsupportedMedia(&body)
 		case http.StatusUnprocessableEntity:
 			var (
-				body DownloadBasePluginInvalidResponseBody
+				body DownloadObservabilityPluginInvalidResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("plugins", "downloadBasePlugin", err)
+				return nil, goahttp.ErrDecodingError("plugins", "downloadObservabilityPlugin", err)
 			}
-			err = ValidateDownloadBasePluginInvalidResponseBody(&body)
+			err = ValidateDownloadObservabilityPluginInvalidResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("plugins", "downloadBasePlugin", err)
+				return nil, goahttp.ErrValidationError("plugins", "downloadObservabilityPlugin", err)
 			}
-			return nil, NewDownloadBasePluginInvalid(&body)
+			return nil, NewDownloadObservabilityPluginInvalid(&body)
 		case http.StatusInternalServerError:
 			en := resp.Header.Get("goa-error")
 			switch en {
 			case "invariant_violation":
 				var (
-					body DownloadBasePluginInvariantViolationResponseBody
+					body DownloadObservabilityPluginInvariantViolationResponseBody
 					err  error
 				)
 				err = decoder(resp).Decode(&body)
 				if err != nil {
-					return nil, goahttp.ErrDecodingError("plugins", "downloadBasePlugin", err)
+					return nil, goahttp.ErrDecodingError("plugins", "downloadObservabilityPlugin", err)
 				}
-				err = ValidateDownloadBasePluginInvariantViolationResponseBody(&body)
+				err = ValidateDownloadObservabilityPluginInvariantViolationResponseBody(&body)
 				if err != nil {
-					return nil, goahttp.ErrValidationError("plugins", "downloadBasePlugin", err)
+					return nil, goahttp.ErrValidationError("plugins", "downloadObservabilityPlugin", err)
 				}
-				return nil, NewDownloadBasePluginInvariantViolation(&body)
+				return nil, NewDownloadObservabilityPluginInvariantViolation(&body)
 			case "unexpected":
 				var (
-					body DownloadBasePluginUnexpectedResponseBody
+					body DownloadObservabilityPluginUnexpectedResponseBody
 					err  error
 				)
 				err = decoder(resp).Decode(&body)
 				if err != nil {
-					return nil, goahttp.ErrDecodingError("plugins", "downloadBasePlugin", err)
+					return nil, goahttp.ErrDecodingError("plugins", "downloadObservabilityPlugin", err)
 				}
-				err = ValidateDownloadBasePluginUnexpectedResponseBody(&body)
+				err = ValidateDownloadObservabilityPluginUnexpectedResponseBody(&body)
 				if err != nil {
-					return nil, goahttp.ErrValidationError("plugins", "downloadBasePlugin", err)
+					return nil, goahttp.ErrValidationError("plugins", "downloadObservabilityPlugin", err)
 				}
-				return nil, NewDownloadBasePluginUnexpected(&body)
+				return nil, NewDownloadObservabilityPluginUnexpected(&body)
 			default:
 				body, _ := io.ReadAll(resp.Body)
-				return nil, goahttp.ErrInvalidResponse("plugins", "downloadBasePlugin", resp.StatusCode, string(body))
+				return nil, goahttp.ErrInvalidResponse("plugins", "downloadObservabilityPlugin", resp.StatusCode, string(body))
 			}
 		case http.StatusBadGateway:
 			var (
-				body DownloadBasePluginGatewayErrorResponseBody
+				body DownloadObservabilityPluginGatewayErrorResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("plugins", "downloadBasePlugin", err)
+				return nil, goahttp.ErrDecodingError("plugins", "downloadObservabilityPlugin", err)
 			}
-			err = ValidateDownloadBasePluginGatewayErrorResponseBody(&body)
+			err = ValidateDownloadObservabilityPluginGatewayErrorResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("plugins", "downloadBasePlugin", err)
+				return nil, goahttp.ErrValidationError("plugins", "downloadObservabilityPlugin", err)
 			}
-			return nil, NewDownloadBasePluginGatewayError(&body)
+			return nil, NewDownloadObservabilityPluginGatewayError(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
-			return nil, goahttp.ErrInvalidResponse("plugins", "downloadBasePlugin", resp.StatusCode, string(body))
+			return nil, goahttp.ErrInvalidResponse("plugins", "downloadObservabilityPlugin", resp.StatusCode, string(body))
 		}
 	}
 }

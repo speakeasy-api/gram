@@ -479,12 +479,12 @@ func TestRenderHookScriptCursorOmitsProjectHeaderWhenSlugMissing(t *testing.T) {
 // so dropping it from the registered events would silently lose all tool
 // failure telemetry. Cursor's parallel list already carries postToolUseFailure;
 // keep parity to make sure the failure signal isn't dropped on the Claude side.
-func TestClaudeBaseHookEventsRegistersToolFailureEvent(t *testing.T) {
+func TestClaudeObservabilityHookEventsRegistersToolFailureEvent(t *testing.T) {
 	t.Parallel()
-	require.Contains(t, ClaudeBaseHookEvents, "PostToolUseFailure")
+	require.Contains(t, ClaudeObservabilityHookEvents, "PostToolUseFailure")
 }
 
-func TestGenerateClaudeBasePluginHooksJSONIncludesAllRegisteredEvents(t *testing.T) {
+func TestGenerateClaudeObservabilityPluginHooksJSONIncludesAllRegisteredEvents(t *testing.T) {
 	t.Parallel()
 	cfg := GenerateConfig{
 		OrgName:     "Acme",
@@ -494,13 +494,13 @@ func TestGenerateClaudeBasePluginHooksJSONIncludesAllRegisteredEvents(t *testing
 	files, err := GeneratePluginPackages(nil, cfg)
 	require.NoError(t, err)
 
-	hooksJSON := files[ClaudeBaseSlug(cfg)+"/hooks.json"]
-	require.NotNil(t, hooksJSON, "claude base hooks.json missing")
+	hooksJSON := files[ClaudeObservabilitySlug(cfg)+"/hooks.json"]
+	require.NotNil(t, hooksJSON, "claude observability hooks.json missing")
 
 	var parsed claudeHooksConfig
 	require.NoError(t, json.Unmarshal(hooksJSON, &parsed))
 
-	for _, event := range ClaudeBaseHookEvents {
+	for _, event := range ClaudeObservabilityHookEvents {
 		require.Contains(t, parsed.Hooks, event, "event %q must be registered in hooks.json or Claude will silently drop it", event)
 	}
 }

@@ -417,13 +417,13 @@ func BuildDownloadPluginPackagePayload(pluginsDownloadPluginPackagePluginID stri
 	return v, nil
 }
 
-// BuildDownloadBasePluginPayload builds the payload for the plugins
-// downloadBasePlugin endpoint from CLI flags.
-func BuildDownloadBasePluginPayload(pluginsDownloadBasePluginPlatform string, pluginsDownloadBasePluginSessionToken string, pluginsDownloadBasePluginProjectSlugInput string) (*plugins.DownloadBasePluginPayload, error) {
+// BuildDownloadObservabilityPluginPayload builds the payload for the plugins
+// downloadObservabilityPlugin endpoint from CLI flags.
+func BuildDownloadObservabilityPluginPayload(pluginsDownloadObservabilityPluginPlatform string, pluginsDownloadObservabilityPluginSessionToken string, pluginsDownloadObservabilityPluginProjectSlugInput string) (*plugins.DownloadObservabilityPluginPayload, error) {
 	var err error
 	var platform string
 	{
-		platform = pluginsDownloadBasePluginPlatform
+		platform = pluginsDownloadObservabilityPluginPlatform
 		if !(platform == "claude" || platform == "cursor") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("platform", platform, []any{"claude", "cursor"}))
 		}
@@ -433,17 +433,17 @@ func BuildDownloadBasePluginPayload(pluginsDownloadBasePluginPlatform string, pl
 	}
 	var sessionToken *string
 	{
-		if pluginsDownloadBasePluginSessionToken != "" {
-			sessionToken = &pluginsDownloadBasePluginSessionToken
+		if pluginsDownloadObservabilityPluginSessionToken != "" {
+			sessionToken = &pluginsDownloadObservabilityPluginSessionToken
 		}
 	}
 	var projectSlugInput *string
 	{
-		if pluginsDownloadBasePluginProjectSlugInput != "" {
-			projectSlugInput = &pluginsDownloadBasePluginProjectSlugInput
+		if pluginsDownloadObservabilityPluginProjectSlugInput != "" {
+			projectSlugInput = &pluginsDownloadObservabilityPluginProjectSlugInput
 		}
 	}
-	v := &plugins.DownloadBasePluginPayload{}
+	v := &plugins.DownloadObservabilityPluginPayload{}
 	v.Platform = platform
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput

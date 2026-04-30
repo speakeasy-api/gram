@@ -869,13 +869,13 @@ func (s *Service) DownloadPluginPackage(ctx context.Context, payload *gen.Downlo
 	}, io.NopCloser(bytes.NewReader(buf.Bytes())), nil
 }
 
-// DownloadBasePlugin returns a ZIP of the per-org base (observability) plugin
-// for direct installation. Mints a fresh hooks-scoped API key per download
-// and embeds it in the script — the org's API Keys page will accumulate one
-// row per download, which admins can audit and revoke independently of the
-// publish-bundled key. The plugin contents are otherwise identical to what
-// PublishPlugins ships in the GitHub marketplace.
-func (s *Service) DownloadBasePlugin(ctx context.Context, payload *gen.DownloadBasePluginPayload) (*gen.DownloadBasePluginResult, io.ReadCloser, error) {
+// DownloadObservabilityPlugin returns a ZIP of the per-org observability
+// plugin for direct installation. Mints a fresh hooks-scoped API key per
+// download and embeds it in the script — the org's API Keys page will
+// accumulate one row per download, which admins can audit and revoke
+// independently of the publish-bundled key. The plugin contents are
+// otherwise identical to what PublishPlugins ships in the GitHub marketplace.
+func (s *Service) DownloadObservabilityPlugin(ctx context.Context, payload *gen.DownloadObservabilityPluginPayload) (*gen.DownloadObservabilityPluginResult, io.ReadCloser, error) {
 	ac, err := s.authContext(ctx)
 	if err != nil {
 		return nil, nil, oops.C(oops.CodeUnauthorized)
@@ -886,7 +886,7 @@ func (s *Service) DownloadBasePlugin(ctx context.Context, payload *gen.DownloadB
 	}
 
 	if ac.ProjectSlug == nil {
-		return nil, nil, oops.E(oops.CodeUnauthorized, nil, "base plugin download requires a session-authenticated context")
+		return nil, nil, oops.E(oops.CodeUnauthorized, nil, "observability plugin download requires a session-authenticated context")
 	}
 
 	candidate, err := s.buildPluginAPIKeyCandidate(auth.APIKeyScopeHooks, "hooks-download")
@@ -901,9 +901,9 @@ func (s *Service) DownloadBasePlugin(ctx context.Context, payload *gen.DownloadB
 	cfg := s.generateConfig(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug, *ac.ProjectSlug)
 	cfg.HooksAPIKey = candidate.fullKey
 
-	files, err := GenerateBasePluginPackage(cfg, payload.Platform)
+	files, err := GenerateObservabilityPluginPackage(cfg, payload.Platform)
 	if err != nil {
-		return nil, nil, oops.E(oops.CodeUnexpected, err, "generate base plugin package").Log(ctx, s.logger)
+		return nil, nil, oops.E(oops.CodeUnexpected, err, "generate observability plugin package").Log(ctx, s.logger)
 	}
 
 	var buf bytes.Buffer
@@ -911,11 +911,11 @@ func (s *Service) DownloadBasePlugin(ctx context.Context, payload *gen.DownloadB
 		return nil, nil, oops.E(oops.CodeUnexpected, err, "build plugin zip").Log(ctx, s.logger)
 	}
 
-	filename := "base"
+	filename := "observability"
 	if payload.Platform == "cursor" {
-		filename = "base-cursor"
+		filename = "observability-cursor"
 	}
-	return &gen.DownloadBasePluginResult{
+	return &gen.DownloadObservabilityPluginResult{
 		ContentType:        "application/zip",
 		ContentDisposition: fmt.Sprintf(`attachment; filename="%s.zip"`, filename),
 	}, io.NopCloser(bytes.NewReader(buf.Bytes())), nil

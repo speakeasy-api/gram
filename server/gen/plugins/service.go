@@ -41,14 +41,14 @@ type Service interface {
 	// Consider [goa.design/goa/v3/pkg.SkipResponseWriter] to adapt existing
 	// implementations.
 	DownloadPluginPackage(context.Context, *DownloadPluginPackagePayload) (res *DownloadPluginPackageResult, body io.ReadCloser, err error)
-	// Download a ZIP of the per-org base plugin (observability hooks). Mints a
+	// Download a ZIP of the per-org observability plugin (Gram hooks). Mints a
 	// fresh hooks-scoped API key on each download and embeds it in the plugin's
 	// hook script.
 
 	// If body implements [io.WriterTo], that implementation will be used instead.
 	// Consider [goa.design/goa/v3/pkg.SkipResponseWriter] to adapt existing
 	// implementations.
-	DownloadBasePlugin(context.Context, *DownloadBasePluginPayload) (res *DownloadBasePluginResult, body io.ReadCloser, err error)
+	DownloadObservabilityPlugin(context.Context, *DownloadObservabilityPluginPayload) (res *DownloadObservabilityPluginResult, body io.ReadCloser, err error)
 	// Check whether GitHub publishing is configured and connected for this project.
 	GetPublishStatus(context.Context, *GetPublishStatusPayload) (res *PublishStatusResult, err error)
 	// Generate and publish all plugin packages to a GitHub repository.
@@ -75,7 +75,7 @@ const ServiceName = "plugins"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [13]string{"listPlugins", "getPlugin", "createPlugin", "updatePlugin", "deletePlugin", "addPluginServer", "updatePluginServer", "removePluginServer", "setPluginAssignments", "downloadPluginPackage", "downloadBasePlugin", "getPublishStatus", "publishPlugins"}
+var MethodNames = [13]string{"listPlugins", "getPlugin", "createPlugin", "updatePlugin", "deletePlugin", "addPluginServer", "updatePluginServer", "removePluginServer", "setPluginAssignments", "downloadPluginPackage", "downloadObservabilityPlugin", "getPublishStatus", "publishPlugins"}
 
 // AddPluginServerPayload is the payload type of the plugins service
 // addPluginServer method.
@@ -112,18 +112,18 @@ type DeletePluginPayload struct {
 	ProjectSlugInput *string
 }
 
-// DownloadBasePluginPayload is the payload type of the plugins service
-// downloadBasePlugin method.
-type DownloadBasePluginPayload struct {
+// DownloadObservabilityPluginPayload is the payload type of the plugins
+// service downloadObservabilityPlugin method.
+type DownloadObservabilityPluginPayload struct {
 	// Target platform.
 	Platform         string
 	SessionToken     *string
 	ProjectSlugInput *string
 }
 
-// DownloadBasePluginResult is the result type of the plugins service
-// downloadBasePlugin method.
-type DownloadBasePluginResult struct {
+// DownloadObservabilityPluginResult is the result type of the plugins service
+// downloadObservabilityPlugin method.
+type DownloadObservabilityPluginResult struct {
 	ContentType        string
 	ContentDisposition string
 }

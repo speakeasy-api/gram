@@ -11748,10 +11748,10 @@ paths:
             x-speakeasy-name-override: deletePlugin
             x-speakeasy-react-hook:
                 name: DeletePlugin
-    /rpc/plugins.downloadBasePlugin:
+    /rpc/plugins.downloadObservabilityPlugin:
         get:
-            description: Download a ZIP of the per-org base plugin (observability hooks). Mints a fresh hooks-scoped API key on each download and embeds it in the plugin's hook script.
-            operationId: downloadBasePlugin
+            description: Download a ZIP of the per-org observability plugin (Gram hooks). Mints a fresh hooks-scoped API key on each download and embeds it in the plugin's hook script.
+            operationId: downloadObservabilityPlugin
             parameters:
                 - allowEmptyValue: true
                   description: Target platform.
@@ -11850,10 +11850,10 @@ paths:
             security:
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
-            summary: downloadBasePlugin plugins
+            summary: downloadObservabilityPlugin plugins
             tags:
                 - plugins
-            x-speakeasy-name-override: downloadBasePlugin
+            x-speakeasy-name-override: downloadObservabilityPlugin
     /rpc/plugins.downloadPluginPackage:
         get:
             description: Download a ZIP of a single plugin package for direct installation.

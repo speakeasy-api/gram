@@ -191,7 +191,7 @@ func extractSessionMetadata(payload *gen.LogsPayload) claudeLogMetadata {
 // Two attribution paths run side-by-side during the migration off the
 // OTEL-only flow:
 //  1. Plugin path — when the request carries Gram-Key + Gram-Project
-//     (e.g. from the per-org base plugin's hook.sh), the handler validates
+//     (e.g. from the per-org observability plugin's hook.sh), the handler validates
 //     them via s.auth and uses the resulting auth context for org/project.
 //  2. OTEL path — when the headers are absent (existing customers running
 //     Claude with OTEL forwarding), the handler falls back to looking up

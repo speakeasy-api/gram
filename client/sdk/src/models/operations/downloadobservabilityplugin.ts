@@ -9,7 +9,7 @@ import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
-export type DownloadBasePluginSecurity = {
+export type DownloadObservabilityPluginSecurity = {
   projectSlugHeaderGramProject?: string | undefined;
   sessionHeaderGramSession?: string | undefined;
 };
@@ -26,7 +26,7 @@ export const Platform = {
  */
 export type Platform = ClosedEnum<typeof Platform>;
 
-export type DownloadBasePluginRequest = {
+export type DownloadObservabilityPluginRequest = {
   /**
    * Target platform.
    */
@@ -41,21 +41,21 @@ export type DownloadBasePluginRequest = {
   gramProject?: string | undefined;
 };
 
-export type DownloadBasePluginResponse = {
+export type DownloadObservabilityPluginResponse = {
   headers: { [k: string]: Array<string> };
   result: ReadableStream<Uint8Array>;
 };
 
 /** @internal */
-export type DownloadBasePluginSecurity$Outbound = {
+export type DownloadObservabilityPluginSecurity$Outbound = {
   "project_slug_header_Gram-Project"?: string | undefined;
   "session_header_Gram-Session"?: string | undefined;
 };
 
 /** @internal */
-export const DownloadBasePluginSecurity$outboundSchema: z.ZodMiniType<
-  DownloadBasePluginSecurity$Outbound,
-  DownloadBasePluginSecurity
+export const DownloadObservabilityPluginSecurity$outboundSchema: z.ZodMiniType<
+  DownloadObservabilityPluginSecurity$Outbound,
+  DownloadObservabilityPluginSecurity
 > = z.pipe(
   z.object({
     projectSlugHeaderGramProject: z.optional(z.string()),
@@ -69,11 +69,13 @@ export const DownloadBasePluginSecurity$outboundSchema: z.ZodMiniType<
   }),
 );
 
-export function downloadBasePluginSecurityToJSON(
-  downloadBasePluginSecurity: DownloadBasePluginSecurity,
+export function downloadObservabilityPluginSecurityToJSON(
+  downloadObservabilityPluginSecurity: DownloadObservabilityPluginSecurity,
 ): string {
   return JSON.stringify(
-    DownloadBasePluginSecurity$outboundSchema.parse(downloadBasePluginSecurity),
+    DownloadObservabilityPluginSecurity$outboundSchema.parse(
+      downloadObservabilityPluginSecurity,
+    ),
   );
 }
 
@@ -83,16 +85,16 @@ export const Platform$outboundSchema: z.ZodMiniEnum<typeof Platform> = z.enum(
 );
 
 /** @internal */
-export type DownloadBasePluginRequest$Outbound = {
+export type DownloadObservabilityPluginRequest$Outbound = {
   platform: string;
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
 };
 
 /** @internal */
-export const DownloadBasePluginRequest$outboundSchema: z.ZodMiniType<
-  DownloadBasePluginRequest$Outbound,
-  DownloadBasePluginRequest
+export const DownloadObservabilityPluginRequest$outboundSchema: z.ZodMiniType<
+  DownloadObservabilityPluginRequest$Outbound,
+  DownloadObservabilityPluginRequest
 > = z.pipe(
   z.object({
     platform: Platform$outboundSchema,
@@ -107,17 +109,19 @@ export const DownloadBasePluginRequest$outboundSchema: z.ZodMiniType<
   }),
 );
 
-export function downloadBasePluginRequestToJSON(
-  downloadBasePluginRequest: DownloadBasePluginRequest,
+export function downloadObservabilityPluginRequestToJSON(
+  downloadObservabilityPluginRequest: DownloadObservabilityPluginRequest,
 ): string {
   return JSON.stringify(
-    DownloadBasePluginRequest$outboundSchema.parse(downloadBasePluginRequest),
+    DownloadObservabilityPluginRequest$outboundSchema.parse(
+      downloadObservabilityPluginRequest,
+    ),
   );
 }
 
 /** @internal */
-export const DownloadBasePluginResponse$inboundSchema: z.ZodMiniType<
-  DownloadBasePluginResponse,
+export const DownloadObservabilityPluginResponse$inboundSchema: z.ZodMiniType<
+  DownloadObservabilityPluginResponse,
   unknown
 > = z.pipe(
   z.object({
@@ -134,12 +138,13 @@ export const DownloadBasePluginResponse$inboundSchema: z.ZodMiniType<
   }),
 );
 
-export function downloadBasePluginResponseFromJSON(
+export function downloadObservabilityPluginResponseFromJSON(
   jsonString: string,
-): SafeParseResult<DownloadBasePluginResponse, SDKValidationError> {
+): SafeParseResult<DownloadObservabilityPluginResponse, SDKValidationError> {
   return safeParse(
     jsonString,
-    (x) => DownloadBasePluginResponse$inboundSchema.parse(JSON.parse(x)),
-    `Failed to parse 'DownloadBasePluginResponse' from JSON`,
+    (x) =>
+      DownloadObservabilityPluginResponse$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'DownloadObservabilityPluginResponse' from JSON`,
   );
 }

@@ -27,19 +27,19 @@ import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * downloadBasePlugin plugins
+ * downloadObservabilityPlugin plugins
  *
  * @remarks
- * Download a ZIP of the per-org base plugin (observability hooks). Mints a fresh hooks-scoped API key on each download and embeds it in the plugin's hook script.
+ * Download a ZIP of the per-org observability plugin (Gram hooks). Mints a fresh hooks-scoped API key on each download and embeds it in the plugin's hook script.
  */
-export function pluginsDownloadBasePlugin(
+export function pluginsDownloadObservabilityPlugin(
   client: GramCore,
-  request: operations.DownloadBasePluginRequest,
-  security?: operations.DownloadBasePluginSecurity | undefined,
+  request: operations.DownloadObservabilityPluginRequest,
+  security?: operations.DownloadObservabilityPluginSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    operations.DownloadBasePluginResponse,
+    operations.DownloadObservabilityPluginResponse,
     | errors.ServiceError
     | GramError
     | ResponseValidationError
@@ -61,13 +61,13 @@ export function pluginsDownloadBasePlugin(
 
 async function $do(
   client: GramCore,
-  request: operations.DownloadBasePluginRequest,
-  security?: operations.DownloadBasePluginSecurity | undefined,
+  request: operations.DownloadObservabilityPluginRequest,
+  security?: operations.DownloadObservabilityPluginSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      operations.DownloadBasePluginResponse,
+      operations.DownloadObservabilityPluginResponse,
       | errors.ServiceError
       | GramError
       | ResponseValidationError
@@ -84,7 +84,10 @@ async function $do(
   const parsed = safeParse(
     request,
     (value) =>
-      z.parse(operations.DownloadBasePluginRequest$outboundSchema, value),
+      z.parse(
+        operations.DownloadObservabilityPluginRequest$outboundSchema,
+        value,
+      ),
     "Input validation failed",
   );
   if (!parsed.ok) {
@@ -93,7 +96,7 @@ async function $do(
   const payload = parsed.value;
   const body = null;
 
-  const path = pathToFunc("/rpc/plugins.downloadBasePlugin")();
+  const path = pathToFunc("/rpc/plugins.downloadObservabilityPlugin")();
 
   const query = encodeFormQuery({
     "platform": payload.platform,
@@ -129,7 +132,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "downloadBasePlugin",
+    operationID: "downloadObservabilityPlugin",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -185,7 +188,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    operations.DownloadBasePluginResponse,
+    operations.DownloadObservabilityPluginResponse,
     | errors.ServiceError
     | GramError
     | ResponseValidationError
@@ -196,11 +199,11 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.stream(200, operations.DownloadBasePluginResponse$inboundSchema, {
-      ctype: "application/zip",
-      hdrs: true,
-      key: "Result",
-    }),
+    M.stream(
+      200,
+      operations.DownloadObservabilityPluginResponse$inboundSchema,
+      { ctype: "application/zip", hdrs: true, key: "Result" },
+    ),
     M.jsonErr(
       [400, 401, 403, 404, 409, 415, 422],
       errors.ServiceError$inboundSchema,

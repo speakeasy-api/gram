@@ -29,19 +29,19 @@ import {
   TupleToPrefixes,
 } from "./_types.js";
 import {
-  buildPluginsDownloadBasePluginQuery,
-  PluginsDownloadBasePluginQueryData,
-  prefetchPluginsDownloadBasePlugin,
-  queryKeyPluginsDownloadBasePlugin,
-} from "./pluginsDownloadBasePlugin.core.js";
+  buildPluginsDownloadObservabilityPluginQuery,
+  PluginsDownloadObservabilityPluginQueryData,
+  prefetchPluginsDownloadObservabilityPlugin,
+  queryKeyPluginsDownloadObservabilityPlugin,
+} from "./pluginsDownloadObservabilityPlugin.core.js";
 export {
-  buildPluginsDownloadBasePluginQuery,
-  type PluginsDownloadBasePluginQueryData,
-  prefetchPluginsDownloadBasePlugin,
-  queryKeyPluginsDownloadBasePlugin,
+  buildPluginsDownloadObservabilityPluginQuery,
+  type PluginsDownloadObservabilityPluginQueryData,
+  prefetchPluginsDownloadObservabilityPlugin,
+  queryKeyPluginsDownloadObservabilityPlugin,
 };
 
-export type PluginsDownloadBasePluginQueryError =
+export type PluginsDownloadObservabilityPluginQueryError =
   | errors.ServiceError
   | GramError
   | ResponseValidationError
@@ -53,25 +53,25 @@ export type PluginsDownloadBasePluginQueryError =
   | SDKValidationError;
 
 /**
- * downloadBasePlugin plugins
+ * downloadObservabilityPlugin plugins
  *
  * @remarks
- * Download a ZIP of the per-org base plugin (observability hooks). Mints a fresh hooks-scoped API key on each download and embeds it in the plugin's hook script.
+ * Download a ZIP of the per-org observability plugin (Gram hooks). Mints a fresh hooks-scoped API key on each download and embeds it in the plugin's hook script.
  */
-export function usePluginsDownloadBasePlugin(
-  request: operations.DownloadBasePluginRequest,
-  security?: operations.DownloadBasePluginSecurity | undefined,
+export function usePluginsDownloadObservabilityPlugin(
+  request: operations.DownloadObservabilityPluginRequest,
+  security?: operations.DownloadObservabilityPluginSecurity | undefined,
   options?: QueryHookOptions<
-    PluginsDownloadBasePluginQueryData,
-    PluginsDownloadBasePluginQueryError
+    PluginsDownloadObservabilityPluginQueryData,
+    PluginsDownloadObservabilityPluginQueryError
   >,
 ): UseQueryResult<
-  PluginsDownloadBasePluginQueryData,
-  PluginsDownloadBasePluginQueryError
+  PluginsDownloadObservabilityPluginQueryData,
+  PluginsDownloadObservabilityPluginQueryError
 > {
   const client = useGramContext();
   return useQuery({
-    ...buildPluginsDownloadBasePluginQuery(
+    ...buildPluginsDownloadObservabilityPluginQuery(
       client,
       request,
       security,
@@ -82,25 +82,25 @@ export function usePluginsDownloadBasePlugin(
 }
 
 /**
- * downloadBasePlugin plugins
+ * downloadObservabilityPlugin plugins
  *
  * @remarks
- * Download a ZIP of the per-org base plugin (observability hooks). Mints a fresh hooks-scoped API key on each download and embeds it in the plugin's hook script.
+ * Download a ZIP of the per-org observability plugin (Gram hooks). Mints a fresh hooks-scoped API key on each download and embeds it in the plugin's hook script.
  */
-export function usePluginsDownloadBasePluginSuspense(
-  request: operations.DownloadBasePluginRequest,
-  security?: operations.DownloadBasePluginSecurity | undefined,
+export function usePluginsDownloadObservabilityPluginSuspense(
+  request: operations.DownloadObservabilityPluginRequest,
+  security?: operations.DownloadObservabilityPluginSecurity | undefined,
   options?: SuspenseQueryHookOptions<
-    PluginsDownloadBasePluginQueryData,
-    PluginsDownloadBasePluginQueryError
+    PluginsDownloadObservabilityPluginQueryData,
+    PluginsDownloadObservabilityPluginQueryError
   >,
 ): UseSuspenseQueryResult<
-  PluginsDownloadBasePluginQueryData,
-  PluginsDownloadBasePluginQueryError
+  PluginsDownloadObservabilityPluginQueryData,
+  PluginsDownloadObservabilityPluginQueryError
 > {
   const client = useGramContext();
   return useSuspenseQuery({
-    ...buildPluginsDownloadBasePluginQuery(
+    ...buildPluginsDownloadObservabilityPluginQuery(
       client,
       request,
       security,
@@ -110,7 +110,7 @@ export function usePluginsDownloadBasePluginSuspense(
   });
 }
 
-export function setPluginsDownloadBasePluginData(
+export function setPluginsDownloadObservabilityPluginData(
   client: QueryClient,
   queryKeyBase: [
     parameters: {
@@ -119,14 +119,17 @@ export function setPluginsDownloadBasePluginData(
       gramProject?: string | undefined;
     },
   ],
-  data: PluginsDownloadBasePluginQueryData,
-): PluginsDownloadBasePluginQueryData | undefined {
-  const key = queryKeyPluginsDownloadBasePlugin(...queryKeyBase);
+  data: PluginsDownloadObservabilityPluginQueryData,
+): PluginsDownloadObservabilityPluginQueryData | undefined {
+  const key = queryKeyPluginsDownloadObservabilityPlugin(...queryKeyBase);
 
-  return client.setQueryData<PluginsDownloadBasePluginQueryData>(key, data);
+  return client.setQueryData<PluginsDownloadObservabilityPluginQueryData>(
+    key,
+    data,
+  );
 }
 
-export function invalidatePluginsDownloadBasePlugin(
+export function invalidatePluginsDownloadObservabilityPlugin(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
     [parameters: {
@@ -142,18 +145,18 @@ export function invalidatePluginsDownloadBasePlugin(
     queryKey: [
       "@gram/client",
       "plugins",
-      "downloadBasePlugin",
+      "downloadObservabilityPlugin",
       ...queryKeyBase,
     ],
   });
 }
 
-export function invalidateAllPluginsDownloadBasePlugin(
+export function invalidateAllPluginsDownloadObservabilityPlugin(
   client: QueryClient,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: ["@gram/client", "plugins", "downloadBasePlugin"],
+    queryKey: ["@gram/client", "plugins", "downloadObservabilityPlugin"],
   });
 }

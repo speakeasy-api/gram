@@ -543,7 +543,7 @@ func TestPluginsService_PublishPlugins_CreatesAPIKeyWithCorrectScope(t *testing.
 	require.NoError(t, err)
 
 	// Verify two keys were created — one consumer-scoped (MCP) and one
-	// hooks-scoped (base plugin observability).
+	// hooks-scoped (observability plugin).
 	keys, err := keysrepo.New(ti.conn).ListAPIKeysByOrganization(ctx, authCtx.ActiveOrganizationID)
 	require.NoError(t, err)
 
@@ -889,19 +889,19 @@ func TestPluginsService_PublishPlugins_PublicToolsetWithoutMetadata(t *testing.T
 	require.NoError(t, err)
 }
 
-// PublishPlugins always emits a per-org "base" plugin containing observability
-// hooks. The hook script bakes in the hooks-scoped API key so team members
-// don't need to configure credentials per-machine.
-func TestPluginsService_PublishPlugins_EmitsBasePlugin(t *testing.T) {
+// PublishPlugins always emits a per-org observability plugin containing
+// Gram hooks. The hook script bakes in the hooks-scoped API key so team
+// members don't need to configure credentials per-machine.
+func TestPluginsService_PublishPlugins_EmitsObservabilityPlugin(t *testing.T) {
 	t.Parallel()
 
 	mock := &mockGitHubPublisher{}
 	ctx, ti := newTestPluginsServiceWithGitHub(t, mock)
 
-	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Base Test"})
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Observability Test"})
 	require.NoError(t, err)
 
-	toolset := createTestToolset(t, ctx, ti.conn, "base-toolset")
+	toolset := createTestToolset(t, ctx, ti.conn, "observability-toolset")
 	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
 		PluginID:    plugin.ID,
 		ToolsetID:   toolset.ID.String(),
@@ -914,22 +914,22 @@ func TestPluginsService_PublishPlugins_EmitsBasePlugin(t *testing.T) {
 	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
 	require.NoError(t, err)
 
-	claudeBase, cursorBase := orgBaseSlugs(t, ctx, ti)
+	claudeObservability, cursorObservability := orgObservabilitySlugs(t, ctx, ti)
 
-	// Both Claude and Cursor base plugins must be present.
-	require.NotNil(t, mock.lastPushedFiles[claudeBase+"/.claude-plugin/plugin.json"], "claude base plugin.json missing")
-	require.NotNil(t, mock.lastPushedFiles[claudeBase+"/hooks.json"], "claude base hooks.json missing")
-	require.NotNil(t, mock.lastPushedFiles[claudeBase+"/hook.sh"], "claude base hook.sh missing")
+	// Both Claude and Cursor observability plugins must be present.
+	require.NotNil(t, mock.lastPushedFiles[claudeObservability+"/.claude-plugin/plugin.json"], "claude observability plugin.json missing")
+	require.NotNil(t, mock.lastPushedFiles[claudeObservability+"/hooks.json"], "claude observability hooks.json missing")
+	require.NotNil(t, mock.lastPushedFiles[claudeObservability+"/hook.sh"], "claude observability hook.sh missing")
 
-	require.NotNil(t, mock.lastPushedFiles[cursorBase+"/.cursor-plugin/plugin.json"], "cursor base plugin.json missing")
-	require.NotNil(t, mock.lastPushedFiles[cursorBase+"/hooks.json"], "cursor base hooks.json missing")
-	require.NotNil(t, mock.lastPushedFiles[cursorBase+"/hook.sh"], "cursor base hook.sh missing")
+	require.NotNil(t, mock.lastPushedFiles[cursorObservability+"/.cursor-plugin/plugin.json"], "cursor observability plugin.json missing")
+	require.NotNil(t, mock.lastPushedFiles[cursorObservability+"/hooks.json"], "cursor observability hooks.json missing")
+	require.NotNil(t, mock.lastPushedFiles[cursorObservability+"/hook.sh"], "cursor observability hook.sh missing")
 }
 
-// The base hook script must contain the freshly-minted hooks-scoped API key
-// (Bearer-token form) so team members can install the plugin without any
-// per-machine credential configuration.
-func TestPluginsService_PublishPlugins_BaseHookScriptContainsAPIKey(t *testing.T) {
+// The observability hook script must contain the freshly-minted hooks-scoped
+// API key (Bearer-token form) so team members can install the plugin without
+// any per-machine credential configuration.
+func TestPluginsService_PublishPlugins_ObservabilityHookScriptContainsAPIKey(t *testing.T) {
 	t.Parallel()
 
 	mock := &mockGitHubPublisher{}
@@ -963,10 +963,10 @@ func TestPluginsService_PublishPlugins_BaseHookScriptContainsAPIKey(t *testing.T
 	}
 	require.NotEmpty(t, hooksKeyPrefix, "expected a plugins-hooks-* API key")
 
-	claudeBase, cursorBase := orgBaseSlugs(t, ctx, ti)
+	claudeObservability, cursorObservability := orgObservabilitySlugs(t, ctx, ti)
 	// Both endpoints accept Gram-Key (Cursor requires it via Security; Claude
 	// accepts it as an optional header for plugin-driven attribution).
-	for _, path := range []string{claudeBase + "/hook.sh", cursorBase + "/hook.sh"} {
+	for _, path := range []string{claudeObservability + "/hook.sh", cursorObservability + "/hook.sh"} {
 		script := string(mock.lastPushedFiles[path])
 		require.NotEmpty(t, script, path+" missing")
 		require.Contains(t, script, "Gram-Key: "+hooksKeyPrefix, "%s does not embed hooks key in Gram-Key", path)
@@ -975,9 +975,9 @@ func TestPluginsService_PublishPlugins_BaseHookScriptContainsAPIKey(t *testing.T
 	}
 }
 
-// The base plugin must appear FIRST in each platform's marketplace listing
-// so team admins see it before any feature plugins.
-func TestPluginsService_PublishPlugins_BaseListedFirstInMarketplace(t *testing.T) {
+// The observability plugin must appear FIRST in each platform's marketplace
+// listing so team admins see it before any feature plugins.
+func TestPluginsService_PublishPlugins_ObservabilityListedFirstInMarketplace(t *testing.T) {
 	t.Parallel()
 
 	mock := &mockGitHubPublisher{}
@@ -1001,13 +1001,13 @@ func TestPluginsService_PublishPlugins_BaseListedFirstInMarketplace(t *testing.T
 	_, err := ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
 	require.NoError(t, err)
 
-	claudeBase, cursorBase := orgBaseSlugs(t, ctx, ti)
+	claudeObservability, cursorObservability := orgObservabilitySlugs(t, ctx, ti)
 	for _, p := range []struct {
 		path        string
 		expectFirst string
 	}{
-		{".claude-plugin/marketplace.json", claudeBase},
-		{".cursor-plugin/marketplace.json", cursorBase},
+		{".claude-plugin/marketplace.json", claudeObservability},
+		{".cursor-plugin/marketplace.json", cursorObservability},
 	} {
 		raw := mock.lastPushedFiles[p.path]
 		require.NotNil(t, raw, p.path+" missing")
@@ -1017,8 +1017,8 @@ func TestPluginsService_PublishPlugins_BaseListedFirstInMarketplace(t *testing.T
 			} `json:"plugins"`
 		}
 		require.NoError(t, json.Unmarshal(raw, &market))
-		require.GreaterOrEqual(t, len(market.Plugins), 3, "expected base + 2 features in %s", p.path)
-		require.Equal(t, p.expectFirst, market.Plugins[0].Name, "base plugin must be first in %s", p.path)
+		require.GreaterOrEqual(t, len(market.Plugins), 3, "expected observability + 2 features in %s", p.path)
+		require.Equal(t, p.expectFirst, market.Plugins[0].Name, "observability plugin must be first in %s", p.path)
 	}
 }
 func TestPluginsService_PublishPlugins_CodexPackageHappyPath(t *testing.T) {

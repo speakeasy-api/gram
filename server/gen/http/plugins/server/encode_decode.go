@@ -2220,11 +2220,11 @@ func EncodeDownloadPluginPackageError(encoder func(context.Context, http.Respons
 	}
 }
 
-// EncodeDownloadBasePluginResponse returns an encoder for responses returned
-// by the plugins downloadBasePlugin endpoint.
-func EncodeDownloadBasePluginResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+// EncodeDownloadObservabilityPluginResponse returns an encoder for responses
+// returned by the plugins downloadObservabilityPlugin endpoint.
+func EncodeDownloadObservabilityPluginResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*plugins.DownloadBasePluginResult)
+		res, _ := v.(*plugins.DownloadObservabilityPluginResult)
 		ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/zip")
 		w.Header().Set("Content-Type", res.ContentType)
 		w.Header().Set("Content-Disposition", res.ContentDisposition)
@@ -2233,11 +2233,11 @@ func EncodeDownloadBasePluginResponse(encoder func(context.Context, http.Respons
 	}
 }
 
-// DecodeDownloadBasePluginRequest returns a decoder for requests sent to the
-// plugins downloadBasePlugin endpoint.
-func DecodeDownloadBasePluginRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*plugins.DownloadBasePluginPayload, error) {
-	return func(r *http.Request) (*plugins.DownloadBasePluginPayload, error) {
-		var payload *plugins.DownloadBasePluginPayload
+// DecodeDownloadObservabilityPluginRequest returns a decoder for requests sent
+// to the plugins downloadObservabilityPlugin endpoint.
+func DecodeDownloadObservabilityPluginRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*plugins.DownloadObservabilityPluginPayload, error) {
+	return func(r *http.Request) (*plugins.DownloadObservabilityPluginPayload, error) {
+		var payload *plugins.DownloadObservabilityPluginPayload
 		var (
 			platform         string
 			sessionToken     *string
@@ -2262,7 +2262,7 @@ func DecodeDownloadBasePluginRequest(mux goahttp.Muxer, decoder func(*http.Reque
 		if err != nil {
 			return payload, err
 		}
-		payload = NewDownloadBasePluginPayload(platform, sessionToken, projectSlugInput)
+		payload = NewDownloadObservabilityPluginPayload(platform, sessionToken, projectSlugInput)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -2282,9 +2282,9 @@ func DecodeDownloadBasePluginRequest(mux goahttp.Muxer, decoder func(*http.Reque
 	}
 }
 
-// EncodeDownloadBasePluginError returns an encoder for errors returned by the
-// downloadBasePlugin plugins endpoint.
-func EncodeDownloadBasePluginError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+// EncodeDownloadObservabilityPluginError returns an encoder for errors
+// returned by the downloadObservabilityPlugin plugins endpoint.
+func EncodeDownloadObservabilityPluginError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
 	encodeError := goahttp.ErrorEncoder(encoder, formatter)
 	return func(ctx context.Context, w http.ResponseWriter, v error) error {
 		var en goa.GoaErrorNamer
@@ -2301,7 +2301,7 @@ func EncodeDownloadBasePluginError(encoder func(context.Context, http.ResponseWr
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewDownloadBasePluginUnauthorizedResponseBody(res)
+				body = NewDownloadObservabilityPluginUnauthorizedResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnauthorized)
@@ -2315,7 +2315,7 @@ func EncodeDownloadBasePluginError(encoder func(context.Context, http.ResponseWr
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewDownloadBasePluginForbiddenResponseBody(res)
+				body = NewDownloadObservabilityPluginForbiddenResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusForbidden)
@@ -2329,7 +2329,7 @@ func EncodeDownloadBasePluginError(encoder func(context.Context, http.ResponseWr
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewDownloadBasePluginBadRequestResponseBody(res)
+				body = NewDownloadObservabilityPluginBadRequestResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadRequest)
@@ -2343,7 +2343,7 @@ func EncodeDownloadBasePluginError(encoder func(context.Context, http.ResponseWr
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewDownloadBasePluginNotFoundResponseBody(res)
+				body = NewDownloadObservabilityPluginNotFoundResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusNotFound)
@@ -2357,7 +2357,7 @@ func EncodeDownloadBasePluginError(encoder func(context.Context, http.ResponseWr
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewDownloadBasePluginConflictResponseBody(res)
+				body = NewDownloadObservabilityPluginConflictResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusConflict)
@@ -2371,7 +2371,7 @@ func EncodeDownloadBasePluginError(encoder func(context.Context, http.ResponseWr
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewDownloadBasePluginUnsupportedMediaResponseBody(res)
+				body = NewDownloadObservabilityPluginUnsupportedMediaResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnsupportedMediaType)
@@ -2385,7 +2385,7 @@ func EncodeDownloadBasePluginError(encoder func(context.Context, http.ResponseWr
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewDownloadBasePluginInvalidResponseBody(res)
+				body = NewDownloadObservabilityPluginInvalidResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnprocessableEntity)
@@ -2399,7 +2399,7 @@ func EncodeDownloadBasePluginError(encoder func(context.Context, http.ResponseWr
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewDownloadBasePluginInvariantViolationResponseBody(res)
+				body = NewDownloadObservabilityPluginInvariantViolationResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -2413,7 +2413,7 @@ func EncodeDownloadBasePluginError(encoder func(context.Context, http.ResponseWr
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewDownloadBasePluginUnexpectedResponseBody(res)
+				body = NewDownloadObservabilityPluginUnexpectedResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -2427,7 +2427,7 @@ func EncodeDownloadBasePluginError(encoder func(context.Context, http.ResponseWr
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewDownloadBasePluginGatewayErrorResponseBody(res)
+				body = NewDownloadObservabilityPluginGatewayErrorResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadGateway)

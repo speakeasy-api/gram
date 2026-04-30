@@ -324,7 +324,7 @@ run();
 * [addPluginServer](docs/sdks/plugins/README.md#addpluginserver) - addPluginServer plugins
 * [createPlugin](docs/sdks/plugins/README.md#createplugin) - createPlugin plugins
 * [deletePlugin](docs/sdks/plugins/README.md#deleteplugin) - deletePlugin plugins
-* [downloadBasePlugin](docs/sdks/plugins/README.md#downloadbaseplugin) - downloadBasePlugin plugins
+* [downloadObservabilityPlugin](docs/sdks/plugins/README.md#downloadobservabilityplugin) - downloadObservabilityPlugin plugins
 * [downloadPluginPackage](docs/sdks/plugins/README.md#downloadpluginpackage) - downloadPluginPackage plugins
 * [getPlugin](docs/sdks/plugins/README.md#getplugin) - getPlugin plugins
 * [getPublishStatus](docs/sdks/plugins/README.md#getpublishstatus) - getPublishStatus plugins
@@ -590,7 +590,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`pluginsAddPluginServer`](docs/sdks/plugins/README.md#addpluginserver) - addPluginServer plugins
 - [`pluginsCreatePlugin`](docs/sdks/plugins/README.md#createplugin) - createPlugin plugins
 - [`pluginsDeletePlugin`](docs/sdks/plugins/README.md#deleteplugin) - deletePlugin plugins
-- [`pluginsDownloadBasePlugin`](docs/sdks/plugins/README.md#downloadbaseplugin) - downloadBasePlugin plugins
+- [`pluginsDownloadObservabilityPlugin`](docs/sdks/plugins/README.md#downloadobservabilityplugin) - downloadObservabilityPlugin plugins
 - [`pluginsDownloadPluginPackage`](docs/sdks/plugins/README.md#downloadpluginpackage) - downloadPluginPackage plugins
 - [`pluginsGetPlugin`](docs/sdks/plugins/README.md#getplugin) - getPlugin plugins
 - [`pluginsGetPublishStatus`](docs/sdks/plugins/README.md#getpublishstatus) - getPublishStatus plugins
@@ -834,7 +834,7 @@ To learn about this feature and how to get started, check
 - [`usePauseTriggerMutation`](docs/sdks/triggers/README.md#pause) - pauseTriggerInstance triggers
 - [`usePlugin`](docs/sdks/plugins/README.md#getplugin) - getPlugin plugins
 - [`usePlugins`](docs/sdks/plugins/README.md#listplugins) - listPlugins plugins
-- [`usePluginsDownloadBasePlugin`](docs/sdks/plugins/README.md#downloadbaseplugin) - downloadBasePlugin plugins
+- [`usePluginsDownloadObservabilityPlugin`](docs/sdks/plugins/README.md#downloadobservabilityplugin) - downloadObservabilityPlugin plugins
 - [`usePluginsDownloadPluginPackage`](docs/sdks/plugins/README.md#downloadpluginpackage) - downloadPluginPackage plugins
 - [`useProject`](docs/sdks/projects/README.md#read) - getProject projects
 - [`useProjectsSetOrganizationWhitelistMutation`](docs/sdks/projects/README.md#setorganizationwhitelist) - setOrganizationWhitelist projects

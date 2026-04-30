@@ -2049,10 +2049,10 @@ type DownloadPluginPackageGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// DownloadBasePluginUnauthorizedResponseBody is the type of the "plugins"
-// service "downloadBasePlugin" endpoint HTTP response body for the
-// "unauthorized" error.
-type DownloadBasePluginUnauthorizedResponseBody struct {
+// DownloadObservabilityPluginUnauthorizedResponseBody is the type of the
+// "plugins" service "downloadObservabilityPlugin" endpoint HTTP response body
+// for the "unauthorized" error.
+type DownloadObservabilityPluginUnauthorizedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2068,9 +2068,10 @@ type DownloadBasePluginUnauthorizedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// DownloadBasePluginForbiddenResponseBody is the type of the "plugins" service
-// "downloadBasePlugin" endpoint HTTP response body for the "forbidden" error.
-type DownloadBasePluginForbiddenResponseBody struct {
+// DownloadObservabilityPluginForbiddenResponseBody is the type of the
+// "plugins" service "downloadObservabilityPlugin" endpoint HTTP response body
+// for the "forbidden" error.
+type DownloadObservabilityPluginForbiddenResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2086,10 +2087,10 @@ type DownloadBasePluginForbiddenResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// DownloadBasePluginBadRequestResponseBody is the type of the "plugins"
-// service "downloadBasePlugin" endpoint HTTP response body for the
-// "bad_request" error.
-type DownloadBasePluginBadRequestResponseBody struct {
+// DownloadObservabilityPluginBadRequestResponseBody is the type of the
+// "plugins" service "downloadObservabilityPlugin" endpoint HTTP response body
+// for the "bad_request" error.
+type DownloadObservabilityPluginBadRequestResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2105,9 +2106,10 @@ type DownloadBasePluginBadRequestResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// DownloadBasePluginNotFoundResponseBody is the type of the "plugins" service
-// "downloadBasePlugin" endpoint HTTP response body for the "not_found" error.
-type DownloadBasePluginNotFoundResponseBody struct {
+// DownloadObservabilityPluginNotFoundResponseBody is the type of the "plugins"
+// service "downloadObservabilityPlugin" endpoint HTTP response body for the
+// "not_found" error.
+type DownloadObservabilityPluginNotFoundResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2123,9 +2125,10 @@ type DownloadBasePluginNotFoundResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// DownloadBasePluginConflictResponseBody is the type of the "plugins" service
-// "downloadBasePlugin" endpoint HTTP response body for the "conflict" error.
-type DownloadBasePluginConflictResponseBody struct {
+// DownloadObservabilityPluginConflictResponseBody is the type of the "plugins"
+// service "downloadObservabilityPlugin" endpoint HTTP response body for the
+// "conflict" error.
+type DownloadObservabilityPluginConflictResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2141,10 +2144,10 @@ type DownloadBasePluginConflictResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// DownloadBasePluginUnsupportedMediaResponseBody is the type of the "plugins"
-// service "downloadBasePlugin" endpoint HTTP response body for the
-// "unsupported_media" error.
-type DownloadBasePluginUnsupportedMediaResponseBody struct {
+// DownloadObservabilityPluginUnsupportedMediaResponseBody is the type of the
+// "plugins" service "downloadObservabilityPlugin" endpoint HTTP response body
+// for the "unsupported_media" error.
+type DownloadObservabilityPluginUnsupportedMediaResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2160,9 +2163,10 @@ type DownloadBasePluginUnsupportedMediaResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// DownloadBasePluginInvalidResponseBody is the type of the "plugins" service
-// "downloadBasePlugin" endpoint HTTP response body for the "invalid" error.
-type DownloadBasePluginInvalidResponseBody struct {
+// DownloadObservabilityPluginInvalidResponseBody is the type of the "plugins"
+// service "downloadObservabilityPlugin" endpoint HTTP response body for the
+// "invalid" error.
+type DownloadObservabilityPluginInvalidResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2178,10 +2182,10 @@ type DownloadBasePluginInvalidResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// DownloadBasePluginInvariantViolationResponseBody is the type of the
-// "plugins" service "downloadBasePlugin" endpoint HTTP response body for the
-// "invariant_violation" error.
-type DownloadBasePluginInvariantViolationResponseBody struct {
+// DownloadObservabilityPluginInvariantViolationResponseBody is the type of the
+// "plugins" service "downloadObservabilityPlugin" endpoint HTTP response body
+// for the "invariant_violation" error.
+type DownloadObservabilityPluginInvariantViolationResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2197,10 +2201,10 @@ type DownloadBasePluginInvariantViolationResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// DownloadBasePluginUnexpectedResponseBody is the type of the "plugins"
-// service "downloadBasePlugin" endpoint HTTP response body for the
-// "unexpected" error.
-type DownloadBasePluginUnexpectedResponseBody struct {
+// DownloadObservabilityPluginUnexpectedResponseBody is the type of the
+// "plugins" service "downloadObservabilityPlugin" endpoint HTTP response body
+// for the "unexpected" error.
+type DownloadObservabilityPluginUnexpectedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2216,10 +2220,10 @@ type DownloadBasePluginUnexpectedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// DownloadBasePluginGatewayErrorResponseBody is the type of the "plugins"
-// service "downloadBasePlugin" endpoint HTTP response body for the
-// "gateway_error" error.
-type DownloadBasePluginGatewayErrorResponseBody struct {
+// DownloadObservabilityPluginGatewayErrorResponseBody is the type of the
+// "plugins" service "downloadObservabilityPlugin" endpoint HTTP response body
+// for the "gateway_error" error.
+type DownloadObservabilityPluginGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -4278,11 +4282,11 @@ func NewDownloadPluginPackageGatewayErrorResponseBody(res *goa.ServiceError) *Do
 	return body
 }
 
-// NewDownloadBasePluginUnauthorizedResponseBody builds the HTTP response body
-// from the result of the "downloadBasePlugin" endpoint of the "plugins"
-// service.
-func NewDownloadBasePluginUnauthorizedResponseBody(res *goa.ServiceError) *DownloadBasePluginUnauthorizedResponseBody {
-	body := &DownloadBasePluginUnauthorizedResponseBody{
+// NewDownloadObservabilityPluginUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "downloadObservabilityPlugin" endpoint
+// of the "plugins" service.
+func NewDownloadObservabilityPluginUnauthorizedResponseBody(res *goa.ServiceError) *DownloadObservabilityPluginUnauthorizedResponseBody {
+	body := &DownloadObservabilityPluginUnauthorizedResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -4293,11 +4297,11 @@ func NewDownloadBasePluginUnauthorizedResponseBody(res *goa.ServiceError) *Downl
 	return body
 }
 
-// NewDownloadBasePluginForbiddenResponseBody builds the HTTP response body
-// from the result of the "downloadBasePlugin" endpoint of the "plugins"
-// service.
-func NewDownloadBasePluginForbiddenResponseBody(res *goa.ServiceError) *DownloadBasePluginForbiddenResponseBody {
-	body := &DownloadBasePluginForbiddenResponseBody{
+// NewDownloadObservabilityPluginForbiddenResponseBody builds the HTTP response
+// body from the result of the "downloadObservabilityPlugin" endpoint of the
+// "plugins" service.
+func NewDownloadObservabilityPluginForbiddenResponseBody(res *goa.ServiceError) *DownloadObservabilityPluginForbiddenResponseBody {
+	body := &DownloadObservabilityPluginForbiddenResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -4308,11 +4312,11 @@ func NewDownloadBasePluginForbiddenResponseBody(res *goa.ServiceError) *Download
 	return body
 }
 
-// NewDownloadBasePluginBadRequestResponseBody builds the HTTP response body
-// from the result of the "downloadBasePlugin" endpoint of the "plugins"
-// service.
-func NewDownloadBasePluginBadRequestResponseBody(res *goa.ServiceError) *DownloadBasePluginBadRequestResponseBody {
-	body := &DownloadBasePluginBadRequestResponseBody{
+// NewDownloadObservabilityPluginBadRequestResponseBody builds the HTTP
+// response body from the result of the "downloadObservabilityPlugin" endpoint
+// of the "plugins" service.
+func NewDownloadObservabilityPluginBadRequestResponseBody(res *goa.ServiceError) *DownloadObservabilityPluginBadRequestResponseBody {
+	body := &DownloadObservabilityPluginBadRequestResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -4323,10 +4327,11 @@ func NewDownloadBasePluginBadRequestResponseBody(res *goa.ServiceError) *Downloa
 	return body
 }
 
-// NewDownloadBasePluginNotFoundResponseBody builds the HTTP response body from
-// the result of the "downloadBasePlugin" endpoint of the "plugins" service.
-func NewDownloadBasePluginNotFoundResponseBody(res *goa.ServiceError) *DownloadBasePluginNotFoundResponseBody {
-	body := &DownloadBasePluginNotFoundResponseBody{
+// NewDownloadObservabilityPluginNotFoundResponseBody builds the HTTP response
+// body from the result of the "downloadObservabilityPlugin" endpoint of the
+// "plugins" service.
+func NewDownloadObservabilityPluginNotFoundResponseBody(res *goa.ServiceError) *DownloadObservabilityPluginNotFoundResponseBody {
+	body := &DownloadObservabilityPluginNotFoundResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -4337,10 +4342,11 @@ func NewDownloadBasePluginNotFoundResponseBody(res *goa.ServiceError) *DownloadB
 	return body
 }
 
-// NewDownloadBasePluginConflictResponseBody builds the HTTP response body from
-// the result of the "downloadBasePlugin" endpoint of the "plugins" service.
-func NewDownloadBasePluginConflictResponseBody(res *goa.ServiceError) *DownloadBasePluginConflictResponseBody {
-	body := &DownloadBasePluginConflictResponseBody{
+// NewDownloadObservabilityPluginConflictResponseBody builds the HTTP response
+// body from the result of the "downloadObservabilityPlugin" endpoint of the
+// "plugins" service.
+func NewDownloadObservabilityPluginConflictResponseBody(res *goa.ServiceError) *DownloadObservabilityPluginConflictResponseBody {
+	body := &DownloadObservabilityPluginConflictResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -4351,11 +4357,11 @@ func NewDownloadBasePluginConflictResponseBody(res *goa.ServiceError) *DownloadB
 	return body
 }
 
-// NewDownloadBasePluginUnsupportedMediaResponseBody builds the HTTP response
-// body from the result of the "downloadBasePlugin" endpoint of the "plugins"
-// service.
-func NewDownloadBasePluginUnsupportedMediaResponseBody(res *goa.ServiceError) *DownloadBasePluginUnsupportedMediaResponseBody {
-	body := &DownloadBasePluginUnsupportedMediaResponseBody{
+// NewDownloadObservabilityPluginUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "downloadObservabilityPlugin" endpoint
+// of the "plugins" service.
+func NewDownloadObservabilityPluginUnsupportedMediaResponseBody(res *goa.ServiceError) *DownloadObservabilityPluginUnsupportedMediaResponseBody {
+	body := &DownloadObservabilityPluginUnsupportedMediaResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -4366,10 +4372,11 @@ func NewDownloadBasePluginUnsupportedMediaResponseBody(res *goa.ServiceError) *D
 	return body
 }
 
-// NewDownloadBasePluginInvalidResponseBody builds the HTTP response body from
-// the result of the "downloadBasePlugin" endpoint of the "plugins" service.
-func NewDownloadBasePluginInvalidResponseBody(res *goa.ServiceError) *DownloadBasePluginInvalidResponseBody {
-	body := &DownloadBasePluginInvalidResponseBody{
+// NewDownloadObservabilityPluginInvalidResponseBody builds the HTTP response
+// body from the result of the "downloadObservabilityPlugin" endpoint of the
+// "plugins" service.
+func NewDownloadObservabilityPluginInvalidResponseBody(res *goa.ServiceError) *DownloadObservabilityPluginInvalidResponseBody {
+	body := &DownloadObservabilityPluginInvalidResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -4380,11 +4387,11 @@ func NewDownloadBasePluginInvalidResponseBody(res *goa.ServiceError) *DownloadBa
 	return body
 }
 
-// NewDownloadBasePluginInvariantViolationResponseBody builds the HTTP response
-// body from the result of the "downloadBasePlugin" endpoint of the "plugins"
-// service.
-func NewDownloadBasePluginInvariantViolationResponseBody(res *goa.ServiceError) *DownloadBasePluginInvariantViolationResponseBody {
-	body := &DownloadBasePluginInvariantViolationResponseBody{
+// NewDownloadObservabilityPluginInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "downloadObservabilityPlugin" endpoint
+// of the "plugins" service.
+func NewDownloadObservabilityPluginInvariantViolationResponseBody(res *goa.ServiceError) *DownloadObservabilityPluginInvariantViolationResponseBody {
+	body := &DownloadObservabilityPluginInvariantViolationResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -4395,11 +4402,11 @@ func NewDownloadBasePluginInvariantViolationResponseBody(res *goa.ServiceError) 
 	return body
 }
 
-// NewDownloadBasePluginUnexpectedResponseBody builds the HTTP response body
-// from the result of the "downloadBasePlugin" endpoint of the "plugins"
-// service.
-func NewDownloadBasePluginUnexpectedResponseBody(res *goa.ServiceError) *DownloadBasePluginUnexpectedResponseBody {
-	body := &DownloadBasePluginUnexpectedResponseBody{
+// NewDownloadObservabilityPluginUnexpectedResponseBody builds the HTTP
+// response body from the result of the "downloadObservabilityPlugin" endpoint
+// of the "plugins" service.
+func NewDownloadObservabilityPluginUnexpectedResponseBody(res *goa.ServiceError) *DownloadObservabilityPluginUnexpectedResponseBody {
+	body := &DownloadObservabilityPluginUnexpectedResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -4410,11 +4417,11 @@ func NewDownloadBasePluginUnexpectedResponseBody(res *goa.ServiceError) *Downloa
 	return body
 }
 
-// NewDownloadBasePluginGatewayErrorResponseBody builds the HTTP response body
-// from the result of the "downloadBasePlugin" endpoint of the "plugins"
-// service.
-func NewDownloadBasePluginGatewayErrorResponseBody(res *goa.ServiceError) *DownloadBasePluginGatewayErrorResponseBody {
-	body := &DownloadBasePluginGatewayErrorResponseBody{
+// NewDownloadObservabilityPluginGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "downloadObservabilityPlugin" endpoint
+// of the "plugins" service.
+func NewDownloadObservabilityPluginGatewayErrorResponseBody(res *goa.ServiceError) *DownloadObservabilityPluginGatewayErrorResponseBody {
+	body := &DownloadObservabilityPluginGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -4859,10 +4866,10 @@ func NewDownloadPluginPackagePayload(pluginID string, platform string, sessionTo
 	return v
 }
 
-// NewDownloadBasePluginPayload builds a plugins service downloadBasePlugin
-// endpoint payload.
-func NewDownloadBasePluginPayload(platform string, sessionToken *string, projectSlugInput *string) *plugins.DownloadBasePluginPayload {
-	v := &plugins.DownloadBasePluginPayload{}
+// NewDownloadObservabilityPluginPayload builds a plugins service
+// downloadObservabilityPlugin endpoint payload.
+func NewDownloadObservabilityPluginPayload(platform string, sessionToken *string, projectSlugInput *string) *plugins.DownloadObservabilityPluginPayload {
+	v := &plugins.DownloadObservabilityPluginPayload{}
 	v.Platform = platform
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput

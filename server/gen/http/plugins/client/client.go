@@ -58,9 +58,9 @@ type Client struct {
 	// downloadPluginPackage endpoint.
 	DownloadPluginPackageDoer goahttp.Doer
 
-	// DownloadBasePlugin Doer is the HTTP client used to make requests to the
-	// downloadBasePlugin endpoint.
-	DownloadBasePluginDoer goahttp.Doer
+	// DownloadObservabilityPlugin Doer is the HTTP client used to make requests to
+	// the downloadObservabilityPlugin endpoint.
+	DownloadObservabilityPluginDoer goahttp.Doer
 
 	// GetPublishStatus Doer is the HTTP client used to make requests to the
 	// getPublishStatus endpoint.
@@ -90,24 +90,24 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		ListPluginsDoer:           doer,
-		GetPluginDoer:             doer,
-		CreatePluginDoer:          doer,
-		UpdatePluginDoer:          doer,
-		DeletePluginDoer:          doer,
-		AddPluginServerDoer:       doer,
-		UpdatePluginServerDoer:    doer,
-		RemovePluginServerDoer:    doer,
-		SetPluginAssignmentsDoer:  doer,
-		DownloadPluginPackageDoer: doer,
-		DownloadBasePluginDoer:    doer,
-		GetPublishStatusDoer:      doer,
-		PublishPluginsDoer:        doer,
-		RestoreResponseBody:       restoreBody,
-		scheme:                    scheme,
-		host:                      host,
-		decoder:                   dec,
-		encoder:                   enc,
+		ListPluginsDoer:                 doer,
+		GetPluginDoer:                   doer,
+		CreatePluginDoer:                doer,
+		UpdatePluginDoer:                doer,
+		DeletePluginDoer:                doer,
+		AddPluginServerDoer:             doer,
+		UpdatePluginServerDoer:          doer,
+		RemovePluginServerDoer:          doer,
+		SetPluginAssignmentsDoer:        doer,
+		DownloadPluginPackageDoer:       doer,
+		DownloadObservabilityPluginDoer: doer,
+		GetPublishStatusDoer:            doer,
+		PublishPluginsDoer:              doer,
+		RestoreResponseBody:             restoreBody,
+		scheme:                          scheme,
+		host:                            host,
+		decoder:                         dec,
+		encoder:                         enc,
 	}
 }
 
@@ -356,15 +356,15 @@ func (c *Client) DownloadPluginPackage() goa.Endpoint {
 	}
 }
 
-// DownloadBasePlugin returns an endpoint that makes HTTP requests to the
-// plugins service downloadBasePlugin server.
-func (c *Client) DownloadBasePlugin() goa.Endpoint {
+// DownloadObservabilityPlugin returns an endpoint that makes HTTP requests to
+// the plugins service downloadObservabilityPlugin server.
+func (c *Client) DownloadObservabilityPlugin() goa.Endpoint {
 	var (
-		encodeRequest  = EncodeDownloadBasePluginRequest(c.encoder)
-		decodeResponse = DecodeDownloadBasePluginResponse(c.decoder, c.RestoreResponseBody)
+		encodeRequest  = EncodeDownloadObservabilityPluginRequest(c.encoder)
+		decodeResponse = DecodeDownloadObservabilityPluginResponse(c.decoder, c.RestoreResponseBody)
 	)
 	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildDownloadBasePluginRequest(ctx, v)
+		req, err := c.BuildDownloadObservabilityPluginRequest(ctx, v)
 		if err != nil {
 			return nil, err
 		}
@@ -372,16 +372,16 @@ func (c *Client) DownloadBasePlugin() goa.Endpoint {
 		if err != nil {
 			return nil, err
 		}
-		resp, err := c.DownloadBasePluginDoer.Do(req)
+		resp, err := c.DownloadObservabilityPluginDoer.Do(req)
 		if err != nil {
-			return nil, goahttp.ErrRequestError("plugins", "downloadBasePlugin", err)
+			return nil, goahttp.ErrRequestError("plugins", "downloadObservabilityPlugin", err)
 		}
 		res, err := decodeResponse(resp)
 		if err != nil {
 			resp.Body.Close()
 			return nil, err
 		}
-		return &plugins.DownloadBasePluginResponseData{Result: res.(*plugins.DownloadBasePluginResult), Body: resp.Body}, nil
+		return &plugins.DownloadObservabilityPluginResponseData{Result: res.(*plugins.DownloadObservabilityPluginResult), Body: resp.Body}, nil
 	}
 }
 

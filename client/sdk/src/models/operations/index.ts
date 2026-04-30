@@ -57,7 +57,7 @@ export * from "./deletetoolsetenvironmentlink.js";
 export * from "./deletetriggerinstance.js";
 export * from "./detachserverfromcollection.js";
 export * from "./disablerbac.js";
-export * from "./downloadbaseplugin.js";
+export * from "./downloadobservabilityplugin.js";
 export * from "./downloadpluginpackage.js";
 export * from "./enablerbac.js";
 export * from "./evolvedeployment.js";

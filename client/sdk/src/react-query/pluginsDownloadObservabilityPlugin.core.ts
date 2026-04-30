@@ -8,23 +8,23 @@ import {
   QueryKey,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { pluginsDownloadBasePlugin } from "../funcs/pluginsDownloadBasePlugin.js";
+import { pluginsDownloadObservabilityPlugin } from "../funcs/pluginsDownloadObservabilityPlugin.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import * as operations from "../models/operations/index.js";
 import { unwrapAsync } from "../types/fp.js";
-export type PluginsDownloadBasePluginQueryData =
-  operations.DownloadBasePluginResponse;
+export type PluginsDownloadObservabilityPluginQueryData =
+  operations.DownloadObservabilityPluginResponse;
 
-export function prefetchPluginsDownloadBasePlugin(
+export function prefetchPluginsDownloadObservabilityPlugin(
   queryClient: QueryClient,
   client$: GramCore,
-  request: operations.DownloadBasePluginRequest,
-  security?: operations.DownloadBasePluginSecurity | undefined,
+  request: operations.DownloadObservabilityPluginRequest,
+  security?: operations.DownloadObservabilityPluginSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
-    ...buildPluginsDownloadBasePluginQuery(
+    ...buildPluginsDownloadObservabilityPluginQuery(
       client$,
       request,
       security,
@@ -33,26 +33,26 @@ export function prefetchPluginsDownloadBasePlugin(
   });
 }
 
-export function buildPluginsDownloadBasePluginQuery(
+export function buildPluginsDownloadObservabilityPluginQuery(
   client$: GramCore,
-  request: operations.DownloadBasePluginRequest,
-  security?: operations.DownloadBasePluginSecurity | undefined,
+  request: operations.DownloadObservabilityPluginRequest,
+  security?: operations.DownloadObservabilityPluginSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
   queryFn: (
     context: QueryFunctionContext,
-  ) => Promise<PluginsDownloadBasePluginQueryData>;
+  ) => Promise<PluginsDownloadObservabilityPluginQueryData>;
 } {
   return {
-    queryKey: queryKeyPluginsDownloadBasePlugin({
+    queryKey: queryKeyPluginsDownloadObservabilityPlugin({
       platform: request.platform,
       gramSession: request.gramSession,
       gramProject: request.gramProject,
     }),
-    queryFn: async function pluginsDownloadBasePluginQueryFn(
+    queryFn: async function pluginsDownloadObservabilityPluginQueryFn(
       ctx,
-    ): Promise<PluginsDownloadBasePluginQueryData> {
+    ): Promise<PluginsDownloadObservabilityPluginQueryData> {
       const sig = combineSignals(
         ctx.signal,
         options?.signal,
@@ -64,7 +64,7 @@ export function buildPluginsDownloadBasePluginQuery(
         signal: sig,
       };
 
-      return unwrapAsync(pluginsDownloadBasePlugin(
+      return unwrapAsync(pluginsDownloadObservabilityPlugin(
         client$,
         request,
         security,
@@ -74,12 +74,12 @@ export function buildPluginsDownloadBasePluginQuery(
   };
 }
 
-export function queryKeyPluginsDownloadBasePlugin(
+export function queryKeyPluginsDownloadObservabilityPlugin(
   parameters: {
     platform: operations.Platform;
     gramSession?: string | undefined;
     gramProject?: string | undefined;
   },
 ): QueryKey {
-  return ["@gram/client", "plugins", "downloadBasePlugin", parameters];
+  return ["@gram/client", "plugins", "downloadObservabilityPlugin", parameters];
 }

@@ -277,8 +277,8 @@ var _ = Service("plugins", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "downloadPluginPackage")
 	})
 
-	Method("downloadBasePlugin", func() {
-		Description("Download a ZIP of the per-org base plugin (observability hooks). Mints a fresh hooks-scoped API key on each download and embeds it in the plugin's hook script.")
+	Method("downloadObservabilityPlugin", func() {
+		Description("Download a ZIP of the per-org observability plugin (Gram hooks). Mints a fresh hooks-scoped API key on each download and embeds it in the plugin's hook script.")
 
 		Payload(func() {
 			Attribute("platform", String, func() {
@@ -297,7 +297,7 @@ var _ = Service("plugins", func() {
 		})
 
 		HTTP(func() {
-			GET("/rpc/plugins.downloadBasePlugin")
+			GET("/rpc/plugins.downloadObservabilityPlugin")
 			Param("platform")
 			security.SessionHeader()
 			security.ProjectHeader()
@@ -309,8 +309,8 @@ var _ = Service("plugins", func() {
 			SkipResponseBodyEncodeDecode()
 		})
 
-		Meta("openapi:operationId", "downloadBasePlugin")
-		Meta("openapi:extension:x-speakeasy-name-override", "downloadBasePlugin")
+		Meta("openapi:operationId", "downloadObservabilityPlugin")
+		Meta("openapi:extension:x-speakeasy-name-override", "downloadObservabilityPlugin")
 	})
 
 	Method("getPublishStatus", func() {

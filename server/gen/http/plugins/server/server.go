@@ -20,20 +20,20 @@ import (
 
 // Server lists the plugins service endpoint HTTP handlers.
 type Server struct {
-	Mounts                []*MountPoint
-	ListPlugins           http.Handler
-	GetPlugin             http.Handler
-	CreatePlugin          http.Handler
-	UpdatePlugin          http.Handler
-	DeletePlugin          http.Handler
-	AddPluginServer       http.Handler
-	UpdatePluginServer    http.Handler
-	RemovePluginServer    http.Handler
-	SetPluginAssignments  http.Handler
-	DownloadPluginPackage http.Handler
-	DownloadBasePlugin    http.Handler
-	GetPublishStatus      http.Handler
-	PublishPlugins        http.Handler
+	Mounts                      []*MountPoint
+	ListPlugins                 http.Handler
+	GetPlugin                   http.Handler
+	CreatePlugin                http.Handler
+	UpdatePlugin                http.Handler
+	DeletePlugin                http.Handler
+	AddPluginServer             http.Handler
+	UpdatePluginServer          http.Handler
+	RemovePluginServer          http.Handler
+	SetPluginAssignments        http.Handler
+	DownloadPluginPackage       http.Handler
+	DownloadObservabilityPlugin http.Handler
+	GetPublishStatus            http.Handler
+	PublishPlugins              http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -73,23 +73,23 @@ func New(
 			{"RemovePluginServer", "DELETE", "/rpc/plugins.removePluginServer"},
 			{"SetPluginAssignments", "PUT", "/rpc/plugins.setPluginAssignments"},
 			{"DownloadPluginPackage", "GET", "/rpc/plugins.downloadPluginPackage"},
-			{"DownloadBasePlugin", "GET", "/rpc/plugins.downloadBasePlugin"},
+			{"DownloadObservabilityPlugin", "GET", "/rpc/plugins.downloadObservabilityPlugin"},
 			{"GetPublishStatus", "GET", "/rpc/plugins.getPublishStatus"},
 			{"PublishPlugins", "POST", "/rpc/plugins.publishPlugins"},
 		},
-		ListPlugins:           NewListPluginsHandler(e.ListPlugins, mux, decoder, encoder, errhandler, formatter),
-		GetPlugin:             NewGetPluginHandler(e.GetPlugin, mux, decoder, encoder, errhandler, formatter),
-		CreatePlugin:          NewCreatePluginHandler(e.CreatePlugin, mux, decoder, encoder, errhandler, formatter),
-		UpdatePlugin:          NewUpdatePluginHandler(e.UpdatePlugin, mux, decoder, encoder, errhandler, formatter),
-		DeletePlugin:          NewDeletePluginHandler(e.DeletePlugin, mux, decoder, encoder, errhandler, formatter),
-		AddPluginServer:       NewAddPluginServerHandler(e.AddPluginServer, mux, decoder, encoder, errhandler, formatter),
-		UpdatePluginServer:    NewUpdatePluginServerHandler(e.UpdatePluginServer, mux, decoder, encoder, errhandler, formatter),
-		RemovePluginServer:    NewRemovePluginServerHandler(e.RemovePluginServer, mux, decoder, encoder, errhandler, formatter),
-		SetPluginAssignments:  NewSetPluginAssignmentsHandler(e.SetPluginAssignments, mux, decoder, encoder, errhandler, formatter),
-		DownloadPluginPackage: NewDownloadPluginPackageHandler(e.DownloadPluginPackage, mux, decoder, encoder, errhandler, formatter),
-		DownloadBasePlugin:    NewDownloadBasePluginHandler(e.DownloadBasePlugin, mux, decoder, encoder, errhandler, formatter),
-		GetPublishStatus:      NewGetPublishStatusHandler(e.GetPublishStatus, mux, decoder, encoder, errhandler, formatter),
-		PublishPlugins:        NewPublishPluginsHandler(e.PublishPlugins, mux, decoder, encoder, errhandler, formatter),
+		ListPlugins:                 NewListPluginsHandler(e.ListPlugins, mux, decoder, encoder, errhandler, formatter),
+		GetPlugin:                   NewGetPluginHandler(e.GetPlugin, mux, decoder, encoder, errhandler, formatter),
+		CreatePlugin:                NewCreatePluginHandler(e.CreatePlugin, mux, decoder, encoder, errhandler, formatter),
+		UpdatePlugin:                NewUpdatePluginHandler(e.UpdatePlugin, mux, decoder, encoder, errhandler, formatter),
+		DeletePlugin:                NewDeletePluginHandler(e.DeletePlugin, mux, decoder, encoder, errhandler, formatter),
+		AddPluginServer:             NewAddPluginServerHandler(e.AddPluginServer, mux, decoder, encoder, errhandler, formatter),
+		UpdatePluginServer:          NewUpdatePluginServerHandler(e.UpdatePluginServer, mux, decoder, encoder, errhandler, formatter),
+		RemovePluginServer:          NewRemovePluginServerHandler(e.RemovePluginServer, mux, decoder, encoder, errhandler, formatter),
+		SetPluginAssignments:        NewSetPluginAssignmentsHandler(e.SetPluginAssignments, mux, decoder, encoder, errhandler, formatter),
+		DownloadPluginPackage:       NewDownloadPluginPackageHandler(e.DownloadPluginPackage, mux, decoder, encoder, errhandler, formatter),
+		DownloadObservabilityPlugin: NewDownloadObservabilityPluginHandler(e.DownloadObservabilityPlugin, mux, decoder, encoder, errhandler, formatter),
+		GetPublishStatus:            NewGetPublishStatusHandler(e.GetPublishStatus, mux, decoder, encoder, errhandler, formatter),
+		PublishPlugins:              NewPublishPluginsHandler(e.PublishPlugins, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -108,7 +108,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.RemovePluginServer = m(s.RemovePluginServer)
 	s.SetPluginAssignments = m(s.SetPluginAssignments)
 	s.DownloadPluginPackage = m(s.DownloadPluginPackage)
-	s.DownloadBasePlugin = m(s.DownloadBasePlugin)
+	s.DownloadObservabilityPlugin = m(s.DownloadObservabilityPlugin)
 	s.GetPublishStatus = m(s.GetPublishStatus)
 	s.PublishPlugins = m(s.PublishPlugins)
 }
@@ -128,7 +128,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountRemovePluginServerHandler(mux, h.RemovePluginServer)
 	MountSetPluginAssignmentsHandler(mux, h.SetPluginAssignments)
 	MountDownloadPluginPackageHandler(mux, h.DownloadPluginPackage)
-	MountDownloadBasePluginHandler(mux, h.DownloadBasePlugin)
+	MountDownloadObservabilityPluginHandler(mux, h.DownloadObservabilityPlugin)
 	MountGetPublishStatusHandler(mux, h.GetPublishStatus)
 	MountPublishPluginsHandler(mux, h.PublishPlugins)
 }
@@ -703,21 +703,22 @@ func NewDownloadPluginPackageHandler(
 	})
 }
 
-// MountDownloadBasePluginHandler configures the mux to serve the "plugins"
-// service "downloadBasePlugin" endpoint.
-func MountDownloadBasePluginHandler(mux goahttp.Muxer, h http.Handler) {
+// MountDownloadObservabilityPluginHandler configures the mux to serve the
+// "plugins" service "downloadObservabilityPlugin" endpoint.
+func MountDownloadObservabilityPluginHandler(mux goahttp.Muxer, h http.Handler) {
 	f, ok := h.(http.HandlerFunc)
 	if !ok {
 		f = func(w http.ResponseWriter, r *http.Request) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("GET", "/rpc/plugins.downloadBasePlugin", f)
+	mux.Handle("GET", "/rpc/plugins.downloadObservabilityPlugin", f)
 }
 
-// NewDownloadBasePluginHandler creates a HTTP handler which loads the HTTP
-// request and calls the "plugins" service "downloadBasePlugin" endpoint.
-func NewDownloadBasePluginHandler(
+// NewDownloadObservabilityPluginHandler creates a HTTP handler which loads the
+// HTTP request and calls the "plugins" service "downloadObservabilityPlugin"
+// endpoint.
+func NewDownloadObservabilityPluginHandler(
 	endpoint goa.Endpoint,
 	mux goahttp.Muxer,
 	decoder func(*http.Request) goahttp.Decoder,
@@ -726,13 +727,13 @@ func NewDownloadBasePluginHandler(
 	formatter func(ctx context.Context, err error) goahttp.Statuser,
 ) http.Handler {
 	var (
-		decodeRequest  = DecodeDownloadBasePluginRequest(mux, decoder)
-		encodeResponse = EncodeDownloadBasePluginResponse(encoder)
-		encodeError    = EncodeDownloadBasePluginError(encoder, formatter)
+		decodeRequest  = DecodeDownloadObservabilityPluginRequest(mux, decoder)
+		encodeResponse = EncodeDownloadObservabilityPluginResponse(encoder)
+		encodeError    = EncodeDownloadObservabilityPluginError(encoder, formatter)
 	)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
-		ctx = context.WithValue(ctx, goa.MethodKey, "downloadBasePlugin")
+		ctx = context.WithValue(ctx, goa.MethodKey, "downloadObservabilityPlugin")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "plugins")
 		payload, err := decodeRequest(r)
 		if err != nil {
@@ -748,7 +749,7 @@ func NewDownloadBasePluginHandler(
 			}
 			return
 		}
-		o := res.(*plugins.DownloadBasePluginResponseData)
+		o := res.(*plugins.DownloadObservabilityPluginResponseData)
 		defer o.Body.Close()
 		if wt, ok := o.Body.(io.WriterTo); ok {
 			if err := encodeResponse(ctx, w, o.Result); err != nil {

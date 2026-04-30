@@ -46,19 +46,21 @@ type GenerateConfig struct {
 	// MCP server configs. If empty, configs will use placeholder variables.
 	APIKey string
 	// HooksAPIKey is the plaintext hooks-scoped Gram API key embedded in the
-	// base plugin's hook script. If empty, the base plugin is omitted.
+	// observability plugin's hook script. If empty, the observability plugin
+	// is omitted.
 	HooksAPIKey string
 	// ProjectSlug is the publishing project's slug. The Cursor hooks endpoint
 	// requires it via the Gram-Project header (Claude's does not).
 	ProjectSlug string
 }
 
-// ClaudeBaseHookEvents are the Claude Code hook events the base plugin
-// registers against. Names match Claude's hooks.json schema. Claude only
-// invokes hook.sh for events listed here, so any event the Claude() handler
-// in server/internal/hooks/claude_hooks.go expects to record must appear
-// in this list — otherwise it is silently dropped on the client side.
-var ClaudeBaseHookEvents = []string{
+// ClaudeObservabilityHookEvents are the Claude Code hook events the
+// observability plugin registers against. Names match Claude's hooks.json
+// schema. Claude only invokes hook.sh for events listed here, so any event
+// the Claude() handler in server/internal/hooks/claude_hooks.go expects to
+// record must appear in this list — otherwise it is silently dropped on
+// the client side.
+var ClaudeObservabilityHookEvents = []string{
 	"PreToolUse",
 	"PostToolUse",
 	"PostToolUseFailure",
@@ -69,11 +71,11 @@ var ClaudeBaseHookEvents = []string{
 	"Notification",
 }
 
-// CursorBaseHookEvents are Cursor's native hook event names (per
+// CursorObservabilityHookEvents are Cursor's native hook event names (per
 // server/design/hooks/design.go:58). Cursor uses different event names
 // than Claude, not a lowercased mirror, so the two lists are maintained
 // separately.
-var CursorBaseHookEvents = []string{
+var CursorObservabilityHookEvents = []string{
 	"beforeSubmitPrompt",
 	"stop",
 	"afterAgentResponse",
@@ -94,26 +96,26 @@ func GeneratePluginPackages(plugins []PluginInfo, cfg GenerateConfig) (map[strin
 	var cursorPlugins []marketplaceEntry
 	var codexPlugins []codexMarketplaceEntry
 
-	// Base plugin (observability hooks) ships first in the marketplace so it's
-	// the first thing team admins see. Skipped when no hooks key is configured
-	// — typically only in tests that don't exercise the publish flow.
+	// Observability plugin ships first in the marketplace so it's the first
+	// thing team admins see. Skipped when no hooks key is configured —
+	// typically only in tests that don't exercise the publish flow.
 	if cfg.HooksAPIKey != "" {
-		if err := generateClaudeBasePlugin(files, cfg); err != nil {
-			return nil, fmt.Errorf("generate claude base plugin: %w", err)
+		if err := generateClaudeObservabilityPlugin(files, cfg); err != nil {
+			return nil, fmt.Errorf("generate claude observability plugin: %w", err)
 		}
-		if err := generateCursorBasePlugin(files, cfg); err != nil {
-			return nil, fmt.Errorf("generate cursor base plugin: %w", err)
+		if err := generateCursorObservabilityPlugin(files, cfg); err != nil {
+			return nil, fmt.Errorf("generate cursor observability plugin: %w", err)
 		}
-		claudeBase := ClaudeBaseSlug(cfg)
+		claudeObservability := ClaudeObservabilitySlug(cfg)
 		claudePlugins = append(claudePlugins, marketplaceEntry{
-			Name:        claudeBase,
-			Source:      "./" + claudeBase,
+			Name:        claudeObservability,
+			Source:      "./" + claudeObservability,
 			Description: "Required: Gram observability hooks for " + cfg.OrgName + ".",
 		})
-		cursorBase := CursorBaseSlug(cfg)
+		cursorObservability := CursorObservabilitySlug(cfg)
 		cursorPlugins = append(cursorPlugins, marketplaceEntry{
-			Name:        cursorBase,
-			Source:      "./" + cursorBase,
+			Name:        cursorObservability,
+			Source:      "./" + cursorObservability,
 			Description: "Required: Gram observability hooks for " + cfg.OrgName + ".",
 		})
 	}
@@ -217,7 +219,7 @@ func generateReadme(plugins []PluginInfo, cfg GenerateConfig) []byte {
 	b.WriteString("- **Auto-managed by Gram.** Each publish from the Gram dashboard overwrites this repository's contents. Any manual edits, new branches, or local commits will be discarded on the next publish — make changes in Gram instead.\n\n")
 
 	if cfg.HooksAPIKey != "" {
-		fmt.Fprintf(&b, "> **Required:** install the `%s` plugin alongside any feature plugins to enable Gram observability. Without it, your team will install MCP servers but tool events will not be reported to your Gram dashboard.\n\n", ClaudeBaseSlug(cfg))
+		fmt.Fprintf(&b, "> **Required:** install the `%s` plugin alongside any feature plugins to enable Gram observability. Without it, your team will install MCP servers but tool events will not be reported to your Gram dashboard.\n\n", ClaudeObservabilitySlug(cfg))
 	}
 
 	if len(plugins) > 0 {
@@ -241,9 +243,9 @@ func generateReadme(plugins []PluginInfo, cfg GenerateConfig) []byte {
 	b.WriteString("3. Click **Add Marketplace** and paste this repository's URL\n")
 	b.WriteString("4. Plugins will be automatically available to members of your organization\n")
 	if cfg.HooksAPIKey != "" {
-		base := ClaudeBaseSlug(cfg)
-		fmt.Fprintf(&b, "\nMark the `%s` plugin as required so observability is on by default for all team members:\n\n", base)
-		fmt.Fprintf(&b, "```json\n{\n  \"plugins\": {\n    \"required\": [\"%s@%s-gram\"]\n  }\n}\n```\n", base, conv.ToSlug(cfg.OrgName))
+		obs := ClaudeObservabilitySlug(cfg)
+		fmt.Fprintf(&b, "\nMark the `%s` plugin as required so observability is on by default for all team members:\n\n", obs)
+		fmt.Fprintf(&b, "```json\n{\n  \"plugins\": {\n    \"required\": [\"%s@%s-gram\"]\n  }\n}\n```\n", obs, conv.ToSlug(cfg.OrgName))
 	}
 	b.WriteString("\n### Cursor\n\n")
 	b.WriteString("1. Open your team's [Cursor dashboard](https://cursor.com/dashboard)\n")
@@ -251,7 +253,7 @@ func generateReadme(plugins []PluginInfo, cfg GenerateConfig) []byte {
 	b.WriteString("3. Paste this repository's URL to import the marketplace\n")
 	b.WriteString("4. Plugins will be available to team members\n")
 	if cfg.HooksAPIKey != "" {
-		fmt.Fprintf(&b, "\nIn Cursor's team marketplace settings, mark the `%s` plugin as required so observability is on by default for all team members.\n", CursorBaseSlug(cfg))
+		fmt.Fprintf(&b, "\nIn Cursor's team marketplace settings, mark the `%s` plugin as required so observability is on by default for all team members.\n", CursorObservabilitySlug(cfg))
 	}
 
 	b.WriteString("\n### Codex\n\n")
@@ -388,32 +390,35 @@ func generateCodexPluginInDir(files map[string][]byte, subdir, name string, p Pl
 	return nil
 }
 
-// ClaudeBaseSlug / CursorBaseSlug derive the base plugin's directory name
-// and marketplace identifier from the org slug. Namespacing per-org avoids
-// collisions with user plugins that legitimately use slug "base".
+// ClaudeObservabilitySlug / CursorObservabilitySlug derive the observability
+// plugin's directory name and marketplace identifier from the org slug.
+// Namespacing per-org avoids collisions with user plugins that legitimately
+// use slug "observability".
 // Exported because tests need to predict the published path.
-func ClaudeBaseSlug(cfg GenerateConfig) string { return conv.ToSlug(cfg.OrgName) + "-base" }
-func CursorBaseSlug(cfg GenerateConfig) string {
-	return conv.ToSlug(cfg.OrgName) + "-base-cursor"
+func ClaudeObservabilitySlug(cfg GenerateConfig) string {
+	return conv.ToSlug(cfg.OrgName) + "-observability"
+}
+func CursorObservabilitySlug(cfg GenerateConfig) string {
+	return conv.ToSlug(cfg.OrgName) + "-observability-cursor"
 }
 
-// generateClaudeBasePlugin emits the per-org "base" plugin containing Gram
-// observability hooks for Claude Code. The hook script bakes in the org's
+// generateClaudeObservabilityPlugin emits the per-org observability plugin
+// containing Gram hooks for Claude Code. The hook script bakes in the org's
 // hooks-scoped API key so no per-machine credential setup is required.
-func generateClaudeBasePlugin(files map[string][]byte, cfg GenerateConfig) error {
-	return generateClaudeBasePluginInDir(files, ClaudeBaseSlug(cfg), cfg)
+func generateClaudeObservabilityPlugin(files map[string][]byte, cfg GenerateConfig) error {
+	return generateClaudeObservabilityPluginInDir(files, ClaudeObservabilitySlug(cfg), cfg)
 }
 
-// generateClaudeBasePluginFlat emits the same files at the root (no subdir)
-// for direct ZIP installation via `claude --plugin-dir`.
-func generateClaudeBasePluginFlat(files map[string][]byte, cfg GenerateConfig) error {
-	return generateClaudeBasePluginInDir(files, "", cfg)
+// generateClaudeObservabilityPluginFlat emits the same files at the root
+// (no subdir) for direct ZIP installation via `claude --plugin-dir`.
+func generateClaudeObservabilityPluginFlat(files map[string][]byte, cfg GenerateConfig) error {
+	return generateClaudeObservabilityPluginInDir(files, "", cfg)
 }
 
-func generateClaudeBasePluginInDir(files map[string][]byte, subdir string, cfg GenerateConfig) error {
+func generateClaudeObservabilityPluginInDir(files map[string][]byte, subdir string, cfg GenerateConfig) error {
 	name := subdir
 	if name == "" {
-		name = ClaudeBaseSlug(cfg)
+		name = ClaudeObservabilitySlug(cfg)
 	}
 	pluginJSON, err := marshalJSON(claudePluginMeta{
 		Name:        name,
@@ -431,8 +436,8 @@ func generateClaudeBasePluginInDir(files map[string][]byte, subdir string, cfg G
 	matchers := []claudeHookMatcher{
 		{Matcher: "*", Hooks: []claudeHookCommand{{Type: "command", Command: `bash "$CLAUDE_PLUGIN_ROOT/hook.sh"`}}},
 	}
-	hookEvents := make(map[string][]claudeHookMatcher, len(ClaudeBaseHookEvents))
-	for _, event := range ClaudeBaseHookEvents {
+	hookEvents := make(map[string][]claudeHookMatcher, len(ClaudeObservabilityHookEvents))
+	for _, event := range ClaudeObservabilityHookEvents {
 		hookEvents[event] = matchers
 	}
 	hooksJSON, err := marshalJSON(claudeHooksConfig{Hooks: hookEvents})
@@ -446,27 +451,27 @@ func generateClaudeBasePluginInDir(files map[string][]byte, subdir string, cfg G
 	return nil
 }
 
-// generateCursorBasePlugin emits the per-org "base" plugin for Cursor. Same
-// shape as the Claude variant but uses Cursor's hook event names + script
-// destination URL.
-func generateCursorBasePlugin(files map[string][]byte, cfg GenerateConfig) error {
-	return generateCursorBasePluginInDir(files, CursorBaseSlug(cfg), cfg)
+// generateCursorObservabilityPlugin emits the per-org observability plugin
+// for Cursor. Same shape as the Claude variant but uses Cursor's hook event
+// names + script destination URL.
+func generateCursorObservabilityPlugin(files map[string][]byte, cfg GenerateConfig) error {
+	return generateCursorObservabilityPluginInDir(files, CursorObservabilitySlug(cfg), cfg)
 }
 
-// generateCursorBasePluginFlat emits the same files at the root (no subdir)
-// for direct ZIP installation.
-func generateCursorBasePluginFlat(files map[string][]byte, cfg GenerateConfig) error {
-	return generateCursorBasePluginInDir(files, "", cfg)
+// generateCursorObservabilityPluginFlat emits the same files at the root
+// (no subdir) for direct ZIP installation.
+func generateCursorObservabilityPluginFlat(files map[string][]byte, cfg GenerateConfig) error {
+	return generateCursorObservabilityPluginInDir(files, "", cfg)
 }
 
-func generateCursorBasePluginInDir(files map[string][]byte, subdir string, cfg GenerateConfig) error {
+func generateCursorObservabilityPluginInDir(files map[string][]byte, subdir string, cfg GenerateConfig) error {
 	name := subdir
 	if name == "" {
-		name = CursorBaseSlug(cfg)
+		name = CursorObservabilitySlug(cfg)
 	}
 	pluginJSON, err := marshalJSON(cursorPluginMeta{
 		Name:        name,
-		DisplayName: "Base (Cursor)",
+		DisplayName: "Observability (Cursor)",
 		Description: "Gram observability hooks for " + cfg.OrgName + ". Install this plugin to forward tool events to your team's Gram dashboard.",
 		Version:     "0.1.0",
 		Author:      pluginAuthor{Name: cfg.OrgName, URL: "https://getgram.ai"},
@@ -477,8 +482,8 @@ func generateCursorBasePluginInDir(files map[string][]byte, subdir string, cfg G
 	}
 	files[path.Join(subdir, ".cursor-plugin/plugin.json")] = pluginJSON
 
-	hookEvents := make(map[string][]cursorHookCommand, len(CursorBaseHookEvents))
-	for _, event := range CursorBaseHookEvents {
+	hookEvents := make(map[string][]cursorHookCommand, len(CursorObservabilityHookEvents))
+	for _, event := range CursorObservabilityHookEvents {
 		hookEvents[event] = []cursorHookCommand{{Command: `bash "$CURSOR_PLUGIN_ROOT/hook.sh"`}}
 	}
 	hooksJSON, err := marshalJSON(cursorHooksConfig{Version: 1, Hooks: hookEvents})
@@ -492,19 +497,20 @@ func generateCursorBasePluginInDir(files map[string][]byte, subdir string, cfg G
 	return nil
 }
 
-// GenerateBasePluginPackage produces the file map for a single base plugin
-// for direct ZIP installation (no <org>-base/ subdir). Mints fresh hooks key
-// is the caller's responsibility — this just renders files using cfg.HooksAPIKey.
-func GenerateBasePluginPackage(cfg GenerateConfig, platform string) (map[string][]byte, error) {
+// GenerateObservabilityPluginPackage produces the file map for a single
+// observability plugin for direct ZIP installation (no <org>-observability/
+// subdir). Minting a fresh hooks key is the caller's responsibility — this
+// just renders files using cfg.HooksAPIKey.
+func GenerateObservabilityPluginPackage(cfg GenerateConfig, platform string) (map[string][]byte, error) {
 	files := make(map[string][]byte)
 	switch platform {
 	case "claude":
-		if err := generateClaudeBasePluginFlat(files, cfg); err != nil {
-			return nil, fmt.Errorf("generate claude base plugin: %w", err)
+		if err := generateClaudeObservabilityPluginFlat(files, cfg); err != nil {
+			return nil, fmt.Errorf("generate claude observability plugin: %w", err)
 		}
 	case "cursor":
-		if err := generateCursorBasePluginFlat(files, cfg); err != nil {
-			return nil, fmt.Errorf("generate cursor base plugin: %w", err)
+		if err := generateCursorObservabilityPluginFlat(files, cfg); err != nil {
+			return nil, fmt.Errorf("generate cursor observability plugin: %w", err)
 		}
 	default:
 		return nil, fmt.Errorf("unsupported platform: %s", platform)

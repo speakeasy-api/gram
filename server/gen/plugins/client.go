@@ -16,37 +16,37 @@ import (
 
 // Client is the "plugins" service client.
 type Client struct {
-	ListPluginsEndpoint           goa.Endpoint
-	GetPluginEndpoint             goa.Endpoint
-	CreatePluginEndpoint          goa.Endpoint
-	UpdatePluginEndpoint          goa.Endpoint
-	DeletePluginEndpoint          goa.Endpoint
-	AddPluginServerEndpoint       goa.Endpoint
-	UpdatePluginServerEndpoint    goa.Endpoint
-	RemovePluginServerEndpoint    goa.Endpoint
-	SetPluginAssignmentsEndpoint  goa.Endpoint
-	DownloadPluginPackageEndpoint goa.Endpoint
-	DownloadBasePluginEndpoint    goa.Endpoint
-	GetPublishStatusEndpoint      goa.Endpoint
-	PublishPluginsEndpoint        goa.Endpoint
+	ListPluginsEndpoint                 goa.Endpoint
+	GetPluginEndpoint                   goa.Endpoint
+	CreatePluginEndpoint                goa.Endpoint
+	UpdatePluginEndpoint                goa.Endpoint
+	DeletePluginEndpoint                goa.Endpoint
+	AddPluginServerEndpoint             goa.Endpoint
+	UpdatePluginServerEndpoint          goa.Endpoint
+	RemovePluginServerEndpoint          goa.Endpoint
+	SetPluginAssignmentsEndpoint        goa.Endpoint
+	DownloadPluginPackageEndpoint       goa.Endpoint
+	DownloadObservabilityPluginEndpoint goa.Endpoint
+	GetPublishStatusEndpoint            goa.Endpoint
+	PublishPluginsEndpoint              goa.Endpoint
 }
 
 // NewClient initializes a "plugins" service client given the endpoints.
-func NewClient(listPlugins, getPlugin, createPlugin, updatePlugin, deletePlugin, addPluginServer, updatePluginServer, removePluginServer, setPluginAssignments, downloadPluginPackage, downloadBasePlugin, getPublishStatus, publishPlugins goa.Endpoint) *Client {
+func NewClient(listPlugins, getPlugin, createPlugin, updatePlugin, deletePlugin, addPluginServer, updatePluginServer, removePluginServer, setPluginAssignments, downloadPluginPackage, downloadObservabilityPlugin, getPublishStatus, publishPlugins goa.Endpoint) *Client {
 	return &Client{
-		ListPluginsEndpoint:           listPlugins,
-		GetPluginEndpoint:             getPlugin,
-		CreatePluginEndpoint:          createPlugin,
-		UpdatePluginEndpoint:          updatePlugin,
-		DeletePluginEndpoint:          deletePlugin,
-		AddPluginServerEndpoint:       addPluginServer,
-		UpdatePluginServerEndpoint:    updatePluginServer,
-		RemovePluginServerEndpoint:    removePluginServer,
-		SetPluginAssignmentsEndpoint:  setPluginAssignments,
-		DownloadPluginPackageEndpoint: downloadPluginPackage,
-		DownloadBasePluginEndpoint:    downloadBasePlugin,
-		GetPublishStatusEndpoint:      getPublishStatus,
-		PublishPluginsEndpoint:        publishPlugins,
+		ListPluginsEndpoint:                 listPlugins,
+		GetPluginEndpoint:                   getPlugin,
+		CreatePluginEndpoint:                createPlugin,
+		UpdatePluginEndpoint:                updatePlugin,
+		DeletePluginEndpoint:                deletePlugin,
+		AddPluginServerEndpoint:             addPluginServer,
+		UpdatePluginServerEndpoint:          updatePluginServer,
+		RemovePluginServerEndpoint:          removePluginServer,
+		SetPluginAssignmentsEndpoint:        setPluginAssignments,
+		DownloadPluginPackageEndpoint:       downloadPluginPackage,
+		DownloadObservabilityPluginEndpoint: downloadObservabilityPlugin,
+		GetPublishStatusEndpoint:            getPublishStatus,
+		PublishPluginsEndpoint:              publishPlugins,
 	}
 }
 
@@ -268,9 +268,9 @@ func (c *Client) DownloadPluginPackage(ctx context.Context, p *DownloadPluginPac
 	return o.Result, o.Body, nil
 }
 
-// DownloadBasePlugin calls the "downloadBasePlugin" endpoint of the "plugins"
-// service.
-// DownloadBasePlugin may return the following errors:
+// DownloadObservabilityPlugin calls the "downloadObservabilityPlugin" endpoint
+// of the "plugins" service.
+// DownloadObservabilityPlugin may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
@@ -282,13 +282,13 @@ func (c *Client) DownloadPluginPackage(ctx context.Context, p *DownloadPluginPac
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
-func (c *Client) DownloadBasePlugin(ctx context.Context, p *DownloadBasePluginPayload) (res *DownloadBasePluginResult, resp io.ReadCloser, err error) {
+func (c *Client) DownloadObservabilityPlugin(ctx context.Context, p *DownloadObservabilityPluginPayload) (res *DownloadObservabilityPluginResult, resp io.ReadCloser, err error) {
 	var ires any
-	ires, err = c.DownloadBasePluginEndpoint(ctx, p)
+	ires, err = c.DownloadObservabilityPluginEndpoint(ctx, p)
 	if err != nil {
 		return
 	}
-	o := ires.(*DownloadBasePluginResponseData)
+	o := ires.(*DownloadObservabilityPluginResponseData)
 	return o.Result, o.Body, nil
 }
 

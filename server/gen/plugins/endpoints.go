@@ -17,19 +17,19 @@ import (
 
 // Endpoints wraps the "plugins" service endpoints.
 type Endpoints struct {
-	ListPlugins           goa.Endpoint
-	GetPlugin             goa.Endpoint
-	CreatePlugin          goa.Endpoint
-	UpdatePlugin          goa.Endpoint
-	DeletePlugin          goa.Endpoint
-	AddPluginServer       goa.Endpoint
-	UpdatePluginServer    goa.Endpoint
-	RemovePluginServer    goa.Endpoint
-	SetPluginAssignments  goa.Endpoint
-	DownloadPluginPackage goa.Endpoint
-	DownloadBasePlugin    goa.Endpoint
-	GetPublishStatus      goa.Endpoint
-	PublishPlugins        goa.Endpoint
+	ListPlugins                 goa.Endpoint
+	GetPlugin                   goa.Endpoint
+	CreatePlugin                goa.Endpoint
+	UpdatePlugin                goa.Endpoint
+	DeletePlugin                goa.Endpoint
+	AddPluginServer             goa.Endpoint
+	UpdatePluginServer          goa.Endpoint
+	RemovePluginServer          goa.Endpoint
+	SetPluginAssignments        goa.Endpoint
+	DownloadPluginPackage       goa.Endpoint
+	DownloadObservabilityPlugin goa.Endpoint
+	GetPublishStatus            goa.Endpoint
+	PublishPlugins              goa.Endpoint
 }
 
 // DownloadPluginPackageResponseData holds both the result and the HTTP
@@ -41,11 +41,11 @@ type DownloadPluginPackageResponseData struct {
 	Body io.ReadCloser
 }
 
-// DownloadBasePluginResponseData holds both the result and the HTTP response
-// body reader of the "downloadBasePlugin" method.
-type DownloadBasePluginResponseData struct {
+// DownloadObservabilityPluginResponseData holds both the result and the HTTP
+// response body reader of the "downloadObservabilityPlugin" method.
+type DownloadObservabilityPluginResponseData struct {
 	// Result is the method result.
-	Result *DownloadBasePluginResult
+	Result *DownloadObservabilityPluginResult
 	// Body streams the HTTP response body.
 	Body io.ReadCloser
 }
@@ -55,19 +55,19 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		ListPlugins:           NewListPluginsEndpoint(s, a.APIKeyAuth),
-		GetPlugin:             NewGetPluginEndpoint(s, a.APIKeyAuth),
-		CreatePlugin:          NewCreatePluginEndpoint(s, a.APIKeyAuth),
-		UpdatePlugin:          NewUpdatePluginEndpoint(s, a.APIKeyAuth),
-		DeletePlugin:          NewDeletePluginEndpoint(s, a.APIKeyAuth),
-		AddPluginServer:       NewAddPluginServerEndpoint(s, a.APIKeyAuth),
-		UpdatePluginServer:    NewUpdatePluginServerEndpoint(s, a.APIKeyAuth),
-		RemovePluginServer:    NewRemovePluginServerEndpoint(s, a.APIKeyAuth),
-		SetPluginAssignments:  NewSetPluginAssignmentsEndpoint(s, a.APIKeyAuth),
-		DownloadPluginPackage: NewDownloadPluginPackageEndpoint(s, a.APIKeyAuth),
-		DownloadBasePlugin:    NewDownloadBasePluginEndpoint(s, a.APIKeyAuth),
-		GetPublishStatus:      NewGetPublishStatusEndpoint(s, a.APIKeyAuth),
-		PublishPlugins:        NewPublishPluginsEndpoint(s, a.APIKeyAuth),
+		ListPlugins:                 NewListPluginsEndpoint(s, a.APIKeyAuth),
+		GetPlugin:                   NewGetPluginEndpoint(s, a.APIKeyAuth),
+		CreatePlugin:                NewCreatePluginEndpoint(s, a.APIKeyAuth),
+		UpdatePlugin:                NewUpdatePluginEndpoint(s, a.APIKeyAuth),
+		DeletePlugin:                NewDeletePluginEndpoint(s, a.APIKeyAuth),
+		AddPluginServer:             NewAddPluginServerEndpoint(s, a.APIKeyAuth),
+		UpdatePluginServer:          NewUpdatePluginServerEndpoint(s, a.APIKeyAuth),
+		RemovePluginServer:          NewRemovePluginServerEndpoint(s, a.APIKeyAuth),
+		SetPluginAssignments:        NewSetPluginAssignmentsEndpoint(s, a.APIKeyAuth),
+		DownloadPluginPackage:       NewDownloadPluginPackageEndpoint(s, a.APIKeyAuth),
+		DownloadObservabilityPlugin: NewDownloadObservabilityPluginEndpoint(s, a.APIKeyAuth),
+		GetPublishStatus:            NewGetPublishStatusEndpoint(s, a.APIKeyAuth),
+		PublishPlugins:              NewPublishPluginsEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -83,7 +83,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.RemovePluginServer = m(e.RemovePluginServer)
 	e.SetPluginAssignments = m(e.SetPluginAssignments)
 	e.DownloadPluginPackage = m(e.DownloadPluginPackage)
-	e.DownloadBasePlugin = m(e.DownloadBasePlugin)
+	e.DownloadObservabilityPlugin = m(e.DownloadObservabilityPlugin)
 	e.GetPublishStatus = m(e.GetPublishStatus)
 	e.PublishPlugins = m(e.PublishPlugins)
 }
@@ -442,11 +442,11 @@ func NewDownloadPluginPackageEndpoint(s Service, authAPIKeyFn security.AuthAPIKe
 	}
 }
 
-// NewDownloadBasePluginEndpoint returns an endpoint function that calls the
-// method "downloadBasePlugin" of service "plugins".
-func NewDownloadBasePluginEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+// NewDownloadObservabilityPluginEndpoint returns an endpoint function that
+// calls the method "downloadObservabilityPlugin" of service "plugins".
+func NewDownloadObservabilityPluginEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
-		p := req.(*DownloadBasePluginPayload)
+		p := req.(*DownloadObservabilityPluginPayload)
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "session",
@@ -473,11 +473,11 @@ func NewDownloadBasePluginEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFu
 		if err != nil {
 			return nil, err
 		}
-		res, body, err := s.DownloadBasePlugin(ctx, p)
+		res, body, err := s.DownloadObservabilityPlugin(ctx, p)
 		if err != nil {
 			return nil, err
 		}
-		return &DownloadBasePluginResponseData{Result: res, Body: body}, nil
+		return &DownloadObservabilityPluginResponseData{Result: res, Body: body}, nil
 	}
 }
 
