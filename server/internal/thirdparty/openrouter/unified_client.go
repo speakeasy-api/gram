@@ -432,21 +432,22 @@ func (c *ChatClient) GetObjectCompletion(ctx context.Context, req ObjectCompleti
 	}))
 
 	completionReq := CompletionRequest{
-		OrgID:          req.OrgID,
-		ProjectID:      req.ProjectID,
-		Messages:       messages,
-		Tools:          nil,
-		Temperature:    nil,
-		Model:          req.Model,
-		Stream:         false,
-		UsageSource:    req.UsageSource,
-		UserID:         req.UserID,
-		ExternalUserID: req.ExternalUserID,
-		UserEmail:      "",
-		HTTPMetadata:   req.HTTPMetadata,
-		JSONSchema:     req.JSONSchema,
-		ChatID:         uuid.Nil,
-		APIKeyID:       "",
+		OrgID:                     req.OrgID,
+		ProjectID:                 req.ProjectID,
+		Messages:                  messages,
+		Tools:                     nil,
+		Temperature:               nil,
+		Model:                     req.Model,
+		Stream:                    false,
+		UsageSource:               req.UsageSource,
+		UserID:                    req.UserID,
+		ExternalUserID:            req.ExternalUserID,
+		UserEmail:                 "",
+		HTTPMetadata:              req.HTTPMetadata,
+		JSONSchema:                req.JSONSchema,
+		ChatID:                    uuid.Nil,
+		APIKeyID:                  "",
+		NormalizeOutboundMessages: false,
 	}
 
 	return c.GetCompletion(ctx, completionReq)
