@@ -8,21 +8,21 @@ sequenceDiagram
 
     Note over Client, Linear: Preamble — initial 401, MCP-spec discovery, DCR (abstracted)
 
-    Note over Client, Linear: Phase 1 — Resolve Challenges
+    Note over Client, Linear: Phase 1 — Resolve Challenges (same as §5.2 implicit)
     Client->>Browser: open https://app.getgram.ai/mcp/authorize?client_id=…&code_challenge=…&state=…
     Browser->>clientsessions: GET /mcp/authorize?…
     clientsessions->>clientsessions: buildRequiredChallenge → required challenges
     Note over clientsessions: idempotent — every callback re-runs it. Full state space in §5.1.
     clientsessions->>clientsessions: write ChallengeState (MCP Client OAuth context: client_id, redirect_uri, code_challenge, original state, scope)
 
-    Note over Client, Linear: Phase 2 — Establish Client Session
+    Note over Client, Linear: Phase 2 — Establish Client Session (same as §5.2 implicit)
     clientsessions->>clientsessions: read required identity level from ChallengeState (authenticated | anonymous)
     alt authentication passes AND has sufficient identity level
         Note over clientsessions: reuse the resolved principal
     else authentication insufficient AND anonymous allowed
         clientsessions->>clientsessions: issue new anonymous session for subject anonymous:<mcp-session-id>
     else authentication insufficient AND user authentication required
-        Note over Browser, Speakeasy: Documented as a Speakeasy IDP Challenge. Open: We should consider registering Gram MCP Gateway as a new true OIDC App instead to avoid further dependence on Speakeasy as a provider
+        Note over Browser, Speakeasy: Documented as a Speakeasy IDP Challenge. (Same shape as §5.2 implicit Phase 2.)
         activate Speakeasy
         clientsessions-->>Browser: 302 → https://app.speakeasyapi.dev/v1/speakeasy_provider/login?return_url=https://app.getgram.ai/mcp/client_login_callback&state=<challenge-state-id>
         Browser->>Speakeasy: GET /v1/speakeasy_provider/login
@@ -38,13 +38,18 @@ sequenceDiagram
     end
     clientsessions->>clientsessions: stamp resolved principal onto ChallengeState
 
-    Note over Client, Linear: Phase 3 — Establish Remote Sessions (still owning Browser — not yet yielding to MCP Client callback)
-    loop for each pending remote_oauth_client (one in this example)
-        Note over remotesessions: RemoteSessions are scoped by (principal, remote_oauth_client) — not by MCP server. First-iteration constraints: one MCP server per remote_oauth_client, and one issuer per remote_oauth_client (so the client implies its issuer) — both may relax later.
+    Note over Client, Linear: Phase 3 — Establish Remote Sessions (interactive — user clicks each remote)
+    clientsessions-->>Browser: 302 → /mcp/connect?state=<challenge-state-id>
+    Browser->>clientsessions: GET /mcp/connect?state=…
+    clientsessions->>clientsessions: load ChallengeState, run buildRequiredChallenge (RemoteSessions still missing)
+    clientsessions-->>Browser: connect page — lists remote_oauth_clients (Connect button per pending, ✓ per completed) plus a "Give '<MCP Client>' Access to these Accounts" button (disabled until every remote is connected)
+
+    loop user clicks "Connect" for each pending remote_oauth_client (one click in this example)
+        Browser->>clientsessions: POST /mcp/connect?state=… (form: remote_oauth_client=Linear → server starts that remote's auth flow)
         clientsessions->>remotesessions: ensure session (principal, remote_oauth_client)
-        alt session valid (exists or silently refreshed)
+        alt session valid (raced with another tab, or silently refreshed)
             remotesessions-->>clientsessions: existing session
-            Note over remotesessions: skip the auth dance — continue to next issuer or to Phase 4
+            clientsessions-->>Browser: redirect back to /mcp/connect (page now shows ✓ for Linear)
         else session missing or expired
             remotesessions->>remotesessions: write RemoteSessionAuthState + RemoteSessionPKCE
             Note over remotesessions: state=RemoteSessionAuthState.StateID is the only handle carried across the redirect chain
@@ -58,15 +63,15 @@ sequenceDiagram
             remotesessions->>Linear: POST /oauth/token (code + verifier)
             Linear-->>remotesessions: { access_token, refresh_token }
             remotesessions->>remotesessions: write RemoteSession (existence is the completion marker — no separate progress field)
+            remotesessions-->>Browser: 302 → /mcp/connect?state=<challenge-state-id>
+            Browser->>clientsessions: GET /mcp/connect?state=…
+            clientsessions-->>Browser: connect page — ✓ for Linear, "Give Access" button enabled once every remote is connected
         end
     end
 
-    Note over Client, Linear: Phase 4 — Grant Access and Return Credentials (same connect UI as §5.3 interactive — only the grant button is rendered since every remote is already connected)
-    remotesessions-->>Browser: 302 → /mcp/connect?state=<challenge-state-id>
-    Browser->>clientsessions: GET /mcp/connect?state=…
-    clientsessions->>clientsessions: load ChallengeState, run buildRequiredChallenge (all RemoteSessions present)
-    clientsessions-->>Browser: connect page — ✓ for all remotes, "Give '<MCP Client>' Access to these Accounts" button enabled
+    Note over Client, Linear: Phase 4 — Grant Access and Return Credentials (consent is folded into the connect UI)
     Browser->>clientsessions: POST /mcp/connect?state=… (no remote selector → server treats as Give Access click)
+    clientsessions->>clientsessions: load ChallengeState, run buildRequiredChallenge (all RemoteSessions present)
     alt no consent record OR remote_set_hash mismatch
         clientsessions->>clientsessions: write client_session_consents row
     end

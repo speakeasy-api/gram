@@ -1,0 +1,51 @@
+---
+title: Unified Challenge — Lifecycle (covers both implicit and interactive modes)
+---
+stateDiagram-v2
+    direction LR
+
+    [*] --> ResolvingChallenges: GET /mcp/authorize
+
+    ResolvingChallenges --> EstablishingClientSession: ChallengeState written
+
+    state EstablishingClientSession {
+        direction LR
+        [*] --> ResolvingPrincipal
+        ResolvingPrincipal --> Reused: existing session matches identity level
+        ResolvingPrincipal --> Anonymous: anonymous identity level allowed
+        ResolvingPrincipal --> AuthenticatedUser: Gram login completed
+
+        Reused --> EstablishingRemoteSessions: principal stamped
+        Anonymous --> EstablishingRemoteSessions: principal stamped
+        AuthenticatedUser --> EstablishingRemoteSessions: principal stamped
+
+        state EstablishingRemoteSessions {
+            direction LR
+            [*] --> NextRemote
+            NextRemote --> SessionReady: existing session valid or silently refreshed
+            NextRemote --> SessionReady: completed remote OAuth challenge
+            SessionReady --> NextRemote: more remote_oauth_clients pending
+            SessionReady --> [*]: all RemoteSessions present
+
+            note right of NextRemote
+                Implicit mode — transitions fire via
+                automatic callback redirects.
+                Interactive mode — transitions fire via
+                user clicks on the /mcp/connect UI.
+                Same lifecycle, different trigger.
+            end note
+        }
+
+        EstablishingRemoteSessions --> CheckingConsent: all RemoteSessions present
+        CheckingConsent --> IssuingGrant: existing consent record matches remote_set_hash
+        CheckingConsent --> CollectingConsent: no matching consent record
+        CollectingConsent --> IssuingGrant: user submits consent
+
+        IssuingGrant --> TokenExchange: redirect MCP Client with auth code
+        TokenExchange --> [*]: JWT issued, ClientSession created
+
+        note right of IssuingGrant
+            Browser ownership transfers to
+            the MCP Client here.
+        end note
+    }

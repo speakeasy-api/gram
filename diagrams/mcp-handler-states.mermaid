@@ -1,0 +1,35 @@
+---
+title: MCP Handler — Per-request Lifecycle
+---
+stateDiagram-v2
+    direction LR
+
+    state "Dispatch to Backend" as DispatchToBackend
+
+    [*] --> PolicyGate: request hits /mcp/{slug}
+
+    PolicyGate --> ResolvingPrincipal: server requires auth (private always implies RBAC)
+    PolicyGate --> CollectingRemoteCredentials: server is public (no auth policy)
+
+    ResolvingPrincipal --> Authorizing: JWT validates and principal still exists
+    ResolvingPrincipal --> ClientSessionChallenge: ClientSessionManager raises ChallengeRequiredError (JWT invalid or principal missing)
+
+    Authorizing --> CollectingRemoteCredentials: RBAC pass
+    Authorizing --> Forbidden: RBAC fail
+
+    CollectingRemoteCredentials --> MergingCredentials: all RemoteSessions current (or silently refreshed)
+    CollectingRemoteCredentials --> RemoteSessionChallenge: RemoteSessionManager raises ChallengeRequiredError
+
+    MergingCredentials --> DispatchToBackend: OAuth credentials merged with static environment
+
+    DispatchToBackend --> Success: backend returns
+
+    Success --> [*]: 200
+    ClientSessionChallenge --> [*]: handler coerces to 401 + WWW-Authenticate → /mcp/authorize
+    RemoteSessionChallenge --> [*]: handler coerces to URL-mode elicitation (M#8 if available) — otherwise falls back to 401 auth challenge
+    Forbidden --> [*]: 403
+
+    note right of DispatchToBackend
+        Backend errors and their relationship
+        to OAuth are out of scope — see §7.
+    end note

@@ -322,11 +322,29 @@ We deliberately don't break out separate `client-session-challenge` and `remote-
 
 > Backend errors and their relationship to OAuth are **out of scope** for this section. The state machine in §5.1 treats backend invocation as a single transition; how a backend's failure response surfaces to the MCP client is a separate concern.
 
-The mermaid blocks below are also kept as standalone files in `/diagrams/*.mermaid` for tooling that wants them.
+Diagrams are sources of truth in `/diagrams/*.mermaid`; sections below link rather than embed. Open the file in any mermaid renderer to view.
 
 ### 5.1 `mcp-handler` — state machine
 
-_[To draft. Per-request lifecycle: Receiving → IdentifyingPrincipal → Authorizing → CollectingRemoteCredentials → Dispatching, with terminal `Success`, `AuthChallenge`, `ConsentChallenge`, `Forbidden` states. References §5.2/§5.3 for what happens during a challenge response.]_
+The per-request lifecycle. Fires _every_ time a request lands on `/mcp/{slug}`, separately from the one-time challenge flow that gets the client a JWT in the first place. The challenge flow (§5.2/§5.3) is what a client runs in response to one of the terminal challenge states below.
+
+**Diagram:** [`diagrams/mcp-handler-states.mermaid`](diagrams/mcp-handler-states.mermaid)
+
+State summary:
+
+- **PolicyGate.** First check: does this server have a Gram authorization policy? If no policy (public server), skip identity + authz and head straight for credential collection. If a policy exists, the server is private — and **private always implies RBAC**.
+- **ResolvingPrincipal.** `clientsessions/` validates the `Authorization: Bearer <JWT>` _and_ resolves whether the principal still exists. The `sub` is one of `user:<id>`, `apikey:<uuid>`, or `anonymous:<mcp-session-id>`. Anonymous principals are _not_ provisioned at request time — they are minted only during a §5.2 / §5.3 challenge. If the JWT is invalid OR the principal can't be resolved, `ClientSessionManager` raises a `ChallengeRequiredError`.
+- **Authorizing.** RBAC scope check. Failure raises `Forbidden`.
+- **CollectingRemoteCredentials.** `remotesessions/` ensures every required `RemoteSession` for `(principal, remote_oauth_client)` is current. Stale-but-refreshable sessions are silently refreshed inline. A session that's missing or expired beyond refresh causes `RemoteSessionManager` to raise a `ChallengeRequiredError`.
+- **MergingCredentials.** Resolved OAuth credentials are merged with the toolset's static environment. The merged bundle is what `DispatchToBackend` hands to the backend.
+- **DispatchToBackend.** Backend invoked with the credential bundle. Backend errors and their interaction with OAuth are **out of scope** for this section (see §7).
+- **Terminal states:**
+  - `Success` — 200 with the backend's response.
+  - `ClientSessionChallenge` — `ClientSessionManager` raised `ChallengeRequiredError`. The handler coerces this to a 401 + `WWW-Authenticate` pointing at `/mcp/authorize`. Client runs §5.2 / §5.3 to acquire a JWT, then retries.
+  - `RemoteSessionChallenge` — `RemoteSessionManager` raised `ChallengeRequiredError`. The handler coerces this to a URL-mode elicitation pointing at `/mcp/connect` (Milestone #8) — otherwise falls back to a 401 auth challenge identical to `ClientSessionChallenge`.
+  - `Forbidden` — 403. Not a challenge — no client action will fix it.
+
+The two `ChallengeRequiredError` paths are the only mechanism by which the per-request handler triggers the challenge flow. The handler's coercion logic — `ClientSessionManager` → 401, `RemoteSessionManager` → URL-elicitation-or-401 — is what `mcp/challenge.go` (§3.1) is for.
 
 ### 5.2 `unified-challenge` — implicit mode
 
@@ -344,96 +362,18 @@ A `remote_oauth_client` registered with Linear (`client_id` + `client_secret_enc
 
 Gram exposes the following URLs in this flow. Each callback handler re-loads ChallengeState by `state` and runs `buildRequiredChallenge` to decide what 302 comes next.
 
-| Path                                               | Method | Role                                                            |
-| -------------------------------------------------- | ------ | --------------------------------------------------------------- |
-| `https://app.getgram.ai/mcp/authorize`             | GET    | AS authorize endpoint (entry; sets up ChallengeState)           |
-| `https://app.getgram.ai/mcp/gram_login_callback`   | GET    | Speakeasy returns here after Gram login (`clientsessions/`)     |
-| `https://app.getgram.ai/mcp/remote_login_callback` | GET    | Remote AS returns here after upstream login (`remotesessions/`) |
-| `https://app.getgram.ai/mcp/consent`               | GET    | Consent page (`clientsessions/`)                                |
-| `https://app.getgram.ai/mcp/consent_callback`      | POST   | Consent submission (`clientsessions/`)                          |
-| `https://app.getgram.ai/mcp/token`                 | POST   | AS token endpoint (`clientsessions/`)                           |
+| Path                                               | Method     | Role                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| -------------------------------------------------- | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `https://app.getgram.ai/mcp/authorize`             | GET        | AS authorize endpoint (entry — sets up ChallengeState)                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `https://app.getgram.ai/mcp/client_login_callback` | GET        | Speakeasy returns here after Gram login (`clientsessions/`)                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `https://app.getgram.ai/mcp/remote_login_callback` | GET        | Remote AS returns here after upstream login (`remotesessions/`)                                                                                                                                                                                                                                                                                                                                                                                             |
+| `https://app.getgram.ai/mcp/connect`               | GET / POST | Connect UI (`clientsessions/`) — GET renders the per-remote + grant-access page; POST disambiguates from the form body alone — a `remote_oauth_client` selector means "start that remote's auth flow", absence means "Give Access click" (server runs `buildRequiredChallenge` to confirm all remotes are connected before minting the grant). In implicit mode only the no-selector path is exercised, since remotes are completed via the redirect chain. |
+| `https://app.getgram.ai/mcp/token`                 | POST       | AS token endpoint (`clientsessions/`)                                                                                                                                                                                                                                                                                                                                                                                                                       |
 
-```mermaid
-sequenceDiagram
-    participant Client as MCP Client
-    participant Browser
-    participant clientsessions as clientsessions/
-    participant remotesessions as remotesessions/
-    participant Linear as Linear<br/>(login.linear.com)
+**Diagrams.**
 
-    Note over Client, Linear: Preamble — initial 401, MCP-spec discovery, DCR (abstracted)
-
-    Note over Client, Linear: Phase 1 — Resolve Challenges
-    Client->>Browser: open https://app.getgram.ai/mcp/authorize?client_id=…&code_challenge=…&state=…
-    Browser->>clientsessions: GET /mcp/authorize?…
-    clientsessions->>clientsessions: buildRequiredChallenge → required challenges
-    Note over clientsessions: idempotent — every callback re-runs it. Full state space in §5.1.
-    clientsessions->>clientsessions: write ChallengeState (MCP Client OAuth context: client_id, redirect_uri, code_challenge, original state, scope)
-
-    Note over Client, Linear: Phase 2 — Establish Client Session
-    clientsessions->>clientsessions: read required identity level from ChallengeState (authenticated | anonymous)
-    alt authentication passes AND has sufficient identity level
-        Note over clientsessions: reuse the resolved principal
-    else authentication insufficient AND anonymous allowed
-        clientsessions->>clientsessions: issue new anonymous session for subject anonymous:<mcp-session-id>
-    else authentication insufficient AND user authentication required
-        Note over Browser, Speakeasy: Documented as a Speakeasy IDP Challenge. Open: We should consider registering Gram MCP Gateway as a new true OIDC App instead to avoid further dependence on Speakeasy as a provider
-        activate Speakeasy
-        clientsessions-->>Browser: 302 → https://app.speakeasyapi.dev/v1/speakeasy_provider/login?return_url=https://app.getgram.ai/mcp/gram_login_callback&state=<challenge-state-id>
-        Browser->>Speakeasy: GET /v1/speakeasy_provider/login
-        Speakeasy-->>Browser: return login challenge
-        Browser->>Speakeasy: POST user credentials
-        Speakeasy-->>Browser: 302 → https://app.getgram.ai/mcp/gram_login_callback?code=…&state=<challenge-state-id>
-        Browser->>clientsessions: GET /mcp/gram_login_callback?…
-        clientsessions->>Speakeasy: exchange code for ID token, fetch user info
-        Speakeasy-->>clientsessions: { id_token, user_info }
-        clientsessions->>clientsessions: verify user is a member of the client_session_issuer's owning org
-        clientsessions->>clientsessions: issue new authenticated session for subject user:<user-id>
-        deactivate Speakeasy
-    end
-    clientsessions->>clientsessions: stamp resolved principal onto ChallengeState
-
-    Note over Client, Linear: Phase 3 — Establish Remote Sessions (still owning Browser — not yet yielding to MCP Client callback)
-    loop for each pending remote_oauth_client (one in this example)
-        Note over remotesessions: RemoteSessions are scoped by (principal, remote_oauth_client) — not by MCP server. First-iteration constraints: one MCP server per remote_oauth_client, and one issuer per remote_oauth_client (so the client implies its issuer) — both may relax later.
-        clientsessions->>remotesessions: ensure session (principal, remote_oauth_client)
-        alt session valid (exists or silently refreshed)
-            remotesessions-->>clientsessions: existing session
-            Note over remotesessions: skip the auth dance — continue to next issuer or to Phase 4
-        else session missing or expired
-            remotesessions->>remotesessions: write RemoteSessionAuthState + RemoteSessionPKCE
-            Note over remotesessions: state=RemoteSessionAuthState.StateID is the only handle carried across the redirect chain
-            clientsessions-->>Browser: 302 → https://login.linear.com/oauth/authorize?client_id=…&state=…&code_challenge=…
-            Browser->>Linear: GET /oauth/authorize?…
-            Linear-->>Browser: return login challenge
-            Browser->>Linear: POST /oauth/login (user credentials)
-            Linear-->>Browser: 302 → https://app.getgram.ai/mcp/remote_login_callback?code=…&state=…
-            Browser->>remotesessions: GET /mcp/remote_login_callback?code=…&state=…
-            remotesessions->>remotesessions: lookup RemoteSessionAuthState by state, fetch RemoteSessionPKCE
-            remotesessions->>Linear: POST /oauth/token (code + verifier)
-            Linear-->>remotesessions: { access_token, refresh_token }
-            remotesessions->>remotesessions: write RemoteSession (existence is the completion marker — no separate progress field)
-        end
-    end
-
-    Note over Client, Linear: Phase 4 — Get User Consent and Return Credentials
-    remotesessions-->>Browser: 302 → /mcp/consent?state=<challenge-state-id>
-    Browser->>clientsessions: GET /mcp/consent?state=…
-    clientsessions->>clientsessions: load ChallengeState, run buildRequiredChallenge (observes all RemoteSessions present)
-    alt no consent record OR remote_set_hash mismatch
-        clientsessions-->>Browser: consent page (lists Linear)
-        Browser->>clientsessions: POST /mcp/consent_callback?state=… (consent body)
-        clientsessions->>clientsessions: write client_session_consents row
-    end
-    clientsessions->>clientsessions: mint ClientSessionGrant (auth code, principal, MCP Client redirect_uri and original state read from ChallengeState)
-    clientsessions-->>Client: 302 → MCP Client redirect_uri?code=…&state=<original MCP Client state>
-    Note over clientsessions: we finally return control to the clients callback URL and lose control over browser control flow
-    Client->>clientsessions: POST /mcp/token (code + verifier)
-    clientsessions->>clientsessions: verify ClientSessionGrant, mint JWT, create ClientSession (refresh-token hash key, principal, jti), update ClientSessionIndex
-    clientsessions-->>Client: { access_token: JWT, refresh_token }
-
-    Note over Client, Linear: Post — Client retries the original MCP request with the JWT (lifecycle covered by §5.1)
-```
+- Sequence (actor view — MCP Client, Browser, `clientsessions/`, `remotesessions/`, Speakeasy, Linear): [`diagrams/unified-challenge-implicit.mermaid`](diagrams/unified-challenge-implicit.mermaid)
+- State machine (lifecycle view — abstracts the auth handshakes; covers both implicit and interactive modes; left-to-right): [`diagrams/unified-challenge-states.mermaid`](diagrams/unified-challenge-states.mermaid)
 
 Design notes:
 
@@ -441,34 +381,35 @@ Design notes:
 - **Phase 2 reads identity level from ChallengeState** (`authenticated` | `anonymous`) and three-way branches: reuse the principal, issue an anonymous session, or run the Speakeasy login chain. Speakeasy is today's upstream IDP — wrapped in `activate`/`deactivate` to mark the dependency. Open: register Gram MCP Gateway as a true OIDC app so we drop the Speakeasy-as-IDP middleman.
 - **Phase 3 short-circuits on `ensure session`.** If `remotesessions/` finds a current `RemoteSession` (or can silently refresh), no redirect. The Linear dance only runs when the session is missing or expired. RemoteSessions are scoped by `(principal, remote_oauth_client)` — not by MCP server. First-iteration constraints: one MCP server per `remote_oauth_client`, one issuer per `remote_oauth_client` (so the client implies its issuer); both may relax later.
 - **Phase 4 mints `ClientSessionGrant` only after consent**, then redirects to the MCP Client's `redirect_uri`. The `ClientSession` Redis doc is created **lazily at token exchange** — minting a JWT and storing a refresh-token hash should not happen until the MCP Client actually exchanges the code.
-- **Three distinct callback URLs, no `?finalize=`.** `/mcp/gram_login_callback` (clientsessions), `/mcp/remote_login_callback` (remotesessions), `/mcp/consent_callback` (clientsessions). Each handler runs `buildRequiredChallenge` and 302s to the next required step.
+- **Two real callback URLs, plus a unified connect UI.** `/mcp/client_login_callback` (clientsessions, Speakeasy returns here) and `/mcp/remote_login_callback` (remotesessions, remote ASes return here) are the OAuth callbacks. `/mcp/connect` is shared with §5.3 interactive — it is the page where the user grants access (and, in interactive mode, drives per-remote connections). Each handler runs `buildRequiredChallenge` and 302s to the next required step. No `?finalize=` query-param hack.
 - **ChallengeState contents are deliberately unpinned here.** At minimum: the MCP Client's OAuth request fields and (after Phase 2) the resolved principal URN. Schema lands in §4 once flows are stable.
 - **Browser absorbs the user.** No separate `User` lane.
 
 #### Parameter reference
 
-The opaque-looking `state`, `code`, and `verifier` parameters above each map to specific records. This table tracks what's in each:
+The opaque-looking `state`, `code`, and `verifier` parameters in the sequence diagram each map to specific records. This table tracks what's in each:
 
-| Param                                                          | Where it appears | Contents / Redis reference                                                                               |
-| -------------------------------------------------------------- | ---------------- | -------------------------------------------------------------------------------------------------------- |
-| `state` (MCP Client → `/mcp/authorize`)                        | URL query        | MCP Client's anti-CSRF state — echoed verbatim in Phase 4's redirect to `redirect_uri`                   |
-| `code_challenge` (MCP Client → `/mcp/authorize`)               | URL query        | MCP Client's PKCE challenge — kept on ChallengeState, then on `ClientSessionGrant`                       |
-| `return_url` (Gram → Speakeasy `/v1/speakeasy_provider/login`) | URL query        | `https://app.getgram.ai/mcp/gram_login_callback`                                                         |
-| `state` (Gram → Speakeasy `/v1/speakeasy_provider/login`)      | URL query        | ChallengeState id                                                                                        |
-| `code` (Speakeasy → `/mcp/gram_login_callback`)                | URL query        | Speakeasy-issued one-time auth code (consumed in Phase 2)                                                |
-| `state` (Speakeasy → `/mcp/gram_login_callback`)               | URL query        | echoed ChallengeState id                                                                                 |
-| `state` (Gram → Linear `/oauth/authorize`)                     | URL query        | `RemoteSessionAuthState.StateID` → Redis `remoteSessionAuthState:{stateID}`                              |
-| `code_challenge` (Gram → Linear `/oauth/authorize`)            | URL query        | hash of `RemoteSessionPKCE.Verifier` → Redis `remoteSessionPKCE:{nonce}` (nonce encoded in `state`)      |
-| `code` (Linear → `/mcp/remote_login_callback`)                 | URL query        | Linear-issued one-time auth code (consumed in Phase 3)                                                   |
-| `state` (Linear → `/mcp/remote_login_callback`)                | URL query        | echoed `RemoteSessionAuthState.StateID`                                                                  |
-| `verifier` (Gram → Linear `/oauth/token`)                      | request body     | `RemoteSessionPKCE.Verifier`                                                                             |
-| `state` (`/mcp/remote_login_callback` → `/mcp/consent`)        | URL query        | ChallengeState id                                                                                        |
-| `state` (`/mcp/consent` → `/mcp/consent_callback`)             | URL query        | ChallengeState id                                                                                        |
-| `code` (Gram → MCP Client `redirect_uri`)                      | URL query        | `ClientSessionGrant.Code` → Redis `clientSessionGrant:{clientSessionIssuerID}:{code}`                    |
-| `state` (Gram → MCP Client `redirect_uri`)                     | URL query        | echoed MCP Client's original `state` — read from ChallengeState                                          |
-| `verifier` (MCP Client → `/mcp/token`)                         | request body     | MCP Client's PKCE verifier — matches `code_challenge` from Phase 1                                       |
-| `access_token` (Phase 4 response)                              | response body    | freshly-minted `SessionClaims` JWT — no Redis row                                                        |
-| `refresh_token` (Phase 4 response)                             | response body    | opaque token — SHA-256 hash keys `ClientSession` and appears in `ClientSessionIndex.ActiveRefreshHashes` |
+| Param                                                          | Where it appears | Contents / Redis reference                                                                                                                      |
+| -------------------------------------------------------------- | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `state` (MCP Client → `/mcp/authorize`)                        | URL query        | MCP Client's anti-CSRF state — echoed verbatim in Phase 4's redirect to `redirect_uri`                                                          |
+| `code_challenge` (MCP Client → `/mcp/authorize`)               | URL query        | MCP Client's PKCE challenge — kept on ChallengeState, then on `ClientSessionGrant`                                                              |
+| `return_url` (Gram → Speakeasy `/v1/speakeasy_provider/login`) | URL query        | `https://app.getgram.ai/mcp/client_login_callback`                                                                                              |
+| `state` (Gram → Speakeasy `/v1/speakeasy_provider/login`)      | URL query        | ChallengeState id                                                                                                                               |
+| `code` (Speakeasy → `/mcp/client_login_callback`)              | URL query        | Speakeasy-issued one-time auth code (consumed in Phase 2)                                                                                       |
+| `state` (Speakeasy → `/mcp/client_login_callback`)             | URL query        | echoed ChallengeState id                                                                                                                        |
+| `state` (Gram → Linear `/oauth/authorize`)                     | URL query        | `RemoteSessionAuthState.StateID` → Redis `remoteSessionAuthState:{stateID}`                                                                     |
+| `code_challenge` (Gram → Linear `/oauth/authorize`)            | URL query        | hash of `RemoteSessionPKCE.Verifier` → Redis `remoteSessionPKCE:{nonce}` (nonce encoded in `state`)                                             |
+| `code` (Linear → `/mcp/remote_login_callback`)                 | URL query        | Linear-issued one-time auth code (consumed in Phase 3)                                                                                          |
+| `state` (Linear → `/mcp/remote_login_callback`)                | URL query        | echoed `RemoteSessionAuthState.StateID`                                                                                                         |
+| `verifier` (Gram → Linear `/oauth/token`)                      | request body     | `RemoteSessionPKCE.Verifier`                                                                                                                    |
+| `state` (`/mcp/remote_login_callback` → `/mcp/connect`)        | URL query        | ChallengeState id                                                                                                                               |
+| `state` (`/mcp/connect` GET ↔ POST)                            | URL query        | ChallengeState id (same value passed through render → submit)                                                                                   |
+| `remote_oauth_client` (`/mcp/connect` POST body, optional)     | form field       | when present, the id of the remote whose Connect button was clicked — server starts that remote's auth flow. Absent on Give Access submissions. |
+| `code` (Gram → MCP Client `redirect_uri`)                      | URL query        | `ClientSessionGrant.Code` → Redis `clientSessionGrant:{clientSessionIssuerID}:{code}`                                                           |
+| `state` (Gram → MCP Client `redirect_uri`)                     | URL query        | echoed MCP Client's original `state` — read from ChallengeState                                                                                 |
+| `verifier` (MCP Client → `/mcp/token`)                         | request body     | MCP Client's PKCE verifier — matches `code_challenge` from Phase 1                                                                              |
+| `access_token` (Phase 4 response)                              | response body    | freshly-minted `SessionClaims` JWT — no Redis row                                                                                               |
+| `refresh_token` (Phase 4 response)                             | response body    | opaque token — SHA-256 hash keys `ClientSession` and appears in `ClientSessionIndex.ActiveRefreshHashes`                                        |
 
 ### 5.3 `unified-challenge` — interactive mode
 
