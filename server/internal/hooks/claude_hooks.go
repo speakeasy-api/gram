@@ -322,7 +322,7 @@ func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePaylo
 			result := makeHookResult(payload.HookEventName)
 			output, _ := result.HookSpecificOutput.(*HookSpecificOutput)
 			deny := "deny"
-			reason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
+			reason := renderBlockReason(scanResult.UserMessage, fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description))
 			// systemMessage renders as a warning in the user's terminal;
 			// permissionDecisionReason is what Claude itself sees and may quote
 			// back to the user. Send the same self-branded message in both so
@@ -433,7 +433,7 @@ func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePaylo
 				"policyName":    policy.Name,
 			}),
 		)
-		reason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", policy.Name, detail)
+		reason := renderBlockReason(policy.UserMessage, fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", policy.Name, detail))
 		// Record a companion ClickHouse entry with gram.hook.block_reason set
 		// so the trace_summaries materialized view can flag this trace as
 		// blocked. Shares the original PreToolUse trace_id (derived from

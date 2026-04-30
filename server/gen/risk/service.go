@@ -79,6 +79,9 @@ type CreateRiskPolicyPayload struct {
 	Action string
 	// Whether the policy name should be auto-generated.
 	AutoName *bool
+	// Optional message shown to end users when this policy blocks an action or
+	// surfaces a flagged finding.
+	UserMessage *string
 }
 
 // DeleteRiskPolicyPayload is the payload type of the risk service
@@ -204,6 +207,9 @@ type UpdateRiskPolicyPayload struct {
 	Action *string
 	// Whether the policy name should be auto-generated.
 	AutoName *bool
+	// Optional message shown to end users when this policy blocks an action or
+	// surfaces a flagged finding. Send an empty string to clear.
+	UserMessage *string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

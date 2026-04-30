@@ -76,6 +76,17 @@ func (s *Service) scanCursorForEnforcement(ctx context.Context, payload *gen.Cur
 	return result
 }
 
+// renderBlockReason returns the message shown to the agent when a tool call
+// or prompt is denied. When the policy carries a non-empty user_message, that
+// overrides the default Speakeasy-branded format; otherwise the supplied
+// fallback is rendered verbatim.
+func renderBlockReason(userMessage *string, fallback string) string {
+	if userMessage != nil && *userMessage != "" {
+		return *userMessage
+	}
+	return fallback
+}
+
 // extractClaudeText returns the scannable text content from a Claude hook payload.
 func extractClaudeText(payload *gen.ClaudePayload) string {
 	switch payload.HookEventName {

@@ -222,6 +222,7 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 		Enabled:          enabled,
 		Action:           action,
 		AutoName:         autoName,
+		UserMessage:      conv.PtrToPGTextEmpty(payload.UserMessage),
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "create risk policy").Log(ctx, s.logger)
@@ -366,6 +367,13 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		autoName = *payload.AutoName
 	}
 
+	// user_message is preserved when not in the payload; an explicit empty
+	// string clears it (rendered as NULL).
+	userMessage := current.UserMessage
+	if payload.UserMessage != nil {
+		userMessage = conv.PtrToPGTextEmpty(payload.UserMessage)
+	}
+
 	// Regenerate the name only when the caller explicitly opts in on this
 	// update via auto_name=true. Toggling unrelated fields (e.g. enabled)
 	// should not silently rename the policy.
@@ -402,6 +410,7 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		Enabled:          enabled,
 		Action:           action,
 		AutoName:         autoName,
+		UserMessage:      userMessage,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "update risk policy").Log(ctx, s.logger)
@@ -790,6 +799,7 @@ func (s *Service) policyToType(ctx context.Context, row repo.RiskPolicy) (*types
 		Enabled:          row.Enabled,
 		Action:           row.Action,
 		AutoName:         row.AutoName,
+		UserMessage:      conv.FromPGText[string](row.UserMessage),
 		Version:          row.Version,
 		CreatedAt:        row.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:        row.UpdatedAt.Time.Format(time.RFC3339),
@@ -812,6 +822,7 @@ func policyRowSnapshot(row repo.RiskPolicy) *types.RiskPolicy {
 		Enabled:          row.Enabled,
 		Action:           row.Action,
 		AutoName:         row.AutoName,
+		UserMessage:      conv.FromPGText[string](row.UserMessage),
 		Version:          row.Version,
 		CreatedAt:        row.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:        row.UpdatedAt.Time.Format(time.RFC3339),

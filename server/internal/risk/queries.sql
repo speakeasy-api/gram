@@ -9,6 +9,7 @@ INSERT INTO risk_policies (
   , enabled
   , action
   , auto_name
+  , user_message
   , version
 )
 VALUES (
@@ -21,6 +22,7 @@ VALUES (
   , @enabled
   , @action
   , @auto_name
+  , @user_message
   , 1
 )
 RETURNING *;
@@ -54,6 +56,7 @@ SET name = @name
   , enabled = @enabled
   , action = @action
   , auto_name = @auto_name
+  , user_message = @user_message
   , version = CASE
       WHEN sources IS DISTINCT FROM @sources
         OR presidio_entities IS DISTINCT FROM @presidio_entities

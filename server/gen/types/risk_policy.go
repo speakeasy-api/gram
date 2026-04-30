@@ -26,6 +26,9 @@ type RiskPolicy struct {
 	// Whether the policy name is auto-generated. When true, the name is
 	// regenerated on each update.
 	AutoName bool
+	// Optional message shown to the end user when this policy blocks an action or
+	// surfaces a flagged finding. When unset, a default message is rendered.
+	UserMessage *string
 	// Policy version, incremented on each update.
 	Version int64
 	// When the policy was created.
