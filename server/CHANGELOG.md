@@ -1,5 +1,34 @@
 # server
 
+## 0.45.0
+
+### Minor Changes
+
+- cc00be4: Assistants v0: server-side service, Temporal workflows + reaper, Fly.io / local Firecracker runtime providers, per-thread token manager, and the dashboard create/edit/onboarding UI for assistants with model, instructions, toolset and environment bindings.
+- de9a6af: Add management APIs and queries for MCP servers and MCP endpoints
+- 399ade0: Record plugin actions in the audit log. Plugin create, update, delete,
+  server add/update/remove, role assignments, and publish each emit an
+  audit entry inside the same transaction as the mutation, surfacing the
+  events in `auditlogs.list` and the dashboard activity views.
+- 4f152ca: Extend plugin publishing to generate Codex-compatible packages alongside
+  Claude Code and Cursor. Each published plugin now also includes a
+  `.codex-plugin/plugin.json` manifest and `.mcp.json` server config, with a
+  top-level `.agents/plugins/marketplace.json` listing all plugins for
+  installation via `codex plugin marketplace add`.
+- a85e350: reject private/reserved IPs in Remote MCP Server URL validation
+
+### Patch Changes
+
+- 506d221: Reduced per-batch concurrency against Polar /quantities
+- 745d0b2: feat(access): reassign members to the default role on role deletion and surface the affected members in the dashboard delete dialog
+- 16cbc66: fix(mcp): filter tools/list response by RBAC grants so users with tool-scoped mcp:connect permissions only see their authorized tools
+- 04c2dbf: Improve automatic setup of OAuth Settings for Remote MCP servers
+- d7d9fc0: Stop logging expected missing MCP install page metadata lookups.
+- 4163c3e: Stop logging expected .well-known OAuth probe misses
+- 7721e8e: Add a one-click "Auto-Configure" path on the OAuth wizard's path selection step for OAuth 2.1 MCP servers, and drop the requirement that custom OAuth proxy configurations supply scopes.
+- 7c3be05: Support for shadow mcp blocking (block unapproved MCP servers org-wide)
+- 506d221: reduce concurrency on polar meter requests
+
 ## 0.44.0
 
 ### Minor Changes
