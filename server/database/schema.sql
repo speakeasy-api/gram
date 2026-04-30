@@ -2193,6 +2193,7 @@ CREATE TABLE IF NOT EXISTS risk_policies (
   presidio_entities TEXT[],
   action TEXT NOT NULL DEFAULT 'flag',
   auto_name BOOLEAN NOT NULL DEFAULT TRUE,
+  user_message TEXT,
   version BIGINT NOT NULL,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
