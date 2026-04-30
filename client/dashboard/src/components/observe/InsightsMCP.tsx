@@ -507,7 +507,7 @@ function parseLocalDate(dateStr: string): Date {
   return new Date(dateStr);
 }
 
-export function MCPInsights() {
+export function InsightsMCPContent() {
   return (
     <InsightsOverviewShell noDataKind="tools" showMcpFilter>
       {(props) => <ToolsInsightsContent {...props} />}
@@ -519,10 +519,14 @@ export function InsightsOverviewShell({
   children,
   noDataKind,
   showMcpFilter,
+  title = "MCP Servers",
+  subtitle = "Monitor agent sessions, tool performance, and system health",
 }: {
   children: (props: InsightsContentProps) => React.ReactNode;
   noDataKind: "tools" | "chats";
   showMcpFilter: boolean;
+  title?: string;
+  subtitle?: string;
 }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const client = useGramContext();
@@ -814,6 +818,8 @@ export function InsightsOverviewShell({
           onMcpServerChange={setMcpServerParam}
           toolsets={toolsets}
           isLoadingToolsets={isLoadingToolsets}
+          title={title}
+          subtitle={subtitle}
         />
 
         <InsightsOverviewContent
@@ -857,6 +863,8 @@ function InsightsPageHeader({
   onMcpServerChange,
   toolsets,
   isLoadingToolsets,
+  title,
+  subtitle,
 }: {
   filterDimension: FilterDimension;
   onFilterDimensionChange: (d: FilterDimension) => void;
@@ -875,6 +883,8 @@ function InsightsPageHeader({
   onMcpServerChange?: (serverSlug: string | null) => void;
   toolsets: Array<{ slug: string; name: string }>;
   isLoadingToolsets?: boolean;
+  title: string;
+  subtitle: string;
 }) {
   const { isExpanded: isInsightsOpen } = useInsightsState();
   const { projectSlug } = useSlugs();
@@ -889,10 +899,8 @@ function InsightsPageHeader({
       )}
     >
       <div className="flex min-w-0 flex-col gap-1">
-        <h1 className="text-xl font-semibold">MCP Servers</h1>
-        <p className="text-muted-foreground text-sm">
-          Monitor agent sessions, tool performance, and system health
-        </p>
+        <h1 className="text-xl font-semibold">{title}</h1>
+        <p className="text-muted-foreground text-sm">{subtitle}</p>
       </div>
       <div
         className={cn(

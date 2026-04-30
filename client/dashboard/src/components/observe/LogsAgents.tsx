@@ -117,7 +117,7 @@ function isValidPreset(value: string | null): value is DateRangePreset {
   return value !== null && validPresets.includes(value as DateRangePreset);
 }
 
-export function AgentSessionsContent() {
+export function LogsAgentsContent() {
   const [searchParams, setSearchParams] = useSearchParams();
 
   const [offset, setOffset] = useState(0);
@@ -607,7 +607,7 @@ function AgentSessionsPageContent({
         onOpenChange={(open) => !open && setSelectedChat(null)}
         direction="right"
       >
-        <DrawerContent className="!w-[720px] sm:!max-w-[720px]">
+        <DrawerContent className="w-[720px]! sm:max-w-[720px]!">
           {selectedChat && (
             <ChatDetailPanel
               chatId={selectedChat.id}

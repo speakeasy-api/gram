@@ -193,7 +193,7 @@ function MCPServerFilter({
   );
 }
 
-export function LogsContent() {
+export function LogsMCPContent() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { projectSlug } = useSlugs();
 
