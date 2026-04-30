@@ -1230,7 +1230,8 @@ type WorkosOrganizationSync struct {
 }
 
 type WorkosUserSync struct {
-	ID          int64
+	ID          int32
 	LastEventID string
 	CreatedAt   pgtype.Timestamptz
+	UpdatedAt   pgtype.Timestamptz
 }

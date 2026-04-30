@@ -110,7 +110,7 @@ Login-time pull sync exists (`syncWorkOSMemberships` in `server/internal/auth/se
 
 ---
 
-### Test 1 — Webhook signature validation
+### Test 1 — Webhook signature validation (:check:)
 
 ```bash
 # Bad signature → 401
@@ -123,7 +123,7 @@ curl -s -o /dev/null -w "%{http_code}" \
 
 ---
 
-### Test 2 — Org created via webhook links to Gram org
+### Test 2 — Org created via webhook links to Gram org (:check)
 
 **Setup:** In WorkOS dashboard, set org `external_id` to an existing Gram org UUID:
 
@@ -142,7 +142,7 @@ SELECT * FROM workos_organization_syncs WHERE workos_organization_id = '<workos_
 
 ---
 
-### Test 3 — Membership event links user
+### Test 3 — Membership event links user (cant check)
 
 **Setup:**
 
@@ -211,3 +211,58 @@ In Temporal UI (`http://localhost:8233`):
 | `server/internal/background/process_workos_org_events.go`               | Temporal workflow + debounced executor                                        |
 | `server/internal/thirdparty/workos/events.go`                           | `ListEvents` client method                                                    |
 | `server/internal/external/impl.go`                                      | WorkOS webhook HTTP handler                                                   |
+
+## Leftover work
+
+### Latest context
+
+We have the core work done to listen to workos events and store them in our database. This is working as expected and the data model is mostly finished.
+
+We have a few snags to cover, and some of them related to a specific problem that will be outlined below.
+
+### Problem context 1: eventual consistency
+
+Currently we don't have a proper eventual consistency mechanism in place. One example:
+
+1. We suddenly wipe our database
+2. We have a script that repopulates it
+3. WorkOS events keep coming in
+
+We may run into a situation where we have a very old workos event ID that changes the already up to date data that we already filled due to our backfill script. So we'll be overwriting data that is already up to date.
+
+#### Solution
+
+For every table that we update in the sync, we need to track the workos_updated_at date (note: not the same as updated_at because we might update tables for other reasons).
+
+The algorithm we need is:
+
+function shouldProcessEvent(row, event) {
+if (row.last_event_id == null) {
+return event.object.updated_at >= row.workos_updated_at;
+}
+
+return event.id > row.last_event_id;
+}
+
+### Problem context 2: roles and FK
+
+We've been having the debate around how to handle global / organisation roles and foreign keys. Solution is now clear:
+
+(For context, we're renaming organizaition_user_roles to organization_role_assignments):
+
+1. Add a column role_urn for the role
+2. role_urn will be one of `role:global:<gloabl_role_id>` or `role:organization:<organization_role_id>
+3. There is no foreign key and no need for it. Any updates have to be handled by the app
+
+### Problem context 3: organisation membership updates
+
+There is a chance that an organisation membership event arrives before we have a local gram user table. This means that we wont have a user ID. We need to assume this can happen and update what we can at the point in time of the event. Eventually that user will get created and have the proper organization membership. What this means:
+
+1. Allow the user ID of a membership to be null (column change).
+2. When a membership event comes - if we dont have an internal user ID - we just leave it empty. Eventually we'll be able to fill this and we'll do it when the user does get created
+
+### Backfill script
+
+We need to create a script to backfill the data before the first run (and whenever required). This should look at all the orgs in our DB and query workos to get the current state. Should run as a temporal workflow (manually triggered). This is how global roles get filled originally.
+
+organization_role_assignments

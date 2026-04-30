@@ -114,7 +114,7 @@ func (b *BackfillWorkOSOrg) Do(ctx context.Context, params BackfillWorkOSOrgPara
 		gramUserID, err := usersrepo.New(dbtx).GetUserIDByWorkosID(ctx, conv.ToPGText(member.UserID))
 		switch {
 		case errors.Is(err, pgx.ErrNoRows):
-			// proceed with null user_id
+			// proceed with null user_id on role assignments; skip relationship upsert
 		case err != nil:
 			return fmt.Errorf("get user by workos id %q: %w", member.UserID, err)
 		default:

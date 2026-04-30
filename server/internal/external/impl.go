@@ -122,6 +122,19 @@ func (s *Service) ReceiveWorkOSWebhook(ctx context.Context, payload *gen.Receive
 		return oops.E(oops.CodeBadRequest, err, "unable to parse workos webhook payload").Log(ctx, logger)
 	}
 
+	// Membership events use a global cursor (workos_user_syncs) — span all orgs.
+	// Org/role events use per-org cursor (workos_organization_syncs).
+	if event.Data.Object == "organization_membership" {
+		_, err = background.ExecuteProcessWorkOSMembershipEventsWorkflowDebounced(ctx, s.temporalEnv)
+		var alreadyStartedM *serviceerror.WorkflowExecutionAlreadyStarted
+		switch {
+		case errors.As(err, &alreadyStartedM):
+		case err != nil:
+			logger.ErrorContext(ctx, "failed to start workos membership events workflow")
+		}
+		return nil
+	}
+
 	orgID := conv.Ternary(event.Data.Object == "organization", event.Data.ID, event.Data.OrganizationID)
 
 	if orgID == "" {

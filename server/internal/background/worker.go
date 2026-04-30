@@ -223,7 +223,9 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.GenerateToolsetEmbeddings)
 	temporalWorker.RegisterActivity(activities.FallbackModelUsageTracking)
 	temporalWorker.RegisterActivity(activities.ProcessWorkOSOrganizationEvents)
+	temporalWorker.RegisterActivity(activities.ProcessWorkOSMembershipEvents)
 	temporalWorker.RegisterActivity(activities.GetAllWorkOSLinkedOrganizations)
+	temporalWorker.RegisterActivity(activities.BackfillWorkOSOrg)
 	temporalWorker.RegisterActivity(activities.GenerateChatTitle)
 	temporalWorker.RegisterActivity(activities.SegmentChat)
 	temporalWorker.RegisterActivity(activities.DeleteChatResolutions)
@@ -251,7 +253,10 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(DelayedChatResolutionAnalysisWorkflow)
 	temporalWorker.RegisterWorkflow(ProcessWorkOSOrganizationEventsWorkflowDebounced)
 	temporalWorker.RegisterWorkflow(ProcessWorkOSOrganizationEventsWorkflow)
+	temporalWorker.RegisterWorkflow(ProcessWorkOSMembershipEventsWorkflowDebounced)
+	temporalWorker.RegisterWorkflow(ProcessWorkOSMembershipEventsWorkflow)
 	temporalWorker.RegisterWorkflow(ReconcileWorkOSOrganizationsWorkflow)
+	temporalWorker.RegisterWorkflow(BackfillWorkOSOrganizationsWorkflow)
 	// Trigger workflows
 	temporalWorker.RegisterWorkflow(TriggerCronWorkflow)
 	temporalWorker.RegisterWorkflow(TriggerDispatchWorkflow)
@@ -276,6 +281,12 @@ func NewTemporalWorker(
 	if err := AddReconcileWorkOSOrganizationsSchedule(context.Background(), env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
 			logger.ErrorContext(context.Background(), "failed to add reconcile workos organizations schedule", attr.SlogError(err))
+		}
+	}
+
+	if err := AddReconcileWorkOSMembershipsSchedule(context.Background(), env); err != nil {
+		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
+			logger.ErrorContext(context.Background(), "failed to add reconcile workos memberships schedule", attr.SlogError(err))
 		}
 	}
 

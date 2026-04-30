@@ -65,6 +65,7 @@ type Activities struct {
 	fetchUnanalyzedMessages         *risk_analysis.FetchUnanalyzed
 	analyzeBatch                    *risk_analysis.AnalyzeBatch
 	processWorkOSOrganizationEvents *activities.ProcessWorkOSOrganizationEvents
+	processWorkOSMembershipEvents   *activities.ProcessWorkOSMembershipEvents
 	getAllWorkOSLinkedOrganizations *activities.GetAllWorkOSLinkedOrganizations
 	backfillWorkOSOrg               *activities.BackfillWorkOSOrg
 }
@@ -130,6 +131,7 @@ func NewActivities(
 		fetchUnanalyzedMessages:         risk_analysis.NewFetchUnanalyzed(logger, tracerProvider, db),
 		analyzeBatch:                    risk_analysis.NewAnalyzeBatch(logger, tracerProvider, meterProvider, db, piiScanner),
 		processWorkOSOrganizationEvents: activities.NewProcessWorkOSOrganizationEvents(logger, db, workosEventsClient),
+		processWorkOSMembershipEvents:   activities.NewProcessWorkOSMembershipEvents(logger, db, workosEventsClient),
 		getAllWorkOSLinkedOrganizations: activities.NewGetAllWorkOSLinkedOrganizations(logger, db),
 		backfillWorkOSOrg:               activities.NewBackfillWorkOSOrg(logger, db, workosClient),
 	}
@@ -274,6 +276,10 @@ func (a *Activities) AnalyzeBatch(ctx context.Context, input risk_analysis.Analy
 
 func (a *Activities) ProcessWorkOSOrganizationEvents(ctx context.Context, params activities.ProcessWorkOSOrganizationEventsParams) (*activities.ProcessWorkOSOrganizationEventsResult, error) {
 	return a.processWorkOSOrganizationEvents.Do(ctx, params)
+}
+
+func (a *Activities) ProcessWorkOSMembershipEvents(ctx context.Context, params activities.ProcessWorkOSMembershipEventsParams) (*activities.ProcessWorkOSMembershipEventsResult, error) {
+	return a.processWorkOSMembershipEvents.Do(ctx, params)
 }
 
 func (a *Activities) GetAllWorkOSLinkedOrganizations(ctx context.Context) ([]string, error) {
