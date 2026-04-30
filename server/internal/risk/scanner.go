@@ -100,7 +100,7 @@ func NewScanner(logger *slog.Logger, db *pgxpool.Pool, piiScanner ra.PIIScanner,
 	// Scan() creates a new detector each call (with a global mutex),
 	// which is fine for batch workers but adds unnecessary latency on
 	// the real-time hook path.
-	det, err := detect.NewDetectorDefaultConfig()
+	det, err := ra.NewDetector()
 	if err != nil {
 		logger.ErrorContext(context.Background(), "failed to pre-create gitleaks detector, will fall back to per-scan creation", attr.SlogError(err))
 	}

@@ -86,7 +86,11 @@ func makeHookResult(hookEventName string) *gen.ClaudeHookResult {
 func (s *Service) handleUserPromptSubmit(ctx context.Context, payload *gen.ClaudeHookPayload) (*gen.ClaudeHookResult, error) {
 	if s.riskScanner != nil && payload.Prompt != nil && payload.SessionID != nil {
 		if scanResult := s.scanClaudeForEnforcement(ctx, payload); scanResult != nil {
-			return nil, oops.E(oops.CodeForbidden, nil, "Speakeasy blocked this prompt: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
+			reason := fmt.Sprintf("Speakeasy blocked this prompt: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
+			if metadata, err := s.getSessionMetadata(ctx, *payload.SessionID); err == nil {
+				s.writeClaudeBlockToClickHouse(ctx, payload, &metadata, reason)
+			}
+			return nil, oops.E(oops.CodeForbidden, nil, "%s", reason)
 		}
 	}
 	return makeHookResult(payload.HookEventName), nil

@@ -40,6 +40,13 @@ func NewScanner() *Scanner {
 
 // newDetector creates a gitleaks detector, serialized by detectorInitMu.
 func (s *Scanner) newDetector() (*detect.Detector, error) {
+	return NewDetector()
+}
+
+// NewDetector creates a gitleaks detector using the package-level mutex
+// to serialize viper initialization. Use this from any package that needs
+// to construct a long-lived detector outside the Scanner abstraction.
+func NewDetector() (*detect.Detector, error) {
 	detectorInitMu.Lock()
 	defer detectorInitMu.Unlock()
 	detector, err := detect.NewDetectorDefaultConfig()
