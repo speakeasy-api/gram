@@ -245,7 +245,7 @@ export default function Plugins() {
               )}
               <PluginGrid
                 plugins={filteredPlugins}
-                searchQuery={search}
+                searchQuery={hasPlugins ? search : ""}
                 onDelete={setPluginToDelete}
                 createCard={createCard}
               />
