@@ -317,3 +317,77 @@ SELECT
     max(time_unix_nano) AS last_seen_unix_nano
 FROM telemetry_logs
 GROUP BY gram_project_id, attribute_key;
+
+CREATE TABLE IF NOT EXISTS authz_challenges (
+    -- Identity
+    id UUID DEFAULT generateUUIDv7() COMMENT 'Unique identifier for the challenge entry.',
+    timestamp DateTime64(9) COMMENT 'Time the authz decision was made.' CODEC(DoubleDelta, ZSTD),
+
+    -- Tenancy
+    organization_id String COMMENT 'Organization the principal was acting in.' CODEC(ZSTD),
+    project_id String DEFAULT '' COMMENT 'Project the check was scoped to. Empty string when the check is org-level (kept non-nullable so it can sit in the primary key).' CODEC(ZSTD),
+
+    -- Request correlation (joins to telemetry_logs / tool_logs)
+    trace_id FixedString(32) COMMENT 'W3C trace ID linking the challenge to the originating request.',
+    span_id FixedString(16) COMMENT 'W3C span ID for the specific operation that triggered the challenge.',
+    request_id Nullable(String) COMMENT 'Internal request ID from RequestContext (when set).' CODEC(ZSTD),
+
+    -- Principal
+    principal_urn String COMMENT 'Primary principal URN (e.g. user:<uuid> or api_key:<id>).' CODEC(ZSTD),
+    principal_type LowCardinality(String) COMMENT 'Principal kind: user | api_key | assistant.',
+    user_id Nullable(String) COMMENT 'AuthContext.UserID at decision time.' CODEC(ZSTD),
+    user_external_id Nullable(String) COMMENT 'Customer-supplied external user identifier.' CODEC(ZSTD),
+    user_email Nullable(String) COMMENT 'AuthContext.Email when present (session auth path).' CODEC(ZSTD),
+    api_key_id Nullable(String) COMMENT 'API key ID for api_key principals.' CODEC(ZSTD),
+    session_id Nullable(String) COMMENT 'Session ID for session-authed principals.' CODEC(ZSTD),
+    role_slugs Array(LowCardinality(String)) COMMENT 'Role principal URNs whose grants were loaded for this principal.',
+
+    -- Decision
+    operation LowCardinality(String) COMMENT 'Authz operation: require | require_any | filter.',
+    outcome LowCardinality(String) COMMENT 'Decision outcome: allow | deny | error.',
+    reason LowCardinality(String) COMMENT 'Reason: grant_matched | no_grants | scope_unsatisfied | invalid_check | rbac_skipped_apikey | dev_override.',
+
+    -- Focus check (denormalized from requested_checks for fast filtering)
+    scope LowCardinality(String) COMMENT 'Scope of the focus check.',
+    resource_kind LowCardinality(String) COMMENT 'Resource kind of the focus check.',
+    resource_id String COMMENT 'Resource ID of the focus check.' CODEC(ZSTD),
+    selector String COMMENT 'JSON selector of the focus check.' CODEC(ZSTD),
+    expanded_scopes Array(LowCardinality(String)) COMMENT 'Scope hierarchy expansion of the focus check.',
+
+    -- Full set of checks evaluated by this Require/RequireAny/Filter call
+    requested_checks Nested(
+        scope LowCardinality(String),
+        resource_kind LowCardinality(String),
+        resource_id String,
+        selector String
+    ) COMMENT 'All checks requested in the call. length(requested_checks.scope) gives the count.',
+
+    -- Grants that satisfied the check (empty arrays on deny)
+    matched_grants Nested(
+        principal_urn String,
+        scope LowCardinality(String),
+        selector String,
+        matched_via_check_scope LowCardinality(String)
+    ) COMMENT 'Grants that satisfied at least one requested check. Empty on deny.',
+    evaluated_grant_count UInt32 COMMENT 'Total grants the principal had loaded on context at decision time.',
+
+    -- Filter-mode aggregates (only for operation=filter)
+    filter_candidate_count UInt32 DEFAULT 0 COMMENT 'Number of resource IDs the Filter call considered.',
+    filter_allowed_count UInt32 DEFAULT 0 COMMENT 'Number of resource IDs the Filter call returned as allowed.'
+) ENGINE = MergeTree
+PARTITION BY toYYYYMMDD(timestamp)
+ORDER BY (organization_id, project_id, outcome, timestamp, id)
+TTL toDateTime(timestamp) + INTERVAL 30 DAY
+SETTINGS index_granularity = 8192
+COMMENT 'Authz challenge log: every authz decision (allow + deny) for forensics and the Challenge UI.';
+
+-- Bloom filter indices for point lookups (organization_id and project_id are
+-- already in the ORDER BY so no bloom filters needed for them).
+CREATE INDEX IF NOT EXISTS idx_authz_challenges_principal_urn ON authz_challenges (principal_urn) TYPE bloom_filter(0.01) GRANULARITY 1;
+CREATE INDEX IF NOT EXISTS idx_authz_challenges_user_id ON authz_challenges (user_id) TYPE bloom_filter(0.01) GRANULARITY 1;
+CREATE INDEX IF NOT EXISTS idx_authz_challenges_resource_id ON authz_challenges (resource_id) TYPE bloom_filter(0.01) GRANULARITY 1;
+CREATE INDEX IF NOT EXISTS idx_authz_challenges_trace_id ON authz_challenges (trace_id) TYPE bloom_filter(0.01) GRANULARITY 1;
+CREATE INDEX IF NOT EXISTS idx_authz_challenges_session_id ON authz_challenges (session_id) TYPE bloom_filter(0.01) GRANULARITY 1;
+CREATE INDEX IF NOT EXISTS idx_authz_challenges_api_key_id ON authz_challenges (api_key_id) TYPE bloom_filter(0.01) GRANULARITY 1;
+CREATE INDEX IF NOT EXISTS idx_authz_challenges_scope ON authz_challenges (scope) TYPE set(0) GRANULARITY 4;
+CREATE INDEX IF NOT EXISTS idx_authz_challenges_reason ON authz_challenges (reason) TYPE set(0) GRANULARITY 4;
