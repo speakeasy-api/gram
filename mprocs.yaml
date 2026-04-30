@@ -1,3 +1,4 @@
+# mprocs configuration
 procs:
   mock-idp:
     cmd: ["mise", "run", "start:mock-idp"]
