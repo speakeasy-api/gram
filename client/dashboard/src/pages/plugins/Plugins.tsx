@@ -80,6 +80,9 @@ export default function Plugins() {
           ?.match(/filename="(.+)"/)?.[1] ?? `observability-${platform}.zip`;
       a.click();
       URL.revokeObjectURL(url);
+    } catch (err) {
+      toast.error("Failed to download observability plugin");
+      console.error("observability plugin download failed", err);
     } finally {
       setIsDownloadingObservability(null);
     }
