@@ -131,4 +131,4 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md) for development setup and detailed cont
 └ [Temporal](https://temporal.io/) - workflow engine.  
 └ [Polar](https://polar.sh/) - usage based billing.  
 └ [OpenRouter](https://openrouter.ai/) - LLM gateway.  
-└ [Speakeasy](https://www.speakeasy.com/) - Generated SDKs. Spec hosted [here](http://app.getgram.ai/openapi.yaml).
+└ [Speakeasy](https://www.speakeasy.com/) - Generated SDKs. Spec hosted [here](http://app.getgram.ai/openapi.yaml). 
