@@ -101,7 +101,9 @@ export function ProxyMetadataForm() {
             </div>
 
             <div>
-              <Type className="mb-2 font-medium">Scopes (comma-separated)</Type>
+              <Type className="mb-2 font-medium">
+                Scopes (comma-separated, optional)
+              </Type>
               <Input
                 placeholder="read, write, openid"
                 value={proxy.scopes}

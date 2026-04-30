@@ -108,10 +108,6 @@ function EditOAuthProxyForm({
       return;
     }
     const scopesArray = parseScopes(scopes);
-    if (scopesArray.length === 0) {
-      setError("At least one scope is required");
-      return;
-    }
     setError(null);
 
     const audienceChanged = audience !== initialAudience;

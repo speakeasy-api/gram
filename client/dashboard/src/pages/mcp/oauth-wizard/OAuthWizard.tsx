@@ -16,7 +16,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Globe } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
-import { AutoRegisterChoice } from "./AutoRegisterChoice";
+import { AutoConfigureLoader } from "./AutoConfigureLoader";
 import { AutoRegisterFailedStep } from "./AutoRegisterFailedStep";
 import { ExternalOAuthForm } from "./ExternalOAuthForm";
 import { FatalErrorStep } from "./FatalErrorStep";
@@ -166,9 +166,8 @@ function WizardSteps({
 
       {state.matches({ proxy: "metadata" }) && <ProxyMetadataForm />}
 
-      {(state.matches({ proxy: "autoRegisterChoice" }) ||
-        state.matches({ proxy: "registering" }) ||
-        (isProxyCreating && isAutoRegistering)) && <AutoRegisterChoice />}
+      {(state.matches({ proxy: "registering" }) ||
+        (isProxyCreating && isAutoRegistering)) && <AutoConfigureLoader />}
 
       {state.matches({ proxy: "autoRegisterFailed" }) && (
         <AutoRegisterFailedStep error={state.context.error} onClose={onClose} />
