@@ -11,18 +11,36 @@ import (
 // This complements the existing WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE which
 // acts purely as a duplicate function call suppression mechanism, and doesn't
 // allow for enqueuing subsequent runs of the workflow.
+//
+// `wrapped` is the workflow function whose body runs once per execution. It
+// must return (result, nil) and must not issue its own ContinueAsNew —
+// continuation is owned by this wrapper. Errors returned by `wrapped` are
+// propagated unchanged.
+//
+// `continueAsSelf` is the function used as the ContinueAsNew target when the
+// wrapper decides to enqueue another run. It MUST be the debounced wrapper
+// itself, not `wrapped`, otherwise subsequent runs lose debounce semantics
+// (the next run would not coalesce signals). Top-level workflow functions can
+// reference themselves recursively in Go, so callers pass the function being
+// defined here.
+//
+// `reenqueue` lets callers say "another run is needed even without an extra
+// signal" — e.g. when the activity reports HasMore. Treated additively with
+// any signals received during this run.
 func Debounce[Params any, Result any](
-	wfn func(ctx workflow.Context, params Params) (result Result, err error),
+	wrapped func(ctx workflow.Context, params Params) (result Result, err error),
+	continueAsSelf func(ctx workflow.Context, params Params) (result Result, err error),
 	signalName string,
 	reenqueue func(params Params, result Result) bool,
 ) func(ctx workflow.Context, params Params) (result Result, err error) {
 	return func(ctx workflow.Context, params Params) (result Result, err error) {
 		discard := ""
 		signalCh := workflow.GetSignalChannel(ctx, signalName)
-		// Get the initial signal that triggered the workflow with signal-with-start
+		// Drain the signal that triggered this run via signal-with-start so it
+		// doesn't double-count toward the post-run reenqueue check.
 		_ = signalCh.ReceiveAsync(&discard)
 
-		res, err := wfn(ctx, params)
+		res, err := wrapped(ctx, params)
 		if err != nil {
 			return res, err
 		}
@@ -44,6 +62,6 @@ func Debounce[Params any, Result any](
 			return res, nil
 		}
 
-		return res, workflow.NewContinueAsNewError(ctx, wfn, params)
+		return res, workflow.NewContinueAsNewError(ctx, continueAsSelf, params)
 	}
 }

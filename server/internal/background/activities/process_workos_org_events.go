@@ -130,7 +130,7 @@ func (p *ProcessWorkOSOrganizationEvents) handlePage(ctx context.Context, logger
 			return lastEventID, oops.E(oops.CodeUnexpected, nil, "unexpected non-organization event object: %s", orgEvent.Object).Log(ctx, eventLogger)
 		}
 
-		eventLogger = eventLogger.With(attr.SlogWorkOSEventOrganizationID(orgEvent.OrganizationID))
+		eventLogger = eventLogger.With(attr.SlogWorkOSEventOrganizationID(orgID))
 
 		eventID, err := p.handleEvent(ctx, eventLogger, workosOrgID, event)
 		if err != nil {
