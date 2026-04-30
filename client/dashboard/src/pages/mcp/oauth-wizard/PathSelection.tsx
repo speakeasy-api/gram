@@ -31,7 +31,7 @@ export function PathSelection() {
             title="Auto-Configure"
             onClick={() => send({ type: "SELECT_PROXY_AUTO" })}
             icon={ZapIcon}
-            badge={<Badge variant="information">Recommended</Badge>}
+            badges={<Badge variant="information">Recommended</Badge>}
           >
             <Type muted small>
               Automatically set up OAuth Proxy based on pre-discovered details
@@ -44,12 +44,12 @@ export function PathSelection() {
           title="OAuth Proxy"
           onClick={() => send({ type: "SELECT_PROXY" })}
           icon={WaypointsIcon}
-          badge={
-            !canAutoConfigure &&
-            discovered?.version === "2.0" && (
+          badges={[
+            !canAutoConfigure && discovered?.version === "2.0" && (
               <Badge variant="information">Recommended</Badge>
-            )
-          }
+            ),
+            discovered && <Badge variant="neutral">Discovered</Badge>,
+          ]}
         >
           <Type muted small>
             Use existing OAuth credentials from the upstream service to
@@ -61,6 +61,11 @@ export function PathSelection() {
           title="External OAuth"
           onClick={() => send({ type: "SELECT_EXTERNAL" })}
           icon={ServerIcon}
+          badges={
+            discovered?.version === "2.1" && (
+              <Badge variant="neutral">Discovered</Badge>
+            )
+          }
         >
           <Type muted small>
             Allow MCP clients to interact directly with an external OAuth
@@ -109,7 +114,7 @@ const OAuthDetectedCallout = ({
 
 function PathOptionCard(props: {
   title: string;
-  badge?: React.ReactNode;
+  badges?: React.ReactNode;
   onClick: () => void;
   icon: LucideIcon;
   children: React.ReactNode;
@@ -129,7 +134,7 @@ function PathOptionCard(props: {
         <Icon className="text-muted-foreground w-5" />
         <Type className="font-medium">{props.title}</Type>
       </div>
-      {props.badge}
+      <div className="flex gap-2">{props.badges}</div>
       {props.children}
     </button>
   );
