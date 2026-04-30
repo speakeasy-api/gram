@@ -2,12 +2,12 @@ package mv
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -46,7 +46,7 @@ func DescribePromptTemplate(
 		return nil, oops.E(oops.CodeBadRequest, err, "id or name is required to lookup template").Log(ctx, logger)
 	}
 	switch {
-	case errors.Is(err, sql.ErrNoRows):
+	case errors.Is(err, pgx.ErrNoRows):
 		return nil, oops.E(oops.CodeNotFound, nil, "template not found")
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to get template").Log(ctx, logger)

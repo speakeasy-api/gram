@@ -3,13 +3,13 @@ package environments
 import (
 	"context"
 	"crypto/sha256"
-	"database/sql"
 	"encoding/hex"
 	"errors"
 	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
@@ -344,7 +344,7 @@ func (s *Service) DeleteEnvironment(ctx context.Context, payload *gen.DeleteEnvi
 		ProjectID: *authCtx.ProjectID,
 	})
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return nil
 		}
 		return oops.E(oops.CodeUnexpected, err, "failed to delete environment").Log(ctx, logger)
@@ -456,7 +456,7 @@ func (s *Service) DeleteSourceEnvironmentLink(ctx context.Context, payload *gen.
 		SourceSlug: payload.SourceSlug,
 		ProjectID:  *authCtx.ProjectID,
 	})
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return oops.E(oops.CodeUnexpected, err, "failed to delete source environment link").Log(ctx, s.logger)
 	}
 
@@ -480,7 +480,7 @@ func (s *Service) GetSourceEnvironment(ctx context.Context, payload *gen.GetSour
 	})
 
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.E(oops.CodeNotFound, err, "environment not found for source").Log(ctx, s.logger)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to get environment for source").Log(ctx, s.logger)
@@ -579,7 +579,7 @@ func (s *Service) DeleteToolsetEnvironmentLink(ctx context.Context, payload *gen
 		ToolsetID: toolsetID,
 		ProjectID: *authCtx.ProjectID,
 	})
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return oops.E(oops.CodeUnexpected, err, "failed to delete toolset environment link").Log(ctx, s.logger)
 	}
 
@@ -607,7 +607,7 @@ func (s *Service) GetToolsetEnvironment(ctx context.Context, payload *gen.GetToo
 	})
 
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.E(oops.CodeNotFound, err, "environment not found for toolset").Log(ctx, s.logger)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to get environment for toolset").Log(ctx, s.logger)

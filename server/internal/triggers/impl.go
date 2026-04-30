@@ -2,7 +2,6 @@ package triggers
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,6 +12,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -399,7 +399,7 @@ func toTriggerError(ctx context.Context, logger *slog.Logger, err error, message
 		public = fmt.Sprintf("%s: %s", message, err.Error())
 	case errors.Is(err, bgtriggers.ErrAuthFailed):
 		code = oops.CodeUnauthorized
-	case errors.Is(err, sql.ErrNoRows):
+	case errors.Is(err, pgx.ErrNoRows):
 		code = oops.CodeNotFound
 	}
 	return oops.E(code, err, "%s", public).Log(ctx, logger)

@@ -2,7 +2,6 @@ package mv
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,6 +12,7 @@ import (
 
 	"github.com/ettle/strcase"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -81,7 +81,7 @@ func DescribeToolsetEntry(
 		ProjectID: pid,
 	})
 	switch {
-	case errors.Is(err, sql.ErrNoRows):
+	case errors.Is(err, pgx.ErrNoRows):
 		return nil, oops.E(oops.CodeNotFound, err, "toolset not found").Log(ctx, logger)
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to load toolset").Log(ctx, logger)
@@ -358,7 +358,7 @@ func DescribeToolset(
 		ProjectID: pid,
 	})
 	switch {
-	case errors.Is(err, sql.ErrNoRows):
+	case errors.Is(err, pgx.ErrNoRows):
 		return nil, oops.E(oops.CodeNotFound, err, "toolset not found").Log(ctx, logger)
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to load toolset").Log(ctx, logger)
@@ -367,7 +367,7 @@ func DescribeToolset(
 	// TODO: It would be better if every query below accepted a deployment ID as a parameter to guarantee cache consistency.
 	activeDeploymentID, err := deploymentRepo.GetActiveDeploymentID(ctx, pid)
 	switch {
-	case errors.Is(err, sql.ErrNoRows):
+	case errors.Is(err, pgx.ErrNoRows):
 		logger.WarnContext(ctx, "no active deployment id", attr.SlogError(err))
 	case err != nil:
 		logger.ErrorContext(ctx, "failed to get active deployment id", attr.SlogError(err))
@@ -450,7 +450,7 @@ func DescribeToolset(
 			ProjectID: pid,
 			ID:        toolset.ExternalOauthServerID.UUID,
 		})
-		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to get external oauth server metadata").Log(ctx, logger)
 		}
 		if len(externalOauthMetadata.Metadata) > 0 {
@@ -475,7 +475,7 @@ func DescribeToolset(
 			ProjectID: pid,
 			ID:        toolset.OauthProxyServerID.UUID,
 		})
-		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to get oauth proxy server").Log(ctx, logger)
 		}
 		if err == nil {
@@ -1206,7 +1206,7 @@ func getToolsetOrigin(
 		ToolsetID:      toolsetID,
 	})
 	switch {
-	case errors.Is(err, sql.ErrNoRows):
+	case errors.Is(err, pgx.ErrNoRows):
 		return nil, nil
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to load toolset origin").Log(ctx, logger)
