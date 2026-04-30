@@ -1,4 +1,4 @@
-h1:GF/T8YyxPGYQlaGtTOqKdkgq1JXaycoBffAt07/c2XI=
+h1:30GVS3vdj0VS7nGZp2BSq2566xT4iAKHq4ZGF9ZnheE=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -148,3 +148,4 @@ h1:GF/T8YyxPGYQlaGtTOqKdkgq1JXaycoBffAt07/c2XI=
 20260429084759_selector-indexes.sql h1:ESv55XcreTXC4wzd7Ui3k12dESUQwBy1yCiPWH74GBQ=
 20260429103554_drop_mcp_frontends_and_slugs.sql h1:gzlbVdjsiTS5Rcfe9ZarON+sjhOrKGFVdELohFxjoVI=
 20260429131558_mcp_servers_and_endpoints.sql h1:sNg8L6mZfYPnbP4xBreK4S9la7SwGzTBCw0Qe68h3DY=
+20260430111449_add-workos-roles-and-sync-tables.sql h1:tIK7+g0gEt27jixmoso4bHI7GYAtxUzfL8l24k2Os8g=
