@@ -8,23 +8,23 @@ import {
   QueryKey,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { pluginsDownloadPluginPackage } from "../funcs/pluginsDownloadPluginPackage.js";
+import { pluginsDownloadObservabilityPlugin } from "../funcs/pluginsDownloadObservabilityPlugin.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import * as operations from "../models/operations/index.js";
 import { unwrapAsync } from "../types/fp.js";
-export type PluginsDownloadPluginPackageQueryData =
-  operations.DownloadPluginPackageResponse;
+export type PluginsDownloadObservabilityPluginQueryData =
+  operations.DownloadObservabilityPluginResponse;
 
-export function prefetchPluginsDownloadPluginPackage(
+export function prefetchPluginsDownloadObservabilityPlugin(
   queryClient: QueryClient,
   client$: GramCore,
-  request: operations.DownloadPluginPackageRequest,
-  security?: operations.DownloadPluginPackageSecurity | undefined,
+  request: operations.DownloadObservabilityPluginRequest,
+  security?: operations.DownloadObservabilityPluginSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
-    ...buildPluginsDownloadPluginPackageQuery(
+    ...buildPluginsDownloadObservabilityPluginQuery(
       client$,
       request,
       security,
@@ -33,27 +33,26 @@ export function prefetchPluginsDownloadPluginPackage(
   });
 }
 
-export function buildPluginsDownloadPluginPackageQuery(
+export function buildPluginsDownloadObservabilityPluginQuery(
   client$: GramCore,
-  request: operations.DownloadPluginPackageRequest,
-  security?: operations.DownloadPluginPackageSecurity | undefined,
+  request: operations.DownloadObservabilityPluginRequest,
+  security?: operations.DownloadObservabilityPluginSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
   queryFn: (
     context: QueryFunctionContext,
-  ) => Promise<PluginsDownloadPluginPackageQueryData>;
+  ) => Promise<PluginsDownloadObservabilityPluginQueryData>;
 } {
   return {
-    queryKey: queryKeyPluginsDownloadPluginPackage({
-      pluginId: request.pluginId,
+    queryKey: queryKeyPluginsDownloadObservabilityPlugin({
       platform: request.platform,
       gramSession: request.gramSession,
       gramProject: request.gramProject,
     }),
-    queryFn: async function pluginsDownloadPluginPackageQueryFn(
+    queryFn: async function pluginsDownloadObservabilityPluginQueryFn(
       ctx,
-    ): Promise<PluginsDownloadPluginPackageQueryData> {
+    ): Promise<PluginsDownloadObservabilityPluginQueryData> {
       const sig = combineSignals(
         ctx.signal,
         options?.signal,
@@ -65,7 +64,7 @@ export function buildPluginsDownloadPluginPackageQuery(
         signal: sig,
       };
 
-      return unwrapAsync(pluginsDownloadPluginPackage(
+      return unwrapAsync(pluginsDownloadObservabilityPlugin(
         client$,
         request,
         security,
@@ -75,13 +74,12 @@ export function buildPluginsDownloadPluginPackageQuery(
   };
 }
 
-export function queryKeyPluginsDownloadPluginPackage(
+export function queryKeyPluginsDownloadObservabilityPlugin(
   parameters: {
-    pluginId: string;
-    platform: operations.QueryParamPlatform;
+    platform: operations.Platform;
     gramSession?: string | undefined;
     gramProject?: string | undefined;
   },
 ): QueryKey {
-  return ["@gram/client", "plugins", "downloadPluginPackage", parameters];
+  return ["@gram/client", "plugins", "downloadObservabilityPlugin", parameters];
 }

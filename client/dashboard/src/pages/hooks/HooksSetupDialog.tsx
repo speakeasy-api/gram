@@ -6,7 +6,8 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import { ExternalLink, Plus } from "lucide-react";
+import { usePublishStatus } from "@gram/client/react-query/publishStatus";
+import { ExternalLink, Plus, Sparkles } from "lucide-react";
 import { useEffect, useState } from "react";
 import { HookSourceIcon } from "./HookSourceIcon";
 
@@ -240,6 +241,40 @@ const providers: {
   },
 ];
 
+// PublishedRepoPanel surfaces the simpler install path for orgs that have
+// already connected a published GitHub repo: a one-click "install the base
+// plugin" flow that bakes credentials in, so they can skip the manual
+// SessionStart hook below.
+function PublishedRepoPanel({ repoUrl }: { repoUrl: string }) {
+  return (
+    <div className="border-primary/30 bg-primary/5 mb-6 rounded-lg border p-4">
+      <div className="mb-2 flex items-center gap-2">
+        <Sparkles className="text-primary size-4" />
+        <h3 className="text-sm font-semibold">
+          Recommended: install via your org's published marketplace
+        </h3>
+      </div>
+      <p className="text-muted-foreground mb-3 text-sm">
+        Your org publishes plugins to a private GitHub repo with credentials
+        already embedded. Installing the <code>base</code> plugin gives your
+        team observability automatically — no manual SessionStart hook, no
+        credential paste.
+      </p>
+      <Button variant="outline" size="sm" asChild>
+        <a
+          href={repoUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-2"
+        >
+          <ExternalLink className="size-4" />
+          Open published repo
+        </a>
+      </Button>
+    </div>
+  );
+}
+
 export function HooksSetupDialog({
   open,
   onOpenChange,
@@ -250,6 +285,11 @@ export function HooksSetupDialog({
   defaultProvider?: Provider;
 }) {
   const [selected, setSelected] = useState<Provider>(defaultProvider);
+  const { data: publishStatus } = usePublishStatus();
+  const showPublishedPanel =
+    publishStatus?.configured &&
+    publishStatus?.connected &&
+    Boolean(publishStatus?.repoUrl);
 
   useEffect(() => {
     setSelected(defaultProvider);
@@ -261,6 +301,10 @@ export function HooksSetupDialog({
         <Dialog.Header>
           <Dialog.Title>Setup Hooks</Dialog.Title>
         </Dialog.Header>
+
+        {showPublishedPanel && publishStatus?.repoUrl && (
+          <PublishedRepoPanel repoUrl={publishStatus.repoUrl} />
+        )}
 
         <div className="mb-6 flex flex-wrap gap-3">
           {providers.map((p) => {

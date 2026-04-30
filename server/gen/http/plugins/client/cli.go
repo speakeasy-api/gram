@@ -417,6 +417,40 @@ func BuildDownloadPluginPackagePayload(pluginsDownloadPluginPackagePluginID stri
 	return v, nil
 }
 
+// BuildDownloadObservabilityPluginPayload builds the payload for the plugins
+// downloadObservabilityPlugin endpoint from CLI flags.
+func BuildDownloadObservabilityPluginPayload(pluginsDownloadObservabilityPluginPlatform string, pluginsDownloadObservabilityPluginSessionToken string, pluginsDownloadObservabilityPluginProjectSlugInput string) (*plugins.DownloadObservabilityPluginPayload, error) {
+	var err error
+	var platform string
+	{
+		platform = pluginsDownloadObservabilityPluginPlatform
+		if !(platform == "claude" || platform == "cursor") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("platform", platform, []any{"claude", "cursor"}))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if pluginsDownloadObservabilityPluginSessionToken != "" {
+			sessionToken = &pluginsDownloadObservabilityPluginSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if pluginsDownloadObservabilityPluginProjectSlugInput != "" {
+			projectSlugInput = &pluginsDownloadObservabilityPluginProjectSlugInput
+		}
+	}
+	v := &plugins.DownloadObservabilityPluginPayload{}
+	v.Platform = platform
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildGetPublishStatusPayload builds the payload for the plugins
 // getPublishStatus endpoint from CLI flags.
 func BuildGetPublishStatusPayload(pluginsGetPublishStatusSessionToken string, pluginsGetPublishStatusProjectSlugInput string) (*plugins.GetPublishStatusPayload, error) {

@@ -15,7 +15,7 @@ import (
 // payload, resolves the project from session metadata, and runs the risk
 // scanner. Returns nil when the scanner is unavailable, the session is not
 // yet validated, or no enforcing policy matches.
-func (s *Service) scanClaudeForEnforcement(ctx context.Context, payload *gen.ClaudeHookPayload) *risk.ScanResult {
+func (s *Service) scanClaudeForEnforcement(ctx context.Context, payload *gen.ClaudePayload) *risk.ScanResult {
 	if s.riskScanner == nil || payload.SessionID == nil {
 		return nil
 	}
@@ -77,7 +77,7 @@ func (s *Service) scanCursorForEnforcement(ctx context.Context, payload *gen.Cur
 }
 
 // extractClaudeText returns the scannable text content from a Claude hook payload.
-func extractClaudeText(payload *gen.ClaudeHookPayload) string {
+func extractClaudeText(payload *gen.ClaudePayload) string {
 	switch payload.HookEventName {
 	case "UserPromptSubmit":
 		if payload.Prompt != nil {

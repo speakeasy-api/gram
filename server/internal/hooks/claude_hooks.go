@@ -12,9 +12,11 @@ import (
 
 	"github.com/google/uuid"
 	goahttp "goa.design/goa/v3/http"
+	"goa.design/goa/v3/security"
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -184,8 +186,8 @@ func extractSessionMetadata(payload *gen.LogsPayload) claudeLogMetadata {
 	return metadata
 }
 
-// Claude is the unified endpoint for all Claude Code hook events
-func (s *Service) Claude(ctx context.Context, payload *gen.ClaudeHookPayload) (*gen.ClaudeHookResult, error) {
+// Claude is the unified endpoint for all Claude Code hook events.
+func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (*gen.ClaudeHookResult, error) {
 	s.logger.InfoContext(ctx, fmt.Sprintf("🪝 HOOK Claude: %s", payload.HookEventName),
 		attr.SlogEvent("claude_hook"),
 		attr.SlogValueAny(map[string]any{
@@ -194,6 +196,14 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudeHookPayload) (*
 			"sessionID":     payload.SessionID,
 		}),
 	)
+
+	if hasOptionalPluginAuth(payload) {
+		var err error
+		ctx, err = s.authorizePluginRequest(ctx, *payload.ApikeyToken, *payload.ProjectSlugInput)
+		if err != nil {
+			return nil, err
+		}
+	}
 
 	s.recordHook(ctx, payload)
 
@@ -221,7 +231,7 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudeHookPayload) (*
 	}
 }
 
-func (s *Service) handleSessionStart(ctx context.Context, payload *gen.ClaudeHookPayload) (*gen.ClaudeHookResult, error) {
+func (s *Service) handleSessionStart(ctx context.Context, payload *gen.ClaudePayload) (*gen.ClaudeHookResult, error) {
 	// Always allow sessions to start
 	continueVal := true
 	result := makeHookResult(payload.HookEventName)
@@ -229,25 +239,62 @@ func (s *Service) handleSessionStart(ctx context.Context, payload *gen.ClaudeHoo
 	return result, nil
 }
 
-func (s *Service) recordHook(ctx context.Context, payload *gen.ClaudeHookPayload) {
+// hasOptionalPluginAuth returns true when the Claude request carries both
+// the Gram-Key and Gram-Project headers, which signals plugin-driven
+// attribution and triggers explicit auth in Claude().
+func hasOptionalPluginAuth(payload *gen.ClaudePayload) bool {
+	return payload.ApikeyToken != nil && *payload.ApikeyToken != "" &&
+		payload.ProjectSlugInput != nil && *payload.ProjectSlugInput != ""
+}
+
+// authorizePluginRequest validates the API key and project slug supplied
+// by a plugin-driven Claude request. Returns the auth-populated context
+// on success, or a 401 on either failure (the request explicitly tried
+// to authenticate, so we don't silently fall back to OTEL on bad creds).
+func (s *Service) authorizePluginRequest(ctx context.Context, key, projectSlug string) (context.Context, error) {
+	keyScheme := &security.APIKeyScheme{
+		Name:           constants.KeySecurityScheme,
+		Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+		RequiredScopes: []string{"hooks"},
+	}
+	ctx, err := s.auth.Authorize(ctx, key, keyScheme)
+	if err != nil {
+		return ctx, err
+	}
+	projectScheme := &security.APIKeyScheme{
+		Name:           constants.ProjectSlugSecuritySchema,
+		Scopes:         []string{},
+		RequiredScopes: []string{"hooks"},
+	}
+	return s.auth.Authorize(ctx, projectSlug, projectScheme)
+}
+
+func (s *Service) recordHook(ctx context.Context, payload *gen.ClaudePayload) {
 	if payload.SessionID == nil || *payload.SessionID == "" {
 		s.logger.WarnContext(ctx, "Tool event called without session ID")
 		return
 	}
 
 	sessionID := *payload.SessionID
+
+	// Both plugin-authenticated and OTEL-only requests go through the same
+	// Redis-buffered flow: persist when session metadata is in the cache,
+	// buffer otherwise so flushPendingHooks can re-persist with full
+	// attribution once /rpc/hooks.otel.logs lands. Claude hook payloads
+	// don't carry user.email, so even plugin requests would land with an
+	// empty user_email if persisted synchronously on a cache miss — Cursor
+	// avoids this because its payload includes UserEmail directly.
 	metadata, err := s.getSessionMetadata(ctx, sessionID)
 	if err == nil {
 		s.persistHook(ctx, payload, &metadata)
 	} else {
-		// Session not validated yet - buffer in Redis
 		if err := s.bufferHook(ctx, sessionID, payload); err != nil {
 			s.logger.ErrorContext(ctx, "Failed to buffer hook", attr.SlogError(err))
 		}
 	}
 }
 
-func (s *Service) persistHook(ctx context.Context, payload *gen.ClaudeHookPayload, metadata *SessionMetadata) {
+func (s *Service) persistHook(ctx context.Context, payload *gen.ClaudePayload, metadata *SessionMetadata) {
 	if isConversationEvent(payload.HookEventName) {
 		if err := s.persistConversationEvent(ctx, payload, metadata); err != nil {
 			s.logger.ErrorContext(ctx, "Failed to persist conversation event", attr.SlogError(err))
@@ -268,7 +315,7 @@ func (s *Service) getSessionMetadata(ctx context.Context, sessionID string) (Ses
 	return metadata, nil
 }
 
-func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudeHookPayload) (*gen.ClaudeHookResult, error) {
+func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePayload) (*gen.ClaudeHookResult, error) {
 	if s.riskScanner != nil && payload.SessionID != nil {
 		if scanResult := s.scanClaudeForEnforcement(ctx, payload); scanResult != nil {
 			result := makeHookResult(payload.HookEventName)
@@ -327,18 +374,42 @@ func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudeHookP
 		}
 		return result, nil
 	}
-	metadata, err := s.getSessionMetadata(ctx, sessionID)
-	if err != nil {
-		// Session metadata not yet validated — allow this call; the buffered
-		// hook will be re-persisted once metadata arrives.
-		s.logger.WarnContext(ctx, "claude PreToolUse fired before session metadata available; allowing tool call",
-			attr.SlogEvent("claude_hook_pretooluse_no_metadata"),
-			attr.SlogError(err),
-		)
-		if output != nil {
-			output.PermissionDecision = &allow
+	// Plugin path: when the request authenticated via Gram-Key + Gram-Project,
+	// org/project come from the auth context — same pattern as recordHook.
+	// This lets the shadow-MCP guard run on the very first PreToolUse of a
+	// session, before OTEL Logs has had a chance to seed Redis. Redis is still
+	// consulted to enrich UserEmail / ServiceName / ClaudeOrgID for the
+	// downstream ClickHouse row, but absence of cached fields is non-fatal.
+	var metadata SessionMetadata
+	if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil && authCtx.ProjectID != nil {
+		metadata = SessionMetadata{
+			SessionID:   sessionID,
+			ServiceName: "",
+			UserEmail:   "",
+			ClaudeOrgID: "",
+			GramOrgID:   authCtx.ActiveOrganizationID,
+			ProjectID:   authCtx.ProjectID.String(),
 		}
-		return result, nil
+		if cached, err := s.getSessionMetadata(ctx, sessionID); err == nil {
+			metadata.ServiceName = cached.ServiceName
+			metadata.UserEmail = cached.UserEmail
+			metadata.ClaudeOrgID = cached.ClaudeOrgID
+		}
+	} else {
+		var err error
+		metadata, err = s.getSessionMetadata(ctx, sessionID)
+		if err != nil {
+			// OTEL path with no cached metadata yet — allow this call; the
+			// buffered hook will be re-persisted once metadata arrives.
+			s.logger.WarnContext(ctx, "claude PreToolUse fired before session metadata available; allowing tool call",
+				attr.SlogEvent("claude_hook_pretooluse_no_metadata"),
+				attr.SlogError(err),
+			)
+			if output != nil {
+				output.PermissionDecision = &allow
+			}
+			return result, nil
+		}
 	}
 
 	if !s.blockShadowMCPEnabled(ctx, metadata.GramOrgID) {
@@ -396,7 +467,7 @@ func claudeMCPToolName(rawName string) (string, bool) {
 	return parts[2], true
 }
 
-func (s *Service) handlePostToolUse(ctx context.Context, payload *gen.ClaudeHookPayload) (*gen.ClaudeHookResult, error) {
+func (s *Service) handlePostToolUse(ctx context.Context, payload *gen.ClaudePayload) (*gen.ClaudeHookResult, error) {
 	return makeHookResult(payload.HookEventName), nil
 }
 
@@ -406,7 +477,7 @@ func (s *Service) handlePostToolUse(ctx context.Context, payload *gen.ClaudeHook
 // (derived from tool_use_id) as the original PreToolUse log, and adds
 // gram.hook.block_reason. trace_summaries_mv aggregates with max(), so the
 // trace will surface as blocked regardless of which row arrives first.
-func (s *Service) writeClaudeBlockToClickHouse(ctx context.Context, payload *gen.ClaudeHookPayload, metadata *SessionMetadata, reason string) {
+func (s *Service) writeClaudeBlockToClickHouse(ctx context.Context, payload *gen.ClaudePayload, metadata *SessionMetadata, reason string) {
 	if s.telemetryLogger == nil || reason == "" {
 		return
 	}
@@ -436,7 +507,7 @@ func (s *Service) writeClaudeBlockToClickHouse(ctx context.Context, payload *gen
 	})
 }
 
-func (s *Service) handlePostToolUseFailure(ctx context.Context, payload *gen.ClaudeHookPayload) (*gen.ClaudeHookResult, error) {
+func (s *Service) handlePostToolUseFailure(ctx context.Context, payload *gen.ClaudePayload) (*gen.ClaudeHookResult, error) {
 	return makeHookResult(payload.HookEventName), nil
 }
 

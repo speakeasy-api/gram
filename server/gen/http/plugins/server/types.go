@@ -2049,6 +2049,196 @@ type DownloadPluginPackageGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// DownloadObservabilityPluginUnauthorizedResponseBody is the type of the
+// "plugins" service "downloadObservabilityPlugin" endpoint HTTP response body
+// for the "unauthorized" error.
+type DownloadObservabilityPluginUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DownloadObservabilityPluginForbiddenResponseBody is the type of the
+// "plugins" service "downloadObservabilityPlugin" endpoint HTTP response body
+// for the "forbidden" error.
+type DownloadObservabilityPluginForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DownloadObservabilityPluginBadRequestResponseBody is the type of the
+// "plugins" service "downloadObservabilityPlugin" endpoint HTTP response body
+// for the "bad_request" error.
+type DownloadObservabilityPluginBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DownloadObservabilityPluginNotFoundResponseBody is the type of the "plugins"
+// service "downloadObservabilityPlugin" endpoint HTTP response body for the
+// "not_found" error.
+type DownloadObservabilityPluginNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DownloadObservabilityPluginConflictResponseBody is the type of the "plugins"
+// service "downloadObservabilityPlugin" endpoint HTTP response body for the
+// "conflict" error.
+type DownloadObservabilityPluginConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DownloadObservabilityPluginUnsupportedMediaResponseBody is the type of the
+// "plugins" service "downloadObservabilityPlugin" endpoint HTTP response body
+// for the "unsupported_media" error.
+type DownloadObservabilityPluginUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DownloadObservabilityPluginInvalidResponseBody is the type of the "plugins"
+// service "downloadObservabilityPlugin" endpoint HTTP response body for the
+// "invalid" error.
+type DownloadObservabilityPluginInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DownloadObservabilityPluginInvariantViolationResponseBody is the type of the
+// "plugins" service "downloadObservabilityPlugin" endpoint HTTP response body
+// for the "invariant_violation" error.
+type DownloadObservabilityPluginInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DownloadObservabilityPluginUnexpectedResponseBody is the type of the
+// "plugins" service "downloadObservabilityPlugin" endpoint HTTP response body
+// for the "unexpected" error.
+type DownloadObservabilityPluginUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DownloadObservabilityPluginGatewayErrorResponseBody is the type of the
+// "plugins" service "downloadObservabilityPlugin" endpoint HTTP response body
+// for the "gateway_error" error.
+type DownloadObservabilityPluginGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // GetPublishStatusUnauthorizedResponseBody is the type of the "plugins"
 // service "getPublishStatus" endpoint HTTP response body for the
 // "unauthorized" error.
@@ -4092,6 +4282,156 @@ func NewDownloadPluginPackageGatewayErrorResponseBody(res *goa.ServiceError) *Do
 	return body
 }
 
+// NewDownloadObservabilityPluginUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "downloadObservabilityPlugin" endpoint
+// of the "plugins" service.
+func NewDownloadObservabilityPluginUnauthorizedResponseBody(res *goa.ServiceError) *DownloadObservabilityPluginUnauthorizedResponseBody {
+	body := &DownloadObservabilityPluginUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDownloadObservabilityPluginForbiddenResponseBody builds the HTTP response
+// body from the result of the "downloadObservabilityPlugin" endpoint of the
+// "plugins" service.
+func NewDownloadObservabilityPluginForbiddenResponseBody(res *goa.ServiceError) *DownloadObservabilityPluginForbiddenResponseBody {
+	body := &DownloadObservabilityPluginForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDownloadObservabilityPluginBadRequestResponseBody builds the HTTP
+// response body from the result of the "downloadObservabilityPlugin" endpoint
+// of the "plugins" service.
+func NewDownloadObservabilityPluginBadRequestResponseBody(res *goa.ServiceError) *DownloadObservabilityPluginBadRequestResponseBody {
+	body := &DownloadObservabilityPluginBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDownloadObservabilityPluginNotFoundResponseBody builds the HTTP response
+// body from the result of the "downloadObservabilityPlugin" endpoint of the
+// "plugins" service.
+func NewDownloadObservabilityPluginNotFoundResponseBody(res *goa.ServiceError) *DownloadObservabilityPluginNotFoundResponseBody {
+	body := &DownloadObservabilityPluginNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDownloadObservabilityPluginConflictResponseBody builds the HTTP response
+// body from the result of the "downloadObservabilityPlugin" endpoint of the
+// "plugins" service.
+func NewDownloadObservabilityPluginConflictResponseBody(res *goa.ServiceError) *DownloadObservabilityPluginConflictResponseBody {
+	body := &DownloadObservabilityPluginConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDownloadObservabilityPluginUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "downloadObservabilityPlugin" endpoint
+// of the "plugins" service.
+func NewDownloadObservabilityPluginUnsupportedMediaResponseBody(res *goa.ServiceError) *DownloadObservabilityPluginUnsupportedMediaResponseBody {
+	body := &DownloadObservabilityPluginUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDownloadObservabilityPluginInvalidResponseBody builds the HTTP response
+// body from the result of the "downloadObservabilityPlugin" endpoint of the
+// "plugins" service.
+func NewDownloadObservabilityPluginInvalidResponseBody(res *goa.ServiceError) *DownloadObservabilityPluginInvalidResponseBody {
+	body := &DownloadObservabilityPluginInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDownloadObservabilityPluginInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "downloadObservabilityPlugin" endpoint
+// of the "plugins" service.
+func NewDownloadObservabilityPluginInvariantViolationResponseBody(res *goa.ServiceError) *DownloadObservabilityPluginInvariantViolationResponseBody {
+	body := &DownloadObservabilityPluginInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDownloadObservabilityPluginUnexpectedResponseBody builds the HTTP
+// response body from the result of the "downloadObservabilityPlugin" endpoint
+// of the "plugins" service.
+func NewDownloadObservabilityPluginUnexpectedResponseBody(res *goa.ServiceError) *DownloadObservabilityPluginUnexpectedResponseBody {
+	body := &DownloadObservabilityPluginUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDownloadObservabilityPluginGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "downloadObservabilityPlugin" endpoint
+// of the "plugins" service.
+func NewDownloadObservabilityPluginGatewayErrorResponseBody(res *goa.ServiceError) *DownloadObservabilityPluginGatewayErrorResponseBody {
+	body := &DownloadObservabilityPluginGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewGetPublishStatusUnauthorizedResponseBody builds the HTTP response body
 // from the result of the "getPublishStatus" endpoint of the "plugins" service.
 func NewGetPublishStatusUnauthorizedResponseBody(res *goa.ServiceError) *GetPublishStatusUnauthorizedResponseBody {
@@ -4519,6 +4859,17 @@ func NewSetPluginAssignmentsPayload(body *SetPluginAssignmentsRequestBody, sessi
 func NewDownloadPluginPackagePayload(pluginID string, platform string, sessionToken *string, projectSlugInput *string) *plugins.DownloadPluginPackagePayload {
 	v := &plugins.DownloadPluginPackagePayload{}
 	v.PluginID = pluginID
+	v.Platform = platform
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewDownloadObservabilityPluginPayload builds a plugins service
+// downloadObservabilityPlugin endpoint payload.
+func NewDownloadObservabilityPluginPayload(platform string, sessionToken *string, projectSlugInput *string) *plugins.DownloadObservabilityPluginPayload {
+	v := &plugins.DownloadObservabilityPluginPayload{}
 	v.Platform = platform
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput

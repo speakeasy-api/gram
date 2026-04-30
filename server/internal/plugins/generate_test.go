@@ -1,6 +1,8 @@
 package plugins
 
 import (
+	"archive/zip"
+	"bytes"
 	"encoding/json"
 	"strings"
 	"testing"
@@ -417,4 +419,129 @@ func TestGenerateMarketplaceManifest(t *testing.T) {
 	require.Len(t, cursorManifest.Plugins, 2)
 	require.Equal(t, "./a-cursor", cursorManifest.Plugins[0].Source)
 	require.Equal(t, "./b-cursor", cursorManifest.Plugins[1].Source)
+}
+
+func TestRenderHookScriptClaudeUsesGramKeyAndProjectHeaders(t *testing.T) {
+	t.Parallel()
+	// Claude's hook endpoint accepts Gram-Key + Gram-Project as optional
+	// headers (design.go:116). When supplied, the handler attributes hooks
+	// via the auth context; when absent, it falls back to OTEL session
+	// metadata. The script always sends them so plugin installs work.
+	cfg := GenerateConfig{
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+		ProjectSlug: "acme-prod",
+	}
+	script := string(renderHookScript(cfg, "claude"))
+
+	require.Contains(t, script, "https://app.getgram.ai/rpc/hooks.claude")
+	require.NotContains(t, script, "/hooks/claude", "must not use the legacy /hooks/<platform> path")
+	require.Contains(t, script, "Gram-Key: gram_local_secret_xyz")
+	require.Contains(t, script, "Gram-Project: acme-prod")
+	require.NotContains(t, script, "Authorization", "endpoint reads Gram-Key, not Authorization")
+}
+
+func TestRenderHookScriptCursorUsesGramKeyAndProjectHeaders(t *testing.T) {
+	t.Parallel()
+	// Cursor's hook endpoint reads Gram-Key + Gram-Project per
+	// server/gen/http/hooks/server/encode_decode.go:261.
+	cfg := GenerateConfig{
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+		ProjectSlug: "acme-prod",
+	}
+	script := string(renderHookScript(cfg, "cursor"))
+
+	require.Contains(t, script, "https://app.getgram.ai/rpc/hooks.cursor")
+	require.NotContains(t, script, "/hooks/cursor", "must not use the legacy /hooks/<platform> path")
+	require.Contains(t, script, `Gram-Key: gram_local_secret_xyz`, "cursor reads Gram-Key, not Authorization")
+	require.NotContains(t, script, "Authorization", "cursor endpoint does not read Authorization")
+	require.Contains(t, script, `Gram-Project: acme-prod`, "cursor requires the project header per design")
+}
+
+func TestRenderHookScriptCursorOmitsProjectHeaderWhenSlugMissing(t *testing.T) {
+	t.Parallel()
+	// Defensive: if generateConfig is ever called without a slug, we should
+	// emit a script that's at least syntactically valid rather than embed an
+	// empty header.
+	cfg := GenerateConfig{
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+	}
+	script := string(renderHookScript(cfg, "cursor"))
+
+	require.Contains(t, script, "Gram-Key: gram_local_secret_xyz", "key still emitted without a slug")
+	require.NotContains(t, script, "Gram-Project")
+}
+
+// Claude only invokes hook.sh for events listed in hooks.json. The Claude()
+// handler in server/internal/hooks/claude_hooks.go records PostToolUseFailure,
+// so dropping it from the registered events would silently lose all tool
+// failure telemetry. Cursor's parallel list already carries postToolUseFailure;
+// keep parity to make sure the failure signal isn't dropped on the Claude side.
+func TestClaudeObservabilityHookEventsRegistersToolFailureEvent(t *testing.T) {
+	t.Parallel()
+	require.Contains(t, ClaudeObservabilityHookEvents, "PostToolUseFailure")
+}
+
+func TestGenerateClaudeObservabilityPluginHooksJSONIncludesAllRegisteredEvents(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{
+		OrgName:     "Acme",
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+	}
+	files, err := GeneratePluginPackages(nil, cfg)
+	require.NoError(t, err)
+
+	hooksJSON := files[ClaudeObservabilitySlug(cfg)+"/hooks.json"]
+	require.NotNil(t, hooksJSON, "claude observability hooks.json missing")
+
+	var parsed claudeHooksConfig
+	require.NoError(t, json.Unmarshal(hooksJSON, &parsed))
+
+	for _, event := range ClaudeObservabilityHookEvents {
+		require.Contains(t, parsed.Hooks, event, "event %q must be registered in hooks.json or Claude will silently drop it", event)
+	}
+}
+
+func TestGenerateReadmeIncludesCodexInstallation(t *testing.T) {
+	t.Parallel()
+	files, err := GeneratePluginPackages(nil, GenerateConfig{
+		OrgName:   "Acme",
+		ServerURL: "https://app.getgram.ai",
+	})
+	require.NoError(t, err)
+
+	readme := string(files["README.md"])
+	require.Contains(t, readme, "### Codex", "Codex installation section must be present — Codex packages are still generated and listed in the marketplace")
+	require.Contains(t, readme, "codex plugin marketplace add")
+}
+
+// hook.sh in the ZIP must carry the execute bit, otherwise extracting the
+// archive leaves the script unrunnable and Claude Code / Cursor fail with
+// "permission denied" when the registered command tries `./hook.sh`. Mirrors
+// the GitHub publish path's mode 100755 in thirdparty/github/repo.go.
+func TestWritePluginZipMakesShellScriptsExecutable(t *testing.T) {
+	t.Parallel()
+	files := map[string][]byte{
+		"hook.sh":                    []byte("#!/usr/bin/env bash\necho hi\n"),
+		".claude-plugin/plugin.json": []byte("{}"),
+		"README.md":                  []byte("# readme\n"),
+	}
+
+	var buf bytes.Buffer
+	require.NoError(t, writePluginZip(&buf, files))
+
+	r, err := zip.NewReader(bytes.NewReader(buf.Bytes()), int64(buf.Len()))
+	require.NoError(t, err)
+
+	modes := make(map[string]uint32, len(r.File))
+	for _, f := range r.File {
+		modes[f.Name] = uint32(f.Mode().Perm())
+	}
+
+	require.Equal(t, uint32(0o755), modes["hook.sh"], "hook.sh must be executable so ./hook.sh works after unzip")
+	require.Equal(t, uint32(0o644), modes[".claude-plugin/plugin.json"], "non-script files keep default mode")
+	require.Equal(t, uint32(0o644), modes["README.md"], "non-script files keep default mode")
 }

@@ -7371,6 +7371,21 @@ paths:
       summary: claude hooks
       description: Unified endpoint for all Claude Code hook events. Handles SessionStart, PreToolUse, PostToolUse, and PostToolUseFailure.
       operationId: hooks#claude
+      parameters:
+        - name: Gram-Key
+          in: header
+          description: Optional API key for plugin-driven attribution.
+          allowEmptyValue: true
+          schema:
+            type: string
+            description: Optional API key for plugin-driven attribution.
+        - name: Gram-Project
+          in: header
+          description: Optional project slug for plugin-driven attribution.
+          allowEmptyValue: true
+          schema:
+            type: string
+            description: Optional project slug for plugin-driven attribution.
       requestBody:
         required: true
         content:
@@ -11800,6 +11815,113 @@ paths:
       x-speakeasy-name-override: deletePlugin
       x-speakeasy-react-hook:
         name: DeletePlugin
+  /rpc/plugins.downloadObservabilityPlugin:
+    get:
+      description: Download a ZIP of the per-org observability plugin (Gram hooks). Mints a fresh hooks-scoped API key on each download and embeds it in the plugin's hook script.
+      operationId: downloadObservabilityPlugin
+      parameters:
+        - allowEmptyValue: true
+          description: Target platform.
+          in: query
+          name: platform
+          required: true
+          schema:
+            description: Target platform.
+            enum:
+              - claude
+              - cursor
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/zip:
+              schema:
+                format: binary
+                type: string
+          description: OK response.
+          headers:
+            Content-Disposition:
+              schema:
+                type: string
+            Content-Type:
+              schema:
+                type: string
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: downloadObservabilityPlugin plugins
+      tags:
+        - plugins
+      x-speakeasy-name-override: downloadObservabilityPlugin
   /rpc/plugins.downloadPluginPackage:
     get:
       description: Download a ZIP of a single plugin package for direct installation.

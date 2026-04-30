@@ -3,6 +3,7 @@ import { Page } from "@/components/page-layout";
 import { Dialog } from "@/components/ui/dialog";
 import { SearchBar } from "@/components/ui/search-bar";
 import { Type } from "@/components/ui/type";
+import { useFetcher } from "@/contexts/Fetcher";
 import { HumanizeDateTime } from "@/lib/dates";
 import { useRoutes } from "@/routes";
 import { Plugin } from "@gram/client/models/components";
@@ -17,8 +18,18 @@ import {
   usePublishStatusSuspense,
 } from "@gram/client/react-query/publishStatus";
 import { usePublishPluginsMutation } from "@gram/client/react-query/publishPlugins";
-import { Button, Column, Icon, Stack, Table } from "@speakeasy-api/moonshine";
-import { Plus, Puzzle } from "lucide-react";
+import {
+  Button,
+  Column,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  Icon,
+  Stack,
+  Table,
+} from "@speakeasy-api/moonshine";
+import { Activity, Plus, Puzzle } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
 import { Link, Outlet, useNavigate } from "react-router";
@@ -40,6 +51,42 @@ export default function Plugins() {
 
   const { data } = usePluginsSuspense();
   const { data: publishStatus } = usePublishStatusSuspense();
+  const { fetch: authFetch } = useFetcher();
+  const [isObservabilityDownloadMenuOpen, setIsObservabilityDownloadMenuOpen] =
+    useState(false);
+  const [isDownloadingObservability, setIsDownloadingObservability] = useState<
+    "claude" | "cursor" | null
+  >(null);
+
+  const handleObservabilityDownload = async (platform: "claude" | "cursor") => {
+    setIsObservabilityDownloadMenuOpen(false);
+    setIsDownloadingObservability(platform);
+    try {
+      const resp = await authFetch(
+        `/rpc/plugins.downloadObservabilityPlugin?platform=${platform}`,
+        {},
+      );
+      if (!resp.ok) {
+        toast.error("Failed to download observability plugin");
+        return;
+      }
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download =
+        resp.headers
+          .get("Content-Disposition")
+          ?.match(/filename="(.+)"/)?.[1] ?? `observability-${platform}.zip`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      toast.error("Failed to download observability plugin");
+      console.error("observability plugin download failed", err);
+    } finally {
+      setIsDownloadingObservability(null);
+    }
+  };
 
   const publishMutation = usePublishPluginsMutation({
     onSuccess: (data) => {
@@ -286,6 +333,71 @@ export default function Plugins() {
                 />
               </>
             )}
+          </Page.Section.Body>
+        </Page.Section>
+
+        <Page.Section>
+          <Page.Section.Title>Observability hooks</Page.Section.Title>
+          <Page.Section.Description className="w-3/4">
+            The observability plugin forwards tool events from your team's
+            Claude Code and Cursor installs to your Gram dashboard. When you
+            publish to GitHub, it ships first in your marketplace marked
+            Required. You can also download a single-plugin ZIP per platform
+            here for direct install — each download mints a fresh hooks-scoped
+            API key.
+          </Page.Section.Description>
+          <Page.Section.Body>
+            <Stack direction="horizontal" gap={3} align="center">
+              <div className="bg-primary/10 flex h-10 w-10 items-center justify-center rounded-lg">
+                <Activity className="text-primary h-5 w-5" />
+              </div>
+              <Stack direction="vertical" gap={1} className="flex-1">
+                <Type variant="body" className="font-medium">
+                  Observability plugin
+                </Type>
+                <Type small muted>
+                  {publishStatus?.connected
+                    ? "Included in your published marketplace as required."
+                    : "Available as a direct ZIP download. Connect GitHub publishing to also ship it via the marketplace."}
+                </Type>
+              </Stack>
+              <DropdownMenu
+                open={isObservabilityDownloadMenuOpen}
+                onOpenChange={setIsObservabilityDownloadMenuOpen}
+              >
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={isDownloadingObservability !== null}
+                  >
+                    <Button.LeftIcon>
+                      <Icon name="download" className="h-4 w-4" />
+                    </Button.LeftIcon>
+                    <Button.Text>
+                      {isDownloadingObservability
+                        ? "Downloading..."
+                        : "Download Observability Plugin"}
+                    </Button.Text>
+                    <Button.RightIcon>
+                      <Icon name="chevron-down" className="h-4 w-4" />
+                    </Button.RightIcon>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem
+                    onClick={() => handleObservabilityDownload("claude")}
+                  >
+                    Claude
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => handleObservabilityDownload("cursor")}
+                  >
+                    Cursor
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </Stack>
           </Page.Section.Body>
         </Page.Section>
 

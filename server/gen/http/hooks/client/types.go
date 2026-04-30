@@ -1022,7 +1022,7 @@ type OTELNumberDataPointRequestBody struct {
 
 // NewClaudeRequestBody builds the HTTP request body from the payload of the
 // "claude" endpoint of the "hooks" service.
-func NewClaudeRequestBody(p *hooks.ClaudeHookPayload) *ClaudeRequestBody {
+func NewClaudeRequestBody(p *hooks.ClaudePayload) *ClaudeRequestBody {
 	body := &ClaudeRequestBody{
 		HookEventName:        p.HookEventName,
 		ToolName:             p.ToolName,

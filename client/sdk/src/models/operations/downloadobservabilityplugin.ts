@@ -9,33 +9,28 @@ import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
-export type DownloadPluginPackageSecurity = {
+export type DownloadObservabilityPluginSecurity = {
   projectSlugHeaderGramProject?: string | undefined;
   sessionHeaderGramSession?: string | undefined;
 };
 
 /**
- * Target platform to download plugins for.
+ * Target platform.
  */
-export const QueryParamPlatform = {
+export const Platform = {
   Claude: "claude",
   Cursor: "cursor",
-  Codex: "codex",
 } as const;
 /**
- * Target platform to download plugins for.
+ * Target platform.
  */
-export type QueryParamPlatform = ClosedEnum<typeof QueryParamPlatform>;
+export type Platform = ClosedEnum<typeof Platform>;
 
-export type DownloadPluginPackageRequest = {
+export type DownloadObservabilityPluginRequest = {
   /**
-   * The plugin to download.
+   * Target platform.
    */
-  pluginId: string;
-  /**
-   * Target platform to download plugins for.
-   */
-  platform: QueryParamPlatform;
+  platform: Platform;
   /**
    * Session header
    */
@@ -46,21 +41,21 @@ export type DownloadPluginPackageRequest = {
   gramProject?: string | undefined;
 };
 
-export type DownloadPluginPackageResponse = {
+export type DownloadObservabilityPluginResponse = {
   headers: { [k: string]: Array<string> };
   result: ReadableStream<Uint8Array>;
 };
 
 /** @internal */
-export type DownloadPluginPackageSecurity$Outbound = {
+export type DownloadObservabilityPluginSecurity$Outbound = {
   "project_slug_header_Gram-Project"?: string | undefined;
   "session_header_Gram-Session"?: string | undefined;
 };
 
 /** @internal */
-export const DownloadPluginPackageSecurity$outboundSchema: z.ZodMiniType<
-  DownloadPluginPackageSecurity$Outbound,
-  DownloadPluginPackageSecurity
+export const DownloadObservabilityPluginSecurity$outboundSchema: z.ZodMiniType<
+  DownloadObservabilityPluginSecurity$Outbound,
+  DownloadObservabilityPluginSecurity
 > = z.pipe(
   z.object({
     projectSlugHeaderGramProject: z.optional(z.string()),
@@ -74,62 +69,59 @@ export const DownloadPluginPackageSecurity$outboundSchema: z.ZodMiniType<
   }),
 );
 
-export function downloadPluginPackageSecurityToJSON(
-  downloadPluginPackageSecurity: DownloadPluginPackageSecurity,
+export function downloadObservabilityPluginSecurityToJSON(
+  downloadObservabilityPluginSecurity: DownloadObservabilityPluginSecurity,
 ): string {
   return JSON.stringify(
-    DownloadPluginPackageSecurity$outboundSchema.parse(
-      downloadPluginPackageSecurity,
+    DownloadObservabilityPluginSecurity$outboundSchema.parse(
+      downloadObservabilityPluginSecurity,
     ),
   );
 }
 
 /** @internal */
-export const QueryParamPlatform$outboundSchema: z.ZodMiniEnum<
-  typeof QueryParamPlatform
-> = z.enum(QueryParamPlatform);
+export const Platform$outboundSchema: z.ZodMiniEnum<typeof Platform> = z.enum(
+  Platform,
+);
 
 /** @internal */
-export type DownloadPluginPackageRequest$Outbound = {
-  plugin_id: string;
+export type DownloadObservabilityPluginRequest$Outbound = {
   platform: string;
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
 };
 
 /** @internal */
-export const DownloadPluginPackageRequest$outboundSchema: z.ZodMiniType<
-  DownloadPluginPackageRequest$Outbound,
-  DownloadPluginPackageRequest
+export const DownloadObservabilityPluginRequest$outboundSchema: z.ZodMiniType<
+  DownloadObservabilityPluginRequest$Outbound,
+  DownloadObservabilityPluginRequest
 > = z.pipe(
   z.object({
-    pluginId: z.string(),
-    platform: QueryParamPlatform$outboundSchema,
+    platform: Platform$outboundSchema,
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
-      pluginId: "plugin_id",
       gramSession: "Gram-Session",
       gramProject: "Gram-Project",
     });
   }),
 );
 
-export function downloadPluginPackageRequestToJSON(
-  downloadPluginPackageRequest: DownloadPluginPackageRequest,
+export function downloadObservabilityPluginRequestToJSON(
+  downloadObservabilityPluginRequest: DownloadObservabilityPluginRequest,
 ): string {
   return JSON.stringify(
-    DownloadPluginPackageRequest$outboundSchema.parse(
-      downloadPluginPackageRequest,
+    DownloadObservabilityPluginRequest$outboundSchema.parse(
+      downloadObservabilityPluginRequest,
     ),
   );
 }
 
 /** @internal */
-export const DownloadPluginPackageResponse$inboundSchema: z.ZodMiniType<
-  DownloadPluginPackageResponse,
+export const DownloadObservabilityPluginResponse$inboundSchema: z.ZodMiniType<
+  DownloadObservabilityPluginResponse,
   unknown
 > = z.pipe(
   z.object({
@@ -146,12 +138,13 @@ export const DownloadPluginPackageResponse$inboundSchema: z.ZodMiniType<
   }),
 );
 
-export function downloadPluginPackageResponseFromJSON(
+export function downloadObservabilityPluginResponseFromJSON(
   jsonString: string,
-): SafeParseResult<DownloadPluginPackageResponse, SDKValidationError> {
+): SafeParseResult<DownloadObservabilityPluginResponse, SDKValidationError> {
   return safeParse(
     jsonString,
-    (x) => DownloadPluginPackageResponse$inboundSchema.parse(JSON.parse(x)),
-    `Failed to parse 'DownloadPluginPackageResponse' from JSON`,
+    (x) =>
+      DownloadObservabilityPluginResponse$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'DownloadObservabilityPluginResponse' from JSON`,
   );
 }
