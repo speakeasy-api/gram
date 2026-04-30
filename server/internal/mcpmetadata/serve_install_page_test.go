@@ -18,6 +18,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	customdomains_repo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
+	externalmcp_repo "github.com/speakeasy-api/gram/server/internal/externalmcp/repo"
+	externalmcp_types "github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types"
+	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/oauthtest"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
@@ -1022,4 +1025,141 @@ func TestServeInstallPage_NoDomain_AuthedUserWithOrgDomain(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, rr.Code)
 	require.Equal(t, "text/html", rr.Header().Get("Content-Type"))
+}
+
+func TestServeInstallPage_ExternalMCP_FiltersNonUserProvidedHeaders(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPMetadataService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
+
+	mcpSlug := "external-mcp-filter-" + uuid.New().String()[:8]
+	toolset, err := ti.toolsetRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+		OrganizationID:         orgID,
+		ProjectID:              projectID,
+		Name:                   "External MCP Filter Test",
+		Slug:                   mcpSlug,
+		McpSlug:                conv.ToPGText(mcpSlug),
+		Description:            conv.ToPGText("public toolset proxying an external MCP server with header configs"),
+		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
+		McpEnabled:             true,
+	})
+	require.NoError(t, err)
+
+	_, err = ti.conn.Exec(ctx,
+		"UPDATE toolsets SET mcp_is_public = true WHERE id = $1", toolset.ID)
+	require.NoError(t, err)
+
+	var deploymentID uuid.UUID
+	err = ti.conn.QueryRow(ctx, `
+		INSERT INTO deployments (project_id, organization_id, user_id, idempotency_key)
+		VALUES ($1, $2, $3, $4)
+		RETURNING id
+	`, projectID, orgID, "test-user", uuid.New().String()).Scan(&deploymentID)
+	require.NoError(t, err)
+
+	_, err = ti.conn.Exec(ctx, `
+		INSERT INTO deployment_statuses (deployment_id, status)
+		VALUES ($1, 'completed')
+	`, deploymentID)
+	require.NoError(t, err)
+
+	var registryID uuid.UUID
+	err = ti.conn.QueryRow(ctx, `
+		INSERT INTO mcp_registries (name, url)
+		VALUES ($1, $2)
+		RETURNING id
+	`, "test-registry-"+mcpSlug, "https://mcp.example.com/glyphic").Scan(&registryID)
+	require.NoError(t, err)
+
+	externalmcpRepo := externalmcp_repo.New(ti.conn)
+	attachmentSlug := "glyphic"
+	attachment, err := externalmcpRepo.CreateExternalMCPAttachment(ctx, externalmcp_repo.CreateExternalMCPAttachmentParams{
+		DeploymentID:            deploymentID,
+		RegistryID:              uuid.NullUUID{UUID: registryID, Valid: true},
+		Name:                    "Glyphic MCP Server",
+		Slug:                    attachmentSlug,
+		RegistryServerSpecifier: "test-server",
+	})
+	require.NoError(t, err)
+
+	// header_definitions JSON shape matches the unexported externalMCPHeaderDefinition
+	// struct in server/internal/mv/toolset.go. extractExternalMCPHeaderDefinitions
+	// produces variable names by snake-casing "<attachmentSlug>_<headerName>", so the
+	// resulting names here are GLYPHIC_X_API_KEY, GLYPHIC_AUTHORIZATION, GLYPHIC_TRACE_ID.
+	headerDefsJSON := []byte(`[
+		{"name":"X-Api-Key","isRequired":true,"isSecret":true},
+		{"name":"Authorization","isRequired":true,"isSecret":true},
+		{"name":"Trace-Id","isRequired":true,"isSecret":false}
+	]`)
+
+	toolURN := "tools:externalmcp:" + attachmentSlug + ":proxy"
+	_, err = externalmcpRepo.CreateExternalMCPToolDefinition(ctx, externalmcp_repo.CreateExternalMCPToolDefinitionParams{
+		ExternalMcpAttachmentID:    attachment.ID,
+		ToolUrn:                    toolURN,
+		Type:                       "proxy",
+		RemoteUrl:                  "https://mcp.example.com/glyphic",
+		TransportType:              externalmcp_types.TransportTypeStreamableHTTP,
+		RequiresOauth:              false,
+		OauthVersion:               "none",
+		OauthAuthorizationEndpoint: pgtype.Text{},
+		OauthTokenEndpoint:         pgtype.Text{},
+		OauthRegistrationEndpoint:  pgtype.Text{},
+		OauthScopesSupported:       []string{},
+		HeaderDefinitions:          headerDefsJSON,
+	})
+	require.NoError(t, err)
+
+	_, err = ti.conn.Exec(ctx, `
+		INSERT INTO toolset_versions (toolset_id, version, tool_urns, resource_urns)
+		VALUES ($1, 1, $2, '{}')
+	`, toolset.ID, []string{toolURN})
+	require.NoError(t, err)
+
+	mcpRepo := mcpmetadata_repo.New(ti.conn)
+	metadata, err := mcpRepo.UpsertMetadata(ctx, mcpmetadata_repo.UpsertMetadataParams{
+		ToolsetID: toolset.ID,
+		ProjectID: projectID,
+	})
+	require.NoError(t, err)
+
+	// Mark X-Api-Key as system-provided and Authorization as omitted; leave Trace-Id
+	// without an env config (defaulting to user-provided) as the positive-case anchor.
+	_, err = mcpRepo.UpsertEnvironmentConfig(ctx, mcpmetadata_repo.UpsertEnvironmentConfigParams{
+		ProjectID:     projectID,
+		McpMetadataID: metadata.ID,
+		VariableName:  "GLYPHIC_X_API_KEY",
+		ProvidedBy:    "system",
+	})
+	require.NoError(t, err)
+	_, err = mcpRepo.UpsertEnvironmentConfig(ctx, mcpmetadata_repo.UpsertEnvironmentConfigParams{
+		ProjectID:     projectID,
+		McpMetadataID: metadata.ID,
+		VariableName:  "GLYPHIC_AUTHORIZATION",
+		ProvidedBy:    "none",
+	})
+	require.NoError(t, err)
+
+	installReq := httptest.NewRequest("GET", "/mcp/"+mcpSlug+"/install", nil)
+	installRctx := chi.NewRouteContext()
+	installRctx.URLParams.Add("mcpSlug", mcpSlug)
+	installReq = installReq.WithContext(context.WithValue(context.Background(), chi.RouteCtxKey, installRctx))
+
+	installRR := httptest.NewRecorder()
+	err = ti.service.ServeInstallPage(installRR, installReq)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, installRR.Code)
+
+	body := installRR.Body.String()
+	assert.NotContains(t, body, "GLYPHIC_X_API_KEY",
+		"system-provided external MCP header must not appear in the install snippet")
+	assert.NotContains(t, body, "GLYPHIC_AUTHORIZATION",
+		"omitted external MCP header must not appear in the install snippet")
+	assert.Contains(t, body, "GLYPHIC_TRACE_ID",
+		"user-provided external MCP header (no env config) must still appear in the install snippet")
 }
