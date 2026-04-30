@@ -1,5 +1,17 @@
 # mprocs configuration
 procs:
+  otel-collector:
+    cmd: ["docker", "compose", "logs", "-f", "otel-collector"]
+    stop:
+      send-keys: ["<C-c>"]
+  jaeger:
+    cmd: ["docker", "compose", "logs", "-f", "jaeger"]
+    stop:
+      send-keys: ["<C-c>"]
+  prometheus:
+    cmd: ["docker", "compose", "logs", "-f", "prometheus"]
+    stop:
+      send-keys: ["<C-c>"]
   mock-idp:
     cmd: ["mise", "run", "start:mock-idp"]
     stop:

@@ -150,6 +150,7 @@ GRAM_ENABLE_OTEL_METRICS = 1
 ## Local development settings ##
 ################################
 JAEGER_WEB_PORT = "16686"
+PROMETHEUS_PORT = "9091"
 GRAM_LOG_PRETTY = 1
 ## This config is used by the Elements SDK and CLI to point to the correct Gram
 ## API server
