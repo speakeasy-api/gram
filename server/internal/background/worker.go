@@ -37,6 +37,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
+	"github.com/workos/workos-go/v6/pkg/events"
 )
 
 type WorkerOptions struct {
@@ -66,6 +67,7 @@ type WorkerOptions struct {
 	PIIScanner          risk_analysis.PIIScanner
 	ShadowMCPClient     *shadowmcp.Client
 	AuditLogger         *audit.Logger
+	WorkOSEventsClient  *events.Client
 }
 
 func ForDeploymentProcessing(
@@ -105,6 +107,7 @@ func ForDeploymentProcessing(
 		TemporalEnv:         nil,
 		PIIScanner:          nil,
 		ShadowMCPClient:     nil,
+		WorkOSEventsClient:  nil,
 	}
 }
 
@@ -142,6 +145,7 @@ func NewTemporalWorker(
 		PIIScanner:          nil,
 		ShadowMCPClient:     nil,
 		AuditLogger:         nil,
+		WorkOSEventsClient:  nil,
 	}
 
 	for _, o := range options {
@@ -172,6 +176,7 @@ func NewTemporalWorker(
 			PIIScanner:          conv.Default(o.PIIScanner, opts.PIIScanner),
 			ShadowMCPClient:     conv.Default(o.ShadowMCPClient, opts.ShadowMCPClient),
 			AuditLogger:         conv.Default(o.AuditLogger, opts.AuditLogger),
+			WorkOSEventsClient:  conv.Default(o.WorkOSEventsClient, opts.WorkOSEventsClient),
 		}
 	}
 
@@ -212,6 +217,7 @@ func NewTemporalWorker(
 		opts.PIIScanner,
 		opts.ShadowMCPClient,
 		opts.AuditLogger,
+		opts.WorkOSEventsClient,
 	)
 
 	temporalWorker.RegisterActivity(activities.ProcessDeployment)
@@ -252,6 +258,8 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.ReapInactiveAssistantRuntimes)
 	temporalWorker.RegisterActivity(activities.SignalAssistantCoordinator)
 	temporalWorker.RegisterActivity(activities.SignalAssistantThread)
+	// WorkOS sync activities
+	temporalWorker.RegisterActivity(activities.ProcessWorkOSOrganizationEvents)
 
 	temporalWorker.RegisterWorkflow(ProcessDeploymentWorkflow)
 	temporalWorker.RegisterWorkflow(FunctionsReaperWorkflow)
@@ -275,6 +283,9 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(AssistantThreadWorkflow)
 	temporalWorker.RegisterWorkflow(AssistantReaperWorkflow)
 	temporalWorker.RegisterWorkflow(AssistantRuntimeJanitorWorkflow)
+	// WorkOS sync workflows
+	temporalWorker.RegisterWorkflow(ProcessWorkOSOrganizationEventsWorkflow)
+	temporalWorker.RegisterWorkflow(ProcessWorkOSOrganizationEventsWorkflowDebounced)
 
 	if err := AddPlatformUsageMetricsSchedule(context.Background(), env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
