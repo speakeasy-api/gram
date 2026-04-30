@@ -729,10 +729,22 @@ func newStartCommand() *cli.Command {
 			mux.Use(middleware.AdminOverrideMiddleware)
 			mux.Use(middleware.RBACOverrideMiddleware())
 
+			// Reuse the same Presidio client the worker uses for offline analysis
+			// so the runtime hook scanner can flag/redact PII inputs too.
+			var hookPIIScanner risk_analysis.PIIScanner
+			if presidioURL := c.String("presidio-analyzer-url"); presidioURL != "" {
+				hookPIIScanner = risk_analysis.NewPresidioClient(presidioURL, tracerProvider, meterProvider, logger)
+			}
+
+			riskScanner, err := risk.NewScanner(logger, db, hookPIIScanner, meterProvider)
+			if err != nil {
+				return fmt.Errorf("create risk scanner: %w", err)
+			}
+
 			about.Attach(mux, about.NewService(logger, tracerProvider))
 			access.Attach(mux, access.NewService(logger, tracerProvider, db, sessionManager, roleClient, authzEngine, productFeatures))
 			assistants.Attach(mux, assistantsSvc)
-			hooks.Attach(mux, hooks.NewService(logger, db, tracerProvider, telemLogger, sessionManager, hooksCache, chatClient, temporalEnv, authzEngine, productFeatures, &background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv}, chatWriter))
+			hooks.Attach(mux, hooks.NewService(logger, db, tracerProvider, telemLogger, sessionManager, hooksCache, chatClient, temporalEnv, authzEngine, productFeatures, &background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv}, riskScanner, chatWriter))
 			audit.Attach(mux, audit.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
 			auth.Attach(mux, auth.NewService(
 				logger,
@@ -803,7 +815,7 @@ func newStartCommand() *cli.Command {
 				logger,
 			)
 			shutdownFuncs = append(shutdownFuncs, riskSignaler.Shutdown)
-			riskService := risk.NewService(logger, tracerProvider, db, sessionManager, authzEngine, riskSignaler)
+			riskService := risk.NewService(logger, tracerProvider, db, sessionManager, authzEngine, riskSignaler, completionsClient)
 			chatWriter.AddObserver(riskService)
 			risk.Attach(mux, riskService)
 

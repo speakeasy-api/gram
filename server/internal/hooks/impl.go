@@ -25,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -47,6 +48,7 @@ type Service struct {
 	repo               *repo.Queries
 	productFeatures    ProductFeaturesClient
 	chatTitleGenerator ChatTitleGenerator
+	riskScanner        risk.RiskScanner
 	writer             *chat.ChatMessageWriter
 }
 
@@ -93,6 +95,7 @@ func NewService(
 	authz *authz.Engine,
 	pfClient ProductFeaturesClient,
 	chatTitleGenerator ChatTitleGenerator,
+	riskScanner risk.RiskScanner,
 	writer *chat.ChatMessageWriter,
 ) *Service {
 	return &Service{
@@ -108,6 +111,7 @@ func NewService(
 		repo:               repo.New(db),
 		productFeatures:    pfClient,
 		chatTitleGenerator: chatTitleGenerator,
+		riskScanner:        riskScanner,
 		writer:             writer,
 	}
 }

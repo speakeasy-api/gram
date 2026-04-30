@@ -24,7 +24,7 @@ func BuildCreateRiskPolicyPayload(riskCreateRiskPolicyBody string, riskCreateRis
 	{
 		err = json.Unmarshal([]byte(riskCreateRiskPolicyBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"enabled\": false,\n      \"name\": \"abc123\",\n      \"presidio_entities\": [\n         \"abc123\"\n      ],\n      \"sources\": [\n         \"abc123\"\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"action\": \"block\",\n      \"auto_name\": false,\n      \"enabled\": false,\n      \"name\": \"abc123\",\n      \"presidio_entities\": [\n         \"abc123\"\n      ],\n      \"sources\": [\n         \"abc123\"\n      ]\n   }'")
 		}
 	}
 	var apikeyToken *string
@@ -46,8 +46,10 @@ func BuildCreateRiskPolicyPayload(riskCreateRiskPolicyBody string, riskCreateRis
 		}
 	}
 	v := &risk.CreateRiskPolicyPayload{
-		Name:    body.Name,
-		Enabled: body.Enabled,
+		Name:     body.Name,
+		Enabled:  body.Enabled,
+		Action:   body.Action,
+		AutoName: body.AutoName,
 	}
 	if body.Sources != nil {
 		v.Sources = make([]string, len(body.Sources))
@@ -59,6 +61,12 @@ func BuildCreateRiskPolicyPayload(riskCreateRiskPolicyBody string, riskCreateRis
 		v.PresidioEntities = make([]string, len(body.PresidioEntities))
 		for i, val := range body.PresidioEntities {
 			v.PresidioEntities[i] = val
+		}
+	}
+	{
+		var zero string
+		if v.Action == zero {
+			v.Action = "flag"
 		}
 	}
 	v.ApikeyToken = apikeyToken
@@ -144,9 +152,14 @@ func BuildUpdateRiskPolicyPayload(riskUpdateRiskPolicyBody string, riskUpdateRis
 	{
 		err = json.Unmarshal([]byte(riskUpdateRiskPolicyBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"enabled\": false,\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"presidio_entities\": [\n         \"abc123\"\n      ],\n      \"sources\": [\n         \"abc123\"\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"action\": \"block\",\n      \"auto_name\": false,\n      \"enabled\": false,\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"presidio_entities\": [\n         \"abc123\"\n      ],\n      \"sources\": [\n         \"abc123\"\n      ]\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		if body.Action != nil {
+			if !(*body.Action == "flag" || *body.Action == "block") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "block"}))
+			}
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -170,9 +183,11 @@ func BuildUpdateRiskPolicyPayload(riskUpdateRiskPolicyBody string, riskUpdateRis
 		}
 	}
 	v := &risk.UpdateRiskPolicyPayload{
-		ID:      body.ID,
-		Name:    body.Name,
-		Enabled: body.Enabled,
+		ID:       body.ID,
+		Name:     body.Name,
+		Enabled:  body.Enabled,
+		Action:   body.Action,
+		AutoName: body.AutoName,
 	}
 	if body.Sources != nil {
 		v.Sources = make([]string, len(body.Sources))

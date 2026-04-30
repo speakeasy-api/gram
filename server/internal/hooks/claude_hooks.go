@@ -269,6 +269,31 @@ func (s *Service) getSessionMetadata(ctx context.Context, sessionID string) (Ses
 }
 
 func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudeHookPayload) (*gen.ClaudeHookResult, error) {
+	if s.riskScanner != nil && payload.SessionID != nil {
+		if scanResult := s.scanClaudeForEnforcement(ctx, payload); scanResult != nil {
+			result := makeHookResult(payload.HookEventName)
+			output, _ := result.HookSpecificOutput.(*HookSpecificOutput)
+			deny := "deny"
+			reason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
+			// systemMessage renders as a warning in the user's terminal;
+			// permissionDecisionReason is what Claude itself sees and may quote
+			// back to the user. Send the same self-branded message in both so
+			// the user sees feedback regardless of how Claude chooses to render
+			// the deny — matches the shadow-MCP guard deny path below.
+			result.SystemMessage = &reason
+			if output != nil {
+				output.PermissionDecision = &deny
+				output.PermissionDecisionReason = &reason
+			}
+			// Surface the block reason on the trace summary so the dashboard
+			// shows why the call was denied.
+			if metadata, err := s.getSessionMetadata(ctx, *payload.SessionID); err == nil {
+				s.writeClaudeBlockToClickHouse(ctx, payload, &metadata, reason)
+			}
+			return result, nil
+		}
+	}
+
 	allow := "allow"
 	deny := "deny"
 	result := makeHookResult(payload.HookEventName)

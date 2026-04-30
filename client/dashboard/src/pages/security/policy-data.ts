@@ -1206,11 +1206,10 @@ export const DETECTION_RULES: Record<RuleCategory, DetectionRule[]> = {
     { id: "CRYPTO", title: "Bitcoin wallet address", source: "presidio" },
   ],
   pii: [
-    {
-      id: "PERSON",
-      title: "Full person name (NLP-backed)",
-      source: "presidio",
-    },
+    // PERSON intentionally omitted: Presidio's NER-backed person detection
+    // is too brittle for the runtime hot path (false positives on common
+    // capitalized words). Re-enable once we have a confidence threshold or
+    // a scoped allow-list.
     { id: "EMAIL_ADDRESS", title: "Email address", source: "presidio" },
     { id: "PHONE_NUMBER", title: "Telephone number", source: "presidio" },
     {
@@ -1445,7 +1444,6 @@ export const MOCK_POLICIES: DlpPolicy[] = [
     enabled: true,
     ruleCategories: ["pii", "government_ids"],
     selectedRules: [
-      "PERSON",
       "EMAIL_ADDRESS",
       "PHONE_NUMBER",
       "US_SSN",

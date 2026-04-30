@@ -64,10 +64,16 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.
 
 	switch payload.HookEventName {
 	case "beforeMCPExecution":
-		// beforeMCPExecution only fires for MCP-routed (non-local) tool calls,
-		// so Gram-hosted tool validation runs here. Cursor's generic preToolUse
-		// also fires for native local tools (read_file, edit_file, etc.) and
-		// is left as allow.
+		// beforeMCPExecution fires for MCP-routed (non-local) tool calls. Run
+		// the risk scanner first (block-only today), then fall through to the
+		// shadow-MCP guard so unapproved toolsets are still blocked.
+		if scanResult := s.scanCursorForEnforcement(ctx, payload, orgID, projectID); scanResult != nil {
+			msg := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
+			blockReason = msg
+			result.Permission = new("deny")
+			result.UserMessage = &msg
+			break
+		}
 		if !s.blockShadowMCPEnabled(ctx, orgID) {
 			result.Permission = new("allow")
 			break
@@ -91,7 +97,32 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.
 			result.Permission = new("allow")
 		}
 	case "preToolUse":
-		result.Permission = new("allow")
+		// preToolUse fires for ALL Cursor tool calls including MCP ones, while
+		// beforeMCPExecution also fires for MCP-routed calls and already runs
+		// the scan there. Skip the scan here for MCP tools to avoid scanning
+		// (and DB-querying) the same input twice on the hot path. Native tools
+		// (read_file, edit_file, ...) only have this single event and still
+		// get scanned.
+		toolName := conv.PtrValOr(payload.ToolName, "")
+		if strings.HasPrefix(toolName, "MCP:") {
+			result.Permission = new("allow")
+			break
+		}
+		if scanResult := s.scanCursorForEnforcement(ctx, payload, orgID, projectID); scanResult != nil {
+			msg := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
+			blockReason = msg
+			result.Permission = new("deny")
+			result.UserMessage = &msg
+		} else {
+			result.Permission = new("allow")
+		}
+	case "beforeSubmitPrompt":
+		if scanResult := s.scanCursorForEnforcement(ctx, payload, orgID, projectID); scanResult != nil {
+			msg := fmt.Sprintf("Speakeasy blocked this prompt: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
+			blockReason = msg
+			result.Permission = new("deny")
+			result.UserMessage = &msg
+		}
 	default:
 		// nothing to do
 	}
