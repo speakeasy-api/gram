@@ -275,7 +275,7 @@ func TestProcessWorkOSOrganizationEvents_MembershipUnknownOrgSkips(t *testing.T)
 	require.NoError(t, err)
 }
 
-func TestProcessWorkOSOrganizationEvents_MembershipUnknownUserSkips(t *testing.T) {
+func TestProcessWorkOSOrganizationEvents_MembershipUnknownUserStoresRoleAssignment(t *testing.T) {
 	t.Parallel()
 
 	const workosOrgID = "wos_org_unknownuser"
@@ -285,6 +285,7 @@ func TestProcessWorkOSOrganizationEvents_MembershipUnknownUserSkips(t *testing.T
 	eventsClient := newMockEventsLister(t)
 	eventsClient.On("ListEvents", mock.Anything, mock.Anything).
 		Return(events.ListEventsResponse{Data: []events.Event{
+			newWorkOSRoleEvent(t, "organization_role.created", "evt_role_member", "role_member", workosOrgID, "member", "Member"),
 			newWorkOSMembershipEvent(t, "organization_membership.created", "evt_mem_2", "mem_2", workosOrgID, workosUserID, "member"),
 		}}, nil).Once()
 
@@ -303,6 +304,19 @@ func TestProcessWorkOSOrganizationEvents_MembershipUnknownUserSkips(t *testing.T
 		WorkOSOrganizationID: workosOrgID,
 	})
 	require.NoError(t, err)
+
+	// Cursor advances even without a local Gram user.
+	cursor, err := workosrepo.New(db).GetOrganizationSyncLastEventID(ctx, workosOrgID)
+	require.NoError(t, err)
+	require.Equal(t, "evt_mem_2", cursor)
+
+	// Role assignment stored with null user_id.
+	userRoles, err := orgrepo.New(db).GetOrganizationUserRoles(ctx, orgrepo.GetOrganizationUserRolesParams{
+		OrganizationID: gramOrgID,
+		UserID:         conv.ToPGText(""),
+	})
+	require.NoError(t, err)
+	require.Empty(t, userRoles) // user_id is null, query by user_id returns nothing
 }
 
 func TestProcessWorkOSOrganizationEvents_MembershipCreatedLinksUser(t *testing.T) {
@@ -359,7 +373,7 @@ func TestProcessWorkOSOrganizationEvents_MembershipCreatedLinksUser(t *testing.T
 
 	userRoles, err := orgrepo.New(db).GetOrganizationUserRoles(ctx, orgrepo.GetOrganizationUserRolesParams{
 		OrganizationID: gramOrgID,
-		UserID:         gramUserID,
+		UserID:         conv.ToPGText(gramUserID),
 	})
 	require.NoError(t, err)
 	require.Len(t, userRoles, 1)
@@ -416,7 +430,7 @@ func TestProcessWorkOSOrganizationEvents_MembershipBeforeRoleEventSilentlySkipsR
 
 	userRoles, err := orgrepo.New(db).GetOrganizationUserRoles(ctx, orgrepo.GetOrganizationUserRolesParams{
 		OrganizationID: gramOrgID,
-		UserID:         gramUserID,
+		UserID:         conv.ToPGText(gramUserID),
 	})
 	require.NoError(t, err)
 	require.Empty(t, userRoles)

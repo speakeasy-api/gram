@@ -307,22 +307,23 @@ func handleOrganizationMembershipUpsert(ctx context.Context, logger *slog.Logger
 		return fmt.Errorf("get organization by workos id %q: %w", payload.OrganizationID, err)
 	}
 
-	userID, err := usersrepo.New(dbtx).GetUserIDByWorkosID(ctx, conv.ToPGText(payload.UserID))
+	// Resolve Gram user. If not yet in DB, proceed with null user_id — role assignments are stored
+	// by workos_user_id and the user_id is backfilled later (e.g., on first login).
+	gramUserID, err := usersrepo.New(dbtx).GetUserIDByWorkosID(ctx, conv.ToPGText(payload.UserID))
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		logger.DebugContext(ctx, "skipping membership event for unknown user", attr.SlogWorkOSUserID(payload.UserID))
-		return nil
+		logger.DebugContext(ctx, "user not yet in gram, storing role assignments without user link", attr.SlogWorkOSUserID(payload.UserID))
 	case err != nil:
 		return fmt.Errorf("get user by workos id %q: %w", payload.UserID, err)
-	}
-
-	err = orgrepo.New(dbtx).UpsertWorkOSMembership(ctx, orgrepo.UpsertWorkOSMembershipParams{
-		OrganizationID:     organizationID,
-		UserID:             userID,
-		WorkosMembershipID: conv.ToPGText(payload.ID),
-	})
-	if err != nil {
-		return fmt.Errorf("upsert organization membership %q: %w", payload.ID, err)
+	default:
+		// Only create the org-user relationship when the Gram user exists.
+		if err := orgrepo.New(dbtx).UpsertWorkOSMembership(ctx, orgrepo.UpsertWorkOSMembershipParams{
+			OrganizationID:     organizationID,
+			UserID:             gramUserID,
+			WorkosMembershipID: conv.ToPGText(payload.ID),
+		}); err != nil {
+			return fmt.Errorf("upsert organization membership %q: %w", payload.ID, err)
+		}
 	}
 
 	// WorkOS membership events expose roles in three shapes depending on event version:
@@ -346,12 +347,17 @@ func handleOrganizationMembershipUpsert(ctx context.Context, logger *slog.Logger
 	// WorkOS has been observed sending duplicate slugs within payload.Roles.
 	roleSlugs = dedupeStrings(roleSlugs)
 
-	if err := orgrepo.New(dbtx).SyncUserOrganizationRoles(ctx, orgrepo.SyncUserOrganizationRolesParams{
-		OrganizationID:  organizationID,
-		UserID:          userID,
-		WorkosRoleSlugs: roleSlugs,
+	userIDParam := conv.ToPGTextEmpty(gramUserID)
+	if err := orgrepo.New(dbtx).SyncUserOrganizationRoleAssignments(ctx, orgrepo.SyncUserOrganizationRoleAssignmentsParams{
+		OrganizationID:     organizationID,
+		WorkosUserID:       payload.UserID,
+		UserID:             userIDParam,
+		WorkosRoleSlugs:    roleSlugs,
+		WorkosMembershipID: conv.ToPGText(payload.ID),
+		WorkosUpdatedAt:    conv.ToPGTimestamptz(payload.UpdatedAt),
+		WorkosLastEventID:  conv.ToPGText(event.ID),
 	}); err != nil {
-		return fmt.Errorf("sync organization user roles for membership %q: %w", payload.ID, err)
+		return fmt.Errorf("sync organization user role assignments for membership %q: %w", payload.ID, err)
 	}
 
 	return nil
@@ -372,25 +378,34 @@ func handleOrganizationMembershipDeleted(ctx context.Context, logger *slog.Logge
 		return fmt.Errorf("get organization by workos id %q: %w", payload.OrganizationID, err)
 	}
 
-	userID, err := usersrepo.New(dbtx).GetUserIDByWorkosID(ctx, conv.ToPGText(payload.UserID))
+	// Delete role assignments by workos_user_id — works regardless of whether Gram user exists.
+	if err := orgrepo.New(dbtx).DeleteOrganizationRoleAssignmentsByWorkosUser(ctx, orgrepo.DeleteOrganizationRoleAssignmentsByWorkosUserParams{
+		OrganizationID: organizationID,
+		WorkosUserID:   payload.UserID,
+	}); err != nil {
+		return fmt.Errorf("delete role assignments for workos user %q: %w", payload.UserID, err)
+	}
+
+	gramUserID, err := usersrepo.New(dbtx).GetUserIDByWorkosID(ctx, conv.ToPGText(payload.UserID))
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		logger.DebugContext(ctx, "skipping membership delete for unknown user", attr.SlogWorkOSUserID(payload.UserID))
+		logger.DebugContext(ctx, "skipping relationship delete for unknown user", attr.SlogWorkOSUserID(payload.UserID))
 		return nil
 	case err != nil:
 		return fmt.Errorf("get user by workos id %q: %w", payload.UserID, err)
 	}
 
-	err = orgrepo.New(dbtx).DeleteOrganizationUserRelationship(ctx, orgrepo.DeleteOrganizationUserRelationshipParams{
+	if err := orgrepo.New(dbtx).DeleteOrganizationUserRelationship(ctx, orgrepo.DeleteOrganizationUserRelationshipParams{
 		OrganizationID: organizationID,
-		UserID:         userID,
-	})
-	if err != nil {
+		UserID:         gramUserID,
+	}); err != nil {
 		return fmt.Errorf("delete organization membership %q: %w", payload.ID, err)
 	}
 
 	return nil
 }
+
+const workosRoleTypeEnvironment = "EnvironmentRole"
 
 type workosRoleEvent struct {
 	ID             string     `json:"id"`
@@ -398,6 +413,7 @@ type workosRoleEvent struct {
 	OrganizationID string     `json:"organization_id"`
 	Name           string     `json:"name"`
 	Slug           string     `json:"slug"`
+	Type           string     `json:"type"` // "EnvironmentRole" or "OrganizationRole"
 	Description    string     `json:"description"`
 	CreatedAt      time.Time  `json:"created_at"`
 	UpdatedAt      time.Time  `json:"updated_at"`
@@ -408,6 +424,21 @@ func handleOrganizationRoleUpsert(ctx context.Context, logger *slog.Logger, dbtx
 	var payload workosRoleEvent
 	if err := json.Unmarshal(event.Data, &payload); err != nil {
 		return fmt.Errorf("unmarshal organization role event: %w", err)
+	}
+
+	if payload.Type == workosRoleTypeEnvironment {
+		err := accessrepo.New(dbtx).UpsertGlobalRole(ctx, accessrepo.UpsertGlobalRoleParams{
+			WorkosSlug:        payload.Slug,
+			WorkosName:        payload.Name,
+			WorkosDescription: conv.ToPGTextEmpty(payload.Description),
+			WorkosCreatedAt:   conv.ToPGTimestamptzEmpty(payload.CreatedAt),
+			WorkosUpdatedAt:   conv.ToPGTimestamptzEmpty(payload.UpdatedAt),
+			WorkosLastEventID: conv.ToPGText(event.ID),
+		})
+		if err != nil {
+			return fmt.Errorf("upsert global role %q: %w", payload.Slug, err)
+		}
+		return nil
 	}
 
 	organizationID, err := orgrepo.New(dbtx).GetOrganizationIDByWorkosID(ctx, conv.ToPGText(payload.OrganizationID))
@@ -441,15 +472,6 @@ func handleOrganizationRoleDeleted(ctx context.Context, logger *slog.Logger, dbt
 		return fmt.Errorf("unmarshal organization role delete event: %w", err)
 	}
 
-	organizationID, err := orgrepo.New(dbtx).GetOrganizationIDByWorkosID(ctx, conv.ToPGText(payload.OrganizationID))
-	switch {
-	case errors.Is(err, pgx.ErrNoRows):
-		logger.DebugContext(ctx, "skipping role delete for unknown organization", attr.SlogWorkOSOrganizationID(payload.OrganizationID))
-		return nil
-	case err != nil:
-		return fmt.Errorf("get organization by workos id %q: %w", payload.OrganizationID, err)
-	}
-
 	deletedAt := payload.DeletedAt
 	if deletedAt == nil {
 		deletedAt = &event.CreatedAt
@@ -457,6 +479,27 @@ func handleOrganizationRoleDeleted(ctx context.Context, logger *slog.Logger, dbt
 	if deletedAt.IsZero() {
 		now := time.Now().UTC()
 		deletedAt = &now
+	}
+
+	if payload.Type == workosRoleTypeEnvironment {
+		_, err := accessrepo.New(dbtx).MarkGlobalRoleDeleted(ctx, accessrepo.MarkGlobalRoleDeletedParams{
+			WorkosDeletedAt:   conv.ToPGTimestamptzEmpty(*deletedAt),
+			WorkosLastEventID: conv.ToPGText(event.ID),
+			WorkosSlug:        payload.Slug,
+		})
+		if err != nil {
+			return fmt.Errorf("mark global role deleted %q: %w", payload.Slug, err)
+		}
+		return nil
+	}
+
+	organizationID, err := orgrepo.New(dbtx).GetOrganizationIDByWorkosID(ctx, conv.ToPGText(payload.OrganizationID))
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		logger.DebugContext(ctx, "skipping role delete for unknown organization", attr.SlogWorkOSOrganizationID(payload.OrganizationID))
+		return nil
+	case err != nil:
+		return fmt.Errorf("get organization by workos id %q: %w", payload.OrganizationID, err)
 	}
 
 	_, err = accessrepo.New(dbtx).MarkRoleDeleted(ctx, accessrepo.MarkRoleDeletedParams{

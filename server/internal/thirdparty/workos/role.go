@@ -16,6 +16,7 @@ type Role struct {
 	ID          string    `json:"id"`
 	Name        string    `json:"name"`
 	Slug        string    `json:"slug"`
+	Type        string    `json:"type"` // "EnvironmentRole" or "OrganizationRole"
 	Description string    `json:"description"`
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
@@ -55,6 +56,7 @@ func (wc *Client) ListRoles(ctx context.Context, orgID string) ([]Role, error) {
 			ID:          r.ID,
 			Name:        r.Name,
 			Slug:        r.Slug,
+			Type:        string(r.Type),
 			Description: r.Description,
 			CreatedAt:   createdAt,
 			UpdatedAt:   updatedAt,
