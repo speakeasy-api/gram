@@ -63,7 +63,8 @@ func ExecuteProcessWorkOSOrganizationEventsWorkflowDebounced(ctx context.Context
 func ProcessWorkOSOrganizationEventsWorkflowDebounced(ctx workflow.Context, params ProcessWorkOSEventsParams) (*ProcessWorkOSEventsResult, error) {
 	sig := processWorkOSOrganizationEventsDebounceSignal(params)
 	return Debounce(
-		ProcessWorkOSOrganizationEventsWorkflow,
+		ProcessWorkOSOrganizationEventsWorkflow,          // wrapped: runs one page per execution
+		ProcessWorkOSOrganizationEventsWorkflowDebounced, // continueAsSelf: keeps debounce on the next run
 		sig,
 		func(_ ProcessWorkOSEventsParams, result *ProcessWorkOSEventsResult) bool {
 			return result.HasMore
@@ -94,9 +95,7 @@ func ProcessWorkOSOrganizationEventsWorkflow(ctx workflow.Context, params Proces
 		return nil, fmt.Errorf("failed to process WorkOS events: %w", err)
 	}
 
-	result := &ProcessWorkOSEventsResult{HasMore: processRes.HasMore}
-	if processRes.HasMore {
-		return result, workflow.NewContinueAsNewError(ctx, ProcessWorkOSOrganizationEventsWorkflow, params)
-	}
-	return result, nil
+	// HasMore continuation is delegated to the Debounce wrapper via reenqueue so
+	// signals coming in during this run are coalesced with the next page.
+	return &ProcessWorkOSEventsResult{HasMore: processRes.HasMore}, nil
 }
