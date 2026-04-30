@@ -84,7 +84,6 @@ var _ RiskScanner = (*Scanner)(nil)
 type Scanner struct {
 	logger     *slog.Logger
 	repo       *repo.Queries
-	gitleaks   *ra.Scanner
 	gitleaksMu sync.Mutex       // DetectString is not concurrent-safe
 	detector   *detect.Detector // pre-created, reused across scans
 	piiScanner ra.PIIScanner    // nil if Presidio is unavailable
@@ -92,28 +91,25 @@ type Scanner struct {
 }
 
 // NewScanner creates a RiskScanner. piiScanner may be nil if Presidio
-// is not available in the server process.
-func NewScanner(logger *slog.Logger, db *pgxpool.Pool, piiScanner ra.PIIScanner, meterProvider metric.MeterProvider) *Scanner {
-	scanner := ra.NewScanner()
-
-	// Pre-create a gitleaks detector to avoid per-scan init overhead.
-	// Scan() creates a new detector each call (with a global mutex),
-	// which is fine for batch workers but adds unnecessary latency on
-	// the real-time hook path.
+// is not available in the server process. Pre-creates a gitleaks detector
+// to avoid per-scan rule compilation on the real-time hook path; returns
+// an error if the detector cannot be built (init relies on viper global
+// state and should never realistically fail, but propagating the error
+// keeps startup honest).
+func NewScanner(logger *slog.Logger, db *pgxpool.Pool, piiScanner ra.PIIScanner, meterProvider metric.MeterProvider) (*Scanner, error) {
 	det, err := ra.NewDetector()
 	if err != nil {
-		logger.ErrorContext(context.Background(), "failed to pre-create gitleaks detector, will fall back to per-scan creation", attr.SlogError(err))
+		return nil, fmt.Errorf("create gitleaks detector: %w", err)
 	}
 
 	return &Scanner{
 		logger:     logger.With(attr.SlogComponent("risk-scanner")),
 		repo:       repo.New(db),
-		gitleaks:   scanner,
 		gitleaksMu: sync.Mutex{},
 		detector:   det,
 		piiScanner: piiScanner,
 		metrics:    newScannerMetrics(meterProvider, logger),
-	}
+	}, nil
 }
 
 func (s *Scanner) ScanForEnforcement(ctx context.Context, projectID uuid.UUID, text string) (*ScanResult, error) {
@@ -200,10 +196,7 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text s
 	for _, source := range policy.Sources {
 		switch source {
 		case "gitleaks":
-			findings, err := s.scanGitleaks(text)
-			if err != nil {
-				return nil, fmt.Errorf("gitleaks scan: %w", err)
-			}
+			findings := s.scanGitleaks(text)
 			if len(findings) > 0 {
 				return &ScanResult{
 					Action:      policy.Action,
@@ -238,24 +231,13 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text s
 	return nil, nil
 }
 
-// scanGitleaks uses the pre-created detector if available, falling back to
-// Scanner.Scan() (which creates a new detector per call) if construction failed.
-func (s *Scanner) scanGitleaks(text string) ([]ra.Finding, error) {
-	if s.detector == nil {
-		findings, err := s.gitleaks.Scan(text)
-		if err != nil {
-			return nil, fmt.Errorf("gitleaks fallback scan: %w", err)
-		}
-		return findings, nil
-	}
-	// gitleaks v8's Detector.DetectString mutates internal state (rules, line
-	// counters, last-finding bookkeeping) without synchronization, so calling
-	// it from multiple goroutines races the detector and can return
-	// truncated or duplicated findings. The mutex serializes access to the
-	// shared detector instance; we keep the detector around to avoid the
-	// per-call init cost (rule compilation) on the hot enforcement path.
+// scanGitleaks runs DetectString on the pre-created detector under
+// gitleaksMu. The detector is reused (avoiding per-scan rule compilation)
+// but DetectString mutates internal state (rules, line counters, last-finding
+// bookkeeping) without synchronization, so calls must serialize.
+func (s *Scanner) scanGitleaks(text string) []ra.Finding {
 	s.gitleaksMu.Lock()
 	raw := s.detector.DetectString(text)
 	s.gitleaksMu.Unlock()
-	return ra.ConvertFindings(text, raw), nil
+	return ra.ConvertFindings(text, raw)
 }

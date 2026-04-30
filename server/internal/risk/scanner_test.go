@@ -103,12 +103,13 @@ func TestScanner_FanOutAcrossPoliciesIsConcurrent(t *testing.T) {
 	}
 
 	pii := &instrumentedPIIScanner{delay: 200 * time.Millisecond}
-	scanner := risk.NewScanner(
+	scanner, err := risk.NewScanner(
 		testenv.NewLogger(t),
 		ti.conn,
 		pii,
 		testenv.NewMeterProvider(t),
 	)
+	require.NoError(t, err)
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	start := time.Now()
@@ -145,12 +146,13 @@ func TestScanner_FirstMatchCancelsSiblings(t *testing.T) {
 		delay:        2 * time.Second, // long enough that any non-cancellation would dominate
 		findOnEntity: "FAST",
 	}
-	scanner := risk.NewScanner(
+	scanner, err := risk.NewScanner(
 		testenv.NewLogger(t),
 		ti.conn,
 		pii,
 		testenv.NewMeterProvider(t),
 	)
+	require.NoError(t, err)
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	start := time.Now()
