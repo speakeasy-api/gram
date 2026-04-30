@@ -88,6 +88,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
 	"github.com/speakeasy-api/gram/server/internal/usage"
 	"github.com/speakeasy-api/gram/server/internal/variations"
+	"github.com/speakeasy-api/gram/server/internal/xmcp"
 )
 
 func newStartCommand() *cli.Command {
@@ -778,6 +779,7 @@ func newStartCommand() *cli.Command {
 			mcpservers.Attach(mux, mcpservers.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
 			mcpendpoints.Attach(mux, mcpendpoints.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
 			remotemcp.Attach(mux, remotemcp.NewService(logger, tracerProvider, db, sessionManager, encryptionClient, authzEngine))
+			xmcp.Attach(mux, xmcp.NewService(logger, tracerProvider, meterProvider, db, sessionManager, encryptionClient, authzEngine, guardianPolicy, billingRepo, billingTracker), mcpService, mcpMetadataService)
 			triggers.Attach(mux, triggers.NewService(logger, tracerProvider, db, sessionManager, authzEngine, triggerApp))
 			tools.Attach(mux, tools.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
 			resources.Attach(mux, resources.NewService(logger, tracerProvider, db, sessionManager, authzEngine))

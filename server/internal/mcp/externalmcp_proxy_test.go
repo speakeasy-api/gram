@@ -17,91 +17,29 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	externalmcp_repo "github.com/speakeasy-api/gram/server/internal/externalmcp/repo"
 	externalmcp_types "github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types"
+	"github.com/speakeasy-api/gram/server/internal/testmcp"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
-// mockTool represents a tool that the mock MCP server will expose
-type mockTool struct {
-	Name        string
-	Description string
-	InputSchema map[string]any
-	Annotations *mcp.ToolAnnotations
-	Response    mockToolResponse
-}
-
-// mockToolResponse represents the response content for a tool call
-type mockToolResponse struct {
-	Content []map[string]any
-	IsError bool
-}
-
 // newMockExternalMCPServer creates an httptest server that speaks the MCP protocol
-// using the official MCP SDK, which properly handles session management for both
-// SSE and StreamableHTTP transports.
-func newMockExternalMCPServer(t *testing.T, transportType externalmcp_types.TransportType, tools []mockTool) *httptest.Server {
+// via the selected transport, delegating to the shared testmcp package so the
+// same mock is used by tests across the codebase.
+func newMockExternalMCPServer(t *testing.T, transportType externalmcp_types.TransportType, tools []testmcp.Tool) *httptest.Server {
 	t.Helper()
 
-	// Create a new MCP server
-	mcpServer := mcp.NewServer(&mcp.Implementation{
-		Name:    "test-external-mcp-server",
-		Version: "1.0.0",
-	}, nil)
-
-	// Register each mock tool with the server
-	for _, tool := range tools {
-		// Capture the tool response for the closure
-		toolResponse := tool.Response
-
-		// Convert the input schema to JSON for the Tool definition
-		inputSchemaJSON, err := json.Marshal(tool.InputSchema)
-		require.NoError(t, err)
-
-		// Add the tool to the server using the low-level AddTool method
-		// which allows us to use json.RawMessage for the input schema
-		mcpServer.AddTool(&mcp.Tool{
-			Name:        tool.Name,
-			Description: tool.Description,
-			InputSchema: json.RawMessage(inputSchemaJSON),
-			Annotations: tool.Annotations,
-		}, func(_ context.Context, _ *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			// Convert the mock response content to MCP Content types
-			content := make([]mcp.Content, 0, len(toolResponse.Content))
-			for _, c := range toolResponse.Content {
-				contentType, _ := c["type"].(string)
-				switch contentType {
-				case "text":
-					text, _ := c["text"].(string)
-					content = append(content, &mcp.TextContent{Text: text})
-				default:
-					// For unknown types, try to use text if available
-					if text, ok := c["text"].(string); ok {
-						content = append(content, &mcp.TextContent{Text: text})
-					}
-				}
-			}
-			return &mcp.CallToolResult{
-				Content: content,
-				IsError: toolResponse.IsError,
-			}, nil
-		})
+	server := &testmcp.Server{
+		Tools: tools,
 	}
 
-	// Create the appropriate HTTP handler based on transport type
-	var handler http.Handler
 	switch transportType {
 	case externalmcp_types.TransportTypeSSE:
-		handler = mcp.NewSSEHandler(func(_ *http.Request) *mcp.Server {
-			return mcpServer
-		}, nil)
+		return testmcp.NewSSEServer(t, server)
 	case externalmcp_types.TransportTypeStreamableHTTP:
-		handler = mcp.NewStreamableHTTPHandler(func(_ *http.Request) *mcp.Server {
-			return mcpServer
-		}, nil)
+		return testmcp.NewStreamableHTTPServer(t, server)
 	default:
 		t.Fatalf("unsupported transport type: %s", transportType)
+		return nil
 	}
-
-	return httptest.NewServer(handler)
 }
 
 // externalMCPConfig contains configuration for setting up external MCP in tests
@@ -281,7 +219,7 @@ func TestE2E_ExternalMCP_Proxy_StreamableHTTP(t *testing.T) {
 	ctx, ti := newTestMCPService(t)
 
 	// Create mock external MCP server
-	mockTools := []mockTool{
+	mockTools := []testmcp.Tool{
 		{
 			Name:        "get_weather",
 			Description: "Get current weather for a location",
@@ -295,7 +233,7 @@ func TestE2E_ExternalMCP_Proxy_StreamableHTTP(t *testing.T) {
 				},
 				"required": []any{"location"},
 			},
-			Response: mockToolResponse{
+			Response: testmcp.ToolResponse{
 				Content: []map[string]any{
 					{
 						"type": "text",
@@ -399,7 +337,7 @@ func TestE2E_ExternalMCP_Proxy_SSE(t *testing.T) {
 	ctx, ti := newTestMCPService(t)
 
 	// Create mock external MCP server with SSE transport
-	mockTools := []mockTool{
+	mockTools := []testmcp.Tool{
 		{
 			Name:        "calculate",
 			Description: "Perform a calculation",
@@ -413,7 +351,7 @@ func TestE2E_ExternalMCP_Proxy_SSE(t *testing.T) {
 				},
 				"required": []any{"expression"},
 			},
-			Response: mockToolResponse{
+			Response: testmcp.ToolResponse{
 				Content: []map[string]any{
 					{
 						"type": "text",
@@ -518,7 +456,7 @@ func TestE2E_ExternalMCP_Proxy_Annotations(t *testing.T) {
 
 	ctx, ti := newTestMCPService(t)
 
-	mockTools := []mockTool{
+	mockTools := []testmcp.Tool{
 		{
 			Name:        "read_data",
 			Description: "Read data from the database",
@@ -533,7 +471,7 @@ func TestE2E_ExternalMCP_Proxy_Annotations(t *testing.T) {
 				IdempotentHint:  true,
 				OpenWorldHint:   new(false), // explicit false — must not be dropped
 			},
-			Response: mockToolResponse{
+			Response: testmcp.ToolResponse{
 				Content: []map[string]any{
 					{"type": "text", "text": "data"},
 				},
@@ -552,7 +490,7 @@ func TestE2E_ExternalMCP_Proxy_Annotations(t *testing.T) {
 				IdempotentHint:  true,
 				OpenWorldHint:   new(true),
 			},
-			Response: mockToolResponse{
+			Response: testmcp.ToolResponse{
 				Content: []map[string]any{
 					{"type": "text", "text": "deleted"},
 				},
