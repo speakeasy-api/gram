@@ -37,6 +37,15 @@ func ReconcileWorkOSOrganizationsWorkflow(ctx workflow.Context) error {
 	}
 
 	for _, workosOrgID := range workosOrgIDs {
+		// Snapshot current WorkOS state (roles + memberships) before triggering event processing.
+		// Ensures env-level roles (which don't emit per-org events) are always present, and
+		// handles the eventual-consistency case where the DB was wiped and repopulated.
+		if err := workflow.ExecuteActivity(ctx, a.BackfillWorkOSOrg, activities.BackfillWorkOSOrgParams{
+			WorkOSOrgID: workosOrgID,
+		}).Get(ctx, nil); err != nil {
+			workflow.GetLogger(ctx).Warn("failed to backfill workos org", "workos_org_id", workosOrgID, "error", err)
+		}
+
 		params := ProcessWorkOSEventsParams{WorkOSOrganizationID: workosOrgID}
 		childCtx := workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
 			WorkflowID:            processWorkOSOrganizationEventsWorkflowID(params),

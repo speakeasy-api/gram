@@ -66,6 +66,7 @@ type Activities struct {
 	analyzeBatch                    *risk_analysis.AnalyzeBatch
 	processWorkOSOrganizationEvents *activities.ProcessWorkOSOrganizationEvents
 	getAllWorkOSLinkedOrganizations *activities.GetAllWorkOSLinkedOrganizations
+	backfillWorkOSOrg               *activities.BackfillWorkOSOrg
 }
 
 func NewActivities(
@@ -130,6 +131,7 @@ func NewActivities(
 		analyzeBatch:                    risk_analysis.NewAnalyzeBatch(logger, tracerProvider, meterProvider, db, piiScanner),
 		processWorkOSOrganizationEvents: activities.NewProcessWorkOSOrganizationEvents(logger, db, workosEventsClient),
 		getAllWorkOSLinkedOrganizations: activities.NewGetAllWorkOSLinkedOrganizations(logger, db),
+		backfillWorkOSOrg:               activities.NewBackfillWorkOSOrg(logger, db, workosClient),
 	}
 }
 
@@ -276,4 +278,8 @@ func (a *Activities) ProcessWorkOSOrganizationEvents(ctx context.Context, params
 
 func (a *Activities) GetAllWorkOSLinkedOrganizations(ctx context.Context) ([]string, error) {
 	return a.getAllWorkOSLinkedOrganizations.Do(ctx)
+}
+
+func (a *Activities) BackfillWorkOSOrg(ctx context.Context, params activities.BackfillWorkOSOrgParams) error {
+	return a.backfillWorkOSOrg.Do(ctx, params)
 }
