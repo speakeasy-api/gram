@@ -144,7 +144,7 @@ WHERE deleted IS FALSE;
 -- Toolset link to client_session_issuer.
 -- Replaces toolsets.external_oauth_server_id and toolsets.oauth_proxy_server_id
 -- (and the toolsets_oauth_exclusivity CHECK that gated them).
--- mcp_frontends mirrors this column whenever its runtime migration lands (per spike.md §3.5).
+-- mcp_servers mirrors this column whenever its runtime migration lands (per spike.md §3.5).
 -- ---------------------------------------------------------------------------
 
 ALTER TABLE toolsets

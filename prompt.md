@@ -50,7 +50,7 @@ Skills (these don't exist yet — we will create them as ongoing documentation f
 
 - **Gram** — what is it? How does it work? How does its MCP pathway work?
 - **Gram Legacy OAuth** — what is it? Why does it work the way it does? What are the principles behind where we're migrating to?
-- **MCP Frontend/Backend Decoupling** — internal-only Gram concept. Pinned references:
+- **MCP Servers and Endpoints** — internal-only Gram concept (`mcp_servers` + `mcp_endpoints`, formerly `mcp_frontends` + `mcp_slugs`). Pinned references:
   - https://www.notion.so/RFC-Gram-MCP-Frontends-and-Slugs-342726c497cc800ba609de5cbe5f3d38?source=copy_link
   - https://www.notion.so/speakeasyapi/RFC-Gram-Remote-MCP-Servers-33c726c497cc8072ac6dc6816f3d264f?source=copy_link
   - https://github.com/speakeasy-api/gram/pull/2412
