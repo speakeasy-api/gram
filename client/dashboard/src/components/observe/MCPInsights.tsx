@@ -1,7 +1,5 @@
-import { Page } from "@/components/page-layout";
 import { InsightsConfig } from "@/components/insights-sidebar";
 import { useInsightsState } from "@/components/insights-context";
-import { RequireScope } from "@/components/require-scope";
 import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
 import { ObservabilitySkeleton } from "@/components/ObservabilitySkeleton";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
@@ -37,7 +35,7 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
-import { Check, ChevronDown, MessageCircle } from "lucide-react";
+import { Check, ChevronDown } from "lucide-react";
 import { McpIcon } from "@/components/ui/mcp-icon";
 import {
   Chart as ChartJS,
@@ -56,11 +54,7 @@ import { useRoutes } from "@/routes";
 import { cn } from "@/lib/utils";
 import { Dialog } from "@/components/ui/dialog";
 import { Button } from "@speakeasy-api/moonshine";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-/**
- * Check if time series has any meaningful data (non-zero values)
- */
 function hasTimeSeriesData(
   timeSeries: Array<{
     totalChats?: number;
@@ -73,9 +67,6 @@ function hasTimeSeriesData(
   );
 }
 
-/**
- * Check if summary has any data at all
- */
 function hasSummaryData(summary?: {
   totalChats?: number;
   totalToolCalls?: number;
@@ -84,25 +75,16 @@ function hasSummaryData(summary?: {
   return (summary.totalChats ?? 0) > 0 || (summary.totalToolCalls ?? 0) > 0;
 }
 
-/**
- * Check if there's any tool call data in summary
- */
 function hasToolData(summary?: { totalToolCalls?: number }): boolean {
   if (!summary) return false;
   return (summary.totalToolCalls ?? 0) > 0;
 }
 
-/**
- * Check if there's any chat session data in summary
- */
 function hasChatData(summary?: { totalChats?: number }): boolean {
   if (!summary) return false;
   return (summary.totalChats ?? 0) > 0;
 }
 
-/**
- * Check if time series has any tool call data
- */
 function hasTimeSeriesToolData(
   timeSeries: Array<{ totalToolCalls?: number }>,
 ): boolean {
@@ -110,9 +92,6 @@ function hasTimeSeriesToolData(
   return timeSeries.some((d) => (d.totalToolCalls ?? 0) > 0);
 }
 
-/**
- * Check if time series has any chat data
- */
 function hasTimeSeriesChatData(
   timeSeries: Array<{ totalChats?: number }>,
 ): boolean {
@@ -120,9 +99,6 @@ function hasTimeSeriesChatData(
   return timeSeries.some((d) => (d.totalChats ?? 0) > 0);
 }
 
-/**
- * Overlay shown on charts when there's no data for the selected time range
- */
 function NoDataOverlay() {
   return (
     <div className="bg-background/80 absolute inset-0 flex flex-col items-center justify-center rounded backdrop-blur-[1px]">
@@ -143,10 +119,6 @@ interface SetupRequiredModalProps {
   onNavigateToElements: () => void;
 }
 
-/**
- * Modal shown when there's no data at all across any period,
- * prompting the user to set up Elements
- */
 function SetupRequiredModal({
   open,
   onClose,
@@ -205,23 +177,23 @@ function SetupRequiredModal({
   );
 }
 
-function ViewChatsLink({ from, to }: { from: Date; to: Date }) {
+function ViewSessionsLink({ from, to }: { from: Date; to: Date }) {
   const routes = useRoutes();
   return (
-    <routes.chatSessions.Link
+    <routes.logs.agents.Link
       queryParams={{ from: from.toISOString(), to: to.toISOString() }}
       className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-sm no-underline transition-colors hover:no-underline"
     >
-      View chats
+      View sessions
       <ChevronRight className="size-4" />
-    </routes.chatSessions.Link>
+    </routes.logs.agents.Link>
   );
 }
 
 function ViewLogsLink({ from, to }: { from: Date; to: Date }) {
   const routes = useRoutes();
   return (
-    <routes.logs.Link
+    <routes.logs.mcp.Link
       queryParams={{
         from: toLocalISOString(from),
         to: toLocalISOString(to),
@@ -230,7 +202,7 @@ function ViewLogsLink({ from, to }: { from: Date; to: Date }) {
     >
       View logs
       <ChevronRight className="size-4" />
-    </routes.logs.Link>
+    </routes.logs.mcp.Link>
   );
 }
 
@@ -246,7 +218,24 @@ ChartJS.register(
 );
 
 type FilterDimension = "all" | "api_key" | "user";
-type InsightsTab = "tools" | "chats";
+
+export type InsightsContentProps = {
+  data: GetObservabilityOverviewResult;
+  summary: GetObservabilityOverviewResult["summary"];
+  comparison: GetObservabilityOverviewResult["comparison"];
+  timeSeries: NonNullable<GetObservabilityOverviewResult["timeSeries"]>;
+  topToolsByCount: GetObservabilityOverviewResult["topToolsByCount"];
+  topToolsByFailureRate: GetObservabilityOverviewResult["topToolsByFailureRate"];
+  comparisonLabel: string;
+  isInsightsOpen: boolean;
+  isRefetching: boolean;
+  showNoDataOverlay: boolean;
+  effectiveFrom: Date;
+  effectiveTo: Date;
+  timeRangeMs: number;
+  onTimeRangeSelect: (from: Date, to: Date) => void;
+  navigateToLogs: (toolUrn?: string) => void;
+};
 
 function FilterBar({
   dimension,
@@ -277,7 +266,6 @@ function FilterBar({
       <span className="text-muted-foreground hidden text-sm font-medium 2xl:inline">
         Filter by
       </span>
-      {/* Integrated segmented control with dropdown */}
       <div className="border-border flex h-[42px] items-center rounded-md border p-1">
         {(["all", "api_key", "user"] as const).map((value) => {
           const isSelected = dimension === value;
@@ -303,7 +291,6 @@ function FilterBar({
           );
         })}
 
-        {/* Integrated searchable dropdown - always visible */}
         <div className="bg-border/50 mx-1 h-6 w-px" />
         <Popover
           open={dimension !== "all" && !disabled && open}
@@ -379,9 +366,6 @@ function FilterBar({
   );
 }
 
-/**
- * MCP Server filter dropdown for the Tools/MCP tab
- */
 function MCPServerFilter({
   selectedServer,
   onServerChange,
@@ -474,7 +458,6 @@ function MCPServerFilter({
   );
 }
 
-// Valid date range presets
 const validPresets: DateRangePreset[] = [
   "15m",
   "1h",
@@ -492,10 +475,6 @@ function isValidPreset(value: string | null): value is DateRangePreset {
   return value !== null && validPresets.includes(value as DateRangePreset);
 }
 
-/**
- * Format a date as a local ISO-like string (YYYY-MM-DDTHH:mm:ss) without UTC conversion.
- * This preserves the local date/time when stored in URL params.
- */
 function toLocalISOString(date: Date): string {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -506,17 +485,9 @@ function toLocalISOString(date: Date): string {
   return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}`;
 }
 
-/**
- * Parse a date string, treating it as local time if no timezone is specified.
- * This reverses toLocalISOString and also handles legacy UTC ISO strings.
- */
 function parseLocalDate(dateStr: string): Date {
-  // If the string ends with Z or has a timezone offset, it's UTC - parse directly
   if (dateStr.endsWith("Z") || /[+-]\d{2}:\d{2}$/.test(dateStr)) {
-    // For UTC strings, parse and extract the date/time components to create local date
-    // This handles legacy URLs that stored dates as UTC
     const utcDate = new Date(dateStr);
-    // Extract UTC components and create as local (to preserve the intended date)
     const match = dateStr.match(
       /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})/,
     );
@@ -533,28 +504,33 @@ function parseLocalDate(dateStr: string): Date {
     }
     return utcDate;
   }
-  // No timezone - parse as local
   return new Date(dateStr);
 }
 
-export default function ObservabilityOverview() {
+export function MCPInsights() {
   return (
-    <RequireScope scope="project:read" level="page">
-      <ObservabilityOverviewInner />
-    </RequireScope>
+    <InsightsOverviewShell noDataKind="tools" showMcpFilter>
+      {(props) => <ToolsInsightsContent {...props} />}
+    </InsightsOverviewShell>
   );
 }
 
-function ObservabilityOverviewInner() {
+export function InsightsOverviewShell({
+  children,
+  noDataKind,
+  showMcpFilter,
+}: {
+  children: (props: InsightsContentProps) => React.ReactNode;
+  noDataKind: "tools" | "chats";
+  showMcpFilter: boolean;
+}) {
   const [searchParams, setSearchParams] = useSearchParams();
   const client = useGramContext();
 
-  // Fetch toolsets for MCP server filter - used for both dropdown and URN prefix derivation
   const { data: toolsetsData, isLoading: isLoadingToolsets } =
     useListToolsets();
   const toolsets = toolsetsData?.toolsets ?? [];
 
-  // Track if user has seen setup modal (persists to localStorage)
   const [hasSeenSetupModal, setHasSeenSetupModal] = useState(() => {
     try {
       return localStorage.getItem("insights-setup-modal-seen") === "true";
@@ -572,11 +548,6 @@ function ObservabilityOverviewInner() {
     }
   }, []);
 
-  // Tab state for MCP vs Chats view
-  const [activeTab, setActiveTab] = useState<InsightsTab>("tools");
-
-  // Telemetry tools available to the AI assistant on the overview page.
-  // These correspond to operationIds in server/design/telemetry/design.go.
   const metricsToolFilter = useCallback(
     ({ toolName }: { toolName: string }) =>
       [
@@ -594,7 +565,6 @@ function ObservabilityOverviewInner() {
     toolsToInclude: metricsToolFilter,
   });
 
-  // Parse URL params
   const urlRange = searchParams.get("range");
   const urlFrom = searchParams.get("from");
   const urlTo = searchParams.get("to");
@@ -611,7 +581,6 @@ function ObservabilityOverviewInner() {
   const urlFilterId = searchParams.get("filterId");
   const urlMcpServer = searchParams.get("mcpServer");
 
-  // Derive state from URL
   const selectedMcpServer = urlMcpServer ?? null;
   const dateRange: DateRangePreset = isValidPreset(urlRange) ? urlRange : "30d";
 
@@ -631,7 +600,6 @@ function ObservabilityOverviewInner() {
 
   const selectedFilterValue = urlFilterId ?? null;
 
-  // Update URL helpers
   const updateSearchParams = useCallback(
     (updates: Record<string, string | null>) => {
       setSearchParams((prev) => {
@@ -655,8 +623,8 @@ function ObservabilityOverviewInner() {
         range: preset,
         from: null,
         to: null,
-        interval: null, // Clear interval when switching to preset
-        label: null, // Clear label when switching to preset
+        interval: null,
+        label: null,
       });
     },
     [updateSearchParams],
@@ -686,7 +654,7 @@ function ObservabilityOverviewInner() {
     (dimension: FilterDimension) => {
       updateSearchParams({
         filter: dimension === "all" ? null : dimension,
-        filterId: null, // Reset filter value when dimension changes
+        filterId: null,
       });
     },
     [updateSearchParams],
@@ -710,14 +678,11 @@ function ObservabilityOverviewInner() {
     [updateSearchParams],
   );
 
-  // Use custom range if set, otherwise use preset
-  // Memoize to prevent new Date objects on every render
   const { from, to } = useMemo(
     () => customRange ?? getPresetRange(dateRange),
     [customRange, dateRange],
   );
 
-  // Fetch filter options for the selected dimension (only when not "all")
   const { data: filterOptions } = useQuery({
     queryKey: [
       "observability",
@@ -743,7 +708,6 @@ function ObservabilityOverviewInner() {
     enabled: filterDimension !== "all",
   });
 
-  // Build filter params based on selected dimension, value, and MCP server
   const filterParams = useMemo(() => {
     const params: {
       apiKeyId?: string;
@@ -751,7 +715,6 @@ function ObservabilityOverviewInner() {
       toolsetSlug?: string;
     } = {};
 
-    // Add dimension filter (API key or user)
     if (filterDimension !== "all" && selectedFilterValue) {
       if (filterDimension === "api_key") {
         params.apiKeyId = selectedFilterValue;
@@ -760,14 +723,12 @@ function ObservabilityOverviewInner() {
       }
     }
 
-    // Add MCP server filter by toolset slug
-    // Only apply MCP filter when on the "tools" tab to avoid filtering out chat data
-    if (selectedMcpServer && activeTab === "tools") {
+    if (showMcpFilter && selectedMcpServer) {
       params.toolsetSlug = selectedMcpServer;
     }
 
     return params;
-  }, [filterDimension, selectedFilterValue, selectedMcpServer, activeTab]);
+  }, [filterDimension, selectedFilterValue, selectedMcpServer, showMcpFilter]);
 
   const { data, isPending, isFetching, error, refetch, isLogsDisabled } =
     useLogsEnabledErrorCheck(
@@ -795,7 +756,6 @@ function ObservabilityOverviewInner() {
       }),
     );
 
-  // Format date range for copilot context
   const dateRangeContext = useMemo(() => {
     const formatDate = (d: Date) =>
       d.toLocaleDateString("en-US", {
@@ -835,50 +795,46 @@ function ObservabilityOverviewInner() {
           },
         ]}
       />
-      <Page>
-        <Page.Header>
-          <Page.Header.Breadcrumbs fullWidth />
-        </Page.Header>
-        <Page.Body fullWidth className="space-y-6">
-          <InsightsPageHeader
-            filterDimension={filterDimension}
-            onFilterDimensionChange={setFilterDimensionParam}
-            selectedFilterValue={selectedFilterValue}
-            onSelectedFilterValueChange={setSelectedFilterValueParam}
-            filterOptions={filterOptions?.options ?? []}
-            dateRange={dateRange}
-            onDateRangeChange={setDateRangeParam}
-            customRange={customRange}
-            customRangeLabel={urlLabel}
-            onCustomRangeChange={setCustomRangeParam}
-            onClearCustomRange={clearCustomRange}
-            disabled={isLogsDisabled}
-            showMcpFilter={activeTab === "tools"}
-            selectedMcpServer={selectedMcpServer}
-            onMcpServerChange={setMcpServerParam}
-            toolsets={toolsets}
-            isLoadingToolsets={isLoadingToolsets}
-          />
+      <div className="min-h-0 w-full flex-1 space-y-6 overflow-y-auto p-8 pb-24">
+        <InsightsPageHeader
+          filterDimension={filterDimension}
+          onFilterDimensionChange={setFilterDimensionParam}
+          selectedFilterValue={selectedFilterValue}
+          onSelectedFilterValueChange={setSelectedFilterValueParam}
+          filterOptions={filterOptions?.options ?? []}
+          dateRange={dateRange}
+          onDateRangeChange={setDateRangeParam}
+          customRange={customRange}
+          customRangeLabel={urlLabel}
+          onCustomRangeChange={setCustomRangeParam}
+          onClearCustomRange={clearCustomRange}
+          disabled={isLogsDisabled}
+          showMcpFilter={showMcpFilter}
+          selectedMcpServer={selectedMcpServer}
+          onMcpServerChange={setMcpServerParam}
+          toolsets={toolsets}
+          isLoadingToolsets={isLoadingToolsets}
+        />
 
-          <ObservabilityContent
-            isPending={isPending}
-            isFetching={isFetching}
-            error={error}
-            isLogsDisabled={isLogsDisabled}
-            data={data}
-            dateRange={dateRange}
-            customRange={customRange}
-            onTimeRangeSelect={(from, to) => {
-              setCustomRangeParam(from, to);
-            }}
-            refetch={refetch}
-            hasSeenSetupModal={hasSeenSetupModal}
-            onSetupModalSeen={markSetupModalSeen}
-            activeTab={activeTab}
-            onTabChange={setActiveTab}
-          />
-        </Page.Body>
-      </Page>
+        <InsightsOverviewContent
+          isPending={isPending}
+          isFetching={isFetching}
+          error={error}
+          isLogsDisabled={isLogsDisabled}
+          data={data}
+          dateRange={dateRange}
+          customRange={customRange}
+          onTimeRangeSelect={(from, to) => {
+            setCustomRangeParam(from, to);
+          }}
+          refetch={refetch}
+          hasSeenSetupModal={hasSeenSetupModal}
+          onSetupModalSeen={markSetupModalSeen}
+          noDataKind={noDataKind}
+        >
+          {children}
+        </InsightsOverviewContent>
+      </div>
     </>
   );
 }
@@ -933,7 +889,7 @@ function InsightsPageHeader({
       )}
     >
       <div className="flex min-w-0 flex-col gap-1">
-        <h1 className="text-xl font-semibold">Insights</h1>
+        <h1 className="text-xl font-semibold">MCP Servers</h1>
         <p className="text-muted-foreground text-sm">
           Monitor agent sessions, tool performance, and system health
         </p>
@@ -941,7 +897,7 @@ function InsightsPageHeader({
       <div
         className={cn(
           "flex items-center gap-3",
-          isInsightsOpen ? "justify-start" : "flex-shrink-0",
+          isInsightsOpen ? "justify-start" : "shrink-0",
         )}
       >
         {showMcpFilter ? (
@@ -1010,7 +966,7 @@ function getComparisonLabel(
   }
 }
 
-function ObservabilityContent({
+function InsightsOverviewContent({
   isPending,
   isFetching,
   error,
@@ -1022,8 +978,8 @@ function ObservabilityContent({
   refetch,
   hasSeenSetupModal,
   onSetupModalSeen,
-  activeTab,
-  onTabChange,
+  noDataKind,
+  children,
 }: {
   isPending: boolean;
   isFetching: boolean;
@@ -1036,33 +992,28 @@ function ObservabilityContent({
   refetch: () => void;
   hasSeenSetupModal: boolean;
   onSetupModalSeen: () => void;
-  activeTab: InsightsTab;
-  onTabChange: (tab: InsightsTab) => void;
+  noDataKind: "tools" | "chats";
+  children: (props: InsightsContentProps) => React.ReactNode;
 }) {
   const routes = useRoutes();
   const navigate = useNavigate();
   const { isExpanded: isInsightsOpen, setIsExpanded } = useInsightsState();
   const [showSetupModal, setShowSetupModal] = useState(false);
-  // Track if we've done the initial auto-switch (only auto-switch once on first data load)
-  const hasAutoSwitched = useRef(false);
 
-  // Calculate effective from/to dates for links
   const { from: effectiveFrom, to: effectiveTo } = useMemo(
     () => customRange ?? getPresetRange(dateRange),
     [customRange, dateRange],
   );
 
-  // Navigate to logs page with optional tool filter and time range
   const navigateToLogs = useCallback(
     (toolUrn?: string) => {
-      const logsUrl = routes.logs.href();
+      const logsUrl = routes.logs.mcp.href();
       const params = new URLSearchParams();
 
       if (toolUrn) {
         params.set("q", toolUrn);
       }
 
-      // Pass time range to logs page
       if (customRange) {
         params.set("from", toLocalISOString(customRange.from));
         params.set("to", toLocalISOString(customRange.to));
@@ -1076,7 +1027,6 @@ function ObservabilityContent({
     [routes.logs, navigate, customRange, dateRange],
   );
 
-  // Check data availability for empty states
   const { hasAnyData, hasTools, hasChats } = useMemo(() => {
     if (!data)
       return {
@@ -1084,11 +1034,9 @@ function ObservabilityContent({
         hasTools: false,
         hasChats: false,
       };
-    // Check current period, comparison period, and time series
     const currentHasData = hasSummaryData(data.summary);
     const comparisonHasData = hasSummaryData(data.comparison);
     const timeSeriesHasData = hasTimeSeriesData(data.timeSeries ?? []);
-    // Check both summary and time series for tools/chats
     const toolsInSummary =
       hasToolData(data.summary) || hasToolData(data.comparison);
     const toolsInTimeSeries = hasTimeSeriesToolData(data.timeSeries ?? []);
@@ -1102,19 +1050,6 @@ function ObservabilityContent({
     };
   }, [data]);
 
-  // Auto-switch tab only on initial data load (not on user clicks)
-  React.useEffect(() => {
-    if (!isPending && data && !hasAutoSwitched.current) {
-      hasAutoSwitched.current = true;
-      if (activeTab === "tools" && !hasTools && hasChats) {
-        onTabChange("chats");
-      } else if (activeTab === "chats" && !hasChats && hasTools) {
-        onTabChange("tools");
-      }
-    }
-  }, [isPending, data, hasTools, hasChats, activeTab, onTabChange]);
-
-  // Show setup modal when data loads and there's no data at all (only if not already seen)
   React.useEffect(() => {
     if (!isPending && data && !hasAnyData && !hasSeenSetupModal) {
       setShowSetupModal(true);
@@ -1154,260 +1089,35 @@ function ObservabilityContent({
 
   const comparisonLabel = getComparisonLabel(dateRange, customRange !== null);
 
-  // Calculate error rate
-  const errorRate =
-    summary?.totalToolCalls && summary.totalToolCalls > 0
-      ? ((summary.failedToolCalls ?? 0) / summary.totalToolCalls) * 100
-      : 0;
-  const previousErrorRate =
-    comparison?.totalToolCalls && comparison.totalToolCalls > 0
-      ? ((comparison.failedToolCalls ?? 0) / comparison.totalToolCalls) * 100
-      : 0;
-
-  // Show loading indicator when refetching (but keep showing old data)
   const isRefetching = isFetching && !isPending;
 
-  // Calculate the actual time range for chart label formatting
   const { from, to } = customRange ?? getPresetRange(dateRange);
   const timeRangeMs = to.getTime() - from.getTime();
 
-  // Per-tab no data overlays
-  const showToolsNoDataOverlay = !hasTools && !isRefetching;
-  const showChatsNoDataOverlay = !hasChats && !isRefetching;
+  const showNoDataOverlay =
+    noDataKind === "tools"
+      ? !hasTools && !isRefetching
+      : !hasChats && !isRefetching;
 
   return (
     <div className="space-y-6">
-      <Tabs
-        value={activeTab}
-        onValueChange={(v) => onTabChange(v as InsightsTab)}
-      >
-        <TabsList className="border-border h-auto w-full justify-start gap-8 rounded-none border-b bg-transparent p-0">
-          <TabsTrigger
-            value="tools"
-            className="text-muted-foreground data-[state=active]:text-foreground data-[state=active]:after:bg-primary relative h-auto flex-none rounded-none border-none bg-transparent! pt-2 pr-8 pb-3 pl-0 shadow-none! after:absolute after:right-0 after:bottom-0 after:left-0 after:h-0.5 after:bg-transparent data-[state=active]:bg-transparent!"
-          >
-            <div className="flex items-center gap-3">
-              <McpIcon className="size-5" />
-              <div className="flex flex-col items-start text-left">
-                <span className="font-medium">MCP</span>
-                <span className="text-muted-foreground text-xs font-normal">
-                  Claude Code, Desktop, etc.
-                </span>
-              </div>
-            </div>
-          </TabsTrigger>
-          <TabsTrigger
-            value="chats"
-            className="text-muted-foreground data-[state=active]:text-foreground data-[state=active]:after:bg-primary relative h-auto flex-none rounded-none border-none bg-transparent! pt-2 pr-8 pb-3 pl-0 shadow-none! after:absolute after:right-0 after:bottom-0 after:left-0 after:h-0.5 after:bg-transparent data-[state=active]:bg-transparent!"
-          >
-            <div className="flex items-center gap-3">
-              <MessageCircle className="size-5" />
-              <div className="flex flex-col items-start text-left">
-                <span className="font-medium">Chats</span>
-                <span className="text-muted-foreground text-xs font-normal">
-                  Gram Elements SDK
-                </span>
-              </div>
-            </div>
-          </TabsTrigger>
-        </TabsList>
-
-        {/* ===== TOOLS TAB ===== */}
-        <TabsContent value="tools" className="mt-6 space-y-8">
-          {/* Tool Metrics Section */}
-          <section>
-            <h2 className="mb-4 text-lg font-semibold">Tool Metrics</h2>
-            <div className="space-y-4">
-              <ToolCallsChart
-                data={timeSeries ?? []}
-                timeRangeMs={timeRangeMs}
-                title="Tool Calls & Errors"
-                onTimeRangeSelect={onTimeRangeSelect}
-                isLoading={isRefetching}
-                showNoData={showToolsNoDataOverlay}
-                from={effectiveFrom}
-                to={effectiveTo}
-              />
-              <div
-                className={cn(
-                  "grid gap-4",
-                  isInsightsOpen ? "grid-cols-1" : "grid-cols-1 lg:grid-cols-2",
-                )}
-              >
-                <div className="border-border bg-card rounded-lg border p-6">
-                  <h3 className="mb-4 text-sm font-semibold">
-                    Top Tools by Usage
-                  </h3>
-                  <ToolBarList
-                    tools={topToolsByCount ?? []}
-                    valueKey="callCount"
-                    valueLabel="calls"
-                    onToolClick={(toolUrn) => navigateToLogs(toolUrn)}
-                  />
-                </div>
-                <div className="border-border bg-card rounded-lg border p-6">
-                  <h3 className="mb-4 text-sm font-semibold">
-                    Failure Distribution by Tool
-                  </h3>
-                  <ToolBarList
-                    tools={topToolsByFailureRate ?? []}
-                    valueKey="failureRate"
-                    valueLabel="%"
-                    isPercentage
-                    showLegend
-                    onToolClick={(toolUrn) => navigateToLogs(toolUrn)}
-                  />
-                </div>
-              </div>
-            </div>
-          </section>
-
-          {/* System Metrics Section */}
-          <section>
-            <h2 className="mb-4 text-lg font-semibold">System Metrics</h2>
-            <div
-              className={cn(
-                "grid gap-4",
-                isInsightsOpen
-                  ? "grid-cols-1 md:grid-cols-2"
-                  : "grid-cols-1 md:grid-cols-3",
-              )}
-            >
-              <MetricCard
-                title="Tool Calls"
-                value={summary?.totalToolCalls ?? 0}
-                previousValue={comparison?.totalToolCalls ?? 0}
-                icon="wrench"
-                thresholds={{ red: 10, amber: 50 }}
-                comparisonLabel={comparisonLabel}
-              />
-              <MetricCard
-                title="Avg Latency"
-                value={summary?.avgLatencyMs ?? 0}
-                previousValue={comparison?.avgLatencyMs ?? 0}
-                format="ms"
-                icon="clock"
-                invertDelta
-                thresholds={{ red: 500, amber: 250, inverted: true }}
-                comparisonLabel={comparisonLabel}
-              />
-              <MetricCard
-                title="Error Rate"
-                value={errorRate}
-                previousValue={previousErrorRate}
-                format="percent"
-                icon="triangle-alert"
-                invertDelta
-                thresholds={{ red: 10, amber: 5, inverted: true }}
-                comparisonLabel={comparisonLabel}
-              />
-            </div>
-          </section>
-        </TabsContent>
-
-        {/* ===== CHATS TAB ===== */}
-        <TabsContent value="chats" className="mt-6 space-y-8">
-          <section>
-            <h2 className="mb-4 text-lg font-semibold">Chat Resolution</h2>
-            <div className="space-y-4">
-              <div
-                className={cn(
-                  "grid gap-4 transition-all duration-300",
-                  isInsightsOpen
-                    ? "grid-cols-1 md:grid-cols-2"
-                    : "grid-cols-1 md:grid-cols-2 lg:grid-cols-4",
-                )}
-              >
-                <MetricCard
-                  title="Total Chats"
-                  value={summary?.totalChats ?? 0}
-                  previousValue={comparison?.totalChats ?? 0}
-                  icon="message-circle"
-                  thresholds={{ red: 10, amber: 50 }}
-                  comparisonLabel={comparisonLabel}
-                />
-                <MetricCard
-                  title="Resolution Rate"
-                  value={
-                    summary?.totalChats
-                      ? ((summary.resolvedChats ?? 0) / summary.totalChats) *
-                        100
-                      : 0
-                  }
-                  previousValue={
-                    comparison?.totalChats
-                      ? ((comparison.resolvedChats ?? 0) /
-                          comparison.totalChats) *
-                        100
-                      : 0
-                  }
-                  format="percent"
-                  icon="circle-check"
-                  thresholds={{ red: 30, amber: 60 }}
-                  comparisonLabel={comparisonLabel}
-                />
-                <MetricCard
-                  title="Avg Session Duration"
-                  value={(summary?.avgSessionDurationMs ?? 0) / 1000}
-                  previousValue={(comparison?.avgSessionDurationMs ?? 0) / 1000}
-                  format="seconds"
-                  icon="timer"
-                  invertDelta
-                  thresholds={{ red: 300, amber: 120, inverted: true }}
-                  comparisonLabel={comparisonLabel}
-                />
-                <MetricCard
-                  title="Avg Resolution Time"
-                  value={(summary?.avgResolutionTimeMs ?? 0) / 1000}
-                  previousValue={(comparison?.avgResolutionTimeMs ?? 0) / 1000}
-                  format="seconds"
-                  icon="clock"
-                  invertDelta
-                  thresholds={{ red: 180, amber: 60, inverted: true }}
-                  comparisonLabel={comparisonLabel}
-                />
-              </div>
-              <div
-                className={cn(
-                  "grid gap-4",
-                  isInsightsOpen ? "grid-cols-1" : "grid-cols-1 lg:grid-cols-2",
-                )}
-              >
-                <ResolvedChatsChart
-                  data={timeSeries ?? []}
-                  timeRangeMs={timeRangeMs}
-                  title="Resolution Rate Over Time"
-                  onTimeRangeSelect={onTimeRangeSelect}
-                  isLoading={isRefetching}
-                  from={effectiveFrom}
-                  to={effectiveTo}
-                  showNoData={showChatsNoDataOverlay}
-                />
-                <ResolutionStatusChart
-                  data={timeSeries ?? []}
-                  timeRangeMs={timeRangeMs}
-                  title="Chats by Resolution Status"
-                  onTimeRangeSelect={onTimeRangeSelect}
-                  isLoading={isRefetching}
-                  from={effectiveFrom}
-                  to={effectiveTo}
-                  showNoData={showChatsNoDataOverlay}
-                />
-              </div>
-              <SessionDurationChart
-                data={timeSeries ?? []}
-                timeRangeMs={timeRangeMs}
-                title="Avg Session Duration Over Time"
-                onTimeRangeSelect={onTimeRangeSelect}
-                isLoading={isRefetching}
-                from={effectiveFrom}
-                to={effectiveTo}
-                showNoData={showChatsNoDataOverlay}
-              />
-            </div>
-          </section>
-        </TabsContent>
-      </Tabs>
+      {children({
+        data,
+        summary,
+        comparison,
+        timeSeries: timeSeries ?? [],
+        topToolsByCount,
+        topToolsByFailureRate,
+        comparisonLabel,
+        isInsightsOpen,
+        isRefetching,
+        showNoDataOverlay,
+        effectiveFrom,
+        effectiveTo,
+        timeRangeMs,
+        onTimeRangeSelect,
+        navigateToLogs,
+      })}
 
       {/* Setup modal for total empty state */}
       <SetupRequiredModal
@@ -1428,7 +1138,122 @@ function ObservabilityContent({
   );
 }
 
-// Chart selection wrapper for drag-to-zoom functionality
+function ToolsInsightsContent({
+  summary,
+  comparison,
+  timeSeries,
+  topToolsByCount,
+  topToolsByFailureRate,
+  comparisonLabel,
+  isInsightsOpen,
+  isRefetching,
+  showNoDataOverlay,
+  effectiveFrom,
+  effectiveTo,
+  timeRangeMs,
+  onTimeRangeSelect,
+  navigateToLogs,
+}: InsightsContentProps) {
+  const errorRate =
+    summary?.totalToolCalls && summary.totalToolCalls > 0
+      ? ((summary.failedToolCalls ?? 0) / summary.totalToolCalls) * 100
+      : 0;
+  const previousErrorRate =
+    comparison?.totalToolCalls && comparison.totalToolCalls > 0
+      ? ((comparison.failedToolCalls ?? 0) / comparison.totalToolCalls) * 100
+      : 0;
+
+  return (
+    <div className="space-y-8">
+      <section>
+        <h2 className="mb-4 text-lg font-semibold">Tool Metrics</h2>
+        <div className="space-y-4">
+          <ToolCallsChart
+            data={timeSeries}
+            timeRangeMs={timeRangeMs}
+            title="Tool Calls & Errors"
+            onTimeRangeSelect={onTimeRangeSelect}
+            isLoading={isRefetching}
+            showNoData={showNoDataOverlay}
+            from={effectiveFrom}
+            to={effectiveTo}
+          />
+          <div
+            className={cn(
+              "grid gap-4",
+              isInsightsOpen ? "grid-cols-1" : "grid-cols-1 lg:grid-cols-2",
+            )}
+          >
+            <div className="border-border bg-card rounded-lg border p-6">
+              <h3 className="mb-4 text-sm font-semibold">Top Tools by Usage</h3>
+              <ToolBarList
+                tools={topToolsByCount ?? []}
+                valueKey="callCount"
+                valueLabel="calls"
+                onToolClick={(toolUrn) => navigateToLogs(toolUrn)}
+              />
+            </div>
+            <div className="border-border bg-card rounded-lg border p-6">
+              <h3 className="mb-4 text-sm font-semibold">
+                Failure Distribution by Tool
+              </h3>
+              <ToolBarList
+                tools={topToolsByFailureRate ?? []}
+                valueKey="failureRate"
+                valueLabel="%"
+                isPercentage
+                showLegend
+                onToolClick={(toolUrn) => navigateToLogs(toolUrn)}
+              />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h2 className="mb-4 text-lg font-semibold">System Metrics</h2>
+        <div
+          className={cn(
+            "grid gap-4",
+            isInsightsOpen
+              ? "grid-cols-1 md:grid-cols-2"
+              : "grid-cols-1 md:grid-cols-3",
+          )}
+        >
+          <MetricCard
+            title="Tool Calls"
+            value={summary?.totalToolCalls ?? 0}
+            previousValue={comparison?.totalToolCalls ?? 0}
+            icon="wrench"
+            thresholds={{ red: 10, amber: 50 }}
+            comparisonLabel={comparisonLabel}
+          />
+          <MetricCard
+            title="Avg Latency"
+            value={summary?.avgLatencyMs ?? 0}
+            previousValue={comparison?.avgLatencyMs ?? 0}
+            format="ms"
+            icon="clock"
+            invertDelta
+            thresholds={{ red: 500, amber: 250, inverted: true }}
+            comparisonLabel={comparisonLabel}
+          />
+          <MetricCard
+            title="Error Rate"
+            value={errorRate}
+            previousValue={previousErrorRate}
+            format="percent"
+            icon="triangle-alert"
+            invertDelta
+            thresholds={{ red: 10, amber: 5, inverted: true }}
+            comparisonLabel={comparisonLabel}
+          />
+        </div>
+      </section>
+    </div>
+  );
+}
+
 function ChartWithSelection({
   children,
   data,
@@ -1446,7 +1271,6 @@ function ChartWithSelection({
   } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
 
-  // Clone children and inject ref
   const childrenWithRef = React.cloneElement(
     children as React.ReactElement<{ ref?: (chart: ChartJS | null) => void }>,
     {
@@ -1456,7 +1280,6 @@ function ChartWithSelection({
     },
   );
 
-  // Helper to find the nearest data index from an x-coordinate
   const getDataIndexFromX = useCallback(
     (x: number): number => {
       if (!chartRef.current || data.length === 0) {
@@ -1469,7 +1292,6 @@ function ChartWithSelection({
         return 0;
       }
 
-      // Find the closest data point by x-coordinate
       let closestIndex = 0;
       let minDistance = Infinity;
 
@@ -1486,7 +1308,6 @@ function ChartWithSelection({
     [data],
   );
 
-  // Calculate the selected date range based on current selection
   const getSelectedRange = useCallback(() => {
     if (!selection || !containerRef.current || data.length === 0) return null;
 
@@ -1539,7 +1360,6 @@ function ChartWithSelection({
     )
       return;
 
-    // Only trigger if selection has meaningful width
     const selectionWidth = Math.abs(selection.currentX - selection.startX);
     if (selectionWidth > 10 && data.length > 0) {
       const startIndex = getDataIndexFromX(
@@ -1549,7 +1369,6 @@ function ChartWithSelection({
         Math.max(selection.startX, selection.currentX),
       );
 
-      // Only proceed if we have different indices (meaningful selection)
       if (startIndex !== endIndex) {
         const startTimestamp =
           Number(data[startIndex]?.bucketTimeUnixNano) / 1_000_000;
@@ -1582,7 +1401,6 @@ function ChartWithSelection({
 
   const selectedRange = getSelectedRange();
 
-  // Format date for the range display
   const formatRangeDate = (date: Date) => {
     return date.toLocaleDateString("en-US", {
       month: "short",
@@ -1601,7 +1419,6 @@ function ChartWithSelection({
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseLeave}
     >
-      {/* Hide tooltips while dragging */}
       {isDragging && (
         <style>{`
           [role="tooltip"], .chartjs-tooltip { display: none !important; }
@@ -1616,7 +1433,6 @@ function ChartWithSelection({
             width: selectionWidth,
           }}
         >
-          {/* Range label */}
           {selectedRange && selectionWidth > 40 && (
             <div className="bg-background/95 border-border absolute top-2 left-1/2 -translate-x-1/2 rounded border px-2 py-1 text-xs whitespace-nowrap shadow-sm">
               <span className="text-muted-foreground">
@@ -1784,7 +1600,7 @@ function ToolCallsChart({
   );
 }
 
-function ResolvedChatsChart({
+export function ResolvedChatsChart({
   data,
   timeRangeMs,
   title,
@@ -1814,8 +1630,6 @@ function ResolvedChatsChart({
     return formatChartLabel(date, timeRangeMs);
   });
 
-  // Calculate resolution rate %
-  // Return 0 for periods with no data (shows as line at bottom instead of gap)
   const rawResolvedPct = data.map((d) => {
     const total = d.totalChats ?? 0;
     if (total === 0) return 0;
@@ -1899,7 +1713,7 @@ function ResolvedChatsChart({
     <div className="border-border bg-card rounded-lg border p-6">
       <div className="mb-4 flex items-center justify-between">
         <h3 className="text-sm font-semibold">{title}</h3>
-        <ViewChatsLink from={from} to={to} />
+        <ViewSessionsLink from={from} to={to} />
       </div>
       <div className="relative">
         {isLoading && (
@@ -1919,7 +1733,7 @@ function ResolvedChatsChart({
   );
 }
 
-function ResolutionStatusChart({
+export function ResolutionStatusChart({
   data,
   timeRangeMs,
   title,
@@ -1950,19 +1764,15 @@ function ResolutionStatusChart({
     return formatChartLabel(date, timeRangeMs);
   });
 
-  // Raw data for reference
   const rawSuccessData = data.map((d) => d.resolvedChats ?? 0);
   const rawFailedData = data.map((d) => d.failedChats ?? 0);
   const rawPartialData = data.map((d) => d.partialChats ?? 0);
   const rawAbandonedData = data.map((d) => d.abandonedChats ?? 0);
 
-  // Smooth data but preserve zeros - don't let smoothing inflate zero values
   const smoothPreservingZeros = (arr: number[]) => {
     const smoothed = smoothData(arr);
-    // If original value is zero and all neighbors in window are zero, keep it zero
     return smoothed.map((val, i) => {
       if (arr[i] === 0) {
-        // Check if all values in the smoothing window are also zero
         const windowSize = Math.min(5, Math.floor(arr.length * 0.15));
         const halfWindow = Math.floor(windowSize / 2);
         const start = Math.max(0, i - halfWindow);
@@ -2070,7 +1880,6 @@ function ResolutionStatusChart({
         callbacks: {
           label: (context: TooltipItem<"line">) => {
             const label = context.dataset.label || "";
-            // Use raw data for tooltip (actual counts, not smoothed)
             const idx = context.dataIndex;
             const rawArrays = [
               rawSuccessData,
@@ -2079,13 +1888,11 @@ function ResolutionStatusChart({
               rawAbandonedData,
             ];
             const value = rawArrays[context.datasetIndex]?.[idx] ?? 0;
-            // Don't show zero values in tooltip
             if (value === 0) return "";
             return `${label}: ${value.toLocaleString()} chats`;
           },
         },
         filter: (tooltipItem: TooltipItem<"line">) => {
-          // Filter based on raw data, not smoothed
           const rawArrays = [
             rawSuccessData,
             rawFailedData,
@@ -2115,11 +1922,10 @@ function ResolutionStatusChart({
           color: "rgba(128, 128, 128, 0.2)",
         },
         ticks: {
-          precision: 0, // Force integer ticks on Y-axis
-          stepSize: 1, // Ensure tick intervals are whole numbers
+          precision: 0,
+          stepSize: 1,
           callback: (value: number | string) => {
             const num = typeof value === "string" ? parseFloat(value) : value;
-            // Only show whole numbers
             if (!Number.isInteger(num)) return "";
             return num.toLocaleString();
           },
@@ -2132,7 +1938,7 @@ function ResolutionStatusChart({
     <div className="border-border bg-card rounded-lg border p-6">
       <div className="mb-4 flex items-center justify-between">
         <h3 className="text-sm font-semibold">{title}</h3>
-        <ViewChatsLink from={from} to={to} />
+        <ViewSessionsLink from={from} to={to} />
       </div>
       <div className="relative">
         {isLoading && (
@@ -2152,7 +1958,7 @@ function ResolutionStatusChart({
   );
 }
 
-function SessionDurationChart({
+export function SessionDurationChart({
   data,
   timeRangeMs,
   title,
@@ -2180,7 +1986,6 @@ function SessionDurationChart({
     return formatChartLabel(date, timeRangeMs);
   });
 
-  // Convert ms to seconds for display
   const rawData = data.map((d) => (d.avgSessionDurationMs ?? 0) / 1000);
   const durationData = smoothData(rawData);
 
@@ -2269,7 +2074,7 @@ function SessionDurationChart({
     <div className="border-border bg-card rounded-lg border p-6">
       <div className="mb-4 flex items-center justify-between">
         <h3 className="text-sm font-semibold">{title}</h3>
-        <ViewChatsLink from={from} to={to} />
+        <ViewSessionsLink from={from} to={to} />
       </div>
       <div className="relative">
         {isLoading && (
@@ -2289,18 +2094,17 @@ function SessionDurationChart({
   );
 }
 
-// Brand-inspired muted palette (from moonshine gradient colors)
 const barColors = [
-  "bg-[hsl(214,69%,50%)]", // Java blue
-  "bg-[hsl(4,67%,52%)]", // Swift red
-  "bg-[hsl(108,35%,45%)]", // Terraform green
-  "bg-[hsl(216,70%,60%)]", // Python blue
-  "bg-[hsl(23,80%,55%)]", // Ruby orange
-  "bg-[hsl(334,50%,45%)]", // PHP magenta
-  "bg-[hsl(68,45%,50%)]", // Unity lime
-  "bg-[hsl(154,50%,40%)]", // C teal
-  "bg-[hsl(220,60%,45%)]", // Go blue
-  "bg-[hsl(280,40%,50%)]", // Purple accent
+  "bg-[hsl(214,69%,50%)]",
+  "bg-[hsl(4,67%,52%)]",
+  "bg-[hsl(108,35%,45%)]",
+  "bg-[hsl(216,70%,60%)]",
+  "bg-[hsl(23,80%,55%)]",
+  "bg-[hsl(334,50%,45%)]",
+  "bg-[hsl(68,45%,50%)]",
+  "bg-[hsl(154,50%,40%)]",
+  "bg-[hsl(220,60%,45%)]",
+  "bg-[hsl(280,40%,50%)]",
 ];
 
 function ToolBarList({
@@ -2325,14 +2129,11 @@ function ToolBarList({
 }) {
   const [isExpanded, setIsExpanded] = useState(false);
 
-  // Calculate total failures for relative percentage
   const totalFailures = tools.reduce(
     (sum, t) => sum + (t.failureCount ?? 0),
     0,
   );
 
-  // Sort tools by the displayed value (highest first)
-  // When isPercentage is true, sort by failureCount (which determines the displayed %)
   const sortedTools = [...tools].sort((a, b) => {
     if (isPercentage) {
       return (b.failureCount ?? 0) - (a.failureCount ?? 0);
@@ -2345,7 +2146,6 @@ function ToolBarList({
     : Math.min(10, sortedTools.length);
   const barListData = sortedTools.slice(0, displayCount).map((tool) => {
     const rawValue = tool[valueKey] ?? 0;
-    // For failure rate, show as percentage of total failures
     const value = isPercentage
       ? totalFailures > 0
         ? ((tool.failureCount ?? 0) / totalFailures) * 100
@@ -2397,16 +2197,13 @@ function ToolBarList({
                 {displayValue}
               </span>
               <div className="relative h-7 flex-1">
-                {/* Background text (for overflow outside bar) */}
                 <span className="text-foreground absolute inset-y-0 left-2 z-0 flex items-center truncate pr-8 text-sm font-medium">
                   {item.name}
                 </span>
-                {/* Colored bar */}
                 <div
                   className={`absolute inset-y-0 left-0 rounded ${barColors[index % barColors.length]} transition-all group-hover:opacity-90`}
                   style={{ width: `${Math.max(widthPercent, 5)}%` }}
                 />
-                {/* White text clipped to bar */}
                 <div
                   className="absolute inset-y-0 left-0 z-10 overflow-hidden"
                   style={{ width: `${Math.max(widthPercent, 5)}%` }}
@@ -2415,7 +2212,6 @@ function ToolBarList({
                     {item.name}
                   </span>
                 </div>
-                {/* Hover arrow */}
                 {onToolClick && (
                   <div className="absolute inset-y-0 right-2 flex items-center opacity-0 transition-opacity group-hover:opacity-100">
                     <ChevronRight className="text-foreground size-4" />
@@ -2427,7 +2223,6 @@ function ToolBarList({
         })}
       </div>
 
-      {/* Show more/less button */}
       {hasMore && (
         <button
           onClick={() => setIsExpanded(!isExpanded)}
@@ -2447,7 +2242,6 @@ function ToolBarList({
         </button>
       )}
 
-      {/* Legend for failure rate */}
       {showLegend && (
         <p className="text-muted-foreground mt-2 text-xs">
           Percentage shows each tool's share of total failures (

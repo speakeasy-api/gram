@@ -1,11 +1,12 @@
 import { Outlet } from "react-router";
-import { LogsContent } from "@/components/observe/LogsContent";
+import { AgentInsights } from "@/components/observe/AgentInsights";
+import { InsightsHooksContent } from "@/components/observe/InsightsHooksContent";
+import { MCPInsights } from "@/components/observe/MCPInsights";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
-import { LogsHooks } from "@/components/observe/LogsHooks";
 import { ObserveTabNav } from "@/components/observe/ObserveTabNav";
 
-export function LogsRoot() {
+export function InsightsRoot() {
   return (
     <div className="flex h-full flex-col">
       {/* ^ Wrapper needed to fill page height, allow inner content scrolls. */}
@@ -13,8 +14,8 @@ export function LogsRoot() {
         <Page.Header>
           <Page.Header.Breadcrumbs fullWidth />
         </Page.Header>
-        <ObserveTabNav base="logs" />
-        <Page.Body fullWidth fullHeight overflowHidden noPadding>
+        <ObserveTabNav base="insights" />
+        <Page.Body fullWidth overflowHidden noPadding>
           <Outlet />
         </Page.Body>
       </Page>
@@ -22,18 +23,26 @@ export function LogsRoot() {
   );
 }
 
-export function LogsHooksPage() {
+export function InsightsHooksPage() {
   return (
     <RequireScope scope={["project:read", "project:write"]} level="page">
-      <LogsHooks />
+      <InsightsHooksContent />
     </RequireScope>
   );
 }
 
-export function LogsMCPPage() {
+export function InsightsMCPPage() {
   return (
     <RequireScope scope="project:read" level="page">
-      <LogsContent />
+      <MCPInsights />
+    </RequireScope>
+  );
+}
+
+export function InsightsAgentsPage() {
+  return (
+    <RequireScope scope="project:read" level="page">
+      <AgentInsights />
     </RequireScope>
   );
 }

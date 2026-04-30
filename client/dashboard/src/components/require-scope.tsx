@@ -109,7 +109,7 @@ function ScopeDisabled({
         >
           {/* Wrapper div that re-enables pointer events for the tooltip to work */}
           <div
-            className="pointer-events-auto w-full cursor-not-allowed [&_*]:cursor-not-allowed"
+            className="pointer-events-auto w-full cursor-not-allowed **:cursor-not-allowed"
             onClickCapture={(e) => {
               e.preventDefault();
               e.stopPropagation();
