@@ -10,6 +10,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/mv"
 	risk_repo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 )
 
@@ -45,19 +46,32 @@ func (p PolicyEnabledCache) TTL() time.Duration { return policyEnabledCacheTTL }
 // Client serves "is shadow-MCP enabled for this project?" reads from Redis,
 // falling back to the risk_policies table on a miss, and exposes the
 // invalidation entry-point used by the risk service after policy writes.
+//
+// It also owns the toolset cache used by ValidateToolsetCall so every
+// shadow_mcp call site (tools/list hot path, hook handlers, batch scanner)
+// shares a single cache instance — and the underlying Redis namespace —
+// rather than each constructing its own.
 type Client struct {
-	logger *slog.Logger
-	repo   *risk_repo.Queries
-	cache  cache.TypedCacheObject[PolicyEnabledCache]
+	logger       *slog.Logger
+	db           *pgxpool.Pool
+	repo         *risk_repo.Queries
+	cache        cache.TypedCacheObject[PolicyEnabledCache]
+	toolsetCache cache.TypedCacheObject[mv.ToolsetBaseContents]
 }
 
 func NewClient(logger *slog.Logger, db *pgxpool.Pool, cacheImpl cache.Cache) *Client {
 	logger = logger.With(attr.SlogComponent("shadowmcp"))
 	return &Client{
 		logger: logger,
+		db:     db,
 		repo:   risk_repo.New(db),
 		cache: cache.NewTypedObjectCache[PolicyEnabledCache](
 			logger.With(attr.SlogCacheNamespace("shadow_mcp_policy_enabled")),
+			cacheImpl,
+			cache.SuffixNone,
+		),
+		toolsetCache: cache.NewTypedObjectCache[mv.ToolsetBaseContents](
+			logger.With(attr.SlogCacheNamespace("toolset")),
 			cacheImpl,
 			cache.SuffixNone,
 		),

@@ -600,6 +600,7 @@ func newWorkerCommand() *cli.Command {
 				AssistantsCore:      assistantsCore,
 				TemporalEnv:         temporalEnv,
 				PIIScanner:          piiScanner,
+				ShadowMCPClient:     shadowMCPClient,
 			})
 
 			return temporalWorker.Run(worker.InterruptCh())

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -29,25 +30,27 @@ import (
 // AnalyzeBatch scans a batch of messages against enabled detection sources
 // and writes the results back to the database.
 type AnalyzeBatch struct {
-	logger     *slog.Logger
-	tracer     trace.Tracer
-	metrics    *riskMetrics
-	db         *pgxpool.Pool
-	scanner    *Scanner
-	piiScanner PIIScanner
+	logger          *slog.Logger
+	tracer          trace.Tracer
+	metrics         *riskMetrics
+	db              *pgxpool.Pool
+	scanner         *Scanner
+	piiScanner      PIIScanner
+	shadowMCPClient *shadowmcp.Client
 }
 
-func NewAnalyzeBatch(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, piiScanner PIIScanner) *AnalyzeBatch {
+func NewAnalyzeBatch(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, piiScanner PIIScanner, shadowMCPClient *shadowmcp.Client) *AnalyzeBatch {
 	if piiScanner == nil {
 		piiScanner = &StubPIIScanner{}
 	}
 	return &AnalyzeBatch{
-		logger:     logger,
-		tracer:     tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"),
-		metrics:    newRiskMetrics(meterProvider, logger),
-		db:         db,
-		scanner:    NewScanner(),
-		piiScanner: piiScanner,
+		logger:          logger,
+		tracer:          tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"),
+		metrics:         newRiskMetrics(meterProvider, logger),
+		db:              db,
+		scanner:         NewScanner(),
+		piiScanner:      piiScanner,
+		shadowMCPClient: shadowMCPClient,
 	}
 }
 
@@ -220,9 +223,12 @@ func (a *AnalyzeBatch) scanShadowMCP(ctx context.Context, orgID string, messages
 }
 
 // scanMessageToolCalls iterates the tool_calls JSON array stored on a chat
-// message and runs shadowmcp.ValidateGramToolsetCall against each call. The
-// expected payload mirrors what hooks/session_capture.go writes:
+// message and runs the shadow_mcp validator against each call. The expected
+// payload mirrors what hooks/session_capture.go writes:
 // [{"id": "...", "type": "function", "function": {"name": "...", "arguments": "<json>"}}]
+//
+// Toolset lookups are served by the shared shadowmcp.Client cache so a batch
+// covering many calls from the same toolset only pays one DB round-trip.
 func (a *AnalyzeBatch) scanMessageToolCalls(ctx context.Context, orgID string, raw []byte) []Finding {
 	var calls []struct {
 		Function struct {
@@ -254,7 +260,10 @@ func (a *AnalyzeBatch) scanMessageToolCalls(ctx context.Context, orgID string, r
 			}
 		}
 		bareName := stripMCPToolPrefix(toolName)
-		detail, denied := shadowmcp.ValidateGramToolsetCall(ctx, a.logger, a.db, nil, toolInput, bareName, orgID)
+		if a.shadowMCPClient == nil {
+			continue
+		}
+		detail, denied := a.shadowMCPClient.ValidateToolsetCall(ctx, toolInput, bareName, orgID)
 		if !denied {
 			continue
 		}

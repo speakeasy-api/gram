@@ -21,9 +21,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
-	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/risk"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -40,12 +40,12 @@ type Service struct {
 	auth               *auth.Auth
 	authz              *authz.Engine
 	cache              cache.Cache
-	toolsetCache       cache.TypedCacheObject[mv.ToolsetBaseContents]
 	temporalEnv        *tenv.Environment
 	repo               *repo.Queries
 	productFeatures    ProductFeaturesClient
 	chatTitleGenerator ChatTitleGenerator
 	riskScanner        risk.RiskScanner
+	shadowMCPClient    *shadowmcp.Client
 	writer             *chat.ChatMessageWriter
 }
 
@@ -93,6 +93,7 @@ func NewService(
 	pfClient ProductFeaturesClient,
 	chatTitleGenerator ChatTitleGenerator,
 	riskScanner risk.RiskScanner,
+	shadowMCPClient *shadowmcp.Client,
 	writer *chat.ChatMessageWriter,
 ) *Service {
 	return &Service{
@@ -103,12 +104,12 @@ func NewService(
 		auth:               auth.New(logger, db, sessionsMgr, authz),
 		authz:              authz,
 		cache:              cacheAdapter,
-		toolsetCache:       cache.NewTypedObjectCache[mv.ToolsetBaseContents](logger.With(attr.SlogCacheNamespace("toolset")), cacheAdapter, cache.SuffixNone),
 		temporalEnv:        temporalEnv,
 		repo:               repo.New(db),
 		productFeatures:    pfClient,
 		chatTitleGenerator: chatTitleGenerator,
 		riskScanner:        riskScanner,
+		shadowMCPClient:    shadowMCPClient,
 		writer:             writer,
 	}
 }
