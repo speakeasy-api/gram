@@ -139,6 +139,32 @@ func (q *Queries) ListPrincipalGrantsByOrg(ctx context.Context, arg ListPrincipa
 	return items, nil
 }
 
+const markGlobalRoleDeleted = `-- name: MarkGlobalRoleDeleted :execrows
+UPDATE global_roles
+SET workos_deleted_at = $1,
+    workos_last_event_id = $2,
+    updated_at = clock_timestamp()
+WHERE workos_slug = $3
+  AND (
+    workos_deleted_at IS NULL
+    OR workos_deleted_at < $1
+  )
+`
+
+type MarkGlobalRoleDeletedParams struct {
+	WorkosDeletedAt   pgtype.Timestamptz
+	WorkosLastEventID pgtype.Text
+	WorkosSlug        string
+}
+
+func (q *Queries) MarkGlobalRoleDeleted(ctx context.Context, arg MarkGlobalRoleDeletedParams) (int64, error) {
+	result, err := q.db.Exec(ctx, markGlobalRoleDeleted, arg.WorkosDeletedAt, arg.WorkosLastEventID, arg.WorkosSlug)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const markRoleDeleted = `-- name: MarkRoleDeleted :execrows
 UPDATE organization_roles
 SET workos_deleted_at = $1,
@@ -191,6 +217,56 @@ func (q *Queries) RemoveResourceFromGrants(ctx context.Context, arg RemoveResour
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const upsertGlobalRole = `-- name: UpsertGlobalRole :exec
+INSERT INTO global_roles (
+    workos_slug,
+    workos_name,
+    workos_description,
+    workos_created_at,
+    workos_updated_at,
+    workos_last_event_id
+)
+VALUES (
+    $1,
+    $2,
+    $3,
+    $4,
+    $5,
+    $6
+)
+ON CONFLICT (workos_slug)
+DO UPDATE SET
+  workos_name = EXCLUDED.workos_name,
+  workos_description = EXCLUDED.workos_description,
+  workos_created_at = EXCLUDED.workos_created_at,
+  workos_updated_at = EXCLUDED.workos_updated_at,
+  workos_deleted_at = NULL,
+  workos_last_event_id = EXCLUDED.workos_last_event_id,
+  updated_at = clock_timestamp()
+  WHERE global_roles.workos_updated_at < EXCLUDED.workos_updated_at
+`
+
+type UpsertGlobalRoleParams struct {
+	WorkosSlug        string
+	WorkosName        string
+	WorkosDescription pgtype.Text
+	WorkosCreatedAt   pgtype.Timestamptz
+	WorkosUpdatedAt   pgtype.Timestamptz
+	WorkosLastEventID pgtype.Text
+}
+
+func (q *Queries) UpsertGlobalRole(ctx context.Context, arg UpsertGlobalRoleParams) error {
+	_, err := q.db.Exec(ctx, upsertGlobalRole,
+		arg.WorkosSlug,
+		arg.WorkosName,
+		arg.WorkosDescription,
+		arg.WorkosCreatedAt,
+		arg.WorkosUpdatedAt,
+		arg.WorkosLastEventID,
+	)
+	return err
 }
 
 const upsertPrincipalGrant = `-- name: UpsertPrincipalGrant :one

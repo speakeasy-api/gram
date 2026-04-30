@@ -1333,16 +1333,18 @@ ON users (email);
 CREATE UNIQUE INDEX IF NOT EXISTS users_workos_id_key
 ON users (workos_id);
 
--- TODO: do we need this table? What will it give us?
+-- global_roles stores environment-level WorkOS roles (e.g. "admin", "member").
+-- These are not scoped to any organization.
 CREATE TABLE IF NOT EXISTS global_roles (
   id UUID NOT NULL DEFAULT generate_uuidv7(),
 
-  workos_slug TEXT NOT NULL,  
+  workos_slug TEXT NOT NULL,
   workos_name TEXT NOT NULL,
   workos_description TEXT,
   workos_created_at timestamptz NOT NULL,
   workos_updated_at timestamptz NOT NULL,
   workos_deleted_at timestamptz,
+  workos_deleted boolean NOT NULL GENERATED ALWAYS AS (workos_deleted_at IS NOT NULL) stored,
   workos_last_event_id TEXT,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -1352,6 +1354,10 @@ CREATE TABLE IF NOT EXISTS global_roles (
 
   CONSTRAINT global_roles_pkey PRIMARY KEY (id)
 );
+
+-- Slug is immutable in WorkOS, making it a safe unique key for environment-level roles.
+CREATE UNIQUE INDEX IF NOT EXISTS global_roles_workos_slug_key
+ON global_roles (workos_slug);
 
 CREATE TABLE IF NOT EXISTS organization_roles (
   id UUID NOT NULL DEFAULT generate_uuidv7(),
@@ -1433,24 +1439,35 @@ CREATE UNIQUE INDEX IF NOT EXISTS organization_user_relationships_workos_members
 ON organization_user_relationships (workos_membership_id)
 WHERE deleted IS FALSE;
 
-CREATE TABLE IF NOT EXISTS organization_user_roles (
+-- organization_role_assignments stores which roles each WorkOS user has within an org.
+-- role_urn encodes both the role type and ID: "role:global:<uuid>" or "role:organization:<uuid>".
+-- No FK on role_urn — role deletions are handled in app logic.
+-- user_id is nullable: if the Gram user doesn't exist yet, the assignment is stored by workos_user_id
+-- and user_id is filled in later (e.g., on first login or backfill).
+CREATE TABLE IF NOT EXISTS organization_role_assignments (
   id UUID NOT NULL DEFAULT generate_uuidv7(),
   organization_id TEXT NOT NULL,
-  user_id TEXT NOT NULL,
-  role_id UUID NOT NULL,
+  workos_user_id TEXT NOT NULL,
+  user_id TEXT,
+  role_urn TEXT NOT NULL,
+  workos_membership_id TEXT,
+  workos_updated_at timestamptz NOT NULL,
+  workos_last_event_id TEXT,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
-  CONSTRAINT organization_user_roles_pkey PRIMARY KEY (id),
-  CONSTRAINT organization_user_roles_organization_id_user_id_role_id_key UNIQUE (organization_id, user_id, role_id),
-  CONSTRAINT organization_user_roles_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
-  CONSTRAINT organization_user_roles_user_id_fkey FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
-  CONSTRAINT organization_user_roles_role_id_fkey FOREIGN KEY (role_id) REFERENCES organization_roles (id) ON DELETE CASCADE
+  CONSTRAINT organization_role_assignments_pkey PRIMARY KEY (id),
+  CONSTRAINT organization_role_assignments_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT organization_role_assignments_user_id_fkey FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL
 );
 
-CREATE INDEX IF NOT EXISTS organization_user_roles_organization_id_user_id_idx
-ON organization_user_roles (organization_id, user_id);
+CREATE UNIQUE INDEX IF NOT EXISTS organization_role_assignments_org_workos_user_role_key
+ON organization_role_assignments (organization_id, workos_user_id, role_urn);
+
+CREATE INDEX IF NOT EXISTS organization_role_assignments_org_user_idx
+ON organization_role_assignments (organization_id, user_id)
+WHERE user_id IS NOT NULL;
 
 
 CREATE TABLE IF NOT EXISTS oauth_proxy_client_info (

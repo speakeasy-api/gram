@@ -502,6 +502,7 @@ type GlobalRole struct {
 	WorkosCreatedAt   pgtype.Timestamptz
 	WorkosUpdatedAt   pgtype.Timestamptz
 	WorkosDeletedAt   pgtype.Timestamptz
+	WorkosDeleted     bool
 	WorkosLastEventID pgtype.Text
 	CreatedAt         pgtype.Timestamptz
 	UpdatedAt         pgtype.Timestamptz
@@ -780,6 +781,19 @@ type OrganizationRole struct {
 	Deleted           bool
 }
 
+type OrganizationRoleAssignment struct {
+	ID                 uuid.UUID
+	OrganizationID     string
+	WorkosUserID       string
+	UserID             pgtype.Text
+	RoleUrn            string
+	WorkosMembershipID pgtype.Text
+	WorkosUpdatedAt    pgtype.Timestamptz
+	WorkosLastEventID  pgtype.Text
+	CreatedAt          pgtype.Timestamptz
+	UpdatedAt          pgtype.Timestamptz
+}
+
 type OrganizationUserRelationship struct {
 	ID                 int64
 	OrganizationID     string
@@ -789,15 +803,6 @@ type OrganizationUserRelationship struct {
 	UpdatedAt          pgtype.Timestamptz
 	DeletedAt          pgtype.Timestamptz
 	Deleted            bool
-}
-
-type OrganizationUserRole struct {
-	ID             uuid.UUID
-	OrganizationID string
-	UserID         string
-	RoleID         uuid.UUID
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
 }
 
 type Package struct {

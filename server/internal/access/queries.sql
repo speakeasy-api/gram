@@ -87,3 +87,42 @@ WHERE organization_id = @organization_id
     workos_deleted_at IS NULL
     OR workos_deleted_at < @workos_deleted_at
   );
+
+-- name: UpsertGlobalRole :exec
+INSERT INTO global_roles (
+    workos_slug,
+    workos_name,
+    workos_description,
+    workos_created_at,
+    workos_updated_at,
+    workos_last_event_id
+)
+VALUES (
+    @workos_slug,
+    @workos_name,
+    @workos_description,
+    @workos_created_at,
+    @workos_updated_at,
+    @workos_last_event_id
+)
+ON CONFLICT (workos_slug)
+DO UPDATE SET
+  workos_name = EXCLUDED.workos_name,
+  workos_description = EXCLUDED.workos_description,
+  workos_created_at = EXCLUDED.workos_created_at,
+  workos_updated_at = EXCLUDED.workos_updated_at,
+  workos_deleted_at = NULL,
+  workos_last_event_id = EXCLUDED.workos_last_event_id,
+  updated_at = clock_timestamp()
+  WHERE global_roles.workos_updated_at < EXCLUDED.workos_updated_at;
+
+-- name: MarkGlobalRoleDeleted :execrows
+UPDATE global_roles
+SET workos_deleted_at = @workos_deleted_at,
+    workos_last_event_id = @workos_last_event_id,
+    updated_at = clock_timestamp()
+WHERE workos_slug = @workos_slug
+  AND (
+    workos_deleted_at IS NULL
+    OR workos_deleted_at < @workos_deleted_at
+  );

@@ -158,37 +158,65 @@ ON CONFLICT (organization_id, user_id) DO UPDATE SET
     deleted_at = NULL,
     updated_at = clock_timestamp();
 
--- name: SyncUserOrganizationRoles :exec
--- Declaratively set all WorkOS roles for a user in an organization. Resolves
--- slugs to internal role IDs, inserts new roles and removes roles not in the list.
-WITH input_roles AS (
-    SELECT id AS role_id
+-- name: SyncUserOrganizationRoleAssignments :exec
+-- Declaratively set all WorkOS role assignments for a user (identified by workos_user_id) in an org.
+-- Resolves slugs to IDs in organization_roles and global_roles, builds role URNs, and upserts.
+-- Removes stale assignments for this workos_user_id that are no longer in the resolved set.
+-- workos_updated_at guards against replaying stale events (only updates when event is newer).
+WITH input_role_urns AS (
+    SELECT 'role:organization:' || id::text AS role_urn
     FROM organization_roles
     WHERE organization_id = @organization_id
       AND workos_slug = ANY(@workos_role_slugs::text[])
       AND deleted IS FALSE
       AND workos_deleted IS FALSE
+    UNION ALL
+    SELECT 'role:global:' || id::text AS role_urn
+    FROM global_roles
+    WHERE workos_slug = ANY(@workos_role_slugs::text[])
+      AND deleted IS FALSE
+      AND workos_deleted IS FALSE
 ),
 upserted AS (
-    INSERT INTO organization_user_roles (organization_id, user_id, role_id)
-    SELECT @organization_id, @user_id, role_id
-    FROM input_roles
-    ON CONFLICT (organization_id, user_id, role_id) DO UPDATE SET
+    INSERT INTO organization_role_assignments (
+        organization_id, workos_user_id, user_id, role_urn,
+        workos_membership_id, workos_updated_at, workos_last_event_id
+    )
+    SELECT @organization_id, @workos_user_id, sqlc.narg('user_id')::text, iru.role_urn,
+           @workos_membership_id, @workos_updated_at, @workos_last_event_id
+    FROM input_role_urns iru
+    ON CONFLICT (organization_id, workos_user_id, role_urn)
+    DO UPDATE SET
+        user_id = COALESCE(EXCLUDED.user_id, organization_role_assignments.user_id),
+        workos_membership_id = EXCLUDED.workos_membership_id,
+        workos_updated_at = EXCLUDED.workos_updated_at,
+        workos_last_event_id = EXCLUDED.workos_last_event_id,
         updated_at = clock_timestamp()
-    RETURNING role_id
+    WHERE organization_role_assignments.workos_updated_at < EXCLUDED.workos_updated_at
 )
-DELETE FROM organization_user_roles
+DELETE FROM organization_role_assignments
 WHERE organization_id = @organization_id::text
-  AND user_id = @user_id::text
-  AND role_id NOT IN (SELECT role_id FROM input_roles);
+  AND workos_user_id = @workos_user_id::text
+  AND role_urn NOT IN (SELECT role_urn FROM input_role_urns);
+
+-- name: DeleteOrganizationRoleAssignmentsByWorkosUser :exec
+-- Removes all role assignments for a WorkOS user within an org.
+-- Called on membership deleted events.
+DELETE FROM organization_role_assignments
+WHERE organization_id = @organization_id
+  AND workos_user_id = @workos_user_id;
 
 -- name: GetOrganizationUserRoles :many
-SELECT our.id, our.organization_id, our.user_id, our.role_id,
-       r.workos_slug, r.workos_name
-FROM organization_user_roles our
-JOIN organization_roles r ON r.id = our.role_id
-WHERE our.organization_id = @organization_id
-  AND our.user_id = @user_id;
+SELECT ora.id, ora.organization_id, ora.workos_user_id, ora.user_id, ora.role_urn,
+       COALESCE(r.workos_slug, gr.workos_slug) AS workos_slug,
+       COALESCE(r.workos_name, gr.workos_name) AS workos_name
+FROM organization_role_assignments ora
+LEFT JOIN organization_roles r ON ora.role_urn LIKE 'role:organization:%'
+    AND r.id = split_part(ora.role_urn, ':', 3)::uuid
+LEFT JOIN global_roles gr ON ora.role_urn LIKE 'role:global:%'
+    AND gr.id = split_part(ora.role_urn, ':', 3)::uuid
+WHERE ora.organization_id = @organization_id
+  AND ora.user_id = @user_id;
 
 -- name: SetUserWorkOSMemberships :exec
 -- Declaratively set all WorkOS memberships for a user. Takes WorkOS org IDs

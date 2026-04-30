@@ -1,4 +1,4 @@
-h1:byCyi2saUtKLguGETCcS68ZE6ds3ejTOOzzcLuGET64=
+h1:F3PdYRJUNbDbGADaQE8pOrMrAmE6awIhbHIA1gNQR1Y=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -145,4 +145,4 @@ h1:byCyi2saUtKLguGETCcS68ZE6ds3ejTOOzzcLuGET64=
 20260424180559_risk-policies-default-pii.sql h1:A+qKEtwSff7+mi6l0vTGLqv8kvIzStw9A98ydQjmJc0=
 20260427000001_drop-grant-resource-column.sql h1:Jitic/8a1v2PYnK6/UGxEqiAw2/w+WLDYoxlcpiR4Io=
 20260427000002_remove-noisy-pii-entities.sql h1:FqvDsDMiIG8deyZZpAj4+ipt3bUqL204W8qi4GmEAzU=
-20260428141821_add-workos-roles-and-sync-tables.sql h1:c4B+ocpDpN7NAeoZevXnhH2gnIRYAnB+5Ch+qjuN8rw=
+20260430092013_add-workos-roles-and-sync-tables.sql h1:A4u3YVcfbX9Cbay634Iv9xKSK3uGGJV1fkzz7Qw+MxE=
