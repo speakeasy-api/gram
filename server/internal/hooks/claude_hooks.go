@@ -187,18 +187,6 @@ func extractSessionMetadata(payload *gen.LogsPayload) claudeLogMetadata {
 }
 
 // Claude is the unified endpoint for all Claude Code hook events.
-//
-// Two attribution paths run side-by-side during the migration off the
-// OTEL-only flow:
-//  1. Plugin path — when the request carries Gram-Key + Gram-Project
-//     (e.g. from the per-org observability plugin's hook.sh), the handler validates
-//     them via s.auth and uses the resulting auth context for org/project.
-//  2. OTEL path — when the headers are absent (existing customers running
-//     Claude with OTEL forwarding), the handler falls back to looking up
-//     Redis session metadata seeded by /rpc/hooks.otel/v1/logs.
-//
-// Once all customers move to plugin-based attribution, switch this method
-// to the same Security() block as Method("cursor") and remove the fallback.
 func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (*gen.ClaudeHookResult, error) {
 	s.logger.InfoContext(ctx, fmt.Sprintf("🪝 HOOK Claude: %s", payload.HookEventName),
 		attr.SlogEvent("claude_hook"),
