@@ -429,7 +429,7 @@ func generateClaudeBasePluginInDir(files map[string][]byte, subdir string, cfg G
 	files[path.Join(subdir, ".claude-plugin/plugin.json")] = pluginJSON
 
 	matchers := []claudeHookMatcher{
-		{Matcher: "*", Hooks: []claudeHookCommand{{Type: "command", Command: "./hook.sh"}}},
+		{Matcher: "*", Hooks: []claudeHookCommand{{Type: "command", Command: `bash "$CLAUDE_PLUGIN_ROOT/hook.sh"`}}},
 	}
 	hookEvents := make(map[string][]claudeHookMatcher, len(ClaudeBaseHookEvents))
 	for _, event := range ClaudeBaseHookEvents {
@@ -479,7 +479,7 @@ func generateCursorBasePluginInDir(files map[string][]byte, subdir string, cfg G
 
 	hookEvents := make(map[string][]cursorHookCommand, len(CursorBaseHookEvents))
 	for _, event := range CursorBaseHookEvents {
-		hookEvents[event] = []cursorHookCommand{{Command: "./hook.sh"}}
+		hookEvents[event] = []cursorHookCommand{{Command: `bash "$CURSOR_PLUGIN_ROOT/hook.sh"`}}
 	}
 	hooksJSON, err := marshalJSON(cursorHooksConfig{Version: 1, Hooks: hookEvents})
 	if err != nil {
