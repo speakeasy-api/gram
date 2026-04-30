@@ -390,10 +390,11 @@ func roles(rows []repo.ChatMessage) []string {
 	return out
 }
 
-// An assistant response that carries both narrative text and tool_calls must
-// land as two rows — text-only then tool-calls-only — so the stored shape
-// matches what NormalizeAssistantMessages produces on replay.
-func TestCaptureMessage_SplitsAssistantResponseWithBothTextAndToolCalls(t *testing.T) {
+// An assistant response that carries both narrative text and tool_calls is a
+// single model response and should land as a single stored row. OpenRouter
+// replay normalization decides whether provider-specific wire payloads keep or
+// drop the narrative text.
+func TestCaptureMessage_StoresAssistantResponseWithBothTextAndToolCallsInSingleRow(t *testing.T) {
 	t.Parallel()
 
 	ctx, conn, projectID, orgID := newTestChatContext(t)
@@ -404,7 +405,7 @@ func TestCaptureMessage_SplitsAssistantResponseWithBothTextAndToolCalls(t *testi
 	resp := openrouter.CompletionResponse{
 		Content:   "I'll check the weather.",
 		Model:     "test-model",
-		MessageID: "msg-split",
+		MessageID: "msg-mixed",
 		ToolCalls: []openrouter.ToolCall{{
 			Index: 0,
 			ID:    "tool_abc",
@@ -424,27 +425,19 @@ func TestCaptureMessage_SplitsAssistantResponseWithBothTextAndToolCalls(t *testi
 	runTurn(t, ctx, s, req, resp)
 
 	rows := listAllMessages(t, ctx, conn, chatID, projectID)
-	require.Len(t, rows, 3)
-	require.Equal(t, []string{"user", "assistant", "assistant"}, roles(rows))
+	require.Len(t, rows, 2)
+	require.Equal(t, []string{"user", "assistant"}, roles(rows))
 
-	text := rows[1]
-	require.Equal(t, "I'll check the weather.", text.Content)
-	require.Empty(t, text.ToolCalls, "text-only row carries no tool_calls")
-	require.Equal(t, int64(0), text.PromptTokens)
-	require.Equal(t, int64(0), text.CompletionTokens)
-
-	tools := rows[2]
-	require.Empty(t, tools.Content)
-	require.NotEmpty(t, tools.ToolCalls, "tool-only row carries tool_calls JSON")
-	require.Equal(t, int64(10), tools.PromptTokens)
-	require.Equal(t, int64(5), tools.CompletionTokens)
-	require.Equal(t, int64(15), tools.TotalTokens)
+	assistant := rows[1]
+	require.Equal(t, "I'll check the weather.", assistant.Content)
+	require.NotEmpty(t, assistant.ToolCalls)
+	require.Equal(t, int64(10), assistant.PromptTokens)
+	require.Equal(t, int64(5), assistant.CompletionTokens)
+	require.Equal(t, int64(15), assistant.TotalTokens)
 }
 
-// Whitespace-only content must be treated as "no text" on both sides of the
-// normalize/capture boundary. Storing 2 rows for whitespace + tools would make
-// the replay match (which sees 1 tool-only message after normalization) diverge
-// and bump generation every turn.
+// Whitespace-only assistant response content is treated as no text so storage
+// does not preserve invisible narrative around tool calls.
 func TestCaptureMessage_WhitespaceOnlyContentWithToolCallsStoresSingleRow(t *testing.T) {
 	t.Parallel()
 
@@ -476,7 +469,7 @@ func TestCaptureMessage_WhitespaceOnlyContentWithToolCallsStoresSingleRow(t *tes
 	runTurn(t, ctx, s, req, resp)
 
 	rows := listAllMessages(t, ctx, conn, chatID, projectID)
-	require.Len(t, rows, 2, "whitespace-only content collapses into the tool row")
+	require.Len(t, rows, 2, "whitespace-only content collapses into one assistant row")
 	require.Equal(t, []string{"user", "assistant"}, roles(rows))
 
 	tools := rows[1]

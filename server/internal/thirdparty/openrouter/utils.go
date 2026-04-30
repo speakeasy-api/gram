@@ -2,23 +2,23 @@ package openrouter
 
 import (
 	"iter"
-	"strings"
 
 	or "github.com/OpenRouterTeam/go-sdk/models/components"
 	"github.com/OpenRouterTeam/go-sdk/optionalnullable"
 )
 
-// NormalizeAssistantMessages yields assistant messages in a canonical shape
-// where content and tool_calls never coexist on the same message. An assistant
-// message with both text content and tool_calls is emitted as two sequential
-// messages: text-only, then tool-calls-only. All other messages pass through
+// NormalizeAssistantMessages yields assistant messages in a canonical shape for
+// OpenRouter where content and tool_calls never coexist on the same message.
+// An assistant message with both text content and tool_calls is emitted as a
+// single tool-calls message with empty content. All other messages pass through
 // unchanged. Idempotent.
 //
 // Rationale: some OpenAI->Anthropic converters (Azure path) reject a single
-// assistant message that carries both content and tool_calls. Splitting into
-// two sequential assistant messages maps 1:1 to Anthropic's native multi-block
-// content shape (text block followed by tool_use block) without losing the
-// narrative text.
+// assistant message that carries both content and tool_calls. Other converters
+// (Vertex path) reject or mishandle a split text-only assistant message followed
+// by a tool-calls-only assistant message. Dropping pre-tool narrative text at
+// the OpenRouter boundary preserves the required tool_call/tool_result
+// adjacency across dynamically routed providers.
 func NormalizeAssistantMessages(msgs []or.ChatMessages) iter.Seq[or.ChatMessages] {
 	return func(yield func(or.ChatMessages) bool) {
 		for _, msg := range msgs {
@@ -39,55 +39,12 @@ func NormalizeAssistantMessages(msgs []or.ChatMessages) iter.Seq[or.ChatMessages
 
 			empty := or.CreateChatAssistantMessageContentStr("")
 
-			if !assistantHasContent(asst) {
-				normalized := *asst
-				normalized.Content = optionalnullable.From(&empty)
-				if !yield(or.CreateChatMessagesAssistant(normalized)) {
-					return
-				}
-				continue
-			}
-
-			textOnly := *asst
-			textOnly.ToolCalls = nil
-
-			toolOnly := or.ChatAssistantMessage{
-				Role:             asst.Role,
-				Content:          optionalnullable.From(&empty),
-				Name:             nil,
-				ToolCalls:        asst.ToolCalls,
-				Refusal:          nil,
-				Reasoning:        nil,
-				ReasoningDetails: nil,
-				Images:           nil,
-				Audio:            nil,
-			}
-
-			if !yield(or.CreateChatMessagesAssistant(textOnly)) {
-				return
-			}
-			if !yield(or.CreateChatMessagesAssistant(toolOnly)) {
+			normalized := *asst
+			normalized.Content = optionalnullable.From(&empty)
+			if !yield(or.CreateChatMessagesAssistant(normalized)) {
 				return
 			}
 		}
-	}
-}
-
-func assistantHasContent(asst *or.ChatAssistantMessage) bool {
-	content, ok := asst.Content.GetOrZero()
-	if !ok {
-		return false
-	}
-	switch content.Type {
-	case or.ChatAssistantMessageContentTypeStr:
-		if content.Str == nil {
-			return false
-		}
-		return strings.TrimSpace(*content.Str) != ""
-	case or.ChatAssistantMessageContentTypeArrayOfChatContentItems:
-		return len(content.ArrayOfChatContentItems) > 0
-	default:
-		return false
 	}
 }
 
