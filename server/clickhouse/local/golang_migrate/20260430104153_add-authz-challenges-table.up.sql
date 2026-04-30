@@ -43,4 +43,4 @@ CREATE TABLE `authz_challenges` (
   INDEX `idx_authz_challenges_trace_id` ((trace_id)) TYPE bloom_filter(0.01) GRANULARITY 1,
   INDEX `idx_authz_challenges_user_id` ((user_id)) TYPE bloom_filter(0.01) GRANULARITY 1
 ) ENGINE = MergeTree
-PRIMARY KEY (`organization_id`, `project_id`, `outcome`, `timestamp`, `id`) ORDER BY (`organization_id`, `project_id`, `outcome`, `timestamp`, `id`) PARTITION BY (toYYYYMMDD(timestamp)) TTL toDateTime(timestamp) + toIntervalDay(30) SETTINGS index_granularity = 8192 COMMENT 'Authz challenge log: every authz decision (allow + deny) for forensics and the Challenge UI.';
+PRIMARY KEY (`organization_id`, `project_id`, `outcome`, `timestamp`, `id`) ORDER BY (`organization_id`, `project_id`, `outcome`, `timestamp`, `id`) PARTITION BY (toYYYYMMDD(timestamp)) TTL toDateTime(timestamp) + toIntervalDay(90) SETTINGS index_granularity = 8192 COMMENT 'Authz challenge log: every authz decision (allow + deny) for forensics and the Challenge UI.';

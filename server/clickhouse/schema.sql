@@ -377,7 +377,7 @@ CREATE TABLE IF NOT EXISTS authz_challenges (
 ) ENGINE = MergeTree
 PARTITION BY toYYYYMMDD(timestamp)
 ORDER BY (organization_id, project_id, outcome, timestamp, id)
-TTL toDateTime(timestamp) + INTERVAL 30 DAY
+TTL toDateTime(timestamp) + INTERVAL 90 DAY
 SETTINGS index_granularity = 8192
 COMMENT 'Authz challenge log: every authz decision (allow + deny) for forensics and the Challenge UI.';
 

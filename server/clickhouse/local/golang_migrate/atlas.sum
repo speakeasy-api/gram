@@ -1,4 +1,4 @@
-h1:AWCc0pZVv0mcWtKKaXAiTcpyHVPv3sr2CGEeAp9kQDQ=
+h1:mtsYaGGBfG25yFXJkc34Xc7cuypeUbKHofEY3rdcs1o=
 20251127155815_initial_golang_migrate.up.sql h1:fkATa14aucJEoldFi1VgW7TRT8gyC6NGe1Hq/OzXVuI=
 20251208142630_add-tool-logs-table.up.sql h1:cGJCiWBvLPFwOlpx0jYYLgdPZD21+gKSF/x4mVksBcI=
 20251209104438_add-id-col-to-tool-logs-table.up.sql h1:+Ubsl1ZKfeCZL9dBhohUnkBksKZj6nwdZSXm7WwowaE=
@@ -33,4 +33,4 @@ h1:AWCc0pZVv0mcWtKKaXAiTcpyHVPv3sr2CGEeAp9kQDQ=
 20260423195357_trace-status-from-attributes.up.sql h1:sGtbt2CBDOPTZhPHl0A7Xoxd1DauF2391lckPQXzizw=
 20260427192006_add-hook-block-reason.up.sql h1:AYNAwIQG07w6OoCgLMKrgyuLi6n+9GoM3r9NPG/bZSo=
 20260428192411_fix-block-reason-merge.up.sql h1:wwVaPA93KqQ/rN62the3FDyQ2Blv4Z6F61q9w2oRjqE=
-20260430101504_add-authz-challenges-table.up.sql h1:pkw3amXIAR9c0lpbRzvlOY18hh9DLMov1PQac7KYMlI=
+20260430104153_add-authz-challenges-table.up.sql h1:xzosYIiO3fRbLIoIjkhqXnH0zxbhhusvO7HZ80u1w1M=
