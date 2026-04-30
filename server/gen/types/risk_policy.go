@@ -21,6 +21,11 @@ type RiskPolicy struct {
 	PresidioEntities []string
 	// Whether the policy is active.
 	Enabled bool
+	// Policy action: flag (log only) or block (deny in real-time).
+	Action string
+	// Whether the policy name is auto-generated. When true, the name is
+	// regenerated on each update.
+	AutoName bool
 	// Policy version, incremented on each update.
 	Version int64
 	// When the policy was created.

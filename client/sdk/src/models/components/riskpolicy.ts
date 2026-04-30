@@ -5,10 +5,31 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
+import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
+/**
+ * Policy action: flag (log only) or block (deny in real-time).
+ */
+export const RiskPolicyAction = {
+  Flag: "flag",
+  Block: "block",
+} as const;
+/**
+ * Policy action: flag (log only) or block (deny in real-time).
+ */
+export type RiskPolicyAction = ClosedEnum<typeof RiskPolicyAction>;
+
 export type RiskPolicy = {
+  /**
+   * Policy action: flag (log only) or block (deny in real-time).
+   */
+  action: RiskPolicyAction;
+  /**
+   * Whether the policy name is auto-generated. When true, the name is regenerated on each update.
+   */
+  autoName: boolean;
   /**
    * When the policy was created.
    */
@@ -56,9 +77,16 @@ export type RiskPolicy = {
 };
 
 /** @internal */
+export const RiskPolicyAction$inboundSchema: z.ZodMiniEnum<
+  typeof RiskPolicyAction
+> = z.enum(RiskPolicyAction);
+
+/** @internal */
 export const RiskPolicy$inboundSchema: z.ZodMiniType<RiskPolicy, unknown> = z
   .pipe(
     z.object({
+      action: z._default(RiskPolicyAction$inboundSchema, "flag"),
+      auto_name: z.boolean(),
       created_at: z.pipe(
         z.iso.datetime({ offset: true }),
         z.transform(v => new Date(v)),
@@ -79,6 +107,7 @@ export const RiskPolicy$inboundSchema: z.ZodMiniType<RiskPolicy, unknown> = z
     }),
     z.transform((v) => {
       return remap$(v, {
+        "auto_name": "autoName",
         "created_at": "createdAt",
         "pending_messages": "pendingMessages",
         "presidio_entities": "presidioEntities",

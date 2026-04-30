@@ -84,7 +84,7 @@ func (s *Scanner) ScanBatchParallel(messages []string) ([][]Finding, error) {
 		wg.Go(func() {
 			for idx := range ch {
 				findings := d.DetectString(messages[idx])
-				results[idx] = convertFindings(messages[idx], findings)
+				results[idx] = ConvertFindings(messages[idx], findings)
 			}
 		})
 	}
@@ -100,7 +100,7 @@ func (s *Scanner) Scan(content string) ([]Finding, error) {
 		return nil, fmt.Errorf("create gitleaks detector: %w", err)
 	}
 	findings := d.DetectString(content)
-	return convertFindings(content, findings), nil
+	return ConvertFindings(content, findings), nil
 }
 
 // ScanWithGitleaks is a package-level convenience for scanning a single message.
@@ -108,7 +108,8 @@ func ScanWithGitleaks(content string) ([]Finding, error) {
 	return NewScanner().Scan(content)
 }
 
-func convertFindings(content string, raw []report.Finding) []Finding {
+// ConvertFindings converts raw gitleaks findings to the internal Finding type.
+func ConvertFindings(content string, raw []report.Finding) []Finding {
 	out := make([]Finding, 0, len(raw))
 	for _, f := range raw {
 		tags := parseTags(f.Tags)

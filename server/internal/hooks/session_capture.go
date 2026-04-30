@@ -16,6 +16,7 @@ import (
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 )
 
@@ -80,7 +81,14 @@ func makeHookResult(hookEventName string) *gen.ClaudeHookResult {
 }
 
 // handleUserPromptSubmit captures the user's prompt text as a chat message.
+// When a blocking risk policy matches, it denies the prompt with HTTP 403.
+// The send_hook.sh script converts 4xx responses to exit code 2 (block).
 func (s *Service) handleUserPromptSubmit(ctx context.Context, payload *gen.ClaudeHookPayload) (*gen.ClaudeHookResult, error) {
+	if s.riskScanner != nil && payload.Prompt != nil && payload.SessionID != nil {
+		if scanResult := s.scanClaudeForEnforcement(ctx, payload); scanResult != nil {
+			return nil, oops.E(oops.CodeForbidden, nil, "Speakeasy blocked this prompt: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
+		}
+	}
 	return makeHookResult(payload.HookEventName), nil
 }
 

@@ -22,14 +22,14 @@ func TestOnMessagesStored_SignalsEnabledPolicies(t *testing.T) {
 
 	enabled := true
 	_, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
-		Name:    "Enabled Policy",
+		Name:    new("Enabled Policy"),
 		Enabled: &enabled,
 	})
 	require.NoError(t, err)
 
 	disabled := false
 	_, err = ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
-		Name:    "Disabled Policy",
+		Name:    new("Disabled Policy"),
 		Enabled: &disabled,
 	})
 	require.NoError(t, err)

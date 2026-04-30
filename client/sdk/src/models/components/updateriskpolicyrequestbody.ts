@@ -4,8 +4,31 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
+import { ClosedEnum } from "../../types/enums.js";
+
+/**
+ * Policy action: flag or block.
+ */
+export const UpdateRiskPolicyRequestBodyAction = {
+  Flag: "flag",
+  Block: "block",
+} as const;
+/**
+ * Policy action: flag or block.
+ */
+export type UpdateRiskPolicyRequestBodyAction = ClosedEnum<
+  typeof UpdateRiskPolicyRequestBodyAction
+>;
 
 export type UpdateRiskPolicyRequestBody = {
+  /**
+   * Policy action: flag or block.
+   */
+  action?: UpdateRiskPolicyRequestBodyAction | undefined;
+  /**
+   * Whether the policy name should be auto-generated.
+   */
+  autoName?: boolean | undefined;
   /**
    * Whether the policy is active.
    */
@@ -29,7 +52,14 @@ export type UpdateRiskPolicyRequestBody = {
 };
 
 /** @internal */
+export const UpdateRiskPolicyRequestBodyAction$outboundSchema: z.ZodMiniEnum<
+  typeof UpdateRiskPolicyRequestBodyAction
+> = z.enum(UpdateRiskPolicyRequestBodyAction);
+
+/** @internal */
 export type UpdateRiskPolicyRequestBody$Outbound = {
+  action?: string | undefined;
+  auto_name?: boolean | undefined;
   enabled?: boolean | undefined;
   id: string;
   name: string;
@@ -43,6 +73,8 @@ export const UpdateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
   UpdateRiskPolicyRequestBody
 > = z.pipe(
   z.object({
+    action: z.optional(UpdateRiskPolicyRequestBodyAction$outboundSchema),
+    autoName: z.optional(z.boolean()),
     enabled: z.optional(z.boolean()),
     id: z.string(),
     name: z.string(),
@@ -51,6 +83,7 @@ export const UpdateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      autoName: "auto_name",
       presidioEntities: "presidio_entities",
     });
   }),
