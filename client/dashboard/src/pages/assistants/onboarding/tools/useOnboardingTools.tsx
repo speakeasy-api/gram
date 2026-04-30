@@ -368,6 +368,16 @@ type PersonalityChoice =
 function buildAssistantTools(deps: ToolDeps) {
   const { sdk, draft, organizationId } = deps;
 
+  // The LLM may emit multiple mutating tool calls in parallel within one turn.
+  // Without this, two attach_toolset calls would each read the same pre-attach
+  // toolsets snapshot, compute their own next array, and PUT — last write wins.
+  let mutationTail: Promise<unknown> = Promise.resolve();
+  const serialize = <T,>(fn: () => Promise<T>): Promise<T> => {
+    const next = mutationTail.then(fn, fn);
+    mutationTail = next.catch(() => undefined);
+    return next;
+  };
+
   const triggerCreateInFlight = new Map<string, Promise<ToolResult>>();
 
   const propose_identity = defineFrontendTool<ProposeIdentityArgs, ToolResult>(
@@ -422,65 +432,70 @@ function buildAssistantTools(deps: ToolDeps) {
 
         const p = userInput.personality;
         const name = userInput.name;
-        try {
-          if (p.kind === "prebuilt") {
-            const hasInstructions = p.prebuilt.instructions.trim().length > 0;
-            const current = draft.assistant?.instructions ?? "";
-            const next = hasInstructions
-              ? setSection(current, "Personality", p.prebuilt.instructions)
-              : current;
-            const a = await ensureAssistant(
-              deps,
-              hasInstructions ? { name, instructions: next } : { name },
-            );
-            await recomputeBehaviorSection(deps, a);
-            return okResult({
-              name,
-              personality: {
-                kind: "prebuilt" as const,
-                slug: p.prebuilt.slug,
-                title: p.prebuilt.title,
-                summary: p.prebuilt.summary,
-                body_set: hasInstructions,
-              },
-              note: hasInstructions
-                ? `Saved name "${name}" and the "${p.prebuilt.title}" personality verbatim under # Personality. Now describe what this assistant does — call set_tasks with role-specific guidance derived from the user's stated goal. Do not call set_personality unless the user explicitly asks to change it.`
-                : `Saved name "${name}". The "${p.prebuilt.title}" preset has no body — synthesize personality content (voice, tone, formatting habits, uncertainty handling) matching the title "${p.prebuilt.title}" and summary "${p.prebuilt.summary}", then call set_personality with the result. Then call set_tasks with role-specific guidance.`,
-            });
-          }
-          if (p.kind === "custom_text") {
-            const current = draft.assistant?.instructions ?? "";
-            const next = setSection(current, "Personality", p.custom_text);
-            const a = await ensureAssistant(deps, { name, instructions: next });
-            await recomputeBehaviorSection(deps, a);
-            return okResult({
-              name,
-              personality: { kind: "custom_text" as const },
-              note: `Saved name "${name}" and the user's pasted personality verbatim under # Personality. Now call set_tasks with role-specific guidance. Do not modify # Personality.`,
-            });
-          }
-          if (p.kind === "generate") {
+        return serialize(async () => {
+          try {
+            if (p.kind === "prebuilt") {
+              const hasInstructions = p.prebuilt.instructions.trim().length > 0;
+              const current = draft.assistant?.instructions ?? "";
+              const next = hasInstructions
+                ? setSection(current, "Personality", p.prebuilt.instructions)
+                : current;
+              const a = await ensureAssistant(
+                deps,
+                hasInstructions ? { name, instructions: next } : { name },
+              );
+              await recomputeBehaviorSection(deps, a);
+              return okResult({
+                name,
+                personality: {
+                  kind: "prebuilt" as const,
+                  slug: p.prebuilt.slug,
+                  title: p.prebuilt.title,
+                  summary: p.prebuilt.summary,
+                  body_set: hasInstructions,
+                },
+                note: hasInstructions
+                  ? `Saved name "${name}" and the "${p.prebuilt.title}" personality verbatim under # Personality. Now describe what this assistant does — call set_tasks with role-specific guidance derived from the user's stated goal. Do not call set_personality unless the user explicitly asks to change it.`
+                  : `Saved name "${name}". The "${p.prebuilt.title}" preset has no body — synthesize personality content (voice, tone, formatting habits, uncertainty handling) matching the title "${p.prebuilt.title}" and summary "${p.prebuilt.summary}", then call set_personality with the result. Then call set_tasks with role-specific guidance.`,
+              });
+            }
+            if (p.kind === "custom_text") {
+              const current = draft.assistant?.instructions ?? "";
+              const next = setSection(current, "Personality", p.custom_text);
+              const a = await ensureAssistant(deps, {
+                name,
+                instructions: next,
+              });
+              await recomputeBehaviorSection(deps, a);
+              return okResult({
+                name,
+                personality: { kind: "custom_text" as const },
+                note: `Saved name "${name}" and the user's pasted personality verbatim under # Personality. Now call set_tasks with role-specific guidance. Do not modify # Personality.`,
+              });
+            }
+            if (p.kind === "generate") {
+              const a = await ensureAssistant(deps, { name });
+              await recomputeBehaviorSection(deps, a);
+              return okResult({
+                name,
+                personality: {
+                  kind: "generate" as const,
+                  description: p.describe,
+                },
+                note: `Saved name "${name}". The user described their desired personality: "${p.describe}". Expand that into a full personality (voice, tone, formatting habits, uncertainty handling) and call set_personality with the expanded text. Then call set_tasks with role-specific guidance.`,
+              });
+            }
             const a = await ensureAssistant(deps, { name });
             await recomputeBehaviorSection(deps, a);
             return okResult({
               name,
-              personality: {
-                kind: "generate" as const,
-                description: p.describe,
-              },
-              note: `Saved name "${name}". The user described their desired personality: "${p.describe}". Expand that into a full personality (voice, tone, formatting habits, uncertainty handling) and call set_personality with the expanded text. Then call set_tasks with role-specific guidance.`,
+              personality: { kind: "random" as const },
+              note: `Saved name "${name}". Invent a distinctive personality from scratch (voice, formatting habits, sign-off, uncertainty handling). Keep it professional-compatible. Call set_personality with the result, then set_tasks with role-specific guidance.`,
             });
+          } catch (e) {
+            return errResult(e instanceof Error ? e.message : "save failed");
           }
-          const a = await ensureAssistant(deps, { name });
-          await recomputeBehaviorSection(deps, a);
-          return okResult({
-            name,
-            personality: { kind: "random" as const },
-            note: `Saved name "${name}". Invent a distinctive personality from scratch (voice, formatting habits, sign-off, uncertainty handling). Keep it professional-compatible. Call set_personality with the result, then set_tasks with role-specific guidance.`,
-          });
-        } catch (e) {
-          return errResult(e instanceof Error ? e.message : "save failed");
-        }
+        });
       },
     },
     "propose_identity",
@@ -505,30 +520,31 @@ function buildAssistantTools(deps: ToolDeps) {
           ),
         status: z.enum(["active", "paused"]).optional(),
       }),
-      execute: async (args) => {
-        try {
-          const a = await ensureAssistant(deps, args as UpdateAssistantArgs);
-          const envResult = a.name
-            ? await ensureAssistantEnv(deps, a.name)
-            : null;
-          const notes: string[] = [];
-          if (envResult?.note) notes.push(envResult.note);
-          return okResult({
-            assistant: {
-              id: a.id,
-              name: a.name,
-              model: a.model,
-              status: a.status,
-              instructions: a.instructions,
-              toolsets: a.toolsets,
-            },
-            environment: envResult?.env ?? draft.assistantEnv ?? undefined,
-            ...(notes.length > 0 ? { notes } : {}),
-          });
-        } catch (e) {
-          return errResult(e instanceof Error ? e.message : "update failed");
-        }
-      },
+      execute: async (args) =>
+        serialize(async () => {
+          try {
+            const a = await ensureAssistant(deps, args as UpdateAssistantArgs);
+            const envResult = a.name
+              ? await ensureAssistantEnv(deps, a.name)
+              : null;
+            const notes: string[] = [];
+            if (envResult?.note) notes.push(envResult.note);
+            return okResult({
+              assistant: {
+                id: a.id,
+                name: a.name,
+                model: a.model,
+                status: a.status,
+                instructions: a.instructions,
+                toolsets: a.toolsets,
+              },
+              environment: envResult?.env ?? draft.assistantEnv ?? undefined,
+              ...(notes.length > 0 ? { notes } : {}),
+            });
+          } catch (e) {
+            return errResult(e instanceof Error ? e.message : "update failed");
+          }
+        }),
     },
     "update_assistant",
   );
@@ -545,25 +561,26 @@ function buildAssistantTools(deps: ToolDeps) {
             "Personality body. No leading '# Personality' heading. No H1 sub-headings — use H2 or lower.",
           ),
       }),
-      execute: async (args) => {
-        const { instructions } = args as SetPersonalityArgs;
-        try {
-          const current = draft.assistant?.instructions ?? "";
-          const next = setSection(current, "Personality", instructions);
-          const updated = await ensureAssistant(deps, { instructions: next });
-          return okResult({
-            assistant: {
-              id: updated.id,
-              name: updated.name,
-              instructions: updated.instructions,
-            },
-          });
-        } catch (e) {
-          return errResult(
-            e instanceof Error ? e.message : "set personality failed",
-          );
-        }
-      },
+      execute: async (args) =>
+        serialize(async () => {
+          const { instructions } = args as SetPersonalityArgs;
+          try {
+            const current = draft.assistant?.instructions ?? "";
+            const next = setSection(current, "Personality", instructions);
+            const updated = await ensureAssistant(deps, { instructions: next });
+            return okResult({
+              assistant: {
+                id: updated.id,
+                name: updated.name,
+                instructions: updated.instructions,
+              },
+            });
+          } catch (e) {
+            return errResult(
+              e instanceof Error ? e.message : "set personality failed",
+            );
+          }
+        }),
     },
     "set_personality",
   );
@@ -580,23 +597,26 @@ function buildAssistantTools(deps: ToolDeps) {
             "Tasks/role body. The job description for this assistant. No leading '# Tasks' heading. No H1 sub-headings — use H2 or lower.",
           ),
       }),
-      execute: async (args) => {
-        const { tasks } = args as SetTasksArgs;
-        try {
-          const current = draft.assistant?.instructions ?? "";
-          const next = setSection(current, "Tasks", tasks);
-          const updated = await ensureAssistant(deps, { instructions: next });
-          return okResult({
-            assistant: {
-              id: updated.id,
-              name: updated.name,
-              instructions: updated.instructions,
-            },
-          });
-        } catch (e) {
-          return errResult(e instanceof Error ? e.message : "set tasks failed");
-        }
-      },
+      execute: async (args) =>
+        serialize(async () => {
+          const { tasks } = args as SetTasksArgs;
+          try {
+            const current = draft.assistant?.instructions ?? "";
+            const next = setSection(current, "Tasks", tasks);
+            const updated = await ensureAssistant(deps, { instructions: next });
+            return okResult({
+              assistant: {
+                id: updated.id,
+                name: updated.name,
+                instructions: updated.instructions,
+              },
+            });
+          } catch (e) {
+            return errResult(
+              e instanceof Error ? e.message : "set tasks failed",
+            );
+          }
+        }),
     },
     "set_tasks",
   );
@@ -614,40 +634,41 @@ function buildAssistantTools(deps: ToolDeps) {
             "Override the assistant's shared environment for this toolset. Omit in almost all cases — the assistant's env is used by default.",
           ),
       }),
-      execute: async (args) => {
-        const { toolset_slug, environment_slug } = args as AttachToolsetArgs;
-        try {
-          const a = await ensureAssistant(deps, {});
-          const notes: string[] = [];
-          let boundSlug = environment_slug;
-          if (!boundSlug) {
-            const envResult = await ensureAssistantEnv(deps, a.name);
-            boundSlug = envResult.env.slug;
-            if (envResult.note) notes.push(envResult.note);
+      execute: async (args) =>
+        serialize(async () => {
+          const { toolset_slug, environment_slug } = args as AttachToolsetArgs;
+          try {
+            const a = await ensureAssistant(deps, {});
+            const notes: string[] = [];
+            let boundSlug = environment_slug;
+            if (!boundSlug) {
+              const envResult = await ensureAssistantEnv(deps, a.name);
+              boundSlug = envResult.env.slug;
+              if (envResult.note) notes.push(envResult.note);
+            }
+            const next = a.toolsets
+              .filter((t) => t.toolsetSlug !== toolset_slug)
+              .concat([
+                {
+                  toolsetSlug: toolset_slug,
+                  environmentSlug: boundSlug,
+                },
+              ]);
+            const updated = await sdk.assistants.update({
+              updateAssistantForm: { id: a.id, toolsets: next },
+            });
+            draft.setAssistant(updated);
+            draft.invalidateAll();
+            await recomputeBehaviorSection(deps, updated);
+            return okResult({
+              toolsets: updated.toolsets,
+              environment_slug: boundSlug,
+              ...(notes.length > 0 ? { notes } : {}),
+            });
+          } catch (e) {
+            return errResult(e instanceof Error ? e.message : "attach failed");
           }
-          const next = a.toolsets
-            .filter((t) => t.toolsetSlug !== toolset_slug)
-            .concat([
-              {
-                toolsetSlug: toolset_slug,
-                environmentSlug: boundSlug,
-              },
-            ]);
-          const updated = await sdk.assistants.update({
-            updateAssistantForm: { id: a.id, toolsets: next },
-          });
-          draft.setAssistant(updated);
-          draft.invalidateAll();
-          await recomputeBehaviorSection(deps, updated);
-          return okResult({
-            toolsets: updated.toolsets,
-            environment_slug: boundSlug,
-            ...(notes.length > 0 ? { notes } : {}),
-          });
-        } catch (e) {
-          return errResult(e instanceof Error ? e.message : "attach failed");
-        }
-      },
+        }),
     },
     "attach_toolset",
   );
@@ -657,26 +678,27 @@ function buildAssistantTools(deps: ToolDeps) {
       description:
         "Remove a toolset from the assistant. Does not delete the toolset itself.",
       parameters: z.object({ toolset_slug: z.string() }),
-      execute: async (args) => {
-        const { toolset_slug } = args as DetachToolsetArgs;
-        try {
-          if (!draft.assistantId || !draft.assistant) {
-            return errResult("No assistant exists yet. Create one first.");
+      execute: async (args) =>
+        serialize(async () => {
+          const { toolset_slug } = args as DetachToolsetArgs;
+          try {
+            if (!draft.assistantId || !draft.assistant) {
+              return errResult("No assistant exists yet. Create one first.");
+            }
+            const next = draft.assistant.toolsets.filter(
+              (t) => t.toolsetSlug !== toolset_slug,
+            );
+            const updated = await sdk.assistants.update({
+              updateAssistantForm: { id: draft.assistantId, toolsets: next },
+            });
+            draft.setAssistant(updated);
+            draft.invalidateAll();
+            await recomputeBehaviorSection(deps, updated);
+            return okResult({ toolsets: updated.toolsets });
+          } catch (e) {
+            return errResult(e instanceof Error ? e.message : "detach failed");
           }
-          const next = draft.assistant.toolsets.filter(
-            (t) => t.toolsetSlug !== toolset_slug,
-          );
-          const updated = await sdk.assistants.update({
-            updateAssistantForm: { id: draft.assistantId, toolsets: next },
-          });
-          draft.setAssistant(updated);
-          draft.invalidateAll();
-          await recomputeBehaviorSection(deps, updated);
-          return okResult({ toolsets: updated.toolsets });
-        } catch (e) {
-          return errResult(e instanceof Error ? e.message : "detach failed");
-        }
-      },
+        }),
     },
     "detach_toolset",
   );
@@ -717,30 +739,31 @@ function buildAssistantTools(deps: ToolDeps) {
         tool_urns: z.array(z.string()).optional(),
         default_environment_slug: z.string().optional(),
       }),
-      execute: async (args) => {
-        const { name, description, tool_urns, default_environment_slug } =
-          args as CreateToolsetArgs;
-        try {
-          const created = await sdk.toolsets.create({
-            createToolsetRequestBody: {
-              name,
-              description,
-              toolUrns: tool_urns,
-              defaultEnvironmentSlug: default_environment_slug,
-            },
-          });
-          draft.invalidateAll();
-          return okResult({
-            slug: created.slug,
-            name: created.name,
-            tool_count: created.tools.length,
-          });
-        } catch (e) {
-          return errResult(
-            e instanceof Error ? e.message : "create toolset failed",
-          );
-        }
-      },
+      execute: async (args) =>
+        serialize(async () => {
+          const { name, description, tool_urns, default_environment_slug } =
+            args as CreateToolsetArgs;
+          try {
+            const created = await sdk.toolsets.create({
+              createToolsetRequestBody: {
+                name,
+                description,
+                toolUrns: tool_urns,
+                defaultEnvironmentSlug: default_environment_slug,
+              },
+            });
+            draft.invalidateAll();
+            return okResult({
+              slug: created.slug,
+              name: created.name,
+              tool_count: created.tools.length,
+            });
+          } catch (e) {
+            return errResult(
+              e instanceof Error ? e.message : "create toolset failed",
+            );
+          }
+        }),
     },
     "create_toolset",
   );
@@ -753,28 +776,33 @@ function buildAssistantTools(deps: ToolDeps) {
         toolset_slug: z.string(),
         tool_urns: z.array(z.string()).min(1),
       }),
-      execute: async (args) => {
-        const { toolset_slug, tool_urns } = args as AddToolsArgs;
-        try {
-          const current = await sdk.toolsets.getBySlug({ slug: toolset_slug });
-          const merged = Array.from(
-            new Set([...(current.toolUrns ?? []), ...tool_urns]),
-          );
-          const updated = await sdk.toolsets.updateBySlug({
-            slug: toolset_slug,
-            updateToolsetRequestBody: { toolUrns: merged },
-          });
-          draft.invalidateAll();
-          await recomputeBehaviorSection(deps);
-          return okResult({
-            slug: updated.slug,
-            tool_count: updated.tools.length,
-            tool_urns: updated.toolUrns,
-          });
-        } catch (e) {
-          return errResult(e instanceof Error ? e.message : "add tools failed");
-        }
-      },
+      execute: async (args) =>
+        serialize(async () => {
+          const { toolset_slug, tool_urns } = args as AddToolsArgs;
+          try {
+            const current = await sdk.toolsets.getBySlug({
+              slug: toolset_slug,
+            });
+            const merged = Array.from(
+              new Set([...(current.toolUrns ?? []), ...tool_urns]),
+            );
+            const updated = await sdk.toolsets.updateBySlug({
+              slug: toolset_slug,
+              updateToolsetRequestBody: { toolUrns: merged },
+            });
+            draft.invalidateAll();
+            await recomputeBehaviorSection(deps);
+            return okResult({
+              slug: updated.slug,
+              tool_count: updated.tools.length,
+              tool_urns: updated.toolUrns,
+            });
+          } catch (e) {
+            return errResult(
+              e instanceof Error ? e.message : "add tools failed",
+            );
+          }
+        }),
     },
     "add_tools_to_toolset",
   );
@@ -863,30 +891,31 @@ function buildAssistantTools(deps: ToolDeps) {
         name: z.string().min(1),
         description: z.string().optional(),
       }),
-      execute: async (args) => {
-        const { name, description } = args as CreateEnvArgs;
-        try {
-          const created = await sdk.environments.create({
-            createEnvironmentForm: {
-              name,
-              description: description ?? "",
-              entries: [],
-              organizationId,
-            },
-          });
-          draft.invalidateAll();
-          return okResult({
-            id: created.id,
-            slug: created.slug,
-            name: created.name,
-            description: created.description,
-          });
-        } catch (e) {
-          return errResult(
-            e instanceof Error ? e.message : "create env failed",
-          );
-        }
-      },
+      execute: async (args) =>
+        serialize(async () => {
+          const { name, description } = args as CreateEnvArgs;
+          try {
+            const created = await sdk.environments.create({
+              createEnvironmentForm: {
+                name,
+                description: description ?? "",
+                entries: [],
+                organizationId,
+              },
+            });
+            draft.invalidateAll();
+            return okResult({
+              id: created.id,
+              slug: created.slug,
+              name: created.name,
+              description: created.description,
+            });
+          } catch (e) {
+            return errResult(
+              e instanceof Error ? e.message : "create env failed",
+            );
+          }
+        }),
     },
     "create_environment",
   );
@@ -909,34 +938,35 @@ function buildAssistantTools(deps: ToolDeps) {
             "Override the assistant's shared env. Omit in almost all cases — a missing env is recreated automatically.",
           ),
       }),
-      execute: async (args) => {
-        const { keys, environment_slug } = args as AddEnvKeysArgs;
-        try {
-          const notes: string[] = [];
-          let slug = environment_slug;
-          if (!slug) {
-            const a = await ensureAssistant(deps, {});
-            const envResult = await ensureAssistantEnv(deps, a.name);
-            slug = envResult.env.slug;
-            if (envResult.note) notes.push(envResult.note);
+      execute: async (args) =>
+        serialize(async () => {
+          const { keys, environment_slug } = args as AddEnvKeysArgs;
+          try {
+            const notes: string[] = [];
+            let slug = environment_slug;
+            if (!slug) {
+              const a = await ensureAssistant(deps, {});
+              const envResult = await ensureAssistantEnv(deps, a.name);
+              slug = envResult.env.slug;
+              if (envResult.note) notes.push(envResult.note);
+            }
+            const existing = await currentEnvEntryNames(deps, slug);
+            const toAdd = keys
+              .filter((k) => !existing.has(k))
+              .map((name) => ({ name, value: "" }));
+            await upsertEnvEntries(deps, slug, toAdd);
+            return okResult({
+              environment_slug: slug,
+              added: toAdd.map((e) => e.name),
+              already_present: keys.filter((k) => existing.has(k)),
+              ...(notes.length > 0 ? { notes } : {}),
+            });
+          } catch (e) {
+            return errResult(
+              e instanceof Error ? e.message : "add env keys failed",
+            );
           }
-          const existing = await currentEnvEntryNames(deps, slug);
-          const toAdd = keys
-            .filter((k) => !existing.has(k))
-            .map((name) => ({ name, value: "" }));
-          await upsertEnvEntries(deps, slug, toAdd);
-          return okResult({
-            environment_slug: slug,
-            added: toAdd.map((e) => e.name),
-            already_present: keys.filter((k) => existing.has(k)),
-            ...(notes.length > 0 ? { notes } : {}),
-          });
-        } catch (e) {
-          return errResult(
-            e instanceof Error ? e.message : "add env keys failed",
-          );
-        }
-      },
+        }),
     },
     "add_environment_keys",
   );
@@ -992,22 +1022,26 @@ function buildAssistantTools(deps: ToolDeps) {
         const { keys, environment_slug } = args as RequestSecretsArgs;
         const toolCallId = ctx.toolCallId ?? "";
 
-        let envSlug: string;
         const preNotes: string[] = [];
+        let envSlug: string;
         try {
-          if (environment_slug) {
-            envSlug = environment_slug;
-          } else {
-            const a = await ensureAssistant(deps, {});
-            const envResult = await ensureAssistantEnv(deps, a.name);
-            envSlug = envResult.env.slug;
-            if (envResult.note) preNotes.push(envResult.note);
-          }
-          const existing = await currentEnvEntryNames(deps, envSlug);
-          const stubs = keys
-            .filter((k) => !existing.has(k.name))
-            .map((k) => ({ name: k.name, value: "" }));
-          await upsertEnvEntries(deps, envSlug, stubs);
+          envSlug = await serialize(async () => {
+            let slug: string;
+            if (environment_slug) {
+              slug = environment_slug;
+            } else {
+              const a = await ensureAssistant(deps, {});
+              const envResult = await ensureAssistantEnv(deps, a.name);
+              slug = envResult.env.slug;
+              if (envResult.note) preNotes.push(envResult.note);
+            }
+            const existing = await currentEnvEntryNames(deps, slug);
+            const stubs = keys
+              .filter((k) => !existing.has(k.name))
+              .map((k) => ({ name: k.name, value: "" }));
+            await upsertEnvEntries(deps, slug, stubs);
+            return slug;
+          });
         } catch (e) {
           return errResult(
             e instanceof Error ? e.message : "prepare env failed",
@@ -1049,23 +1083,25 @@ function buildAssistantTools(deps: ToolDeps) {
           });
         }
 
-        try {
-          const entries = Object.entries(userInput.values ?? {})
-            .filter(([, v]) => String(v).length > 0)
-            .map(([name, value]) => ({ name, value: String(value) }));
-          await upsertEnvEntries(deps, envSlug, entries);
-          return okResult({
-            saved: true,
-            environment_slug: envSlug,
-            saved_keys: entries.map((e) => e.name),
-            declared_keys: keys.map((k) => k.name),
-            ...(preNotes.length > 0 ? { notes: preNotes } : {}),
-          });
-        } catch (e) {
-          return errResult(e instanceof Error ? e.message : "save failed", {
-            environment_slug: envSlug,
-          });
-        }
+        return serialize(async () => {
+          try {
+            const entries = Object.entries(userInput.values ?? {})
+              .filter(([, v]) => String(v).length > 0)
+              .map(([name, value]) => ({ name, value: String(value) }));
+            await upsertEnvEntries(deps, envSlug, entries);
+            return okResult({
+              saved: true,
+              environment_slug: envSlug,
+              saved_keys: entries.map((e) => e.name),
+              declared_keys: keys.map((k) => k.name),
+              ...(preNotes.length > 0 ? { notes: preNotes } : {}),
+            });
+          } catch (e) {
+            return errResult(e instanceof Error ? e.message : "save failed", {
+              environment_slug: envSlug,
+            });
+          }
+        });
       },
     },
     "request_environment_secrets",
@@ -1225,7 +1261,7 @@ function buildAssistantTools(deps: ToolDeps) {
         const key = `${draft.assistantId ?? "new"}:${definition_slug}:${name}`;
         const inflight = triggerCreateInFlight.get(key);
         if (inflight) return inflight;
-        const p = run();
+        const p = serialize(run);
         triggerCreateInFlight.set(key, p);
         try {
           return await p;
@@ -1248,32 +1284,33 @@ function buildAssistantTools(deps: ToolDeps) {
         status: z.enum(["active", "paused"]).optional(),
         environment_id: z.string().optional(),
       }),
-      execute: async (args) => {
-        const { id, name, config, status, environment_id } =
-          args as UpdateTriggerArgs;
-        try {
-          const updated = await sdk.triggers.update({
-            updateTriggerInstanceForm: {
-              id,
-              name,
-              config,
-              status,
-              environmentId: environment_id,
-            },
-          });
-          draft.invalidateAll();
-          return okResult({
-            id: updated.id,
-            name: updated.name,
-            status: updated.status,
-            webhook_url: updated.webhookUrl,
-          });
-        } catch (e) {
-          return errResult(
-            e instanceof Error ? e.message : "update trigger failed",
-          );
-        }
-      },
+      execute: async (args) =>
+        serialize(async () => {
+          const { id, name, config, status, environment_id } =
+            args as UpdateTriggerArgs;
+          try {
+            const updated = await sdk.triggers.update({
+              updateTriggerInstanceForm: {
+                id,
+                name,
+                config,
+                status,
+                environmentId: environment_id,
+              },
+            });
+            draft.invalidateAll();
+            return okResult({
+              id: updated.id,
+              name: updated.name,
+              status: updated.status,
+              webhook_url: updated.webhookUrl,
+            });
+          } catch (e) {
+            return errResult(
+              e instanceof Error ? e.message : "update trigger failed",
+            );
+          }
+        }),
     },
     "update_trigger",
   );
