@@ -1364,7 +1364,11 @@ func (s *ServiceCore) buildRuntimeStartupConfig(
 		return runtimeStartupConfig{}, err
 	}
 
-	completionsURL := runtimeServerURL.JoinPath("chat", "completions").String()
+	completionsEndpoint := runtimeServerURL.JoinPath("chat", "completions")
+	completionsQuery := completionsEndpoint.Query()
+	completionsQuery.Set("unstable_normalizeOutboundMessages", "1")
+	completionsEndpoint.RawQuery = completionsQuery.Encode()
+	completionsURL := completionsEndpoint.String()
 	return runtimeStartupConfig{
 		Model:          assistant.Model,
 		Instructions:   conv.PtrEmpty(instructions),

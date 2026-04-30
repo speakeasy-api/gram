@@ -33,8 +33,8 @@ Pass section bodies WITHOUT a leading heading — the tool adds it. Inside a sec
 # Glossary (answer "what is X?" from here, don't speculate)
 - Status — \`active\` fires, \`paused\` ignores. \`update_assistant(status)\`.
 - Model — LLM id. \`update_assistant(model)\`. See Models.
-- Concurrency — max parallel runs. Set at creation, not editable here.
-- Warm TTL — runtime keep-alive secs. Default 300. Not editable here.
+- Concurrency — max parallel warm runtimes. Default 1. \`update_assistant(max_concurrency)\`.
+- Warm TTL — runtime keep-alive secs after last request. Default 300. 0 disables. \`update_assistant(warm_ttl_seconds)\`.
 - System instructions — runtime prompt. \`# Personality\` (\`set_personality\`), \`# Behavior\` (auto), \`# Tasks\` (\`set_tasks\`). See "System prompt sections".
 - Toolset — bundle of tools. \`list_toolsets\` / \`create_toolset\` / \`attach_toolset\` / \`detach_toolset\` / \`add_tools_to_toolset\`. When attached, toolsets bind to the assistant's shared env by default. Toolset mutations recompute \`# Behavior\`.
 - Tool — URN \`tools:http:<source>:<op>\` / \`tools:function:<source>:<op>\`. \`<source>\` is project-specific, not the integration brand. Discover via \`list_available_tools\`; never guess.

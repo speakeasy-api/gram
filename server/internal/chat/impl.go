@@ -760,8 +760,9 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 			UserAgent: metadata.UserAgent,
 			IPAddress: metadata.IPAddress,
 		},
-		APIKeyID:   authCtx.APIKeyID,
-		JSONSchema: jsonSchema,
+		APIKeyID:                  authCtx.APIKeyID,
+		JSONSchema:                jsonSchema,
+		NormalizeOutboundMessages: r.URL.Query().Get("unstable_normalizeOutboundMessages") == "1",
 	}
 
 	isStreaming := chatRequest.Stream

@@ -176,6 +176,8 @@ async function ensureAssistant(
     instructions?: string;
     model?: string;
     status?: "active" | "paused";
+    warm_ttl_seconds?: number;
+    max_concurrency?: number;
   },
 ) {
   const { sdk, draft } = deps;
@@ -190,6 +192,12 @@ async function ensureAssistant(
           : {}),
         ...(payload.model !== undefined ? { model: payload.model } : {}),
         ...(payload.status !== undefined ? { status: payload.status } : {}),
+        ...(payload.warm_ttl_seconds !== undefined
+          ? { warmTtlSeconds: payload.warm_ttl_seconds }
+          : {}),
+        ...(payload.max_concurrency !== undefined
+          ? { maxConcurrency: payload.max_concurrency }
+          : {}),
       },
     });
     draft.setAssistant(updated);
@@ -206,6 +214,12 @@ async function ensureAssistant(
       model: payload.model ?? "anthropic/claude-sonnet-4.6",
       status: payload.status,
       toolsets: [],
+      ...(payload.warm_ttl_seconds !== undefined
+        ? { warmTtlSeconds: payload.warm_ttl_seconds }
+        : {}),
+      ...(payload.max_concurrency !== undefined
+        ? { maxConcurrency: payload.max_concurrency }
+        : {}),
     },
   });
   draft.setAssistant(created);
@@ -289,6 +303,8 @@ type UpdateAssistantArgs = {
   name?: string;
   model?: string;
   status?: "active" | "paused";
+  warm_ttl_seconds?: number;
+  max_concurrency?: number;
 };
 type SetPersonalityArgs = { instructions: string };
 type SetTasksArgs = { tasks: string };
@@ -504,7 +520,7 @@ function buildAssistantTools(deps: ToolDeps) {
   const update_assistant = defineFrontendTool<UpdateAssistantArgs, ToolResult>(
     {
       description:
-        "Update the assistant's name, model, or status. The system prompt is split into three managed sections — # Personality (set via set_personality), # Behavior (managed automatically based on attached tools), # Tasks (set via set_tasks) — and is NOT writable through this tool. The first call also creates the assistant if none exists yet (creation flow).",
+        "Update the assistant's name, model, status, warm TTL, or max concurrency. The system prompt is split into three managed sections — # Personality (set via set_personality), # Behavior (managed automatically based on attached tools), # Tasks (set via set_tasks) — and is NOT writable through this tool. The first call also creates the assistant if none exists yet (creation flow).",
       parameters: z.object({
         name: z
           .string()
@@ -519,6 +535,20 @@ function buildAssistantTools(deps: ToolDeps) {
             "OpenRouter-style model id, e.g. 'anthropic/claude-sonnet-4.6'.",
           ),
         status: z.enum(["active", "paused"]).optional(),
+        warm_ttl_seconds: z
+          .number()
+          .int()
+          .min(0)
+          .optional()
+          .describe(
+            "Seconds to keep a warm runtime alive after the last request. 0 disables warm runtimes. Default 300.",
+          ),
+        max_concurrency: z
+          .number()
+          .int()
+          .min(1)
+          .optional()
+          .describe("Maximum number of concurrent warm runtimes. Default 1."),
       }),
       execute: async (args) =>
         serialize(async () => {
