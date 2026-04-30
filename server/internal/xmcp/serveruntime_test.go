@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/testmcp"
 	"github.com/speakeasy-api/gram/server/internal/xmcp"
@@ -45,16 +46,18 @@ func runHandlerWithHeaders(t *testing.T, ctx context.Context, ti *testInstance, 
 }
 
 // insertProject creates a stub project row so we can test cross-project
-// isolation. Tests rely on the project_id being a valid foreign key target
-// for remote_mcp_servers.
-func insertProject(t *testing.T, ctx context.Context, ti *testInstance, projectID uuid.UUID, organizationID string) {
+// isolation and returns its id for use as a foreign key on remote_mcp_servers.
+func insertProject(t *testing.T, ctx context.Context, ti *testInstance, organizationID string) uuid.UUID {
 	t.Helper()
 
-	_, err := ti.conn.Exec(ctx, `
-		INSERT INTO projects (id, organization_id, name, slug)
-		VALUES ($1, $2, $3, $4)
-	`, projectID, organizationID, "other-project-"+projectID.String()[:8], "other-project-"+projectID.String()[:8])
+	slug := "other-project-" + uuid.NewString()[:8]
+	p, err := projectsrepo.New(ti.conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
+		Name:           slug,
+		Slug:           slug,
+		OrganizationID: organizationID,
+	})
 	require.NoError(t, err)
+	return p.ID
 }
 
 func TestServeRuntime_MissingAuthReturns401(t *testing.T) {
@@ -155,8 +158,7 @@ func TestServeRuntime_Post_ProjectIsolationReturns404(t *testing.T) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
-	otherProjectID := uuid.New()
-	insertProject(t, ctx, ti, otherProjectID, authCtx.ActiveOrganizationID)
+	otherProjectID := insertProject(t, ctx, ti, authCtx.ActiveOrganizationID)
 
 	// Server belongs to a different project than the API key's.
 	server := seedRemoteMCPServer(t, ctx, ti, otherProjectID, mockServer.URL)

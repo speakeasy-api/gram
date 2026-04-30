@@ -74,7 +74,7 @@ func (i *ToolUsageLimitsInterceptor) InterceptToolsCallRequest(ctx context.Conte
 		return nil
 	}
 
-	if periodUsage.HasActiveSubscription {
+	if periodUsage == nil || periodUsage.HasActiveSubscription {
 		return nil
 	}
 
