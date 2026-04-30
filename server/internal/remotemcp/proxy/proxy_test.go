@@ -20,8 +20,10 @@ import (
 	tracenoop "go.opentelemetry.io/otel/trace/noop"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 const initializeRequest = `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}`
@@ -29,9 +31,12 @@ const initializeRequest = `{"jsonrpc":"2.0","id":1,"method":"initialize","params
 func newProxyForTest(t *testing.T, upstreamURL string) *proxy.Proxy {
 	t.Helper()
 
+	policy, err := guardian.NewUnsafePolicy(tracenoop.NewTracerProvider(), nil)
+	require.NoError(t, err)
+
 	return &proxy.Proxy{
-		HTTPClient:           http.DefaultClient,
-		Logger:               discardLogger(),
+		GuardianPolicy:       policy,
+		Logger:               testenv.NewLogger(t),
 		Tracer:               tracenoop.NewTracerProvider().Tracer("test"),
 		NonStreamingTimeout:  5 * time.Second,
 		StreamingTimeout:     5 * time.Second,
@@ -516,16 +521,24 @@ func TestProxy_Post_NonStreamingBodyPhaseTimeoutReturnsGatewayError(t *testing.T
 	// open without writing the body. Phase 2 timer (post-headers) fires
 	// and surfaces a gateway error — regression guard for the timer-reset
 	// behavior in forwardRequest.
+	handlerDone := make(chan struct{})
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		if flusher, ok := w.(http.Flusher); ok {
 			flusher.Flush()
 		}
-		// Block forever (until parent cancels) — body never arrives.
-		<-r.Context().Done()
+		// Block until either r.Context cancels (proxy disconnect) or the
+		// test cleanup unblocks the handler — body never arrives.
+		select {
+		case <-r.Context().Done():
+		case <-handlerDone:
+		}
 	}))
 	t.Cleanup(upstream.Close)
+	// Registered after upstream.Close so it runs first (LIFO): unblock the
+	// handler before upstream.Close waits for it to drain.
+	t.Cleanup(func() { close(handlerDone) })
 
 	p := newProxyForTest(t, upstream.URL)
 	p.NonStreamingTimeout = 100 * time.Millisecond
@@ -600,6 +613,7 @@ func TestProxy_Get_StreamTerminatesOnIdleTimeout(t *testing.T) {
 	// even though NonStreamingTimeout is much larger.
 	const idleTimeout = 100 * time.Millisecond
 
+	handlerDone := make(chan struct{})
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.WriteHeader(http.StatusOK)
@@ -611,11 +625,18 @@ func TestProxy_Get_StreamTerminatesOnIdleTimeout(t *testing.T) {
 		if flusher != nil {
 			flusher.Flush()
 		}
-		// Hold the connection silent until the parent context cancels —
-		// the proxy's idle timer should beat us to it.
-		<-r.Context().Done()
+		// Hold the connection silent until either the proxy disconnects or
+		// test cleanup releases the handler — the proxy's idle timer should
+		// beat the cleanup channel.
+		select {
+		case <-r.Context().Done():
+		case <-handlerDone:
+		}
 	}))
 	t.Cleanup(upstream.Close)
+	// Registered after upstream.Close so it runs first (LIFO): unblock the
+	// handler before upstream.Close waits for it to drain.
+	t.Cleanup(func() { close(handlerDone) })
 
 	p := newProxyForTest(t, upstream.URL)
 	p.NonStreamingTimeout = 5 * time.Second // deliberately too long to be load-bearing
@@ -767,7 +788,7 @@ func TestProxy_Post_RecordsMetrics(t *testing.T) {
 
 	reader := sdkmetric.NewManualReader()
 	meterProvider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
-	metrics := proxy.NewMetrics(meterProvider.Meter("test"), discardLogger())
+	metrics := proxy.NewMetrics(meterProvider.Meter("test"), testenv.NewLogger(t))
 
 	p := newProxyForTest(t, upstream.URL)
 	p.Metrics = metrics
@@ -821,7 +842,7 @@ func TestProxy_Post_RecordsErrorStatusClassOnUpstreamFailure(t *testing.T) {
 
 	reader := sdkmetric.NewManualReader()
 	meterProvider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
-	metrics := proxy.NewMetrics(meterProvider.Meter("test"), discardLogger())
+	metrics := proxy.NewMetrics(meterProvider.Meter("test"), testenv.NewLogger(t))
 
 	p := newProxyForTest(t, unreachableURL)
 	p.Metrics = metrics

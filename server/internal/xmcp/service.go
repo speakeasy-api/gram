@@ -44,7 +44,7 @@ type Service struct {
 	enc                          *encryption.Client
 	auth                         *auth.Auth
 	authz                        *authz.Engine
-	proxyClient                  *guardian.HTTPClient
+	guardianPolicy               *guardian.Policy
 	proxyMetrics                 *proxy.Metrics
 	toolUsageLimitsInterceptor   *ToolUsageLimitsInterceptor
 	toolUsageTrackingInterceptor *ToolUsageTrackingInterceptor
@@ -74,7 +74,7 @@ func NewService(
 		enc:                          enc,
 		auth:                         auth.New(logger, db, sessionManager, authzEngine),
 		authz:                        authzEngine,
-		proxyClient:                  guardianPolicy.PooledClient(),
+		guardianPolicy:               guardianPolicy,
 		proxyMetrics:                 proxy.NewMetrics(meter, logger),
 		toolUsageLimitsInterceptor:   NewToolUsageLimitsInterceptor(billingRepo, logger),
 		toolUsageTrackingInterceptor: NewToolUsageTrackingInterceptor(billingTracker, logger),

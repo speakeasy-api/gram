@@ -2,7 +2,6 @@ package xmcp
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -11,6 +10,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"goa.design/goa/v3/security"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -57,7 +57,7 @@ func (s *Service) ServeMCP(w http.ResponseWriter, r *http.Request) error {
 		ProjectID: *authCtx.ProjectID,
 	})
 	switch {
-	case errors.Is(err, sql.ErrNoRows):
+	case errors.Is(err, pgx.ErrNoRows):
 		return oops.E(oops.CodeNotFound, err, "remote mcp server not found").Log(ctx, logger)
 	case err != nil:
 		return oops.E(oops.CodeUnexpected, err, "load remote mcp server").Log(ctx, logger)
@@ -136,7 +136,7 @@ func (s *Service) buildProxy(logger *slog.Logger, server *repo.RemoteMcpServer, 
 	}
 
 	return &proxy.Proxy{
-		HTTPClient:                s.proxyClient,
+		GuardianPolicy:            s.guardianPolicy,
 		Logger:                    logger,
 		Tracer:                    s.tracer,
 		NonStreamingTimeout:       proxy.DefaultNonStreamingTimeout,

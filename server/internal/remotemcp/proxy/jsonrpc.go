@@ -23,9 +23,6 @@ func jsonrpcIDsEqual(a, b jsonrpc.ID) bool {
 // callers can preserve status-only responses without invoking interceptors.
 // Bodies exceeding maxBytes return [ErrBodyTooLarge].
 func readJSONRPCBody(r io.Reader, maxBytes int64) ([]byte, jsonrpc.Message, error) {
-	if r == nil {
-		return nil, nil, nil
-	}
 	body, err := io.ReadAll(io.LimitReader(r, maxBytes+1))
 	if err != nil {
 		return nil, nil, fmt.Errorf("read body: %w", err)

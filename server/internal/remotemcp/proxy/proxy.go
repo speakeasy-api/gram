@@ -76,9 +76,15 @@ const (
 // request so the SessionID and interceptor state stay tied to a single
 // client exchange.
 type Proxy struct {
-	HTTPClient *guardian.HTTPClient
-	Logger     *slog.Logger
-	Tracer     trace.Tracer
+	// GuardianPolicy is used to build a fresh, non-pooled HTTP client per
+	// upstream request. Pooling is inappropriate here because each Proxy
+	// instance handles a single upstream host and discards the connection
+	// when the request finishes; a pooled transport would accumulate idle
+	// connections across distinct Remote MCP Servers without ever reusing
+	// them.
+	GuardianPolicy *guardian.Policy
+	Logger         *slog.Logger
+	Tracer         trace.Tracer
 
 	// NonStreamingTimeout bounds the connect+headers phase for every
 	// upstream request, plus the body read for non-streaming responses.
@@ -159,10 +165,16 @@ type Proxy struct {
 // Streamable HTTP transport, DELETE is used by clients to explicitly
 // terminate a session identified by Mcp-Session-Id (see spec § Session
 // Management).
-func (p *Proxy) Delete(w http.ResponseWriter, r *http.Request) error {
+func (p *Proxy) Delete(w http.ResponseWriter, r *http.Request) (err error) {
 	start := time.Now()
 	ctx, span := p.Tracer.Start(r.Context(), "remotemcp.proxy.Delete", trace.WithAttributes(p.requestSpanAttributes(http.MethodDelete)...))
 	defer span.End()
+	defer func() {
+		if err != nil {
+			span.SetStatus(codes.Error, err.Error())
+			span.RecordError(err, trace.WithStackTrace(true))
+		}
+	}()
 
 	var (
 		upstreamStatus int
@@ -175,7 +187,6 @@ func (p *Proxy) Delete(w http.ResponseWriter, r *http.Request) error {
 	//nolint:bodyclose // Body is closed via the defer below; linter can't trace the close across the forwardRequest helper.
 	_, upstreamResp, err := p.forwardRequest(ctx, r, http.NoBody)
 	if err != nil {
-		span.SetStatus(codes.Error, err.Error())
 		return err
 	}
 	defer o11y.NoLogDefer(upstreamResp.Body.Close)
@@ -186,7 +197,6 @@ func (p *Proxy) Delete(w http.ResponseWriter, r *http.Request) error {
 	n, err := writeResponse(w, upstreamResp, upstreamResp.Body)
 	responseBytes = n
 	if err != nil {
-		span.SetStatus(codes.Error, err.Error())
 		return err
 	}
 	return nil
@@ -205,10 +215,16 @@ func (p *Proxy) Delete(w http.ResponseWriter, r *http.Request) error {
 // dispatch; any other response (the spec'd 405, or non-conformant upstream
 // behavior) is relayed verbatim via [writeResponse] so the user's MCP
 // runtime sees what upstream actually said.
-func (p *Proxy) Get(w http.ResponseWriter, r *http.Request) error {
+func (p *Proxy) Get(w http.ResponseWriter, r *http.Request) (err error) {
 	start := time.Now()
 	ctx, span := p.Tracer.Start(r.Context(), "remotemcp.proxy.Get", trace.WithAttributes(p.requestSpanAttributes(http.MethodGet)...))
 	defer span.End()
+	defer func() {
+		if err != nil {
+			span.SetStatus(codes.Error, err.Error())
+			span.RecordError(err, trace.WithStackTrace(true))
+		}
+	}()
 
 	var (
 		upstreamStatus int
@@ -221,7 +237,6 @@ func (p *Proxy) Get(w http.ResponseWriter, r *http.Request) error {
 	//nolint:bodyclose // Body is closed via the defer below; linter can't trace the close across the forwardRequest helper.
 	upstreamReq, upstreamResp, err := p.forwardRequest(ctx, r, http.NoBody)
 	if err != nil {
-		span.SetStatus(codes.Error, err.Error())
 		return err
 	}
 	defer o11y.NoLogDefer(upstreamResp.Body.Close)
@@ -237,11 +252,10 @@ func (p *Proxy) Get(w http.ResponseWriter, r *http.Request) error {
 	// the user's MCP runtime sees upstream's actual response instead of
 	// silently misparsing it as an SSE stream.
 	if isEventStream(upstreamResp.Header) {
-		n, err := p.relaySSEStream(ctx, w, r, upstreamReq, upstreamResp, nil, nil)
+		n, streamErr := p.relaySSEStream(ctx, w, r, upstreamReq, upstreamResp, nil, nil)
 		responseBytes = n
-		if err != nil {
-			span.SetStatus(codes.Error, err.Error())
-			return err
+		if streamErr != nil {
+			return streamErr
 		}
 		return nil
 	}
@@ -249,7 +263,6 @@ func (p *Proxy) Get(w http.ResponseWriter, r *http.Request) error {
 	n, err := writeResponse(w, upstreamResp, upstreamResp.Body)
 	responseBytes = n
 	if err != nil {
-		span.SetStatus(codes.Error, err.Error())
 		return err
 	}
 	return nil
@@ -259,10 +272,16 @@ func (p *Proxy) Get(w http.ResponseWriter, r *http.Request) error {
 // configured interceptors before the forward and after the response returns.
 // POST is the primary MCP method — every JSON-RPC message sent by the client
 // is a POST to the MCP endpoint (see spec § Sending Messages to the Server).
-func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) error {
+func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 	start := time.Now()
 	ctx, span := p.Tracer.Start(r.Context(), "remotemcp.proxy.Post", trace.WithAttributes(p.requestSpanAttributes(http.MethodPost)...))
 	defer span.End()
+	defer func() {
+		if err != nil {
+			span.SetStatus(codes.Error, err.Error())
+			span.RecordError(err, trace.WithStackTrace(true))
+		}
+	}()
 
 	var (
 		upstreamStatus int
@@ -273,10 +292,8 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) error {
 	}()
 
 	userReq := &UserRequest{UserHTTPRequest: r, JSONRPCMessages: nil, body: nil}
-	if err := userReq.ParseJSONRPCMessages(p.MaxBufferedBodyBytes); err != nil {
-		wrapped := oops.E(oops.CodeBadRequest, err, "invalid jsonrpc request").Log(ctx, p.Logger)
-		span.SetStatus(codes.Error, wrapped.Error())
-		return wrapped
+	if parseErr := userReq.ParseJSONRPCMessages(p.MaxBufferedBodyBytes); parseErr != nil {
+		return oops.E(oops.CodeBadRequest, parseErr, "invalid jsonrpc request").Log(ctx, p.Logger)
 	}
 
 	// Extract the originating request id once. Used as the correlation id
@@ -328,7 +345,6 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) error {
 	//nolint:bodyclose // Body is closed via the defer below; linter can't trace the close across the forwardRequest helper.
 	upstreamReq, upstreamResp, err := p.forwardRequest(ctx, r, userReq.BodyReader())
 	if err != nil {
-		span.SetStatus(codes.Error, err.Error())
 		return err
 	}
 	defer o11y.NoLogDefer(upstreamResp.Body.Close)
@@ -347,7 +363,6 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) error {
 		n, streamErr := p.relaySSEStream(ctx, w, r, upstreamReq, upstreamResp, toolsCallReq, toolsListReq)
 		responseBytes = n
 		if streamErr != nil {
-			span.SetStatus(codes.Error, streamErr.Error())
 			return streamErr
 		}
 		return nil
@@ -355,9 +370,7 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) error {
 
 	bodyBytes, msg, err := readJSONRPCBody(upstreamResp.Body, p.MaxBufferedBodyBytes)
 	if err != nil {
-		wrapped := oops.E(oops.CodeUnexpected, err, "invalid jsonrpc response from remote mcp server").Log(ctx, p.Logger)
-		span.SetStatus(codes.Error, wrapped.Error())
-		return wrapped
+		return oops.E(oops.CodeUnexpected, err, "invalid jsonrpc response from remote mcp server").Log(ctx, p.Logger)
 	}
 
 	// Empty bodies skip interceptor invocation but still relay through to
@@ -404,7 +417,6 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) error {
 	n, err := writeResponse(w, upstreamResp, bytes.NewReader(bodyBytes))
 	responseBytes = n
 	if err != nil {
-		span.SetStatus(codes.Error, err.Error())
 		return err
 	}
 	return nil
@@ -454,7 +466,7 @@ func (p *Proxy) forwardRequest(ctx context.Context, r *http.Request, body io.Rea
 		return nil, nil, err
 	}
 
-	resp, err := p.HTTPClient.Do(upstreamReq)
+	resp, err := p.GuardianPolicy.Client().Do(upstreamReq)
 	if err != nil {
 		// timer.Stop() returns false if the timer has already fired;
 		// that's how we distinguish a phase-1 timeout from a parent
@@ -829,6 +841,7 @@ func (p *Proxy) writeRejection(ctx context.Context, w http.ResponseWriter, span 
 			attr.SlogError(err),
 			attr.SlogComponent("remotemcp.proxy"))
 		span.SetStatus(codes.Error, cause.Error())
+		span.RecordError(cause, trace.WithStackTrace(true))
 		return 0
 	}
 
@@ -847,6 +860,7 @@ func (p *Proxy) writeRejection(ctx context.Context, w http.ResponseWriter, span 
 			attr.SlogComponent("remotemcp.proxy"))
 	}
 	span.SetStatus(codes.Error, cause.Error())
+	span.RecordError(cause, trace.WithStackTrace(true))
 	return int64(n)
 }
 
