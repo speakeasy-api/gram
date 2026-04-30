@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: ee20f50fce5d7ed4f5ebd349f19fcb02
+  docChecksum: 386fee73177d1bead9f9b6a269860ee0
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -2613,7 +2613,7 @@ trackedFiles:
   src/funcs/pluginsDeletePlugin.ts:
     last_write_checksum: sha1:0fae47acd6c4ad0caba1d676be5e8fea03ea3386
   src/funcs/pluginsDownloadBasePlugin.ts:
-    last_write_checksum: sha1:3e4c5f8ed1767c7ee0b5c76d2a94b5cbff3d4822
+    last_write_checksum: sha1:620af33ae99bd46407d39ce7b536d05b34e28f5c
   src/funcs/pluginsDownloadPluginPackage.ts:
     last_write_checksum: sha1:2137a0829b969e414ea39e7f81f13e50f1148c35
   src/funcs/pluginsGetPlugin.ts:
@@ -8221,6 +8221,7 @@ examples:
       responses:
         "200":
           application/json: "x-file: example.file"
+          application/zip: "x-file: example.file"
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":

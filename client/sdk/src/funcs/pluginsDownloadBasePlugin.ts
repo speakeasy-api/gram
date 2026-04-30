@@ -100,7 +100,7 @@ async function $do(
   });
 
   const headers = new Headers(compactMap({
-    Accept: "application/json",
+    Accept: "application/zip",
     "Gram-Project": encodeSimple("Gram-Project", payload["Gram-Project"], {
       explode: false,
       charEncoding: "none",
@@ -197,7 +197,7 @@ async function $do(
     | SDKValidationError
   >(
     M.stream(200, operations.DownloadBasePluginResponse$inboundSchema, {
-      ctype: "application/json",
+      ctype: "application/zip",
       hdrs: true,
       key: "Result",
     }),

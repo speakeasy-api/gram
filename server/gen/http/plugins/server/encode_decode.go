@@ -2225,6 +2225,7 @@ func EncodeDownloadPluginPackageError(encoder func(context.Context, http.Respons
 func EncodeDownloadBasePluginResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
 		res, _ := v.(*plugins.DownloadBasePluginResult)
+		ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/zip")
 		w.Header().Set("Content-Type", res.ContentType)
 		w.Header().Set("Content-Disposition", res.ContentDisposition)
 		w.WriteHeader(http.StatusOK)

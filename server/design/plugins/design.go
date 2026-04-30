@@ -302,6 +302,7 @@ var _ = Service("plugins", func() {
 			security.SessionHeader()
 			security.ProjectHeader()
 			Response(StatusOK, func() {
+				ContentType("application/zip")
 				Header("content_type:Content-Type")
 				Header("content_disposition:Content-Disposition")
 			})

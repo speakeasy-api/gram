@@ -11781,7 +11781,7 @@ paths:
             responses:
                 "200":
                     content:
-                        application/json:
+                        application/zip:
                             schema:
                                 format: binary
                                 type: string
