@@ -187,6 +187,16 @@ type SetPluginAssignmentsResponseBody struct {
 	Assignments []*PluginAssignmentResponseBody `form:"assignments,omitempty" json:"assignments,omitempty" xml:"assignments,omitempty"`
 }
 
+// GetPluginPackageContentsResponseBody is the type of the "plugins" service
+// "getPluginPackageContents" endpoint HTTP response body.
+type GetPluginPackageContentsResponseBody struct {
+	// The placeholder string substituted for the Gram API key in the returned
+	// contents.
+	RedactedKeyPlaceholder *string `form:"redacted_key_placeholder,omitempty" json:"redacted_key_placeholder,omitempty" xml:"redacted_key_placeholder,omitempty"`
+	// Generated contents per platform.
+	Platforms []*PluginPackagePlatformContentsResponseBody `form:"platforms,omitempty" json:"platforms,omitempty" xml:"platforms,omitempty"`
+}
+
 // GetPublishStatusResponseBody is the type of the "plugins" service
 // "getPublishStatus" endpoint HTTP response body.
 type GetPublishStatusResponseBody struct {
@@ -2049,6 +2059,196 @@ type DownloadPluginPackageGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// GetPluginPackageContentsUnauthorizedResponseBody is the type of the
+// "plugins" service "getPluginPackageContents" endpoint HTTP response body for
+// the "unauthorized" error.
+type GetPluginPackageContentsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetPluginPackageContentsForbiddenResponseBody is the type of the "plugins"
+// service "getPluginPackageContents" endpoint HTTP response body for the
+// "forbidden" error.
+type GetPluginPackageContentsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetPluginPackageContentsBadRequestResponseBody is the type of the "plugins"
+// service "getPluginPackageContents" endpoint HTTP response body for the
+// "bad_request" error.
+type GetPluginPackageContentsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetPluginPackageContentsNotFoundResponseBody is the type of the "plugins"
+// service "getPluginPackageContents" endpoint HTTP response body for the
+// "not_found" error.
+type GetPluginPackageContentsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetPluginPackageContentsConflictResponseBody is the type of the "plugins"
+// service "getPluginPackageContents" endpoint HTTP response body for the
+// "conflict" error.
+type GetPluginPackageContentsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetPluginPackageContentsUnsupportedMediaResponseBody is the type of the
+// "plugins" service "getPluginPackageContents" endpoint HTTP response body for
+// the "unsupported_media" error.
+type GetPluginPackageContentsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetPluginPackageContentsInvalidResponseBody is the type of the "plugins"
+// service "getPluginPackageContents" endpoint HTTP response body for the
+// "invalid" error.
+type GetPluginPackageContentsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetPluginPackageContentsInvariantViolationResponseBody is the type of the
+// "plugins" service "getPluginPackageContents" endpoint HTTP response body for
+// the "invariant_violation" error.
+type GetPluginPackageContentsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetPluginPackageContentsUnexpectedResponseBody is the type of the "plugins"
+// service "getPluginPackageContents" endpoint HTTP response body for the
+// "unexpected" error.
+type GetPluginPackageContentsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetPluginPackageContentsGatewayErrorResponseBody is the type of the
+// "plugins" service "getPluginPackageContents" endpoint HTTP response body for
+// the "gateway_error" error.
+type GetPluginPackageContentsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // GetPublishStatusUnauthorizedResponseBody is the type of the "plugins"
 // service "getPublishStatus" endpoint HTTP response body for the
 // "unauthorized" error.
@@ -2459,6 +2659,24 @@ type PluginAssignmentResponseBody struct {
 	// Principal URN (e.g. role:engineering, user:id, or *).
 	PrincipalUrn *string `form:"principal_urn,omitempty" json:"principal_urn,omitempty" xml:"principal_urn,omitempty"`
 	CreatedAt    *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+}
+
+// PluginPackagePlatformContentsResponseBody is used to define fields on
+// response body types.
+type PluginPackagePlatformContentsResponseBody struct {
+	// Target platform.
+	Platform *string `form:"platform,omitempty" json:"platform,omitempty" xml:"platform,omitempty"`
+	// Files in this platform's package, sorted by path.
+	Files []*PluginPackageFileResponseBody `form:"files,omitempty" json:"files,omitempty" xml:"files,omitempty"`
+}
+
+// PluginPackageFileResponseBody is used to define fields on response body
+// types.
+type PluginPackageFileResponseBody struct {
+	// Relative file path within the plugin package.
+	Path *string `form:"path,omitempty" json:"path,omitempty" xml:"path,omitempty"`
+	// UTF-8 file contents with any Gram API key replaced by a redacted placeholder.
+	Contents *string `form:"contents,omitempty" json:"contents,omitempty" xml:"contents,omitempty"`
 }
 
 // NewCreatePluginRequestBody builds the HTTP request body from the payload of
@@ -4243,6 +4461,174 @@ func NewDownloadPluginPackageGatewayError(body *DownloadPluginPackageGatewayErro
 	return v
 }
 
+// NewGetPluginPackageContentsPluginPackageContentsResultOK builds a "plugins"
+// service "getPluginPackageContents" endpoint result from a HTTP "OK" response.
+func NewGetPluginPackageContentsPluginPackageContentsResultOK(body *GetPluginPackageContentsResponseBody) *plugins.PluginPackageContentsResult {
+	v := &plugins.PluginPackageContentsResult{
+		RedactedKeyPlaceholder: *body.RedactedKeyPlaceholder,
+	}
+	v.Platforms = make([]*plugins.PluginPackagePlatformContents, len(body.Platforms))
+	for i, val := range body.Platforms {
+		if val == nil {
+			v.Platforms[i] = nil
+			continue
+		}
+		v.Platforms[i] = unmarshalPluginPackagePlatformContentsResponseBodyToPluginsPluginPackagePlatformContents(val)
+	}
+
+	return v
+}
+
+// NewGetPluginPackageContentsUnauthorized builds a plugins service
+// getPluginPackageContents endpoint unauthorized error.
+func NewGetPluginPackageContentsUnauthorized(body *GetPluginPackageContentsUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetPluginPackageContentsForbidden builds a plugins service
+// getPluginPackageContents endpoint forbidden error.
+func NewGetPluginPackageContentsForbidden(body *GetPluginPackageContentsForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetPluginPackageContentsBadRequest builds a plugins service
+// getPluginPackageContents endpoint bad_request error.
+func NewGetPluginPackageContentsBadRequest(body *GetPluginPackageContentsBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetPluginPackageContentsNotFound builds a plugins service
+// getPluginPackageContents endpoint not_found error.
+func NewGetPluginPackageContentsNotFound(body *GetPluginPackageContentsNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetPluginPackageContentsConflict builds a plugins service
+// getPluginPackageContents endpoint conflict error.
+func NewGetPluginPackageContentsConflict(body *GetPluginPackageContentsConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetPluginPackageContentsUnsupportedMedia builds a plugins service
+// getPluginPackageContents endpoint unsupported_media error.
+func NewGetPluginPackageContentsUnsupportedMedia(body *GetPluginPackageContentsUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetPluginPackageContentsInvalid builds a plugins service
+// getPluginPackageContents endpoint invalid error.
+func NewGetPluginPackageContentsInvalid(body *GetPluginPackageContentsInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetPluginPackageContentsInvariantViolation builds a plugins service
+// getPluginPackageContents endpoint invariant_violation error.
+func NewGetPluginPackageContentsInvariantViolation(body *GetPluginPackageContentsInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetPluginPackageContentsUnexpected builds a plugins service
+// getPluginPackageContents endpoint unexpected error.
+func NewGetPluginPackageContentsUnexpected(body *GetPluginPackageContentsUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetPluginPackageContentsGatewayError builds a plugins service
+// getPluginPackageContents endpoint gateway_error error.
+func NewGetPluginPackageContentsGatewayError(body *GetPluginPackageContentsGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewGetPublishStatusPublishStatusResultOK builds a "plugins" service
 // "getPublishStatus" endpoint result from a HTTP "OK" response.
 func NewGetPublishStatusPublishStatusResultOK(body *GetPublishStatusResponseBody) *plugins.PublishStatusResult {
@@ -4800,6 +5186,25 @@ func ValidateSetPluginAssignmentsResponseBody(body *SetPluginAssignmentsResponse
 	for _, e := range body.Assignments {
 		if e != nil {
 			if err2 := ValidatePluginAssignmentResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateGetPluginPackageContentsResponseBody runs the validations defined on
+// GetPluginPackageContentsResponseBody
+func ValidateGetPluginPackageContentsResponseBody(body *GetPluginPackageContentsResponseBody) (err error) {
+	if body.RedactedKeyPlaceholder == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("redacted_key_placeholder", "body"))
+	}
+	if body.Platforms == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("platforms", "body"))
+	}
+	for _, e := range body.Platforms {
+		if e != nil {
+			if err2 := ValidatePluginPackagePlatformContentsResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -7229,6 +7634,248 @@ func ValidateDownloadPluginPackageGatewayErrorResponseBody(body *DownloadPluginP
 	return
 }
 
+// ValidateGetPluginPackageContentsUnauthorizedResponseBody runs the
+// validations defined on getPluginPackageContents_unauthorized_response_body
+func ValidateGetPluginPackageContentsUnauthorizedResponseBody(body *GetPluginPackageContentsUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetPluginPackageContentsForbiddenResponseBody runs the validations
+// defined on getPluginPackageContents_forbidden_response_body
+func ValidateGetPluginPackageContentsForbiddenResponseBody(body *GetPluginPackageContentsForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetPluginPackageContentsBadRequestResponseBody runs the validations
+// defined on getPluginPackageContents_bad_request_response_body
+func ValidateGetPluginPackageContentsBadRequestResponseBody(body *GetPluginPackageContentsBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetPluginPackageContentsNotFoundResponseBody runs the validations
+// defined on getPluginPackageContents_not_found_response_body
+func ValidateGetPluginPackageContentsNotFoundResponseBody(body *GetPluginPackageContentsNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetPluginPackageContentsConflictResponseBody runs the validations
+// defined on getPluginPackageContents_conflict_response_body
+func ValidateGetPluginPackageContentsConflictResponseBody(body *GetPluginPackageContentsConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetPluginPackageContentsUnsupportedMediaResponseBody runs the
+// validations defined on
+// getPluginPackageContents_unsupported_media_response_body
+func ValidateGetPluginPackageContentsUnsupportedMediaResponseBody(body *GetPluginPackageContentsUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetPluginPackageContentsInvalidResponseBody runs the validations
+// defined on getPluginPackageContents_invalid_response_body
+func ValidateGetPluginPackageContentsInvalidResponseBody(body *GetPluginPackageContentsInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetPluginPackageContentsInvariantViolationResponseBody runs the
+// validations defined on
+// getPluginPackageContents_invariant_violation_response_body
+func ValidateGetPluginPackageContentsInvariantViolationResponseBody(body *GetPluginPackageContentsInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetPluginPackageContentsUnexpectedResponseBody runs the validations
+// defined on getPluginPackageContents_unexpected_response_body
+func ValidateGetPluginPackageContentsUnexpectedResponseBody(body *GetPluginPackageContentsUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetPluginPackageContentsGatewayErrorResponseBody runs the
+// validations defined on getPluginPackageContents_gateway_error_response_body
+func ValidateGetPluginPackageContentsGatewayErrorResponseBody(body *GetPluginPackageContentsGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateGetPublishStatusUnauthorizedResponseBody runs the validations
 // defined on getPublishStatus_unauthorized_response_body
 func ValidateGetPublishStatusUnauthorizedResponseBody(body *GetPublishStatusUnauthorizedResponseBody) (err error) {
@@ -7807,6 +8454,42 @@ func ValidatePluginAssignmentResponseBody(body *PluginAssignmentResponseBody) (e
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidatePluginPackagePlatformContentsResponseBody runs the validations
+// defined on PluginPackagePlatformContentsResponseBody
+func ValidatePluginPackagePlatformContentsResponseBody(body *PluginPackagePlatformContentsResponseBody) (err error) {
+	if body.Platform == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("platform", "body"))
+	}
+	if body.Files == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("files", "body"))
+	}
+	if body.Platform != nil {
+		if !(*body.Platform == "claude" || *body.Platform == "cursor" || *body.Platform == "codex") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.platform", *body.Platform, []any{"claude", "cursor", "codex"}))
+		}
+	}
+	for _, e := range body.Files {
+		if e != nil {
+			if err2 := ValidatePluginPackageFileResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidatePluginPackageFileResponseBody runs the validations defined on
+// PluginPackageFileResponseBody
+func ValidatePluginPackageFileResponseBody(body *PluginPackageFileResponseBody) (err error) {
+	if body.Path == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("path", "body"))
+	}
+	if body.Contents == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("contents", "body"))
 	}
 	return
 }

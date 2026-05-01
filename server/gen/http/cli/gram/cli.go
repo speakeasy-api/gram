@@ -82,7 +82,7 @@ func UsageCommands() []string {
 		"mcp-metadata (get-mcp-metadata|set-mcp-metadata|export-mcp-metadata)",
 		"organizations (send-invite|revoke-invite|list-invites|get-invite-by-token|list-users|remove-user)",
 		"packages (create-package|update-package|list-packages|list-versions|publish)",
-		"plugins (list-plugins|get-plugin|create-plugin|update-plugin|delete-plugin|add-plugin-server|update-plugin-server|remove-plugin-server|set-plugin-assignments|download-plugin-package|get-publish-status|publish-plugins)",
+		"plugins (list-plugins|get-plugin|create-plugin|update-plugin|delete-plugin|add-plugin-server|update-plugin-server|remove-plugin-server|set-plugin-assignments|download-plugin-package|get-plugin-package-contents|get-publish-status|publish-plugins)",
 		"features (get-product-features|set-product-feature)",
 		"projects (get-project|create-project|list-projects|set-logo|list-allowed-origins|upsert-allowed-origin|delete-project|set-organization-whitelist)",
 		"remote-mcp (create-server|list-servers|get-server|update-server|delete-server)",
@@ -773,6 +773,11 @@ func ParseEndpoint(
 		pluginsDownloadPluginPackageSessionTokenFlag     = pluginsDownloadPluginPackageFlags.String("session-token", "", "")
 		pluginsDownloadPluginPackageProjectSlugInputFlag = pluginsDownloadPluginPackageFlags.String("project-slug-input", "", "")
 
+		pluginsGetPluginPackageContentsFlags                = flag.NewFlagSet("get-plugin-package-contents", flag.ExitOnError)
+		pluginsGetPluginPackageContentsPluginIDFlag         = pluginsGetPluginPackageContentsFlags.String("plugin-id", "REQUIRED", "")
+		pluginsGetPluginPackageContentsSessionTokenFlag     = pluginsGetPluginPackageContentsFlags.String("session-token", "", "")
+		pluginsGetPluginPackageContentsProjectSlugInputFlag = pluginsGetPluginPackageContentsFlags.String("project-slug-input", "", "")
+
 		pluginsGetPublishStatusFlags                = flag.NewFlagSet("get-publish-status", flag.ExitOnError)
 		pluginsGetPublishStatusSessionTokenFlag     = pluginsGetPublishStatusFlags.String("session-token", "", "")
 		pluginsGetPublishStatusProjectSlugInputFlag = pluginsGetPublishStatusFlags.String("project-slug-input", "", "")
@@ -1414,6 +1419,7 @@ func ParseEndpoint(
 	pluginsRemovePluginServerFlags.Usage = pluginsRemovePluginServerUsage
 	pluginsSetPluginAssignmentsFlags.Usage = pluginsSetPluginAssignmentsUsage
 	pluginsDownloadPluginPackageFlags.Usage = pluginsDownloadPluginPackageUsage
+	pluginsGetPluginPackageContentsFlags.Usage = pluginsGetPluginPackageContentsUsage
 	pluginsGetPublishStatusFlags.Usage = pluginsGetPublishStatusUsage
 	pluginsPublishPluginsFlags.Usage = pluginsPublishPluginsUsage
 
@@ -2076,6 +2082,9 @@ func ParseEndpoint(
 
 			case "download-plugin-package":
 				epf = pluginsDownloadPluginPackageFlags
+
+			case "get-plugin-package-contents":
+				epf = pluginsGetPluginPackageContentsFlags
 
 			case "get-publish-status":
 				epf = pluginsGetPublishStatusFlags
@@ -2856,6 +2865,9 @@ func ParseEndpoint(
 			case "download-plugin-package":
 				endpoint = c.DownloadPluginPackage()
 				data, err = pluginsc.BuildDownloadPluginPackagePayload(*pluginsDownloadPluginPackagePluginIDFlag, *pluginsDownloadPluginPackagePlatformFlag, *pluginsDownloadPluginPackageSessionTokenFlag, *pluginsDownloadPluginPackageProjectSlugInputFlag)
+			case "get-plugin-package-contents":
+				endpoint = c.GetPluginPackageContents()
+				data, err = pluginsc.BuildGetPluginPackageContentsPayload(*pluginsGetPluginPackageContentsPluginIDFlag, *pluginsGetPluginPackageContentsSessionTokenFlag, *pluginsGetPluginPackageContentsProjectSlugInputFlag)
 			case "get-publish-status":
 				endpoint = c.GetPublishStatus()
 				data, err = pluginsc.BuildGetPublishStatusPayload(*pluginsGetPublishStatusSessionTokenFlag, *pluginsGetPublishStatusProjectSlugInputFlag)
@@ -5922,6 +5934,7 @@ func pluginsUsage() {
 	fmt.Fprintln(os.Stderr, `    remove-plugin-server: Remove a server from a plugin.`)
 	fmt.Fprintln(os.Stderr, `    set-plugin-assignments: Replace all assignments for a plugin with the given list of principal URNs.`)
 	fmt.Fprintln(os.Stderr, `    download-plugin-package: Download a ZIP of a single plugin package for direct installation.`)
+	fmt.Fprintln(os.Stderr, `    get-plugin-package-contents: Return the generated file contents for a plugin across all supported platforms, with API keys replaced by a redacted placeholder. Intended for in-dashboard inspection only — use downloadPluginPackage to obtain a runnable bundle with a real key.`)
 	fmt.Fprintln(os.Stderr, `    get-publish-status: Check whether GitHub publishing is configured and connected for this project.`)
 	fmt.Fprintln(os.Stderr, `    publish-plugins: Generate and publish all plugin packages to a GitHub repository.`)
 	fmt.Fprintln(os.Stderr)
@@ -6148,6 +6161,28 @@ func pluginsDownloadPluginPackageUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "plugins download-plugin-package --plugin-id \"550e8400-e29b-41d4-a716-446655440000\" --platform \"cursor\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func pluginsGetPluginPackageContentsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] plugins get-plugin-package-contents", os.Args[0])
+	fmt.Fprint(os.Stderr, " -plugin-id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Return the generated file contents for a plugin across all supported platforms, with API keys replaced by a redacted placeholder. Intended for in-dashboard inspection only — use downloadPluginPackage to obtain a runnable bundle with a real key.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -plugin-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "plugins get-plugin-package-contents --plugin-id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func pluginsGetPublishStatusUsage() {

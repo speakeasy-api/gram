@@ -20,19 +20,20 @@ import (
 
 // Server lists the plugins service endpoint HTTP handlers.
 type Server struct {
-	Mounts                []*MountPoint
-	ListPlugins           http.Handler
-	GetPlugin             http.Handler
-	CreatePlugin          http.Handler
-	UpdatePlugin          http.Handler
-	DeletePlugin          http.Handler
-	AddPluginServer       http.Handler
-	UpdatePluginServer    http.Handler
-	RemovePluginServer    http.Handler
-	SetPluginAssignments  http.Handler
-	DownloadPluginPackage http.Handler
-	GetPublishStatus      http.Handler
-	PublishPlugins        http.Handler
+	Mounts                   []*MountPoint
+	ListPlugins              http.Handler
+	GetPlugin                http.Handler
+	CreatePlugin             http.Handler
+	UpdatePlugin             http.Handler
+	DeletePlugin             http.Handler
+	AddPluginServer          http.Handler
+	UpdatePluginServer       http.Handler
+	RemovePluginServer       http.Handler
+	SetPluginAssignments     http.Handler
+	DownloadPluginPackage    http.Handler
+	GetPluginPackageContents http.Handler
+	GetPublishStatus         http.Handler
+	PublishPlugins           http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -72,21 +73,23 @@ func New(
 			{"RemovePluginServer", "DELETE", "/rpc/plugins.removePluginServer"},
 			{"SetPluginAssignments", "PUT", "/rpc/plugins.setPluginAssignments"},
 			{"DownloadPluginPackage", "GET", "/rpc/plugins.downloadPluginPackage"},
+			{"GetPluginPackageContents", "GET", "/rpc/plugins.getPluginPackageContents"},
 			{"GetPublishStatus", "GET", "/rpc/plugins.getPublishStatus"},
 			{"PublishPlugins", "POST", "/rpc/plugins.publishPlugins"},
 		},
-		ListPlugins:           NewListPluginsHandler(e.ListPlugins, mux, decoder, encoder, errhandler, formatter),
-		GetPlugin:             NewGetPluginHandler(e.GetPlugin, mux, decoder, encoder, errhandler, formatter),
-		CreatePlugin:          NewCreatePluginHandler(e.CreatePlugin, mux, decoder, encoder, errhandler, formatter),
-		UpdatePlugin:          NewUpdatePluginHandler(e.UpdatePlugin, mux, decoder, encoder, errhandler, formatter),
-		DeletePlugin:          NewDeletePluginHandler(e.DeletePlugin, mux, decoder, encoder, errhandler, formatter),
-		AddPluginServer:       NewAddPluginServerHandler(e.AddPluginServer, mux, decoder, encoder, errhandler, formatter),
-		UpdatePluginServer:    NewUpdatePluginServerHandler(e.UpdatePluginServer, mux, decoder, encoder, errhandler, formatter),
-		RemovePluginServer:    NewRemovePluginServerHandler(e.RemovePluginServer, mux, decoder, encoder, errhandler, formatter),
-		SetPluginAssignments:  NewSetPluginAssignmentsHandler(e.SetPluginAssignments, mux, decoder, encoder, errhandler, formatter),
-		DownloadPluginPackage: NewDownloadPluginPackageHandler(e.DownloadPluginPackage, mux, decoder, encoder, errhandler, formatter),
-		GetPublishStatus:      NewGetPublishStatusHandler(e.GetPublishStatus, mux, decoder, encoder, errhandler, formatter),
-		PublishPlugins:        NewPublishPluginsHandler(e.PublishPlugins, mux, decoder, encoder, errhandler, formatter),
+		ListPlugins:              NewListPluginsHandler(e.ListPlugins, mux, decoder, encoder, errhandler, formatter),
+		GetPlugin:                NewGetPluginHandler(e.GetPlugin, mux, decoder, encoder, errhandler, formatter),
+		CreatePlugin:             NewCreatePluginHandler(e.CreatePlugin, mux, decoder, encoder, errhandler, formatter),
+		UpdatePlugin:             NewUpdatePluginHandler(e.UpdatePlugin, mux, decoder, encoder, errhandler, formatter),
+		DeletePlugin:             NewDeletePluginHandler(e.DeletePlugin, mux, decoder, encoder, errhandler, formatter),
+		AddPluginServer:          NewAddPluginServerHandler(e.AddPluginServer, mux, decoder, encoder, errhandler, formatter),
+		UpdatePluginServer:       NewUpdatePluginServerHandler(e.UpdatePluginServer, mux, decoder, encoder, errhandler, formatter),
+		RemovePluginServer:       NewRemovePluginServerHandler(e.RemovePluginServer, mux, decoder, encoder, errhandler, formatter),
+		SetPluginAssignments:     NewSetPluginAssignmentsHandler(e.SetPluginAssignments, mux, decoder, encoder, errhandler, formatter),
+		DownloadPluginPackage:    NewDownloadPluginPackageHandler(e.DownloadPluginPackage, mux, decoder, encoder, errhandler, formatter),
+		GetPluginPackageContents: NewGetPluginPackageContentsHandler(e.GetPluginPackageContents, mux, decoder, encoder, errhandler, formatter),
+		GetPublishStatus:         NewGetPublishStatusHandler(e.GetPublishStatus, mux, decoder, encoder, errhandler, formatter),
+		PublishPlugins:           NewPublishPluginsHandler(e.PublishPlugins, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -105,6 +108,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.RemovePluginServer = m(s.RemovePluginServer)
 	s.SetPluginAssignments = m(s.SetPluginAssignments)
 	s.DownloadPluginPackage = m(s.DownloadPluginPackage)
+	s.GetPluginPackageContents = m(s.GetPluginPackageContents)
 	s.GetPublishStatus = m(s.GetPublishStatus)
 	s.PublishPlugins = m(s.PublishPlugins)
 }
@@ -124,6 +128,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountRemovePluginServerHandler(mux, h.RemovePluginServer)
 	MountSetPluginAssignmentsHandler(mux, h.SetPluginAssignments)
 	MountDownloadPluginPackageHandler(mux, h.DownloadPluginPackage)
+	MountGetPluginPackageContentsHandler(mux, h.GetPluginPackageContents)
 	MountGetPublishStatusHandler(mux, h.GetPublishStatus)
 	MountPublishPluginsHandler(mux, h.PublishPlugins)
 }
@@ -694,6 +699,60 @@ func NewDownloadPluginPackageHandler(
 		if _, err := io.Copy(w, buf); err != nil {
 			http.NewResponseController(w).Flush()
 			panic(http.ErrAbortHandler) // too late to write an error
+		}
+	})
+}
+
+// MountGetPluginPackageContentsHandler configures the mux to serve the
+// "plugins" service "getPluginPackageContents" endpoint.
+func MountGetPluginPackageContentsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/plugins.getPluginPackageContents", f)
+}
+
+// NewGetPluginPackageContentsHandler creates a HTTP handler which loads the
+// HTTP request and calls the "plugins" service "getPluginPackageContents"
+// endpoint.
+func NewGetPluginPackageContentsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetPluginPackageContentsRequest(mux, decoder)
+		encodeResponse = EncodeGetPluginPackageContentsResponse(encoder)
+		encodeError    = EncodeGetPluginPackageContentsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getPluginPackageContents")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "plugins")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
 		}
 	})
 }

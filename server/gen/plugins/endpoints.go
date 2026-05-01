@@ -17,18 +17,19 @@ import (
 
 // Endpoints wraps the "plugins" service endpoints.
 type Endpoints struct {
-	ListPlugins           goa.Endpoint
-	GetPlugin             goa.Endpoint
-	CreatePlugin          goa.Endpoint
-	UpdatePlugin          goa.Endpoint
-	DeletePlugin          goa.Endpoint
-	AddPluginServer       goa.Endpoint
-	UpdatePluginServer    goa.Endpoint
-	RemovePluginServer    goa.Endpoint
-	SetPluginAssignments  goa.Endpoint
-	DownloadPluginPackage goa.Endpoint
-	GetPublishStatus      goa.Endpoint
-	PublishPlugins        goa.Endpoint
+	ListPlugins              goa.Endpoint
+	GetPlugin                goa.Endpoint
+	CreatePlugin             goa.Endpoint
+	UpdatePlugin             goa.Endpoint
+	DeletePlugin             goa.Endpoint
+	AddPluginServer          goa.Endpoint
+	UpdatePluginServer       goa.Endpoint
+	RemovePluginServer       goa.Endpoint
+	SetPluginAssignments     goa.Endpoint
+	DownloadPluginPackage    goa.Endpoint
+	GetPluginPackageContents goa.Endpoint
+	GetPublishStatus         goa.Endpoint
+	PublishPlugins           goa.Endpoint
 }
 
 // DownloadPluginPackageResponseData holds both the result and the HTTP
@@ -45,18 +46,19 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		ListPlugins:           NewListPluginsEndpoint(s, a.APIKeyAuth),
-		GetPlugin:             NewGetPluginEndpoint(s, a.APIKeyAuth),
-		CreatePlugin:          NewCreatePluginEndpoint(s, a.APIKeyAuth),
-		UpdatePlugin:          NewUpdatePluginEndpoint(s, a.APIKeyAuth),
-		DeletePlugin:          NewDeletePluginEndpoint(s, a.APIKeyAuth),
-		AddPluginServer:       NewAddPluginServerEndpoint(s, a.APIKeyAuth),
-		UpdatePluginServer:    NewUpdatePluginServerEndpoint(s, a.APIKeyAuth),
-		RemovePluginServer:    NewRemovePluginServerEndpoint(s, a.APIKeyAuth),
-		SetPluginAssignments:  NewSetPluginAssignmentsEndpoint(s, a.APIKeyAuth),
-		DownloadPluginPackage: NewDownloadPluginPackageEndpoint(s, a.APIKeyAuth),
-		GetPublishStatus:      NewGetPublishStatusEndpoint(s, a.APIKeyAuth),
-		PublishPlugins:        NewPublishPluginsEndpoint(s, a.APIKeyAuth),
+		ListPlugins:              NewListPluginsEndpoint(s, a.APIKeyAuth),
+		GetPlugin:                NewGetPluginEndpoint(s, a.APIKeyAuth),
+		CreatePlugin:             NewCreatePluginEndpoint(s, a.APIKeyAuth),
+		UpdatePlugin:             NewUpdatePluginEndpoint(s, a.APIKeyAuth),
+		DeletePlugin:             NewDeletePluginEndpoint(s, a.APIKeyAuth),
+		AddPluginServer:          NewAddPluginServerEndpoint(s, a.APIKeyAuth),
+		UpdatePluginServer:       NewUpdatePluginServerEndpoint(s, a.APIKeyAuth),
+		RemovePluginServer:       NewRemovePluginServerEndpoint(s, a.APIKeyAuth),
+		SetPluginAssignments:     NewSetPluginAssignmentsEndpoint(s, a.APIKeyAuth),
+		DownloadPluginPackage:    NewDownloadPluginPackageEndpoint(s, a.APIKeyAuth),
+		GetPluginPackageContents: NewGetPluginPackageContentsEndpoint(s, a.APIKeyAuth),
+		GetPublishStatus:         NewGetPublishStatusEndpoint(s, a.APIKeyAuth),
+		PublishPlugins:           NewPublishPluginsEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -72,6 +74,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.RemovePluginServer = m(e.RemovePluginServer)
 	e.SetPluginAssignments = m(e.SetPluginAssignments)
 	e.DownloadPluginPackage = m(e.DownloadPluginPackage)
+	e.GetPluginPackageContents = m(e.GetPluginPackageContents)
 	e.GetPublishStatus = m(e.GetPublishStatus)
 	e.PublishPlugins = m(e.PublishPlugins)
 }
@@ -427,6 +430,41 @@ func NewDownloadPluginPackageEndpoint(s Service, authAPIKeyFn security.AuthAPIKe
 			return nil, err
 		}
 		return &DownloadPluginPackageResponseData{Result: res, Body: body}, nil
+	}
+}
+
+// NewGetPluginPackageContentsEndpoint returns an endpoint function that calls
+// the method "getPluginPackageContents" of service "plugins".
+func NewGetPluginPackageContentsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetPluginPackageContentsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.GetPluginPackageContents(ctx, p)
 	}
 }
 

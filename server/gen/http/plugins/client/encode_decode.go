@@ -2375,6 +2375,244 @@ func DecodeDownloadPluginPackageResponse(decoder func(*http.Response) goahttp.De
 	}
 }
 
+// BuildGetPluginPackageContentsRequest instantiates a HTTP request object with
+// method and path set to call the "plugins" service "getPluginPackageContents"
+// endpoint
+func (c *Client) BuildGetPluginPackageContentsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetPluginPackageContentsPluginsPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("plugins", "getPluginPackageContents", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetPluginPackageContentsRequest returns an encoder for requests sent
+// to the plugins getPluginPackageContents server.
+func EncodeGetPluginPackageContentsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*plugins.GetPluginPackageContentsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("plugins", "getPluginPackageContents", "*plugins.GetPluginPackageContentsPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		values.Add("plugin_id", p.PluginID)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeGetPluginPackageContentsResponse returns a decoder for responses
+// returned by the plugins getPluginPackageContents endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeGetPluginPackageContentsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetPluginPackageContentsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetPluginPackageContentsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "getPluginPackageContents", err)
+			}
+			err = ValidateGetPluginPackageContentsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "getPluginPackageContents", err)
+			}
+			res := NewGetPluginPackageContentsPluginPackageContentsResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetPluginPackageContentsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "getPluginPackageContents", err)
+			}
+			err = ValidateGetPluginPackageContentsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "getPluginPackageContents", err)
+			}
+			return nil, NewGetPluginPackageContentsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetPluginPackageContentsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "getPluginPackageContents", err)
+			}
+			err = ValidateGetPluginPackageContentsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "getPluginPackageContents", err)
+			}
+			return nil, NewGetPluginPackageContentsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetPluginPackageContentsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "getPluginPackageContents", err)
+			}
+			err = ValidateGetPluginPackageContentsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "getPluginPackageContents", err)
+			}
+			return nil, NewGetPluginPackageContentsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetPluginPackageContentsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "getPluginPackageContents", err)
+			}
+			err = ValidateGetPluginPackageContentsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "getPluginPackageContents", err)
+			}
+			return nil, NewGetPluginPackageContentsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetPluginPackageContentsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "getPluginPackageContents", err)
+			}
+			err = ValidateGetPluginPackageContentsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "getPluginPackageContents", err)
+			}
+			return nil, NewGetPluginPackageContentsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetPluginPackageContentsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "getPluginPackageContents", err)
+			}
+			err = ValidateGetPluginPackageContentsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "getPluginPackageContents", err)
+			}
+			return nil, NewGetPluginPackageContentsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetPluginPackageContentsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "getPluginPackageContents", err)
+			}
+			err = ValidateGetPluginPackageContentsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "getPluginPackageContents", err)
+			}
+			return nil, NewGetPluginPackageContentsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetPluginPackageContentsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("plugins", "getPluginPackageContents", err)
+				}
+				err = ValidateGetPluginPackageContentsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("plugins", "getPluginPackageContents", err)
+				}
+				return nil, NewGetPluginPackageContentsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetPluginPackageContentsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("plugins", "getPluginPackageContents", err)
+				}
+				err = ValidateGetPluginPackageContentsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("plugins", "getPluginPackageContents", err)
+				}
+				return nil, NewGetPluginPackageContentsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("plugins", "getPluginPackageContents", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetPluginPackageContentsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "getPluginPackageContents", err)
+			}
+			err = ValidateGetPluginPackageContentsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "getPluginPackageContents", err)
+			}
+			return nil, NewGetPluginPackageContentsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("plugins", "getPluginPackageContents", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildGetPublishStatusRequest instantiates a HTTP request object with method
 // and path set to call the "plugins" service "getPublishStatus" endpoint
 func (c *Client) BuildGetPublishStatusRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -2913,6 +3151,37 @@ func unmarshalPluginAssignmentResponseBodyToPluginsPluginAssignment(v *PluginAss
 		ID:           *v.ID,
 		PrincipalUrn: *v.PrincipalUrn,
 		CreatedAt:    *v.CreatedAt,
+	}
+
+	return res
+}
+
+// unmarshalPluginPackagePlatformContentsResponseBodyToPluginsPluginPackagePlatformContents
+// builds a value of type *plugins.PluginPackagePlatformContents from a value
+// of type *PluginPackagePlatformContentsResponseBody.
+func unmarshalPluginPackagePlatformContentsResponseBodyToPluginsPluginPackagePlatformContents(v *PluginPackagePlatformContentsResponseBody) *plugins.PluginPackagePlatformContents {
+	res := &plugins.PluginPackagePlatformContents{
+		Platform: *v.Platform,
+	}
+	res.Files = make([]*plugins.PluginPackageFile, len(v.Files))
+	for i, val := range v.Files {
+		if val == nil {
+			res.Files[i] = nil
+			continue
+		}
+		res.Files[i] = unmarshalPluginPackageFileResponseBodyToPluginsPluginPackageFile(val)
+	}
+
+	return res
+}
+
+// unmarshalPluginPackageFileResponseBodyToPluginsPluginPackageFile builds a
+// value of type *plugins.PluginPackageFile from a value of type
+// *PluginPackageFileResponseBody.
+func unmarshalPluginPackageFileResponseBodyToPluginsPluginPackageFile(v *PluginPackageFileResponseBody) *plugins.PluginPackageFile {
+	res := &plugins.PluginPackageFile{
+		Path:     *v.Path,
+		Contents: *v.Contents,
 	}
 
 	return res

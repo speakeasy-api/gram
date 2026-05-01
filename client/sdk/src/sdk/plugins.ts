@@ -7,6 +7,7 @@ import { pluginsCreatePlugin } from "../funcs/pluginsCreatePlugin.js";
 import { pluginsDeletePlugin } from "../funcs/pluginsDeletePlugin.js";
 import { pluginsDownloadPluginPackage } from "../funcs/pluginsDownloadPluginPackage.js";
 import { pluginsGetPlugin } from "../funcs/pluginsGetPlugin.js";
+import { pluginsGetPluginPackageContents } from "../funcs/pluginsGetPluginPackageContents.js";
 import { pluginsGetPublishStatus } from "../funcs/pluginsGetPublishStatus.js";
 import { pluginsListPlugins } from "../funcs/pluginsListPlugins.js";
 import { pluginsPublishPlugins } from "../funcs/pluginsPublishPlugins.js";
@@ -108,6 +109,25 @@ export class Plugins extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.Plugin> {
     return unwrapAsync(pluginsGetPlugin(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * getPluginPackageContents plugins
+   *
+   * @remarks
+   * Return the generated file contents for a plugin across all supported platforms, with API keys replaced by a redacted placeholder. Intended for in-dashboard inspection only — use downloadPluginPackage to obtain a runnable bundle with a real key.
+   */
+  async getPluginPackageContents(
+    request: operations.GetPluginPackageContentsRequest,
+    security?: operations.GetPluginPackageContentsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.PluginPackageContentsResult> {
+    return unwrapAsync(pluginsGetPluginPackageContents(
       this,
       request,
       security,

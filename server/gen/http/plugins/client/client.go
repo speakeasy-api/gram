@@ -58,6 +58,10 @@ type Client struct {
 	// downloadPluginPackage endpoint.
 	DownloadPluginPackageDoer goahttp.Doer
 
+	// GetPluginPackageContents Doer is the HTTP client used to make requests to
+	// the getPluginPackageContents endpoint.
+	GetPluginPackageContentsDoer goahttp.Doer
+
 	// GetPublishStatus Doer is the HTTP client used to make requests to the
 	// getPublishStatus endpoint.
 	GetPublishStatusDoer goahttp.Doer
@@ -86,23 +90,24 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		ListPluginsDoer:           doer,
-		GetPluginDoer:             doer,
-		CreatePluginDoer:          doer,
-		UpdatePluginDoer:          doer,
-		DeletePluginDoer:          doer,
-		AddPluginServerDoer:       doer,
-		UpdatePluginServerDoer:    doer,
-		RemovePluginServerDoer:    doer,
-		SetPluginAssignmentsDoer:  doer,
-		DownloadPluginPackageDoer: doer,
-		GetPublishStatusDoer:      doer,
-		PublishPluginsDoer:        doer,
-		RestoreResponseBody:       restoreBody,
-		scheme:                    scheme,
-		host:                      host,
-		decoder:                   dec,
-		encoder:                   enc,
+		ListPluginsDoer:              doer,
+		GetPluginDoer:                doer,
+		CreatePluginDoer:             doer,
+		UpdatePluginDoer:             doer,
+		DeletePluginDoer:             doer,
+		AddPluginServerDoer:          doer,
+		UpdatePluginServerDoer:       doer,
+		RemovePluginServerDoer:       doer,
+		SetPluginAssignmentsDoer:     doer,
+		DownloadPluginPackageDoer:    doer,
+		GetPluginPackageContentsDoer: doer,
+		GetPublishStatusDoer:         doer,
+		PublishPluginsDoer:           doer,
+		RestoreResponseBody:          restoreBody,
+		scheme:                       scheme,
+		host:                         host,
+		decoder:                      dec,
+		encoder:                      enc,
 	}
 }
 
@@ -348,6 +353,30 @@ func (c *Client) DownloadPluginPackage() goa.Endpoint {
 			return nil, err
 		}
 		return &plugins.DownloadPluginPackageResponseData{Result: res.(*plugins.DownloadPluginPackageResult), Body: resp.Body}, nil
+	}
+}
+
+// GetPluginPackageContents returns an endpoint that makes HTTP requests to the
+// plugins service getPluginPackageContents server.
+func (c *Client) GetPluginPackageContents() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetPluginPackageContentsRequest(c.encoder)
+		decodeResponse = DecodeGetPluginPackageContentsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetPluginPackageContentsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetPluginPackageContentsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("plugins", "getPluginPackageContents", err)
+		}
+		return decodeResponse(resp)
 	}
 }
 

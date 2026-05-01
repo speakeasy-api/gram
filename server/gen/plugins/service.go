@@ -41,6 +41,11 @@ type Service interface {
 	// Consider [goa.design/goa/v3/pkg.SkipResponseWriter] to adapt existing
 	// implementations.
 	DownloadPluginPackage(context.Context, *DownloadPluginPackagePayload) (res *DownloadPluginPackageResult, body io.ReadCloser, err error)
+	// Return the generated file contents for a plugin across all supported
+	// platforms, with API keys replaced by a redacted placeholder. Intended for
+	// in-dashboard inspection only — use downloadPluginPackage to obtain a
+	// runnable bundle with a real key.
+	GetPluginPackageContents(context.Context, *GetPluginPackageContentsPayload) (res *PluginPackageContentsResult, err error)
 	// Check whether GitHub publishing is configured and connected for this project.
 	GetPublishStatus(context.Context, *GetPublishStatusPayload) (res *PublishStatusResult, err error)
 	// Generate and publish all plugin packages to a GitHub repository.
@@ -67,7 +72,7 @@ const ServiceName = "plugins"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [12]string{"listPlugins", "getPlugin", "createPlugin", "updatePlugin", "deletePlugin", "addPluginServer", "updatePluginServer", "removePluginServer", "setPluginAssignments", "downloadPluginPackage", "getPublishStatus", "publishPlugins"}
+var MethodNames = [13]string{"listPlugins", "getPlugin", "createPlugin", "updatePlugin", "deletePlugin", "addPluginServer", "updatePluginServer", "removePluginServer", "setPluginAssignments", "downloadPluginPackage", "getPluginPackageContents", "getPublishStatus", "publishPlugins"}
 
 // AddPluginServerPayload is the payload type of the plugins service
 // addPluginServer method.
@@ -120,6 +125,15 @@ type DownloadPluginPackagePayload struct {
 type DownloadPluginPackageResult struct {
 	ContentType        string
 	ContentDisposition string
+}
+
+// GetPluginPackageContentsPayload is the payload type of the plugins service
+// getPluginPackageContents method.
+type GetPluginPackageContentsPayload struct {
+	// The plugin to inspect.
+	PluginID         string
+	SessionToken     *string
+	ProjectSlugInput *string
 }
 
 // GetPluginPayload is the payload type of the plugins service getPlugin method.
@@ -178,6 +192,30 @@ type PluginAssignment struct {
 	// Principal URN (e.g. role:engineering, user:id, or *).
 	PrincipalUrn string
 	CreatedAt    string
+}
+
+// PluginPackageContentsResult is the result type of the plugins service
+// getPluginPackageContents method.
+type PluginPackageContentsResult struct {
+	// The placeholder string substituted for the Gram API key in the returned
+	// contents.
+	RedactedKeyPlaceholder string
+	// Generated contents per platform.
+	Platforms []*PluginPackagePlatformContents
+}
+
+type PluginPackageFile struct {
+	// Relative file path within the plugin package.
+	Path string
+	// UTF-8 file contents with any Gram API key replaced by a redacted placeholder.
+	Contents string
+}
+
+type PluginPackagePlatformContents struct {
+	// Target platform.
+	Platform string
+	// Files in this platform's package, sorted by path.
+	Files []*PluginPackageFile
 }
 
 // PluginServer is the result type of the plugins service addPluginServer

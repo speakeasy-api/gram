@@ -310,6 +310,7 @@ run();
 * [deletePlugin](docs/sdks/plugins/README.md#deleteplugin) - deletePlugin plugins
 * [downloadPluginPackage](docs/sdks/plugins/README.md#downloadpluginpackage) - downloadPluginPackage plugins
 * [getPlugin](docs/sdks/plugins/README.md#getplugin) - getPlugin plugins
+* [getPluginPackageContents](docs/sdks/plugins/README.md#getpluginpackagecontents) - getPluginPackageContents plugins
 * [getPublishStatus](docs/sdks/plugins/README.md#getpublishstatus) - getPublishStatus plugins
 * [listPlugins](docs/sdks/plugins/README.md#listplugins) - listPlugins plugins
 * [publishPlugins](docs/sdks/plugins/README.md#publishplugins) - publishPlugins plugins
@@ -565,6 +566,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`pluginsDeletePlugin`](docs/sdks/plugins/README.md#deleteplugin) - deletePlugin plugins
 - [`pluginsDownloadPluginPackage`](docs/sdks/plugins/README.md#downloadpluginpackage) - downloadPluginPackage plugins
 - [`pluginsGetPlugin`](docs/sdks/plugins/README.md#getplugin) - getPlugin plugins
+- [`pluginsGetPluginPackageContents`](docs/sdks/plugins/README.md#getpluginpackagecontents) - getPluginPackageContents plugins
 - [`pluginsGetPublishStatus`](docs/sdks/plugins/README.md#getpublishstatus) - getPublishStatus plugins
 - [`pluginsListPlugins`](docs/sdks/plugins/README.md#listplugins) - listPlugins plugins
 - [`pluginsPublishPlugins`](docs/sdks/plugins/README.md#publishplugins) - publishPlugins plugins
@@ -797,6 +799,7 @@ To learn about this feature and how to get started, check
 - [`useMembers`](docs/sdks/access/README.md#listmembers) - listMembers access
 - [`usePauseTriggerMutation`](docs/sdks/triggers/README.md#pause) - pauseTriggerInstance triggers
 - [`usePlugin`](docs/sdks/plugins/README.md#getplugin) - getPlugin plugins
+- [`usePluginPackageContents`](docs/sdks/plugins/README.md#getpluginpackagecontents) - getPluginPackageContents plugins
 - [`usePlugins`](docs/sdks/plugins/README.md#listplugins) - listPlugins plugins
 - [`usePluginsDownloadPluginPackage`](docs/sdks/plugins/README.md#downloadpluginpackage) - downloadPluginPackage plugins
 - [`useProject`](docs/sdks/projects/README.md#read) - getProject projects

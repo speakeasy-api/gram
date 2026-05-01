@@ -10889,6 +10889,104 @@ paths:
             x-speakeasy-name-override: getPlugin
             x-speakeasy-react-hook:
                 name: Plugin
+    /rpc/plugins.getPluginPackageContents:
+        get:
+            description: Return the generated file contents for a plugin across all supported platforms, with API keys replaced by a redacted placeholder. Intended for in-dashboard inspection only — use downloadPluginPackage to obtain a runnable bundle with a real key.
+            operationId: getPluginPackageContents
+            parameters:
+                - allowEmptyValue: true
+                  description: The plugin to inspect.
+                  in: query
+                  name: plugin_id
+                  required: true
+                  schema:
+                    description: The plugin to inspect.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/PluginPackageContentsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: getPluginPackageContents plugins
+            tags:
+                - plugins
+            x-speakeasy-name-override: getPluginPackageContents
+            x-speakeasy-react-hook:
+                name: PluginPackageContents
     /rpc/plugins.getPublishStatus:
         get:
             description: Check whether GitHub publishing is configured and connected for this project.
@@ -25230,6 +25328,50 @@ components:
                 - id
                 - principal_urn
                 - created_at
+        PluginPackageContentsResult:
+            type: object
+            properties:
+                platforms:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/PluginPackagePlatformContents'
+                    description: Generated contents per platform.
+                redacted_key_placeholder:
+                    type: string
+                    description: The placeholder string substituted for the Gram API key in the returned contents.
+            required:
+                - redacted_key_placeholder
+                - platforms
+        PluginPackageFile:
+            type: object
+            properties:
+                contents:
+                    type: string
+                    description: UTF-8 file contents with any Gram API key replaced by a redacted placeholder.
+                path:
+                    type: string
+                    description: Relative file path within the plugin package.
+            required:
+                - path
+                - contents
+        PluginPackagePlatformContents:
+            type: object
+            properties:
+                files:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/PluginPackageFile'
+                    description: Files in this platform's package, sorted by path.
+                platform:
+                    type: string
+                    description: Target platform.
+                    enum:
+                        - claude
+                        - cursor
+                        - codex
+            required:
+                - platform
+                - files
         PluginServer:
             type: object
             properties:

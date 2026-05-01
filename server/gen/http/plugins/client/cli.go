@@ -417,6 +417,38 @@ func BuildDownloadPluginPackagePayload(pluginsDownloadPluginPackagePluginID stri
 	return v, nil
 }
 
+// BuildGetPluginPackageContentsPayload builds the payload for the plugins
+// getPluginPackageContents endpoint from CLI flags.
+func BuildGetPluginPackageContentsPayload(pluginsGetPluginPackageContentsPluginID string, pluginsGetPluginPackageContentsSessionToken string, pluginsGetPluginPackageContentsProjectSlugInput string) (*plugins.GetPluginPackageContentsPayload, error) {
+	var err error
+	var pluginID string
+	{
+		pluginID = pluginsGetPluginPackageContentsPluginID
+		err = goa.MergeErrors(err, goa.ValidateFormat("plugin_id", pluginID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if pluginsGetPluginPackageContentsSessionToken != "" {
+			sessionToken = &pluginsGetPluginPackageContentsSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if pluginsGetPluginPackageContentsProjectSlugInput != "" {
+			projectSlugInput = &pluginsGetPluginPackageContentsProjectSlugInput
+		}
+	}
+	v := &plugins.GetPluginPackageContentsPayload{}
+	v.PluginID = pluginID
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildGetPublishStatusPayload builds the payload for the plugins
 // getPublishStatus endpoint from CLI flags.
 func BuildGetPublishStatusPayload(pluginsGetPublishStatusSessionToken string, pluginsGetPublishStatusProjectSlugInput string) (*plugins.GetPublishStatusPayload, error) {

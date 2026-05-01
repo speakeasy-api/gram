@@ -276,6 +276,34 @@ var _ = Service("plugins", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "downloadPluginPackage")
 	})
 
+	Method("getPluginPackageContents", func() {
+		Description("Return the generated file contents for a plugin across all supported platforms, with API keys replaced by a redacted placeholder. Intended for in-dashboard inspection only — use downloadPluginPackage to obtain a runnable bundle with a real key.")
+
+		Payload(func() {
+			Attribute("plugin_id", String, func() {
+				Description("The plugin to inspect.")
+				Format(FormatUUID)
+			})
+			Required("plugin_id")
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(PluginPackageContentsResult)
+
+		HTTP(func() {
+			GET("/rpc/plugins.getPluginPackageContents")
+			Param("plugin_id")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getPluginPackageContents")
+		Meta("openapi:extension:x-speakeasy-name-override", "getPluginPackageContents")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "PluginPackageContents"}`)
+	})
+
 	Method("getPublishStatus", func() {
 		Description("Check whether GitHub publishing is configured and connected for this project.")
 
@@ -458,6 +486,30 @@ var SetPluginAssignmentsForm = Type("SetPluginAssignmentsForm", func() {
 var ListPluginsResult = Type("ListPluginsResult", func() {
 	Required("plugins")
 	Attribute("plugins", ArrayOf(PluginModel), "The plugins in the organization.")
+})
+
+var PluginPackageFile = Type("PluginPackageFile", func() {
+	Required("path", "contents")
+
+	Attribute("path", String, "Relative file path within the plugin package.")
+	Attribute("contents", String, "UTF-8 file contents with any Gram API key replaced by a redacted placeholder.")
+})
+
+var PluginPackagePlatformContents = Type("PluginPackagePlatformContents", func() {
+	Required("platform", "files")
+
+	Attribute("platform", String, func() {
+		Description("Target platform.")
+		Enum("claude", "cursor", "codex")
+	})
+	Attribute("files", ArrayOf(PluginPackageFile), "Files in this platform's package, sorted by path.")
+})
+
+var PluginPackageContentsResult = Type("PluginPackageContentsResult", func() {
+	Required("redacted_key_placeholder", "platforms")
+
+	Attribute("redacted_key_placeholder", String, "The placeholder string substituted for the Gram API key in the returned contents.")
+	Attribute("platforms", ArrayOf(PluginPackagePlatformContents), "Generated contents per platform.")
 })
 
 var PublishStatusResult = Type("PublishStatusResult", func() {

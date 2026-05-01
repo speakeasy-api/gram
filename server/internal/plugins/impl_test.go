@@ -405,6 +405,109 @@ func TestPluginsService_DownloadPluginPackage(t *testing.T) {
 	require.NoError(t, body.Close())
 }
 
+func TestPluginsService_GetPluginPackageContents(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestPluginsService(t)
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Inspect Test"})
+	require.NoError(t, err)
+
+	toolset := createTestToolset(t, ctx, ti.conn, "inspect-toolset")
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
+		PluginID:    plugin.ID,
+		ToolsetID:   toolset.ID.String(),
+		DisplayName: "Inspect Server",
+		Policy:      "required",
+		SortOrder:   0,
+	})
+	require.NoError(t, err)
+
+	result, err := ti.service.GetPluginPackageContents(ctx, &gen.GetPluginPackageContentsPayload{
+		PluginID: plugin.ID,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	require.True(t, strings.HasPrefix(result.RedactedKeyPlaceholder, "gram_local_"))
+	require.Contains(t, result.RedactedKeyPlaceholder, "•")
+
+	platforms := make(map[string][]*gen.PluginPackageFile, len(result.Platforms))
+	for _, p := range result.Platforms {
+		platforms[p.Platform] = p.Files
+	}
+	require.Contains(t, platforms, "claude")
+	require.Contains(t, platforms, "cursor")
+	require.Contains(t, platforms, "codex")
+
+	for platform, files := range platforms {
+		require.NotEmpty(t, files, "%s package must contain files", platform)
+		var prev string
+		for _, f := range files {
+			require.NotEmpty(t, f.Path)
+			require.NotEmpty(t, f.Contents)
+			require.NotContains(t, f.Contents, "gram_local_"+strings.Repeat("a", 64),
+				"%s file %s must not contain a real-looking hex token", platform, f.Path)
+			if prev != "" {
+				require.Less(t, prev, f.Path, "%s files must be sorted by path", platform)
+			}
+			prev = f.Path
+		}
+	}
+
+	// The placeholder key should appear baked into the Authorization headers
+	// of the generated MCP configs for the private server.
+	claudeMCP := findFile(t, platforms["claude"], ".mcp.json")
+	require.Contains(t, claudeMCP, result.RedactedKeyPlaceholder,
+		"claude .mcp.json must embed the redacted placeholder, not a real key")
+}
+
+func TestPluginsService_GetPluginPackageContents_NotFound(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestPluginsService(t)
+
+	_, err := ti.service.GetPluginPackageContents(ctx, &gen.GetPluginPackageContentsPayload{
+		PluginID: uuid.New().String(),
+	})
+	require.Error(t, err)
+
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
+}
+
+func TestPluginsService_GetPluginPackageContents_ForbiddenWithoutScope(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestPluginsService(t)
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Forbidden Inspect"})
+	require.NoError(t, err)
+
+	denied := authz.GrantsToContext(ctx, nil)
+
+	_, err = ti.service.GetPluginPackageContents(denied, &gen.GetPluginPackageContentsPayload{
+		PluginID: plugin.ID,
+	})
+	require.Error(t, err)
+
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+}
+
+func findFile(t *testing.T, files []*gen.PluginPackageFile, suffix string) string {
+	t.Helper()
+	for _, f := range files {
+		if strings.HasSuffix(f.Path, suffix) {
+			return f.Contents
+		}
+	}
+	t.Fatalf("no file with suffix %q found in %d files", suffix, len(files))
+	return ""
+}
+
 func TestPluginsService_GetPublishStatus_NotConfigured(t *testing.T) {
 	t.Parallel()
 

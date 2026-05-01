@@ -25,10 +25,11 @@ import {
   Table,
 } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { useParams } from "react-router";
 import type { PluginServer } from "@gram/client/models/components";
 import { useFetcher } from "@/contexts/Fetcher";
+import { PluginContentInspector } from "./PluginContentInspector";
 
 export default function PluginDetail() {
   const { pluginId } = useParams<{ pluginId: string }>();
@@ -36,6 +37,7 @@ export default function PluginDetail() {
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isAddServerOpen, setIsAddServerOpen] = useState(false);
   const [isDownloadMenuOpen, setIsDownloadMenuOpen] = useState(false);
+  const [isInspectOpen, setIsInspectOpen] = useState(false);
 
   const { data: plugin } = usePluginSuspense({ id: pluginId! });
 
@@ -266,6 +268,40 @@ export default function PluginDetail() {
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
+
+        {/* Inspect contents */}
+        <Heading variant="h5" className="mt-8 mb-3">
+          Inspect contents
+        </Heading>
+        <Stack gap={3}>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => setIsInspectOpen((prev) => !prev)}
+          >
+            <Button.LeftIcon>
+              <Icon
+                name={isInspectOpen ? "chevron-down" : "chevron-right"}
+                className="h-4 w-4"
+              />
+            </Button.LeftIcon>
+            <Button.Text>
+              {isInspectOpen ? "Hide files" : "Show generated files"}
+            </Button.Text>
+          </Button>
+          {isInspectOpen && (
+            <Suspense
+              fallback={
+                <Stack gap={2}>
+                  <Skeleton className="h-9 w-64" />
+                  <Skeleton className="h-72 w-full" />
+                </Stack>
+              }
+            >
+              <PluginContentInspector pluginId={pluginId!} />
+            </Suspense>
+          )}
+        </Stack>
 
         {/* Edit Dialog */}
         <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>

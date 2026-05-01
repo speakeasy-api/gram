@@ -57,6 +57,11 @@ func DownloadPluginPackagePluginsPath() string {
 	return "/rpc/plugins.downloadPluginPackage"
 }
 
+// GetPluginPackageContentsPluginsPath returns the URL path to the plugins service getPluginPackageContents HTTP endpoint.
+func GetPluginPackageContentsPluginsPath() string {
+	return "/rpc/plugins.getPluginPackageContents"
+}
+
 // GetPublishStatusPluginsPath returns the URL path to the plugins service getPublishStatus HTTP endpoint.
 func GetPublishStatusPluginsPath() string {
 	return "/rpc/plugins.getPublishStatus"

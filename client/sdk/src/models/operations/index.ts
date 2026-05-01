@@ -73,6 +73,7 @@ export * from "./getmcpserverdetails.js";
 export * from "./getobservabilityoverview.js";
 export * from "./getperiodusage.js";
 export * from "./getplugin.js";
+export * from "./getpluginpackagecontents.js";
 export * from "./getproductfeatures.js";
 export * from "./getproject.js";
 export * from "./getprojectmetricssummary.js";

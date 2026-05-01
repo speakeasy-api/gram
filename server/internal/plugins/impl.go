@@ -881,6 +881,102 @@ func (s *Service) DownloadPluginPackage(ctx context.Context, payload *gen.Downlo
 	}, io.NopCloser(bytes.NewReader(buf.Bytes())), nil
 }
 
+// redactedKeyToken is the 64-character placeholder substituted for the hex
+// API token when generating contents for inspection. It preserves the real
+// key prefix (e.g. "gram_local_") so the rendered config looks structurally
+// correct, but never carries a usable credential. The length matches a real
+// hex-encoded 32-byte token so any UI alignment (e.g. monospace columns)
+// matches what users see after a real download.
+//
+//nolint:gosec // placeholder string, not a credential
+const redactedKeyToken = "••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••"
+
+func (s *Service) GetPluginPackageContents(ctx context.Context, payload *gen.GetPluginPackageContentsPayload) (*gen.PluginPackageContentsResult, error) {
+	ac, err := s.authContext(ctx)
+	if err != nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	pluginID, err := uuid.Parse(payload.PluginID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid plugin id").Log(ctx, s.logger)
+	}
+
+	dbPlugin, err := s.repo.GetPlugin(ctx, repo.GetPluginParams{
+		ID:             pluginID,
+		OrganizationID: ac.ActiveOrganizationID,
+		ProjectID:      *ac.ProjectID,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.C(oops.CodeNotFound)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "get plugin").Log(ctx, s.logger)
+	}
+
+	allInfos, err := s.resolvePluginInfos(ctx, *ac.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+
+	var pluginInfo *PluginInfo
+	for i := range allInfos {
+		if allInfos[i].Slug == dbPlugin.Slug {
+			pluginInfo = &allInfos[i]
+			break
+		}
+	}
+	if pluginInfo == nil {
+		pluginInfo = &PluginInfo{
+			Name:        dbPlugin.Name,
+			Slug:        dbPlugin.Slug,
+			Description: conv.FromPGTextOrEmpty[string](dbPlugin.Description),
+			Servers:     nil,
+		}
+	}
+
+	cfg := s.generateConfig(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug)
+	placeholder := s.keyPrefix + redactedKeyToken
+	cfg.APIKey = placeholder
+
+	platforms := []string{"claude", "cursor", "codex"}
+	result := &gen.PluginPackageContentsResult{
+		RedactedKeyPlaceholder: placeholder,
+		Platforms:              make([]*gen.PluginPackagePlatformContents, 0, len(platforms)),
+	}
+	for _, platform := range platforms {
+		files, err := GenerateSinglePluginPackage(*pluginInfo, cfg, platform)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "generate plugin package").Log(ctx, s.logger)
+		}
+
+		paths := make([]string, 0, len(files))
+		for path := range files {
+			paths = append(paths, path)
+		}
+		sort.Strings(paths)
+
+		genFiles := make([]*gen.PluginPackageFile, 0, len(paths))
+		for _, path := range paths {
+			genFiles = append(genFiles, &gen.PluginPackageFile{
+				Path:     path,
+				Contents: string(files[path]),
+			})
+		}
+
+		result.Platforms = append(result.Platforms, &gen.PluginPackagePlatformContents{
+			Platform: platform,
+			Files:    genFiles,
+		})
+	}
+
+	return result, nil
+}
+
 // --- Publish & Distribution ---
 
 func (s *Service) GetPublishStatus(ctx context.Context, payload *gen.GetPublishStatusPayload) (*gen.PublishStatusResult, error) {
