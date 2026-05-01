@@ -255,6 +255,19 @@ CREATE TABLE IF NOT EXISTS api_keys (
   key_hash TEXT NOT NULL,
   scopes TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
 
+  -- When non-null, restricts the key to MCP requests targeting this toolset.
+  -- See rfc-plugin-scoped-keys.md. No FK: toolsets is declared later in the
+  -- file and the soft-delete pattern means a hard cascade is not desired.
+  -- Application code is the sole writer.
+  toolset_id uuid,
+  -- Back-reference to the plugin that minted this key, used for
+  -- revoke-on-republish lookups. NULL for non-plugin keys. No FK for the same
+  -- reasons as toolset_id.
+  plugin_id uuid,
+  -- Marks keys minted by Gram itself (e.g. plugin publishing) so they are
+  -- hidden from the user-managed keys UI and excluded from user-key quotas.
+  system_managed BOOLEAN NOT NULL DEFAULT FALSE,
+
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
@@ -270,6 +283,14 @@ CREATE TABLE IF NOT EXISTS api_keys (
 CREATE UNIQUE INDEX IF NOT EXISTS api_keys_organization_id_name_key
 ON api_keys (organization_id, name)
 WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS api_keys_plugin_id_idx
+ON api_keys (plugin_id)
+WHERE plugin_id IS NOT NULL AND deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS api_keys_toolset_id_idx
+ON api_keys (toolset_id)
+WHERE toolset_id IS NOT NULL AND deleted IS FALSE;
 
 CREATE TABLE IF NOT EXISTS deployments_openapiv3_assets (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
@@ -2112,6 +2133,12 @@ CREATE TABLE IF NOT EXISTS plugin_servers (
   policy TEXT NOT NULL DEFAULT 'required',
   sort_order INT NOT NULL DEFAULT 0,
 
+  -- The plugin-minted, toolset-scoped api_keys row whose secret is embedded
+  -- in the published manifest entry for this server. NULL for public servers
+  -- (which use user-provided env-config auth) and for any server whose
+  -- plugin has never been published. Cleared on hard-delete of the api_key.
+  api_key_id uuid,
+
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
@@ -2124,6 +2151,7 @@ CREATE TABLE IF NOT EXISTS plugin_servers (
   -- If a hard-delete path is added later, it must purge soft-deleted
   -- plugin_servers referencing the target first.
   CONSTRAINT plugin_servers_toolset_id_fkey FOREIGN KEY (toolset_id) REFERENCES toolsets (id) ON DELETE RESTRICT,
+  CONSTRAINT plugin_servers_api_key_id_fkey FOREIGN KEY (api_key_id) REFERENCES api_keys (id) ON DELETE SET NULL,
   CONSTRAINT plugin_servers_policy_check CHECK (policy IN ('required', 'optional'))
 );
 
