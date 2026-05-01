@@ -23,6 +23,7 @@ func disabledAllRulesPlugin() *plugin {
 				AuditEventURNTyping:        auditEventURNTypingSettings{Disabled: true},
 				NoDirectChatMessageInsert:  noDirectChatMessageInsertSettings{Disabled: true},
 				NoSqlErrNoRows:             noSqlErrNoRowsSettings{Disabled: true},
+				NoTestingRawSql:            noTestingRawSqlSettings{Disabled: true},
 			},
 		},
 	}
@@ -43,5 +44,5 @@ func TestBuildAnalyzersAllEnabled(t *testing.T) {
 	p := &plugin{}
 	analyzers, err := p.BuildAnalyzers()
 	require.NoError(t, err)
-	require.Len(t, analyzers, 11)
+	require.Len(t, analyzers, 12)
 }
