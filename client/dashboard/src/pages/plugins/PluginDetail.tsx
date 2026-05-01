@@ -1,9 +1,13 @@
 import { InputField } from "@/components/moon/input-field";
 import { Page } from "@/components/page-layout";
+import { ToolCollectionBadge } from "@/components/tool-collection-badge";
+import { Badge } from "@/components/ui/badge";
 import { Dialog } from "@/components/ui/dialog";
 import { Heading } from "@/components/ui/heading";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Type } from "@/components/ui/type";
+import { UpdatedAt } from "@/components/updated-at";
+import { useRoutes } from "@/routes";
 import {
   invalidateAllPlugin,
   usePluginSuspense,
@@ -15,19 +19,20 @@ import { useRemovePluginServerMutation } from "@gram/client/react-query/removePl
 import { useListToolsets } from "@gram/client/react-query/listToolsets";
 import {
   Button,
-  Column,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
   Icon,
   Stack,
-  Table,
 } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useParams } from "react-router";
-import type { PluginServer } from "@gram/client/models/components";
+import type {
+  PluginServer,
+  ToolsetEntry,
+} from "@gram/client/models/components";
 import { useSdkClient } from "@/contexts/Sdk";
 import { toast } from "sonner";
 
@@ -43,7 +48,10 @@ export default function PluginDetail() {
   const client = useSdkClient();
   const { data: toolsetsData, isLoading: isLoadingToolsets } =
     useListToolsets();
-  const toolsets = toolsetsData?.toolsets ?? [];
+  const toolsets = useMemo(
+    () => toolsetsData?.toolsets ?? [],
+    [toolsetsData?.toolsets],
+  );
 
   const invalidateAll = async () => {
     await invalidateAllPlugin(queryClient);
@@ -130,40 +138,15 @@ export default function PluginDetail() {
     }
   };
 
-  const serverColumns: Column<PluginServer>[] = [
-    {
-      key: "displayName",
-      header: "Name",
-      width: "2fr",
-      render: (s) => <Type variant="body">{s.displayName}</Type>,
-    },
-    {
-      key: "policy",
-      header: "Policy",
-      width: "100px",
-      render: (s) => <Type variant="body">{s.policy}</Type>,
-    },
-    {
-      key: "actions",
-      header: "",
-      width: "80px",
-      render: (s) => (
-        <Button
-          variant="tertiary"
-          size="sm"
-          onClick={() => handleRemoveServer(s)}
-          className="hover:text-destructive"
-        >
-          <Button.LeftIcon>
-            <Icon name="trash-2" className="h-4 w-4" />
-          </Button.LeftIcon>
-          <Button.Text className="sr-only">Remove</Button.Text>
-        </Button>
-      ),
-    },
-  ];
+  const toolsetById = useMemo(() => {
+    const map = new Map<string, ToolsetEntry>();
+    for (const t of toolsets) map.set(t.id, t);
+    return map;
+  }, [toolsets]);
 
   if (!plugin) return null;
+
+  const servers = plugin.servers ?? [];
 
   return (
     <Page>
@@ -210,32 +193,37 @@ export default function PluginDetail() {
             Add Server
           </Button>
         </Stack>
-        <Table
-          columns={serverColumns}
-          data={plugin.servers ?? []}
-          rowKey={(row) => row.id}
-          noResultsMessage={
-            <Stack
-              gap={2}
-              className="bg-background h-full p-4"
-              align="center"
-              justify="center"
+        {servers.length === 0 ? (
+          <Stack
+            gap={2}
+            className="bg-background mb-8 rounded-md border p-8"
+            align="center"
+            justify="center"
+          >
+            <Type variant="body">No servers added yet</Type>
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => setIsAddServerOpen(true)}
             >
-              <Type variant="body">No servers added yet</Type>
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={() => setIsAddServerOpen(true)}
-              >
-                <Button.LeftIcon>
-                  <Icon name="plus" className="h-4 w-4" />
-                </Button.LeftIcon>
-                <Button.Text>Add Server</Button.Text>
-              </Button>
-            </Stack>
-          }
-          className="mb-8"
-        />
+              <Button.LeftIcon>
+                <Icon name="plus" className="h-4 w-4" />
+              </Button.LeftIcon>
+              <Button.Text>Add Server</Button.Text>
+            </Button>
+          </Stack>
+        ) : (
+          <div className="mb-8 space-y-2">
+            {servers.map((server) => (
+              <PluginServerRow
+                key={server.id}
+                server={server}
+                toolset={toolsetById.get(server.toolsetId)}
+                onRemove={() => handleRemoveServer(server)}
+              />
+            ))}
+          </div>
+        )}
 
         {/* Download section */}
         <Heading variant="h5" className="mb-3">
@@ -369,5 +357,96 @@ export default function PluginDetail() {
         </Dialog>
       </Page.Body>
     </Page>
+  );
+}
+
+function PluginServerRow({
+  server,
+  toolset,
+  onRemove,
+}: {
+  server: PluginServer;
+  toolset: ToolsetEntry | undefined;
+  onRemove: () => void;
+}) {
+  const routes = useRoutes();
+  const toolNames = toolset?.tools.map((t) => t.name) ?? [];
+  const description = toolset?.description ?? null;
+  const isMissing = !toolset;
+  const isRequired = server.policy === "required";
+
+  const mcpBadge = (() => {
+    if (!toolset) return null;
+    if (!toolset.mcpEnabled) {
+      return (
+        <Badge variant="outline" className="text-muted-foreground">
+          MCP off
+        </Badge>
+      );
+    }
+    if (toolset.mcpIsPublic) {
+      return <Badge variant="secondary">Public MCP</Badge>;
+    }
+    return <Badge variant="outline">Private MCP</Badge>;
+  })();
+
+  const body = (
+    <div className="flex min-w-0 flex-1 flex-col gap-1">
+      <div className="flex items-center gap-2">
+        <Type className="truncate font-medium">{server.displayName}</Type>
+        {isMissing && (
+          <Badge variant="destructive" className="text-xs">
+            Toolset missing
+          </Badge>
+        )}
+      </div>
+      {description && (
+        <Type className="text-muted-foreground line-clamp-1 text-sm">
+          {description}
+        </Type>
+      )}
+    </div>
+  );
+
+  const leftSide = toolset ? (
+    <routes.mcp.details.Link
+      params={[toolset.slug]}
+      className="hover:text-primary flex min-w-0 flex-1 items-center gap-3 hover:no-underline"
+    >
+      {body}
+    </routes.mcp.details.Link>
+  ) : (
+    <div className="flex min-w-0 flex-1 items-center gap-3">{body}</div>
+  );
+
+  return (
+    <div className="bg-surface-secondary hover:bg-surface-tertiary flex items-center gap-3 rounded-md border p-3 transition-colors">
+      {leftSide}
+      <div className="flex shrink-0 items-center gap-2">
+        {toolset && <ToolCollectionBadge toolNames={toolNames} />}
+        {mcpBadge}
+        <Badge variant={isRequired ? "secondary" : "outline"}>
+          {isRequired ? "Required" : "Optional"}
+        </Badge>
+        {toolset && (
+          <UpdatedAt
+            date={new Date(toolset.updatedAt)}
+            italic={false}
+            className="hidden md:flex"
+          />
+        )}
+        <Button
+          variant="tertiary"
+          size="sm"
+          onClick={onRemove}
+          className="hover:text-destructive"
+        >
+          <Button.LeftIcon>
+            <Icon name="trash-2" className="h-4 w-4" />
+          </Button.LeftIcon>
+          <Button.Text className="sr-only">Remove</Button.Text>
+        </Button>
+      </div>
+    </div>
   );
 }
