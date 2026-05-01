@@ -150,6 +150,7 @@ SELECT
 FROM deployments_functions as current
 WHERE current.deployment_id = $4
   AND current.asset_id <> ALL ($5::uuid[])
+  AND current.id <> ALL ($5::uuid[])
 RETURNING id
 `
 
@@ -202,6 +203,7 @@ SELECT
 FROM deployments_openapiv3_assets as current
 WHERE current.deployment_id = $2
   AND current.asset_id <> ALL ($3::uuid[])
+  AND current.id <> ALL ($3::uuid[])
 RETURNING id
 `
 
