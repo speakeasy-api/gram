@@ -574,6 +574,7 @@ function PolicySheetBody({
             const isAvailable = AVAILABLE_CATEGORIES.has(cat);
             const isExpanded = expandedCategory === cat;
             const rules = DETECTION_RULES[cat];
+            const isExpandable = isAvailable && rules.length > 0;
 
             return (
               <div key={cat}>
@@ -581,24 +582,25 @@ function PolicySheetBody({
                 <div
                   className={cn(
                     "flex items-center gap-3 px-4 py-3",
-                    isAvailable && "cursor-pointer",
+                    isExpandable && "cursor-pointer",
                   )}
                   onClick={() => {
-                    if (isAvailable) {
+                    if (isExpandable) {
                       setExpandedCategory(isExpanded ? null : cat);
                     }
                   }}
                 >
-                  {/* Expand chevron (only for available categories) */}
-                  {isAvailable && (
+                  {/* Expand chevron (only for categories with rules to expand) */}
+                  {isExpandable ? (
                     <ChevronRight
                       className={cn(
                         "text-muted-foreground h-4 w-4 shrink-0 transition-transform",
                         isExpanded && "rotate-90",
                       )}
                     />
+                  ) : (
+                    <div className="w-4 shrink-0" />
                   )}
-                  {!isAvailable && <div className="w-4 shrink-0" />}
 
                   {/* Category icon */}
                   <Icon
