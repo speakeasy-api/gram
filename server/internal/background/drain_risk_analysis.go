@@ -30,8 +30,9 @@ const (
 	drainBatchSize = 1_000
 
 	// drainMaxConcurrency is the maximum number of AnalyzeBatch activities
-	// running in parallel.
-	drainMaxConcurrency = 20
+	// running in parallel. Keep this low so the workflow drains Presidio at a
+	// controlled rate instead of amplifying small backlogs into request storms.
+	drainMaxConcurrency = 1
 )
 
 // DrainRiskAnalysisParams identifies the policy this workflow drains.
