@@ -1,5 +1,22 @@
 # dashboard
 
+## 0.45.1
+
+### Patch Changes
+
+- 02712dc: Teams installing Gram-published plugins now get observability automatically.
+  Each org's published marketplace ships a `base` plugin containing the team's
+  hooks with credentials embedded — no manual SessionStart configuration, no
+  credential paste, no risk of forgetting the setup step. Install once per
+  machine and tool events flow into the Gram dashboard for the org regardless
+  of how many feature plugins a team member also installs.
+- ceaf5a8: Switch the Plugins list from a table to a card grid that matches the Collections
+  page. Each plugin card surfaces name, slug, description, server count, and last
+  updated time, and the existing delete action moves into a per-card menu. The
+  empty state is replaced by the shared "create resource" tile so the layout stays
+  consistent with Collections.
+- b0726b5: Normalized observe component filenames to (section)(feature) pattern
+
 ## 0.45.0
 
 ### Minor Changes
