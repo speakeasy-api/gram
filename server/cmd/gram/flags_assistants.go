@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/superfly/fly-go/tokens"
 	"github.com/urfave/cli/v2"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/internal/assistants"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
@@ -209,6 +210,7 @@ func assistantRuntimeConfigFromCLI(c *cli.Context) (assistants.RuntimeBackendCon
 func newAssistantRuntime(
 	ctx context.Context,
 	logger *slog.Logger,
+	tracerProvider trace.TracerProvider,
 	c *cli.Context,
 	guardianPolicy *guardian.Policy,
 	db *pgxpool.Pool,
@@ -226,7 +228,7 @@ func newAssistantRuntime(
 			return nil, fmt.Errorf("invalid fly assistant runtime config: %w", err)
 		}
 	}
-	rb := assistants.NewRuntimeBackend(logger, guardianPolicy, cfg)
+	rb := assistants.NewRuntimeBackend(logger, tracerProvider, guardianPolicy, cfg)
 	if err := assistants.ValidateRuntimeBackendServerURL(ctx, rb, serverURL); err != nil {
 		return nil, fmt.Errorf("validate assistant runtime server url: %w", err)
 	}
