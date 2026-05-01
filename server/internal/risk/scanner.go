@@ -26,6 +26,23 @@ type RiskScanner interface {
 	// ScanForEnforcement scans text against all enabled blocking policies
 	// for the given project. Returns nil if no blocking policy matches.
 	ScanForEnforcement(ctx context.Context, projectID uuid.UUID, text string) (*ScanResult, error)
+	// LookupShadowMCPBlockingPolicy returns the first enabled shadow-MCP
+	// policy for the project whose action is "block". Returns nil when no
+	// such policy exists. Used by hooks to gate the realtime deny path.
+	LookupShadowMCPBlockingPolicy(ctx context.Context, projectID uuid.UUID) (*ShadowMCPPolicy, error)
+	// HasEnabledShadowMCPPolicy reports whether the project has at least one
+	// enabled shadow-MCP policy (any action). Used by the MCP server to
+	// decide whether to inject the x-gram-toolset-id constant into tool
+	// schemas.
+	HasEnabledShadowMCPPolicy(ctx context.Context, projectID uuid.UUID) (bool, error)
+}
+
+// ShadowMCPPolicy is the minimal policy view the hooks layer needs to render
+// a deny message that follows the same `matched policy %q (...)` format as
+// gitleaks/presidio enforcement.
+type ShadowMCPPolicy struct {
+	ID   string
+	Name string
 }
 
 // ScanResult describes a match from a blocking risk policy.
@@ -170,6 +187,34 @@ func (s *Scanner) ScanForEnforcement(ctx context.Context, projectID uuid.UUID, t
 
 	s.recordScan(ctx, projectID.String(), o11y.OutcomeSuccess, time.Since(start))
 	return nil, nil
+}
+
+// LookupShadowMCPBlockingPolicy returns the first enabled shadow-MCP policy
+// for the project whose action is "block". Flag-action policies surface as
+// findings via the batch scanner instead of denying at the hook layer.
+func (s *Scanner) LookupShadowMCPBlockingPolicy(ctx context.Context, projectID uuid.UUID) (*ShadowMCPPolicy, error) {
+	policies, err := s.repo.ListEnabledShadowMCPPoliciesByProject(ctx, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("list shadow_mcp policies: %w", err)
+	}
+	for _, p := range policies {
+		if p.Action == "block" {
+			return &ShadowMCPPolicy{ID: p.ID.String(), Name: p.Name}, nil
+		}
+	}
+	return nil, nil
+}
+
+// HasEnabledShadowMCPPolicy reports whether the project has at least one
+// enabled shadow-MCP policy (flag or block). The MCP server uses this to
+// decide whether to inject the x-gram-toolset-id constant into tool
+// schemas.
+func (s *Scanner) HasEnabledShadowMCPPolicy(ctx context.Context, projectID uuid.UUID) (bool, error) {
+	policies, err := s.repo.ListEnabledShadowMCPPoliciesByProject(ctx, projectID)
+	if err != nil {
+		return false, fmt.Errorf("list shadow_mcp policies: %w", err)
+	}
+	return len(policies) > 0, nil
 }
 
 // recordScan records scan metrics. Uses non-blocking OTEL atomic operations.

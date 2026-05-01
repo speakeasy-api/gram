@@ -32,6 +32,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -53,6 +54,7 @@ type Service struct {
 	authz            *authz.Engine
 	signaler         RiskAnalysisSignaler
 	completionClient openrouter.CompletionClient
+	shadowMCPClient  *shadowmcp.Client
 }
 
 var _ chat.MessageObserver = (*Service)(nil)
@@ -70,6 +72,7 @@ func NewObserver(logger *slog.Logger, tracerProvider trace.TracerProvider, db *p
 		authz:            nil,
 		signaler:         signaler,
 		completionClient: nil,
+		shadowMCPClient:  nil,
 	}
 }
 
@@ -81,6 +84,7 @@ func NewService(
 	authzEngine *authz.Engine,
 	signaler RiskAnalysisSignaler,
 	completionClient openrouter.CompletionClient,
+	shadowMCPClient *shadowmcp.Client,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("risk"))
 
@@ -93,6 +97,7 @@ func NewService(
 		authz:            authzEngine,
 		signaler:         signaler,
 		completionClient: completionClient,
+		shadowMCPClient:  shadowMCPClient,
 	}
 }
 
@@ -173,6 +178,9 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 	if sources == nil {
 		sources = []string{"gitleaks"}
 	}
+	if err := validateSources(sources); err != nil {
+		return nil, err
+	}
 
 	enabled := true
 	if payload.Enabled != nil {
@@ -236,6 +244,10 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit risk policy create").Log(ctx, s.logger)
+	}
+
+	if s.shadowMCPClient != nil {
+		s.shadowMCPClient.Invalidate(ctx, row.ProjectID)
 	}
 
 	// Trigger the drain workflow for the new policy.
@@ -333,6 +345,9 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 	sources := current.Sources
 	if payload.Sources != nil {
 		sources = payload.Sources
+		if err := validateSources(sources); err != nil {
+			return nil, err
+		}
 	}
 
 	presidioEntities := current.PresidioEntities
@@ -417,6 +432,10 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		return nil, oops.E(oops.CodeUnexpected, err, "commit risk policy update").Log(ctx, s.logger)
 	}
 
+	if s.shadowMCPClient != nil {
+		s.shadowMCPClient.Invalidate(ctx, row.ProjectID)
+	}
+
 	// Signal the drain workflow — it reads the current enabled/version
 	// from the DB, so it will clean up results if the policy was disabled.
 	_ = s.signaler.SignalNewMessages(ctx, background.DrainRiskAnalysisParams{
@@ -480,6 +499,10 @@ func (s *Service) DeleteRiskPolicy(ctx context.Context, payload *gen.DeleteRiskP
 
 	if err := dbtx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "commit risk policy delete").Log(ctx, s.logger)
+	}
+
+	if s.shadowMCPClient != nil {
+		s.shadowMCPClient.Invalidate(ctx, *authCtx.ProjectID)
 	}
 
 	return nil
@@ -880,6 +903,8 @@ func (s *Service) fallbackPolicyName(sources []string, action string) string {
 			parts = append(parts, "Secret")
 		case "presidio":
 			parts = append(parts, "PII")
+		case shadowmcp.SourceShadowMCP:
+			parts = append(parts, "Shadow MCP")
 		}
 	}
 	if len(parts) == 0 {
@@ -901,6 +926,17 @@ func validateAction(action string) error {
 	default:
 		return oops.E(oops.CodeInvalid, nil, "action must be one of: flag, block")
 	}
+}
+
+func validateSources(sources []string) error {
+	for _, src := range sources {
+		switch src {
+		case "gitleaks", "presidio", shadowmcp.SourceShadowMCP:
+		default:
+			return oops.E(oops.CodeInvalid, nil, "source %q is not a recognized policy source", src)
+		}
+	}
+	return nil
 }
 
 func validatePolicyName(name string) error {

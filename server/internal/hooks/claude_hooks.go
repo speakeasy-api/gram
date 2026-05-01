@@ -412,37 +412,40 @@ func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePaylo
 		}
 	}
 
-	if !s.blockShadowMCPEnabled(ctx, metadata.GramOrgID) {
+	policy := s.lookupShadowMCPBlockingPolicy(ctx, metadata.ProjectID)
+	if policy == nil {
 		if output != nil {
 			output.PermissionDecision = &allow
 		}
 		return result, nil
 	}
 
-	reason, denied := s.validateGramToolsetCall(ctx, payload.ToolInput, mcpToolName, metadata.GramOrgID)
+	detail, denied := s.shadowMCPClient.ValidateToolsetCall(ctx, payload.ToolInput, mcpToolName, metadata.GramOrgID)
 	if denied {
 		s.logger.InfoContext(ctx, "denying claude tool call: failed gram toolset validation",
 			attr.SlogEvent("claude_hook_denied"),
 			attr.SlogValueAny(map[string]any{
 				"hookEventName": payload.HookEventName,
 				"toolName":      rawToolName,
-				"reason":        reason,
+				"reason":        detail,
+				"policyID":      policy.ID,
+				"policyName":    policy.Name,
 			}),
 		)
+		reason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", policy.Name, detail)
 		// Record a companion ClickHouse entry with gram.hook.block_reason set
 		// so the trace_summaries materialized view can flag this trace as
 		// blocked. Shares the original PreToolUse trace_id (derived from
 		// tool_use_id) so both rows aggregate into the same trace summary.
 		s.writeClaudeBlockToClickHouse(ctx, payload, &metadata, reason)
 
-		userMsg := gramToolsetDenyUserMessage
 		// systemMessage renders as a warning in the user's terminal;
 		// permissionDecisionReason is what Claude itself sees and may quote
-		// back to the user, so we send the same friendly message in both.
-		result.SystemMessage = &userMsg
+		// back to the user, so we send the same self-branded message in both.
+		result.SystemMessage = &reason
 		if output != nil {
 			output.PermissionDecision = &deny
-			output.PermissionDecisionReason = &userMsg
+			output.PermissionDecisionReason = &reason
 		}
 		return result, nil
 	}

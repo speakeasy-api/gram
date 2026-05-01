@@ -31,9 +31,6 @@ type GetProductFeaturesResponseBody struct {
 	ToolIoLogsEnabled *bool `form:"tool_io_logs_enabled,omitempty" json:"tool_io_logs_enabled,omitempty" xml:"tool_io_logs_enabled,omitempty"`
 	// Whether Claude Code session capture is enabled
 	SessionCaptureEnabled *bool `form:"session_capture_enabled,omitempty" json:"session_capture_enabled,omitempty" xml:"session_capture_enabled,omitempty"`
-	// Whether shadow-MCP guarding is enabled (injects required toolset id and
-	// rejects unsigned tool calls)
-	BlockShadowMcpEnabled *bool `form:"block_shadow_mcp_enabled,omitempty" json:"block_shadow_mcp_enabled,omitempty" xml:"block_shadow_mcp_enabled,omitempty"`
 }
 
 // GetProductFeaturesUnauthorizedResponseBody is the type of the "features"
@@ -426,7 +423,6 @@ func NewGetProductFeaturesGramProductFeaturesOK(body *GetProductFeaturesResponse
 		LogsEnabled:           body.LogsEnabled,
 		ToolIoLogsEnabled:     body.ToolIoLogsEnabled,
 		SessionCaptureEnabled: body.SessionCaptureEnabled,
-		BlockShadowMcpEnabled: body.BlockShadowMcpEnabled,
 	}
 
 	return v

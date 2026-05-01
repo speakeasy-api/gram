@@ -16,6 +16,7 @@ export type RuleCategory =
   | "prompt_attacks"
   | "prompt_injection"
   | "off_policy"
+  | "shadow_mcp"
   | "custom";
 
 export type DetectionRule = {
@@ -91,6 +92,12 @@ export const RULE_CATEGORY_META: Record<
     description:
       "Requests that violate usage policies or acceptable use guidelines",
     icon: "ban",
+  },
+  shadow_mcp: {
+    label: "Shadow MCP",
+    description:
+      "Tool calls in Cursor and Claude Code that don't come from a Speakeasy-issued MCP server. Requires Speakeasy hooks to be installed on the agent.",
+    icon: "shield-off",
   },
   custom: {
     label: "Custom Patterns",
@@ -1408,6 +1415,7 @@ export const DETECTION_RULES: Record<RuleCategory, DetectionRule[]> = {
       source: "presidio",
     },
   ],
+  shadow_mcp: [],
   custom: [],
 };
 

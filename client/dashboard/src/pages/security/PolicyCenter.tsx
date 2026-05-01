@@ -75,12 +75,14 @@ const PRESIDIO_CATEGORIES: RuleCategory[] = [
 const AVAILABLE_CATEGORIES: Set<RuleCategory> = new Set([
   "secrets",
   ...PRESIDIO_CATEGORIES,
+  "shadow_mcp",
 ]);
 
 /** All rule categories in display order */
 const ALL_CATEGORIES: RuleCategory[] = [
   "secrets",
   ...PRESIDIO_CATEGORIES,
+  "shadow_mcp",
   "prompt_attacks",
   "prompt_injection",
   "off_policy",
@@ -93,6 +95,7 @@ function policyToCategories(
 ): Set<RuleCategory> {
   const cats = new Set<RuleCategory>();
   if (sources.includes("gitleaks")) cats.add("secrets");
+  if (sources.includes("shadow_mcp")) cats.add("shadow_mcp");
   for (const cat of PRESIDIO_CATEGORIES) {
     const catEntityIds = DETECTION_RULES[cat].map((r) => r.id);
     if (catEntityIds.some((id) => presidioEntities?.includes(id))) {
@@ -107,6 +110,7 @@ function categoriesToPayload(cats: Set<RuleCategory>) {
   const sources: string[] = [];
   const presidioEntities: string[] = [];
   if (cats.has("secrets")) sources.push("gitleaks");
+  if (cats.has("shadow_mcp")) sources.push("shadow_mcp");
   for (const cat of PRESIDIO_CATEGORIES) {
     if (cats.has(cat)) {
       for (const rule of DETECTION_RULES[cat]) {
@@ -570,6 +574,7 @@ function PolicySheetBody({
             const isAvailable = AVAILABLE_CATEGORIES.has(cat);
             const isExpanded = expandedCategory === cat;
             const rules = DETECTION_RULES[cat];
+            const isExpandable = isAvailable && rules.length > 0;
 
             return (
               <div key={cat}>
@@ -577,24 +582,25 @@ function PolicySheetBody({
                 <div
                   className={cn(
                     "flex items-center gap-3 px-4 py-3",
-                    isAvailable && "cursor-pointer",
+                    isExpandable && "cursor-pointer",
                   )}
                   onClick={() => {
-                    if (isAvailable) {
+                    if (isExpandable) {
                       setExpandedCategory(isExpanded ? null : cat);
                     }
                   }}
                 >
-                  {/* Expand chevron (only for available categories) */}
-                  {isAvailable && (
+                  {/* Expand chevron (only for categories with rules to expand) */}
+                  {isExpandable ? (
                     <ChevronRight
                       className={cn(
                         "text-muted-foreground h-4 w-4 shrink-0 transition-transform",
                         isExpanded && "rotate-90",
                       )}
                     />
+                  ) : (
+                    <div className="w-4 shrink-0" />
                   )}
-                  {!isAvailable && <div className="w-4 shrink-0" />}
 
                   {/* Category icon */}
                   <Icon

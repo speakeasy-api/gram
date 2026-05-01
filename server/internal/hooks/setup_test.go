@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
@@ -79,7 +80,8 @@ func newTestHooksService(t *testing.T) (context.Context, *testInstance) {
 	authzEngine := authz.NewEngine(logger, conn, authztest.RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
 	chatWriter, chatWriterShutdown := chat.NewChatMessageWriter(logger, conn, nil)
 	t.Cleanup(func() { _ = chatWriterShutdown(t.Context()) })
-	svc := NewService(logger, conn, tracerProvider, nil, sessionManager, cacheAdapter, nil, nil, authzEngine, nil, nil, nil, chatWriter)
+	shadowMCPClient := shadowmcp.NewClient(logger, conn, cacheAdapter)
+	svc := NewService(logger, conn, tracerProvider, nil, sessionManager, cacheAdapter, nil, nil, authzEngine, nil, nil, nil, shadowMCPClient, chatWriter)
 
 	return ctx, &testInstance{
 		service:        svc,

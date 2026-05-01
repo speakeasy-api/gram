@@ -13,10 +13,6 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
  */
 export type GramProductFeatures = {
   /**
-   * Whether shadow-MCP guarding is enabled (injects required toolset id and rejects unsigned tool calls)
-   */
-  blockShadowMcpEnabled: boolean;
-  /**
    * Whether logging is enabled
    */
   logsEnabled: boolean;
@@ -36,14 +32,12 @@ export const GramProductFeatures$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
-    block_shadow_mcp_enabled: z.boolean(),
     logs_enabled: z.boolean(),
     session_capture_enabled: z.boolean(),
     tool_io_logs_enabled: z.boolean(),
   }),
   z.transform((v) => {
     return remap$(v, {
-      "block_shadow_mcp_enabled": "blockShadowMcpEnabled",
       "logs_enabled": "logsEnabled",
       "session_capture_enabled": "sessionCaptureEnabled",
       "tool_io_logs_enabled": "toolIoLogsEnabled",
