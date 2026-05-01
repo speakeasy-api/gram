@@ -1170,10 +1170,8 @@ func (s *Service) PublishPlugins(ctx context.Context, payload *gen.PublishPlugin
 	}
 
 	pluginSlugs := make([]string, 0, len(pluginInfos))
-	pluginIDs := make([]uuid.UUID, 0, len(pluginInfos))
 	for _, p := range pluginInfos {
 		pluginSlugs = append(pluginSlugs, p.Slug)
-		pluginIDs = append(pluginIDs, p.ID)
 	}
 
 	// Persist the API keys, audit logs, and github connection atomically only
@@ -1182,7 +1180,7 @@ func (s *Service) PublishPlugins(ctx context.Context, payload *gen.PublishPlugin
 	// published repo contains key strings with no DB records — re-publish
 	// overwrites them with fresh valid keys.
 	candidates := append(append([]pluginAPIKeyCandidate{}, mcpCandidates...), hooksCandidate)
-	if err := s.persistPluginAPIKeys(ctx, ac, candidates, pluginIDs, project.Name, repoOwner, repoName, pluginSlugs); err != nil {
+	if err := s.persistPluginAPIKeys(ctx, ac, candidates, project.Name, repoOwner, repoName, pluginSlugs); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "persist plugin api keys").Log(ctx, s.logger)
 	}
 
@@ -1259,9 +1257,13 @@ func (s *Service) buildPluginAPIKeyCandidate(scope auth.APIKeyScope, purpose str
 
 // buildPluginScopedKeyCandidate generates a per-server MCP API key in memory.
 // The key is bound to a specific (plugin, toolset, plugin_server) and will
-// be rejected at the MCP entrypoint for any other toolset. Naming format
-// (per rfc-plugin-scoped-keys.md): plugin:<plugin_slug>:<display_name>:<server_id_first8>
-// — guaranteed unique within an org because plugin_server.id is a UUIDv7.
+// be rejected at the MCP entrypoint for any other toolset. Naming format:
+// plugin:<plugin_slug>:<display_name>:<server_id_first8>:<yyyymmddHHMMSS>:<rand6>.
+// The timestamp + random suffix distinguish successive generations of the
+// same server's key — republish does not revoke prior keys (a separate
+// reaper / explicit-rotation flow handles that), so the partial unique
+// index on (organization_id, name) needs both pieces to allow rapid-fire
+// republishes (same second) to coexist.
 func (s *Service) buildPluginScopedKeyCandidate(p PluginInfo, srv PluginServerInfo) (pluginAPIKeyCandidate, error) {
 	tokenBytes := make([]byte, 32)
 	if _, err := rand.Read(tokenBytes); err != nil {
@@ -1293,7 +1295,10 @@ func (s *Service) buildPluginScopedKeyCandidate(p PluginInfo, srv PluginServerIn
 		}, fmt.Errorf("hash key: %w", err)
 	}
 
-	keyName := fmt.Sprintf("plugin:%s:%s:%s", p.Slug, srv.DisplayName, srv.ID.String()[:8])
+	keyName := fmt.Sprintf("plugin:%s:%s:%s:%s:%s",
+		p.Slug, srv.DisplayName, srv.ID.String()[:8],
+		time.Now().UTC().Format("20060102150405"),
+		token[:6])
 
 	return pluginAPIKeyCandidate{
 		fullKey:        fullKey,
@@ -1312,11 +1317,17 @@ func (s *Service) buildPluginScopedKeyCandidate(p PluginInfo, srv PluginServerIn
 // connection record in a single transaction. All-or-nothing: if any
 // candidate fails to insert, none are persisted.
 //
-// For each plugin in pluginIDs, any existing system-managed keys
-// back-referenced to the plugin are soft-deleted before the new candidates
-// are inserted. This implements the "always rotate on republish" behavior
-// from rfc-plugin-scoped-keys.md — old manifests stop working as soon as
-// the plugin is republished.
+// Republishing accumulates keys: prior generations remain valid in the
+// api_keys table until a separate reaper or explicit admin rotation
+// removes them. This avoids the operational footgun where an admin
+// republishing for a benign reason (renaming a server, fixing a
+// description) silently breaks every install in the wild before each
+// user's plugin runtime pulls the new manifest. The
+// SoftDeletePluginScopedKeys query exists for the future reaper /
+// explicit-rotation paths.
+//
+// plugin_servers.api_key_id is updated to point at the newest row so the
+// dashboard can surface the current credential per server.
 //
 // Plugin-scoped candidates (those carrying pluginID/toolsetID/pluginServerID)
 // are inserted with system_managed=true and have plugin_servers.api_key_id
@@ -1326,7 +1337,6 @@ func (s *Service) persistPluginAPIKeys(
 	ctx context.Context,
 	ac *contextvalues.AuthContext,
 	candidates []pluginAPIKeyCandidate,
-	pluginIDs []uuid.UUID,
 	projectName string,
 	repoOwner, repoName string,
 	pluginSlugs []string,
@@ -1341,45 +1351,6 @@ func (s *Service) persistPluginAPIKeys(
 
 	keysQ := keysrepo.New(tx)
 	pluginsQ := s.repo.WithTx(tx)
-
-	// Revoke prior system-managed keys for each plugin being republished.
-	// The org_id filter is defensive: plugin_id is globally unique already.
-	for _, pid := range pluginIDs {
-		revoked, err := keysQ.SoftDeletePluginScopedKeys(ctx, keysrepo.SoftDeletePluginScopedKeysParams{
-			PluginID:       uuid.NullUUID{UUID: pid, Valid: true},
-			OrganizationID: ac.ActiveOrganizationID,
-		})
-		if err != nil {
-			return fmt.Errorf("revoke prior plugin keys for %s: %w", pid, err)
-		}
-		// Audit each revoked key. Same actor/project context as the publish
-		// itself; the symmetry between create + revoke events lets admins
-		// reconstruct rotations from the audit log alone.
-		for _, k := range revoked {
-			revokedToolsetURN := urn.Toolset{ID: uuid.Nil}
-			if k.ToolsetID.Valid {
-				revokedToolsetURN = urn.NewToolset(k.ToolsetID.UUID)
-			}
-			revokedPluginID := uuid.Nil
-			if k.PluginID.Valid {
-				revokedPluginID = k.PluginID.UUID
-			}
-			if err := audit.LogKeyRevoke(ctx, tx, audit.LogKeyRevokeEvent{
-				OrganizationID:   ac.ActiveOrganizationID,
-				ProjectID:        projectID,
-				Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
-				ActorDisplayName: ac.Email,
-				ActorSlug:        nil,
-				KeyURN:           urn.NewAPIKey(k.ID),
-				KeyName:          k.Name,
-				Scopes:           k.Scopes,
-				PluginID:         revokedPluginID,
-				ToolsetURN:       revokedToolsetURN,
-			}); err != nil {
-				return fmt.Errorf("audit log key revocation %s: %w", k.Name, err)
-			}
-		}
-	}
 
 	for _, candidate := range candidates {
 		scopes := []string{candidate.scope.String()}

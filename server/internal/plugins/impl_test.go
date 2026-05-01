@@ -586,7 +586,7 @@ func TestPluginsService_PublishPlugins_CreatesAPIKeyWithCorrectScope(t *testing.
 	require.Equal(t, mcpKey.ID, linkedKeyID.UUID, "plugin_servers.api_key_id must point at the minted key")
 }
 
-func TestPluginsService_PublishPlugins_RePublishRotatesPerServerKeys(t *testing.T) {
+func TestPluginsService_PublishPlugins_RePublishAccumulatesPerServerKeys(t *testing.T) {
 	t.Parallel()
 
 	mock := &mockGitHubPublisher{}
@@ -607,16 +607,19 @@ func TestPluginsService_PublishPlugins_RePublishRotatesPerServerKeys(t *testing.
 	})
 	require.NoError(t, err)
 
-	// Publish twice.
+	// Publish twice. The minted key name carries a token-derived random
+	// suffix on top of the publish timestamp so back-to-back publishes
+	// (same second) don't collide on the partial unique index on
+	// (organization_id, name) WHERE deleted IS FALSE.
 	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
 	require.NoError(t, err)
 	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
 	require.NoError(t, err)
 
-	// Per rfc-plugin-scoped-keys.md: per-server keys are rotated on every
-	// republish — the prior generation is soft-deleted before the new one
-	// is minted. Hooks keys are not yet rotated (out of scope for v1).
-	// ListAPIKeysByOrganization excludes system-managed keys, so query directly.
+	// Republish accumulates rather than rotates: prior generations stay
+	// active so installs in the wild keep working. A future reaper / explicit
+	// admin rotation handles eventual cleanup. ListAPIKeysByOrganization
+	// excludes system-managed keys, so query directly.
 	activeKeys, err := allOrgKeysIncludingSystemManaged(ctx, t, ti.conn, authCtx.ActiveOrganizationID)
 	require.NoError(t, err)
 
@@ -629,16 +632,16 @@ func TestPluginsService_PublishPlugins_RePublishRotatesPerServerKeys(t *testing.
 			activeHooksCount++
 		}
 	}
-	require.Equal(t, 1, activeMCPCount, "republish must rotate per-server keys, not accumulate")
-	require.Equal(t, 2, activeHooksCount, "hooks key rotation is out of scope for v1")
+	require.Equal(t, 2, activeMCPCount, "republish must keep prior per-server keys active")
+	require.Equal(t, 2, activeHooksCount, "hooks key also accumulates per publish")
 
-	// And the prior generation should still be in the table, soft-deleted.
+	// Nothing should have been soft-deleted as a side effect of republish.
 	var deletedMCPCount int
 	err = ti.conn.QueryRow(ctx,
 		"SELECT count(*) FROM api_keys WHERE name LIKE 'plugin:republish-test:%' AND deleted IS TRUE",
 	).Scan(&deletedMCPCount)
 	require.NoError(t, err)
-	require.Equal(t, 1, deletedMCPCount, "the prior generation's per-server key must be soft-deleted, not hard-deleted")
+	require.Equal(t, 0, deletedMCPCount, "republish must not soft-delete prior keys")
 }
 
 // PublishPlugins must not persist the API key (or audit log entry, or

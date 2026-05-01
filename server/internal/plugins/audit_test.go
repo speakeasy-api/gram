@@ -344,15 +344,15 @@ func TestPluginsService_PublishPlugins_RecordsPluginScopedKeyCreate(t *testing.T
 	require.Contains(t, meta, "scopes")
 }
 
-func TestPluginsService_PublishPlugins_RepublishRecordsKeyRevoke(t *testing.T) {
+func TestPluginsService_PublishPlugins_RepublishEmitsNoKeyRevoke(t *testing.T) {
 	t.Parallel()
 
 	mock := &mockGitHubPublisher{}
 	ctx, ti := newTestPluginsServiceWithGitHub(t, mock)
 
-	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Audit Key Revoke"})
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "No Auto Revoke"})
 	require.NoError(t, err)
-	toolset := createTestToolset(t, ctx, ti.conn, "audit-key-revoke-toolset")
+	toolset := createTestToolset(t, ctx, ti.conn, "no-auto-revoke-toolset")
 	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
 		PluginID:    plugin.ID,
 		ToolsetID:   toolset.ID.String(),
@@ -362,24 +362,18 @@ func TestPluginsService_PublishPlugins_RepublishRecordsKeyRevoke(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// First publish: no prior keys to revoke.
+	// First publish.
 	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
 	require.NoError(t, err)
 	revokesBefore, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionKeyRevoke)
 	require.NoError(t, err)
 
-	// Second publish: must revoke the prior generation's per-server key.
+	// Second publish must not auto-revoke prior keys (a separate reaper /
+	// explicit admin rotation handles cleanup; auto-revoke would silently
+	// break every install in the wild on benign republishes).
 	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
 	require.NoError(t, err)
 	revokesAfter, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionKeyRevoke)
 	require.NoError(t, err)
-	require.Equal(t, revokesBefore+1, revokesAfter, "republish must emit one revoke audit per rotated key")
-
-	rec, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionKeyRevoke)
-	require.NoError(t, err)
-	require.Equal(t, "api_key", rec.SubjectType)
-	meta, err := audittest.DecodeAuditData(rec.Metadata)
-	require.NoError(t, err)
-	require.Equal(t, plugin.ID, meta["plugin_id"], "revoke audit must carry plugin_id of the rotated key")
-	require.Equal(t, toolset.ID.String(), meta["toolset_id"], "revoke audit must carry toolset_id of the rotated key")
+	require.Equal(t, revokesBefore, revokesAfter, "republish must not emit revoke audit events")
 }
