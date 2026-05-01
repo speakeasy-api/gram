@@ -545,7 +545,9 @@ func TestPluginsService_PublishPlugins_CreatesAPIKeyWithCorrectScope(t *testing.
 	// Verify two keys were created: one per-server plugin-scoped MCP key
 	// (system_managed, bound to plugin+toolset) and one hooks-scoped key.
 	// Per-server MCP keys are named `plugin:<slug>:<display>:<id8>`.
-	keys, err := keysrepo.New(ti.conn).ListAPIKeysByOrganization(ctx, authCtx.ActiveOrganizationID)
+	// ListAPIKeysByOrganization excludes system-managed keys, so we query
+	// directly to see them.
+	keys, err := allOrgKeysIncludingSystemManaged(ctx, t, ti.conn, authCtx.ActiveOrganizationID)
 	require.NoError(t, err)
 
 	var mcpKey, hooksKey *keysrepo.ApiKey
@@ -614,7 +616,8 @@ func TestPluginsService_PublishPlugins_RePublishRotatesPerServerKeys(t *testing.
 	// Per rfc-plugin-scoped-keys.md: per-server keys are rotated on every
 	// republish — the prior generation is soft-deleted before the new one
 	// is minted. Hooks keys are not yet rotated (out of scope for v1).
-	activeKeys, err := keysrepo.New(ti.conn).ListAPIKeysByOrganization(ctx, authCtx.ActiveOrganizationID)
+	// ListAPIKeysByOrganization excludes system-managed keys, so query directly.
+	activeKeys, err := allOrgKeysIncludingSystemManaged(ctx, t, ti.conn, authCtx.ActiveOrganizationID)
 	require.NoError(t, err)
 
 	var activeMCPCount, activeHooksCount int
@@ -667,11 +670,12 @@ func TestPluginsService_PublishPlugins_NoOrphanedKeyOnGitHubFailure(t *testing.T
 	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
 	require.Error(t, err, "publish must fail when GitHub does")
 
-	// No plugins-* API key should have been persisted.
-	keys, err := keysrepo.New(ti.conn).ListAPIKeysByOrganization(ctx, authCtx.ActiveOrganizationID)
+	// No plugin-minted key should have been persisted (system-managed keys
+	// included — they're hidden from ListAPIKeysByOrganization).
+	keys, err := allOrgKeysIncludingSystemManaged(ctx, t, ti.conn, authCtx.ActiveOrganizationID)
 	require.NoError(t, err)
 	for _, k := range keys {
-		require.False(t, strings.HasPrefix(k.Name, "plugins-"),
+		require.False(t, strings.HasPrefix(k.Name, "plugins-") || strings.HasPrefix(k.Name, "plugin:"),
 			"orphaned plugin api key %q persisted despite github failure", k.Name)
 	}
 }
@@ -973,7 +977,7 @@ func TestPluginsService_PublishPlugins_ObservabilityHookScriptContainsAPIKey(t *
 	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
 	require.NoError(t, err)
 
-	keys, err := keysrepo.New(ti.conn).ListAPIKeysByOrganization(ctx, authCtx.ActiveOrganizationID)
+	keys, err := allOrgKeysIncludingSystemManaged(ctx, t, ti.conn, authCtx.ActiveOrganizationID)
 	require.NoError(t, err)
 	var hooksKeyPrefix string
 	for _, k := range keys {

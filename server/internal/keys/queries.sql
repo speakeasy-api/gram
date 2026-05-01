@@ -45,10 +45,15 @@ WHERE key_hash = @key_hash
   AND deleted IS FALSE;
 
 -- name: ListAPIKeysByOrganization :many
+-- Returns user-managed keys only. System-managed keys (e.g. those minted
+-- by plugin publish — rfc-plugin-scoped-keys.md) are filtered out so they
+-- don't clutter the dashboard's keys page or count against user quotas.
+-- Use a different query if you need to see system-managed keys.
 SELECT *
 FROM api_keys
 WHERE organization_id = @organization_id
   AND deleted IS FALSE
+  AND system_managed IS FALSE
 ORDER BY created_at DESC;
 
 -- name: DeleteAPIKey :one

@@ -180,9 +180,14 @@ SELECT id, organization_id, project_id, created_by_user_id, name, key_prefix, ke
 FROM api_keys
 WHERE organization_id = $1
   AND deleted IS FALSE
+  AND system_managed IS FALSE
 ORDER BY created_at DESC
 `
 
+// Returns user-managed keys only. System-managed keys (e.g. those minted
+// by plugin publish — rfc-plugin-scoped-keys.md) are filtered out so they
+// don't clutter the dashboard's keys page or count against user quotas.
+// Use a different query if you need to see system-managed keys.
 func (q *Queries) ListAPIKeysByOrganization(ctx context.Context, organizationID string) ([]ApiKey, error) {
 	rows, err := q.db.Query(ctx, listAPIKeysByOrganization, organizationID)
 	if err != nil {
