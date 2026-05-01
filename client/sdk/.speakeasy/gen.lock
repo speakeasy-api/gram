@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 7ec932a0fc73de05510715129d37870a
+  docChecksum: efffcdcad58d7b8d616bdcf0d2132315
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -119,7 +119,7 @@ trackedFiles:
   docs/models/components/chat.md:
     last_write_checksum: sha1:32642a251ae24251702ff26fdd0aa32a14b2763a
   docs/models/components/chatmessage.md:
-    last_write_checksum: sha1:bf5f0ecacfd869c2c73cf27748df25d5ad7f0c6a
+    last_write_checksum: sha1:0d8a81d4c4f0d1f45ae7c5ca78a66be74bf7d74d
   docs/models/components/chatoverview.md:
     last_write_checksum: sha1:c4e133a5f7e54105e65828552f5fbc65c24e7e0d
   docs/models/components/chatoverviewwithresolutions.md:
@@ -3012,7 +3012,7 @@ trackedFiles:
     pristine_git_object: d74d2ff627fec7af63710786888c09ce919dbf87
   src/models/components/chatmessage.ts:
     id: 64060926ed56
-    last_write_checksum: sha1:4bd6f8d4aac788e78f7865a79b470e836b246ccd
+    last_write_checksum: sha1:86d1b0b52d4d911ad41ac3293868429b622acf15
     pristine_git_object: 9bdc3bfc1f7458c0044bb61b2382f8301c0828bf
   src/models/components/chatoverview.ts:
     id: b060f6650726
