@@ -4,6 +4,7 @@ on:
     types: [opened, synchronize, reopened, edited]
     branches:
       - main
+  merge_group:
 
 jobs:
   lint-pr:
@@ -18,8 +19,8 @@ jobs:
       - name: Validate PR title format
         shell: bash
         run: |
-          if [[ "$GIT_REF" ==  "refs/heads/main" ]]; then
-            echo "Skipping PR title validation on main."
+          if [[ "${{ github.event_name }}" == "merge_group" || "$GIT_REF" == "refs/heads/main" ]]; then
+            echo "Skipping PR title validation on $GIT_REF (event: ${{ github.event_name }})."
             exit 0
           fi
 
@@ -45,17 +46,13 @@ jobs:
       - name: Check for significant changes
         id: check
         run: |
-          if [[ "$GIT_REF" ==  "refs/heads/main" ]]; then
-            echo "Skipping changesets-lint job on main."
-            exit 0
-          fi
-
-          if [[ "$PR_TITLE" =~ ^(chore|mig)(\([a-zA-Z0-9_-]+\))?: ]]; then
+          if [[ "${{ github.event_name }}" == "merge_group" || "$GIT_REF" == "refs/heads/main" ]]; then
+            echo "Skipping changesets-lint job on $GIT_REF (event: ${{ github.event_name }})."
+          elif [[ "$PR_TITLE" =~ ^(chore|mig)(\([a-zA-Z0-9_-]+\))?: ]]; then
             echo "Skipping changesets-lint job for chore/mig PR."
-            exit 0
+          else
+            echo "lint=true" >> $GITHUB_OUTPUT
           fi
-
-          echo "lint=true" >> $GITHUB_OUTPUT
 
       - name: Checkout
         if: ${{ steps.check.outputs.lint == 'true' }}
