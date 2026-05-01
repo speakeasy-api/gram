@@ -283,10 +283,8 @@ export function CreateRoleDialog({
     const selectableMembers = members.filter(
       (m) => !(isEditing && m.roleId === editingRole?.id),
     );
-    const allSelected = selectableMembers.every((m) =>
-      selectedMembers.has(m.id),
-    );
     setSelectedMembers((prev) => {
+      const allSelected = selectableMembers.every((m) => prev.has(m.id));
       const next = new Set(prev);
       for (const m of selectableMembers) {
         if (allSelected) {
