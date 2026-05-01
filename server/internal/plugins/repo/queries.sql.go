@@ -451,6 +451,29 @@ func (q *Queries) RemovePluginServer(ctx context.Context, arg RemovePluginServer
 	return err
 }
 
+const setPluginServerAPIKey = `-- name: SetPluginServerAPIKey :exec
+UPDATE plugin_servers
+SET api_key_id = $1,
+    updated_at = clock_timestamp()
+WHERE id = $2
+  AND plugin_id = $3
+  AND deleted IS FALSE
+`
+
+type SetPluginServerAPIKeyParams struct {
+	ApiKeyID uuid.NullUUID
+	ID       uuid.UUID
+	PluginID uuid.UUID
+}
+
+// Links a plugin_server to the api_keys row whose secret is embedded in the
+// published manifest entry for this server. Called inside the publish
+// transaction after the api_key insert.
+func (q *Queries) SetPluginServerAPIKey(ctx context.Context, arg SetPluginServerAPIKeyParams) error {
+	_, err := q.db.Exec(ctx, setPluginServerAPIKey, arg.ApiKeyID, arg.ID, arg.PluginID)
+	return err
+}
+
 const softDeletePluginServers = `-- name: SoftDeletePluginServers :exec
 UPDATE plugin_servers
 SET deleted_at = clock_timestamp(),

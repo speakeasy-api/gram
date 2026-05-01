@@ -7,6 +7,9 @@ INSERT INTO api_keys (
   , key_prefix
   , key_hash
   , scopes
+  , toolset_id
+  , plugin_id
+  , system_managed
 ) VALUES (
     @organization_id
   , @project_id
@@ -15,8 +18,24 @@ INSERT INTO api_keys (
   , @key_prefix
   , @key_hash
   , @scopes::text[]
+  , @toolset_id
+  , @plugin_id
+  , @system_managed
 )
 RETURNING *;
+
+-- name: SoftDeletePluginScopedKeys :execrows
+-- Soft-deletes all active system-managed keys back-referenced to a plugin.
+-- Used on republish to revoke the prior generation's per-server keys before
+-- minting fresh ones. Scoped to organization_id as a defensive guard since
+-- plugin_id alone is globally unique (UUIDv7).
+UPDATE api_keys
+SET deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE plugin_id = @plugin_id
+  AND organization_id = @organization_id
+  AND system_managed IS TRUE
+  AND deleted IS FALSE;
 
 -- name: GetAPIKeyByKeyHash :one
 SELECT api_keys.*, users.email

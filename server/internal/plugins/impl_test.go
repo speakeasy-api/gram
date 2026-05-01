@@ -542,36 +542,49 @@ func TestPluginsService_PublishPlugins_CreatesAPIKeyWithCorrectScope(t *testing.
 	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
 	require.NoError(t, err)
 
-	// Verify two keys were created — one consumer-scoped (MCP) and one
-	// hooks-scoped (observability plugin).
+	// Verify two keys were created: one per-server plugin-scoped MCP key
+	// (system_managed, bound to plugin+toolset) and one hooks-scoped key.
+	// Per-server MCP keys are named `plugin:<slug>:<display>:<id8>`.
 	keys, err := keysrepo.New(ti.conn).ListAPIKeysByOrganization(ctx, authCtx.ActiveOrganizationID)
 	require.NoError(t, err)
 
 	var mcpKey, hooksKey *keysrepo.ApiKey
 	for i := range keys {
 		switch {
-		case strings.HasPrefix(keys[i].Name, "plugins-mcp-"):
+		case strings.HasPrefix(keys[i].Name, "plugin:key-test:"):
 			mcpKey = &keys[i]
 		case strings.HasPrefix(keys[i].Name, "plugins-hooks-"):
 			hooksKey = &keys[i]
 		}
 	}
-	require.NotNil(t, mcpKey, "expected a plugins-mcp-* API key")
+	require.NotNil(t, mcpKey, "expected a plugin:key-test:* API key")
 	require.Contains(t, mcpKey.Scopes, "consumer")
 	require.True(t, strings.HasPrefix(mcpKey.KeyPrefix, "gram_local_"))
+	require.True(t, mcpKey.SystemManaged, "per-server plugin keys must be system_managed")
+	require.True(t, mcpKey.PluginID.Valid, "per-server plugin keys must back-reference a plugin")
+	require.True(t, mcpKey.ToolsetID.Valid, "per-server plugin keys must back-reference a toolset")
+	require.Equal(t, toolset.ID, mcpKey.ToolsetID.UUID, "key.toolset_id must equal the published server's toolset")
 
 	require.NotNil(t, hooksKey, "expected a plugins-hooks-* API key")
 	require.Contains(t, hooksKey.Scopes, "hooks")
 	require.True(t, strings.HasPrefix(hooksKey.KeyPrefix, "gram_local_"))
+	require.True(t, hooksKey.SystemManaged, "hooks plugin keys must be system_managed")
 
-	// Verify the MCP key is injected into the pushed MCP config.
+	// Verify the per-server MCP key is injected into the pushed MCP config.
 	mcpJSON := mock.lastPushedFiles["key-test/.mcp.json"]
 	require.NotNil(t, mcpJSON)
-	require.Contains(t, string(mcpJSON), "gram_local_")
+	require.Contains(t, string(mcpJSON), mcpKey.KeyPrefix, "manifest must embed the minted key")
 	require.NotContains(t, string(mcpJSON), "user_config")
+
+	// And linked back from plugin_servers.
+	var linkedKeyID uuid.NullUUID
+	err = ti.conn.QueryRow(ctx, "SELECT api_key_id FROM plugin_servers WHERE plugin_id = $1 AND deleted IS FALSE", uuid.MustParse(plugin.ID)).Scan(&linkedKeyID)
+	require.NoError(t, err)
+	require.True(t, linkedKeyID.Valid)
+	require.Equal(t, mcpKey.ID, linkedKeyID.UUID, "plugin_servers.api_key_id must point at the minted key")
 }
 
-func TestPluginsService_PublishPlugins_RePublishCreatesAdditionalKey(t *testing.T) {
+func TestPluginsService_PublishPlugins_RePublishRotatesPerServerKeys(t *testing.T) {
 	t.Parallel()
 
 	mock := &mockGitHubPublisher{}
@@ -598,23 +611,31 @@ func TestPluginsService_PublishPlugins_RePublishCreatesAdditionalKey(t *testing.
 	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
 	require.NoError(t, err)
 
-	// Count plugin keys — each publish creates two keys (mcp + hooks).
-	keys, err := keysrepo.New(ti.conn).ListAPIKeysByOrganization(ctx, authCtx.ActiveOrganizationID)
+	// Per rfc-plugin-scoped-keys.md: per-server keys are rotated on every
+	// republish — the prior generation is soft-deleted before the new one
+	// is minted. Hooks keys are not yet rotated (out of scope for v1).
+	activeKeys, err := keysrepo.New(ti.conn).ListAPIKeysByOrganization(ctx, authCtx.ActiveOrganizationID)
 	require.NoError(t, err)
 
-	var mcpCount, hooksCount int
-	for _, k := range keys {
+	var activeMCPCount, activeHooksCount int
+	for _, k := range activeKeys {
 		switch {
-		case strings.HasPrefix(k.Name, "plugins-mcp-"):
-			mcpCount++
+		case strings.HasPrefix(k.Name, "plugin:republish-test:"):
+			activeMCPCount++
 		case strings.HasPrefix(k.Name, "plugins-hooks-"):
-			hooksCount++
+			activeHooksCount++
 		}
 	}
-	// Documents the current behavior: each publish mints fresh keys without
-	// revoking prior ones. A future improvement should revoke first.
-	require.Equal(t, 2, mcpCount, "expected 2 mcp keys after 2 publishes")
-	require.Equal(t, 2, hooksCount, "expected 2 hooks keys after 2 publishes")
+	require.Equal(t, 1, activeMCPCount, "republish must rotate per-server keys, not accumulate")
+	require.Equal(t, 2, activeHooksCount, "hooks key rotation is out of scope for v1")
+
+	// And the prior generation should still be in the table, soft-deleted.
+	var deletedMCPCount int
+	err = ti.conn.QueryRow(ctx,
+		"SELECT count(*) FROM api_keys WHERE name LIKE 'plugin:republish-test:%' AND deleted IS TRUE",
+	).Scan(&deletedMCPCount)
+	require.NoError(t, err)
+	require.Equal(t, 1, deletedMCPCount, "the prior generation's per-server key must be soft-deleted, not hard-deleted")
 }
 
 // PublishPlugins must not persist the API key (or audit log entry, or

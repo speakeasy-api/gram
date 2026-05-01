@@ -91,6 +91,17 @@ WHERE id = @id
   AND plugin_id = @plugin_id
   AND deleted IS FALSE;
 
+-- name: SetPluginServerAPIKey :exec
+-- Links a plugin_server to the api_keys row whose secret is embedded in the
+-- published manifest entry for this server. Called inside the publish
+-- transaction after the api_key insert.
+UPDATE plugin_servers
+SET api_key_id = @api_key_id,
+    updated_at = clock_timestamp()
+WHERE id = @id
+  AND plugin_id = @plugin_id
+  AND deleted IS FALSE;
+
 -- name: AddPluginAssignment :one
 INSERT INTO plugin_assignments (plugin_id, organization_id, principal_urn)
 VALUES (@plugin_id, @organization_id, @principal_urn)

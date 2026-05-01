@@ -21,6 +21,9 @@ INSERT INTO api_keys (
   , key_prefix
   , key_hash
   , scopes
+  , toolset_id
+  , plugin_id
+  , system_managed
 ) VALUES (
     $1
   , $2
@@ -29,6 +32,9 @@ INSERT INTO api_keys (
   , $5
   , $6
   , $7::text[]
+  , $8
+  , $9
+  , $10
 )
 RETURNING id, organization_id, project_id, created_by_user_id, name, key_prefix, key_hash, scopes, toolset_id, plugin_id, system_managed, created_at, updated_at, deleted_at, deleted, last_accessed_at
 `
@@ -41,6 +47,9 @@ type CreateAPIKeyParams struct {
 	KeyPrefix       string
 	KeyHash         string
 	Scopes          []string
+	ToolsetID       uuid.NullUUID
+	PluginID        uuid.NullUUID
+	SystemManaged   bool
 }
 
 func (q *Queries) CreateAPIKey(ctx context.Context, arg CreateAPIKeyParams) (ApiKey, error) {
@@ -52,6 +61,9 @@ func (q *Queries) CreateAPIKey(ctx context.Context, arg CreateAPIKeyParams) (Api
 		arg.KeyPrefix,
 		arg.KeyHash,
 		arg.Scopes,
+		arg.ToolsetID,
+		arg.PluginID,
+		arg.SystemManaged,
 	)
 	var i ApiKey
 	err := row.Scan(
@@ -206,6 +218,33 @@ func (q *Queries) ListAPIKeysByOrganization(ctx context.Context, organizationID 
 		return nil, err
 	}
 	return items, nil
+}
+
+const softDeletePluginScopedKeys = `-- name: SoftDeletePluginScopedKeys :execrows
+UPDATE api_keys
+SET deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE plugin_id = $1
+  AND organization_id = $2
+  AND system_managed IS TRUE
+  AND deleted IS FALSE
+`
+
+type SoftDeletePluginScopedKeysParams struct {
+	PluginID       uuid.NullUUID
+	OrganizationID string
+}
+
+// Soft-deletes all active system-managed keys back-referenced to a plugin.
+// Used on republish to revoke the prior generation's per-server keys before
+// minting fresh ones. Scoped to organization_id as a defensive guard since
+// plugin_id alone is globally unique (UUIDv7).
+func (q *Queries) SoftDeletePluginScopedKeys(ctx context.Context, arg SoftDeletePluginScopedKeysParams) (int64, error) {
+	result, err := q.db.Exec(ctx, softDeletePluginScopedKeys, arg.PluginID, arg.OrganizationID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const updateAPIKeyLastAccessedAt = `-- name: UpdateAPIKeyLastAccessedAt :exec
