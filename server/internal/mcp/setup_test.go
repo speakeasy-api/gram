@@ -16,7 +16,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/stretchr/testify/require"
-	"go.opentelemetry.io/otel/metric/noop"
 	"go.opentelemetry.io/otel/trace"
 
 	keys_gen "github.com/speakeasy-api/gram/server/gen/keys"
@@ -84,7 +83,7 @@ func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
 
 	logger := testenv.NewLogger(t)
 	tracerProvider := testenv.NewTracerProvider(t)
-	meterProvider := noop.NewMeterProvider()
+	meterProvider := testenv.NewMeterProvider(t)
 	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 

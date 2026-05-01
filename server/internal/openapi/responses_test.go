@@ -2,14 +2,15 @@ package openapi
 
 import (
 	"bytes"
-	"log/slog"
 	"os"
 	"strings"
 	"testing"
 
-	"github.com/speakeasy-api/gram/server/internal/tools/repo/models"
 	"github.com/speakeasy-api/openapi/openapi"
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/tools/repo/models"
 )
 
 type openapiFixture struct {
@@ -116,7 +117,7 @@ func TestContentTypeSpecificity(t *testing.T) {
 func TestGetResponseFilter_NilFilterType(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
-	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	logger := testenv.NewLogger(t)
 
 	schemaCache := newConcurrentSchemaCache()
 	td := newOpenAPIFixtureFromFile(t, "testdata/speakeasy-bar.yaml")
@@ -131,7 +132,7 @@ func TestGetResponseFilter_NilFilterType(t *testing.T) {
 func TestGetResponseFilter_NonJQFilterType(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
-	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	logger := testenv.NewLogger(t)
 
 	schemaCache := newConcurrentSchemaCache()
 	td := newOpenAPIFixtureFromFile(t, "testdata/speakeasy-bar.yaml")
@@ -147,7 +148,7 @@ func TestGetResponseFilter_NonJQFilterType(t *testing.T) {
 func TestGetResponseFilter_WithJQFilterType(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
-	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	logger := testenv.NewLogger(t)
 
 	// Create an OpenAPI spec with a simple response
 	spec := newOpenAPIFixture(t, `
@@ -197,7 +198,7 @@ paths:
 func TestSelectResponse_NoResponses(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
-	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	logger := testenv.NewLogger(t)
 
 	spec := newOpenAPIFixture(t, `
 openapi: 3.0.0
@@ -228,7 +229,7 @@ paths:
 func TestSelectResponse_WithMultipleStatusCodes(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
-	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	logger := testenv.NewLogger(t)
 
 	// Create an OpenAPI spec with multiple response codes
 	spec := newOpenAPIFixture(t, `
@@ -286,7 +287,7 @@ paths:
 func TestSelectResponse_PreferGenericContentType(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
-	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	logger := testenv.NewLogger(t)
 
 	// Create an OpenAPI spec with multiple content types for same schema
 	spec := newOpenAPIFixture(t, `
@@ -332,7 +333,7 @@ paths:
 func TestSelectResponse_YAMLAndJSON(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
-	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	logger := testenv.NewLogger(t)
 
 	// Create an OpenAPI spec with both YAML and JSON content types
 	spec := newOpenAPIFixture(t, `

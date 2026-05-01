@@ -3,11 +3,12 @@ package mcp
 import (
 	"context"
 	"encoding/json"
-	"log/slog"
 	"net/http"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func TestIsMCPPassthrough(t *testing.T) {
@@ -241,7 +242,7 @@ func TestIsBinaryMimeType(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	logger := slog.New(slog.DiscardHandler)
+	logger := testenv.NewLogger(t)
 
 	t.Run("returns_true_for_image_types", func(t *testing.T) {
 		t.Parallel()

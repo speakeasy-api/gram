@@ -12,7 +12,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
-	tracenoop "go.opentelemetry.io/otel/trace/noop"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
 
@@ -61,9 +60,9 @@ var _ chat.MessageObserver = (*Service)(nil)
 // NewObserver creates a lightweight chat.MessageObserver that signals the risk
 // drain workflow when new messages are stored. Use this in contexts (e.g. the
 // worker process) where the full risk Service is not needed.
-func NewObserver(logger *slog.Logger, db *pgxpool.Pool, signaler RiskAnalysisSignaler) chat.MessageObserver {
+func NewObserver(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, signaler RiskAnalysisSignaler) chat.MessageObserver {
 	return &Service{
-		tracer:           tracenoop.NewTracerProvider().Tracer(""),
+		tracer:           tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/risk"),
 		logger:           logger.With(attr.SlogComponent("risk")),
 		db:               db,
 		repo:             repo.New(db),

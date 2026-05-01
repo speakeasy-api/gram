@@ -2,7 +2,6 @@ package mcp
 
 import (
 	"encoding/json"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -10,12 +9,13 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func Test_writeOAuthServerMetadataResponse_Static(t *testing.T) {
 	t.Parallel()
 
-	logger := slog.New(slog.DiscardHandler)
+	logger := testenv.NewLogger(t)
 	w := httptest.NewRecorder()
 
 	result := &wellknown.OAuthServerMetadataResult{
@@ -47,7 +47,7 @@ func Test_writeOAuthServerMetadataResponse_Static(t *testing.T) {
 func Test_writeOAuthServerMetadataResponse_Raw(t *testing.T) {
 	t.Parallel()
 
-	logger := slog.New(slog.DiscardHandler)
+	logger := testenv.NewLogger(t)
 	w := httptest.NewRecorder()
 
 	raw := json.RawMessage(`{"issuer":"https://example.test/raw"}`)
@@ -74,7 +74,7 @@ func Test_writeOAuthServerMetadataResponse_Raw(t *testing.T) {
 func Test_writeOAuthServerMetadataResponse_UnknownKind_DoesNotWriteResponse(t *testing.T) {
 	t.Parallel()
 
-	logger := slog.New(slog.DiscardHandler)
+	logger := testenv.NewLogger(t)
 	w := httptest.NewRecorder()
 
 	result := &wellknown.OAuthServerMetadataResult{
@@ -93,7 +93,7 @@ func Test_writeOAuthServerMetadataResponse_UnknownKind_DoesNotWriteResponse(t *t
 func Test_writeOAuthProtectedResourceMetadataResponse_Success(t *testing.T) {
 	t.Parallel()
 
-	logger := slog.New(slog.DiscardHandler)
+	logger := testenv.NewLogger(t)
 	w := httptest.NewRecorder()
 
 	metadata := &wellknown.OAuthProtectedResourceMetadata{

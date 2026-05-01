@@ -3,7 +3,6 @@ package usage
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"testing"
 
@@ -11,7 +10,6 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
-	"go.opentelemetry.io/otel/trace/noop"
 
 	gen "github.com/speakeasy-api/gram/server/gen/usage"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -19,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/usage/repo"
 )
@@ -120,8 +119,8 @@ func rbacDisabled(_ context.Context, _ string) (bool, error) { return false, nil
 
 func newTestService(t *testing.T, billingRepo billing.Repository, serverCount int64) *Service {
 	t.Helper()
-	logger := slog.Default()
-	tp := noop.NewTracerProvider()
+	logger := testenv.NewLogger(t)
+	tp := testenv.NewTracerProvider(t)
 	db := &mockDBTX{serverCount: serverCount}
 	authzEngine := authz.NewEngine(logger, db, rbacDisabled, workos.NewStubClient(), cache.NoopCache)
 

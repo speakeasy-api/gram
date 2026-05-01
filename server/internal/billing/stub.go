@@ -26,10 +26,6 @@ type StubClient struct {
 }
 
 func NewStubClient(logger *slog.Logger, tracerProvider trace.TracerProvider) *StubClient {
-	if logger == nil {
-		logger = slog.Default()
-	}
-
 	return &StubClient{
 		mut:    sync.Mutex{},
 		logger: logger.With(attr.SlogComponent("billing_stub")),
