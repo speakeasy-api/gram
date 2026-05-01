@@ -6,78 +6,30 @@ import (
 	. "goa.design/goa/v3/dsl"
 )
 
-// OrganizationInvitation is a non-sensitive admin view (no invitation token or accept URL).
-var OrganizationInvitation = Type("OrganizationInvitation", func() {
-	Attribute("id", String, "WorkOS invitation ID.")
-	Attribute("email", String, "Invitee email address.")
-	Attribute("state", String, "Invitation lifecycle state.", func() {
-		Enum("pending", "accepted", "expired", "revoked")
-	})
-	Attribute("accepted_at", String, "When the invitation was accepted.", func() {
-		Format(FormatDateTime)
-	})
-	Attribute("revoked_at", String, "When the invitation was revoked.", func() {
-		Format(FormatDateTime)
-	})
-	Attribute("inviter_user_id", String, "Gram user ID of the inviter, when known.")
-	Attribute("expires_at", String, "When the invitation expires.", func() {
-		Format(FormatDateTime)
-	})
-	Attribute("created_at", String, func() {
-		Format(FormatDateTime)
-	})
-	Attribute("updated_at", String, func() {
-		Format(FormatDateTime)
-	})
-
-	Required("id", "email", "state", "created_at", "updated_at")
-})
-
-// OrganizationInvitationAccept is the public accept-flow view: enough to render copy and redirect,
-// without WorkOS invitation IDs or audit timestamps.
-var OrganizationInvitationAccept = Type("OrganizationInvitationAccept", func() {
-	Attribute("email", String, "Invitee email address.")
-	Attribute("state", String, "Invitation lifecycle state.", func() {
-		Enum("pending", "accepted", "expired", "revoked")
-	})
-	Attribute("organization_name", String, "Gram organization display name when the org is linked in Gram; empty if unknown.")
-	Attribute("accept_invitation_url", String, "URL to complete acceptance in WorkOS (may be empty when not actionable).")
-	Required("email", "state", "organization_name", "accept_invitation_url")
-})
-
-// OrganizationUser is a row from organization_user_relationships joined with the users table.
-var OrganizationUser = Type("OrganizationUser", func() {
-	Attribute("id", String, "Gram relationship row ID.")
-	Attribute("organization_id", String, "Gram organization ID.")
-	Attribute("user_id", String, "Gram user ID.")
-	Attribute("name", String, "User display name.")
-	Attribute("email", String, "User email address.")
-	Attribute("photo_url", String, "User photo URL.")
-	Attribute("workos_membership_id", String, "WorkOS organization membership ID when known.")
-	Attribute("created_at", String, func() {
-		Format(FormatDateTime)
-	})
-	Attribute("updated_at", String, func() {
-		Format(FormatDateTime)
-	})
-
-	Required("id", "organization_id", "user_id", "name", "email", "created_at", "updated_at")
-})
-
-var ListInvitesResult = Type("ListInvitesResult", func() {
-	Required("invitations")
-	Attribute("invitations", ArrayOf(OrganizationInvitation), "Pending invitations for the organization only; accepted, expired, and revoked invitations are omitted.")
-})
-
-var ListUsersResult = Type("ListUsersResult", func() {
-	Required("users")
-	Attribute("users", ArrayOf(OrganizationUser), "Users linked to the organization in Gram.")
-})
-
 var _ = Service("organizations", func() {
 	Description("Organization membership, invitations, and directory.")
 	Security(security.Session)
 	shared.DeclareErrorResponses()
+
+	Method("get", func() {
+		Description("Get the active organization from the session.")
+
+		Payload(func() {
+			security.SessionPayload()
+		})
+
+		Result(shared.Organization)
+
+		HTTP(func() {
+			GET("/rpc/organizations.get")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getOrganization")
+		Meta("openapi:extension:x-speakeasy-name-override", "get")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "Organization"}`)
+	})
 
 	Method("sendInvite", func() {
 		Description("Send a WorkOS invitation for the active organization.")
@@ -206,4 +158,134 @@ var _ = Service("organizations", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "removeUser")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RemoveOrganizationUser"}`)
 	})
+
+	Method("enableWebhooks", func() {
+		Description("Enable  webhooks for the active organization.")
+
+		Payload(func() {
+			security.SessionPayload()
+		})
+
+		HTTP(func() {
+			POST("/rpc/organizations.enableWebhooks")
+			security.SessionHeader()
+			Response(StatusNoContent)
+		})
+
+		Meta("openapi:operationId", "enableWebhooks")
+		Meta("openapi:extension:x-speakeasy-name-override", "enableWebhooks")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "EnableWebhooks"}`)
+	})
+	Method("disableWebhooks", func() {
+		Description("Disable  webhooks for the active organization.")
+
+		Payload(func() {
+			security.SessionPayload()
+		})
+
+		HTTP(func() {
+			POST("/rpc/organizations.disableWebhooks")
+			security.SessionHeader()
+			Response(StatusNoContent)
+		})
+
+		Meta("openapi:operationId", "disableWebhooks")
+		Meta("openapi:extension:x-speakeasy-name-override", "disableWebhooks")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DisableWebhooks"}`)
+	})
+
+	Method("createPortalSession", func() {
+		Description("Create a webhook portal session.")
+
+		Payload(func() {
+			security.SessionPayload()
+		})
+
+		Result(CreatePortalSessionResult)
+
+		HTTP(func() {
+			POST("/rpc/organizations.createPortalSession")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "createPortalSession")
+		Meta("openapi:extension:x-speakeasy-name-override", "createPortalSession")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CreatePortalSession"}`)
+	})
+})
+
+// OrganizationInvitation is a non-sensitive admin view (no invitation token or accept URL).
+var OrganizationInvitation = Type("OrganizationInvitation", func() {
+	Attribute("id", String, "WorkOS invitation ID.")
+	Attribute("email", String, "Invitee email address.")
+	Attribute("state", String, "Invitation lifecycle state.", func() {
+		Enum("pending", "accepted", "expired", "revoked")
+	})
+	Attribute("accepted_at", String, "When the invitation was accepted.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("revoked_at", String, "When the invitation was revoked.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("inviter_user_id", String, "Gram user ID of the inviter, when known.")
+	Attribute("expires_at", String, "When the invitation expires.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("created_at", String, func() {
+		Format(FormatDateTime)
+	})
+	Attribute("updated_at", String, func() {
+		Format(FormatDateTime)
+	})
+
+	Required("id", "email", "state", "created_at", "updated_at")
+})
+
+// OrganizationInvitationAccept is the public accept-flow view: enough to render copy and redirect,
+// without WorkOS invitation IDs or audit timestamps.
+var OrganizationInvitationAccept = Type("OrganizationInvitationAccept", func() {
+	Attribute("email", String, "Invitee email address.")
+	Attribute("state", String, "Invitation lifecycle state.", func() {
+		Enum("pending", "accepted", "expired", "revoked")
+	})
+	Attribute("organization_name", String, "Gram organization display name when the org is linked in Gram; empty if unknown.")
+	Attribute("accept_invitation_url", String, "URL to complete acceptance in WorkOS (may be empty when not actionable).")
+	Required("email", "state", "organization_name", "accept_invitation_url")
+})
+
+// OrganizationUser is a row from organization_user_relationships joined with the users table.
+var OrganizationUser = Type("OrganizationUser", func() {
+	Attribute("id", String, "Gram relationship row ID.")
+	Attribute("organization_id", String, "Gram organization ID.")
+	Attribute("user_id", String, "Gram user ID.")
+	Attribute("name", String, "User display name.")
+	Attribute("email", String, "User email address.")
+	Attribute("photo_url", String, "User photo URL.")
+	Attribute("workos_membership_id", String, "WorkOS organization membership ID when known.")
+	Attribute("created_at", String, func() {
+		Format(FormatDateTime)
+	})
+	Attribute("updated_at", String, func() {
+		Format(FormatDateTime)
+	})
+
+	Required("id", "organization_id", "user_id", "name", "email", "created_at", "updated_at")
+})
+
+var ListInvitesResult = Type("ListInvitesResult", func() {
+	Required("invitations")
+	Attribute("invitations", ArrayOf(OrganizationInvitation), "Pending invitations for the organization only; accepted, expired, and revoked invitations are omitted.")
+})
+
+var ListUsersResult = Type("ListUsersResult", func() {
+	Required("users")
+	Attribute("users", ArrayOf(OrganizationUser), "Users linked to the organization in Gram.")
+})
+
+var CreatePortalSessionResult = Type("CreatePortalSessionResult", func() {
+	Attribute("url", String, "URL for the webhook portal session.")
+	Attribute("token", String, "Front-end token for the webhook portal session.")
+
+	Required("url", "token")
 })

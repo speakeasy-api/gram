@@ -390,6 +390,7 @@ func newStartCommand() *cli.Command {
 	flags = append(flags, pluginsFlags...)
 	flags = append(flags, assistantRuntimeFlags...)
 	flags = append(flags, pulseMCPFlags...)
+	flags = append(flags, svixFlags...)
 
 	return &cli.Command{
 		Name:  "start",
@@ -693,6 +694,15 @@ func newStartCommand() *cli.Command {
 			oauthService := oauth.NewService(logger, tracerProvider, meterProvider, db, serverURL, cache.NewRedisCacheAdapter(redisClient), encryptionClient, env, sessionManager, guardianPolicy)
 			externalOAuthService := oauth.NewExternalOAuthService(logger, guardianPolicy, db, cache.NewRedisCacheAdapter(redisClient), authorizer, encryptionClient, externalMcpOAuthConfig)
 			shadowMCPClient := shadowmcp.NewClient(logger, db, cache.NewRedisCacheAdapter(redisClient))
+
+			svixClient, shutdown, err := newSvixClient(c, logger, guardianPolicy)
+			if shutdown != nil {
+				shutdownFuncs = append(shutdownFuncs, shutdown)
+			}
+			if err != nil {
+				return fmt.Errorf("failed to create svix webhook sender: %w", err)
+			}
+
 			triggerApp := newTriggersApp(logger, db, encryptionClient, temporalEnv, telemLogger, serverURL)
 
 			platformSvc := platformtoolsruntime.NewService(
@@ -849,7 +859,7 @@ func newStartCommand() *cli.Command {
 				},
 				authzEngine,
 			))
-			organizations.Attach(mux, organizations.NewService(logger, tracerProvider, db, sessionManager, workosClient, productFeatures, authzEngine))
+			organizations.Attach(mux, organizations.NewService(logger, tracerProvider, db, sessionManager, workosClient, productFeatures, authzEngine, auditLogger, svixClient))
 			projects.Attach(mux, projects.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger))
 			packages.Attach(mux, packages.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
 
@@ -967,6 +977,7 @@ func newStartCommand() *cli.Command {
 						ShadowMCPClient:     shadowMCPClient,
 						AuditLogger:         auditLogger,
 						WorkOSEventsClient:  workosEventsClient,
+						SvixClient:          svixClient,
 					})
 					if err := temporalWorker.Run(workerInterruptCh); err != nil {
 						logger.ErrorContext(ctx, "temporal worker failed", attr.SlogError(err))

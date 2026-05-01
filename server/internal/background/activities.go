@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	svix "github.com/svix/svix-webhooks/go"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 
@@ -15,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	resolution_activities "github.com/speakeasy-api/gram/server/internal/background/activities/chat_resolutions"
+	outbox_svix_relay "github.com/speakeasy-api/gram/server/internal/background/activities/outbox_svix_relay"
 	risk_analysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/billing"
@@ -75,6 +77,7 @@ type Activities struct {
 	signalAssistantThread           *activities.SignalAssistantThread
 	processWorkOSOrganizationEvents *activities.ProcessWorkOSOrganizationEvents
 	processWorkOSMembershipEvents   *activities.ProcessWorkOSMembershipEvents
+	outboxSvixRelay                 *outbox_svix_relay.Relay
 }
 
 func NewActivities(
@@ -107,6 +110,7 @@ func NewActivities(
 	shadowMCPClient *shadowmcp.Client,
 	auditLogger *audit.Logger,
 	workosEventsClient *events.Client,
+	svixClient *svix.Svix,
 ) *Activities {
 	usageTrackingStrategy := chat.NewDefaultUsageTrackingStrategy(db, logger, openrouterProvisioner, billingTracker, nil)
 
@@ -158,6 +162,7 @@ func NewActivities(
 		signalAssistantThread:           activities.NewSignalAssistantThread(&AssistantWorkflowSignaler{TemporalEnv: temporalEnv}),
 		processWorkOSOrganizationEvents: processWorkOSOrgEvents,
 		processWorkOSMembershipEvents:   processWorkOSMembershipEvents,
+		outboxSvixRelay:                 outbox_svix_relay.New(logger, tracerProvider, db, svixClient),
 	}
 }
 
@@ -338,4 +343,27 @@ func (a *Activities) SignalAssistantCoordinator(ctx context.Context, input activ
 
 func (a *Activities) SignalAssistantThread(ctx context.Context, input activities.SignalAssistantThreadInput) error {
 	return a.signalAssistantThread.Do(ctx, input)
+}
+
+func (a *Activities) FetchPendingSvixEvents(ctx context.Context, events outbox_svix_relay.FetchEventArgs) (outbox_svix_relay.FetchEventsResult, error) {
+	result, err := a.outboxSvixRelay.FetchEvents(ctx, events)
+	if err != nil {
+		return outbox_svix_relay.FetchEventsResult{}, fmt.Errorf("fetch pending svix events: %w", err)
+	}
+	return result, nil
+}
+
+func (a *Activities) FilterNoopSvixEvents(ctx context.Context, events []*outbox_svix_relay.OutboxSvixEvent) ([]*outbox_svix_relay.OutboxSvixEvent, error) {
+	result, err := a.outboxSvixRelay.FilterNoopEvents(ctx, events)
+	if err != nil {
+		return nil, fmt.Errorf("mark outbox svix events noop: %w", err)
+	}
+	return result, nil
+}
+
+func (a *Activities) RelaySvixEvents(ctx context.Context, args []*outbox_svix_relay.OutboxSvixEvent) error {
+	if err := a.outboxSvixRelay.RelayEvents(ctx, args); err != nil {
+		return fmt.Errorf("relay svix events: %w", err)
+	}
+	return nil
 }

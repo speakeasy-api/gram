@@ -58,6 +58,7 @@ require (
 	github.com/standard-webhooks/standard-webhooks/libraries v0.0.0-20250711233419-a173a6c0125c
 	github.com/stretchr/testify v1.11.1
 	github.com/superfly/fly-go v0.3.1
+	github.com/svix/svix-webhooks v1.92.2
 	github.com/testcontainers/testcontainers-go v0.42.0
 	github.com/testcontainers/testcontainers-go/modules/clickhouse v0.42.0
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.42.0

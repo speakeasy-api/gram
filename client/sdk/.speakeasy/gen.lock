@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: f4f71af83f4906809176841648fe8725
+  docChecksum: 7b20bd86a43c5c8b8704a29a22241d88
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -168,6 +168,8 @@ trackedFiles:
     last_write_checksum: sha1:a67889cdc8077efd3bfc09e9a66388b33bae98c5
   docs/models/components/createpluginform.md:
     last_write_checksum: sha1:74189ab8d14c5d77c9248a1f9746062e85f09427
+  docs/models/components/createportalsessionresult.md:
+    last_write_checksum: sha1:9018bf1db6808bdae11ee4643f70342bb75cabbc
   docs/models/components/createprojectrequestbody.md:
     last_write_checksum: sha1:2e6b34ca055f9c45cb5bdfbdd7c57c412a4765d9
   docs/models/components/createprojectresult.md:
@@ -512,6 +514,8 @@ trackedFiles:
     last_write_checksum: sha1:eb841eca954c1c8700343c87a59175a3fdcc7e46
   docs/models/components/operator.md:
     last_write_checksum: sha1:a278250c76553362effdfb720017a38808eb6283
+  docs/models/components/organization.md:
+    last_write_checksum: sha1:66c352c06492ea3b63ce335fb63136ad0367082b
   docs/models/components/organizationentry.md:
     last_write_checksum: sha1:d25cab5c2265fb437653402838c61ed27f7dcbc7
   docs/models/components/organizationinvitation.md:
@@ -1044,6 +1048,10 @@ trackedFiles:
     last_write_checksum: sha1:fbf0f99c83f527a0e4396088a1cb70261c8ea142
   docs/models/operations/createpluginsecurity.md:
     last_write_checksum: sha1:43bff8e9a554c79486abf242c800c3443da24e04
+  docs/models/operations/createportalsessionrequest.md:
+    last_write_checksum: sha1:832a9d607f4dc3f2ddb8f90e84b51b9af8599d59
+  docs/models/operations/createportalsessionsecurity.md:
+    last_write_checksum: sha1:7125596be66e623cce80e9f3c7208905de0c2d41
   docs/models/operations/createprojectrequest.md:
     last_write_checksum: sha1:e36ac7be68048f1f388965e9a3648ca1a2acd274
   docs/models/operations/createprojectsecurity.md:
@@ -1230,6 +1238,10 @@ trackedFiles:
     last_write_checksum: sha1:79cca57aa0f56e268aeb59f192d42c67136fa35f
   docs/models/operations/disablerbacsecurity.md:
     last_write_checksum: sha1:008299956482613d350579e2cf1b4077227720d4
+  docs/models/operations/disablewebhooksrequest.md:
+    last_write_checksum: sha1:4047bb6d541fe75e00672ce1470f9efed7fb02b4
+  docs/models/operations/disablewebhookssecurity.md:
+    last_write_checksum: sha1:c49ffaa46d06615872fe2be7b0d8cf7119514c43
   docs/models/operations/downloadobservabilitypluginrequest.md:
     last_write_checksum: sha1:35ff38b278f7587bd96cbd65cf1de037406dc39c
   docs/models/operations/downloadobservabilitypluginresponse.md:
@@ -1246,6 +1258,10 @@ trackedFiles:
     last_write_checksum: sha1:a246fc979c185e5711f4efe07c586752202ec7f2
   docs/models/operations/enablerbacsecurity.md:
     last_write_checksum: sha1:dcadc4f44cf6dda9e7a109b2cc6c766e2a280b81
+  docs/models/operations/enablewebhooksrequest.md:
+    last_write_checksum: sha1:4c78c8feefdeb5b4f806de83982755a1d5005c6e
+  docs/models/operations/enablewebhookssecurity.md:
+    last_write_checksum: sha1:eb9dac59664586db9d7537cc7db9133803d11461
   docs/models/operations/evolvedeploymentrequest.md:
     last_write_checksum: sha1:0bbd61b2374e44e59476df5d7c7016434f2fccca
   docs/models/operations/evolvedeploymentsecurity.md:
@@ -1380,6 +1396,10 @@ trackedFiles:
     last_write_checksum: sha1:1c64442513f93e2ef813aa655a89aa19cb9e6fa3
   docs/models/operations/getobservabilityoverviewsecurityoption2.md:
     last_write_checksum: sha1:33d537179550735c0c9b19db485d2e5626412ea2
+  docs/models/operations/getorganizationrequest.md:
+    last_write_checksum: sha1:755f6641f99236f762dc40859a2945359060cc92
+  docs/models/operations/getorganizationsecurity.md:
+    last_write_checksum: sha1:7ad8eac8efcd6915a8b4db81688b6b6d485f3fe3
   docs/models/operations/getperiodusagerequest.md:
     last_write_checksum: sha1:25d9b5f15506e38cf2ff072d825b29269b68d1d0
   docs/models/operations/getperiodusagesecurity.md:
@@ -2231,7 +2251,7 @@ trackedFiles:
   docs/sdks/mcpservers/README.md:
     last_write_checksum: sha1:e69099f482449fce039fa4115e4ddf68e2a8c729
   docs/sdks/organizations/README.md:
-    last_write_checksum: sha1:ff31d04fb18732503d8eedb6230d9d300af1a07a
+    last_write_checksum: sha1:0348348364c7580f26d98a4a43808c021d571915
   docs/sdks/packages/README.md:
     last_write_checksum: sha1:630727b17ae78739629705da27f894236bba7ad0
   docs/sdks/plugins/README.md:
@@ -2622,6 +2642,14 @@ trackedFiles:
     last_write_checksum: sha1:f97d8cc577fb27c1d2713132e7dcc184353da118
   src/funcs/mcpServersUpdate.ts:
     last_write_checksum: sha1:a211c75fba6033df07effcd1b9787565fb52b8b1
+  src/funcs/organizationsCreatePortalSession.ts:
+    last_write_checksum: sha1:67367ee8153b1e408726fef9e02695465ffbb564
+  src/funcs/organizationsDisableWebhooks.ts:
+    last_write_checksum: sha1:e547f4803408ce6ce33bdb1b1888a4345c36b56c
+  src/funcs/organizationsEnableWebhooks.ts:
+    last_write_checksum: sha1:7f2651d52cb9292450a9b4c523e125ba854eee6d
+  src/funcs/organizationsGet.ts:
+    last_write_checksum: sha1:425caca4be11163b202d6b893f8daa868c224c29
   src/funcs/organizationsGetInviteByToken.ts:
     last_write_checksum: sha1:3aa386ba87041f8c80dba9c044e6d3116296083a
   src/funcs/organizationsListInvites.ts:
@@ -3114,6 +3142,8 @@ trackedFiles:
     pristine_git_object: 6cf8a4aa0320cc638b3916da1343ad13993e4678
   src/models/components/createpluginform.ts:
     last_write_checksum: sha1:ecfe1f04d97dfb8569beee623897b7bbf14a5474
+  src/models/components/createportalsessionresult.ts:
+    last_write_checksum: sha1:dbde55f4c7177572207e2451278ce4c7ebd7a3c8
   src/models/components/createprojectrequestbody.ts:
     id: 5d88b9aa4a4e
     last_write_checksum: sha1:b5356ce28ea4d407957f928d9cac425b96a9e800
@@ -3354,7 +3384,7 @@ trackedFiles:
     pristine_git_object: a6f415c341273d2f679cbaa39ea48eaede35f633
   src/models/components/index.ts:
     id: 0aa842dce54d
-    last_write_checksum: sha1:cd6e54d88998df6e54d4ef02e455da78ae30e029
+    last_write_checksum: sha1:662c9aa7a2bd6c6316100f5ea3f3222152bea1c6
     pristine_git_object: 4c964f216a07beb3007a26774ce7bdaa48c9f74c
   src/models/components/inforesponsebody.ts:
     id: a1447891c5a4
@@ -3564,6 +3594,8 @@ trackedFiles:
     id: a2a9b35d94f5
     last_write_checksum: sha1:b044af42cc03d1e170cf57b256438d324cf97465
     pristine_git_object: 72daadebf82cd22176d850f21cb20daacfec5554
+  src/models/components/organization.ts:
+    last_write_checksum: sha1:274293bd8e907520337f1fb425086aa6e04066ec
   src/models/components/organizationentry.ts:
     id: aa6032ffcddc
     last_write_checksum: sha1:ea941bf60c94870745f97d87fe5084c860dc91b1
@@ -4082,6 +4114,8 @@ trackedFiles:
     pristine_git_object: 249ab471b988ade4599c9f9b4021a6a23df7edf1
   src/models/operations/createplugin.ts:
     last_write_checksum: sha1:f614c9a8165fc50aed153190d9e1e6e154d3dafe
+  src/models/operations/createportalsession.ts:
+    last_write_checksum: sha1:6c520e4bc6a5501628c799c7459def093dd38b8b
   src/models/operations/createproject.ts:
     id: 906aef1b7711
     last_write_checksum: sha1:fa92b1cb1df3220c455eff34ef55012b36163171
@@ -4174,12 +4208,16 @@ trackedFiles:
     last_write_checksum: sha1:29e7c1687257271fa46352024364eeeb5216bdbb
   src/models/operations/disablerbac.ts:
     last_write_checksum: sha1:0d557ade2a9e135cf1c14c6f97b1e55a7d0347e5
+  src/models/operations/disablewebhooks.ts:
+    last_write_checksum: sha1:649c773ea00fe70bfe7100d0af0496a4ba0fb7da
   src/models/operations/downloadobservabilityplugin.ts:
     last_write_checksum: sha1:12b3f77fced862e45b4aec85a6899b74a383c2a9
   src/models/operations/downloadpluginpackage.ts:
     last_write_checksum: sha1:4e8285cd1ca0b6077f0dbb27ed37f2c9405c3045
   src/models/operations/enablerbac.ts:
     last_write_checksum: sha1:8ecdbe0fff94b4827671b8f8806feaebe6d9441d
+  src/models/operations/enablewebhooks.ts:
+    last_write_checksum: sha1:14907d4f9085ce111826b3b8d20acd069ca17067
   src/models/operations/evolvedeployment.ts:
     id: 327da60eca88
     last_write_checksum: sha1:b56cfe5ac466a55c4596b8d7bf9fa17c845fb5ba
@@ -4236,6 +4274,8 @@ trackedFiles:
     last_write_checksum: sha1:d2f8088de6c1a6daf9e160425975a26af60d0505
   src/models/operations/getobservabilityoverview.ts:
     last_write_checksum: sha1:e1baabbb69c8ed056f1e1a4135bd41916b20543c
+  src/models/operations/getorganization.ts:
+    last_write_checksum: sha1:b7733d77c622b0522de606d842b730f8da7b42f0
   src/models/operations/getperiodusage.ts:
     id: ccdd5b11ed06
     last_write_checksum: sha1:46510bbd27108ee1607f58ab7583d7dbd36494cb
@@ -4296,7 +4336,7 @@ trackedFiles:
     last_write_checksum: sha1:68a17ba4375c98a861ba8ea4838401238e9caf7e
   src/models/operations/index.ts:
     id: 0d9ffaf774d2
-    last_write_checksum: sha1:b8622cba1e896a16464ec2f2e5daf16911ba9826
+    last_write_checksum: sha1:3d42b435e94229d4d345ce174dd2b8ba9bf61df0
     pristine_git_object: dfbbde8a33b65de59f2ddc44b5a1200061eeacb0
   src/models/operations/integrationsnumberget.ts:
     id: 0417380c9c27
@@ -4750,6 +4790,8 @@ trackedFiles:
     pristine_git_object: 3dd335800930540539569fa071386bd305ef9804
   src/react-query/createPlugin.ts:
     last_write_checksum: sha1:54480f7232260663bb227d3012608ef9260531ce
+  src/react-query/createPortalSession.ts:
+    last_write_checksum: sha1:d682d7a75b9245e2b5fb9b970082b0cfdb9fb850
   src/react-query/createProject.ts:
     id: d3697497a5e2
     last_write_checksum: sha1:68e6d29786e8dcb0f7578d92f2a80e5c68565c52
@@ -4840,8 +4882,12 @@ trackedFiles:
     pristine_git_object: c44ea770cea09be89ae6d5133131f92c7a5274dc
   src/react-query/disableRBAC.ts:
     last_write_checksum: sha1:87416ad89eee7088281956bd886437480bc70c34
+  src/react-query/disableWebhooks.ts:
+    last_write_checksum: sha1:2107b365915975e26d9700fa96f4c4aacad64d04
   src/react-query/enableRBAC.ts:
     last_write_checksum: sha1:2bd979ac77780bbea2d588e97b5b9cef9c24f69a
+  src/react-query/enableWebhooks.ts:
+    last_write_checksum: sha1:d32338d7b6853890854cd4e7fe428d9a6dd6205a
   src/react-query/evolveDeployment.ts:
     id: cbcdca6b91d0
     last_write_checksum: sha1:c7cc83bf44fa38d0b5f392932d8e56ef1e9c45bf
@@ -4986,7 +5032,7 @@ trackedFiles:
     last_write_checksum: sha1:4aa2ad3f103ef14ea31e605c1d9430e7ec3de3f1
   src/react-query/index.ts:
     id: 9e975471aa65
-    last_write_checksum: sha1:28656d1306c60b6ca7a913d4df349f9d6c6e4f70
+    last_write_checksum: sha1:79a0875cadc95846ea7019a3f3fcbd72bb29e773
     pristine_git_object: ee9cacb2ccb4e0631e0e1fcf4e467454534d2b35
   src/react-query/instance.core.ts:
     id: b18e0a042b11
@@ -5202,6 +5248,10 @@ trackedFiles:
     last_write_checksum: sha1:61911a4acd50a4d7c6f1cda61717090e083d64f2
   src/react-query/members.ts:
     last_write_checksum: sha1:c12a6dc5ce5c89856d0ff50ecdd4a1ff0200eb9f
+  src/react-query/organization.core.ts:
+    last_write_checksum: sha1:85abee26e4654854ce98c76fbc2700035e48e094
+  src/react-query/organization.ts:
+    last_write_checksum: sha1:b6fafc047ccdc6c9d760b87259aa052db90af07d
   src/react-query/pauseTrigger.ts:
     last_write_checksum: sha1:8d80c86e1e454440be0ba898cefbd1255273c1e0
   src/react-query/plugin.core.ts:
@@ -5595,7 +5645,7 @@ trackedFiles:
   src/sdk/mcpservers.ts:
     last_write_checksum: sha1:79b70cd5168949c75514edc1680b1afcb05e1370
   src/sdk/organizations.ts:
-    last_write_checksum: sha1:8dd85eb155db8331d8ab2f56f82fd40f426cafe5
+    last_write_checksum: sha1:91e1ad56121c9818b8d72d6839f5d626ed8561e4
   src/sdk/packages.ts:
     id: d71e5e0d5096
     last_write_checksum: sha1:cd45c1746ab2a619fb53b913e0398d80731df1dc
@@ -8334,6 +8384,38 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  createPortalSession:
+    speakeasy-default-create-portal-session:
+      responses:
+        "200":
+          application/json: {"token": "<value>", "url": "https://weird-pacemaker.biz"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  disableWebhooks:
+    speakeasy-default-disable-webhooks:
+      responses:
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  enableWebhooks:
+    speakeasy-default-enable-webhooks:
+      responses:
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  getOrganization:
+    speakeasy-default-get-organization:
+      responses:
+        "200":
+          application/json: {"account_type": "<value>", "created_at": "2025-03-07T23:45:20.495Z", "id": "<id>", "name": "<value>", "slug": "<value>", "updated_at": "2025-10-13T14:22:14.424Z", "webhooks_enabled": false, "webhooks_onboarded": true}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
 examplesVersion: 1.0.2
 generatedTests: {}
 generatedFiles:

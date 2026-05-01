@@ -56,11 +56,7 @@ func (l *Logger) LogTriggerInstanceCreate(ctx context.Context, dbtx repo.DBTX, e
 		Metadata:       nil,
 	}
 
-	if _, err := repo.New(dbtx).InsertAuditLog(ctx, entry); err != nil {
-		return fmt.Errorf("log %s: %w", action, err)
-	}
-
-	return nil
+	return l.log(ctx, dbtx, entry)
 }
 
 type LogTriggerInstanceUpdateEvent struct {
@@ -112,11 +108,7 @@ func (l *Logger) LogTriggerInstanceUpdate(ctx context.Context, dbtx repo.DBTX, e
 		Metadata:       nil,
 	}
 
-	if _, err := repo.New(dbtx).InsertAuditLog(ctx, entry); err != nil {
-		return fmt.Errorf("log %s: %w", action, err)
-	}
-
-	return nil
+	return l.log(ctx, dbtx, entry)
 }
 
 type LogTriggerInstanceDeleteEvent struct {
@@ -155,11 +147,7 @@ func (l *Logger) LogTriggerInstanceDelete(ctx context.Context, dbtx repo.DBTX, e
 		Metadata:       nil,
 	}
 
-	if _, err := repo.New(dbtx).InsertAuditLog(ctx, entry); err != nil {
-		return fmt.Errorf("log %s: %w", action, err)
-	}
-
-	return nil
+	return l.log(ctx, dbtx, entry)
 }
 
 type LogTriggerInstancePauseEvent struct {
@@ -198,11 +186,7 @@ func (l *Logger) LogTriggerInstancePause(ctx context.Context, dbtx repo.DBTX, ev
 		Metadata:       nil,
 	}
 
-	if _, err := repo.New(dbtx).InsertAuditLog(ctx, entry); err != nil {
-		return fmt.Errorf("log %s: %w", action, err)
-	}
-
-	return nil
+	return l.log(ctx, dbtx, entry)
 }
 
 type LogTriggerInstanceResumeEvent struct {
@@ -241,9 +225,5 @@ func (l *Logger) LogTriggerInstanceResume(ctx context.Context, dbtx repo.DBTX, e
 		Metadata:       nil,
 	}
 
-	if _, err := repo.New(dbtx).InsertAuditLog(ctx, entry); err != nil {
-		return fmt.Errorf("log %s: %w", action, err)
-	}
-
-	return nil
+	return l.log(ctx, dbtx, entry)
 }

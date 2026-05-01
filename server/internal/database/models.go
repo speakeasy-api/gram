@@ -780,6 +780,8 @@ type OrganizationMetadatum struct {
 	WorkosID           pgtype.Text
 	WorkosUpdatedAt    pgtype.Timestamptz
 	WorkosLastEventID  pgtype.Text
+	SvixAppID          pgtype.Text
+	WebhooksEnabled    pgtype.Bool
 	Whitelisted        bool
 	FreeTrialStartedAt pgtype.Timestamptz
 	FreeTrialEndsAt    pgtype.Timestamptz
@@ -829,6 +831,27 @@ type OrganizationUserRelationship struct {
 	UpdatedAt          pgtype.Timestamptz
 	DeletedAt          pgtype.Timestamptz
 	Deleted            bool
+}
+
+type Outbox struct {
+	ID             int64
+	PublicID       uuid.UUID
+	OrganizationID string
+	EventType      string
+	Payload        []byte
+	CreatedAt      pgtype.Timestamptz
+}
+
+type OutboxSvixRelay struct {
+	OutboxID      int64
+	ProcessedAt   pgtype.Timestamptz
+	Noop          bool
+	DeadLettered  bool
+	SvixMessageID pgtype.Text
+	Attempts      int32
+	LastError     pgtype.Text
+	CreatedAt     pgtype.Timestamptz
+	UpdatedAt     pgtype.Timestamptz
 }
 
 type Package struct {

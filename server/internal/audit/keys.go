@@ -60,11 +60,8 @@ func (l *Logger) LogKeyCreate(ctx context.Context, dbtx repo.DBTX, event LogKeyC
 		BeforeSnapshot: nil,
 		AfterSnapshot:  nil,
 	}
-	if _, err := repo.New(dbtx).InsertAuditLog(ctx, entry); err != nil {
-		return fmt.Errorf("log %s: %w", action, err)
-	}
 
-	return nil
+	return l.log(ctx, dbtx, entry)
 }
 
 type LogKeyRevokeEvent struct {
@@ -111,9 +108,6 @@ func (l *Logger) LogKeyRevoke(ctx context.Context, dbtx repo.DBTX, event LogKeyR
 		BeforeSnapshot: nil,
 		AfterSnapshot:  nil,
 	}
-	if _, err := repo.New(dbtx).InsertAuditLog(ctx, entry); err != nil {
-		return fmt.Errorf("log %s: %w", action, err)
-	}
 
-	return nil
+	return l.log(ctx, dbtx, entry)
 }

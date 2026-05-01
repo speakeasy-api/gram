@@ -53,11 +53,7 @@ func (l *Logger) LogRemoteMcpServerCreate(ctx context.Context, dbtx repo.DBTX, e
 		Metadata:       nil,
 	}
 
-	if _, err := repo.New(dbtx).InsertAuditLog(ctx, entry); err != nil {
-		return fmt.Errorf("log %s: %w", action, err)
-	}
-
-	return nil
+	return l.log(ctx, dbtx, entry)
 }
 
 type LogRemoteMcpServerUpdateEvent struct {
@@ -108,11 +104,7 @@ func (l *Logger) LogRemoteMcpServerUpdate(ctx context.Context, dbtx repo.DBTX, e
 		Metadata:       nil,
 	}
 
-	if _, err := repo.New(dbtx).InsertAuditLog(ctx, entry); err != nil {
-		return fmt.Errorf("log %s: %w", action, err)
-	}
-
-	return nil
+	return l.log(ctx, dbtx, entry)
 }
 
 type LogRemoteMcpServerDeleteEvent struct {
@@ -150,9 +142,5 @@ func (l *Logger) LogRemoteMcpServerDelete(ctx context.Context, dbtx repo.DBTX, e
 		Metadata:       nil,
 	}
 
-	if _, err := repo.New(dbtx).InsertAuditLog(ctx, entry); err != nil {
-		return fmt.Errorf("log %s: %w", action, err)
-	}
-
-	return nil
+	return l.log(ctx, dbtx, entry)
 }

@@ -56,11 +56,7 @@ func (l *Logger) LogAccessRoleCreate(ctx context.Context, dbtx repo.DBTX, event 
 		Metadata:       nil,
 	}
 
-	if _, err := repo.New(dbtx).InsertAuditLog(ctx, entry); err != nil {
-		return fmt.Errorf("log %s: %w", action, err)
-	}
-
-	return nil
+	return l.log(ctx, dbtx, entry)
 }
 
 type LogAccessRoleUpdateEvent struct {
@@ -112,11 +108,7 @@ func (l *Logger) LogAccessRoleUpdate(ctx context.Context, dbtx repo.DBTX, event 
 		Metadata:       nil,
 	}
 
-	if _, err := repo.New(dbtx).InsertAuditLog(ctx, entry); err != nil {
-		return fmt.Errorf("log %s: %w", action, err)
-	}
-
-	return nil
+	return l.log(ctx, dbtx, entry)
 }
 
 type LogAccessRoleDeleteEvent struct {
@@ -154,11 +146,7 @@ func (l *Logger) LogAccessRoleDelete(ctx context.Context, dbtx repo.DBTX, event 
 		Metadata:       nil,
 	}
 
-	if _, err := repo.New(dbtx).InsertAuditLog(ctx, entry); err != nil {
-		return fmt.Errorf("log %s: %w", action, err)
-	}
-
-	return nil
+	return l.log(ctx, dbtx, entry)
 }
 
 type LogAccessMemberRoleUpdateEvent struct {
@@ -210,11 +198,7 @@ func (l *Logger) LogAccessMemberRoleUpdate(ctx context.Context, dbtx repo.DBTX, 
 		Metadata:       nil,
 	}
 
-	if _, err := repo.New(dbtx).InsertAuditLog(ctx, entry); err != nil {
-		return fmt.Errorf("log %s: %w", action, err)
-	}
-
-	return nil
+	return l.log(ctx, dbtx, entry)
 }
 
 type LogAccessChallengeResolveEvent struct {

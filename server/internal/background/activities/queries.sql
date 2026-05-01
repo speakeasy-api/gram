@@ -59,7 +59,74 @@ JOIN users u ON d.user_id = u.id
 WHERE d.organization_id = ANY($1::text[])
   AND d.id IN (
     SELECT DISTINCT ON (organization_id) id
-    FROM deployments 
+    FROM deployments
     WHERE organization_id = ANY($1::text[])
     ORDER BY organization_id, created_at DESC
   );
+
+-- name: FetchPendingOutboxIDs :many
+-- Fetch the next batch of outbox row IDs for an organization that the Svix
+-- relay has not finished processing. A row is "pending" when no relay
+-- tracking row exists OR a tracking row exists with processed_at IS NULL and
+-- not dead-lettered. Returns only IDs to keep the activity payload small —
+-- workflows pass IDs to RelayBatch which re-queries the full rows.
+SELECT o.id, o.organization_id, om.svix_app_id, om.webhooks_enabled
+FROM outbox o
+LEFT JOIN organization_metadata om ON o.organization_id = om.id
+LEFT JOIN outbox_svix_relays r ON r.outbox_id = o.id
+WHERE r.outbox_id IS NULL OR (r.processed_at IS NULL AND r.dead_lettered IS FALSE)
+ORDER BY o.id ASC
+LIMIT @batch_size;
+
+-- name: GetOrganizationSvixAppID :one
+-- Returns the organization's current svix_app_id (nullable).
+SELECT svix_app_id, webhooks_enabled
+FROM organization_metadata
+WHERE id = @id;
+
+-- name: FetchOutboxRowsByIDs :many
+-- Hydrate a set of outbox IDs back into full rows along with their current
+-- relay attempt count. Intended to be called inside the relay activity after
+-- the workflow has handed it a batch of IDs.
+SELECT
+    o.id,
+    o.organization_id,
+    o.public_id,
+    o.event_type,
+    o.payload,
+    COALESCE(r.attempts, 0)::int AS attempts
+FROM outbox o
+LEFT JOIN outbox_svix_relays r ON r.outbox_id = o.id
+WHERE o.id = ANY(@ids::bigint[])
+ORDER BY o.id ASC;
+
+-- name: MarkOutboxRelayProcessed :exec
+-- Marks a relay as successfully delivered to Svix.
+INSERT INTO outbox_svix_relays (outbox_id, processed_at, svix_message_id, attempts, last_error)
+VALUES (@outbox_id, clock_timestamp(), @svix_message_id, 1, NULL)
+ON CONFLICT (outbox_id) DO UPDATE SET
+    processed_at = clock_timestamp(),
+    svix_message_id = EXCLUDED.svix_message_id,
+    attempts = outbox_svix_relays.attempts + 1,
+    last_error = NULL,
+    updated_at = clock_timestamp();
+
+-- name: MarkOutboxRelayFailed :exec
+-- Records a failed delivery attempt; the row remains pending for retry.
+INSERT INTO outbox_svix_relays (outbox_id, attempts, last_error)
+VALUES ($1, 1, $2)
+ON CONFLICT (outbox_id) DO UPDATE SET
+    attempts = outbox_svix_relays.attempts + 1,
+    last_error = EXCLUDED.last_error,
+    updated_at = clock_timestamp();
+
+-- name: MarkOutboxRelayDeadLettered :exec
+-- Permanently parks a row after exceeding the retry budget. The pending
+-- partial index excludes dead_lettered rows so they will not be re-fetched.
+INSERT INTO outbox_svix_relays (outbox_id, attempts, last_error, dead_lettered)
+VALUES ($1, 1, $2, TRUE)
+ON CONFLICT (outbox_id) DO UPDATE SET
+    attempts = outbox_svix_relays.attempts + 1,
+    last_error = EXCLUDED.last_error,
+    dead_lettered = TRUE,
+    updated_at = clock_timestamp();

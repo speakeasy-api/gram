@@ -54,11 +54,7 @@ func (l *Logger) LogEnvironmentCreate(ctx context.Context, dbtx repo.DBTX, event
 		Metadata:       nil,
 	}
 
-	if _, err := repo.New(dbtx).InsertAuditLog(ctx, entry); err != nil {
-		return fmt.Errorf("log %s: %w", action, err)
-	}
-
-	return nil
+	return l.log(ctx, dbtx, entry)
 }
 
 type LogEnvironmentUpdateEvent struct {
@@ -110,11 +106,7 @@ func (l *Logger) LogEnvironmentUpdate(ctx context.Context, dbtx repo.DBTX, event
 		Metadata:       nil,
 	}
 
-	if _, err := repo.New(dbtx).InsertAuditLog(ctx, entry); err != nil {
-		return fmt.Errorf("log %s: %w", action, err)
-	}
-
-	return nil
+	return l.log(ctx, dbtx, entry)
 }
 
 type LogEnvironmentDeleteEvent struct {
@@ -153,9 +145,5 @@ func (l *Logger) LogEnvironmentDelete(ctx context.Context, dbtx repo.DBTX, event
 		Metadata:       nil,
 	}
 
-	if _, err := repo.New(dbtx).InsertAuditLog(ctx, entry); err != nil {
-		return fmt.Errorf("log %s: %w", action, err)
-	}
-
-	return nil
+	return l.log(ctx, dbtx, entry)
 }
