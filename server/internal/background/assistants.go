@@ -48,6 +48,12 @@ const assistantThreadMaxIterations = 500
 // re-bootstraps via SignalWithStart.
 const assistantCoordinatorIdleTimeout = 1 * time.Hour
 
+// assistantRetryAdmissionBackoff prevents setup/runtime failures that return
+// RetryAdmission from hot-looping through coordinator admission. The activity
+// returns nil in these cases, so Temporal's activity retry policy is not in
+// play.
+const assistantRetryAdmissionBackoff = 30 * time.Second
+
 func AssistantCoordinatorWorkflow(ctx workflow.Context, input AssistantCoordinatorWorkflowInput) error {
 	var a *Activities
 
@@ -145,6 +151,9 @@ func AssistantThreadWorkflow(ctx workflow.Context, input AssistantThreadWorkflow
 			return nil
 		}
 		if result.RetryAdmission {
+			if err := workflow.NewTimer(ctx, assistantRetryAdmissionBackoff).Get(ctx, nil); err != nil {
+				return err
+			}
 			return workflow.ExecuteActivity(ctx, a.SignalAssistantCoordinator, activities.SignalAssistantCoordinatorInput{
 				AssistantID: result.AssistantID,
 			}).Get(ctx, nil)

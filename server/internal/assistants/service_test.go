@@ -4,9 +4,11 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"log"
 	"net/url"
 	"os"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -430,9 +432,85 @@ WHERE assistant_thread_id = $1
 	require.Contains(t, lastError.String, "runtime RunTurn blew up")
 }
 
+func TestServiceCoreProcessThreadEventsDoesNotStopRuntimeOnConfigureFailure(t *testing.T) {
+	t.Parallel()
+
+	conn, err := assistantsInfra.CloneTestDatabase(t, "assistants_config_fail")
+	require.NoError(t, err)
+
+	projectID := uuid.New()
+	assistantID := uuid.New()
+	chatID := uuid.New()
+	threadID := uuid.New()
+	insertAssistantFixture(t, conn, projectID, assistantID, chatID, threadID)
+
+	var stopCalls atomic.Int64
+	logger := testenv.NewLogger(t)
+	tokens := assistanttokens.New("test-jwt-secret", conn, nil)
+	backend := testRuntimeBackend{
+		backend: runtimeBackendFlyIO,
+		ensureResult: RuntimeBackendEnsureResult{
+			ColdStart:      true,
+			NeedsConfigure: true,
+			BackendMetadataJSON: []byte(`{
+				"app_name": "gram-asst-test",
+				"app_url": "https://gram-asst-test.fly.dev",
+				"machine_id": "machine-1",
+				"last_boot_id": "boot-1"
+			}`),
+		},
+		configureErr: errors.New("runtime Configure blew up"),
+		stopCalls:    &stopCalls,
+	}
+	core := NewServiceCore(logger, conn, backend, nil, tokens, mustParseURLForServiceTest(t, "https://gram.example.com"), telemetry.NewStub(logger))
+
+	admitted, err := core.AdmitPendingThreads(t.Context(), assistantID)
+	require.NoError(t, err)
+	require.Equal(t, []uuid.UUID{threadID}, admitted.ThreadIDs)
+
+	result, err := core.ProcessThreadEvents(t.Context(), projectID, threadID)
+	require.NoError(t, err)
+	require.True(t, result.RetryAdmission)
+	require.False(t, result.RuntimeActive)
+	require.Equal(t, int64(0), stopCalls.Load(), "configure failure should preserve the Fly app for reuse/recovery")
+
+	var state string
+	var deleted bool
+	var metadata []byte
+	err = conn.QueryRow(t.Context(), `
+SELECT state, deleted, backend_metadata_json
+FROM assistant_runtimes
+WHERE assistant_thread_id = $1
+`, threadID).Scan(&state, &deleted, &metadata)
+	require.NoError(t, err)
+	require.Equal(t, runtimeStateFailed, state)
+	require.True(t, deleted)
+	require.JSONEq(t, string(backend.ensureResult.BackendMetadataJSON), string(metadata))
+
+	admittedAgain, err := core.AdmitPendingThreads(t.Context(), assistantID)
+	require.NoError(t, err)
+	require.Equal(t, []uuid.UUID{threadID}, admittedAgain.ThreadIDs)
+
+	var nextMetadata []byte
+	err = conn.QueryRow(t.Context(), `
+SELECT backend_metadata_json
+FROM assistant_runtimes
+WHERE assistant_thread_id = $1
+  AND deleted IS FALSE
+ORDER BY created_at DESC
+LIMIT 1
+`, threadID).Scan(&nextMetadata)
+	require.NoError(t, err)
+	require.JSONEq(t, string(backend.ensureResult.BackendMetadataJSON), string(nextMetadata))
+}
+
 type testRuntimeBackend struct {
-	backend    string
-	runTurnErr error
+	backend      string
+	ensureResult RuntimeBackendEnsureResult
+	ensureErr    error
+	configureErr error
+	runTurnErr   error
+	stopCalls    *atomic.Int64
 }
 
 func (t testRuntimeBackend) Backend() string {
@@ -444,11 +522,14 @@ func (t testRuntimeBackend) SupportsBackend(backend string) bool {
 }
 
 func (t testRuntimeBackend) Ensure(context.Context, assistantRuntimeRecord) (RuntimeBackendEnsureResult, error) {
-	return RuntimeBackendEnsureResult{ColdStart: false, NeedsConfigure: false, BackendMetadataJSON: nil}, nil
+	if t.ensureErr != nil {
+		return RuntimeBackendEnsureResult{}, t.ensureErr
+	}
+	return t.ensureResult, nil
 }
 
 func (t testRuntimeBackend) Configure(context.Context, assistantRuntimeRecord, runtimeStartupConfig) error {
-	return nil
+	return t.configureErr
 }
 
 func (t testRuntimeBackend) RunTurn(context.Context, assistantRuntimeRecord, string, string, string) error {
@@ -456,9 +537,23 @@ func (t testRuntimeBackend) RunTurn(context.Context, assistantRuntimeRecord, str
 }
 
 func (t testRuntimeBackend) ServerURL(context.Context, assistantRuntimeRecord, *url.URL) (*url.URL, error) {
-	return nil, nil
+	parsed, err := url.Parse("https://gram.example.com")
+	if err != nil {
+		return nil, fmt.Errorf("parse test server url: %w", err)
+	}
+	return parsed, nil
 }
 
 func (t testRuntimeBackend) Stop(context.Context, assistantRuntimeRecord) error {
+	if t.stopCalls != nil {
+		t.stopCalls.Add(1)
+	}
 	return nil
+}
+
+func mustParseURLForServiceTest(t *testing.T, raw string) *url.URL {
+	t.Helper()
+	parsed, err := url.Parse(raw)
+	require.NoError(t, err)
+	return parsed
 }
