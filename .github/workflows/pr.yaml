@@ -7,6 +7,7 @@ on:
   push:
     branches:
       - main
+  merge_group:
 
 permissions:
   id-token: write
@@ -50,42 +51,42 @@ jobs:
           HAS_PREVIEW_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'preview') }}
           HAS_FULL_CI_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'ci:full') }}
         run: |
-          if [[ "${{ steps.filter.outputs.server }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "$HAS_PREVIEW_LABEL" == "true" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
+          if [[ "${{ steps.filter.outputs.server }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "${{ github.event_name }}" == "merge_group" || "$HAS_PREVIEW_LABEL" == "true" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
             echo "server=true" >> $GITHUB_OUTPUT
             echo "Server jobs will run."
           else
             echo "Server jobs will be skipped."
           fi
 
-          if [[ "${{ steps.filter.outputs.client }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "$HAS_PREVIEW_LABEL" == "true" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
+          if [[ "${{ steps.filter.outputs.client }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "${{ github.event_name }}" == "merge_group" || "$HAS_PREVIEW_LABEL" == "true" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
             echo "client=true" >> $GITHUB_OUTPUT
             echo "Client jobs will run."
           else
             echo "Client jobs will be skipped."
           fi
 
-          if [[ "${{ steps.filter.outputs.cli }}" == "true" || "${{ github.ref }}" ==  "refs/heads/main" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
+          if [[ "${{ steps.filter.outputs.cli }}" == "true" || "${{ github.ref }}" ==  "refs/heads/main" || "${{ github.event_name }}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
             echo "cli=true" >> $GITHUB_OUTPUT
             echo "CLI jobs will run."
           else
             echo "CLI jobs will be skipped."
           fi
 
-          if [[ "${{ steps.filter.outputs.functions }}" == "true" || "${{ github.ref }}" ==  "refs/heads/main" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
+          if [[ "${{ steps.filter.outputs.functions }}" == "true" || "${{ github.ref }}" ==  "refs/heads/main" || "${{ github.event_name }}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
             echo "functions=true" >> $GITHUB_OUTPUT
             echo "Functions jobs will run."
           else
             echo "Functions jobs will be skipped."
           fi
 
-          if [[ "${{ steps.filter.outputs.tsframework }}" == "true" || "${{ github.ref }}" ==  "refs/heads/main" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
+          if [[ "${{ steps.filter.outputs.tsframework }}" == "true" || "${{ github.ref }}" ==  "refs/heads/main" || "${{ github.event_name }}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
             echo "tsframework=true" >> $GITHUB_OUTPUT
             echo "TypeScript framework jobs will run."
           else
             echo "TypeScript framework jobs will be skipped."
           fi
 
-          if [[ "${{ steps.filter.outputs.elements }}" == "true" || "${{ github.ref }}" ==  "refs/heads/main" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
+          if [[ "${{ steps.filter.outputs.elements }}" == "true" || "${{ github.ref }}" ==  "refs/heads/main" || "${{ github.event_name }}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
             echo "elements=true" >> $GITHUB_OUTPUT
             echo "Elements jobs will run."
           else
@@ -99,21 +100,21 @@ jobs:
             echo "Migrations jobs will be skipped."
           fi
 
-          if [[ "${{ steps.filter.outputs.plog }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
+          if [[ "${{ steps.filter.outputs.plog }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "${{ github.event_name }}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
             echo "plog=true" >> $GITHUB_OUTPUT
             echo "Plog jobs will run."
           else
             echo "Plog jobs will be skipped."
           fi
 
-          if [[ "${{ steps.filter.outputs.sdk }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
+          if [[ "${{ steps.filter.outputs.sdk }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "${{ github.event_name }}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
             echo "sdk=true" >> $GITHUB_OUTPUT
             echo "SDK jobs will run."
           else
             echo "SDK jobs will be skipped."
           fi
 
-          if [[ "${{ steps.filter.outputs.sdk-gen }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "$HAS_PREVIEW_LABEL" == "true" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
+          if [[ "${{ steps.filter.outputs.sdk-gen }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "${{ github.event_name }}" == "merge_group" || "$HAS_PREVIEW_LABEL" == "true" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
             echo "sdk-gen=true" >> $GITHUB_OUTPUT
             echo "SDK generation check will run."
           else
@@ -255,7 +256,7 @@ jobs:
         with:
           images: ${{ steps.assistantFlyCreateDev.outputs.flyAppRegistry }}
           tags: |
-            type=ref,event=branch
+            type=ref,event=branch,enable=${{ github.event_name != 'merge_group' }}
             type=ref,event=tag
             type=ref,event=pr
             type=raw,value=${{ steps.assistant-preview-tag.outputs.tag }},enable=${{ steps.assistant-preview-tag.outputs.enabled }}
@@ -284,7 +285,7 @@ jobs:
         with:
           images: ${{ steps.assistantFlyCreateProd.outputs.flyAppRegistry }}
           tags: |
-            type=ref,event=branch
+            type=ref,event=branch,enable=${{ github.event_name != 'merge_group' }}
             type=ref,event=tag
             type=ref,event=pr
             type=raw,value=${{ steps.assistant-preview-tag.outputs.tag }},enable=${{ steps.assistant-preview-tag.outputs.enabled }}
@@ -367,7 +368,7 @@ jobs:
     name: Push migrations to Atlas Registry
     runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: [changes, server-build-lint]
-    if: needs.changes.outputs.server == 'true'
+    if: needs.changes.outputs.server == 'true' && github.event_name != 'merge_group'
     permissions:
       contents: read
       pull-requests: write
@@ -1110,7 +1111,7 @@ jobs:
             ${{ steps.flyCreateDev.outputs.flyAppRegistry }}
             ${{ steps.flyCreateProd.outputs.flyAppRegistry }}
           tags: |
-            type=ref,event=branch,prefix=,suffix=-${{ matrix.runtime }}
+            type=ref,event=branch,prefix=,suffix=-${{ matrix.runtime }},enable=${{ github.event_name != 'merge_group' }}
             type=ref,event=tag,prefix=,suffix=-${{ matrix.runtime }}
             type=schedule,pattern=nightly,prefix=,suffix=-${{ matrix.runtime }}
             type=sha,prefix=,suffix=-${{ matrix.runtime }}
