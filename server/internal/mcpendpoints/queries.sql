@@ -18,11 +18,23 @@ SELECT *
 FROM mcp_endpoints
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE;
 
--- name: GetMCPEndpointByCustomDomainIDAndSlug :one
+-- name: GetMCPEndpointByProjectAndCustomDomainAndSlug :one
+-- Resolve an endpoint by its (project_id, custom_domain_id, slug) triple.
+-- This is intended for management use, to ensure the resolved endpoint belongs
+-- to the correct project.
 SELECT *
 FROM mcp_endpoints
 WHERE project_id = @project_id
   AND slug = @slug
+  AND custom_domain_id IS NOT DISTINCT FROM @custom_domain_id
+  AND deleted IS FALSE;
+
+-- name: GetMCPEndpointByCustomDomainAndSlug :one
+-- Resolve an endpoint by its globally-unique (custom_domain_id, slug) pair.
+-- This is intended for use in the public-facing endpoint resolution path.
+SELECT *
+FROM mcp_endpoints
+WHERE slug = @slug
   AND custom_domain_id IS NOT DISTINCT FROM @custom_domain_id
   AND deleted IS FALSE;
 

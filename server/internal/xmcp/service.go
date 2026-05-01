@@ -1,12 +1,16 @@
-// Package xmcp implements the experimental Remote MCP Server runtime endpoint
-// at /x/mcp/{remoteMcpServerId}. It is a temporary path used to prove out the
-// Remote MCP Server proxy plumbing; once the MCP Frontend work lands, Remote
-// MCP Server runtime handling will move under /mcp/... and use slug-based
-// routing.
+// Package xmcp implements the experimental MCP runtime endpoint at
+// /x/mcp/{slug}. It is a temporary path used to prove out the
+// MCP Servers / MCP Endpoints fronting model — slug + optional custom
+// domain → mcp_endpoint → mcp_server → backend dispatch (Remote MCP proxy
+// vs. existing toolset-backed serving). Once the model is exercised here,
+// runtime handling will move under /mcp/... per AGE-1902.
 //
-// This package owns the HTTP lifecycle (routing, auth, DB load, header
-// decryption) and delegates the actual forwarding work to
-// [github.com/speakeasy-api/gram/server/internal/remotemcp/proxy].
+// This package owns the HTTP lifecycle (routing, slug resolution, auth, DB
+// loads) for the experimental endpoint and delegates the actual serving
+// work to either [github.com/speakeasy-api/gram/server/internal/remotemcp/proxy]
+// (Remote MCP backend) or
+// [github.com/speakeasy-api/gram/server/internal/mcp.Service.ServeToolsetResolved]
+// (toolset backend).
 package xmcp
 
 import (
@@ -19,8 +23,6 @@ import (
 	goahttp "goa.design/goa/v3/http"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/auth"
-	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
@@ -34,16 +36,16 @@ import (
 )
 
 // RuntimePath is the experimental runtime path served by this package.
-const RuntimePath = "/x/mcp/{remoteMcpServerId}"
+const RuntimePath = "/x/mcp/{slug}"
 
-// Service owns dependencies for the Remote MCP Server runtime endpoint.
+// Service owns dependencies for the experimental MCP runtime endpoint.
 type Service struct {
 	logger                       *slog.Logger
 	tracer                       trace.Tracer
 	db                           *pgxpool.Pool
 	enc                          *encryption.Client
-	auth                         *auth.Auth
 	authz                        *authz.Engine
+	mcpService                   *mcp.Service
 	guardianPolicy               *guardian.Policy
 	proxyMetrics                 *proxy.Metrics
 	toolUsageLimitsInterceptor   *ToolUsageLimitsInterceptor
@@ -56,12 +58,12 @@ func NewService(
 	tracerProvider trace.TracerProvider,
 	meterProvider metric.MeterProvider,
 	db *pgxpool.Pool,
-	sessionManager *sessions.Manager,
 	enc *encryption.Client,
 	authzEngine *authz.Engine,
 	guardianPolicy *guardian.Policy,
 	billingRepo billing.Repository,
 	billingTracker billing.Tracker,
+	mcpService *mcp.Service,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("xmcp"))
 
@@ -72,8 +74,8 @@ func NewService(
 		tracer:                       tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/xmcp"),
 		db:                           db,
 		enc:                          enc,
-		auth:                         auth.New(logger, db, sessionManager, authzEngine),
 		authz:                        authzEngine,
+		mcpService:                   mcpService,
 		guardianPolicy:               guardianPolicy,
 		proxyMetrics:                 proxy.NewMetrics(meter, logger),
 		toolUsageLimitsInterceptor:   NewToolUsageLimitsInterceptor(billingRepo, logger),
@@ -81,10 +83,10 @@ func NewService(
 	}
 }
 
-// Attach registers the experimental Remote MCP Server runtime handler for all
-// supported HTTP methods. DELETE, GET, and POST are required by the MCP
-// Streamable HTTP transport (see spec § Session Management for DELETE and
-// § Listening for Messages from the Server for GET).
+// Attach registers the experimental MCP runtime handler for all supported
+// HTTP methods. DELETE, GET, and POST are required by the MCP Streamable
+// HTTP transport (see spec § Session Management for DELETE and § Listening
+// for Messages from the Server for GET).
 //
 // Attach also registers /x/mcp aliases for the install page and OAuth
 // .well-known metadata routes, delegating to the existing mcp and mcpmetadata
