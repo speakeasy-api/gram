@@ -29,7 +29,7 @@ const (
 	// drainBatchSize is how many messages each AnalyzeBatch activity processes.
 	drainBatchSize = 1_000
 
-	// 1 = sequential. Demand ~0.05 RPS avg / ~0.2 RPS peak (24h 2026-05-01). Parallelism amplifies retry storms — see 2026-04-30 incident (1.6M failed reqs/hr).
+	// Tuned to demand as-of 2026-05-01.
 	drainMaxConcurrency = 1
 )
 

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"math/rand/v2"
 	"net/http"
 	"strings"
 	"sync"
@@ -45,11 +46,20 @@ type presidioResult struct {
 	Score      float64 `json:"score"`
 }
 
-// 4 < Presidio capacity (1-2 pods x 2 workers x 4 threads). Was 100, caused 2026-04-30 WORKER TIMEOUT storm.
+// Tuned to Presidio capacity as-of 2026-05-01.
 const presidioMaxWorkers = 4
 
-// /analyze takes string or array; array returns nested list, ordered (image 2.2.362). 50 = bounded blast on retry, well under gunicorn --timeout=120. Unrelated to container BATCH_SIZE (spaCy nlp only).
+// /analyze accepts a string or array; array returns ordered nested list. Bounds blast radius on retry-bisect.
 const presidioHTTPBatchSize = 50
+
+// presidioRetryBackoff is the base pause between retry-bisect attempts.
+// Backoff grows exponentially with split depth and is jittered to dampen
+// load amplification on transient 5xx storms.
+const presidioRetryBackoff = 500 * time.Millisecond
+
+// presidioRetryBackoffCap caps the per-attempt backoff so deep splits on a
+// poisoned batch still make progress within the activity timeout.
+const presidioRetryBackoffCap = 8 * time.Second
 
 // PresidioClient calls the Presidio Analyzer HTTP API.
 // Presidio is a trusted cluster-internal service, so the client uses an
@@ -61,6 +71,7 @@ type PresidioClient struct {
 	tracer          trace.Tracer
 	logger          *slog.Logger
 	maxWorkers      int
+	retryBackoff    time.Duration
 	requestDuration metric.Float64Histogram
 	requestFailures metric.Int64Counter
 }
@@ -92,16 +103,19 @@ func NewPresidioClient(baseURL string, tracerProvider trace.TracerProvider, mete
 		tracer:          tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis/presidio"),
 		logger:          logger,
 		maxWorkers:      presidioMaxWorkers,
+		retryBackoff:    presidioRetryBackoff,
 		requestDuration: requestDuration,
 		requestFailures: requestFailures,
 	}
 }
 
 // NewPresidioClientWithWorkers is like NewPresidioClient but allows overriding
-// the concurrency limit. Used for benchmarking.
+// the concurrency limit. Used for benchmarking and tests; the retry backoff is
+// disabled so test sweeps don't pay 500ms per bisect step.
 func NewPresidioClientWithWorkers(baseURL string, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, logger *slog.Logger, maxWorkers int) *PresidioClient {
 	c := NewPresidioClient(baseURL, tracerProvider, meterProvider, logger)
 	c.maxWorkers = maxWorkers
+	c.retryBackoff = 0
 	return c
 }
 
@@ -187,7 +201,7 @@ func (p *PresidioClient) AnalyzeBatch(ctx context.Context, texts []string, entit
 
 func (p *PresidioClient) analyzeRange(ctx context.Context, texts []string, entities []string, batch indexRange, results [][]Finding, onProgress func()) {
 	if ok, err := p.tryAnalyzeRange(ctx, texts, entities, batch, results, onProgress); !ok {
-		p.splitFailedRange(ctx, texts, entities, batch, results, onProgress, err)
+		p.splitFailedRange(ctx, texts, entities, batch, results, onProgress, err, 0)
 	}
 }
 
@@ -210,7 +224,10 @@ func (p *PresidioClient) tryAnalyzeRange(ctx context.Context, texts []string, en
 	return true, nil
 }
 
-func (p *PresidioClient) splitFailedRange(ctx context.Context, texts []string, entities []string, batch indexRange, results [][]Finding, onProgress func(), cause error) {
+func (p *PresidioClient) splitFailedRange(ctx context.Context, texts []string, entities []string, batch indexRange, results [][]Finding, onProgress func(), cause error, depth int) {
+	if ctx.Err() != nil {
+		return
+	}
 	if batch.end-batch.start == 1 {
 		p.logger.WarnContext(ctx, "presidio analyze failed for text, skipping",
 			attr.SlogError(cause),
@@ -224,6 +241,11 @@ func (p *PresidioClient) splitFailedRange(ctx context.Context, texts []string, e
 	p.logger.WarnContext(ctx, "presidio analyze failed for text batch, splitting",
 		attr.SlogError(cause),
 	)
+
+	if !sleepCtx(ctx, computePresidioBackoff(p.retryBackoff, depth)) {
+		return
+	}
+
 	mid := batch.start + ((batch.end - batch.start) / 2)
 	left := indexRange{start: batch.start, end: mid}
 	right := indexRange{start: mid, end: batch.end}
@@ -231,10 +253,44 @@ func (p *PresidioClient) splitFailedRange(ctx context.Context, texts []string, e
 	leftOK, leftErr := p.tryAnalyzeRange(ctx, texts, entities, left, results, onProgress)
 	rightOK, rightErr := p.tryAnalyzeRange(ctx, texts, entities, right, results, onProgress)
 	if !leftOK {
-		p.splitFailedRange(ctx, texts, entities, left, results, onProgress, leftErr)
+		p.splitFailedRange(ctx, texts, entities, left, results, onProgress, leftErr, depth+1)
 	}
 	if !rightOK {
-		p.splitFailedRange(ctx, texts, entities, right, results, onProgress, rightErr)
+		p.splitFailedRange(ctx, texts, entities, right, results, onProgress, rightErr, depth+1)
+	}
+}
+
+// computePresidioBackoff returns a full-jittered exponential backoff for the
+// given split depth: uniform in [0, min(cap, base*2^depth)). Returns 0 when
+// base is 0 (tests disable backoff that way).
+func computePresidioBackoff(base time.Duration, depth int) time.Duration {
+	if base <= 0 {
+		return 0
+	}
+	backoff := base
+	for range depth {
+		backoff *= 2
+		if backoff >= presidioRetryBackoffCap {
+			backoff = presidioRetryBackoffCap
+			break
+		}
+	}
+	return time.Duration(rand.Int64N(int64(backoff))) // #nosec G404 -- jitter, not security-sensitive
+}
+
+// sleepCtx pauses for d, returning false if ctx is cancelled before the
+// timer fires. A non-positive d is treated as no sleep.
+func sleepCtx(ctx context.Context, d time.Duration) bool {
+	if d <= 0 {
+		return ctx.Err() == nil
+	}
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-t.C:
+		return true
+	case <-ctx.Done():
+		return false
 	}
 }
 
