@@ -48,6 +48,17 @@ migrations:
   - "server/migrations/**"
   - "server/clickhouse/migrations/**"
 
+database-changes:
+  - "server/database/**"
+  - "server/migrations/**"
+  - "server/clickhouse/**"
+
+# Excludes server/internal/database/** since SQLc-generated output legitimately
+# changes alongside schema.sql edits.
+server-internal:
+  - "server/internal/**"
+  - "!server/internal/database/**"
+
 plog:
   - "go.mod"
   - "go.sum"
