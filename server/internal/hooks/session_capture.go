@@ -86,11 +86,14 @@ func makeHookResult(hookEventName string) *gen.ClaudeHookResult {
 func (s *Service) handleUserPromptSubmit(ctx context.Context, payload *gen.ClaudePayload) (*gen.ClaudeHookResult, error) {
 	if s.riskScanner != nil && payload.Prompt != nil && payload.SessionID != nil {
 		if scanResult := s.scanClaudeForEnforcement(ctx, payload); scanResult != nil {
-			reason := fmt.Sprintf("Speakeasy blocked this prompt: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
+			auditReason := fmt.Sprintf("Speakeasy blocked this prompt: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
+			userReason := renderUserBlockReason(scanResult.UserMessage, auditReason)
+			// ClickHouse always gets the technical reason; the user_message
+			// override only changes what the agent / end user sees.
 			if metadata, err := s.getSessionMetadata(ctx, *payload.SessionID); err == nil {
-				s.writeClaudeBlockToClickHouse(ctx, payload, &metadata, reason)
+				s.writeClaudeBlockToClickHouse(ctx, payload, &metadata, auditReason)
 			}
-			return nil, oops.E(oops.CodeForbidden, nil, "%s", reason)
+			return nil, oops.E(oops.CodeForbidden, nil, "%s", userReason)
 		}
 	}
 	return makeHookResult(payload.HookEventName), nil

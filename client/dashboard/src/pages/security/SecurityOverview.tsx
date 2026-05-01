@@ -135,6 +135,15 @@ function SecurityOverviewContent() {
   });
 
   const policies = policiesData?.policies ?? [];
+  const policyMessageById = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const p of policies) {
+      if (p.userMessage && p.userMessage.trim() !== "") {
+        m.set(p.id, p.userMessage);
+      }
+    }
+    return m;
+  }, [policies]);
   const results = useMemo(
     () => resultsQuery.data?.pages.flatMap((p) => p.results) ?? [],
     [resultsQuery.data],
@@ -300,48 +309,60 @@ function SecurityOverviewContent() {
                         <TableHead>Chat</TableHead>
                         <TableHead>User</TableHead>
                         <TableHead className="w-[200px]">Match</TableHead>
+                        <TableHead className="w-[240px]">Policy Note</TableHead>
                         <TableHead>Detected</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {results.map((result) => (
-                        <TableRow
-                          key={result.id}
-                          className="cursor-pointer"
-                          onClick={() => {
-                            if (result.chatId) {
-                              setSelectedChatId(result.chatId);
-                            }
-                          }}
-                        >
-                          <TableCell>
-                            <Badge variant="secondary">
-                              {
-                                RULE_CATEGORY_META[
-                                  getCategoryForRule(result.ruleId)
-                                ].label
+                      {results.map((result) => {
+                        const policyNote = policyMessageById.get(
+                          result.policyId,
+                        );
+                        return (
+                          <TableRow
+                            key={result.id}
+                            className="cursor-pointer"
+                            onClick={() => {
+                              if (result.chatId) {
+                                setSelectedChatId(result.chatId);
                               }
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="font-mono text-xs">
-                            {result.ruleId ?? "-"}
-                          </TableCell>
-                          <TableCell className="text-muted-foreground max-w-[200px] truncate text-xs">
-                            {result.chatTitle ?? "Untitled"}
-                          </TableCell>
-                          <TableCell className="text-muted-foreground text-xs">
-                            {result.userId ?? "-"}
-                          </TableCell>
-                          <TableCell className="w-[200px] max-w-[200px] truncate">
-                            <MaskedMatch value={result.match} />
-                          </TableCell>
-                          <TableCell className="text-muted-foreground text-xs">
-                            {result.createdAt
-                              ? new Date(result.createdAt).toLocaleString()
-                              : "-"}
-                          </TableCell>
-                        </TableRow>
-                      ))}
+                            }}
+                          >
+                            <TableCell>
+                              <Badge variant="secondary">
+                                {
+                                  RULE_CATEGORY_META[
+                                    getCategoryForRule(result.ruleId)
+                                  ].label
+                                }
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="font-mono text-xs">
+                              {result.ruleId ?? "-"}
+                            </TableCell>
+                            <TableCell className="text-muted-foreground max-w-[200px] truncate text-xs">
+                              {result.chatTitle ?? "Untitled"}
+                            </TableCell>
+                            <TableCell className="text-muted-foreground text-xs">
+                              {result.userId ?? "-"}
+                            </TableCell>
+                            <TableCell className="w-[200px] max-w-[200px] truncate">
+                              <MaskedMatch value={result.match} />
+                            </TableCell>
+                            <TableCell
+                              className="text-muted-foreground w-[240px] max-w-[240px] truncate text-xs italic"
+                              title={policyNote ?? undefined}
+                            >
+                              {policyNote ?? "-"}
+                            </TableCell>
+                            <TableCell className="text-muted-foreground text-xs">
+                              {result.createdAt
+                                ? new Date(result.createdAt).toLocaleString()
+                                : "-"}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
                     </TableBody>
                   </Table>
                   {resultsQuery.hasNextPage && (

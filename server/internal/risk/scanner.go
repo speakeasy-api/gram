@@ -17,6 +17,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	ra "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
 )
@@ -41,8 +42,9 @@ type RiskScanner interface {
 // a deny message that follows the same `matched policy %q (...)` format as
 // gitleaks/presidio enforcement.
 type ShadowMCPPolicy struct {
-	ID   string
-	Name string
+	ID          string
+	Name        string
+	UserMessage *string // nil/empty means "render the default message"
 }
 
 // ScanResult describes a match from a blocking risk policy.
@@ -57,6 +59,7 @@ type ScanResult struct {
 	Source      string // "gitleaks" or "presidio"
 	RuleID      string
 	Description string
+	UserMessage *string // optional override for the rendered block message
 }
 
 type scannerMetrics struct {
@@ -199,7 +202,11 @@ func (s *Scanner) LookupShadowMCPBlockingPolicy(ctx context.Context, projectID u
 	}
 	for _, p := range policies {
 		if p.Action == "block" {
-			return &ShadowMCPPolicy{ID: p.ID.String(), Name: p.Name}, nil
+			return &ShadowMCPPolicy{
+				ID:          p.ID.String(),
+				Name:        p.Name,
+				UserMessage: conv.FromPGText[string](p.UserMessage),
+			}, nil
 		}
 	}
 	return nil, nil
@@ -250,6 +257,7 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text s
 					Source:      "gitleaks",
 					RuleID:      findings[0].RuleID,
 					Description: findings[0].Description,
+					UserMessage: conv.FromPGText[string](policy.UserMessage),
 				}, nil
 			}
 		case "presidio":
@@ -269,6 +277,7 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text s
 					Source:      "presidio",
 					RuleID:      f.RuleID,
 					Description: f.Description,
+					UserMessage: conv.FromPGText[string](policy.UserMessage),
 				}, nil
 			}
 		}

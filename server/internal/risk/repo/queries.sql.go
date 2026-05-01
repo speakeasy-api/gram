@@ -132,6 +132,7 @@ INSERT INTO risk_policies (
   , enabled
   , action
   , auto_name
+  , user_message
   , version
 )
 VALUES (
@@ -144,6 +145,7 @@ VALUES (
   , $7
   , $8
   , $9
+  , $10
   , 1
 )
 RETURNING id, project_id, organization_id, enabled, name, sources, presidio_entities, action, auto_name, user_message, version, created_at, updated_at, deleted_at, deleted
@@ -159,6 +161,7 @@ type CreateRiskPolicyParams struct {
 	Enabled          bool
 	Action           string
 	AutoName         bool
+	UserMessage      pgtype.Text
 }
 
 func (q *Queries) CreateRiskPolicy(ctx context.Context, arg CreateRiskPolicyParams) (RiskPolicy, error) {
@@ -172,6 +175,7 @@ func (q *Queries) CreateRiskPolicy(ctx context.Context, arg CreateRiskPolicyPara
 		arg.Enabled,
 		arg.Action,
 		arg.AutoName,
+		arg.UserMessage,
 	)
 	var i RiskPolicy
 	err := row.Scan(
@@ -872,6 +876,7 @@ SET name = $1
   , enabled = $4
   , action = $5
   , auto_name = $6
+  , user_message = $7
   , version = CASE
       WHEN sources IS DISTINCT FROM $2
         OR presidio_entities IS DISTINCT FROM $3
@@ -881,8 +886,8 @@ SET name = $1
       ELSE version
     END
   , updated_at = clock_timestamp()
-WHERE id = $7
-  AND project_id = $8
+WHERE id = $8
+  AND project_id = $9
   AND deleted IS FALSE
 RETURNING id, project_id, organization_id, enabled, name, sources, presidio_entities, action, auto_name, user_message, version, created_at, updated_at, deleted_at, deleted
 `
@@ -894,6 +899,7 @@ type UpdateRiskPolicyParams struct {
 	Enabled          bool
 	Action           string
 	AutoName         bool
+	UserMessage      pgtype.Text
 	ID               uuid.UUID
 	ProjectID        uuid.UUID
 }
@@ -906,6 +912,7 @@ func (q *Queries) UpdateRiskPolicy(ctx context.Context, arg UpdateRiskPolicyPara
 		arg.Enabled,
 		arg.Action,
 		arg.AutoName,
+		arg.UserMessage,
 		arg.ID,
 		arg.ProjectID,
 	)

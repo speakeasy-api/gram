@@ -321,21 +321,23 @@ func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePaylo
 			result := makeHookResult(payload.HookEventName)
 			output, _ := result.HookSpecificOutput.(*HookSpecificOutput)
 			deny := "deny"
-			reason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
+			auditReason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
+			userReason := renderUserBlockReason(scanResult.UserMessage, auditReason)
 			// systemMessage renders as a warning in the user's terminal;
 			// permissionDecisionReason is what Claude itself sees and may quote
 			// back to the user. Send the same self-branded message in both so
 			// the user sees feedback regardless of how Claude chooses to render
 			// the deny — matches the shadow-MCP guard deny path below.
-			result.SystemMessage = &reason
+			result.SystemMessage = &userReason
 			if output != nil {
 				output.PermissionDecision = &deny
-				output.PermissionDecisionReason = &reason
+				output.PermissionDecisionReason = &userReason
 			}
 			// Surface the block reason on the trace summary so the dashboard
-			// shows why the call was denied.
+			// shows why the call was denied. Always store the technical reason
+			// — the user_message override is for the agent-facing response only.
 			if metadata, err := s.getSessionMetadata(ctx, *payload.SessionID); err == nil {
-				s.writeClaudeBlockToClickHouse(ctx, payload, &metadata, reason)
+				s.writeClaudeBlockToClickHouse(ctx, payload, &metadata, auditReason)
 			}
 			return result, nil
 		}
@@ -432,20 +434,23 @@ func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePaylo
 				"policyName":    policy.Name,
 			}),
 		)
-		reason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", policy.Name, detail)
+		auditReason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", policy.Name, detail)
+		userReason := renderUserBlockReason(policy.UserMessage, auditReason)
 		// Record a companion ClickHouse entry with gram.hook.block_reason set
 		// so the trace_summaries materialized view can flag this trace as
 		// blocked. Shares the original PreToolUse trace_id (derived from
 		// tool_use_id) so both rows aggregate into the same trace summary.
-		s.writeClaudeBlockToClickHouse(ctx, payload, &metadata, reason)
+		// Always store the technical reason — the user_message override
+		// is for the agent-facing response only.
+		s.writeClaudeBlockToClickHouse(ctx, payload, &metadata, auditReason)
 
 		// systemMessage renders as a warning in the user's terminal;
 		// permissionDecisionReason is what Claude itself sees and may quote
 		// back to the user, so we send the same self-branded message in both.
-		result.SystemMessage = &reason
+		result.SystemMessage = &userReason
 		if output != nil {
 			output.PermissionDecision = &deny
-			output.PermissionDecisionReason = &reason
+			output.PermissionDecisionReason = &userReason
 		}
 		return result, nil
 	}

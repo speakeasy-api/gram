@@ -28,6 +28,9 @@ type CreateRiskPolicyRequestBody struct {
 	Action *string `form:"action,omitempty" json:"action,omitempty" xml:"action,omitempty"`
 	// Whether the policy name should be auto-generated.
 	AutoName *bool `form:"auto_name,omitempty" json:"auto_name,omitempty" xml:"auto_name,omitempty"`
+	// Optional message shown to end users when this policy blocks an action or
+	// surfaces a flagged finding.
+	UserMessage *string `form:"user_message,omitempty" json:"user_message,omitempty" xml:"user_message,omitempty"`
 }
 
 // UpdateRiskPolicyRequestBody is the type of the "risk" service
@@ -47,6 +50,9 @@ type UpdateRiskPolicyRequestBody struct {
 	Action *string `form:"action,omitempty" json:"action,omitempty" xml:"action,omitempty"`
 	// Whether the policy name should be auto-generated.
 	AutoName *bool `form:"auto_name,omitempty" json:"auto_name,omitempty" xml:"auto_name,omitempty"`
+	// Optional message shown to end users when this policy blocks an action or
+	// surfaces a flagged finding. Send an empty string to clear.
+	UserMessage *string `form:"user_message,omitempty" json:"user_message,omitempty" xml:"user_message,omitempty"`
 }
 
 // TriggerRiskAnalysisRequestBody is the type of the "risk" service
@@ -76,6 +82,9 @@ type CreateRiskPolicyResponseBody struct {
 	// Whether the policy name is auto-generated. When true, the name is
 	// regenerated on each update.
 	AutoName bool `form:"auto_name" json:"auto_name" xml:"auto_name"`
+	// Optional message shown to the end user when this policy blocks an action or
+	// surfaces a flagged finding. When unset, a default message is rendered.
+	UserMessage *string `form:"user_message,omitempty" json:"user_message,omitempty" xml:"user_message,omitempty"`
 	// Policy version, incremented on each update.
 	Version int64 `form:"version" json:"version" xml:"version"`
 	// When the policy was created.
@@ -115,6 +124,9 @@ type GetRiskPolicyResponseBody struct {
 	// Whether the policy name is auto-generated. When true, the name is
 	// regenerated on each update.
 	AutoName bool `form:"auto_name" json:"auto_name" xml:"auto_name"`
+	// Optional message shown to the end user when this policy blocks an action or
+	// surfaces a flagged finding. When unset, a default message is rendered.
+	UserMessage *string `form:"user_message,omitempty" json:"user_message,omitempty" xml:"user_message,omitempty"`
 	// Policy version, incremented on each update.
 	Version int64 `form:"version" json:"version" xml:"version"`
 	// When the policy was created.
@@ -147,6 +159,9 @@ type UpdateRiskPolicyResponseBody struct {
 	// Whether the policy name is auto-generated. When true, the name is
 	// regenerated on each update.
 	AutoName bool `form:"auto_name" json:"auto_name" xml:"auto_name"`
+	// Optional message shown to the end user when this policy blocks an action or
+	// surfaces a flagged finding. When unset, a default message is rendered.
+	UserMessage *string `form:"user_message,omitempty" json:"user_message,omitempty" xml:"user_message,omitempty"`
 	// Policy version, incremented on each update.
 	Version int64 `form:"version" json:"version" xml:"version"`
 	// When the policy was created.
@@ -1867,6 +1882,9 @@ type RiskPolicyResponseBody struct {
 	// Whether the policy name is auto-generated. When true, the name is
 	// regenerated on each update.
 	AutoName bool `form:"auto_name" json:"auto_name" xml:"auto_name"`
+	// Optional message shown to the end user when this policy blocks an action or
+	// surfaces a flagged finding. When unset, a default message is rendered.
+	UserMessage *string `form:"user_message,omitempty" json:"user_message,omitempty" xml:"user_message,omitempty"`
 	// Policy version, incremented on each update.
 	Version int64 `form:"version" json:"version" xml:"version"`
 	// When the policy was created.
@@ -1939,6 +1957,7 @@ func NewCreateRiskPolicyResponseBody(res *types.RiskPolicy) *CreateRiskPolicyRes
 		Enabled:         res.Enabled,
 		Action:          res.Action,
 		AutoName:        res.AutoName,
+		UserMessage:     res.UserMessage,
 		Version:         res.Version,
 		CreatedAt:       res.CreatedAt,
 		UpdatedAt:       res.UpdatedAt,
@@ -1991,6 +2010,7 @@ func NewGetRiskPolicyResponseBody(res *types.RiskPolicy) *GetRiskPolicyResponseB
 		Enabled:         res.Enabled,
 		Action:          res.Action,
 		AutoName:        res.AutoName,
+		UserMessage:     res.UserMessage,
 		Version:         res.Version,
 		CreatedAt:       res.CreatedAt,
 		UpdatedAt:       res.UpdatedAt,
@@ -2024,6 +2044,7 @@ func NewUpdateRiskPolicyResponseBody(res *types.RiskPolicy) *UpdateRiskPolicyRes
 		Enabled:         res.Enabled,
 		Action:          res.Action,
 		AutoName:        res.AutoName,
+		UserMessage:     res.UserMessage,
 		Version:         res.Version,
 		CreatedAt:       res.CreatedAt,
 		UpdatedAt:       res.UpdatedAt,
@@ -3391,9 +3412,10 @@ func NewTriggerRiskAnalysisGatewayErrorResponseBody(res *goa.ServiceError) *Trig
 // payload.
 func NewCreateRiskPolicyPayload(body *CreateRiskPolicyRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.CreateRiskPolicyPayload {
 	v := &risk.CreateRiskPolicyPayload{
-		Name:     body.Name,
-		Enabled:  body.Enabled,
-		AutoName: body.AutoName,
+		Name:        body.Name,
+		Enabled:     body.Enabled,
+		AutoName:    body.AutoName,
+		UserMessage: body.UserMessage,
 	}
 	if body.Action != nil {
 		v.Action = *body.Action
@@ -3446,11 +3468,12 @@ func NewGetRiskPolicyPayload(id string, apikeyToken *string, sessionToken *strin
 // payload.
 func NewUpdateRiskPolicyPayload(body *UpdateRiskPolicyRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.UpdateRiskPolicyPayload {
 	v := &risk.UpdateRiskPolicyPayload{
-		ID:       *body.ID,
-		Name:     *body.Name,
-		Enabled:  body.Enabled,
-		Action:   body.Action,
-		AutoName: body.AutoName,
+		ID:          *body.ID,
+		Name:        *body.Name,
+		Enabled:     body.Enabled,
+		Action:      body.Action,
+		AutoName:    body.AutoName,
+		UserMessage: body.UserMessage,
 	}
 	if body.Sources != nil {
 		v.Sources = make([]string, len(body.Sources))

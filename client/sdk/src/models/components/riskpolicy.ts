@@ -71,6 +71,10 @@ export type RiskPolicy = {
    */
   updatedAt: Date;
   /**
+   * Optional message shown to the end user when this policy blocks an action or surfaces a flagged finding. When unset, a default message is rendered.
+   */
+  userMessage?: string | undefined;
+  /**
    * Policy version, incremented on each update.
    */
   version: number;
@@ -103,6 +107,7 @@ export const RiskPolicy$inboundSchema: z.ZodMiniType<RiskPolicy, unknown> = z
         z.iso.datetime({ offset: true }),
         z.transform(v => new Date(v)),
       ),
+      user_message: z.optional(z.string()),
       version: z.int(),
     }),
     z.transform((v) => {
@@ -114,6 +119,7 @@ export const RiskPolicy$inboundSchema: z.ZodMiniType<RiskPolicy, unknown> = z
         "project_id": "projectId",
         "total_messages": "totalMessages",
         "updated_at": "updatedAt",
+        "user_message": "userMessage",
       });
     }),
   );
