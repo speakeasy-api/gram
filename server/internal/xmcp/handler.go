@@ -1,6 +1,7 @@
 package xmcp
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -49,43 +50,14 @@ func (s *Service) ServeMCP(w http.ResponseWriter, r *http.Request) error {
 
 	logger := s.logger.With(attr.SlogToolsetMCPSlug(slug))
 
-	var customDomainID uuid.NullUUID
-	if domainCtx := customdomains.FromContext(ctx); domainCtx != nil {
-		customDomainID = uuid.NullUUID{UUID: domainCtx.DomainID, Valid: true}
-	}
-
-	endpoint, err := mcpendpointsrepo.New(s.db).GetMCPEndpointByCustomDomainAndSlug(ctx, mcpendpointsrepo.GetMCPEndpointByCustomDomainAndSlugParams{
-		Slug:           slug,
-		CustomDomainID: customDomainID,
-	})
-	switch {
-	case errors.Is(err, pgx.ErrNoRows):
-		return oops.E(oops.CodeNotFound, err, "mcp endpoint not found")
-	case err != nil:
-		return oops.E(oops.CodeUnexpected, err, "load mcp endpoint").Log(ctx, logger)
-	}
-
-	mcpServer, err := mcpserversrepo.New(s.db).GetMCPServerByID(ctx, mcpserversrepo.GetMCPServerByIDParams{
-		ID:        endpoint.McpServerID,
-		ProjectID: endpoint.ProjectID,
-	})
-	switch {
-	case errors.Is(err, pgx.ErrNoRows):
-		return oops.E(oops.CodeNotFound, err, "mcp server not found")
-	case err != nil:
-		return oops.E(oops.CodeUnexpected, err, "load mcp server").Log(ctx, logger)
-	}
-
-	// Disabled MCP servers are unreachable at runtime regardless of caller
-	// identity. Return the same not-found shape the public path uses so we
-	// don't leak existence to unauthenticated callers.
-	if mcpServer.Visibility == visibilityDisabled {
-		return oops.C(oops.CodeNotFound)
+	endpoint, mcpServer, err := s.resolveMCPEndpointAndServer(ctx, logger, slug)
+	if err != nil {
+		return err
 	}
 
 	switch {
 	case mcpServer.RemoteMcpServerID.Valid:
-		return s.serveRemoteBackend(w, r, logger, &endpoint, &mcpServer)
+		return s.serveRemoteBackend(w, r, logger, endpoint, mcpServer)
 	case mcpServer.ToolsetID.Valid:
 		// AGE-1902: toolset-backed branch still reads runtime config from the
 		// toolsets row (visibility, OAuth, default environment). Once
@@ -113,6 +85,47 @@ func (s *Service) ServeMCP(w http.ResponseWriter, r *http.Request) error {
 		// exactly one backend is set; this is defensive.
 		return oops.E(oops.CodeUnexpected, nil, "mcp server has no backend configured").Log(ctx, logger)
 	}
+}
+
+// resolveMCPEndpointAndServer walks the runtime addressing chain shared by
+// /x/mcp/{slug} and the .well-known routes: it scopes the lookup to the
+// request's customdomains.Context, loads the mcp_endpoint by (slug, custom
+// domain), then loads the linked mcp_server. Disabled servers and missing
+// rows both surface as 404 to avoid leaking existence to unauthenticated
+// callers. logger should already carry the slug attribute.
+func (s *Service) resolveMCPEndpointAndServer(ctx context.Context, logger *slog.Logger, slug string) (*mcpendpointsrepo.McpEndpoint, *mcpserversrepo.McpServer, error) {
+	var customDomainID uuid.NullUUID
+	if domainCtx := customdomains.FromContext(ctx); domainCtx != nil {
+		customDomainID = uuid.NullUUID{UUID: domainCtx.DomainID, Valid: true}
+	}
+
+	endpoint, err := mcpendpointsrepo.New(s.db).GetMCPEndpointByCustomDomainAndSlug(ctx, mcpendpointsrepo.GetMCPEndpointByCustomDomainAndSlugParams{
+		Slug:           slug,
+		CustomDomainID: customDomainID,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil, nil, oops.E(oops.CodeNotFound, err, "mcp endpoint not found")
+	case err != nil:
+		return nil, nil, oops.E(oops.CodeUnexpected, err, "load mcp endpoint").Log(ctx, logger)
+	}
+
+	mcpServer, err := mcpserversrepo.New(s.db).GetMCPServerByID(ctx, mcpserversrepo.GetMCPServerByIDParams{
+		ID:        endpoint.McpServerID,
+		ProjectID: endpoint.ProjectID,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil, nil, oops.E(oops.CodeNotFound, err, "mcp server not found")
+	case err != nil:
+		return nil, nil, oops.E(oops.CodeUnexpected, err, "load mcp server").Log(ctx, logger)
+	}
+
+	if mcpServer.Visibility == visibilityDisabled {
+		return nil, nil, oops.C(oops.CodeNotFound)
+	}
+
+	return &endpoint, &mcpServer, nil
 }
 
 // serveRemoteBackend handles /x/mcp/{slug} for an mcp_server backed by a

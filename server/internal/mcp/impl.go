@@ -364,8 +364,7 @@ func (s *Service) HandleWellKnownOAuthProtectedResourceMetadata(w http.ResponseW
 		s.db,
 		&s.toolsetCache,
 		toolset,
-		baseURL,
-		mcpSlug,
+		baseURL+"/mcp/"+mcpSlug,
 	)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to resolve OAuth protected resource metadata").Log(ctx, s.logger)

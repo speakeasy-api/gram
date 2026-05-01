@@ -27,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments"
 	"github.com/speakeasy-api/gram/server/internal/functions"
@@ -47,6 +48,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
+	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/xmcp"
 )
 
@@ -136,7 +138,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	assistantTokens := assistanttokens.New("test-jwt-secret", conn, authzEngine)
 	mcpService := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthogClient, serverURL, enc, cacheAdapter, guardianPolicy, funcs, oauthService, billingClient, billingClient, telemLogger, telemService, featClient, vectorToolStore, nil, temporalEnv, authzEngine, assistantTokens)
 
-	svc := xmcp.NewService(logger, tracerProvider, meterProvider, conn, enc, authzEngine, guardianPolicy, billingClient, billingClient, mcpService)
+	svc := xmcp.NewService(logger, tracerProvider, meterProvider, conn, enc, authzEngine, guardianPolicy, billingClient, billingClient, mcpService, serverURL)
 
 	return ctx, &testInstance{
 		service:        svc,
@@ -347,6 +349,73 @@ func seedRemoteMCPEndpointWithOAuthProxy(t *testing.T, ctx context.Context, ti *
 	require.NoError(t, err)
 
 	return slug
+}
+
+// seedToolsetMCPEndpoint wires up a full /x/mcp/{slug} resolution chain for
+// a toolset-backed mcp_server: an mcp_servers row pointing at the given
+// toolset + an mcp_endpoints row exposing it under the toolset's mcp_slug.
+// The endpoint slug intentionally mirrors the toolset's mcp_slug — the
+// production model assumes the two stay aligned until OAuth handling is
+// migrated off toolsets onto mcp_servers (AGE-1902).
+func seedToolsetMCPEndpoint(t *testing.T, ctx context.Context, ti *testInstance, projectID uuid.UUID, toolset toolsetsrepo.Toolset, visibility string) (slug string, mcpServer mcpserversrepo.McpServer) {
+	t.Helper()
+	return seedToolsetMCPEndpointOnDomain(t, ctx, ti, projectID, toolset, visibility, uuid.NullUUID{})
+}
+
+// seedToolsetMCPEndpointOnDomain is the custom-domain-aware variant of
+// seedToolsetMCPEndpoint. Pass a Valid customDomainID to scope the
+// resulting mcp_endpoint to that domain so it resolves only when a request
+// arrives with a matching customdomains.Context.
+func seedToolsetMCPEndpointOnDomain(t *testing.T, ctx context.Context, ti *testInstance, projectID uuid.UUID, toolset toolsetsrepo.Toolset, visibility string, customDomainID uuid.NullUUID) (slug string, mcpServer mcpserversrepo.McpServer) {
+	t.Helper()
+
+	mcpServer, err := mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ProjectID:             projectID,
+		EnvironmentID:         uuid.NullUUID{},
+		ExternalOauthServerID: uuid.NullUUID{},
+		OauthProxyServerID:    uuid.NullUUID{},
+		RemoteMcpServerID:     uuid.NullUUID{},
+		ToolsetID:             uuid.NullUUID{UUID: toolset.ID, Valid: true},
+		Visibility:            visibility,
+	})
+	require.NoError(t, err)
+
+	slug = toolset.McpSlug.String
+	_, err = mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
+		ProjectID:      projectID,
+		CustomDomainID: customDomainID,
+		McpServerID:    mcpServer.ID,
+		Slug:           slug,
+	})
+	require.NoError(t, err)
+
+	return slug, mcpServer
+}
+
+// seedCustomDomain creates a verified+activated custom_domains row in the
+// caller's organization. Verification is forced on so the row is treated as
+// active by the runtime resolution code paths.
+func seedCustomDomain(t *testing.T, ctx context.Context, ti *testInstance, organizationID, domainName string) customdomainsrepo.CustomDomain {
+	t.Helper()
+
+	r := customdomainsrepo.New(ti.conn)
+	domain, err := r.CreateCustomDomain(ctx, customdomainsrepo.CreateCustomDomainParams{
+		OrganizationID: organizationID,
+		Domain:         domainName,
+		IngressName:    pgtype.Text{String: "", Valid: false},
+		CertSecretName: pgtype.Text{String: "", Valid: false},
+	})
+	require.NoError(t, err)
+
+	domain, err = r.UpdateCustomDomain(ctx, customdomainsrepo.UpdateCustomDomainParams{
+		ID:             domain.ID,
+		Verified:       true,
+		Activated:      true,
+		IngressName:    pgtype.Text{String: "", Valid: false},
+		CertSecretName: pgtype.Text{String: "", Valid: false},
+	})
+	require.NoError(t, err)
+	return domain
 }
 
 // runHandler invokes the xmcp handler against a custom method/path with chi
