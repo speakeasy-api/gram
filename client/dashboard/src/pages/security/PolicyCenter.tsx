@@ -236,9 +236,7 @@ function PolicyCenterContent() {
             presidioEntities,
             action: formAction,
             autoName: formAutoName,
-            ...(formUserMessage.trim()
-              ? { userMessage: formUserMessage }
-              : {}),
+            ...(formUserMessage.trim() ? { userMessage: formUserMessage } : {}),
           },
         },
       });
