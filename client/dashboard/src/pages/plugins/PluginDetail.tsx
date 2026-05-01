@@ -3,10 +3,13 @@ import { Page } from "@/components/page-layout";
 import { ToolCollectionBadge } from "@/components/tool-collection-badge";
 import { Badge } from "@/components/ui/badge";
 import { Dialog } from "@/components/ui/dialog";
+import { DotCard } from "@/components/ui/dot-card";
 import { Heading } from "@/components/ui/heading";
+import { MoreActions } from "@/components/ui/more-actions";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Type } from "@/components/ui/type";
 import { UpdatedAt } from "@/components/updated-at";
+import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import {
   invalidateAllPlugin,
@@ -27,7 +30,7 @@ import {
   Stack,
 } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
-import { ChevronRight, Globe, Lock, Server, Unplug } from "lucide-react";
+import { Globe, Lock, Server, Unplug } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useParams } from "react-router";
 import type {
@@ -214,9 +217,9 @@ export default function PluginDetail() {
             </Button>
           </Stack>
         ) : (
-          <div className="mb-8 space-y-2">
+          <div className="mb-8 space-y-3">
             {servers.map((server) => (
-              <PluginServerRow
+              <PluginServerCard
                 key={server.id}
                 server={server}
                 toolset={toolsetById.get(server.toolsetId)}
@@ -361,7 +364,7 @@ export default function PluginDetail() {
   );
 }
 
-function PluginServerRow({
+function PluginServerCard({
   server,
   toolset,
   onRemove,
@@ -372,7 +375,6 @@ function PluginServerRow({
 }) {
   const routes = useRoutes();
   const toolNames = toolset?.tools.map((t) => t.name) ?? [];
-  const description = toolset?.description ?? null;
   const isMissing = !toolset;
   const isRequired = server.policy === "required";
 
@@ -402,44 +404,47 @@ function PluginServerRow({
     );
   })();
 
-  const body = (
-    <div className="flex min-w-0 flex-1 flex-col gap-1">
-      <div className="flex items-center gap-2">
-        <Type className="truncate font-medium">{server.displayName}</Type>
-        {isMissing && (
-          <Badge variant="destructive" className="text-xs">
-            Toolset missing
-          </Badge>
-        )}
-      </div>
-      {description && (
-        <Type className="text-muted-foreground line-clamp-1 text-sm">
-          {description}
-        </Type>
-      )}
-    </div>
-  );
-
-  const leftSide = toolset ? (
-    <routes.mcp.details.Link
-      params={[toolset.slug]}
-      className="group hover:text-primary flex min-w-0 flex-1 items-center gap-3 hover:no-underline"
-    >
-      <Server className="text-muted-foreground size-5 shrink-0" />
-      {body}
-      <ChevronRight className="text-muted-foreground size-4 shrink-0 opacity-0 transition-opacity group-hover:opacity-100" />
-    </routes.mcp.details.Link>
-  ) : (
-    <div className="flex min-w-0 flex-1 items-center gap-3">
-      <Server className="text-muted-foreground size-5 shrink-0" />
-      {body}
-    </div>
-  );
+  const handleClick = () => {
+    if (toolset) routes.mcp.details.goTo(toolset.slug);
+  };
 
   return (
-    <div className="bg-surface-secondary hover:bg-surface-tertiary flex items-center gap-3 rounded-md border p-3 transition-colors">
-      {leftSide}
-      <div className="flex shrink-0 items-center gap-2">
+    <DotCard
+      className={cn("min-h-[112px]", toolset && "cursor-pointer")}
+      onClick={toolset ? handleClick : undefined}
+      icon={<Server className="text-muted-foreground h-8 w-8" />}
+    >
+      <div className="mb-2 flex items-start justify-between gap-2">
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+          <Type
+            variant="subheading"
+            as="div"
+            className="text-md group-hover:text-primary truncate transition-colors"
+            title={server.displayName}
+          >
+            {server.displayName}
+          </Type>
+          {isMissing && (
+            <Badge variant="destructive" className="shrink-0 text-xs">
+              Toolset missing
+            </Badge>
+          )}
+        </div>
+        <div onClick={(e) => e.stopPropagation()} className="shrink-0">
+          <MoreActions
+            actions={[
+              {
+                label: "Remove",
+                onClick: onRemove,
+                destructive: true,
+                icon: "trash",
+              },
+            ]}
+          />
+        </div>
+      </div>
+
+      <div className="mt-auto flex flex-wrap items-center gap-2 pt-2">
         {toolset && <ToolCollectionBadge toolNames={toolNames} />}
         {mcpBadge}
         <Badge variant={isRequired ? "secondary" : "outline"}>
@@ -449,21 +454,10 @@ function PluginServerRow({
           <UpdatedAt
             date={new Date(toolset.updatedAt)}
             italic={false}
-            className="hidden md:flex"
+            className="ml-auto"
           />
         )}
-        <Button
-          variant="tertiary"
-          size="sm"
-          onClick={onRemove}
-          className="hover:text-destructive"
-        >
-          <Button.LeftIcon>
-            <Icon name="trash-2" className="h-4 w-4" />
-          </Button.LeftIcon>
-          <Button.Text className="sr-only">Remove</Button.Text>
-        </Button>
       </div>
-    </div>
+    </DotCard>
   );
 }
