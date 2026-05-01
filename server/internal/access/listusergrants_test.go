@@ -237,3 +237,48 @@ func TestService_ListGrants_WorkOSMembersFailure(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "list members from workos")
 }
+
+// ListGrants for an api-key-authenticated request must return the api_key
+// principal's grants — not the publisher's (the user that created the key).
+// rfc-plugin-scoped-keys.md: a plugin-scoped key calling /rpc/access.listGrants
+// should reflect what the key can do, not what the publisher can do.
+func TestService_ListGrants_APIKeyPrincipal_ReturnsKeyGrantsNotPublisherGrants(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+
+	// Replace the session-style auth ctx with one that looks like an api-key
+	// request: APIKeyID set, no SessionID.
+	authCtx.AccountType = "enterprise"
+	authCtx.APIKeyID = "test_api_key_id"
+	authCtx.APIKeySystemManaged = true
+	authCtx.SessionID = nil
+	ctx = contextvalues.SetAuthContext(ctx, authCtx)
+
+	// Seed a publisher (user) grant that should NOT show up in the response,
+	// and an api_key principal grant that SHOULD.
+	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, authCtx.UserID, "publisher@example.com", "Publisher", "workos_user_publisher", "membership_pub")
+	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID), authz.ScopeOrgAdmin, "*")
+
+	apiKeyPrincipal := urn.NewPrincipal(urn.PrincipalTypeAPIKey, authCtx.APIKeyID)
+	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, apiKeyPrincipal, authz.ScopeMCPConnect, "tool_for_key")
+
+	// Drop just the api_key's grant onto the context the way PrepareContext
+	// would for a real request.
+	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeMCPConnect, "tool_for_key"))
+
+	result, err := ti.service.ListGrants(ctx, &gen.ListGrantsPayload{})
+	require.NoError(t, err)
+	require.Len(t, result.Grants, 1, "must return only the api_key's grants, not the publisher's")
+	require.Equal(t, "mcp:connect", result.Grants[0].Scope)
+	require.Len(t, result.Grants[0].Selectors, 1)
+	require.Equal(t, "tool_for_key", result.Grants[0].Selectors[0].ResourceID)
+
+	// And explicitly: the publisher's org:admin grant must not appear.
+	for _, g := range result.Grants {
+		require.NotEqual(t, "org:admin", g.Scope, "publisher's grants must not leak into an api-key listGrants response")
+	}
+}
