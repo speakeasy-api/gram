@@ -1215,32 +1215,14 @@ type pluginAPIKeyCandidate struct {
 func (s *Service) buildPluginAPIKeyCandidate(scope auth.APIKeyScope, purpose string) (pluginAPIKeyCandidate, error) {
 	tokenBytes := make([]byte, 32)
 	if _, err := rand.Read(tokenBytes); err != nil {
-		return pluginAPIKeyCandidate{
-			fullKey:        "",
-			keyHash:        "",
-			keyPrefix:      "",
-			keyName:        "",
-			scope:          auth.APIKeyScopeInvalid,
-			pluginID:       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-			toolsetID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-			pluginServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		}, fmt.Errorf("generate token: %w", err)
+		return pluginAPIKeyCandidate{}, fmt.Errorf("generate token: %w", err)
 	}
 	token := hex.EncodeToString(tokenBytes)
 	fullKey := s.keyPrefix + token
 
 	keyHash, err := auth.GetAPIKeyHash(fullKey)
 	if err != nil {
-		return pluginAPIKeyCandidate{
-			fullKey:        "",
-			keyHash:        "",
-			keyPrefix:      "",
-			keyName:        "",
-			scope:          auth.APIKeyScopeInvalid,
-			pluginID:       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-			toolsetID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-			pluginServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		}, fmt.Errorf("hash key: %w", err)
+		return pluginAPIKeyCandidate{}, fmt.Errorf("hash key: %w", err)
 	}
 
 	return pluginAPIKeyCandidate{
@@ -1255,10 +1237,37 @@ func (s *Service) buildPluginAPIKeyCandidate(scope auth.APIKeyScope, purpose str
 	}, nil
 }
 
+// sanitizeKeyNameSegment makes a free-form string safe to embed in a
+// colon-delimited api_keys.name. plugin_servers.display_name has no schema
+// constraints beyond non-empty, so it can contain colons, whitespace, or
+// unicode that would render the name ambiguous in audit logs. Maps anything
+// outside [A-Za-z0-9_-] to '_' and caps at 60 runes; an empty result falls
+// back to "_" so we never end up with adjacent colons.
+func sanitizeKeyNameSegment(s string) string {
+	const maxLen = 60
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		switch {
+		case (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' || r == '-':
+			b.WriteRune(r)
+		default:
+			b.WriteByte('_')
+		}
+		if b.Len() >= maxLen {
+			break
+		}
+	}
+	if b.Len() == 0 {
+		return "_"
+	}
+	return b.String()
+}
+
 // buildPluginScopedKeyCandidate generates a per-server MCP API key in memory.
 // The key is bound to a specific (plugin, toolset, plugin_server) and will
 // be rejected at the MCP entrypoint for any other toolset. Naming format:
-// plugin:<plugin_slug>:<display_name>:<server_id_first8>:<yyyymmddHHMMSS>:<rand6>.
+// plugin:<plugin_slug>:<sanitized_display_name>:<server_id_first8>:<yyyymmddHHMMSS>:<rand6>.
 // The timestamp + random suffix distinguish successive generations of the
 // same server's key — republish does not revoke prior keys (a separate
 // reaper / explicit-rotation flow handles that), so the partial unique
@@ -1267,36 +1276,18 @@ func (s *Service) buildPluginAPIKeyCandidate(scope auth.APIKeyScope, purpose str
 func (s *Service) buildPluginScopedKeyCandidate(p PluginInfo, srv PluginServerInfo) (pluginAPIKeyCandidate, error) {
 	tokenBytes := make([]byte, 32)
 	if _, err := rand.Read(tokenBytes); err != nil {
-		return pluginAPIKeyCandidate{
-			fullKey:        "",
-			keyHash:        "",
-			keyPrefix:      "",
-			keyName:        "",
-			scope:          auth.APIKeyScopeInvalid,
-			pluginID:       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-			toolsetID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-			pluginServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		}, fmt.Errorf("generate token: %w", err)
+		return pluginAPIKeyCandidate{}, fmt.Errorf("generate token: %w", err)
 	}
 	token := hex.EncodeToString(tokenBytes)
 	fullKey := s.keyPrefix + token
 
 	keyHash, err := auth.GetAPIKeyHash(fullKey)
 	if err != nil {
-		return pluginAPIKeyCandidate{
-			fullKey:        "",
-			keyHash:        "",
-			keyPrefix:      "",
-			keyName:        "",
-			scope:          auth.APIKeyScopeInvalid,
-			pluginID:       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-			toolsetID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-			pluginServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		}, fmt.Errorf("hash key: %w", err)
+		return pluginAPIKeyCandidate{}, fmt.Errorf("hash key: %w", err)
 	}
 
 	keyName := fmt.Sprintf("plugin:%s:%s:%s:%s:%s",
-		p.Slug, srv.DisplayName, srv.ID.String()[:8],
+		p.Slug, sanitizeKeyNameSegment(srv.DisplayName), srv.ID.String()[:8],
 		time.Now().UTC().Format("20060102150405"),
 		token[:6])
 

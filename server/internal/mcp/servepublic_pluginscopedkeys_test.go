@@ -9,13 +9,13 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"net/http"
-	"strings"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
 // createPluginScopedAPIKey inserts a system-managed API key bound to a
@@ -80,8 +80,13 @@ func TestServePublic_PluginScopedKey_RejectsMismatchedToolset(t *testing.T) {
 
 	_, err := servePublicHTTP(t, context.Background(), ti, otherToolset.McpSlug.String, makeInitializeBody(), bearer, nil)
 	require.Error(t, err)
-	require.True(t,
-		strings.Contains(err.Error(), "not authorized for this MCP server") || strings.Contains(err.Error(), "forbidden"),
-		"expected toolset-scope rejection, got: %v", err,
-	)
+
+	// Must surface as Forbidden (not the generic "expired or invalid access
+	// token" Unauthorized that the private-MCP wrapper used to mask
+	// everything as) so middleware maps it to HTTP 403 and the client can
+	// distinguish "your credential is bad" from "your credential is good
+	// but pointed at the wrong server".
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code, "scope mismatch must surface as Forbidden")
 }

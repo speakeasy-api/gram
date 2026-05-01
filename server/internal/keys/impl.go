@@ -267,8 +267,6 @@ func (s *Service) RevokeKey(ctx context.Context, payload *gen.RevokeKeyPayload) 
 		KeyURN:           urn.NewAPIKey(keyID),
 		KeyName:          deleted.Name,
 		Scopes:           deleted.Scopes,
-		PluginID:         uuid.Nil,
-		ToolsetURN:       urn.Toolset{ID: uuid.Nil},
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "error adding api key revocation audit log").Log(ctx, s.logger)
 	}

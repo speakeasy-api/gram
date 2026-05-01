@@ -315,33 +315,26 @@ func TestPluginsService_PublishPlugins_RecordsPluginScopedKeyCreate(t *testing.T
 	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
 	require.NoError(t, err)
 
-	// The most recent api_key:create event should be the per-server plugin
-	// key (mcp keys are created before the hooks key in the publish loop —
-	// LatestAuditLogByAction returns by created_at DESC, so the hooks key
-	// is last). Decode metadata to verify plugin_id + toolset_id surfaced.
-	rec, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionKeyCreate)
-	require.NoError(t, err)
-	meta, err := audittest.DecodeAuditData(rec.Metadata)
-	require.NoError(t, err)
-	// The hooks key has neither plugin_id nor toolset_id, so look at the
-	// per-server key by querying the audit table directly with the metadata
-	// filter.
+	// LatestAuditLogByAction returns the most recent record, which is the
+	// org-wide hooks key (no plugin_id) — not what we want to verify here.
+	// Query directly for the per-server key by its plugin_id metadata key.
+	var subjectType, subjectDisplay string
 	var pluginScopedMeta []byte
 	err = ti.conn.QueryRow(ctx, `
-		SELECT metadata FROM audit_logs
+		SELECT subject_type, subject_display_name, metadata FROM audit_logs
 		WHERE action = $1 AND metadata->>'plugin_id' IS NOT NULL
 		ORDER BY created_at DESC LIMIT 1
-	`, string(audit.ActionKeyCreate)).Scan(&pluginScopedMeta)
+	`, string(audit.ActionKeyCreate)).Scan(&subjectType, &subjectDisplay, &pluginScopedMeta)
 	require.NoError(t, err)
+
+	require.Equal(t, "api_key", subjectType)
+	require.Contains(t, subjectDisplay, "plugin:audit-key-create:")
 
 	pluginMeta, err := audittest.DecodeAuditData(pluginScopedMeta)
 	require.NoError(t, err)
 	require.Equal(t, plugin.ID, pluginMeta["plugin_id"], "plugin_id must surface in audit metadata")
 	require.Equal(t, toolset.ID.String(), pluginMeta["toolset_id"], "toolset_id must surface in audit metadata")
-
-	// Still verify the latest record looks valid (it's the hooks key).
-	require.Equal(t, "api_key", rec.SubjectType)
-	require.Contains(t, meta, "scopes")
+	require.Contains(t, pluginMeta, "scopes")
 }
 
 func TestPluginsService_PublishPlugins_RepublishEmitsNoKeyRevoke(t *testing.T) {

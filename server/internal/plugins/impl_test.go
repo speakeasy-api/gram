@@ -571,6 +571,8 @@ func TestPluginsService_PublishPlugins_CreatesAPIKeyWithCorrectScope(t *testing.
 	require.Contains(t, hooksKey.Scopes, "hooks")
 	require.True(t, strings.HasPrefix(hooksKey.KeyPrefix, "gram_local_"))
 	require.True(t, hooksKey.SystemManaged, "hooks plugin keys must be system_managed")
+	require.False(t, hooksKey.PluginID.Valid, "hooks key is org-wide and must not back-reference a plugin")
+	require.False(t, hooksKey.ToolsetID.Valid, "hooks key is org-wide and must not back-reference a toolset")
 
 	// Verify the per-server MCP key is injected into the pushed MCP config.
 	mcpJSON := mock.lastPushedFiles["key-test/.mcp.json"]
@@ -642,6 +644,82 @@ func TestPluginsService_PublishPlugins_RePublishAccumulatesPerServerKeys(t *test
 	).Scan(&deletedMCPCount)
 	require.NoError(t, err)
 	require.Equal(t, 0, deletedMCPCount, "republish must not soft-delete prior keys")
+
+	// plugin_servers.api_key_id must point at the *latest* generation's key,
+	// not the first one — the dashboard's "current credential" surface relies
+	// on this. The first publish's key remains valid in api_keys but is no
+	// longer linked from plugin_servers.
+	var linkedKeyID uuid.UUID
+	err = ti.conn.QueryRow(ctx,
+		"SELECT api_key_id FROM plugin_servers WHERE plugin_id = $1 AND deleted IS FALSE",
+		uuid.MustParse(plugin.ID),
+	).Scan(&linkedKeyID)
+	require.NoError(t, err)
+
+	// Find the most recently created plugin-scoped key by created_at; the
+	// link should point at it.
+	var newestKeyID uuid.UUID
+	err = ti.conn.QueryRow(ctx,
+		"SELECT id FROM api_keys WHERE name LIKE 'plugin:republish-test:%' ORDER BY created_at DESC LIMIT 1",
+	).Scan(&newestKeyID)
+	require.NoError(t, err)
+	require.Equal(t, newestKeyID, linkedKeyID, "plugin_servers.api_key_id must be re-linked to the latest generation")
+}
+
+// PublishPlugins on a plugin containing both a public and a private server
+// must mint a key only for the private one. The public server's manifest
+// entry uses env-config auth and gets no Gram-issued key.
+func TestPluginsService_PublishPlugins_MixedPublicAndPrivateServers(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockGitHubPublisher{}
+	ctx, ti := newTestPluginsServiceWithGitHub(t, mock)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Mixed Plugin"})
+	require.NoError(t, err)
+
+	privateToolset := createTestToolset(t, ctx, ti.conn, "mixed-private")
+	publicToolset := createTestToolset(t, ctx, ti.conn, "mixed-public")
+	_, err = ti.conn.Exec(ctx, "UPDATE toolsets SET mcp_is_public = TRUE WHERE id = $1", publicToolset.ID)
+	require.NoError(t, err)
+
+	for i, ts := range []toolsetsrepo.Toolset{privateToolset, publicToolset} {
+		_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
+			PluginID:    plugin.ID,
+			ToolsetID:   ts.ID.String(),
+			DisplayName: "S" + ts.Slug,
+			Policy:      "required",
+			SortOrder:   int32(i),
+		})
+		require.NoError(t, err)
+	}
+
+	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
+	require.NoError(t, err)
+
+	// Exactly one plugin-scoped MCP key should have been minted: for the
+	// private server. The public server is skipped in the mint loop.
+	keys, err := allOrgKeysIncludingSystemManaged(ctx, t, ti.conn, authCtx.ActiveOrganizationID)
+	require.NoError(t, err)
+	var pluginScopedCount int
+	for _, k := range keys {
+		if k.PluginID.Valid && k.ToolsetID.Valid {
+			pluginScopedCount++
+			require.Equal(t, privateToolset.ID, k.ToolsetID.UUID, "the only minted plugin-scoped key must be bound to the private toolset")
+		}
+	}
+	require.Equal(t, 1, pluginScopedCount, "public server must not get a plugin-scoped key")
+
+	// Confirm the public server's plugin_servers row has no api_key_id link.
+	var publicLinkedKeyID uuid.NullUUID
+	err = ti.conn.QueryRow(ctx,
+		"SELECT api_key_id FROM plugin_servers WHERE toolset_id = $1 AND deleted IS FALSE",
+		publicToolset.ID,
+	).Scan(&publicLinkedKeyID)
+	require.NoError(t, err)
+	require.False(t, publicLinkedKeyID.Valid, "public server must not be linked to an api_key")
 }
 
 // PublishPlugins must not persist the API key (or audit log entry, or

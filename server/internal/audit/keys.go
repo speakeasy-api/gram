@@ -93,26 +93,14 @@ type LogKeyRevokeEvent struct {
 	KeyName string
 
 	Scopes []string
-
-	// Mirrors LogKeyCreateEvent (rfc-plugin-scoped-keys.md) so the audit
-	// trail is symmetric across mint and revoke.
-	PluginID   uuid.UUID //nolint:glint // TODO(AGE-1954): introduce urn.Plugin and migrate to PluginURN; pending team discussion
-	ToolsetURN urn.Toolset
 }
 
 func LogKeyRevoke(ctx context.Context, dbtx repo.DBTX, event LogKeyRevokeEvent) error {
 	action := ActionKeyRevoke
 
-	payload := map[string]any{
+	metadata, err := marshalAuditPayload(map[string]any{
 		"scopes": event.Scopes,
-	}
-	if event.PluginID != uuid.Nil {
-		payload["plugin_id"] = event.PluginID.String()
-	}
-	if !event.ToolsetURN.IsZero() {
-		payload["toolset_id"] = event.ToolsetURN.ID.String()
-	}
-	metadata, err := marshalAuditPayload(payload)
+	})
 	if err != nil {
 		return fmt.Errorf("marshal %s metadata: %w", action, err)
 	}

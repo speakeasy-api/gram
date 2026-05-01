@@ -545,3 +545,33 @@ func TestWritePluginZipMakesShellScriptsExecutable(t *testing.T) {
 	require.Equal(t, uint32(0o644), modes[".claude-plugin/plugin.json"], "non-script files keep default mode")
 	require.Equal(t, uint32(0o644), modes["README.md"], "non-script files keep default mode")
 }
+
+// serverBearerToken: per-server APIKey wins over GenerateConfig.APIKey when
+// both are set; falls through correctly when one or neither is set.
+func TestServerBearerToken_PerServerWinsOverConfig(t *testing.T) {
+	t.Parallel()
+
+	t.Run("per-server set, config set: per-server wins", func(t *testing.T) {
+		t.Parallel()
+		got := serverBearerToken(
+			PluginServerInfo{APIKey: "from-server"},
+			GenerateConfig{APIKey: "from-config"},
+		)
+		require.Equal(t, "from-server", got)
+	})
+
+	t.Run("per-server empty, config set: falls back to config", func(t *testing.T) {
+		t.Parallel()
+		got := serverBearerToken(
+			PluginServerInfo{APIKey: ""},
+			GenerateConfig{APIKey: "from-config"},
+		)
+		require.Equal(t, "from-config", got)
+	})
+
+	t.Run("both empty: empty string", func(t *testing.T) {
+		t.Parallel()
+		got := serverBearerToken(PluginServerInfo{}, GenerateConfig{})
+		require.Empty(t, got)
+	})
+}
