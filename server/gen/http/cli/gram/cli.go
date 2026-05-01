@@ -76,7 +76,7 @@ func UsageCommands() []string {
 		"chat-sessions (create|revoke)",
 		"deployments (get-deployment|get-latest-deployment|get-active-deployment|create-deployment|evolve|redeploy|list-deployments|get-deployment-logs)",
 		"domains (get-domain|create-domain|delete-domain)",
-		"environments (create-environment|list-environments|update-environment|delete-environment|set-source-environment-link|delete-source-environment-link|get-source-environment|set-toolset-environment-link|delete-toolset-environment-link|get-toolset-environment)",
+		"environments (create-environment|list-environments|update-environment|clone-environment|delete-environment|set-source-environment-link|delete-source-environment-link|get-source-environment|set-toolset-environment-link|delete-toolset-environment-link|get-toolset-environment)",
 		"mcp-registries (clear-cache|list-registries|list-catalog|get-server-details)",
 		"collections (create|list|update|delete|attach-server|detach-server|list-servers)",
 		"functions get-signed-asset-url",
@@ -489,6 +489,12 @@ func ParseEndpoint(
 		environmentsUpdateEnvironmentSlugFlag             = environmentsUpdateEnvironmentFlags.String("slug", "REQUIRED", "")
 		environmentsUpdateEnvironmentSessionTokenFlag     = environmentsUpdateEnvironmentFlags.String("session-token", "", "")
 		environmentsUpdateEnvironmentProjectSlugInputFlag = environmentsUpdateEnvironmentFlags.String("project-slug-input", "", "")
+
+		environmentsCloneEnvironmentFlags                = flag.NewFlagSet("clone-environment", flag.ExitOnError)
+		environmentsCloneEnvironmentBodyFlag             = environmentsCloneEnvironmentFlags.String("body", "REQUIRED", "")
+		environmentsCloneEnvironmentSlugFlag             = environmentsCloneEnvironmentFlags.String("slug", "REQUIRED", "")
+		environmentsCloneEnvironmentSessionTokenFlag     = environmentsCloneEnvironmentFlags.String("session-token", "", "")
+		environmentsCloneEnvironmentProjectSlugInputFlag = environmentsCloneEnvironmentFlags.String("project-slug-input", "", "")
 
 		environmentsDeleteEnvironmentFlags                = flag.NewFlagSet("delete-environment", flag.ExitOnError)
 		environmentsDeleteEnvironmentSlugFlag             = environmentsDeleteEnvironmentFlags.String("slug", "REQUIRED", "")
@@ -1529,6 +1535,7 @@ func ParseEndpoint(
 	environmentsCreateEnvironmentFlags.Usage = environmentsCreateEnvironmentUsage
 	environmentsListEnvironmentsFlags.Usage = environmentsListEnvironmentsUsage
 	environmentsUpdateEnvironmentFlags.Usage = environmentsUpdateEnvironmentUsage
+	environmentsCloneEnvironmentFlags.Usage = environmentsCloneEnvironmentUsage
 	environmentsDeleteEnvironmentFlags.Usage = environmentsDeleteEnvironmentUsage
 	environmentsSetSourceEnvironmentLinkFlags.Usage = environmentsSetSourceEnvironmentLinkUsage
 	environmentsDeleteSourceEnvironmentLinkFlags.Usage = environmentsDeleteSourceEnvironmentLinkUsage
@@ -2107,6 +2114,9 @@ func ParseEndpoint(
 
 			case "update-environment":
 				epf = environmentsUpdateEnvironmentFlags
+
+			case "clone-environment":
+				epf = environmentsCloneEnvironmentFlags
 
 			case "delete-environment":
 				epf = environmentsDeleteEnvironmentFlags
@@ -2989,6 +2999,9 @@ func ParseEndpoint(
 			case "update-environment":
 				endpoint = c.UpdateEnvironment()
 				data, err = environmentsc.BuildUpdateEnvironmentPayload(*environmentsUpdateEnvironmentBodyFlag, *environmentsUpdateEnvironmentSlugFlag, *environmentsUpdateEnvironmentSessionTokenFlag, *environmentsUpdateEnvironmentProjectSlugInputFlag)
+			case "clone-environment":
+				endpoint = c.CloneEnvironment()
+				data, err = environmentsc.BuildCloneEnvironmentPayload(*environmentsCloneEnvironmentBodyFlag, *environmentsCloneEnvironmentSlugFlag, *environmentsCloneEnvironmentSessionTokenFlag, *environmentsCloneEnvironmentProjectSlugInputFlag)
 			case "delete-environment":
 				endpoint = c.DeleteEnvironment()
 				data, err = environmentsc.BuildDeleteEnvironmentPayload(*environmentsDeleteEnvironmentSlugFlag, *environmentsDeleteEnvironmentSessionTokenFlag, *environmentsDeleteEnvironmentProjectSlugInputFlag)
@@ -5153,6 +5166,7 @@ func environmentsUsage() {
 	fmt.Fprintln(os.Stderr, `    create-environment: Create a new environment`)
 	fmt.Fprintln(os.Stderr, `    list-environments: List all environments for an organization`)
 	fmt.Fprintln(os.Stderr, `    update-environment: Update an environment`)
+	fmt.Fprintln(os.Stderr, `    clone-environment: Clone an environment into a new one. Either copies only the variable names with empty placeholder values, or copies the encrypted values verbatim. Encrypted secret values are never decrypted by the application during the clone operation.`)
 	fmt.Fprintln(os.Stderr, `    delete-environment: Delete an environment`)
 	fmt.Fprintln(os.Stderr, `    set-source-environment-link: Set (upsert) a link between a source and an environment`)
 	fmt.Fprintln(os.Stderr, `    delete-source-environment-link: Delete a link between a source and an environment`)
@@ -5228,6 +5242,30 @@ func environmentsUpdateEnvironmentUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "environments update-environment --body '{\n      \"description\": \"abc123\",\n      \"entries_to_remove\": [\n         \"abc123\"\n      ],\n      \"entries_to_update\": [\n         {\n            \"name\": \"abc123\",\n            \"value\": \"abc123\"\n         }\n      ],\n      \"name\": \"abc123\"\n   }' --slug \"aaa\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func environmentsCloneEnvironmentUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] environments clone-environment", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -slug STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Clone an environment into a new one. Either copies only the variable names with empty placeholder values, or copies the encrypted values verbatim. Encrypted secret values are never decrypted by the application during the clone operation.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -slug STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "environments clone-environment --body '{\n      \"copy_values\": false,\n      \"new_name\": \"abc123\"\n   }' --slug \"aaa\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func environmentsDeleteEnvironmentUsage() {

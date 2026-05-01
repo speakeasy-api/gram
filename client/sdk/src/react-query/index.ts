@@ -23,6 +23,7 @@ export * from "./chatSessionsCreate.js";
 export * from "./chatSessionsRevoke.js";
 export * from "./chatSubmitFeedback.js";
 export * from "./checkMCPSlugAvailability.js";
+export * from "./cloneEnvironment.js";
 export * from "./cloneToolset.js";
 export * from "./collectionsAttachServer.js";
 export * from "./collectionsCreate.js";

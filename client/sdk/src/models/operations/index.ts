@@ -11,6 +11,7 @@ export * from "./authlogin.js";
 export * from "./captureevent.js";
 export * from "./checkmcpslugavailability.js";
 export * from "./clearmcpregistrycache.js";
+export * from "./cloneenvironment.js";
 export * from "./clonetoolset.js";
 export * from "./configureslackapp.js";
 export * from "./createapikey.js";

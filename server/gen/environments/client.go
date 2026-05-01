@@ -19,6 +19,7 @@ type Client struct {
 	CreateEnvironmentEndpoint            goa.Endpoint
 	ListEnvironmentsEndpoint             goa.Endpoint
 	UpdateEnvironmentEndpoint            goa.Endpoint
+	CloneEnvironmentEndpoint             goa.Endpoint
 	DeleteEnvironmentEndpoint            goa.Endpoint
 	SetSourceEnvironmentLinkEndpoint     goa.Endpoint
 	DeleteSourceEnvironmentLinkEndpoint  goa.Endpoint
@@ -29,11 +30,12 @@ type Client struct {
 }
 
 // NewClient initializes a "environments" service client given the endpoints.
-func NewClient(createEnvironment, listEnvironments, updateEnvironment, deleteEnvironment, setSourceEnvironmentLink, deleteSourceEnvironmentLink, getSourceEnvironment, setToolsetEnvironmentLink, deleteToolsetEnvironmentLink, getToolsetEnvironment goa.Endpoint) *Client {
+func NewClient(createEnvironment, listEnvironments, updateEnvironment, cloneEnvironment, deleteEnvironment, setSourceEnvironmentLink, deleteSourceEnvironmentLink, getSourceEnvironment, setToolsetEnvironmentLink, deleteToolsetEnvironmentLink, getToolsetEnvironment goa.Endpoint) *Client {
 	return &Client{
 		CreateEnvironmentEndpoint:            createEnvironment,
 		ListEnvironmentsEndpoint:             listEnvironments,
 		UpdateEnvironmentEndpoint:            updateEnvironment,
+		CloneEnvironmentEndpoint:             cloneEnvironment,
 		DeleteEnvironmentEndpoint:            deleteEnvironment,
 		SetSourceEnvironmentLinkEndpoint:     setSourceEnvironmentLink,
 		DeleteSourceEnvironmentLinkEndpoint:  deleteSourceEnvironmentLink,
@@ -107,6 +109,29 @@ func (c *Client) ListEnvironments(ctx context.Context, p *ListEnvironmentsPayloa
 func (c *Client) UpdateEnvironment(ctx context.Context, p *UpdateEnvironmentPayload) (res *types.Environment, err error) {
 	var ires any
 	ires, err = c.UpdateEnvironmentEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*types.Environment), nil
+}
+
+// CloneEnvironment calls the "cloneEnvironment" endpoint of the "environments"
+// service.
+// CloneEnvironment may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) CloneEnvironment(ctx context.Context, p *CloneEnvironmentPayload) (res *types.Environment, err error) {
+	var ires any
+	ires, err = c.CloneEnvironmentEndpoint(ctx, p)
 	if err != nil {
 		return
 	}
