@@ -16,6 +16,7 @@ package xmcp
 import (
 	"log/slog"
 	"net/http"
+	"net/url"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/metric"
@@ -46,6 +47,7 @@ type Service struct {
 	enc                          *encryption.Client
 	authz                        *authz.Engine
 	mcpService                   *mcp.Service
+	serverURL                    *url.URL
 	guardianPolicy               *guardian.Policy
 	proxyMetrics                 *proxy.Metrics
 	toolUsageLimitsInterceptor   *ToolUsageLimitsInterceptor
@@ -64,6 +66,7 @@ func NewService(
 	billingRepo billing.Repository,
 	billingTracker billing.Tracker,
 	mcpService *mcp.Service,
+	serverURL *url.URL,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("xmcp"))
 
@@ -76,6 +79,7 @@ func NewService(
 		enc:                          enc,
 		authz:                        authzEngine,
 		mcpService:                   mcpService,
+		serverURL:                    serverURL,
 		guardianPolicy:               guardianPolicy,
 		proxyMetrics:                 proxy.NewMetrics(meter, logger),
 		toolUsageLimitsInterceptor:   NewToolUsageLimitsInterceptor(billingRepo, logger),
@@ -89,9 +93,10 @@ func NewService(
 // for Messages from the Server for GET).
 //
 // Attach also registers /x/mcp aliases for the install page and OAuth
-// .well-known metadata routes, delegating to the existing mcp and mcpmetadata
-// service handlers so the experimental endpoint has parity with /mcp.
-func Attach(mux goahttp.Muxer, service *Service, mcpService *mcp.Service, metadataService *mcpmetadata.Service) {
+// .well-known metadata routes. The install page delegates to mcpmetadata
+// for parity with /mcp; the .well-known routes are owned by xmcp directly
+// so they can dispatch per-backend (see [Service.HandleWellKnownOAuthServerMetadata]).
+func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Service) {
 	handler := oops.ErrHandle(service.logger, service.ServeMCP).ServeHTTP
 	o11y.AttachHandler(mux, http.MethodDelete, RuntimePath, handler)
 	o11y.AttachHandler(mux, http.MethodGet, RuntimePath, handler)
@@ -106,8 +111,8 @@ func Attach(mux goahttp.Muxer, service *Service, mcpService *mcp.Service, metada
 	// from /x/mcp to /mcp.
 	// o11y.AttachHandler(mux, http.MethodGet, "/mcp/install-page-{hash}.js", oops.ErrHandle(service.logger, metadataService.ServeInstallPageScript).ServeHTTP)
 
-	o11y.AttachHandler(mux, http.MethodGet, "/.well-known/oauth-authorization-server/x/mcp/{mcpSlug}", oops.ErrHandle(service.logger, mcpService.HandleWellKnownOAuthServerMetadata).ServeHTTP)
-	o11y.AttachHandler(mux, http.MethodGet, "/.well-known/oauth-protected-resource/x/mcp/{mcpSlug}", oops.ErrHandle(service.logger, mcpService.HandleWellKnownOAuthProtectedResourceMetadata).ServeHTTP)
+	o11y.AttachHandler(mux, http.MethodGet, "/.well-known/oauth-authorization-server/x/mcp/{mcpSlug}", oops.ErrHandle(service.logger, service.HandleWellKnownOAuthServerMetadata).ServeHTTP)
+	o11y.AttachHandler(mux, http.MethodGet, "/.well-known/oauth-protected-resource/x/mcp/{mcpSlug}", oops.ErrHandle(service.logger, service.HandleWellKnownOAuthProtectedResourceMetadata).ServeHTTP)
 }
 
 // newHeadersRepo returns a per-request headers wrapper bound to the service
