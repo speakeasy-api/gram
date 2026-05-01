@@ -526,14 +526,13 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 	resultMessages := make([]*gen.ChatMessage, len(messages))
 	for i, msg := range messages {
 		toolCalls := string(msg.ToolCalls)
-		content := s.loadMessageContent(ctx, msg)
 		resultMessages[i] = &gen.ChatMessage{
 			ID:             msg.ID.String(),
 			Role:           msg.Role,
 			Model:          msg.Model.String,
 			UserID:         &msg.UserID.String,
 			ExternalUserID: &msg.ExternalUserID.String,
-			Content:        &content,
+			Content:        s.loadMessageContent(ctx, msg),
 			ToolCalls:      &toolCalls,
 			ToolCallID:     &msg.ToolCallID.String,
 			FinishReason:   &msg.FinishReason.String,
