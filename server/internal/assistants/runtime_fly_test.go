@@ -321,13 +321,12 @@ func TestFlyRuntimeBackendEnsureExistingAppAfterPartialCreateFailureClearsStaleM
 	require.Equal(t, 0, apiClient.deleteCalls, "partially created current app should not be torn down because metadata came from an older app incarnation")
 }
 
-func TestFlyRuntimeBackendStopIgnoresMissingApp(t *testing.T) {
+func TestFlyRuntimeBackendStopWithoutMachineMetadataIsNoop(t *testing.T) {
 	t.Parallel()
 
 	server := newTestAssistantRuntimeServer(t, true)
-	backend, apiClient, _ := newTestFlyRuntimeBackend(t, server)
+	backend, apiClient, flapsClient := newTestFlyRuntimeBackend(t, server)
 
-	apiClient.deleteErr = errors.New("not found")
 	rawMetadata, err := json.Marshal(flyRuntimeMetadata{
 		AppName:    "gram-asst-test",
 		AppID:      "",
@@ -344,6 +343,60 @@ func TestFlyRuntimeBackendStopIgnoresMissingApp(t *testing.T) {
 		BackendMetadataJSON: rawMetadata,
 	})
 	require.NoError(t, err)
+	require.Equal(t, 0, flapsClient.stopCalls, "stop is a no-op without a machine id to target")
+	require.Equal(t, 0, apiClient.deleteCalls, "stop must not delete the fly app")
+}
+
+func TestFlyRuntimeBackendStopStopsMachineKeepsApp(t *testing.T) {
+	t.Parallel()
+
+	server := newTestAssistantRuntimeServer(t, true)
+	backend, apiClient, flapsClient := newTestFlyRuntimeBackend(t, server)
+
+	rawMetadata, err := json.Marshal(flyRuntimeMetadata{
+		AppName:    "gram-asst-test",
+		AppID:      "app-1",
+		AppURL:     server.URL,
+		AppIP:      "",
+		MachineID:  "machine-1",
+		Region:     "iad",
+		LastBootID: "boot-1",
+	})
+	require.NoError(t, err)
+
+	err = backend.Stop(context.Background(), assistantRuntimeRecord{
+		Backend:             runtimeBackendFlyIO,
+		BackendMetadataJSON: rawMetadata,
+	})
+	require.NoError(t, err)
+	require.Equal(t, 1, flapsClient.stopCalls, "stop must target the machine via flaps")
+	require.Equal(t, 0, apiClient.deleteCalls, "stop must not delete the fly app — reuse the next admit")
+}
+
+func TestFlyRuntimeBackendStopToleratesMissingMachine(t *testing.T) {
+	t.Parallel()
+
+	server := newTestAssistantRuntimeServer(t, true)
+	backend, apiClient, flapsClient := newTestFlyRuntimeBackend(t, server)
+
+	flapsClient.stopErr = errors.New("not found")
+	rawMetadata, err := json.Marshal(flyRuntimeMetadata{
+		AppName:    "gram-asst-test",
+		AppID:      "app-1",
+		AppURL:     server.URL,
+		AppIP:      "",
+		MachineID:  "machine-gone",
+		Region:     "iad",
+		LastBootID: "boot-1",
+	})
+	require.NoError(t, err)
+
+	err = backend.Stop(context.Background(), assistantRuntimeRecord{
+		Backend:             runtimeBackendFlyIO,
+		BackendMetadataJSON: rawMetadata,
+	})
+	require.NoError(t, err)
+	require.Equal(t, 0, apiClient.deleteCalls, "stop must not fall back to delete-app when flaps reports missing")
 }
 
 func TestFlyRuntimeBackendServerURLRejectsLoopback(t *testing.T) {
@@ -423,6 +476,8 @@ type testFlyRuntimeFlapsClient struct {
 	launchMachine *fly.Machine
 	launchErr     error
 	startErr      error
+	stopErr       error
+	stopCalls     int
 	waitErr       error
 }
 
@@ -462,6 +517,17 @@ func (c *testFlyRuntimeFlapsClient) Start(_ context.Context, _ string, _ string,
 		c.machine.State = "started"
 	}
 	return &fly.MachineStartResponse{}, nil
+}
+
+func (c *testFlyRuntimeFlapsClient) Stop(_ context.Context, _ string, _ fly.StopMachineInput, _ string) error {
+	c.stopCalls++
+	if c.stopErr != nil {
+		return c.stopErr
+	}
+	if c.machine != nil {
+		c.machine.State = "stopped"
+	}
+	return nil
 }
 
 func (c *testFlyRuntimeFlapsClient) Wait(_ context.Context, _ string, _ *fly.Machine, _ string, _ time.Duration) error {

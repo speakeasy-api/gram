@@ -487,6 +487,19 @@ WHERE assistant_thread_id = $1
 	require.True(t, deleted)
 	require.JSONEq(t, string(backend.ensureResult.BackendMetadataJSON), string(metadata))
 
+	hotAdmit, err := core.AdmitPendingThreads(t.Context(), assistantID)
+	require.NoError(t, err)
+	require.Empty(t, hotAdmit.ThreadIDs, "admission backoff must block re-admit immediately after a setup failure")
+
+	// Simulate the backoff window elapsing so the next admit is eligible.
+	_, err = conn.Exec(t.Context(), `
+UPDATE assistant_runtimes
+SET updated_at = clock_timestamp() - INTERVAL '1 hour'
+WHERE assistant_thread_id = $1
+  AND state = $2
+`, threadID, runtimeStateFailed)
+	require.NoError(t, err)
+
 	admittedAgain, err := core.AdmitPendingThreads(t.Context(), assistantID)
 	require.NoError(t, err)
 	require.Equal(t, []uuid.UUID{threadID}, admittedAgain.ThreadIDs)
