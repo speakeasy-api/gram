@@ -43,6 +43,37 @@ jobs:
             exit 1
           fi
 
+      - name: Checkout
+        uses: actions/checkout@ff7abcd0c3c05ccf6adc123a8cd1fd4fb30fb493 # v5.0.0
+
+      - name: Detect changed files
+        uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
+        id: filter
+        with:
+          filters: .github/filters.yaml
+          list-files: json
+
+      - name: Validate migration PR does not mix server changes
+        if: ${{ github.event_name != 'merge_group' && steps.filter.outputs.database-changes == 'true' && steps.filter.outputs.server-internal == 'true' }}
+        shell: bash
+        env:
+          DB_FILES: ${{ steps.filter.outputs.database-changes_files }}
+          INTERNAL_FILES: ${{ steps.filter.outputs.server-internal_files }}
+        run: |
+          set -e
+          echo "❌ This PR mixes database migration changes with other server changes."
+          echo ""
+          echo "Database migration files changed:"
+          echo "$DB_FILES" | jq -r '.[]' | sed 's/^/  - /'
+          echo ""
+          echo "Server implementation files changed:"
+          echo "$INTERNAL_FILES" | jq -r '.[]' | sed 's/^/  - /'
+          echo ""
+          echo "Database schema changes should be scheduled separately from business logic changes"
+          echo "so each can be reviewed and rolled out independently."
+          echo "Please move the non-migration changes to a separate PR."
+          exit 1
+
       - name: Check for significant changes
         id: check
         run: |
@@ -53,10 +84,6 @@ jobs:
           else
             echo "lint=true" >> $GITHUB_OUTPUT
           fi
-
-      - name: Checkout
-        if: ${{ steps.check.outputs.lint == 'true' }}
-        uses: actions/checkout@ff7abcd0c3c05ccf6adc123a8cd1fd4fb30fb493 # v5.0.0
 
       # Check out both the base and head refs so changeset status can compare
       # against the base branch
