@@ -2,6 +2,7 @@ import { InputField } from "@/components/moon/input-field";
 import { Page } from "@/components/page-layout";
 import { ToolCollectionBadge } from "@/components/tool-collection-badge";
 import { Badge } from "@/components/ui/badge";
+import { Button as UiButton } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { DotCard } from "@/components/ui/dot-card";
 import { Heading } from "@/components/ui/heading";
@@ -16,6 +17,7 @@ import {
 import { invalidateAllPlugins } from "@gram/client/react-query/plugins";
 import { useUpdatePluginMutation } from "@gram/client/react-query/updatePlugin";
 import { useAddPluginServerMutation } from "@gram/client/react-query/addPluginServer";
+import { useRemovePluginServerMutation } from "@gram/client/react-query/removePluginServer";
 import { useListToolsets } from "@gram/client/react-query/listToolsets";
 import {
   Button,
@@ -27,7 +29,7 @@ import {
   Stack,
 } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, Network } from "lucide-react";
+import { Network, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useParams } from "react-router";
 import type {
@@ -72,6 +74,17 @@ export default function PluginDetail() {
       invalidateAll();
     },
   });
+
+  const removeServerMutation = useRemovePluginServerMutation({
+    onSuccess: () => invalidateAll(),
+  });
+
+  const handleRemoveServer = (server: PluginServer) => {
+    removeServerMutation.mutate({
+      security: { sessionHeaderGramSession: "" },
+      request: { id: server.id, pluginId: pluginId! },
+    });
+  };
 
   const handleUpdate: React.FormEventHandler<HTMLFormElement> = (e) => {
     e.preventDefault();
@@ -209,6 +222,7 @@ export default function PluginDetail() {
                 key={server.id}
                 server={server}
                 toolset={toolsetById.get(server.toolsetId)}
+                onRemove={() => handleRemoveServer(server)}
               />
             ))}
           </div>
@@ -352,9 +366,11 @@ export default function PluginDetail() {
 function PluginServerCard({
   server,
   toolset,
+  onRemove,
 }: {
   server: PluginServer;
   toolset: ToolsetEntry | undefined;
+  onRemove: () => void;
 }) {
   const routes = useRoutes();
   const isMissing = !toolset;
@@ -430,13 +446,21 @@ function PluginServerCard({
       </div>
 
       <div className="mt-auto flex items-center justify-between gap-2 pt-2">
-        {statusIndicator}
-        {toolset && (
-          <div className="text-muted-foreground group-hover:text-primary flex items-center gap-1 text-sm transition-colors">
-            <span>Open</span>
-            <ArrowRight className="h-3.5 w-3.5" />
-          </div>
-        )}
+        {statusIndicator ?? <span />}
+        <UiButton
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          tooltip="Remove server"
+          aria-label="Remove server"
+          className="hover:text-destructive"
+          onClick={(e) => {
+            e.stopPropagation();
+            onRemove();
+          }}
+        >
+          <Trash2 className="h-4 w-4" />
+        </UiButton>
       </div>
     </DotCard>
   );
