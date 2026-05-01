@@ -144,13 +144,13 @@ Use `audittest` helpers in the service's test package — do not query the audit
 
 ## Relevant mise tasks
 
-| Task                       | Purpose                                                                                                                        |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `mise run gen:goa-server`  | Regenerate `server/gen/auditlogs/**` whenever you edit `server/design/auditlogs/design.go`.                                    |
-| `mise run gen:sdk`         | Regenerate the TypeScript SDK and CLI bindings after a Goa design change.                                                      |
-| `mise run gen:sqlc-server` | Regenerate `server/internal/audit/repo/` and `audittest/repo/`. Run whenever you change `queries.sql` in either place.         |
-| `mise run lint:server`     | `golangci-lint` including `exhaustruct` — keep struct literals complete when adding fields to `Log*Event`.                     |
-| `mise run test:server`     | Runs the full server test suite. Takes the same arguments as `go test` (e.g. `./internal/audit/... ./internal/remotemcp/...`). |
+| Task                       | Purpose                                                                                                                                                                                                             |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `mise run gen:goa-server`  | Regenerate `server/gen/auditlogs/**` whenever you edit `server/design/auditlogs/design.go`.                                                                                                                         |
+| `mise run gen:sdk`         | Regenerate the TypeScript SDK and CLI bindings after a Goa design change.                                                                                                                                           |
+| `mise run gen:sqlc-server` | Regenerate `server/internal/audit/repo/` and `audittest/repo/`. Run whenever you change `queries.sql` in either place. Requires `mise run infra:start` (sqlc connects to the local Postgres to type-check queries). |
+| `mise run lint:server`     | `golangci-lint` including `exhaustruct` — keep struct literals complete when adding fields to `Log*Event`.                                                                                                          |
+| `mise run test:server`     | Runs the full server test suite. Takes the same arguments as `go test` (e.g. `./internal/audit/... ./internal/remotemcp/...`).                                                                                      |
 
 ## Maintaining this skill
 
