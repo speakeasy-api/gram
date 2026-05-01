@@ -279,6 +279,26 @@ export function CreateRoleDialog({
     });
   };
 
+  const toggleAllMembers = () => {
+    const selectableMembers = members.filter(
+      (m) => !(isEditing && m.roleId === editingRole?.id),
+    );
+    const allSelected = selectableMembers.every((m) =>
+      selectedMembers.has(m.id),
+    );
+    setSelectedMembers((prev) => {
+      const next = new Set(prev);
+      for (const m of selectableMembers) {
+        if (allSelected) {
+          next.delete(m.id);
+        } else {
+          next.add(m.id);
+        }
+      }
+      return next;
+    });
+  };
+
   const handleSubmit = () => {
     const sdkGrants = Object.values(grants)
       // Drop scopes with an empty selector list — the user switched to
@@ -596,6 +616,38 @@ export function CreateRoleDialog({
 
             {showMembers && (
               <div className="border-border divide-border mt-3 divide-y rounded-md border">
+                {/* Select-all header */}
+                {(() => {
+                  const selectableMembers = members.filter(
+                    (m) => !(isEditing && m.roleId === editingRole?.id),
+                  );
+                  const allSelected =
+                    selectableMembers.length > 0 &&
+                    selectableMembers.every((m) => selectedMembers.has(m.id));
+                  const someSelected =
+                    !allSelected &&
+                    selectableMembers.some((m) => selectedMembers.has(m.id));
+                  return (
+                    <label className="bg-muted/60 flex cursor-pointer items-center gap-3 px-3 py-2">
+                      <Checkbox
+                        checked={
+                          allSelected
+                            ? true
+                            : someSelected
+                              ? "indeterminate"
+                              : false
+                        }
+                        onCheckedChange={() => toggleAllMembers()}
+                      />
+                      <Type
+                        variant="body"
+                        className="text-muted-foreground text-sm font-medium"
+                      >
+                        Select all
+                      </Type>
+                    </label>
+                  );
+                })()}
                 {members.map((member) => {
                   const alreadyHasRole =
                     isEditing && member.roleId === editingRole?.id;
