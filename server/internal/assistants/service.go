@@ -1177,7 +1177,7 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 			// window so they flow through cleanly under a fresh VM.
 			if errors.Is(runErr, ErrRuntimeUnhealthy) {
 				_ = s.runtime.Stop(ctx, runtimeRecord)
-				_ = s.stopRuntimeRecord(ctx, thread.ProjectID, thread.ID, runtimeStateStopped)
+				_ = s.stopRuntimeRecord(ctx, thread.ProjectID, thread.ID, runtimeStateFailed)
 				return ProcessThreadEventsResult{
 					AssistantID:       assistant.ID,
 					WarmUntil:         time.Time{},
