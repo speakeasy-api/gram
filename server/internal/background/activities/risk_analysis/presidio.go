@@ -29,9 +29,11 @@ type PIIScanner interface {
 	AnalyzeBatch(ctx context.Context, texts []string, entities []string, onProgress func()) ([][]Finding, error)
 }
 
-// presidioRequest is the payload sent to POST /analyze.
+// presidioRequest is the payload sent to POST /analyze. Text is sent as a
+// list so Presidio runs the whole batch through analyze_iterator with a
+// single recognizer load instead of reloading on every text.
 type presidioRequest struct {
-	Text     string   `json:"text"`
+	Text     []string `json:"text"`
 	Language string   `json:"language"`
 	ScoreMin float64  `json:"score_threshold"`
 	Entities []string `json:"entities,omitempty"`
@@ -45,27 +47,48 @@ type presidioResult struct {
 	Score      float64 `json:"score"`
 }
 
-// presidioMaxWorkers is the default concurrency limit for Presidio HTTP
-// requests. Presidio scanning is network-bound, not CPU-bound, so we use a
-// higher limit than runtime.NumCPU().
-const presidioMaxWorkers = 100
+const (
+	// presidioDefaultBatchSize is how many texts go into a single POST /analyze.
+	// Each call loads recognizers once and analyzes the batch with Presidio's
+	// internal multiprocessing, so larger batches mean less overhead per text.
+	presidioDefaultBatchSize = 50
+
+	// presidioDefaultMaxConcurrentRequests caps in-flight POST /analyze calls.
+	// Presidio's gunicorn worker is sync, so high concurrency just queues up
+	// and stalls until pods get killed; a small ceiling avoids that pile-up.
+	presidioDefaultMaxConcurrentRequests = 4
+
+	// presidioHeartbeatInterval is how often AnalyzeBatch fires onProgress
+	// while requests are in flight. Must be well under the Temporal activity
+	// HeartbeatTimeout (30s in DrainRiskAnalysisWorkflow) so a slow Presidio
+	// response doesn't trip the timeout.
+	presidioHeartbeatInterval = 10 * time.Second
+)
 
 // PresidioClient calls the Presidio Analyzer HTTP API.
 // Presidio is a trusted cluster-internal service, so the client uses an
 // unsafe guardian policy with an empty blocklist. The default policy blocks
 // RFC 1918 private ranges (10.0.0.0/8) which Kubernetes ClusterIPs fall into.
 type PresidioClient struct {
-	baseURL         string
-	httpClient      *guardian.HTTPClient
-	tracer          trace.Tracer
-	logger          *slog.Logger
-	maxWorkers      int
-	requestDuration metric.Float64Histogram
-	requestFailures metric.Int64Counter
+	baseURL               string
+	httpClient            *guardian.HTTPClient
+	tracer                trace.Tracer
+	logger                *slog.Logger
+	batchSize             int
+	maxConcurrentRequests int
+	requestDuration       metric.Float64Histogram
+	requestFailures       metric.Int64Counter
 }
 
 // NewPresidioClient creates a client pointing at the given base URL.
 func NewPresidioClient(baseURL string, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, logger *slog.Logger) *PresidioClient {
+	return NewPresidioClientWithLimits(baseURL, tracerProvider, meterProvider, logger, presidioDefaultBatchSize, presidioDefaultMaxConcurrentRequests)
+}
+
+// NewPresidioClientWithLimits is like NewPresidioClient but allows overriding
+// the batch size (texts per HTTP request) and max concurrent in-flight HTTP
+// requests. Non-positive values fall back to the package defaults.
+func NewPresidioClientWithLimits(baseURL string, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, logger *slog.Logger, batchSize, maxConcurrentRequests int) *PresidioClient {
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis/presidio")
 
 	requestDuration, _ := meter.Float64Histogram(
@@ -85,23 +108,23 @@ func NewPresidioClient(baseURL string, tracerProvider trace.TracerProvider, mete
 	unsafePolicy, _ := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	httpClient := unsafePolicy.PooledClient()
 
-	return &PresidioClient{
-		baseURL:         strings.TrimRight(baseURL, "/"),
-		httpClient:      httpClient,
-		tracer:          tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis/presidio"),
-		logger:          logger,
-		maxWorkers:      presidioMaxWorkers,
-		requestDuration: requestDuration,
-		requestFailures: requestFailures,
+	if batchSize <= 0 {
+		batchSize = presidioDefaultBatchSize
 	}
-}
+	if maxConcurrentRequests <= 0 {
+		maxConcurrentRequests = presidioDefaultMaxConcurrentRequests
+	}
 
-// NewPresidioClientWithWorkers is like NewPresidioClient but allows overriding
-// the concurrency limit. Used for benchmarking.
-func NewPresidioClientWithWorkers(baseURL string, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, logger *slog.Logger, maxWorkers int) *PresidioClient {
-	c := NewPresidioClient(baseURL, tracerProvider, meterProvider, logger)
-	c.maxWorkers = maxWorkers
-	return c
+	return &PresidioClient{
+		baseURL:               strings.TrimRight(baseURL, "/"),
+		httpClient:            httpClient,
+		tracer:                tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis/presidio"),
+		logger:                logger,
+		batchSize:             batchSize,
+		maxConcurrentRequests: maxConcurrentRequests,
+		requestDuration:       requestDuration,
+		requestFailures:       requestFailures,
+	}
 }
 
 // presidioEntityBlacklist is the set of Presidio entity types we refuse to
@@ -151,7 +174,9 @@ func (p *PresidioClient) AnalyzeBatch(ctx context.Context, texts []string, entit
 	entities = filtered
 
 	ctx, span := p.tracer.Start(ctx, "presidio.analyzeBatch", trace.WithAttributes(
-		attribute.Int("presidio.batch_size", n),
+		attribute.Int("presidio.text_count", n),
+		attribute.Int("presidio.batch_size", p.batchSize),
+		attribute.Int("presidio.max_concurrent_requests", p.maxConcurrentRequests),
 	))
 	defer func() {
 		if err != nil {
@@ -160,47 +185,74 @@ func (p *PresidioClient) AnalyzeBatch(ctx context.Context, texts []string, entit
 		span.End()
 	}()
 
-	results := make([][]Finding, n)
-	workers := min(p.maxWorkers, n)
-
-	// Pre-fill a buffered channel with indices so workers can pull the next
-	// item without coordination. Closing it causes workers to exit when the
-	// channel drains.
-	ch := make(chan int, n)
-	for i := range n {
-		ch <- i
-	}
-	close(ch)
-
-	var wg sync.WaitGroup
-
-	// Fan out workers that each drain items from ch until it's empty.
-	// Individual failures are logged and skipped; results[idx] stays nil
-	// for that text, which the caller treats as "no findings".
-	for range workers {
-		wg.Go(func() {
-			for idx := range ch {
-				findings, err := p.analyze(ctx, texts[idx], entities)
-				if err != nil {
-					p.logger.WarnContext(ctx, "presidio analyze failed for text, skipping",
-						attr.SlogError(err),
-					)
-					continue
-				}
-				results[idx] = findings
-				if onProgress != nil {
+	// Heartbeat ticker so Temporal activities calling AnalyzeBatch keep their
+	// heartbeat fresh while requests sit in flight. Without this, a slow
+	// Presidio response (e.g. queued behind a sync gunicorn worker) can blow
+	// past the activity HeartbeatTimeout.
+	if onProgress != nil {
+		ticker := time.NewTicker(presidioHeartbeatInterval)
+		done := make(chan struct{})
+		defer func() {
+			close(done)
+			ticker.Stop()
+		}()
+		go func() {
+			for {
+				select {
+				case <-done:
+					return
+				case <-ctx.Done():
+					return
+				case <-ticker.C:
 					onProgress()
 				}
 			}
-		})
+		}()
+	}
+
+	results := make([][]Finding, n)
+	sem := make(chan struct{}, p.maxConcurrentRequests)
+	var wg sync.WaitGroup
+
+	// Slice the input into batches and fan out batched HTTP calls. Individual
+	// chunk failures are logged and skipped; results[idx] stays nil for the
+	// affected texts, which the caller treats as "no findings".
+	for start := 0; start < n; start += p.batchSize {
+		end := min(start+p.batchSize, n)
+		chunk := texts[start:end]
+		offset := start
+
+		sem <- struct{}{}
+		wg.Add(1)
+		go func() {
+			defer func() {
+				<-sem
+				wg.Done()
+			}()
+			chunkFindings, err := p.analyzeChunk(ctx, chunk, entities)
+			if err != nil {
+				p.logger.WarnContext(ctx, "presidio analyze chunk failed, skipping",
+					attr.SlogError(err),
+				)
+				return
+			}
+			for i, f := range chunkFindings {
+				results[offset+i] = f
+			}
+		}()
 	}
 
 	wg.Wait()
 	return results, nil
 }
 
-func (p *PresidioClient) analyze(ctx context.Context, text string, entities []string) (_ []Finding, err error) {
-	ctx, span := p.tracer.Start(ctx, "presidio.analyze")
+// analyzeChunk POSTs a batch of texts to /analyze and decodes the per-text
+// findings list. Presidio returns one inner result list per input text when
+// the request body's text field is a list.
+func (p *PresidioClient) analyzeChunk(ctx context.Context, texts []string, entities []string) (_ [][]Finding, err error) {
+	ctx, span := p.tracer.Start(ctx, "presidio.analyze", trace.WithAttributes(
+		attribute.Int("presidio.chunk_size", len(texts)),
+	))
 	start := time.Now()
 	defer func() {
 		duration := time.Since(start)
@@ -217,7 +269,7 @@ func (p *PresidioClient) analyze(ctx context.Context, text string, entities []st
 	}()
 
 	body, err := json.Marshal(presidioRequest{
-		Text:     text,
+		Text:     texts,
 		Language: "en",
 		ScoreMin: 0.5,
 		Entities: entities,
@@ -242,40 +294,49 @@ func (p *PresidioClient) analyze(ctx context.Context, text string, entities []st
 		return nil, fmt.Errorf("presidio returned status %d", resp.StatusCode)
 	}
 
-	var results []presidioResult
-	if err := json.NewDecoder(resp.Body).Decode(&results); err != nil {
+	var raw [][]presidioResult
+	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
 		return nil, fmt.Errorf("decode presidio response: %w", err)
 	}
-
-	// Presidio returns character (rune) offsets, not byte offsets.
-	// Convert to runes for correct slicing, then map back to byte positions.
-	runes := []rune(text)
-
-	findings := make([]Finding, 0, len(results))
-	for _, r := range results {
-		// Clamp offsets to valid rune range to prevent out-of-bounds panics.
-		start := max(0, min(r.Start, len(runes)))
-		end := max(start, min(r.End, len(runes)))
-
-		match := string(runes[start:end])
-
-		// Convert rune offsets to byte offsets for storage.
-		startByte := len(string(runes[:start]))
-		endByte := len(string(runes[:end]))
-
-		findings = append(findings, Finding{
-			RuleID:      r.EntityType,
-			Description: "PII detected: " + r.EntityType,
-			Match:       match,
-			StartPos:    startByte,
-			EndPos:      endByte,
-			Tags:        []string{"pii", strings.ToLower(r.EntityType)},
-			Source:      "presidio",
-			Confidence:  r.Score,
-		})
+	if len(raw) != len(texts) {
+		return nil, fmt.Errorf("presidio response length mismatch: got %d entries for %d inputs", len(raw), len(texts))
 	}
-	span.SetAttributes(attribute.Int("presidio.findings_count", len(findings)))
-	return findings, nil
+
+	out := make([][]Finding, len(texts))
+	totalFindings := 0
+	for i, results := range raw {
+		// Presidio returns character (rune) offsets, not byte offsets.
+		// Convert to runes for correct slicing, then map back to byte positions.
+		runes := []rune(texts[i])
+
+		findings := make([]Finding, 0, len(results))
+		for _, r := range results {
+			// Clamp offsets to valid rune range to prevent out-of-bounds panics.
+			s := max(0, min(r.Start, len(runes)))
+			e := max(s, min(r.End, len(runes)))
+
+			match := string(runes[s:e])
+
+			// Convert rune offsets to byte offsets for storage.
+			startByte := len(string(runes[:s]))
+			endByte := len(string(runes[:e]))
+
+			findings = append(findings, Finding{
+				RuleID:      r.EntityType,
+				Description: "PII detected: " + r.EntityType,
+				Match:       match,
+				StartPos:    startByte,
+				EndPos:      endByte,
+				Tags:        []string{"pii", strings.ToLower(r.EntityType)},
+				Source:      "presidio",
+				Confidence:  r.Score,
+			})
+		}
+		out[i] = findings
+		totalFindings += len(findings)
+	}
+	span.SetAttributes(attribute.Int("presidio.findings_count", totalFindings))
+	return out, nil
 }
 
 // StubPIIScanner is a no-op implementation for environments without Presidio.
