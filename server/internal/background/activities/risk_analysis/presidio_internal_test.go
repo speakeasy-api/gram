@@ -12,8 +12,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	metricnoop "go.opentelemetry.io/otel/metric/noop"
-	tracenoop "go.opentelemetry.io/otel/trace/noop"
+	"go.opentelemetry.io/otel"
 )
 
 func TestChunkTextIndexes(t *testing.T) {
@@ -110,9 +109,9 @@ func TestPresidioAnalyzeBatchSplitsPoisonedBatch(t *testing.T) {
 
 	client := NewPresidioClientWithWorkers(
 		srv.URL,
-		tracenoop.NewTracerProvider(),
-		metricnoop.NewMeterProvider(),
-		slog.New(slog.DiscardHandler),
+		otel.GetTracerProvider(),
+		otel.GetMeterProvider(),
+		slog.Default(),
 		1,
 	)
 
@@ -167,9 +166,9 @@ func TestPresidioAnalyzeBatchSplitsUntilSingleTexts(t *testing.T) {
 
 	client := NewPresidioClientWithWorkers(
 		srv.URL,
-		tracenoop.NewTracerProvider(),
-		metricnoop.NewMeterProvider(),
-		slog.New(slog.DiscardHandler),
+		otel.GetTracerProvider(),
+		otel.GetMeterProvider(),
+		slog.Default(),
 		1,
 	)
 
