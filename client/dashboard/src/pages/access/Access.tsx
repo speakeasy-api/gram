@@ -99,7 +99,9 @@ export function AccessInner() {
             <PageTabsTrigger value="members">
               Members{memberCount != null ? ` (${memberCount})` : ""}
             </PageTabsTrigger>
-            <PageTabsTrigger value="challenges">Challenges</PageTabsTrigger>
+            <PageTabsTrigger value="challenges">
+              Authorization Challenges
+            </PageTabsTrigger>
           </TabsList>
         </div>
 
