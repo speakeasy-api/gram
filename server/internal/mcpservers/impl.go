@@ -2,7 +2,6 @@ package mcpservers
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -166,7 +165,7 @@ func (s *Service) GetMcpServer(ctx context.Context, payload *gen.GetMcpServerPay
 		ProjectID: *authCtx.ProjectID,
 	})
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.E(oops.CodeNotFound, err, "mcp server not found").Log(ctx, s.logger)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "get mcp server").Log(ctx, s.logger)
@@ -240,7 +239,7 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 		ProjectID: *authCtx.ProjectID,
 	})
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.E(oops.CodeNotFound, err, "mcp server not found").Log(ctx, logger)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "get mcp server").Log(ctx, logger)
@@ -263,7 +262,7 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 		ProjectID:             *authCtx.ProjectID,
 	})
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.E(oops.CodeNotFound, err, "mcp server not found").Log(ctx, logger)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "update mcp server").Log(ctx, logger)
@@ -321,7 +320,7 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 		ProjectID: *authCtx.ProjectID,
 	})
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return oops.E(oops.CodeNotFound, err, "mcp server not found").Log(ctx, logger)
 		}
 		return oops.E(oops.CodeUnexpected, err, "delete mcp server").Log(ctx, logger)
@@ -450,7 +449,7 @@ func verifyServerReferenceOwnership(
 			ID:        ids.EnvironmentID.UUID,
 			ProjectID: projectID,
 		}); err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
+			if errors.Is(err, pgx.ErrNoRows) {
 				return fmt.Errorf("environment_id does not reference a resource in this project")
 			}
 			return fmt.Errorf("check environment ownership: %w", err)
@@ -462,7 +461,7 @@ func verifyServerReferenceOwnership(
 			ProjectID: projectID,
 			ID:        ids.ExternalOAuthServerID.UUID,
 		}); err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
+			if errors.Is(err, pgx.ErrNoRows) {
 				return fmt.Errorf("external_oauth_server_id does not reference a resource in this project")
 			}
 			return fmt.Errorf("check external oauth server ownership: %w", err)
@@ -474,7 +473,7 @@ func verifyServerReferenceOwnership(
 			ProjectID: projectID,
 			ID:        ids.OAuthProxyServerID.UUID,
 		}); err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
+			if errors.Is(err, pgx.ErrNoRows) {
 				return fmt.Errorf("oauth_proxy_server_id does not reference a resource in this project")
 			}
 			return fmt.Errorf("check oauth proxy server ownership: %w", err)
@@ -486,7 +485,7 @@ func verifyServerReferenceOwnership(
 			ID:        ids.RemoteMcpServerID.UUID,
 			ProjectID: projectID,
 		}); err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
+			if errors.Is(err, pgx.ErrNoRows) {
 				return fmt.Errorf("remote_mcp_server_id does not reference a resource in this project")
 			}
 			return fmt.Errorf("check remote mcp server ownership: %w", err)
@@ -498,7 +497,7 @@ func verifyServerReferenceOwnership(
 			ID:        ids.ToolsetID.UUID,
 			ProjectID: projectID,
 		}); err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
+			if errors.Is(err, pgx.ErrNoRows) {
 				return fmt.Errorf("toolset_id does not reference a resource in this project")
 			}
 			return fmt.Errorf("check toolset ownership: %w", err)

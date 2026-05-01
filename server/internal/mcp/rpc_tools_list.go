@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/rag"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
@@ -54,6 +55,7 @@ func handleToolsList(
 	toolsetCache *cache.TypedCacheObject[mv.ToolsetBaseContents],
 	vectorToolStore *rag.ToolsetVectorStore,
 	temporalEnv *temporal.Environment,
+	shadowMCPClient *shadowmcp.Client,
 ) (json.RawMessage, error) {
 	projectID := mv.ProjectID(payload.projectID)
 
@@ -121,7 +123,7 @@ func handleToolsList(
 	toolsetProjectID, err := uuid.Parse(toolset.ProjectID)
 	if err != nil {
 		logger.WarnContext(ctx, "invalid toolset project id; skipping shadow_mcp schema injection", attr.SlogError(err))
-	} else if hasEnabledShadowMCPPolicy(ctx, logger, db, toolsetProjectID) {
+	} else if shadowMCPClient.IsEnabledForProject(ctx, toolsetProjectID) {
 		for _, t := range tools {
 			injected, err := injectToolsetIDConstant(t.InputSchema, toolset.ID)
 			if err != nil {

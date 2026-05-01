@@ -3,12 +3,9 @@ package shadowmcp
 import (
 	"context"
 	"fmt"
-	"log/slog"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	tsr "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -28,20 +25,18 @@ const SourceShadowMCP = "shadow_mcp"
 // toolset.
 const XGramToolsetIDField = "x-gram-toolset-id"
 
-// ValidateGramToolsetCall enforces that a Gram-hosted tool call carries the
+// ValidateToolsetCall enforces that a Gram-hosted tool call carries the
 // required x-gram-toolset-id property, that the referenced toolset exists in
 // the calling organization, and that the toolset contains a tool whose
 // post-variation name matches toolName. Returns (reason, true) when the call
 // fails validation; the reason is suitable for surfacing alongside a policy
 // name in deny / flag messages.
 //
-// toolsetCache may be nil; the underlying mv.DescribeToolset call handles
-// that path by skipping the cache entirely.
-func ValidateGramToolsetCall(
+// Toolset lookups go through the Client's bundled toolset cache so callers
+// on hot paths (tools/list hooks, batch scanner) share a single Redis-backed
+// cache instance.
+func (c *Client) ValidateToolsetCall(
 	ctx context.Context,
-	logger *slog.Logger,
-	db *pgxpool.Pool,
-	toolsetCache *cache.TypedCacheObject[mv.ToolsetBaseContents],
 	toolInput any,
 	toolName string,
 	orgID string,
@@ -63,7 +58,7 @@ func ValidateGramToolsetCall(
 		return fail(fmt.Sprintf("invalid %q value: not a UUID", XGramToolsetIDField))
 	}
 
-	toolsetRow, err := tsr.New(db).GetToolsetByIDAndOrganization(ctx, tsr.GetToolsetByIDAndOrganizationParams{
+	toolsetRow, err := tsr.New(c.db).GetToolsetByIDAndOrganization(ctx, tsr.GetToolsetByIDAndOrganizationParams{
 		ID:             toolsetID,
 		OrganizationID: orgID,
 	})
@@ -77,11 +72,11 @@ func ValidateGramToolsetCall(
 
 	described, err := mv.DescribeToolset(
 		ctx,
-		logger,
-		db,
+		c.logger,
+		c.db,
 		mv.ProjectID(toolsetRow.ProjectID),
 		mv.ToolsetSlug(toolsetRow.Slug),
-		toolsetCache,
+		&c.toolsetCache,
 	)
 	if err != nil {
 		return fail(fmt.Sprintf("failed to load toolset %s", toolsetID))

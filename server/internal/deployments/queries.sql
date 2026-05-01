@@ -306,6 +306,7 @@ SELECT
 FROM deployments_openapiv3_assets as current
 WHERE current.deployment_id = @original_deployment_id
   AND current.asset_id <> ALL (@excluded_ids::uuid[])
+  AND current.id <> ALL (@excluded_ids::uuid[])
 RETURNING id;
 
 -- name: CloneDeploymentFunctionsAssets :many
@@ -329,6 +330,7 @@ SELECT
 FROM deployments_functions as current
 WHERE current.deployment_id = @original_deployment_id
   AND current.asset_id <> ALL (@excluded_ids::uuid[])
+  AND current.id <> ALL (@excluded_ids::uuid[])
 RETURNING id;
 
 -- name: CloneDeploymentToolFunctions :many

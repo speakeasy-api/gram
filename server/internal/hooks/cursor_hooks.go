@@ -19,7 +19,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 )
 
@@ -71,7 +70,7 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.
 			break
 		}
 		toolName := strings.TrimPrefix(conv.PtrValOr(payload.ToolName, ""), "MCP:")
-		if detail, denied := shadowmcp.ValidateGramToolsetCall(ctx, s.logger, s.db, &s.toolsetCache, payload.ToolInput, toolName, orgID); denied {
+		if detail, denied := s.shadowMCPClient.ValidateToolsetCall(ctx, payload.ToolInput, toolName, orgID); denied {
 			s.logger.InfoContext(ctx, "denying cursor tool call: failed gram toolset validation",
 				attr.SlogEvent("cursor_hook_denied"),
 				attr.SlogValueAny(map[string]any{

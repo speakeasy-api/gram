@@ -452,6 +452,7 @@ defer o11y.NoLogDefer(func() error { return resp.Body.Close() })
 - All test setup which includes spinning up databases, caches and background workers must go in `setup_test.go` files. Look for these across the codebase for inspiration and guidance.
 - NEVER write bare SQL queries in tests to insert test data. Use SQLc queries or service-level helpers instead. If test setup needs a query that does not exist yet, add the SQLc query rather than inlining raw SQL in the test.
 - Use `github.com/stretchr/testify/mock` for mocking third-party libraries in tests instead of ad hoc fakes around vendor types.
+- Use `testenv.NewLogger(t)`, `testenv.NewTracerProvider(t)`, and `testenv.NewMeterProvider(t)` instead of constructing loggers or noop OTel providers inline. `testenv.NewLogger(t)` discards in normal runs and emits pretty logs under `go test -v`, which inline `slog.New(slog.DiscardHandler)` and `slog.New(slog.NewTextHandler(os.Stdout, nil))` do not. Exception: tests that assert on log output should use a capturing handler over a `bytes.Buffer`.
 
 <bad-example>
 

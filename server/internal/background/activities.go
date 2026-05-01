@@ -26,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/rag"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -98,6 +99,7 @@ func NewActivities(
 	cacheAdapter cache.Cache,
 	assistantsCore *assistants.ServiceCore,
 	piiScanner risk_analysis.PIIScanner,
+	shadowMCPClient *shadowmcp.Client,
 ) *Activities {
 	usageTrackingStrategy := chat.NewDefaultUsageTrackingStrategy(db, logger, openrouterProvisioner, billingTracker, nil)
 
@@ -129,7 +131,7 @@ func NewActivities(
 		analyzeSegment:                resolution_activities.NewAnalyzeSegment(logger, db, chatClient, telemetryLogger),
 		getUserFeedbackForChat:        resolution_activities.NewGetUserFeedbackForChat(db),
 		fetchUnanalyzedMessages:       risk_analysis.NewFetchUnanalyzed(logger, tracerProvider, db),
-		analyzeBatch:                  risk_analysis.NewAnalyzeBatch(logger, tracerProvider, meterProvider, db, piiScanner),
+		analyzeBatch:                  risk_analysis.NewAnalyzeBatch(logger, tracerProvider, meterProvider, db, piiScanner, shadowMCPClient),
 		admitAssistantThreads:         activities.NewAdmitAssistantThreads(assistantsCore),
 		processAssistantThread:        activities.NewProcessAssistantThread(assistantsCore),
 		expireAssistantThreadRuntime:  activities.NewExpireAssistantThreadRuntime(assistantsCore),

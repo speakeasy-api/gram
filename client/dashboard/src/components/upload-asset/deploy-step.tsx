@@ -39,14 +39,17 @@ export default function DeployStep() {
   const toolsetCreationAttempted = React.useRef(false);
 
   const { toolCount, toolUrns } = React.useMemo(() => {
-    const { deployment, uploadResult } = stepper.meta.current;
-    if (!toolsList.data || !deployment || !uploadResult) {
+    const { deployment, uploadResult, assetName } = stepper.meta.current;
+    if (!toolsList.data || !deployment || !uploadResult || !assetName) {
       return { toolCount: 0, toolUrns: [] as string[] };
     }
 
-    const documentId = deployment!.openapiv3Assets.find(
-      (doc) => doc.assetId === uploadResult?.asset.id,
-    )?.id;
+    const sourceSlug = slugify(assetName);
+    const documentId =
+      deployment.openapiv3Assets.find((doc) => doc.slug === sourceSlug)?.id ??
+      deployment.openapiv3Assets.find(
+        (doc) => doc.assetId === uploadResult.asset.id,
+      )?.id;
 
     const matchingTools = toolsList.data.tools.filter(
       (tool) => tool.type === "http" && tool.openapiv3DocumentId === documentId,

@@ -334,6 +334,36 @@ export function ScopePickerPopover({
               ]);
             }
           }}
+          onBatchToggleTools={(serverId, toolNames, select) => {
+            const sels = selectors ?? [];
+            if (select) {
+              const existing = new Set(
+                sels
+                  .filter((s) => s.resourceId === serverId && s.tool)
+                  .map((s) => s.tool!),
+              );
+              const toAdd = toolNames
+                .filter((name) => !existing.has(name))
+                .map((name) => ({
+                  resourceKind: "mcp" as const,
+                  resourceId: serverId,
+                  tool: name,
+                }));
+              onChangeSelectors([...sels, ...toAdd]);
+            } else {
+              const toolSet = new Set(toolNames);
+              onChangeSelectors(
+                sels.filter(
+                  (s) =>
+                    !(
+                      s.resourceId === serverId &&
+                      s.tool &&
+                      toolSet.has(s.tool)
+                    ),
+                ),
+              );
+            }
+          }}
           className={toolScrollClass}
         />
       </TabsContent>
@@ -446,8 +476,10 @@ export function ScopePickerPopover({
               <Minimize2 className="h-4 w-4" />
             </button>
           </div>
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-1.5">
-            {renderScopeOptions({ includeCollection: false })}
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            <div className="px-1.5 pt-1.5">
+              {renderScopeOptions({ includeCollection: false })}
+            </div>
             {customTabs()}
           </div>
         </Dialog.Content>
@@ -460,11 +492,17 @@ function ToolSelectionPanel({
   mcpServers,
   selectors,
   onToggleTool,
+  onBatchToggleTools,
   className,
 }: {
   mcpServers: ServerGroup[];
   selectors: Selector[];
   onToggleTool: (serverId: string, toolName: string) => void;
+  onBatchToggleTools?: (
+    serverId: string,
+    toolNames: string[],
+    select: boolean,
+  ) => void;
   className?: string;
 }) {
   const allServers = useMemo(
@@ -525,7 +563,7 @@ function ToolSelectionPanel({
   return (
     <div className={cn("flex min-h-0 flex-1", className)}>
       {/* Left column — server list */}
-      <div className="border-border flex min-h-0 w-[160px] shrink-0 flex-col border-r">
+      <div className="border-border flex min-h-0 w-[200px] shrink-0 flex-col border-r">
         <div className="bg-muted/50 text-muted-foreground border-border flex h-10 shrink-0 items-center gap-1.5 border-b px-3 text-[10px] font-medium tracking-wider uppercase">
           <Globe className="h-3 w-3" />
           Server List
@@ -596,6 +634,48 @@ function ToolSelectionPanel({
             </button>
           )}
         </div>
+        {filteredTools.length > 0 &&
+          !search &&
+          (() => {
+            const selectedCount = filteredTools.filter((t) =>
+              selectors.some(
+                (s) => s.resourceId === selectedServerId && s.tool === t.name,
+              ),
+            ).length;
+            const allSelected = selectedCount === filteredTools.length;
+            const someSelected = selectedCount > 0 && !allSelected;
+            return (
+              <button
+                type="button"
+                onClick={() => {
+                  if (onBatchToggleTools && selectedServerId) {
+                    const toolNames = filteredTools.map((t) => t.name);
+                    onBatchToggleTools(
+                      selectedServerId,
+                      toolNames,
+                      !allSelected,
+                    );
+                  }
+                }}
+                className="bg-muted/50 border-border hover:bg-muted flex h-10 shrink-0 cursor-pointer items-center gap-2 border-b px-3 transition-colors"
+              >
+                <Checkbox
+                  checked={
+                    allSelected ? true : someSelected ? "indeterminate" : false
+                  }
+                  className="focus-visible:border-input pointer-events-none focus-visible:ring-0"
+                  tabIndex={-1}
+                />
+                <span className="text-muted-foreground text-sm">
+                  {allSelected
+                    ? `All ${tools.length} selected`
+                    : someSelected
+                      ? `${selectedCount} of ${tools.length} selected`
+                      : `Select all`}
+                </span>
+              </button>
+            );
+          })()}
         <div
           ref={scrollRef}
           onWheel={handleWheel}

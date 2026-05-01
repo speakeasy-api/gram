@@ -19,7 +19,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 )
 
@@ -421,7 +420,7 @@ func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePaylo
 		return result, nil
 	}
 
-	detail, denied := shadowmcp.ValidateGramToolsetCall(ctx, s.logger, s.db, &s.toolsetCache, payload.ToolInput, mcpToolName, metadata.GramOrgID)
+	detail, denied := s.shadowMCPClient.ValidateToolsetCall(ctx, payload.ToolInput, mcpToolName, metadata.GramOrgID)
 	if denied {
 		s.logger.InfoContext(ctx, "denying claude tool call: failed gram toolset validation",
 			attr.SlogEvent("claude_hook_denied"),

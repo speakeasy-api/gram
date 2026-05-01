@@ -30,6 +30,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/rag"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -62,6 +63,7 @@ type WorkerOptions struct {
 	AssistantsCore      *assistants.ServiceCore
 	TemporalEnv         *tenv.Environment
 	PIIScanner          risk_analysis.PIIScanner
+	ShadowMCPClient     *shadowmcp.Client
 }
 
 func ForDeploymentProcessing(
@@ -98,6 +100,7 @@ func ForDeploymentProcessing(
 		AssistantsCore:      nil,
 		TemporalEnv:         nil,
 		PIIScanner:          nil,
+		ShadowMCPClient:     nil,
 	}
 }
 
@@ -133,6 +136,7 @@ func NewTemporalWorker(
 		AssistantsCore:      nil,
 		TemporalEnv:         env,
 		PIIScanner:          nil,
+		ShadowMCPClient:     nil,
 	}
 
 	for _, o := range options {
@@ -161,6 +165,7 @@ func NewTemporalWorker(
 			AssistantsCore:      conv.Default(o.AssistantsCore, opts.AssistantsCore),
 			TemporalEnv:         conv.Default(o.TemporalEnv, opts.TemporalEnv),
 			PIIScanner:          conv.Default(o.PIIScanner, opts.PIIScanner),
+			ShadowMCPClient:     conv.Default(o.ShadowMCPClient, opts.ShadowMCPClient),
 		}
 	}
 
@@ -199,6 +204,7 @@ func NewTemporalWorker(
 		opts.CacheAdapter,
 		opts.AssistantsCore,
 		opts.PIIScanner,
+		opts.ShadowMCPClient,
 	)
 
 	temporalWorker.RegisterActivity(activities.ProcessDeployment)

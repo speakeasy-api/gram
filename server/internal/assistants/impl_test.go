@@ -6,7 +6,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
-	"go.opentelemetry.io/otel/trace/noop"
 
 	gen "github.com/speakeasy-api/gram/server/gen/assistants"
 	"github.com/speakeasy-api/gram/server/gen/types"
@@ -139,7 +138,7 @@ VALUES ($1, 'Project', $2, 'org-test')
 	logger := testenv.NewLogger(t)
 	authzEngine := authz.NewEngine(logger, conn, authztest.RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
 	service := &Service{
-		tracer:   noop.NewTracerProvider().Tracer("test"),
+		tracer:   testenv.NewTracerProvider(t).Tracer("test"),
 		logger:   logger,
 		auth:     nil,
 		authz:    authzEngine,

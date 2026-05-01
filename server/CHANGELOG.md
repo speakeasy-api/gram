@@ -1,5 +1,21 @@
 # server
 
+## 0.46.0
+
+### Minor Changes
+
+- 02712dc: Teams installing Gram-published plugins now get observability automatically.
+  Each org's published marketplace ships a `base` plugin containing the team's
+  hooks with credentials embedded — no manual SessionStart configuration, no
+  credential paste, no risk of forgetting the setup step. Install once per
+  machine and tool events flow into the Gram dashboard for the org regardless
+  of how many feature plugins a team member also installs.
+
+### Patch Changes
+
+- f8fe13d: Fix MCP install page rendering required external MCP headers in the install snippet even when the operator had configured those env vars as System or Omit.
+- 88174e4: Build well-known OAuth metadata response body before writing 200 status so error paths surface as the real status code instead of 200 with an error body
+
 ## 0.45.0
 
 ### Minor Changes

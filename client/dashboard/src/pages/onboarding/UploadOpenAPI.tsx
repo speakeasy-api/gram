@@ -18,6 +18,7 @@ import UploadAssetStepper from "@/components/upload-asset/stepper";
 import { useStepper } from "@/components/upload-asset/stepper/use-stepper";
 import UploadFileStep from "@/components/upload-asset/upload-file-step";
 import { useListTools } from "@/hooks/toolTypes";
+import { slugify } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import { Deployment } from "@gram/client/models/components";
@@ -160,15 +161,17 @@ function FooterActions() {
 
 const useAssetNumtools = (
   assetId: string | undefined,
+  sourceName: string | undefined,
   deployment: Deployment | undefined,
 ) => {
   const { data: tools } = useListTools({
     deploymentId: deployment?.id,
   });
 
-  const documentId = deployment?.openapiv3Assets.find(
-    (doc) => doc.assetId === assetId,
-  )?.id;
+  const sourceSlug = sourceName ? slugify(sourceName) : undefined;
+  const documentId =
+    deployment?.openapiv3Assets.find((doc) => doc.slug === sourceSlug)?.id ??
+    deployment?.openapiv3Assets.find((doc) => doc.assetId === assetId)?.id;
 
   return documentId
     ? tools?.tools.filter(
@@ -203,7 +206,11 @@ export function UploadOpenAPIContent({
   } = useUploadOpenAPISteps();
   const routes = useRoutes();
 
-  const numtools = useAssetNumtools(asset?.asset.id, createdDeployment);
+  const numtools = useAssetNumtools(
+    asset?.asset.id,
+    apiName,
+    createdDeployment,
+  );
 
   const steps: StepProps[] = [
     {

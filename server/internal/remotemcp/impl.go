@@ -2,13 +2,13 @@ package remotemcp
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"log/slog"
 	"net/url"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -220,7 +220,7 @@ func (s *Service) GetServer(ctx context.Context, payload *gen.GetServerPayload) 
 		ProjectID: *authCtx.ProjectID,
 	})
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.E(oops.CodeNotFound, err, "remote mcp server not found").Log(ctx, s.logger)
 		}
 
@@ -280,7 +280,7 @@ func (s *Service) UpdateServer(ctx context.Context, payload *gen.UpdateServerPay
 		ProjectID: *authCtx.ProjectID,
 	})
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.E(oops.CodeNotFound, err, "remote mcp server not found").Log(ctx, logger)
 		}
 
@@ -440,7 +440,7 @@ func (s *Service) DeleteServer(ctx context.Context, payload *gen.DeleteServerPay
 		ProjectID: *authCtx.ProjectID,
 	})
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return nil
 		}
 
