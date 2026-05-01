@@ -3,8 +3,8 @@ import { DotCard } from "@/components/ui/dot-card";
 import { Button } from "@/components/ui/button";
 import { Type } from "@/components/ui/type";
 import { useMcpUrl } from "@/hooks/useToolsetUrl";
-import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
+import { MCPStatusIndicator } from "./MCPStatusIndicator";
 import { ToolsetEntry } from "@gram/client/models/components";
 import { useLatestDeployment } from "@gram/client/react-query";
 import {
@@ -54,50 +54,9 @@ export function MCPCard({ toolset }: { toolset: ToolsetEntry }) {
     }
   };
 
-  // Pulse indicator for status
-  const getStatusConfig = () => {
-    if (!toolset.mcpEnabled) {
-      return {
-        color: "bg-red-500",
-        pulseColor: "bg-red-400",
-        label: "Disabled",
-      };
-    }
-    return {
-      color: "bg-green-500",
-      pulseColor: "bg-green-400",
-      label: toolset.mcpIsPublic ? "Public" : "Private",
-    };
-  };
-
-  const status = getStatusConfig();
   const installSourceTooltip = toolset.origin?.registrySpecifier
     ? `Installed from ${toolset.origin.registrySpecifier}`
     : undefined;
-
-  const statusIndicator = (
-    <div className="flex items-center gap-2">
-      <div className="relative flex h-2.5 w-2.5">
-        {toolset.mcpEnabled && (
-          <span
-            className={cn(
-              "absolute inline-flex h-full w-full animate-ping rounded-full opacity-75",
-              status.pulseColor,
-            )}
-          />
-        )}
-        <span
-          className={cn(
-            "relative inline-flex h-2.5 w-2.5 rounded-full",
-            status.color,
-          )}
-        />
-      </div>
-      <Type variant="small" muted>
-        {status.label}
-      </Type>
-    </div>
-  );
 
   return (
     <DotCard
@@ -165,7 +124,10 @@ export function MCPCard({ toolset }: { toolset: ToolsetEntry }) {
 
       {/* Footer row with status indicator and open link */}
       <div className="mt-auto flex items-center justify-between gap-2 pt-2">
-        {statusIndicator}
+        <MCPStatusIndicator
+          mcpEnabled={toolset.mcpEnabled}
+          mcpIsPublic={toolset.mcpIsPublic}
+        />
         {oauthStatus === "required-unconfigured" ? (
           <div className="text-warning flex items-center gap-1 text-sm">
             <span>Set up</span>

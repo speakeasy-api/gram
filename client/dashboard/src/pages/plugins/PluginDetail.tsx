@@ -1,5 +1,6 @@
 import { InputField } from "@/components/moon/input-field";
 import { Page } from "@/components/page-layout";
+import { MCPStatusIndicator } from "@/components/mcp/MCPStatusIndicator";
 import { ToolCollectionBadge } from "@/components/tool-collection-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button as UiButton } from "@/components/ui/button";
@@ -375,46 +376,6 @@ function PluginServerCard({
   const routes = useRoutes();
   const isMissing = !toolset;
 
-  const status = (() => {
-    if (!toolset) return null;
-    if (!toolset.mcpEnabled) {
-      return {
-        color: "bg-red-500",
-        pulseColor: "bg-red-400",
-        label: "Disabled",
-      };
-    }
-    return {
-      color: "bg-green-500",
-      pulseColor: "bg-green-400",
-      label: toolset.mcpIsPublic ? "Public" : "Private",
-    };
-  })();
-
-  const statusIndicator = status && (
-    <div className="flex items-center gap-2">
-      <div className="relative flex h-2.5 w-2.5">
-        {toolset?.mcpEnabled && (
-          <span
-            className={cn(
-              "absolute inline-flex h-full w-full animate-ping rounded-full opacity-75",
-              status.pulseColor,
-            )}
-          />
-        )}
-        <span
-          className={cn(
-            "relative inline-flex h-2.5 w-2.5 rounded-full",
-            status.color,
-          )}
-        />
-      </div>
-      <Type variant="small" muted>
-        {status.label}
-      </Type>
-    </div>
-  );
-
   const handleClick = () => {
     if (toolset) routes.mcp.details.goTo(toolset.slug);
   };
@@ -446,7 +407,14 @@ function PluginServerCard({
       </div>
 
       <div className="mt-auto flex items-center justify-between gap-2 pt-2">
-        {statusIndicator ?? <span />}
+        {toolset ? (
+          <MCPStatusIndicator
+            mcpEnabled={toolset.mcpEnabled}
+            mcpIsPublic={toolset.mcpIsPublic}
+          />
+        ) : (
+          <span />
+        )}
         <UiButton
           type="button"
           variant="ghost"
