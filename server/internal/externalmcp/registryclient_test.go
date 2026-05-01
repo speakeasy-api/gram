@@ -3,7 +3,6 @@ package externalmcp
 import (
 	"context"
 	"encoding/json"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -11,10 +10,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	tracernoop "go.opentelemetry.io/otel/trace/noop"
 
 	"github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 type PassthroughBackend struct{}
@@ -32,8 +31,8 @@ func (p *PassthroughBackend) Match(req *http.Request) bool {
 func TestListServers_FiltersDeletedServers(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	logger := slog.New(slog.DiscardHandler)
-	tracerProvider := tracernoop.NewTracerProvider()
+	logger := testenv.NewLogger(t)
+	tracerProvider := testenv.NewTracerProvider(t)
 	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 
@@ -104,8 +103,8 @@ func TestListServers_FiltersDeletedServers(t *testing.T) {
 func TestListServers_PreservesRemoteHeadersAndVariables(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	logger := slog.New(slog.DiscardHandler)
-	tracerProvider := tracernoop.NewTracerProvider()
+	logger := testenv.NewLogger(t)
+	tracerProvider := testenv.NewTracerProvider(t)
 	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 
@@ -198,8 +197,8 @@ func TestListServers_PreservesRemoteHeadersAndVariables(t *testing.T) {
 func TestGetServerDetails_OnlyStreamableHTTP(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	logger := slog.New(slog.DiscardHandler)
-	tracerProvider := tracernoop.NewTracerProvider()
+	logger := testenv.NewLogger(t)
+	tracerProvider := testenv.NewTracerProvider(t)
 	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 
@@ -246,8 +245,8 @@ func TestGetServerDetails_OnlyStreamableHTTP(t *testing.T) {
 func TestGetServerDetails_OnlySSE(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	logger := slog.New(slog.DiscardHandler)
-	tracerProvider := tracernoop.NewTracerProvider()
+	logger := testenv.NewLogger(t)
+	tracerProvider := testenv.NewTracerProvider(t)
 	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 
@@ -294,8 +293,8 @@ func TestGetServerDetails_OnlySSE(t *testing.T) {
 func TestGetServerDetails_PrefersStreamableHTTPOverSSE(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	logger := slog.New(slog.DiscardHandler)
-	tracerProvider := tracernoop.NewTracerProvider()
+	logger := testenv.NewLogger(t)
+	tracerProvider := testenv.NewTracerProvider(t)
 	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 
@@ -343,8 +342,8 @@ func TestGetServerDetails_PrefersStreamableHTTPOverSSE(t *testing.T) {
 func TestGetServerDetails_SelectedRemotesFiltersToSSE(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	logger := slog.New(slog.DiscardHandler)
-	tracerProvider := tracernoop.NewTracerProvider()
+	logger := testenv.NewLogger(t)
+	tracerProvider := testenv.NewTracerProvider(t)
 	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 
@@ -394,8 +393,8 @@ func TestGetServerDetails_SelectedRemotesFiltersToSSE(t *testing.T) {
 func TestGetServerDetails_SelectedRemotesStillPrefersStreamableHTTP(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	logger := slog.New(slog.DiscardHandler)
-	tracerProvider := tracernoop.NewTracerProvider()
+	logger := testenv.NewLogger(t)
+	tracerProvider := testenv.NewTracerProvider(t)
 	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 

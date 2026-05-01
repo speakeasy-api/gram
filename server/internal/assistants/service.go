@@ -1108,7 +1108,6 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 		startupConfig, err := s.buildRuntimeStartupConfig(ctx, thread, runtimeRecord, assistant)
 		if err != nil {
 			s.logger.ErrorContext(ctx, "build runtime startup config failed", attr.SlogAssistantThreadID(thread.ID.String()), attr.SlogError(err))
-			_ = s.runtime.Stop(ctx, runtimeRecord)
 			_ = s.stopRuntimeRecord(ctx, thread.ProjectID, thread.ID, runtimeStateFailed)
 			return ProcessThreadEventsResult{
 				AssistantID:       assistant.ID,
@@ -1120,7 +1119,6 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 		}
 		if err := s.runtime.Configure(ctx, runtimeRecord, startupConfig); err != nil {
 			s.logger.ErrorContext(ctx, "configure assistant runtime failed", attr.SlogAssistantThreadID(thread.ID.String()), attr.SlogError(err))
-			_ = s.runtime.Stop(ctx, runtimeRecord)
 			_ = s.stopRuntimeRecord(ctx, thread.ProjectID, thread.ID, runtimeStateFailed)
 			return ProcessThreadEventsResult{
 				AssistantID:       assistant.ID,

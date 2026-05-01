@@ -17,7 +17,6 @@ import (
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata/metricdatatest"
-	tracenoop "go.opentelemetry.io/otel/trace/noop"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
@@ -31,13 +30,13 @@ const initializeRequest = `{"jsonrpc":"2.0","id":1,"method":"initialize","params
 func newProxyForTest(t *testing.T, upstreamURL string) *proxy.Proxy {
 	t.Helper()
 
-	policy, err := guardian.NewUnsafePolicy(tracenoop.NewTracerProvider(), nil)
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
 	require.NoError(t, err)
 
 	return &proxy.Proxy{
 		GuardianPolicy:       policy,
 		Logger:               testenv.NewLogger(t),
-		Tracer:               tracenoop.NewTracerProvider().Tracer("test"),
+		Tracer:               testenv.NewTracerProvider(t).Tracer("test"),
 		NonStreamingTimeout:  5 * time.Second,
 		StreamingTimeout:     5 * time.Second,
 		MaxBufferedBodyBytes: proxy.DefaultMaxBufferedBodyBytes,

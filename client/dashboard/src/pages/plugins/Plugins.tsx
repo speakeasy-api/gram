@@ -1,10 +1,10 @@
+import { CreateResourceCard } from "@/components/create-resource-card";
 import { InputField } from "@/components/moon/input-field";
 import { Page } from "@/components/page-layout";
 import { Dialog } from "@/components/ui/dialog";
 import { SearchBar } from "@/components/ui/search-bar";
 import { Type } from "@/components/ui/type";
 import { useFetcher } from "@/contexts/Fetcher";
-import { HumanizeDateTime } from "@/lib/dates";
 import { useRoutes } from "@/routes";
 import { Plugin } from "@gram/client/models/components";
 import { useCreatePluginMutation } from "@gram/client/react-query/createPlugin";
@@ -20,20 +20,19 @@ import {
 import { usePublishPluginsMutation } from "@gram/client/react-query/publishPlugins";
 import {
   Button,
-  Column,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
   Icon,
   Stack,
-  Table,
 } from "@speakeasy-api/moonshine";
-import { Activity, Plus, Puzzle } from "lucide-react";
+import { Activity } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
-import { Link, Outlet, useNavigate } from "react-router";
+import { Outlet, useNavigate } from "react-router";
 import { toast } from "sonner";
+import { PluginCard } from "./PluginCard";
 import { PublishDialog } from "./PublishDialog";
 
 export function PluginsRoot() {
@@ -175,56 +174,13 @@ export default function Plugins() {
     [publishMutate],
   );
 
-  const columns: Column<Plugin>[] = [
-    {
-      key: "name",
-      header: "Name",
-      width: "2fr",
-      render: (p) => (
-        <Link to={routes.plugins.detail.href(p.id)}>
-          <Type variant="body" className="cursor-pointer hover:underline">
-            {p.name}
-          </Type>
-        </Link>
-      ),
-    },
-    {
-      key: "slug",
-      header: "Slug",
-      width: "1fr",
-      render: (p) => <Type variant="body">{p.slug}</Type>,
-    },
-    {
-      key: "servers",
-      header: "Servers",
-      width: "100px",
-      render: (p) => <Type variant="body">{p.serverCount ?? 0}</Type>,
-    },
-    {
-      key: "updatedAt",
-      header: "Updated",
-      width: "1fr",
-      render: (p) => <HumanizeDateTime date={p.updatedAt} />,
-    },
-    {
-      key: "actions",
-      header: "",
-      width: "80px",
-      render: (p) => (
-        <Button
-          variant="tertiary"
-          size="sm"
-          onClick={() => setPluginToDelete(p)}
-          className="hover:text-destructive"
-        >
-          <Button.LeftIcon>
-            <Icon name="trash-2" className="h-4 w-4" />
-          </Button.LeftIcon>
-          <Button.Text className="sr-only">Delete plugin</Button.Text>
-        </Button>
-      ),
-    },
-  ];
+  const createCard = (
+    <CreateResourceCard
+      title="New Plugin"
+      description="Bundle MCP servers and hooks for distribution to Claude Code, Cursor, and Codex."
+      onClick={() => setIsCreateDialogOpen(true)}
+    />
+  );
 
   return (
     <Page>
@@ -240,99 +196,60 @@ export default function Plugins() {
             Code, Cursor, and Codex marketplaces via GitHub.
           </Page.Section.Description>
           <Page.Section.CTA>
-            {hasPlugins && (
-              <Stack direction="vertical" gap={1} align="end">
-                <Stack direction="horizontal" gap={2}>
-                  {publishStatus?.configured && (
-                    <Button
-                      variant="secondary"
-                      onClick={() => setIsPublishDialogOpen(true)}
-                      disabled={publishMutation.isPending}
-                    >
-                      <Button.LeftIcon>
-                        <Icon
-                          name={
-                            publishStatus.connected ? "refresh-cw" : "upload"
-                          }
-                          className="h-4 w-4"
-                        />
-                      </Button.LeftIcon>
-                      <Button.Text>
-                        {publishMutation.isPending
-                          ? "Publishing..."
-                          : publishStatus.connected
-                            ? "Re-publish"
-                            : "Publish to GitHub"}
-                      </Button.Text>
-                    </Button>
-                  )}
-                  <Button onClick={() => setIsCreateDialogOpen(true)}>
-                    <Button.LeftIcon>
-                      <Plus className="h-4 w-4" />
-                    </Button.LeftIcon>
-                    <Button.Text>New Plugin</Button.Text>
-                  </Button>
-                </Stack>
-              </Stack>
+            {hasPlugins && publishStatus?.configured && (
+              <Button
+                variant="secondary"
+                onClick={() => setIsPublishDialogOpen(true)}
+                disabled={publishMutation.isPending}
+              >
+                <Button.LeftIcon>
+                  <Icon
+                    name={publishStatus.connected ? "refresh-cw" : "upload"}
+                    className="h-4 w-4"
+                  />
+                </Button.LeftIcon>
+                <Button.Text>
+                  {publishMutation.isPending
+                    ? "Publishing..."
+                    : publishStatus.connected
+                      ? "Re-publish"
+                      : "Publish to GitHub"}
+                </Button.Text>
+              </Button>
             )}
           </Page.Section.CTA>
           <Page.Section.Body>
-            {!hasPlugins ? (
-              <div className="bg-muted/20 flex flex-col items-center justify-center rounded-xl border border-dashed px-8 py-16">
-                <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
-                  <Puzzle className="text-muted-foreground h-6 w-6" />
-                </div>
-                <Type variant="subheading" className="mb-1">
-                  No plugins yet
-                </Type>
-                <Type small muted className="mb-4 max-w-md text-center">
-                  Add your first plugin to start distributing MCP servers and
-                  hooks to Claude Code, Cursor, and Codex.
-                </Type>
-                <Button onClick={() => setIsCreateDialogOpen(true)}>
-                  <Button.LeftIcon>
-                    <Plus className="h-4 w-4" />
-                  </Button.LeftIcon>
-                  <Button.Text>New Plugin</Button.Text>
-                </Button>
-              </div>
-            ) : (
-              <>
-                {publishStatus?.connected && publishStatus.repoUrl && (
-                  <span>
-                    Plugin marketplace:{" "}
-                    <a
-                      href={publishStatus.repoUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-sm text-sky-500 hover:text-sky-600 hover:underline"
-                    >
-                      {publishStatus.repoOwner && publishStatus.repoName
-                        ? `${publishStatus.repoOwner}/${publishStatus.repoName}`
-                        : publishStatus.repoUrl}
-                    </a>
-                  </span>
-                )}
-                <Stack
-                  direction="horizontal"
-                  justify="space-between"
-                  align="center"
-                  className="mb-4"
-                >
-                  <SearchBar
-                    value={search}
-                    onChange={setSearch}
-                    placeholder="Search plugins"
-                    className="w-64"
-                  />
-                </Stack>
-                <Table
-                  columns={columns}
-                  data={filteredPlugins}
-                  rowKey={(row) => row.id}
+            <Stack direction="vertical" gap={4}>
+              {publishStatus?.connected && publishStatus.repoUrl && (
+                <span>
+                  Plugin marketplace:{" "}
+                  <a
+                    href={publishStatus.repoUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm text-sky-500 hover:text-sky-600 hover:underline"
+                  >
+                    {publishStatus.repoOwner && publishStatus.repoName
+                      ? `${publishStatus.repoOwner}/${publishStatus.repoName}`
+                      : publishStatus.repoUrl}
+                  </a>
+                </span>
+              )}
+              {hasPlugins && (
+                <SearchBar
+                  value={search}
+                  onChange={setSearch}
+                  placeholder="Search plugins"
+                  className="w-64"
                 />
-              </>
-            )}
+              )}
+              <PluginGrid
+                plugins={filteredPlugins}
+                searchQuery={hasPlugins ? search : ""}
+                onDelete={setPluginToDelete}
+                createCard={createCard}
+              />
+            </Stack>
           </Page.Section.Body>
         </Page.Section>
 
@@ -468,5 +385,39 @@ export default function Plugins() {
         />
       </Page.Body>
     </Page>
+  );
+}
+
+function PluginGrid({
+  plugins,
+  searchQuery,
+  onDelete,
+  createCard,
+}: {
+  plugins: Plugin[];
+  searchQuery: string;
+  onDelete: (plugin: Plugin) => void;
+  createCard: React.ReactNode;
+}) {
+  if (plugins.length === 0) {
+    return (
+      <div className="space-y-4">
+        {searchQuery ? (
+          <Type muted>No plugins matching &ldquo;{searchQuery}&rdquo;</Type>
+        ) : null}
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+          {createCard}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+      {plugins.map((plugin) => (
+        <PluginCard key={plugin.id} plugin={plugin} onDelete={onDelete} />
+      ))}
+      {createCard}
+    </div>
   );
 }

@@ -50,16 +50,16 @@ Audit logging lives in `server/internal/audit/` with its management-API surface 
 
 ### Non-generated files
 
-| File                                                              | Purpose                                                                                                                                     |
-| ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| `server/design/auditlogs/design.go`                               | Goa design for the `auditlogs` service. Regenerates `server/gen/auditlogs/` and `server/gen/http/auditlogs/` via `mise run gen:goa-server`. |
-| `server/internal/audit/<subject>.go`                              | One file per subject (e.g. `access.go`, `remotemcpservers.go`, `toolsets.go`).                                                              |
-| `server/internal/audit/audittest/helpers.go`                      | Test helpers other packages use to assert audit events.                                                                                     |
-| `server/internal/audit/audittest/queries.sql`                     | SQLc queries backing the test helpers. Regenerates `server/internal/audit/audittest/repo/` via `mise run gen:sqlc-server`.                  |
-| `server/internal/audit/events.go`                                 | Top-level declarations shared across every subject.                                                                                         |
-| `server/internal/audit/impl.go`                                   | Implementation of the `/rpc/auditlogs.*` Goa service (reads).                                                                               |
-| `server/internal/audit/queries.sql`                               | SQLc queries for the audit log table. Regenerates `server/internal/audit/repo/` via `mise run gen:sqlc-server`.                             |
-| `server/internal/audit/{setup_test,list_test,listfacets_test}.go` | Tests for the `auditlogs` management API.                                                                                                   |
+| File                                                                 | Purpose                                                                                                                                                                                                                |
+| -------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `server/design/auditlogs/design.go`                                  | Goa design for the `auditlogs` service. Regenerates `server/gen/auditlogs/` and `server/gen/http/auditlogs/` via `mise run gen:goa-server`.                                                                            |
+| `server/internal/audit/<subject>.go`                                 | One file per subject (e.g. `access.go`, `remotemcpservers.go`, `toolsets.go`).                                                                                                                                         |
+| `server/internal/audit/audittest/helpers.go`                         | Test helpers other packages use to assert audit events.                                                                                                                                                                |
+| `server/internal/audit/audittest/queries.sql`                        | SQLc queries backing the test helpers. Regenerates `server/internal/audit/audittest/repo/` via `mise run gen:sqlc-server`.                                                                                             |
+| `server/internal/audit/events.go`                                    | Top-level declarations shared across every subject.                                                                                                                                                                    |
+| `server/internal/auditapi/impl.go`                                   | Implementation of the `/rpc/auditlogs.*` Goa service (reads). Lives in its own package to keep the `audit` writer surface free of `auth/sessions` and `mv` so any service can call `audit.Log*` without import cycles. |
+| `server/internal/audit/queries.sql`                                  | SQLc queries for the audit log table. Regenerates `server/internal/audit/repo/` via `mise run gen:sqlc-server`.                                                                                                        |
+| `server/internal/auditapi/{setup_test,list_test,listfacets_test}.go` | Tests for the `auditlogs` management API.                                                                                                                                                                              |
 
 ### Generated files
 

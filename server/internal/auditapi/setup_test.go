@@ -1,4 +1,4 @@
-package audit_test
+package auditapi_test
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/auditapi"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
@@ -42,7 +42,7 @@ func TestMain(m *testing.M) {
 }
 
 type testInstance struct {
-	service        *audit.Service
+	service        *auditapi.Service
 	conn           *pgxpool.Pool
 	sessionManager *sessions.Manager
 }
@@ -71,7 +71,7 @@ func newTestAuditService(t *testing.T) (context.Context, *testInstance) {
 	authzEngine := authz.NewEngine(logger, conn, authztest.RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
 
 	return ctx, &testInstance{
-		service:        audit.NewService(logger, tracerProvider, conn, sessionManager, authzEngine),
+		service:        auditapi.NewService(logger, tracerProvider, conn, sessionManager, authzEngine),
 		conn:           conn,
 		sessionManager: sessionManager,
 	}

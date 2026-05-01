@@ -2,7 +2,6 @@ package projects
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -90,7 +89,7 @@ func (s *Service) GetProject(ctx context.Context, payload *gen.GetProjectPayload
 		OrganizationID: authCtx.ActiveOrganizationID,
 	})
 	switch {
-	case errors.Is(err, sql.ErrNoRows):
+	case errors.Is(err, pgx.ErrNoRows):
 		return nil, oops.C(oops.CodeNotFound)
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "error getting project by slug").Log(ctx, s.logger, attr.SlogProjectSlug(slug), attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
@@ -456,7 +455,7 @@ func (s *Service) DeleteProject(ctx context.Context, payload *gen.DeleteProjectP
 
 	_, err = pr.DeleteProject(ctx, projectID)
 	switch {
-	case errors.Is(err, sql.ErrNoRows):
+	case errors.Is(err, pgx.ErrNoRows):
 		return nil // Return successfully even if the project was already deleted
 	case err != nil:
 		return oops.E(oops.CodeUnexpected, err, "error deleting project").Log(ctx, s.logger, attr.SlogProjectID(payload.ID))

@@ -477,7 +477,7 @@ func newWorkerCommand() *cli.Command {
 				logger,
 			)
 			shutdownFuncs = append(shutdownFuncs, riskSignaler.Shutdown)
-			chatWriter.AddObserver(risk.NewObserver(logger, db, riskSignaler))
+			chatWriter.AddObserver(risk.NewObserver(logger, tracerProvider, db, riskSignaler))
 
 			completionsClient := openrouter.NewUnifiedClient(
 				logger,
