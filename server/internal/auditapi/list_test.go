@@ -1,4 +1,4 @@
-package audit_test
+package auditapi_test
 
 import (
 	"context"

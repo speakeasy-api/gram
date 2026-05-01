@@ -22,6 +22,7 @@ const (
 	subjectTypeTemplate        subjectType = "template"
 	subjectTypeRemoteMcpServer subjectType = "remote_mcp_server"
 	subjectTypeToolset         subjectType = "toolset"
+	subjectTypeTriggerInstance subjectType = "trigger_instance"
 	subjectTypeVariation       subjectType = "variation"
 	subjectTypeRiskPolicy      subjectType = "risk_policy"
 )
