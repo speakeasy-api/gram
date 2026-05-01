@@ -3,7 +3,6 @@ package templates
 import (
 	"bytes"
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,6 +12,7 @@ import (
 	"github.com/cbroglie/mustache"
 	"github.com/google/uuid"
 	"github.com/jackc/pgerrcode"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
@@ -208,7 +208,7 @@ func (s *Service) UpdateTemplate(ctx context.Context, payload *gen.UpdateTemplat
 		ID:        id,
 	})
 	switch {
-	case errors.Is(err, sql.ErrNoRows):
+	case errors.Is(err, pgx.ErrNoRows):
 		return nil, oops.E(oops.CodeNotFound, err, "template not found").Log(ctx, logger)
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to get template").Log(ctx, logger)
@@ -280,7 +280,7 @@ func (s *Service) UpdateTemplate(ctx context.Context, payload *gen.UpdateTemplat
 	case err == nil:
 		updated = true
 		nextid = newid
-	case errors.Is(err, sql.ErrNoRows):
+	case errors.Is(err, pgx.ErrNoRows):
 		// No change, so we can use the existing id
 	default:
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to update template").Log(ctx, logger)
@@ -371,7 +371,7 @@ func (s *Service) DeleteTemplate(ctx context.Context, payload *gen.DeleteTemplat
 			ID:        id,
 		})
 		switch {
-		case errors.Is(err, sql.ErrNoRows):
+		case errors.Is(err, pgx.ErrNoRows):
 			return nil
 		case err != nil:
 			return oops.E(oops.CodeUnexpected, err, "failed to delete template by id").Log(ctx, logger)
@@ -388,7 +388,7 @@ func (s *Service) DeleteTemplate(ctx context.Context, payload *gen.DeleteTemplat
 			Name:      name,
 		})
 		switch {
-		case errors.Is(err, sql.ErrNoRows):
+		case errors.Is(err, pgx.ErrNoRows):
 			return nil
 		case err != nil:
 			return oops.E(oops.CodeUnexpected, err, "failed to delete template by name").Log(ctx, logger)
@@ -511,7 +511,7 @@ func (s *Service) RenderTemplateByID(ctx context.Context, payload *gen.RenderTem
 		ID:        id,
 	})
 	switch {
-	case errors.Is(err, sql.ErrNoRows):
+	case errors.Is(err, pgx.ErrNoRows):
 		return nil, oops.E(oops.CodeNotFound, err, "template not found").Log(ctx, logger)
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to get template").Log(ctx, logger)

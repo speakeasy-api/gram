@@ -3,7 +3,6 @@ package openrouter
 import (
 	"bytes"
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -15,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 
@@ -157,7 +157,7 @@ func (o *OpenRouter) ProvisionAPIKey(ctx context.Context, orgID string) (string,
 
 	key, err := o.repo.GetOpenRouterAPIKey(ctx, orgID)
 	switch {
-	case errors.Is(err, sql.ErrNoRows), key.Key == "":
+	case errors.Is(err, pgx.ErrNoRows), key.Key == "":
 		org, err := o.orgRepo.GetOrganizationMetadata(ctx, orgID)
 		if err != nil {
 			return "", oops.E(oops.CodeUnexpected, err, "failed to get organization").Log(ctx, o.logger)

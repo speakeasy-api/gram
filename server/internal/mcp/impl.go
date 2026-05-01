@@ -2,7 +2,6 @@ package mcp
 
 import (
 	"context"
-	"database/sql"
 	_ "embed"
 	"encoding/json"
 	"errors"
@@ -19,6 +18,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
@@ -541,7 +541,7 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 	if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil && authCtx.ActiveOrganizationID != "" {
 		projects, err := s.authRepo.ListProjectsByOrganization(ctx, authCtx.ActiveOrganizationID)
 		switch {
-		case errors.Is(err, sql.ErrNoRows):
+		case errors.Is(err, pgx.ErrNoRows):
 			return oops.E(oops.CodeForbidden, nil, "no projects found").Log(ctx, s.logger)
 		case err != nil:
 			return oops.E(oops.CodeUnexpected, err, "error checking project access").Log(ctx, s.logger, attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
@@ -782,7 +782,7 @@ func (s *Service) loadToolsetFromMcpSlug(ctx context.Context, mcpSlug string) (*
 	}
 
 	switch {
-	case errors.Is(toolsetErr, sql.ErrNoRows):
+	case errors.Is(toolsetErr, pgx.ErrNoRows):
 		return nil, nil, errToolsetNotFound
 	case toolsetErr != nil:
 		return nil, nil, fmt.Errorf("lookup toolset: %w", toolsetErr)
