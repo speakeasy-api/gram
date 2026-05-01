@@ -29,9 +29,7 @@ const (
 	// drainBatchSize is how many messages each AnalyzeBatch activity processes.
 	drainBatchSize = 1_000
 
-	// drainMaxConcurrency is the maximum number of AnalyzeBatch activities
-	// running in parallel. Keep this low so the workflow drains Presidio at a
-	// controlled rate instead of amplifying small backlogs into request storms.
+	// 1 = sequential. Demand ~0.05 RPS avg / ~0.2 RPS peak (24h 2026-05-01). Parallelism amplifies retry storms — see 2026-04-30 incident (1.6M failed reqs/hr).
 	drainMaxConcurrency = 1
 )
 

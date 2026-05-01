@@ -45,16 +45,10 @@ type presidioResult struct {
 	Score      float64 `json:"score"`
 }
 
-// presidioMaxWorkers is the per-activity concurrency limit for Presidio HTTP
-// requests. Keep this deliberately small: background risk analysis already
-// runs under Temporal, and Presidio should be drained with backpressure rather
-// than flooded with one request per message.
+// 4 < Presidio capacity (1-2 pods x 2 workers x 4 threads). Was 100, caused 2026-04-30 WORKER TIMEOUT storm.
 const presidioMaxWorkers = 4
 
-// presidioHTTPBatchSize is how many texts are sent in each Presidio /analyze
-// request. Presidio returns one result list per input text, preserving order.
-// Keep this below the container's BATCH_SIZE so one failed request only drops
-// a bounded number of messages.
+// /analyze takes string or array; array returns nested list, ordered (image 2.2.362). 50 = bounded blast on retry, well under gunicorn --timeout=120. Unrelated to container BATCH_SIZE (spaCy nlp only).
 const presidioHTTPBatchSize = 50
 
 // PresidioClient calls the Presidio Analyzer HTTP API.
@@ -170,11 +164,8 @@ func (p *PresidioClient) AnalyzeBatch(ctx context.Context, texts []string, entit
 
 	results := make([][]Finding, n)
 	batches := chunkTextIndexes(n, presidioHTTPBatchSize)
-	workers := min(p.maxWorkers, len(batches))
+	workers := min(max(1, p.maxWorkers), len(batches))
 
-	// Pre-fill a buffered channel with batches so workers can pull the next
-	// request without coordination. Closing it causes workers to exit when the
-	// channel drains.
 	ch := make(chan indexRange, len(batches))
 	for _, batch := range batches {
 		ch <- batch
@@ -182,33 +173,69 @@ func (p *PresidioClient) AnalyzeBatch(ctx context.Context, texts []string, entit
 	close(ch)
 
 	var wg sync.WaitGroup
-
-	// Fan out workers that each drain items from ch until it's empty.
-	// Individual request failures are logged and skipped; results[idx] stays
-	// nil for texts in the failed request, which the caller treats as "no
-	// findings".
 	for range workers {
 		wg.Go(func() {
 			for batch := range ch {
-				findings, err := p.analyze(ctx, texts[batch.start:batch.end], entities)
-				if err != nil {
-					p.logger.WarnContext(ctx, "presidio analyze failed for text batch, skipping",
-						attr.SlogError(err),
-					)
-					continue
-				}
-				for i, f := range findings {
-					results[batch.start+i] = f
-					if onProgress != nil {
-						onProgress()
-					}
-				}
+				p.analyzeRange(ctx, texts, entities, batch, results, onProgress)
 			}
 		})
 	}
 
 	wg.Wait()
 	return results, nil
+}
+
+func (p *PresidioClient) analyzeRange(ctx context.Context, texts []string, entities []string, batch indexRange, results [][]Finding, onProgress func()) {
+	if ok, err := p.tryAnalyzeRange(ctx, texts, entities, batch, results, onProgress); !ok {
+		p.splitFailedRange(ctx, texts, entities, batch, results, onProgress, err)
+	}
+}
+
+func (p *PresidioClient) tryAnalyzeRange(ctx context.Context, texts []string, entities []string, batch indexRange, results [][]Finding, onProgress func()) (bool, error) {
+	if onProgress != nil {
+		onProgress()
+	}
+
+	findings, err := p.analyze(ctx, texts[batch.start:batch.end], entities)
+	if err != nil {
+		return false, err
+	}
+
+	for i, f := range findings {
+		results[batch.start+i] = f
+		if onProgress != nil {
+			onProgress()
+		}
+	}
+	return true, nil
+}
+
+func (p *PresidioClient) splitFailedRange(ctx context.Context, texts []string, entities []string, batch indexRange, results [][]Finding, onProgress func(), cause error) {
+	if batch.end-batch.start == 1 {
+		p.logger.WarnContext(ctx, "presidio analyze failed for text, skipping",
+			attr.SlogError(cause),
+		)
+		if onProgress != nil {
+			onProgress()
+		}
+		return
+	}
+
+	p.logger.WarnContext(ctx, "presidio analyze failed for text batch, splitting",
+		attr.SlogError(cause),
+	)
+	mid := batch.start + ((batch.end - batch.start) / 2)
+	left := indexRange{start: batch.start, end: mid}
+	right := indexRange{start: mid, end: batch.end}
+
+	leftOK, leftErr := p.tryAnalyzeRange(ctx, texts, entities, left, results, onProgress)
+	rightOK, rightErr := p.tryAnalyzeRange(ctx, texts, entities, right, results, onProgress)
+	if !leftOK {
+		p.splitFailedRange(ctx, texts, entities, left, results, onProgress, leftErr)
+	}
+	if !rightOK {
+		p.splitFailedRange(ctx, texts, entities, right, results, onProgress, rightErr)
+	}
 }
 
 type indexRange struct {
@@ -229,6 +256,11 @@ func chunkTextIndexes(n, size int) []indexRange {
 }
 
 func (p *PresidioClient) analyze(ctx context.Context, texts []string, entities []string) (_ [][]Finding, err error) {
+	// /analyze 500s on empty array ("No text provided"). Short-circuit.
+	if len(texts) == 0 {
+		return nil, nil
+	}
+
 	ctx, span := p.tracer.Start(ctx, "presidio.analyze")
 	start := time.Now()
 	defer func() {
@@ -327,9 +359,5 @@ func convertPresidioFindings(text string, results []presidioResult) []Finding {
 type StubPIIScanner struct{}
 
 func (s *StubPIIScanner) AnalyzeBatch(_ context.Context, texts []string, _ []string, _ func()) ([][]Finding, error) {
-	results := make([][]Finding, len(texts))
-	for i := range texts {
-		results[i] = nil
-	}
-	return results, nil
+	return make([][]Finding, len(texts)), nil
 }
