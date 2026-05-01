@@ -4,7 +4,7 @@ CREATE TABLE "organization_invitations" (
   "organization_id" text NOT NULL,
   "email" text NOT NULL,
   "token" text NOT NULL,
-  "inviter_user_id" text NOT NULL,
+  "inviter_user_id" text NULL,
   "role_slug" text NULL,
   "state" text NOT NULL DEFAULT 'pending',
   "expires_at" timestamptz NOT NULL DEFAULT (clock_timestamp() + '7 days'::interval),

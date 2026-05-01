@@ -1446,7 +1446,7 @@ CREATE TABLE IF NOT EXISTS organization_invitations (
   organization_id TEXT NOT NULL,
   email TEXT NOT NULL CHECK (email <> ''),
   token TEXT NOT NULL,
-  inviter_user_id TEXT NOT NULL,
+  inviter_user_id TEXT,
   role_slug TEXT,
   state TEXT NOT NULL DEFAULT 'pending' CHECK (state IN ('pending', 'accepted', 'revoked', 'expired')),
 
