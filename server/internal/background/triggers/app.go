@@ -16,6 +16,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	triggerrepo "github.com/speakeasy-api/gram/server/internal/triggers/repo"
@@ -232,7 +233,7 @@ func (a *App) Create(ctx context.Context, params CreateParams, hooks ...Instance
 	if err != nil {
 		return triggerrepo.TriggerInstance{}, fmt.Errorf("begin trigger create transaction: %w", err)
 	}
-	defer func() { _ = tx.Rollback(ctx) }()
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
 	item, err := triggerrepo.New(tx).CreateTriggerInstance(ctx, triggerrepo.CreateTriggerInstanceParams{
 		OrganizationID: params.OrganizationID,
@@ -325,7 +326,7 @@ func (a *App) Delete(ctx context.Context, projectID uuid.UUID, id uuid.UUID, hoo
 	if err != nil {
 		return fmt.Errorf("begin trigger delete transaction: %w", err)
 	}
-	defer func() { _ = tx.Rollback(ctx) }()
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
 	item, err := triggerrepo.New(tx).DeleteTriggerInstance(ctx, triggerrepo.DeleteTriggerInstanceParams{
 		ID:        id,
@@ -357,7 +358,7 @@ func (a *App) SetStatus(ctx context.Context, projectID uuid.UUID, id uuid.UUID, 
 	if err != nil {
 		return triggerrepo.TriggerInstance{}, fmt.Errorf("begin trigger set-status transaction: %w", err)
 	}
-	defer func() { _ = tx.Rollback(ctx) }()
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
 	item, err := triggerrepo.New(tx).SetTriggerInstanceStatus(ctx, triggerrepo.SetTriggerInstanceStatusParams{
 		Status:    status,
