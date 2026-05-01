@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"os"
-	"testing"
 
 	"github.com/testcontainers/testcontainers-go/log"
 
@@ -28,18 +26,4 @@ func NewTestcontainersLogger(rawLevel string) log.Logger {
 			DataDogAttr: false,
 		})),
 	}
-}
-
-func NewLogger(t *testing.T) *slog.Logger {
-	t.Helper()
-
-	if testing.Verbose() {
-		return slog.New(o11y.NewLogHandler(&o11y.LogHandlerOptions{
-			RawLevel:    os.Getenv("LOG_LEVEL"),
-			Pretty:      true,
-			DataDogAttr: false,
-		}))
-	}
-
-	return slog.New(slog.DiscardHandler)
 }

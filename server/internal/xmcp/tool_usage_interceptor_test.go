@@ -3,7 +3,6 @@ package xmcp_test
 import (
 	"context"
 	"errors"
-	"log/slog"
 	"net/http"
 	"testing"
 
@@ -14,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/xmcp"
 )
 
@@ -49,7 +49,7 @@ func newToolsCallRequestForInterceptor(t *testing.T, ctx context.Context) *proxy
 func TestToolUsageLimitsInterceptor_Name(t *testing.T) {
 	t.Parallel()
 
-	interceptor := xmcp.NewToolUsageLimitsInterceptor(&fakeBillingRepo{storedUsage: nil, storedErr: nil}, discardLogger(t))
+	interceptor := xmcp.NewToolUsageLimitsInterceptor(&fakeBillingRepo{storedUsage: nil, storedErr: nil}, testenv.NewLogger(t))
 	require.Equal(t, "tool-usage-limits", interceptor.Name())
 }
 
@@ -59,7 +59,7 @@ func TestToolUsageLimitsInterceptor_NoAuthContextPassesThrough(t *testing.T) {
 	// Billing repo deliberately left without behavior: the interceptor must
 	// not reach it when auth context is missing.
 	repo := &fakeBillingRepo{storedUsage: nil, storedErr: errors.New("must not be called")}
-	interceptor := xmcp.NewToolUsageLimitsInterceptor(repo, discardLogger(t))
+	interceptor := xmcp.NewToolUsageLimitsInterceptor(repo, testenv.NewLogger(t))
 
 	ctx := t.Context()
 	call := newToolsCallRequestForInterceptor(t, ctx)
@@ -71,7 +71,7 @@ func TestToolUsageLimitsInterceptor_NonBaseTierPassesThrough(t *testing.T) {
 	t.Parallel()
 
 	repo := &fakeBillingRepo{storedUsage: nil, storedErr: errors.New("must not be called")}
-	interceptor := xmcp.NewToolUsageLimitsInterceptor(repo, discardLogger(t))
+	interceptor := xmcp.NewToolUsageLimitsInterceptor(repo, testenv.NewLogger(t))
 
 	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{
 		ActiveOrganizationID: "org-pro",
@@ -88,7 +88,7 @@ func TestToolUsageLimitsInterceptor_BillingErrorPassesThrough(t *testing.T) {
 	// Billing cache miss must not take down tool invocation — the interceptor
 	// logs and continues.
 	repo := &fakeBillingRepo{storedUsage: nil, storedErr: errors.New("cache miss")}
-	interceptor := xmcp.NewToolUsageLimitsInterceptor(repo, discardLogger(t))
+	interceptor := xmcp.NewToolUsageLimitsInterceptor(repo, testenv.NewLogger(t))
 
 	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{
 		ActiveOrganizationID: "org-free",
@@ -110,7 +110,7 @@ func TestToolUsageLimitsInterceptor_ActiveSubscriptionPassesThrough(t *testing.T
 		},
 		storedErr: nil,
 	}
-	interceptor := xmcp.NewToolUsageLimitsInterceptor(repo, discardLogger(t))
+	interceptor := xmcp.NewToolUsageLimitsInterceptor(repo, testenv.NewLogger(t))
 
 	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{
 		ActiveOrganizationID: "org-free-with-sub",
@@ -133,7 +133,7 @@ func TestToolUsageLimitsInterceptor_UnderHardLimitPassesThrough(t *testing.T) {
 		},
 		storedErr: nil,
 	}
-	interceptor := xmcp.NewToolUsageLimitsInterceptor(repo, discardLogger(t))
+	interceptor := xmcp.NewToolUsageLimitsInterceptor(repo, testenv.NewLogger(t))
 
 	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{
 		ActiveOrganizationID: "org-free",
@@ -157,7 +157,7 @@ func TestToolUsageLimitsInterceptor_AtOrOverHardLimitRejects(t *testing.T) {
 		},
 		storedErr: nil,
 	}
-	interceptor := xmcp.NewToolUsageLimitsInterceptor(repo, discardLogger(t))
+	interceptor := xmcp.NewToolUsageLimitsInterceptor(repo, testenv.NewLogger(t))
 
 	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{
 		ActiveOrganizationID: "org-free",
@@ -185,7 +185,7 @@ func TestToolUsageLimitsInterceptor_ZeroIncludedUsesDefaultLimit(t *testing.T) {
 		},
 		storedErr: nil,
 	}
-	interceptor := xmcp.NewToolUsageLimitsInterceptor(repo, discardLogger(t))
+	interceptor := xmcp.NewToolUsageLimitsInterceptor(repo, testenv.NewLogger(t))
 
 	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{
 		ActiveOrganizationID: "org-free",
@@ -198,9 +198,4 @@ func TestToolUsageLimitsInterceptor_ZeroIncludedUsesDefaultLimit(t *testing.T) {
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
-}
-
-func discardLogger(t *testing.T) *slog.Logger {
-	t.Helper()
-	return slog.New(slog.DiscardHandler)
 }

@@ -3,7 +3,6 @@ package providers_test
 import (
 	"encoding/json"
 	"io"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -13,11 +12,13 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/oauth/providers"
 	oauth_repo "github.com/speakeasy-api/gram/server/internal/oauth/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
-func newProvider() *providers.CustomProvider {
-	return providers.NewCustomProvider(slog.Default(), nil)
+func newProvider(t *testing.T) *providers.CustomProvider {
+	t.Helper()
+	return providers.NewCustomProvider(testenv.NewLogger(t), nil)
 }
 
 func baseProvider(tokenEndpoint string) oauth_repo.OauthProxyProvider {
@@ -42,7 +43,7 @@ func TestCustomProvider_RefreshToken_Success(t *testing.T) {
 	defer srv.Close()
 
 	prov := baseProvider(srv.URL + "/token")
-	result, err := newProvider().RefreshToken(t.Context(), "old-refresh", prov, &toolsets_repo.Toolset{})
+	result, err := newProvider(t).RefreshToken(t.Context(), "old-refresh", prov, &toolsets_repo.Toolset{})
 
 	require.NoError(t, err)
 	require.Equal(t, "new-access", result.AccessToken)
@@ -63,7 +64,7 @@ func TestCustomProvider_RefreshToken_NoRotation(t *testing.T) {
 	defer srv.Close()
 
 	prov := baseProvider(srv.URL + "/token")
-	result, err := newProvider().RefreshToken(t.Context(), "old-refresh", prov, &toolsets_repo.Toolset{})
+	result, err := newProvider(t).RefreshToken(t.Context(), "old-refresh", prov, &toolsets_repo.Toolset{})
 
 	require.NoError(t, err)
 	require.Equal(t, "new-access", result.AccessToken)
@@ -92,7 +93,7 @@ func TestCustomProvider_RefreshToken_BasicAuth(t *testing.T) {
 	prov := baseProvider(srv.URL + "/token")
 	prov.TokenEndpointAuthMethodsSupported = []string{"client_secret_basic"}
 
-	_, err := newProvider().RefreshToken(t.Context(), "rt", prov, &toolsets_repo.Toolset{})
+	_, err := newProvider(t).RefreshToken(t.Context(), "rt", prov, &toolsets_repo.Toolset{})
 	require.NoError(t, err)
 
 	require.Contains(t, gotAuth, "Basic ", "should use Basic auth header")
@@ -122,7 +123,7 @@ func TestCustomProvider_RefreshToken_PostAuth(t *testing.T) {
 	prov := baseProvider(srv.URL + "/token")
 	prov.TokenEndpointAuthMethodsSupported = []string{"client_secret_post"}
 
-	_, err := newProvider().RefreshToken(t.Context(), "rt", prov, &toolsets_repo.Toolset{})
+	_, err := newProvider(t).RefreshToken(t.Context(), "rt", prov, &toolsets_repo.Toolset{})
 	require.NoError(t, err)
 
 	require.Empty(t, gotAuth, "should NOT use Basic auth header for post auth")
@@ -140,7 +141,7 @@ func TestCustomProvider_RefreshToken_UpstreamError(t *testing.T) {
 	defer srv.Close()
 
 	prov := baseProvider(srv.URL + "/token")
-	_, err := newProvider().RefreshToken(t.Context(), "rt", prov, &toolsets_repo.Toolset{})
+	_, err := newProvider(t).RefreshToken(t.Context(), "rt", prov, &toolsets_repo.Toolset{})
 
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "401")
@@ -161,7 +162,7 @@ func TestCustomProvider_RefreshToken_CamelCaseResponse(t *testing.T) {
 	defer srv.Close()
 
 	prov := baseProvider(srv.URL + "/token")
-	result, err := newProvider().RefreshToken(t.Context(), "rt", prov, &toolsets_repo.Toolset{})
+	result, err := newProvider(t).RefreshToken(t.Context(), "rt", prov, &toolsets_repo.Toolset{})
 
 	require.NoError(t, err)
 	require.Equal(t, "new-camel", result.AccessToken)

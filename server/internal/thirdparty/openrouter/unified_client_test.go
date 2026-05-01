@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"sort"
@@ -212,7 +211,7 @@ func TestChatClient_GetCompletion(t *testing.T) {
 
 	// Create client
 	client := NewUnifiedClient(
-		slog.Default(),
+		testenv.NewLogger(t),
 		guardianPolicy,
 		provisioner,
 		captureStrategy,
@@ -336,7 +335,7 @@ func TestChatClient_GetCompletionStream(t *testing.T) {
 
 	// Create client
 	client := NewUnifiedClient(
-		slog.Default(),
+		testenv.NewLogger(t),
 		guardianPolicy,
 		provisioner,
 		captureStrategy,
@@ -452,7 +451,7 @@ func TestChatClient_GetCompletion_WithToolCalls(t *testing.T) {
 
 	// Create client
 	client := NewUnifiedClient(
-		slog.Default(),
+		testenv.NewLogger(t),
 		guardianPolicy,
 		provisioner,
 		captureStrategy,
@@ -547,7 +546,7 @@ func TestChatClient_NormalizesMixedAssistantOnlyForOpenRouterRequest(t *testing.
 	require.NoError(t, err)
 
 	client := NewUnifiedClient(
-		slog.Default(),
+		testenv.NewLogger(t),
 		guardianPolicy,
 		&mockProvisioner{apiKey: "test-api-key"},
 		captureStrategy,
@@ -628,7 +627,7 @@ func TestChatClient_PassesMixedAssistantThroughWhenNormalizeFlagUnset(t *testing
 	require.NoError(t, err)
 
 	client := NewUnifiedClient(
-		slog.Default(),
+		testenv.NewLogger(t),
 		guardianPolicy,
 		&mockProvisioner{apiKey: "test-api-key"},
 		&mockMessageCaptureStrategy{},
@@ -710,7 +709,7 @@ func TestChatClient_ErrorHandling(t *testing.T) {
 
 			// Create client
 			client := NewUnifiedClient(
-				slog.Default(),
+				testenv.NewLogger(t),
 				guardianPolicy,
 				provisioner,
 				captureStrategy,
@@ -782,7 +781,7 @@ func TestChatClient_MultipleCompletions_TitleAndResolutionScheduling(t *testing.
 
 	// Create client
 	client := NewUnifiedClient(
-		slog.Default(),
+		testenv.NewLogger(t),
 		guardianPolicy,
 		provisioner,
 		captureStrategy,
@@ -950,7 +949,7 @@ func TestChatClient_NilChatID_ShouldNotScheduleTitleGeneration(t *testing.T) {
 
 	titleGenerator := &trackingTitleGenerator{}
 	client := NewUnifiedClient(
-		slog.Default(),
+		testenv.NewLogger(t),
 		guardianPolicy,
 		&mockProvisioner{apiKey: "test-api-key"},
 		&mockMessageCaptureStrategy{},
@@ -997,7 +996,7 @@ func TestChatClient_TitleGeneration_ScheduledPerCompletionWithValidChatID(t *tes
 	titleGenerator := &trackingTitleGenerator{}
 	tracker := newTrackingCaptureStrategy()
 	client := NewUnifiedClient(
-		slog.Default(),
+		testenv.NewLogger(t),
 		guardianPolicy,
 		&mockProvisioner{apiKey: "test-api-key"},
 		tracker,
@@ -1063,7 +1062,7 @@ func TestChatClient_ReloadChat_NoDuplicateMessages(t *testing.T) {
 
 	tracker := newTrackingCaptureStrategy()
 	client := NewUnifiedClient(
-		slog.Default(),
+		testenv.NewLogger(t),
 		guardianPolicy,
 		&mockProvisioner{apiKey: "test-api-key"},
 		tracker,
@@ -1193,7 +1192,7 @@ func TestChatClient_GetCompletion_WithJSONSchema(t *testing.T) {
 
 	// Create client
 	client := NewUnifiedClient(
-		slog.Default(),
+		testenv.NewLogger(t),
 		guardianPolicy,
 		provisioner,
 		captureStrategy,
@@ -1310,7 +1309,7 @@ func TestChatClient_GetCompletion_WithoutJSONSchema(t *testing.T) {
 
 	// Create client
 	client := NewUnifiedClient(
-		slog.Default(),
+		testenv.NewLogger(t),
 		guardianPolicy,
 		provisioner,
 		captureStrategy,
@@ -1419,7 +1418,7 @@ func TestChatClient_GetCompletion_UnsupportedModelFallback(t *testing.T) {
 	require.NoError(t, err)
 
 	client := NewUnifiedClient(
-		slog.Default(),
+		testenv.NewLogger(t),
 		guardianPolicy,
 		&mockProvisioner{apiKey: "test-api-key"},
 		&mockMessageCaptureStrategy{},

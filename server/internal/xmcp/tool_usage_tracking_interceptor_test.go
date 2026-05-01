@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/xmcp"
 )
 
@@ -102,7 +103,7 @@ func newToolsCallResponseForInterceptor(t *testing.T, sessionID string) *proxy.T
 func TestToolUsageTrackingInterceptor_Name(t *testing.T) {
 	t.Parallel()
 
-	interceptor := xmcp.NewToolUsageTrackingInterceptor(newFakeBillingTracker(), discardLogger(t))
+	interceptor := xmcp.NewToolUsageTrackingInterceptor(newFakeBillingTracker(), testenv.NewLogger(t))
 	require.Equal(t, "tool-usage-tracking", interceptor.Name())
 }
 
@@ -110,7 +111,7 @@ func TestToolUsageTrackingInterceptor_NoAuthContextSkips(t *testing.T) {
 	t.Parallel()
 
 	tracker := newFakeBillingTracker()
-	interceptor := xmcp.NewToolUsageTrackingInterceptor(tracker, discardLogger(t))
+	interceptor := xmcp.NewToolUsageTrackingInterceptor(tracker, testenv.NewLogger(t))
 
 	call := newToolsCallResponseForInterceptor(t, "")
 
@@ -125,7 +126,7 @@ func TestToolUsageTrackingInterceptor_EmitsEventForBaseTier(t *testing.T) {
 	t.Parallel()
 
 	tracker := newFakeBillingTracker()
-	interceptor := xmcp.NewToolUsageTrackingInterceptor(tracker, discardLogger(t))
+	interceptor := xmcp.NewToolUsageTrackingInterceptor(tracker, testenv.NewLogger(t))
 
 	projectID := uuid.New()
 	projectSlug := "demo-project"
@@ -164,7 +165,7 @@ func TestToolUsageTrackingInterceptor_EmitsEventForPaidTier(t *testing.T) {
 	// Limits gating is a separate concern handled by the request-side
 	// interceptor.
 	tracker := newFakeBillingTracker()
-	interceptor := xmcp.NewToolUsageTrackingInterceptor(tracker, discardLogger(t))
+	interceptor := xmcp.NewToolUsageTrackingInterceptor(tracker, testenv.NewLogger(t))
 
 	projectID := uuid.New()
 	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{

@@ -1,4 +1,4 @@
-package functions
+package functions_test
 
 import (
 	"archive/zip"
@@ -7,7 +7,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"io"
-	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
@@ -18,28 +17,29 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/assets"
+	"github.com/speakeasy-api/gram/server/internal/functions"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
-	tracernoop "go.opentelemetry.io/otel/trace/noop"
 )
 
 func TestLocalRunner_ToolCallAndReadResource(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
-	logger := slog.New(slog.DiscardHandler)
-	tracerProvider := tracernoop.NewTracerProvider()
+	logger := testenv.NewLogger(t)
+	tracerProvider := testenv.NewTracerProvider(t)
 
 	root, err := os.OpenRoot(t.TempDir())
 	require.NoError(t, err)
 	t.Cleanup(func() {
 		require.NoError(t, root.Close())
 	})
-	assetStore := assets.NewFSBlobStore(slog.New(slog.DiscardHandler), root)
+	assetStore := assets.NewFSBlobStore(testenv.NewLogger(t), root)
 	serverURL, err := url.Parse("https://localhost:8080")
 	require.NoError(t, err)
 
 	codeRoot := t.TempDir()
-	runner := NewLocalRunner(logger, tracerProvider, codeRoot, serverURL, assetStore)
+	runner := functions.NewLocalRunner(logger, tracerProvider, codeRoot, serverURL, assetStore)
 
 	archive := buildLocalRunnerArchive(t, `
 export async function handleToolCall({ name, input }) {
@@ -75,14 +75,14 @@ export async function handleResources({ uri, input }) {
 	functionID := uuid.New()
 	accessID := uuid.New()
 
-	_, err = runner.Deploy(ctx, RunnerDeployRequest{
+	_, err = runner.Deploy(ctx, functions.RunnerDeployRequest{
 		Version:      "dev",
 		ProjectID:    projectID,
 		DeploymentID: deploymentID,
 		FunctionID:   functionID,
 		AccessID:     accessID,
-		Runtime:      RuntimeNodeJS22,
-		Assets: []RunnerAsset{{
+		Runtime:      functions.RuntimeNodeJS22,
+		Assets: []functions.RunnerAsset{{
 			AssetID:       uuid.New(),
 			AssetURL:      assetURL,
 			GuestPath:     "/data/code.zip",
@@ -96,8 +96,8 @@ export async function handleResources({ uri, input }) {
 	require.NoError(t, err)
 
 	invocationID := uuid.New()
-	toolReq, err := runner.ToolCall(ctx, RunnerToolCallRequest{
-		RunnerBaseRequest: RunnerBaseRequest{
+	toolReq, err := runner.ToolCall(ctx, functions.RunnerToolCallRequest{
+		RunnerBaseRequest: functions.RunnerBaseRequest{
 			InvocationID:      invocationID,
 			OrganizationID:    "org-123",
 			OrganizationSlug:  "organization-123",
@@ -126,8 +126,8 @@ export async function handleResources({ uri, input }) {
 	require.Equal(t, invocationID.String(), toolResp.Header.Get("Gram-Invoke-ID"))
 	require.JSONEq(t, `{"query":"hello","ok":true}`, string(toolBody))
 
-	resourceReq, err := runner.ReadResource(ctx, RunnerResourceReadRequest{
-		RunnerBaseRequest: RunnerBaseRequest{
+	resourceReq, err := runner.ReadResource(ctx, functions.RunnerResourceReadRequest{
+		RunnerBaseRequest: functions.RunnerBaseRequest{
 			InvocationID:      invocationID,
 			OrganizationID:    "org-123",
 			OrganizationSlug:  "organization-123",
@@ -157,7 +157,7 @@ export async function handleResources({ uri, input }) {
 	require.Equal(t, "text/html;profile=mcp-app", resourceResp.Header.Get("Content-Type"))
 	require.Equal(t, invocationID.String(), resourceResp.Header.Get("Gram-Invoke-ID"))
 	require.Equal(t, "<html><body>hello</body></html>", string(resourceBody))
-	require.NotEmpty(t, resourceResp.Trailer.Get(FunctionsExecutionTimeHeader))
+	require.NotEmpty(t, resourceResp.Trailer.Get(functions.FunctionsExecutionTimeHeader))
 }
 
 func buildLocalRunnerArchive(t *testing.T, functionsJS string) []byte {
