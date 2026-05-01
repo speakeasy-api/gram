@@ -252,9 +252,8 @@ export function CreateRoleDialog({
     const group = scopeGroups.find((g) => g.label === label);
     if (!group) return;
 
-    const allSelected = group.scopes.every((s) => grants[s.slug]);
-
     setGrants((prev) => {
+      const allSelected = group.scopes.every((s) => prev[s.slug]);
       const next = { ...prev };
       for (const scope of group.scopes) {
         if (allSelected) {
