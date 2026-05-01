@@ -100,6 +100,7 @@ func (s *Manager) Authenticate(ctx context.Context, key string) (context.Context
 		ProjectSlug:           nil,
 		APIKeyScopes:          nil,
 		APIKeyID:              "",
+		APIKeyToolsetID:       nil,
 		IsAdmin:               false,
 	}
 

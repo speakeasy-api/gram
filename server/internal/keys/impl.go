@@ -143,6 +143,9 @@ func (s *Service) CreateKey(ctx context.Context, payload *gen.CreateKeyPayload) 
 		Scopes:          finalScopes,
 		CreatedByUserID: authCtx.UserID,
 		ProjectID:       projectID,
+		ToolsetID:       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		PluginID:        uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		SystemManaged:   false,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error creating api key").Log(ctx, s.logger)
@@ -157,6 +160,8 @@ func (s *Service) CreateKey(ctx context.Context, payload *gen.CreateKeyPayload) 
 		KeyURN:           urn.NewAPIKey(createdKey.ID),
 		KeyName:          payload.Name,
 		Scopes:           finalScopes,
+		PluginID:         uuid.Nil,
+		ToolsetURN:       urn.Toolset{ID: uuid.Nil},
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error adding api key creation audit log").Log(ctx, s.logger)
 	}
@@ -262,6 +267,8 @@ func (s *Service) RevokeKey(ctx context.Context, payload *gen.RevokeKeyPayload) 
 		KeyURN:           urn.NewAPIKey(keyID),
 		KeyName:          deleted.Name,
 		Scopes:           deleted.Scopes,
+		PluginID:         uuid.Nil,
+		ToolsetURN:       urn.Toolset{ID: uuid.Nil},
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "error adding api key revocation audit log").Log(ctx, s.logger)
 	}

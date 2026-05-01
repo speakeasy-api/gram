@@ -225,7 +225,7 @@ func (q *Queries) ListAPIKeysByOrganization(ctx context.Context, organizationID 
 	return items, nil
 }
 
-const softDeletePluginScopedKeys = `-- name: SoftDeletePluginScopedKeys :execrows
+const softDeletePluginScopedKeys = `-- name: SoftDeletePluginScopedKeys :many
 UPDATE api_keys
 SET deleted_at = clock_timestamp(),
     updated_at = clock_timestamp()
@@ -233,6 +233,7 @@ WHERE plugin_id = $1
   AND organization_id = $2
   AND system_managed IS TRUE
   AND deleted IS FALSE
+RETURNING id, name, scopes, plugin_id, toolset_id
 `
 
 type SoftDeletePluginScopedKeysParams struct {
@@ -240,16 +241,44 @@ type SoftDeletePluginScopedKeysParams struct {
 	OrganizationID string
 }
 
-// Soft-deletes all active system-managed keys back-referenced to a plugin.
-// Used on republish to revoke the prior generation's per-server keys before
-// minting fresh ones. Scoped to organization_id as a defensive guard since
-// plugin_id alone is globally unique (UUIDv7).
-func (q *Queries) SoftDeletePluginScopedKeys(ctx context.Context, arg SoftDeletePluginScopedKeysParams) (int64, error) {
-	result, err := q.db.Exec(ctx, softDeletePluginScopedKeys, arg.PluginID, arg.OrganizationID)
+type SoftDeletePluginScopedKeysRow struct {
+	ID        uuid.UUID
+	Name      string
+	Scopes    []string
+	PluginID  uuid.NullUUID
+	ToolsetID uuid.NullUUID
+}
+
+// Soft-deletes all active system-managed keys back-referenced to a plugin
+// and returns the revoked rows so the caller can emit one audit log entry
+// per key inside the same transaction. Used on republish to revoke the
+// prior generation's per-server keys before minting fresh ones. Scoped to
+// organization_id as a defensive guard since plugin_id alone is globally
+// unique (UUIDv7).
+func (q *Queries) SoftDeletePluginScopedKeys(ctx context.Context, arg SoftDeletePluginScopedKeysParams) ([]SoftDeletePluginScopedKeysRow, error) {
+	rows, err := q.db.Query(ctx, softDeletePluginScopedKeys, arg.PluginID, arg.OrganizationID)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
-	return result.RowsAffected(), nil
+	defer rows.Close()
+	var items []SoftDeletePluginScopedKeysRow
+	for rows.Next() {
+		var i SoftDeletePluginScopedKeysRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Scopes,
+			&i.PluginID,
+			&i.ToolsetID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const updateAPIKeyLastAccessedAt = `-- name: UpdateAPIKeyLastAccessedAt :exec

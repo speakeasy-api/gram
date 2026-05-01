@@ -840,6 +840,7 @@ func (s *Service) DownloadPluginPackage(ctx context.Context, payload *gen.Downlo
 	if pluginInfo == nil {
 		// Plugin exists but has no servers — generate an empty plugin.
 		pluginInfo = &PluginInfo{
+			ID:          dbPlugin.ID,
 			Name:        dbPlugin.Name,
 			Slug:        dbPlugin.Slug,
 			Description: conv.FromPGTextOrEmpty[string](dbPlugin.Description),
@@ -997,6 +998,8 @@ func (s *Service) persistDownloadAPIKey(ctx context.Context, ac *contextvalues.A
 		Scopes:          scopes,
 		CreatedByUserID: ac.UserID,
 		ProjectID:       projectID,
+		ToolsetID:       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		PluginID:        uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		SystemManaged:   true,
 	})
 	if err != nil {
@@ -1012,6 +1015,8 @@ func (s *Service) persistDownloadAPIKey(ctx context.Context, ac *contextvalues.A
 		KeyURN:           urn.NewAPIKey(createdKey.ID),
 		KeyName:          candidate.keyName,
 		Scopes:           scopes,
+		PluginID:         uuid.Nil,
+		ToolsetURN:       urn.Toolset{ID: uuid.Nil},
 	}); err != nil {
 		return fmt.Errorf("audit log key creation: %w", err)
 	}
@@ -1212,22 +1217,43 @@ type pluginAPIKeyCandidate struct {
 func (s *Service) buildPluginAPIKeyCandidate(scope auth.APIKeyScope, purpose string) (pluginAPIKeyCandidate, error) {
 	tokenBytes := make([]byte, 32)
 	if _, err := rand.Read(tokenBytes); err != nil {
-		return pluginAPIKeyCandidate{}, fmt.Errorf("generate token: %w", err)
+		return pluginAPIKeyCandidate{
+			fullKey:        "",
+			keyHash:        "",
+			keyPrefix:      "",
+			keyName:        "",
+			scope:          auth.APIKeyScopeInvalid,
+			pluginID:       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			toolsetID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			pluginServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		}, fmt.Errorf("generate token: %w", err)
 	}
 	token := hex.EncodeToString(tokenBytes)
 	fullKey := s.keyPrefix + token
 
 	keyHash, err := auth.GetAPIKeyHash(fullKey)
 	if err != nil {
-		return pluginAPIKeyCandidate{}, fmt.Errorf("hash key: %w", err)
+		return pluginAPIKeyCandidate{
+			fullKey:        "",
+			keyHash:        "",
+			keyPrefix:      "",
+			keyName:        "",
+			scope:          auth.APIKeyScopeInvalid,
+			pluginID:       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			toolsetID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			pluginServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		}, fmt.Errorf("hash key: %w", err)
 	}
 
 	return pluginAPIKeyCandidate{
-		fullKey:   fullKey,
-		keyHash:   keyHash,
-		keyPrefix: s.keyPrefix + token[:5],
-		keyName:   fmt.Sprintf("plugins-%s-%s-%s", purpose, time.Now().UTC().Format("20060102-150405"), token[:6]),
-		scope:     scope,
+		fullKey:        fullKey,
+		keyHash:        keyHash,
+		keyPrefix:      s.keyPrefix + token[:5],
+		keyName:        fmt.Sprintf("plugins-%s-%s-%s", purpose, time.Now().UTC().Format("20060102-150405"), token[:6]),
+		scope:          scope,
+		pluginID:       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		toolsetID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		pluginServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 	}, nil
 }
 
@@ -1239,14 +1265,32 @@ func (s *Service) buildPluginAPIKeyCandidate(scope auth.APIKeyScope, purpose str
 func (s *Service) buildPluginScopedKeyCandidate(p PluginInfo, srv PluginServerInfo) (pluginAPIKeyCandidate, error) {
 	tokenBytes := make([]byte, 32)
 	if _, err := rand.Read(tokenBytes); err != nil {
-		return pluginAPIKeyCandidate{}, fmt.Errorf("generate token: %w", err)
+		return pluginAPIKeyCandidate{
+			fullKey:        "",
+			keyHash:        "",
+			keyPrefix:      "",
+			keyName:        "",
+			scope:          auth.APIKeyScopeInvalid,
+			pluginID:       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			toolsetID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			pluginServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		}, fmt.Errorf("generate token: %w", err)
 	}
 	token := hex.EncodeToString(tokenBytes)
 	fullKey := s.keyPrefix + token
 
 	keyHash, err := auth.GetAPIKeyHash(fullKey)
 	if err != nil {
-		return pluginAPIKeyCandidate{}, fmt.Errorf("hash key: %w", err)
+		return pluginAPIKeyCandidate{
+			fullKey:        "",
+			keyHash:        "",
+			keyPrefix:      "",
+			keyName:        "",
+			scope:          auth.APIKeyScopeInvalid,
+			pluginID:       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			toolsetID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			pluginServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		}, fmt.Errorf("hash key: %w", err)
 	}
 
 	keyName := fmt.Sprintf("plugin:%s:%s:%s", p.Slug, srv.DisplayName, srv.ID.String()[:8])
@@ -1301,11 +1345,39 @@ func (s *Service) persistPluginAPIKeys(
 	// Revoke prior system-managed keys for each plugin being republished.
 	// The org_id filter is defensive: plugin_id is globally unique already.
 	for _, pid := range pluginIDs {
-		if _, err := keysQ.SoftDeletePluginScopedKeys(ctx, keysrepo.SoftDeletePluginScopedKeysParams{
+		revoked, err := keysQ.SoftDeletePluginScopedKeys(ctx, keysrepo.SoftDeletePluginScopedKeysParams{
 			PluginID:       uuid.NullUUID{UUID: pid, Valid: true},
 			OrganizationID: ac.ActiveOrganizationID,
-		}); err != nil {
+		})
+		if err != nil {
 			return fmt.Errorf("revoke prior plugin keys for %s: %w", pid, err)
+		}
+		// Audit each revoked key. Same actor/project context as the publish
+		// itself; the symmetry between create + revoke events lets admins
+		// reconstruct rotations from the audit log alone.
+		for _, k := range revoked {
+			revokedToolsetURN := urn.Toolset{ID: uuid.Nil}
+			if k.ToolsetID.Valid {
+				revokedToolsetURN = urn.NewToolset(k.ToolsetID.UUID)
+			}
+			revokedPluginID := uuid.Nil
+			if k.PluginID.Valid {
+				revokedPluginID = k.PluginID.UUID
+			}
+			if err := audit.LogKeyRevoke(ctx, tx, audit.LogKeyRevokeEvent{
+				OrganizationID:   ac.ActiveOrganizationID,
+				ProjectID:        projectID,
+				Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
+				ActorDisplayName: ac.Email,
+				ActorSlug:        nil,
+				KeyURN:           urn.NewAPIKey(k.ID),
+				KeyName:          k.Name,
+				Scopes:           k.Scopes,
+				PluginID:         revokedPluginID,
+				ToolsetURN:       revokedToolsetURN,
+			}); err != nil {
+				return fmt.Errorf("audit log key revocation %s: %w", k.Name, err)
+			}
 		}
 	}
 
@@ -1339,6 +1411,14 @@ func (s *Service) persistPluginAPIKeys(
 			}
 		}
 
+		auditPluginID := uuid.Nil
+		if candidate.pluginID.Valid {
+			auditPluginID = candidate.pluginID.UUID
+		}
+		auditToolsetURN := urn.Toolset{ID: uuid.Nil}
+		if candidate.toolsetID.Valid {
+			auditToolsetURN = urn.NewToolset(candidate.toolsetID.UUID)
+		}
 		if err := audit.LogKeyCreate(ctx, tx, audit.LogKeyCreateEvent{
 			OrganizationID:   ac.ActiveOrganizationID,
 			ProjectID:        projectID,
@@ -1348,6 +1428,8 @@ func (s *Service) persistPluginAPIKeys(
 			KeyURN:           urn.NewAPIKey(createdKey.ID),
 			KeyName:          candidate.keyName,
 			Scopes:           scopes,
+			PluginID:         auditPluginID,
+			ToolsetURN:       auditToolsetURN,
 		}); err != nil {
 			return fmt.Errorf("audit log key creation %s: %w", candidate.keyName, err)
 		}
@@ -1428,6 +1510,7 @@ func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID) (
 				MCPURL:      fmt.Sprintf("%s/mcp/%s", s.serverURL, *mcpSlug),
 				IsPublic:    r.ToolsetIsPublic,
 				EnvConfigs:  nil,
+				APIKey:      "",
 			}
 
 			// For public servers, load user-facing environment configs. A public

@@ -293,3 +293,93 @@ func TestPluginsService_PublishPlugins_RecordsAuditEvent(t *testing.T) {
 	require.Len(t, slugs, 1)
 	require.Equal(t, plugin.Slug, slugs[0])
 }
+
+func TestPluginsService_PublishPlugins_RecordsPluginScopedKeyCreate(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockGitHubPublisher{}
+	ctx, ti := newTestPluginsServiceWithGitHub(t, mock)
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Audit Key Create"})
+	require.NoError(t, err)
+	toolset := createTestToolset(t, ctx, ti.conn, "audit-key-create-toolset")
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
+		PluginID:    plugin.ID,
+		ToolsetID:   toolset.ID.String(),
+		DisplayName: "S",
+		Policy:      "required",
+		SortOrder:   0,
+	})
+	require.NoError(t, err)
+
+	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
+	require.NoError(t, err)
+
+	// The most recent api_key:create event should be the per-server plugin
+	// key (mcp keys are created before the hooks key in the publish loop —
+	// LatestAuditLogByAction returns by created_at DESC, so the hooks key
+	// is last). Decode metadata to verify plugin_id + toolset_id surfaced.
+	rec, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionKeyCreate)
+	require.NoError(t, err)
+	meta, err := audittest.DecodeAuditData(rec.Metadata)
+	require.NoError(t, err)
+	// The hooks key has neither plugin_id nor toolset_id, so look at the
+	// per-server key by querying the audit table directly with the metadata
+	// filter.
+	var pluginScopedMeta []byte
+	err = ti.conn.QueryRow(ctx, `
+		SELECT metadata FROM audit_logs
+		WHERE action = $1 AND metadata->>'plugin_id' IS NOT NULL
+		ORDER BY created_at DESC LIMIT 1
+	`, string(audit.ActionKeyCreate)).Scan(&pluginScopedMeta)
+	require.NoError(t, err)
+
+	pluginMeta, err := audittest.DecodeAuditData(pluginScopedMeta)
+	require.NoError(t, err)
+	require.Equal(t, plugin.ID, pluginMeta["plugin_id"], "plugin_id must surface in audit metadata")
+	require.Equal(t, toolset.ID.String(), pluginMeta["toolset_id"], "toolset_id must surface in audit metadata")
+
+	// Still verify the latest record looks valid (it's the hooks key).
+	require.Equal(t, "api_key", rec.SubjectType)
+	require.Contains(t, meta, "scopes")
+}
+
+func TestPluginsService_PublishPlugins_RepublishRecordsKeyRevoke(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockGitHubPublisher{}
+	ctx, ti := newTestPluginsServiceWithGitHub(t, mock)
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Audit Key Revoke"})
+	require.NoError(t, err)
+	toolset := createTestToolset(t, ctx, ti.conn, "audit-key-revoke-toolset")
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
+		PluginID:    plugin.ID,
+		ToolsetID:   toolset.ID.String(),
+		DisplayName: "S",
+		Policy:      "required",
+		SortOrder:   0,
+	})
+	require.NoError(t, err)
+
+	// First publish: no prior keys to revoke.
+	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
+	require.NoError(t, err)
+	revokesBefore, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionKeyRevoke)
+	require.NoError(t, err)
+
+	// Second publish: must revoke the prior generation's per-server key.
+	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
+	require.NoError(t, err)
+	revokesAfter, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionKeyRevoke)
+	require.NoError(t, err)
+	require.Equal(t, revokesBefore+1, revokesAfter, "republish must emit one revoke audit per rotated key")
+
+	rec, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionKeyRevoke)
+	require.NoError(t, err)
+	require.Equal(t, "api_key", rec.SubjectType)
+	meta, err := audittest.DecodeAuditData(rec.Metadata)
+	require.NoError(t, err)
+	require.Equal(t, plugin.ID, meta["plugin_id"], "revoke audit must carry plugin_id of the rotated key")
+	require.Equal(t, toolset.ID.String(), meta["toolset_id"], "revoke audit must carry toolset_id of the rotated key")
+}

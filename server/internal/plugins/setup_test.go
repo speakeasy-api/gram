@@ -241,5 +241,8 @@ func allOrgKeysIncludingSystemManaged(ctx context.Context, t *testing.T, conn *p
 		}
 		keys = append(keys, k)
 	}
-	return keys, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate api_keys rows: %w", err)
+	}
+	return keys, nil
 }
