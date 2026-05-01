@@ -180,7 +180,7 @@ SDK surface names are controlled by OpenAPI metadata, not by renaming Go symbols
 Order matters because each step's output is the next step's input.
 
 1. `mise run gen:goa-server` — after any edit under `server/design/**`.
-2. `mise run gen:sqlc-server` — after any edit under `server/internal/*/queries.sql` or `server/database/sqlc.yaml`. (Or use `mise run gen:server` to run both.)
+2. `mise run gen:sqlc-server` — after any edit under `server/internal/*/queries.sql` or `server/database/sqlc.yaml`. Requires the local Postgres container from `mise run infra:start` (sqlc connects to the database to type-check queries). (Or use `mise run gen:server` to run both.)
 3. `mise run lint:server` and `mise run test:server` — catch struct-field drift early.
 4. `mise run gen:sdk` — regenerate the TypeScript SDK and the public/internal OpenAPI files.
 5. `mise run go:tidy` if imports changed.
@@ -193,7 +193,7 @@ Order matters because each step's output is the next step's input.
 | `mise run gen:goa-server`  | Regenerate everything under `server/gen/**` from the Goa design files.                                                                                          |
 | `mise run gen:sdk`         | Apply Speakeasy overlays and regenerate the TypeScript SDK and both public/internal OpenAPI files. Flags: `--check`, `--skip-versioning`, `--skip-upload-spec`. |
 | `mise run gen:server`      | Convenience: runs `gen:sqlc-server` then `gen:goa-server`.                                                                                                      |
-| `mise run gen:sqlc-server` | Regenerate every `repo/` package from every `queries.sql`.                                                                                                      |
+| `mise run gen:sqlc-server` | Regenerate every `repo/` package from every `queries.sql`. Requires `mise run infra:start` (sqlc connects to the local Postgres to type-check queries).         |
 | `mise run go:tidy`         | `go mod tidy` across the workspace.                                                                                                                             |
 | `mise run lint:server`     | `golangci-lint` over the server tree including `exhaustruct`.                                                                                                   |
 | `mise run test:server`     | Runs `go test` across the server tree; accepts `go test` arguments.                                                                                             |
