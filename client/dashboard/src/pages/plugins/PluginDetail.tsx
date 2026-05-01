@@ -223,6 +223,7 @@ export default function PluginDetail() {
                 key={server.id}
                 server={server}
                 toolset={toolsetById.get(server.toolsetId)}
+                isLoadingToolset={isLoadingToolsets}
                 onRemove={() => handleRemoveServer(server)}
               />
             ))}
@@ -367,14 +368,15 @@ export default function PluginDetail() {
 function PluginServerCard({
   server,
   toolset,
+  isLoadingToolset,
   onRemove,
 }: {
   server: PluginServer;
   toolset: ToolsetEntry | undefined;
+  isLoadingToolset: boolean;
   onRemove: () => void;
 }) {
   const routes = useRoutes();
-  const isMissing = !toolset;
 
   const handleClick = () => {
     if (toolset) routes.mcp.details.goTo(toolset.slug);
@@ -396,12 +398,14 @@ function PluginServerCard({
           {server.displayName}
         </Type>
         <div className="flex items-center gap-1">
-          {isMissing ? (
+          {toolset ? (
+            <ToolCollectionBadge toolNames={toolset.tools.map((t) => t.name)} />
+          ) : isLoadingToolset ? (
+            <Skeleton className="h-5 w-16" />
+          ) : (
             <Badge variant="destructive" className="text-xs">
               Toolset missing
             </Badge>
-          ) : (
-            <ToolCollectionBadge toolNames={toolset.tools.map((t) => t.name)} />
           )}
         </div>
       </div>
@@ -412,6 +416,8 @@ function PluginServerCard({
             mcpEnabled={toolset.mcpEnabled}
             mcpIsPublic={toolset.mcpIsPublic}
           />
+        ) : isLoadingToolset ? (
+          <Skeleton className="h-3.5 w-20" />
         ) : (
           <span />
         )}
