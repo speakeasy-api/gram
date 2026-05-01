@@ -50,6 +50,7 @@ func TestFlyRuntimeBackendEnsureColdCreate(t *testing.T) {
 	require.Equal(t, "machine-1", metadata.MachineID)
 	require.Equal(t, "ord", metadata.Region)
 	require.NotEmpty(t, metadata.AppName)
+	require.NotEmpty(t, metadata.AppID)
 	require.Equal(t, "boot-1", metadata.LastBootID)
 }
 
@@ -60,7 +61,7 @@ func TestFlyRuntimeBackendEnsureWarmReuse(t *testing.T) {
 	backend, apiClient, flapsClient := newTestFlyRuntimeBackend(t, server)
 
 	threadID := uuid.New()
-	apiClient.app = &fly.App{Name: "gram-asst-test"}
+	apiClient.app = &fly.App{ID: "app-1", Name: "gram-asst-test"}
 	flapsClient.machine = &fly.Machine{
 		ID:         "machine-1",
 		State:      "started",
@@ -73,7 +74,9 @@ func TestFlyRuntimeBackendEnsureWarmReuse(t *testing.T) {
 
 	rawMetadata, err := json.Marshal(flyRuntimeMetadata{
 		AppName:    "gram-asst-test",
+		AppID:      "app-1",
 		AppURL:     server.URL,
+		AppIP:      "",
 		MachineID:  "machine-1",
 		Region:     "iad",
 		LastBootID: "boot-1",
@@ -99,7 +102,7 @@ func TestFlyRuntimeBackendEnsureMachineUnconfigured(t *testing.T) {
 	backend, apiClient, flapsClient := newTestFlyRuntimeBackend(t, server)
 
 	threadID := uuid.New()
-	apiClient.app = &fly.App{Name: "gram-asst-test"}
+	apiClient.app = &fly.App{ID: "app-1", Name: "gram-asst-test"}
 	flapsClient.machine = &fly.Machine{
 		ID:         "machine-1",
 		State:      "started",
@@ -112,7 +115,9 @@ func TestFlyRuntimeBackendEnsureMachineUnconfigured(t *testing.T) {
 
 	rawMetadata, err := json.Marshal(flyRuntimeMetadata{
 		AppName:    "gram-asst-test",
+		AppID:      "app-1",
 		AppURL:     server.URL,
+		AppIP:      "",
 		MachineID:  "machine-1",
 		Region:     "iad",
 		LastBootID: "boot-1",
@@ -139,13 +144,15 @@ func TestFlyRuntimeBackendEnsureFlapsNotFoundEstablishedTearsDown(t *testing.T) 
 
 	// ensureApp succeeds (GraphQL says app exists) but flaps Get + List both
 	// 404. Established runtime — LastBootID + MachineID set from a prior boot.
-	apiClient.app = &fly.App{Name: "gram-asst-test"}
+	apiClient.app = &fly.App{ID: "app-1", Name: "gram-asst-test"}
 	flapsClient.getErr = errors.New("not found")
 	flapsClient.listErr = errors.New("app not found")
 
 	rawMetadata, err := json.Marshal(flyRuntimeMetadata{
 		AppName:    "gram-asst-test",
+		AppID:      "app-1",
 		AppURL:     server.URL,
+		AppIP:      "",
 		MachineID:  "machine-1",
 		Region:     "iad",
 		LastBootID: "boot-1",
@@ -172,13 +179,17 @@ func TestFlyRuntimeBackendEnsureFlapsNotFoundFreshAppPropagates(t *testing.T) {
 	// Fresh app — no prior boot recorded. flaps List 404 here is the
 	// propagation case isFlyAppPropagating + launchMachineWithRetry already
 	// cover; corruption detection must NOT trigger and tear the app down.
-	apiClient.app = &fly.App{Name: "gram-asst-test"}
+	apiClient.app = &fly.App{ID: "app-1", Name: "gram-asst-test"}
 	flapsClient.listErr = errors.New("app not found")
 
 	rawMetadata, err := json.Marshal(flyRuntimeMetadata{
-		AppName: "gram-asst-test",
-		AppURL:  server.URL,
-		Region:  "iad",
+		AppName:    "gram-asst-test",
+		AppID:      "",
+		AppURL:     server.URL,
+		AppIP:      "",
+		MachineID:  "",
+		Region:     "iad",
+		LastBootID: "",
 	})
 	require.NoError(t, err)
 
@@ -210,7 +221,9 @@ func TestFlyRuntimeBackendEnsureFreshlyRecreatedAppClearsPriorBootMetadata(t *te
 
 	rawMetadata, err := json.Marshal(flyRuntimeMetadata{
 		AppName:    "gram-asst-test",
+		AppID:      "old-app",
 		AppURL:     server.URL,
+		AppIP:      "",
 		MachineID:  "machine-from-old-app",
 		Region:     "iad",
 		LastBootID: "boot-from-old-app",
@@ -229,6 +242,85 @@ func TestFlyRuntimeBackendEnsureFreshlyRecreatedAppClearsPriorBootMetadata(t *te
 	require.Equal(t, 0, apiClient.deleteCalls, "freshly recreated app must not be torn down because of stale prior boot metadata")
 }
 
+func TestFlyRuntimeBackendEnsureExistingAppWithLegacyMetadataDoesNotTreatPropagationAsCorruption(t *testing.T) {
+	t.Parallel()
+
+	server := newTestAssistantRuntimeServer(t, true)
+	backend, apiClient, flapsClient := newTestFlyRuntimeBackend(t, server)
+
+	apiClient.app = &fly.App{ID: "app-1", Name: "gram-asst-test"}
+	flapsClient.getErr = errors.New("not found")
+	flapsClient.listErr = errors.New("app not found")
+
+	rawMetadata, err := json.Marshal(flyRuntimeMetadata{
+		AppName:    "gram-asst-test",
+		AppID:      "",
+		AppURL:     server.URL,
+		AppIP:      "",
+		MachineID:  "machine-from-legacy-metadata",
+		Region:     "iad",
+		LastBootID: "boot-from-legacy-metadata",
+	})
+	require.NoError(t, err)
+
+	_, err = backend.Ensure(context.Background(), assistantRuntimeRecord{
+		AssistantThreadID:   uuid.New(),
+		AssistantID:         uuid.New(),
+		ProjectID:           uuid.New(),
+		Backend:             runtimeBackendFlyIO,
+		BackendMetadataJSON: rawMetadata,
+	})
+	require.Error(t, err)
+	require.NotErrorIs(t, err, errFlyAppCorrupted)
+	require.Equal(t, 0, apiClient.deleteCalls, "legacy metadata without app_id is not proof that the current app had a prior boot")
+}
+
+func TestFlyRuntimeBackendEnsureExistingAppAfterPartialCreateFailureClearsStaleMetadata(t *testing.T) {
+	t.Parallel()
+
+	server := newTestAssistantRuntimeServer(t, true)
+	backend, apiClient, flapsClient := newTestFlyRuntimeBackend(t, server)
+
+	apiClient.getAppErr = errors.New("not found")
+	apiClient.organization = &fly.Organization{ID: "org-123"}
+	apiClient.allocateSharedErr = errors.New("allocate shared ip failed")
+
+	rawMetadata, err := json.Marshal(flyRuntimeMetadata{
+		AppName:    "gram-asst-test",
+		AppID:      "old-app",
+		AppURL:     server.URL,
+		AppIP:      "",
+		MachineID:  "machine-from-old-app",
+		Region:     "iad",
+		LastBootID: "boot-from-old-app",
+	})
+	require.NoError(t, err)
+
+	_, err = backend.Ensure(context.Background(), assistantRuntimeRecord{
+		AssistantThreadID:   uuid.New(),
+		AssistantID:         uuid.New(),
+		ProjectID:           uuid.New(),
+		Backend:             runtimeBackendFlyIO,
+		BackendMetadataJSON: rawMetadata,
+	})
+	require.ErrorContains(t, err, "allocate assistant fly runtime shared ip")
+
+	apiClient.getAppErr = nil
+	apiClient.allocateSharedErr = nil
+	flapsClient.listErr = errors.New("app not found")
+
+	_, err = backend.Ensure(context.Background(), assistantRuntimeRecord{
+		AssistantThreadID:   uuid.New(),
+		AssistantID:         uuid.New(),
+		ProjectID:           uuid.New(),
+		Backend:             runtimeBackendFlyIO,
+		BackendMetadataJSON: rawMetadata,
+	})
+	require.Error(t, err)
+	require.NotErrorIs(t, err, errFlyAppCorrupted)
+	require.Equal(t, 0, apiClient.deleteCalls, "partially created current app should not be torn down because metadata came from an older app incarnation")
+}
+
 func TestFlyRuntimeBackendStopIgnoresMissingApp(t *testing.T) {
 	t.Parallel()
 
@@ -236,7 +328,15 @@ func TestFlyRuntimeBackendStopIgnoresMissingApp(t *testing.T) {
 	backend, apiClient, _ := newTestFlyRuntimeBackend(t, server)
 
 	apiClient.deleteErr = errors.New("not found")
-	rawMetadata, err := json.Marshal(flyRuntimeMetadata{AppName: "gram-asst-test"})
+	rawMetadata, err := json.Marshal(flyRuntimeMetadata{
+		AppName:    "gram-asst-test",
+		AppID:      "",
+		AppURL:     "",
+		AppIP:      "",
+		MachineID:  "",
+		Region:     "",
+		LastBootID: "",
+	})
 	require.NoError(t, err)
 
 	err = backend.Stop(context.Background(), assistantRuntimeRecord{
@@ -261,15 +361,19 @@ func TestFlyRuntimeBackendServerURLRejectsLoopback(t *testing.T) {
 }
 
 type testFlyRuntimeAPIClient struct {
-	app          *fly.App
-	getAppErr    error
-	deleteErr    error
-	deleteCalls  int
-	createAppErr error
-	organization *fly.Organization
+	app               *fly.App
+	getAppErr         error
+	deleteErr         error
+	deleteCalls       int
+	createAppErr      error
+	allocateSharedErr error
+	organization      *fly.Organization
 }
 
 func (c *testFlyRuntimeAPIClient) AllocateSharedIPAddress(_ context.Context, _ string) (net.IP, error) {
+	if c.allocateSharedErr != nil {
+		return nil, c.allocateSharedErr
+	}
 	// Returning nil leaves AppIP empty so clientForTarget falls back to the
 	// default httpClient — tests point AppURL at a local httptest server that
 	// isn't reachable by the real shared-IP dialer.
@@ -284,7 +388,7 @@ func (c *testFlyRuntimeAPIClient) CreateApp(_ context.Context, input fly.CreateA
 	if c.createAppErr != nil {
 		return nil, c.createAppErr
 	}
-	c.app = &fly.App{Name: input.Name}
+	c.app = &fly.App{ID: "app-created", Name: input.Name}
 	c.getAppErr = nil
 	return c.app, nil
 }

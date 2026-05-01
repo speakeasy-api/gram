@@ -45,11 +45,19 @@ var errFlyAppCorrupted = errors.New("assistant fly runtime app corrupted")
 
 type flyRuntimeMetadata struct {
 	AppName    string `json:"app_name"`
+	AppID      string `json:"app_id,omitempty"`
 	AppURL     string `json:"app_url"`
 	AppIP      string `json:"app_ip,omitempty"`
 	MachineID  string `json:"machine_id"`
 	Region     string `json:"region"`
 	LastBootID string `json:"last_boot_id,omitempty"`
+}
+
+type flyRuntimeAppIdentity struct {
+	Name     string
+	ID       string
+	SharedIP string
+	Created  bool
 }
 
 type flyRuntimeStateResponse struct {
@@ -208,14 +216,16 @@ func (f *FlyRuntimeBackend) ensureExisting(
 		appURL = flyRuntimeAppURL(appName)
 	}
 
-	appIP, appCreated, err := f.ensureApp(ctx, appName)
+	app, err := f.ensureApp(ctx, appName)
 	if err != nil {
 		return RuntimeBackendEnsureResult{}, err
 	}
+	appIP := app.SharedIP
 	if appIP == "" {
 		appIP = metadata.AppIP
 	}
-	if appCreated {
+	sameAppIncarnation := metadata.AppID != "" && app.ID != "" && metadata.AppID == app.ID
+	if app.Created || (metadata.AppID != "" && app.ID != "" && metadata.AppID != app.ID) {
 		// Metadata may have been recovered from a prior runtime row after a
 		// failed/corrupted app was deleted. Once the app has been recreated,
 		// old machine/boot IDs describe the previous app incarnation and must
@@ -224,7 +234,7 @@ func (f *FlyRuntimeBackend) ensureExisting(
 		metadata.LastBootID = ""
 	}
 
-	machine, err := f.resolveMachine(ctx, flapsClient, appName, runtime.AssistantThreadID, metadata.MachineID, metadata.LastBootID)
+	machine, err := f.resolveMachine(ctx, flapsClient, appName, runtime.AssistantThreadID, metadata.MachineID, metadata.LastBootID, sameAppIncarnation)
 	if err != nil {
 		if errors.Is(err, errFlyAppCorrupted) {
 			f.logger.WarnContext(ctx,
@@ -287,6 +297,7 @@ func (f *FlyRuntimeBackend) ensureExisting(
 
 	nextMetadata := flyRuntimeMetadata{
 		AppName:    appName,
+		AppID:      app.ID,
 		AppURL:     appURL,
 		AppIP:      appIP,
 		MachineID:  machine.ID,
@@ -306,33 +317,37 @@ func (f *FlyRuntimeBackend) ensureExisting(
 	}, nil
 }
 
-// ensureApp returns the app's shared v4 IP so callers can dial it directly
-// instead of waiting on public DNS propagation (see flyRuntimeTarget). The
-// boolean reports whether this call created the app.
-func (f *FlyRuntimeBackend) ensureApp(ctx context.Context, appName string) (string, bool, error) {
+// ensureApp returns the app identity and shared v4 IP so callers can dial it
+// directly instead of waiting on public DNS propagation (see flyRuntimeTarget).
+func (f *FlyRuntimeBackend) ensureApp(ctx context.Context, appName string) (flyRuntimeAppIdentity, error) {
 	app, err := f.client.GetApp(ctx, appName)
 	switch {
 	case err == nil:
-		return app.SharedIPAddress, false, nil
+		return flyRuntimeAppIdentity{Name: app.Name, ID: app.ID, SharedIP: app.SharedIPAddress, Created: false}, nil
 	case isFlyNotFound(err):
 		org, err := f.client.GetOrganizationBySlug(ctx, f.config.DefaultFlyOrg)
 		if err != nil {
-			return "", false, fmt.Errorf("resolve assistant fly runtime organization: %w", err)
+			return flyRuntimeAppIdentity{}, fmt.Errorf("resolve assistant fly runtime organization: %w", err)
 		}
+		created := true
 		_, err = f.client.CreateApp(ctx, fly.CreateAppInput{
 			OrganizationID:  org.ID,
 			Name:            appName,
 			PreferredRegion: new(f.config.DefaultFlyRegion),
 		})
-		if err != nil && !isFlyAppNameTaken(err) {
-			return "", false, fmt.Errorf("create assistant fly runtime app: %w", err)
+		if err != nil {
+			if !isFlyAppNameTaken(err) {
+				return flyRuntimeAppIdentity{}, fmt.Errorf("create assistant fly runtime app: %w", err)
+			}
+			created = false
 		}
-		if _, getErr := f.client.GetApp(ctx, appName); getErr != nil {
-			return "", false, fmt.Errorf("verify assistant fly runtime app: %w", getErr)
+		verified, getErr := f.client.GetApp(ctx, appName)
+		if getErr != nil {
+			return flyRuntimeAppIdentity{}, fmt.Errorf("verify assistant fly runtime app: %w", getErr)
 		}
 		ip, err := f.client.AllocateSharedIPAddress(ctx, appName)
 		if err != nil && !isFlyIPAlreadyAssigned(err) {
-			return "", false, fmt.Errorf("allocate assistant fly runtime shared ip: %w", err)
+			return flyRuntimeAppIdentity{}, fmt.Errorf("allocate assistant fly runtime shared ip: %w", err)
 		}
 		ipStr := ""
 		if ip != nil {
@@ -343,7 +358,7 @@ func (f *FlyRuntimeBackend) ensureApp(ctx context.Context, appName string) (stri
 		// propagate, blowing past waitForRuntimeHealth's budget. Allocating
 		// a v6 forces an immediate DNS publish for both records.
 		if _, err := f.client.AllocateIPAddress(ctx, appName, "v6", "", org.ID, ""); err != nil && !isFlyIPAlreadyAssigned(err) {
-			return "", false, fmt.Errorf("allocate assistant fly runtime v6 ip: %w", err)
+			return flyRuntimeAppIdentity{}, fmt.Errorf("allocate assistant fly runtime v6 ip: %w", err)
 		}
 		if ipStr == "" {
 			// IP was already allocated previously (isFlyIPAlreadyAssigned path
@@ -352,9 +367,9 @@ func (f *FlyRuntimeBackend) ensureApp(ctx context.Context, appName string) (stri
 				ipStr = refreshed.SharedIPAddress
 			}
 		}
-		return ipStr, true, nil
+		return flyRuntimeAppIdentity{Name: verified.Name, ID: verified.ID, SharedIP: ipStr, Created: created}, nil
 	default:
-		return "", false, fmt.Errorf("load assistant fly runtime app: %w", err)
+		return flyRuntimeAppIdentity{}, fmt.Errorf("load assistant fly runtime app: %w", err)
 	}
 }
 
@@ -365,9 +380,10 @@ func (f *FlyRuntimeBackend) resolveMachine(
 	threadID uuid.UUID,
 	machineID string,
 	lastBootID string,
+	sameAppIncarnation bool,
 ) (*fly.Machine, error) {
 	wantThreadID := threadID.String()
-	hadPriorBoot := lastBootID != "" || machineID != ""
+	hadPriorBoot := sameAppIncarnation && (lastBootID != "" || machineID != "")
 
 	if machineID != "" {
 		machine, err := flapsClient.Get(ctx, appName, machineID)
@@ -750,6 +766,7 @@ func decodeFlyRuntimeMetadata(raw []byte) (flyRuntimeMetadata, error) {
 	if len(raw) == 0 {
 		return flyRuntimeMetadata{
 			AppName:    "",
+			AppID:      "",
 			AppURL:     "",
 			AppIP:      "",
 			MachineID:  "",
