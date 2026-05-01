@@ -52,14 +52,10 @@ const presidioMaxWorkers = 4
 // /analyze accepts a string or array; array returns ordered nested list. Bounds blast radius on retry-bisect.
 const presidioHTTPBatchSize = 50
 
-// presidioRetryBackoff is the base pause between retry-bisect attempts.
-// Backoff grows exponentially with split depth and is jittered to dampen
-// load amplification on transient 5xx storms.
-const presidioRetryBackoff = 500 * time.Millisecond
+// Keep jitter small: bisection is bounded, but sleeping still counts against the activity timeout.
+const presidioRetryBackoff = 100 * time.Millisecond
 
-// presidioRetryBackoffCap caps the per-attempt backoff so deep splits on a
-// poisoned batch still make progress within the activity timeout.
-const presidioRetryBackoffCap = 8 * time.Second
+const presidioRetryBackoffCap = 1 * time.Second
 
 // PresidioClient calls the Presidio Analyzer HTTP API.
 // Presidio is a trusted cluster-internal service, so the client uses an
