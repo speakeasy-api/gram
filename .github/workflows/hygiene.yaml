@@ -53,12 +53,33 @@ jobs:
           filters: .github/filters.yaml
           list-files: json
 
+      # Run a second paths-filter pass with `predicate-quantifier: every` so
+      # the `!` patterns below act as exclusions (every pattern must match,
+      # which inverts negations into proper exclusions). The default `some`
+      # quantifier on the step above would treat each `!` as its own positive
+      # predicate, matching every file outside the negated path.
+      - name: Detect server-internal changes
+        uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
+        id: filter-internal
+        with:
+          predicate-quantifier: every
+          list-files: json
+          # Excludes SQLc-generated output paths (per `server/database/sqlc.yaml`
+          # `out:` directives) since they legitimately change alongside
+          # schema.sql edits.
+          filters: |
+            server-internal:
+              - "server/internal/**"
+              - "!server/internal/database/**"
+              - "!server/internal/**/repo/**"
+              - "!server/internal/testenv/testrepo/**"
+
       - name: Validate migration PR does not mix server changes
-        if: ${{ github.event_name != 'merge_group' && steps.filter.outputs.database-changes == 'true' && steps.filter.outputs.server-internal == 'true' }}
+        if: ${{ github.event_name != 'merge_group' && steps.filter.outputs.database-changes == 'true' && steps.filter-internal.outputs.server-internal == 'true' }}
         shell: bash
         env:
           DB_FILES: ${{ steps.filter.outputs.database-changes_files }}
-          INTERNAL_FILES: ${{ steps.filter.outputs.server-internal_files }}
+          INTERNAL_FILES: ${{ steps.filter-internal.outputs.server-internal_files }}
         run: |
           set -e
           echo "❌ This PR mixes database migration changes with other server changes."
