@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/audit/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -13,6 +14,7 @@ import (
 
 const (
 	ActionTriggerInstanceCreate Action = "trigger-instance:create"
+	ActionTriggerInstanceUpdate Action = "trigger-instance:update"
 	ActionTriggerInstanceDelete Action = "trigger-instance:delete"
 	ActionTriggerInstancePause  Action = "trigger-instance:pause"
 	ActionTriggerInstanceResume Action = "trigger-instance:resume"
@@ -51,6 +53,62 @@ func LogTriggerInstanceCreate(ctx context.Context, dbtx repo.DBTX, event LogTrig
 
 		BeforeSnapshot: nil,
 		AfterSnapshot:  nil,
+		Metadata:       nil,
+	}
+
+	if _, err := repo.New(dbtx).InsertAuditLog(ctx, entry); err != nil {
+		return fmt.Errorf("log %s: %w", action, err)
+	}
+
+	return nil
+}
+
+type LogTriggerInstanceUpdateEvent struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+
+	Actor            urn.Principal
+	ActorDisplayName *string
+	ActorSlug        *string
+
+	TriggerInstanceURN            urn.TriggerInstance
+	Name                          string
+	DefinitionSlug                string
+	TriggerInstanceSnapshotBefore *types.TriggerInstance
+	TriggerInstanceSnapshotAfter  *types.TriggerInstance
+}
+
+func LogTriggerInstanceUpdate(ctx context.Context, dbtx repo.DBTX, event LogTriggerInstanceUpdateEvent) error {
+	action := ActionTriggerInstanceUpdate
+
+	beforeSnapshot, err := marshalAuditPayload(event.TriggerInstanceSnapshotBefore)
+	if err != nil {
+		return fmt.Errorf("marshal %s before snapshot: %w", action, err)
+	}
+
+	afterSnapshot, err := marshalAuditPayload(event.TriggerInstanceSnapshotAfter)
+	if err != nil {
+		return fmt.Errorf("marshal %s after snapshot: %w", action, err)
+	}
+
+	entry := repo.InsertAuditLogParams{
+		OrganizationID: event.OrganizationID,
+		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
+
+		ActorID:          event.Actor.ID,
+		ActorType:        string(event.Actor.Type),
+		ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName),
+		ActorSlug:        conv.PtrToPGTextEmpty(event.ActorSlug),
+
+		Action: string(action),
+
+		SubjectID:          event.TriggerInstanceURN.ID.String(),
+		SubjectType:        string(subjectTypeTriggerInstance),
+		SubjectDisplayName: conv.ToPGTextEmpty(event.Name),
+		SubjectSlug:        conv.ToPGTextEmpty(event.DefinitionSlug),
+
+		BeforeSnapshot: beforeSnapshot,
+		AfterSnapshot:  afterSnapshot,
 		Metadata:       nil,
 	}
 

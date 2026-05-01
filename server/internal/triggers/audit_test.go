@@ -82,6 +82,43 @@ func TestDeleteTriggerInstance_RecordsAuditEvent(t *testing.T) {
 	require.Equal(t, "slack", row.SubjectSlug)
 }
 
+func TestUpdateTriggerInstance_RecordsAuditEvent(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	created, err := ti.service.CreateTriggerInstance(ctx, newCreatePayload(ti.environmentID, "audit-update-before"))
+	require.NoError(t, err)
+
+	before, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionTriggerInstanceUpdate)
+	require.NoError(t, err)
+
+	updated, err := ti.service.UpdateTriggerInstance(ctx, &gen.UpdateTriggerInstancePayload{
+		ID:               created.ID,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		Name:             conv.PtrEmpty("audit-update-after"),
+		EnvironmentID:    nil,
+		TargetKind:       conv.PtrEmpty(bgtriggers.TargetKindNoop),
+		TargetRef:        conv.PtrEmpty("noop-ref-updated"),
+		TargetDisplay:    conv.PtrEmpty("Noop Updated"),
+		Config:           map[string]any{},
+		Status:           nil,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "audit-update-after", updated.Name)
+
+	after, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionTriggerInstanceUpdate)
+	require.NoError(t, err)
+	require.Equal(t, before+1, after)
+
+	row, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionTriggerInstanceUpdate)
+	require.NoError(t, err)
+	require.Equal(t, "trigger_instance", row.SubjectType)
+	require.Equal(t, "audit-update-after", row.SubjectDisplay)
+	require.Equal(t, "slack", row.SubjectSlug)
+}
+
 func TestPauseTriggerInstance_RecordsAuditEvent(t *testing.T) {
 	t.Parallel()
 

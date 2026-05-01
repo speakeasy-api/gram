@@ -8,7 +8,6 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -30,6 +29,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
+	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	triggerrepo "github.com/speakeasy-api/gram/server/internal/triggers/repo"
@@ -217,6 +217,11 @@ func (s *Service) UpdateTriggerInstance(ctx context.Context, payload *gen.Update
 		configMap = payload.Config
 	}
 
+	beforeView, err := buildTriggerView(existing, s.app.WebhookURL(existing))
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "build trigger instance view").Log(ctx, s.logger)
+	}
+
 	item, err := s.app.Update(ctx, bgtriggers.UpdateParams{
 		ID:             triggerID,
 		ProjectID:      *authCtx.ProjectID,
@@ -228,6 +233,23 @@ func (s *Service) UpdateTriggerInstance(ctx context.Context, payload *gen.Update
 		TargetDisplay:  valueOrDefault(payload.TargetDisplay, existing.TargetDisplay),
 		Config:         configMap,
 		Status:         valueOrDefault(payload.Status, existing.Status),
+	}, func(ctx context.Context, dbtx pgx.Tx, instance triggerrepo.TriggerInstance) error {
+		afterView, err := buildTriggerView(instance, s.app.WebhookURL(instance))
+		if err != nil {
+			return fmt.Errorf("build trigger instance after-snapshot: %w", err)
+		}
+		return audit.LogTriggerInstanceUpdate(ctx, dbtx, audit.LogTriggerInstanceUpdateEvent{
+			OrganizationID:                authCtx.ActiveOrganizationID,
+			ProjectID:                     *authCtx.ProjectID,
+			Actor:                         urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+			ActorDisplayName:              authCtx.Email,
+			ActorSlug:                     nil,
+			TriggerInstanceURN:            urn.NewTriggerInstance(instance.ID),
+			Name:                          instance.Name,
+			DefinitionSlug:                instance.DefinitionSlug,
+			TriggerInstanceSnapshotBefore: beforeView,
+			TriggerInstanceSnapshotAfter:  afterView,
+		})
 	})
 	if err != nil {
 		return nil, toTriggerError(ctx, s.logger, err, "update trigger instance")
@@ -396,26 +418,11 @@ func configJSONToMap(raw []byte) (map[string]any, error) {
 }
 
 func buildTriggerView(instance triggerrepo.TriggerInstance, webhookURL *string) (*types.TriggerInstance, error) {
-	config, err := configJSONToMap(instance.ConfigJson)
+	view, err := mv.BuildTriggerInstanceView(instance, webhookURL)
 	if err != nil {
-		return nil, fmt.Errorf("decode trigger config: %w", err)
+		return nil, fmt.Errorf("build trigger instance view: %w", err)
 	}
-
-	return &types.TriggerInstance{
-		ID:             instance.ID.String(),
-		ProjectID:      instance.ProjectID.String(),
-		DefinitionSlug: instance.DefinitionSlug,
-		Name:           instance.Name,
-		EnvironmentID:  conv.Ternary(instance.EnvironmentID.Valid, conv.PtrEmpty(instance.EnvironmentID.UUID.String()), nil),
-		TargetKind:     instance.TargetKind,
-		TargetRef:      instance.TargetRef,
-		TargetDisplay:  instance.TargetDisplay,
-		Config:         config,
-		Status:         instance.Status,
-		WebhookURL:     webhookURL,
-		CreatedAt:      instance.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:      instance.UpdatedAt.Time.Format(time.RFC3339),
-	}, nil
+	return view, nil
 }
 
 func buildDefinitionView(definition bgtriggers.Definition) *types.TriggerDefinition {

@@ -10,9 +10,11 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -20,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/platformtools/core"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	triggerrepo "github.com/speakeasy-api/gram/server/internal/triggers/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 const (
@@ -394,6 +397,8 @@ func (t *ConfigureTrigger) upsertTrigger(
 	status := normalizeStatus(params.Status)
 	action := "created"
 
+	actorPrincipal := urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)
+
 	var item triggerrepo.TriggerInstance
 	if params.TriggerID == nil || strings.TrimSpace(*params.TriggerID) == "" {
 		item, err = t.app.Create(ctx, bgtriggers.CreateParams{
@@ -407,6 +412,17 @@ func (t *ConfigureTrigger) upsertTrigger(
 			TargetDisplay:  strings.TrimSpace(params.TargetDisplay),
 			Config:         params.Config,
 			Status:         status,
+		}, func(ctx context.Context, dbtx pgx.Tx, instance triggerrepo.TriggerInstance) error {
+			return audit.LogTriggerInstanceCreate(ctx, dbtx, audit.LogTriggerInstanceCreateEvent{
+				OrganizationID:     authCtx.ActiveOrganizationID,
+				ProjectID:          *authCtx.ProjectID,
+				Actor:              actorPrincipal,
+				ActorDisplayName:   authCtx.Email,
+				ActorSlug:          nil,
+				TriggerInstanceURN: urn.NewTriggerInstance(instance.ID),
+				Name:               instance.Name,
+				DefinitionSlug:     instance.DefinitionSlug,
+			})
 		})
 		if err != nil {
 			return nil, fmt.Errorf("create trigger instance: %w", err)
@@ -426,6 +442,11 @@ func (t *ConfigureTrigger) upsertTrigger(
 			return nil, fmt.Errorf("trigger %s is %q, expected %q", existing.ID.String(), existing.DefinitionSlug, params.DefinitionSlug)
 		}
 
+		beforeView, err := buildTriggerInstanceSnapshot(existing, t.app.WebhookURL(existing))
+		if err != nil {
+			return nil, fmt.Errorf("build trigger instance before-snapshot: %w", err)
+		}
+
 		item, err = t.app.Update(ctx, bgtriggers.UpdateParams{
 			ID:             triggerID,
 			ProjectID:      *authCtx.ProjectID,
@@ -437,6 +458,23 @@ func (t *ConfigureTrigger) upsertTrigger(
 			TargetDisplay:  strings.TrimSpace(params.TargetDisplay),
 			Config:         params.Config,
 			Status:         status,
+		}, func(ctx context.Context, dbtx pgx.Tx, instance triggerrepo.TriggerInstance) error {
+			afterView, err := buildTriggerInstanceSnapshot(instance, t.app.WebhookURL(instance))
+			if err != nil {
+				return fmt.Errorf("build trigger instance after-snapshot: %w", err)
+			}
+			return audit.LogTriggerInstanceUpdate(ctx, dbtx, audit.LogTriggerInstanceUpdateEvent{
+				OrganizationID:                authCtx.ActiveOrganizationID,
+				ProjectID:                     *authCtx.ProjectID,
+				Actor:                         actorPrincipal,
+				ActorDisplayName:              authCtx.Email,
+				ActorSlug:                     nil,
+				TriggerInstanceURN:            urn.NewTriggerInstance(instance.ID),
+				Name:                          instance.Name,
+				DefinitionSlug:                instance.DefinitionSlug,
+				TriggerInstanceSnapshotBefore: beforeView,
+				TriggerInstanceSnapshotAfter:  afterView,
+			})
 		})
 		if err != nil {
 			return nil, fmt.Errorf("update trigger instance: %w", err)
@@ -499,6 +537,34 @@ func buildTriggerToolView(
 		WebhookURL:      webhookURL,
 		CreatedAt:       item.CreatedAt.Time.UTC().Format(time.RFC3339),
 		UpdatedAt:       item.UpdatedAt.Time.UTC().Format(time.RFC3339),
+	}, nil
+}
+
+func buildTriggerInstanceSnapshot(item triggerrepo.TriggerInstance, webhookURL *string) (*types.TriggerInstance, error) {
+	config := map[string]any{}
+	if len(item.ConfigJson) > 0 {
+		if err := json.Unmarshal(item.ConfigJson, &config); err != nil {
+			return nil, fmt.Errorf("decode trigger config: %w", err)
+		}
+		if config == nil {
+			config = map[string]any{}
+		}
+	}
+
+	return &types.TriggerInstance{
+		ID:             item.ID.String(),
+		ProjectID:      item.ProjectID.String(),
+		DefinitionSlug: item.DefinitionSlug,
+		Name:           item.Name,
+		EnvironmentID:  conv.Ternary(item.EnvironmentID.Valid, conv.PtrEmpty(item.EnvironmentID.UUID.String()), nil),
+		TargetKind:     item.TargetKind,
+		TargetRef:      item.TargetRef,
+		TargetDisplay:  item.TargetDisplay,
+		Config:         config,
+		Status:         item.Status,
+		WebhookURL:     webhookURL,
+		CreatedAt:      item.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:      item.UpdatedAt.Time.Format(time.RFC3339),
 	}, nil
 }
 

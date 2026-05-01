@@ -272,7 +272,7 @@ func (a *App) Create(ctx context.Context, params CreateParams, hooks ...Instance
 	return item, nil
 }
 
-func (a *App) Update(ctx context.Context, params UpdateParams) (triggerrepo.TriggerInstance, error) {
+func (a *App) Update(ctx context.Context, params UpdateParams, hooks ...InstanceDBHook) (triggerrepo.TriggerInstance, error) {
 	if err := ValidateTargetKind(params.TargetKind); err != nil {
 		return triggerrepo.TriggerInstance{}, fmt.Errorf("%w: %w", ErrBadRequest, err)
 	}
@@ -298,7 +298,13 @@ func (a *App) Update(ctx context.Context, params UpdateParams) (triggerrepo.Trig
 		return triggerrepo.TriggerInstance{}, fmt.Errorf("marshal trigger config: %w", err)
 	}
 
-	item, err := a.repo.UpdateTriggerInstance(ctx, triggerrepo.UpdateTriggerInstanceParams{
+	tx, err := a.db.Begin(ctx)
+	if err != nil {
+		return triggerrepo.TriggerInstance{}, fmt.Errorf("begin trigger update transaction: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+
+	item, err := triggerrepo.New(tx).UpdateTriggerInstance(ctx, triggerrepo.UpdateTriggerInstanceParams{
 		Name:                conv.ToPGText(params.Name),
 		UpdateEnvironmentID: true,
 		EnvironmentID:       params.EnvironmentID,
@@ -312,6 +318,16 @@ func (a *App) Update(ctx context.Context, params UpdateParams) (triggerrepo.Trig
 	})
 	if err != nil {
 		return triggerrepo.TriggerInstance{}, fmt.Errorf("update trigger instance: %w", err)
+	}
+
+	for _, hook := range hooks {
+		if err := hook(ctx, tx, item); err != nil {
+			return triggerrepo.TriggerInstance{}, fmt.Errorf("trigger update hook: %w", err)
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return triggerrepo.TriggerInstance{}, fmt.Errorf("commit trigger update transaction: %w", err)
 	}
 
 	if err := a.reconcileSchedule(ctx, item, definition, config); err != nil {
