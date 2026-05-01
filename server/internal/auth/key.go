@@ -152,11 +152,6 @@ func (k *ByKey) KeyBasedAuth(ctx context.Context, key string, requiredScopes []s
 		projectID = &apiKey.ProjectID.UUID
 	}
 
-	var apiKeyToolsetID *uuid.UUID
-	if apiKey.ToolsetID.Valid {
-		apiKeyToolsetID = &apiKey.ToolsetID.UUID
-	}
-
 	ctx = contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{
 		ActiveOrganizationID:  apiKey.OrganizationID,
 		HasActiveSubscription: org.HasActiveSubscription,
@@ -164,7 +159,7 @@ func (k *ByKey) KeyBasedAuth(ctx context.Context, key string, requiredScopes []s
 		UserID:                apiKey.CreatedByUserID,
 		Email:                 &apiKey.Email,
 		APIKeyID:              apiKey.ID.String(),
-		APIKeyToolsetID:       apiKeyToolsetID,
+		APIKeySystemManaged:   apiKey.SystemManaged,
 		ProjectID:             projectID,
 		OrganizationSlug:      org.Slug,
 		AccountType:           org.GramAccountType,

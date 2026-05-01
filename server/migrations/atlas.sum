@@ -1,4 +1,4 @@
-h1:o/TQxspxktfXhIEWItxjICz9bmICLnex5ZjjkVgwgG0=
+h1:+tXNN0jFH+heqYopGcVl0Tyc9ddgaerQhUWn8Yh8LyY=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -151,4 +151,4 @@ h1:o/TQxspxktfXhIEWItxjICz9bmICLnex5ZjjkVgwgG0=
 20260430111449_add-workos-roles-and-sync-tables.sql h1:tIK7+g0gEt27jixmoso4bHI7GYAtxUzfL8l24k2Os8g=
 20260430201533_risk-policies-action-and-auto-name.sql h1:3tvGuQlzBnUX2gvFtad56YpeX1wpE9asgXh74ywEIhE=
 20260430205315_risk-policies-user-message.sql h1:b3myELZy6W5m08Wz7aqPV6pInYP5SB0KKj5uQ5VYBoQ=
-20260501001404_plugin-scoped-keys.sql h1:BXRH0HSKnvnjoiVyI9gWsNTb/K7PNSY8pnEQfxzHy3U=
+20260501182626_plugin-scoped-keys.sql h1:s+fZ+Ok0P1z2v80AW8G1YA3uIP32vfTzF518rt3sA6Q=

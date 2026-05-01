@@ -7,8 +7,6 @@ INSERT INTO api_keys (
   , key_prefix
   , key_hash
   , scopes
-  , toolset_id
-  , plugin_id
   , system_managed
 ) VALUES (
     @organization_id
@@ -18,8 +16,6 @@ INSERT INTO api_keys (
   , @key_prefix
   , @key_hash
   , @scopes::text[]
-  , @toolset_id
-  , @plugin_id
   , @system_managed
 )
 RETURNING *;

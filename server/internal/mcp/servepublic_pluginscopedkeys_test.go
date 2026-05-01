@@ -1,6 +1,8 @@
 // servepublic_pluginscopedkeys_test.go verifies that API keys bound to a
 // specific toolset (rfc-plugin-scoped-keys.md) are accepted for that
-// toolset's MCP endpoint and rejected for any other.
+// toolset's MCP endpoint and rejected for any other. Scoping is enforced
+// via an mcp:connect grant on the api_key principal — the same RBAC
+// engine call that gates session-authenticated requests.
 package mcp_test
 
 import (
@@ -14,12 +16,16 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-// createPluginScopedAPIKey inserts a system-managed API key bound to a
-// single toolset and returns the plaintext bearer token.
+// createPluginScopedAPIKey inserts a system-managed API key plus an
+// mcp:connect principal_grants row binding it to a single toolset.
+// Returns the plaintext bearer token. Mirrors what the plugin publish
+// path does (plugins/impl.go: persistPluginAPIKeys).
 func createPluginScopedAPIKey(t *testing.T, ctx context.Context, ti *testInstance, toolsetID uuid.UUID) string {
 	t.Helper()
 
@@ -35,12 +41,13 @@ func createPluginScopedAPIKey(t *testing.T, ctx context.Context, ti *testInstanc
 	hash := sha256.Sum256([]byte(fullKey))
 	keyHash := hex.EncodeToString(hash[:])
 
-	_, err = ti.conn.Exec(ctx, `
+	var keyID uuid.UUID
+	err = ti.conn.QueryRow(ctx, `
 		INSERT INTO api_keys (
 			organization_id, project_id, created_by_user_id,
-			name, key_prefix, key_hash, scopes,
-			toolset_id, system_managed
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true)
+			name, key_prefix, key_hash, scopes, system_managed
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, true)
+		RETURNING id
 	`,
 		authCtx.ActiveOrganizationID,
 		*authCtx.ProjectID,
@@ -49,7 +56,20 @@ func createPluginScopedAPIKey(t *testing.T, ctx context.Context, ti *testInstanc
 		"gram_local_"+token[:5],
 		keyHash,
 		[]string{"consumer"},
-		toolsetID,
+	).Scan(&keyID)
+	require.NoError(t, err)
+
+	selector := authz.NewSelector(authz.ScopeMCPConnect, toolsetID.String())
+	selectorJSON, err := selector.MarshalJSON()
+	require.NoError(t, err)
+	_, err = ti.conn.Exec(ctx, `
+		INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
+		VALUES ($1, $2, $3, $4::jsonb)
+	`,
+		authCtx.ActiveOrganizationID,
+		urn.NewPrincipal(urn.PrincipalTypeAPIKey, keyID.String()).String(),
+		string(authz.ScopeMCPConnect),
+		selectorJSON,
 	)
 	require.NoError(t, err)
 

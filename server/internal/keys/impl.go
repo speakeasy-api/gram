@@ -143,8 +143,6 @@ func (s *Service) CreateKey(ctx context.Context, payload *gen.CreateKeyPayload) 
 		Scopes:          finalScopes,
 		CreatedByUserID: authCtx.UserID,
 		ProjectID:       projectID,
-		ToolsetID:       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		PluginID:        uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		SystemManaged:   false,
 	})
 	if err != nil {

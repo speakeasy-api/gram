@@ -28,6 +28,7 @@ import (
 
 	srv "github.com/speakeasy-api/gram/server/gen/http/plugins/server"
 	gen "github.com/speakeasy-api/gram/server/gen/plugins"
+	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
@@ -998,8 +999,6 @@ func (s *Service) persistDownloadAPIKey(ctx context.Context, ac *contextvalues.A
 		Scopes:          scopes,
 		CreatedByUserID: ac.UserID,
 		ProjectID:       projectID,
-		ToolsetID:       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		PluginID:        uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		SystemManaged:   true,
 	})
 	if err != nil {
@@ -1342,6 +1341,7 @@ func (s *Service) persistPluginAPIKeys(
 
 	keysQ := keysrepo.New(tx)
 	pluginsQ := s.repo.WithTx(tx)
+	accessQ := accessrepo.New(tx)
 
 	for _, candidate := range candidates {
 		scopes := []string{candidate.scope.String()}
@@ -1353,16 +1353,19 @@ func (s *Service) persistPluginAPIKeys(
 			Scopes:          scopes,
 			CreatedByUserID: ac.UserID,
 			ProjectID:       projectID,
-			ToolsetID:       candidate.toolsetID,
-			PluginID:        candidate.pluginID,
 			SystemManaged:   true,
 		})
 		if err != nil {
 			return fmt.Errorf("create api key %s: %w", candidate.keyName, err)
 		}
 
-		// Link the plugin_server row to its newly-minted key. Only set for
-		// per-server scoped candidates; org-wide keys (hooks) skip this.
+		// For per-server scoped candidates, write a principal_grants row
+		// binding the api_key principal to this toolset via mcp:connect.
+		// The MCP entrypoint's existing s.authz.Require(ScopeMCPConnect,
+		// toolset.ID) check (mcp/impl.go) is what enforces it at runtime.
+		// Org-wide candidates (e.g. the hooks key) get no grant rows and
+		// fall under the "api_key with zero grants → bypass RBAC" policy
+		// in authz.Engine.ShouldEnforce.
 		if candidate.pluginServerID.Valid {
 			if err := pluginsQ.SetPluginServerAPIKey(ctx, repo.SetPluginServerAPIKeyParams{
 				ID:       candidate.pluginServerID.UUID,
@@ -1370,6 +1373,20 @@ func (s *Service) persistPluginAPIKeys(
 				ApiKeyID: uuid.NullUUID{UUID: createdKey.ID, Valid: true},
 			}); err != nil {
 				return fmt.Errorf("link plugin_server %s to api_key %s: %w", candidate.pluginServerID.UUID, createdKey.ID, err)
+			}
+
+			selector := authz.NewSelector(authz.ScopeMCPConnect, candidate.toolsetID.UUID.String())
+			selectorJSON, err := selector.MarshalJSON()
+			if err != nil {
+				return fmt.Errorf("marshal mcp:connect selector for api_key %s: %w", createdKey.ID, err)
+			}
+			if _, err := accessQ.UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{
+				OrganizationID: ac.ActiveOrganizationID,
+				PrincipalUrn:   urn.NewPrincipal(urn.PrincipalTypeAPIKey, createdKey.ID.String()),
+				Scope:          string(authz.ScopeMCPConnect),
+				Selectors:      selectorJSON,
+			}); err != nil {
+				return fmt.Errorf("write mcp:connect grant for api_key %s: %w", createdKey.ID, err)
 			}
 		}
 

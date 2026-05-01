@@ -21,8 +21,6 @@ INSERT INTO api_keys (
   , key_prefix
   , key_hash
   , scopes
-  , toolset_id
-  , plugin_id
   , system_managed
 ) VALUES (
     $1
@@ -33,10 +31,8 @@ INSERT INTO api_keys (
   , $6
   , $7::text[]
   , $8
-  , $9
-  , $10
 )
-RETURNING id, organization_id, project_id, created_by_user_id, name, key_prefix, key_hash, scopes, toolset_id, plugin_id, system_managed, created_at, updated_at, deleted_at, deleted, last_accessed_at
+RETURNING id, organization_id, project_id, created_by_user_id, name, key_prefix, key_hash, scopes, system_managed, created_at, updated_at, deleted_at, deleted, last_accessed_at
 `
 
 type CreateAPIKeyParams struct {
@@ -47,8 +43,6 @@ type CreateAPIKeyParams struct {
 	KeyPrefix       string
 	KeyHash         string
 	Scopes          []string
-	ToolsetID       uuid.NullUUID
-	PluginID        uuid.NullUUID
 	SystemManaged   bool
 }
 
@@ -61,8 +55,6 @@ func (q *Queries) CreateAPIKey(ctx context.Context, arg CreateAPIKeyParams) (Api
 		arg.KeyPrefix,
 		arg.KeyHash,
 		arg.Scopes,
-		arg.ToolsetID,
-		arg.PluginID,
 		arg.SystemManaged,
 	)
 	var i ApiKey
@@ -75,8 +67,6 @@ func (q *Queries) CreateAPIKey(ctx context.Context, arg CreateAPIKeyParams) (Api
 		&i.KeyPrefix,
 		&i.KeyHash,
 		&i.Scopes,
-		&i.ToolsetID,
-		&i.PluginID,
 		&i.SystemManaged,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -123,7 +113,7 @@ func (q *Queries) DeleteAPIKey(ctx context.Context, arg DeleteAPIKeyParams) (Del
 }
 
 const getAPIKeyByKeyHash = `-- name: GetAPIKeyByKeyHash :one
-SELECT api_keys.id, api_keys.organization_id, api_keys.project_id, api_keys.created_by_user_id, api_keys.name, api_keys.key_prefix, api_keys.key_hash, api_keys.scopes, api_keys.toolset_id, api_keys.plugin_id, api_keys.system_managed, api_keys.created_at, api_keys.updated_at, api_keys.deleted_at, api_keys.deleted, api_keys.last_accessed_at, users.email
+SELECT api_keys.id, api_keys.organization_id, api_keys.project_id, api_keys.created_by_user_id, api_keys.name, api_keys.key_prefix, api_keys.key_hash, api_keys.scopes, api_keys.system_managed, api_keys.created_at, api_keys.updated_at, api_keys.deleted_at, api_keys.deleted, api_keys.last_accessed_at, users.email
 FROM api_keys
 JOIN users ON users.id = api_keys.created_by_user_id
 WHERE key_hash = $1
@@ -139,8 +129,6 @@ type GetAPIKeyByKeyHashRow struct {
 	KeyPrefix       string
 	KeyHash         string
 	Scopes          []string
-	ToolsetID       uuid.NullUUID
-	PluginID        uuid.NullUUID
 	SystemManaged   bool
 	CreatedAt       pgtype.Timestamptz
 	UpdatedAt       pgtype.Timestamptz
@@ -162,8 +150,6 @@ func (q *Queries) GetAPIKeyByKeyHash(ctx context.Context, keyHash string) (GetAP
 		&i.KeyPrefix,
 		&i.KeyHash,
 		&i.Scopes,
-		&i.ToolsetID,
-		&i.PluginID,
 		&i.SystemManaged,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -176,7 +162,7 @@ func (q *Queries) GetAPIKeyByKeyHash(ctx context.Context, keyHash string) (GetAP
 }
 
 const listAPIKeysByOrganization = `-- name: ListAPIKeysByOrganization :many
-SELECT id, organization_id, project_id, created_by_user_id, name, key_prefix, key_hash, scopes, toolset_id, plugin_id, system_managed, created_at, updated_at, deleted_at, deleted, last_accessed_at
+SELECT id, organization_id, project_id, created_by_user_id, name, key_prefix, key_hash, scopes, system_managed, created_at, updated_at, deleted_at, deleted, last_accessed_at
 FROM api_keys
 WHERE organization_id = $1
   AND deleted IS FALSE
@@ -206,8 +192,6 @@ func (q *Queries) ListAPIKeysByOrganization(ctx context.Context, organizationID 
 			&i.KeyPrefix,
 			&i.KeyHash,
 			&i.Scopes,
-			&i.ToolsetID,
-			&i.PluginID,
 			&i.SystemManaged,
 			&i.CreatedAt,
 			&i.UpdatedAt,

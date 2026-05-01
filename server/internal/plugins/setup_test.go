@@ -216,9 +216,8 @@ func allOrgKeysIncludingSystemManaged(ctx context.Context, t *testing.T, conn *p
 
 	rows, err := conn.Query(ctx, `
 		SELECT id, organization_id, project_id, created_by_user_id, name,
-		       key_prefix, key_hash, scopes, toolset_id, plugin_id,
-		       system_managed, created_at, updated_at, deleted_at, deleted,
-		       last_accessed_at
+		       key_prefix, key_hash, scopes, system_managed,
+		       created_at, updated_at, deleted_at, deleted, last_accessed_at
 		FROM api_keys
 		WHERE organization_id = $1 AND deleted IS FALSE
 		ORDER BY created_at DESC
@@ -233,9 +232,8 @@ func allOrgKeysIncludingSystemManaged(ctx context.Context, t *testing.T, conn *p
 		var k keysrepo.ApiKey
 		if err := rows.Scan(
 			&k.ID, &k.OrganizationID, &k.ProjectID, &k.CreatedByUserID, &k.Name,
-			&k.KeyPrefix, &k.KeyHash, &k.Scopes, &k.ToolsetID, &k.PluginID,
-			&k.SystemManaged, &k.CreatedAt, &k.UpdatedAt, &k.DeletedAt, &k.Deleted,
-			&k.LastAccessedAt,
+			&k.KeyPrefix, &k.KeyHash, &k.Scopes, &k.SystemManaged,
+			&k.CreatedAt, &k.UpdatedAt, &k.DeletedAt, &k.Deleted, &k.LastAccessedAt,
 		); err != nil {
 			return nil, fmt.Errorf("scan api_keys: %w", err)
 		}

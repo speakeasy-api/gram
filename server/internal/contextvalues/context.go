@@ -13,11 +13,11 @@ type AuthContext struct {
 	UserID               string
 	ExternalUserID       string // Customer-provided user identifier (e.g., from chat session JWTs)
 	APIKeyID             string
-	// APIKeyToolsetID, when set, restricts the API key's authority to MCP
-	// requests targeting this single toolset. Populated for plugin-scoped
-	// keys (rfc-plugin-scoped-keys.md); nil for org-wide keys and non-key
-	// auth (sessions, OAuth). Enforced at the MCP entrypoint.
-	APIKeyToolsetID       *uuid.UUID
+	// APIKeySystemManaged mirrors api_keys.system_managed for the auth'd
+	// key. The RBAC engine uses it as a cheap pre-check to skip api-key
+	// grant loading for keys that can't possibly carry per-key grants
+	// (i.e. user-managed keys). False for non-key auth.
+	APIKeySystemManaged   bool
 	SessionID             *string
 	ProjectID             *uuid.UUID
 	OrganizationSlug      string

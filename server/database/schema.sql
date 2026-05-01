@@ -255,17 +255,11 @@ CREATE TABLE IF NOT EXISTS api_keys (
   key_hash TEXT NOT NULL,
   scopes TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
 
-  -- When non-null, restricts the key to MCP requests targeting this toolset.
-  -- See rfc-plugin-scoped-keys.md. No FK: toolsets is declared later in the
-  -- file and the soft-delete pattern means a hard cascade is not desired.
-  -- Application code is the sole writer.
-  toolset_id uuid,
-  -- Back-reference to the plugin that minted this key, used for
-  -- revoke-on-republish lookups. NULL for non-plugin keys. No FK for the same
-  -- reasons as toolset_id.
-  plugin_id uuid,
   -- Marks keys minted by Gram itself (e.g. plugin publishing) so they are
   -- hidden from the user-managed keys UI and excluded from user-key quotas.
+  -- Per-key authorization scoping (e.g. binding a plugin-published key to
+  -- a single MCP server) lives in principal_grants on the api_key
+  -- principal — see rfc-plugin-scoped-keys.md.
   system_managed BOOLEAN NOT NULL DEFAULT FALSE,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -283,14 +277,6 @@ CREATE TABLE IF NOT EXISTS api_keys (
 CREATE UNIQUE INDEX IF NOT EXISTS api_keys_organization_id_name_key
 ON api_keys (organization_id, name)
 WHERE deleted IS FALSE;
-
-CREATE INDEX IF NOT EXISTS api_keys_plugin_id_idx
-ON api_keys (plugin_id)
-WHERE plugin_id IS NOT NULL AND deleted IS FALSE;
-
-CREATE INDEX IF NOT EXISTS api_keys_toolset_id_idx
-ON api_keys (toolset_id)
-WHERE toolset_id IS NOT NULL AND deleted IS FALSE;
 
 CREATE TABLE IF NOT EXISTS deployments_openapiv3_assets (
   id uuid NOT NULL DEFAULT generate_uuidv7(),

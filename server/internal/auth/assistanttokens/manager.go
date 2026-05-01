@@ -199,7 +199,7 @@ func (m *Manager) Authorize(ctx context.Context, tokenString string) (context.Co
 		UserID:                owner.ID,
 		ExternalUserID:        "",
 		APIKeyID:              "",
-		APIKeyToolsetID:       nil,
+		APIKeySystemManaged:   false,
 		SessionID:             nil,
 		ProjectID:             &project.ID,
 		OrganizationSlug:      org.Slug,

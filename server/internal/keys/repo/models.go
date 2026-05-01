@@ -18,8 +18,6 @@ type ApiKey struct {
 	KeyPrefix       string
 	KeyHash         string
 	Scopes          []string
-	ToolsetID       uuid.NullUUID
-	PluginID        uuid.NullUUID
 	SystemManaged   bool
 	CreatedAt       pgtype.Timestamptz
 	UpdatedAt       pgtype.Timestamptz

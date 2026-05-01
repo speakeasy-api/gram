@@ -563,16 +563,39 @@ func TestPluginsService_PublishPlugins_CreatesAPIKeyWithCorrectScope(t *testing.
 	require.Contains(t, mcpKey.Scopes, "consumer")
 	require.True(t, strings.HasPrefix(mcpKey.KeyPrefix, "gram_local_"))
 	require.True(t, mcpKey.SystemManaged, "per-server plugin keys must be system_managed")
-	require.True(t, mcpKey.PluginID.Valid, "per-server plugin keys must back-reference a plugin")
-	require.True(t, mcpKey.ToolsetID.Valid, "per-server plugin keys must back-reference a toolset")
-	require.Equal(t, toolset.ID, mcpKey.ToolsetID.UUID, "key.toolset_id must equal the published server's toolset")
+
+	// Toolset binding lives in principal_grants on the api_key principal.
+	// Verify exactly one mcp:connect grant for this key, bound to the
+	// published toolset.
+	var grantSelectorJSON []byte
+	err = ti.conn.QueryRow(ctx, `
+		SELECT selectors FROM principal_grants
+		WHERE organization_id = $1 AND principal_urn = $2 AND scope = $3
+	`,
+		authCtx.ActiveOrganizationID,
+		"api_key:"+mcpKey.ID.String(),
+		"mcp:connect",
+	).Scan(&grantSelectorJSON)
+	require.NoError(t, err, "expected an mcp:connect grant for the per-server key's api_key principal")
+	require.JSONEq(t,
+		`{"resource_kind":"mcp","resource_id":"`+toolset.ID.String()+`"}`,
+		string(grantSelectorJSON),
+		"grant selector must bind this key to the published toolset",
+	)
 
 	require.NotNil(t, hooksKey, "expected a plugins-hooks-* API key")
 	require.Contains(t, hooksKey.Scopes, "hooks")
 	require.True(t, strings.HasPrefix(hooksKey.KeyPrefix, "gram_local_"))
 	require.True(t, hooksKey.SystemManaged, "hooks plugin keys must be system_managed")
-	require.False(t, hooksKey.PluginID.Valid, "hooks key is org-wide and must not back-reference a plugin")
-	require.False(t, hooksKey.ToolsetID.Valid, "hooks key is org-wide and must not back-reference a toolset")
+
+	// The hooks key is org-wide; no principal_grants rows expected.
+	var hooksGrantCount int
+	err = ti.conn.QueryRow(ctx, `
+		SELECT count(*) FROM principal_grants
+		WHERE principal_urn = $1
+	`, "api_key:"+hooksKey.ID.String()).Scan(&hooksGrantCount)
+	require.NoError(t, err)
+	require.Equal(t, 0, hooksGrantCount, "hooks key is org-wide; should not carry per-key grants")
 
 	// Verify the per-server MCP key is injected into the pushed MCP config.
 	mcpJSON := mock.lastPushedFiles["key-test/.mcp.json"]
@@ -699,18 +722,21 @@ func TestPluginsService_PublishPlugins_MixedPublicAndPrivateServers(t *testing.T
 	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
 	require.NoError(t, err)
 
-	// Exactly one plugin-scoped MCP key should have been minted: for the
-	// private server. The public server is skipped in the mint loop.
-	keys, err := allOrgKeysIncludingSystemManaged(ctx, t, ti.conn, authCtx.ActiveOrganizationID)
+	// Exactly one mcp:connect grant should have been written, bound to the
+	// private toolset. The public server is skipped in the mint loop, so
+	// no api_key principal exists for it and no grant either.
+	var grantCount int
+	var boundToolsetID uuid.UUID
+	err = ti.conn.QueryRow(ctx, `
+		SELECT count(*),
+		       coalesce(min(selectors->>'resource_id'), '`+uuid.Nil.String()+`')::uuid
+		FROM principal_grants
+		WHERE organization_id = $1 AND scope = 'mcp:connect' AND principal_type = 'api_key'
+	`, authCtx.ActiveOrganizationID).Scan(&grantCount, &boundToolsetID)
 	require.NoError(t, err)
-	var pluginScopedCount int
-	for _, k := range keys {
-		if k.PluginID.Valid && k.ToolsetID.Valid {
-			pluginScopedCount++
-			require.Equal(t, privateToolset.ID, k.ToolsetID.UUID, "the only minted plugin-scoped key must be bound to the private toolset")
-		}
-	}
-	require.Equal(t, 1, pluginScopedCount, "public server must not get a plugin-scoped key")
+	require.Equal(t, 1, grantCount, "public server must not get a plugin-scoped grant")
+	require.Equal(t, privateToolset.ID, boundToolsetID, "the only mcp:connect grant must bind to the private toolset")
+	_ = authCtx // referenced above; silences linters if shape changes
 
 	// Confirm the public server's plugin_servers row has no api_key_id link.
 	var publicLinkedKeyID uuid.NullUUID

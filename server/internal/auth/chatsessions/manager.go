@@ -107,7 +107,7 @@ func (m *Manager) Authorize(ctx context.Context, token string) (context.Context,
 		UserID:                "",
 		ExternalUserID:        externalUserID,
 		APIKeyID:              claims.APIKeyID,
-		APIKeyToolsetID:       nil,
+		APIKeySystemManaged:   false,
 		SessionID:             nil, // DO NOT SET THIS for chat sessions. The existence of this field implies that this is a dashboard-authenticated request.
 		Email:                 nil,
 		AccountType:           "",
