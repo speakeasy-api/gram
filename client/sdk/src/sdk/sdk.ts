@@ -24,6 +24,7 @@ import { McpEndpoints } from "./mcpendpoints.js";
 import { McpMetadata } from "./mcpmetadata.js";
 import { McpRegistries } from "./mcpregistries.js";
 import { McpServers } from "./mcpservers.js";
+import { Nlpolicies } from "./nlpolicies.js";
 import { Organizations } from "./organizations.js";
 import { Packages } from "./packages.js";
 import { Plugins } from "./plugins.js";
@@ -139,6 +140,11 @@ export class Gram extends ClientSDK {
   private _mcpServers?: McpServers;
   get mcpServers(): McpServers {
     return (this._mcpServers ??= new McpServers(this._options));
+  }
+
+  private _nlpolicies?: Nlpolicies;
+  get nlpolicies(): Nlpolicies {
+    return (this._nlpolicies ??= new Nlpolicies(this._options));
   }
 
   private _organizations?: Organizations;

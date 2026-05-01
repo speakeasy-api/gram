@@ -302,6 +302,21 @@ run();
 * [list](docs/sdks/mcpservers/README.md#list) - listMcpServers mcpServers
 * [update](docs/sdks/mcpservers/README.md#update) - updateMcpServer mcpServers
 
+### [Nlpolicies](docs/sdks/nlpolicies/README.md)
+
+* [clearSessionVerdict](docs/sdks/nlpolicies/README.md#clearsessionverdict) - clearSessionVerdict nlpolicies
+* [create](docs/sdks/nlpolicies/README.md#create) - createPolicy nlpolicies
+* [delete](docs/sdks/nlpolicies/README.md#delete) - deletePolicy nlpolicies
+* [get](docs/sdks/nlpolicies/README.md#get) - getPolicy nlpolicies
+* [getReplayRun](docs/sdks/nlpolicies/README.md#getreplayrun) - getReplayRun nlpolicies
+* [list](docs/sdks/nlpolicies/README.md#list) - listPolicies nlpolicies
+* [listDecisions](docs/sdks/nlpolicies/README.md#listdecisions) - listDecisions nlpolicies
+* [listReplayResults](docs/sdks/nlpolicies/README.md#listreplayresults) - listReplayResults nlpolicies
+* [listSessionVerdicts](docs/sdks/nlpolicies/README.md#listsessionverdicts) - listSessionVerdicts nlpolicies
+* [replay](docs/sdks/nlpolicies/README.md#replay) - replay nlpolicies
+* [setMode](docs/sdks/nlpolicies/README.md#setmode) - setMode nlpolicies
+* [update](docs/sdks/nlpolicies/README.md#update) - updatePolicy nlpolicies
+
 ### [Organizations](docs/sdks/organizations/README.md)
 
 * [getInviteByToken](docs/sdks/organizations/README.md#getinvitebytoken) - getInviteByToken organizations
@@ -576,6 +591,18 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`mcpServersGet`](docs/sdks/mcpservers/README.md#get) - getMcpServer mcpServers
 - [`mcpServersList`](docs/sdks/mcpservers/README.md#list) - listMcpServers mcpServers
 - [`mcpServersUpdate`](docs/sdks/mcpservers/README.md#update) - updateMcpServer mcpServers
+- [`nlpoliciesClearSessionVerdict`](docs/sdks/nlpolicies/README.md#clearsessionverdict) - clearSessionVerdict nlpolicies
+- [`nlpoliciesCreate`](docs/sdks/nlpolicies/README.md#create) - createPolicy nlpolicies
+- [`nlpoliciesDelete`](docs/sdks/nlpolicies/README.md#delete) - deletePolicy nlpolicies
+- [`nlpoliciesGet`](docs/sdks/nlpolicies/README.md#get) - getPolicy nlpolicies
+- [`nlpoliciesGetReplayRun`](docs/sdks/nlpolicies/README.md#getreplayrun) - getReplayRun nlpolicies
+- [`nlpoliciesList`](docs/sdks/nlpolicies/README.md#list) - listPolicies nlpolicies
+- [`nlpoliciesListDecisions`](docs/sdks/nlpolicies/README.md#listdecisions) - listDecisions nlpolicies
+- [`nlpoliciesListReplayResults`](docs/sdks/nlpolicies/README.md#listreplayresults) - listReplayResults nlpolicies
+- [`nlpoliciesListSessionVerdicts`](docs/sdks/nlpolicies/README.md#listsessionverdicts) - listSessionVerdicts nlpolicies
+- [`nlpoliciesReplay`](docs/sdks/nlpolicies/README.md#replay) - replay nlpolicies
+- [`nlpoliciesSetMode`](docs/sdks/nlpolicies/README.md#setmode) - setMode nlpolicies
+- [`nlpoliciesUpdate`](docs/sdks/nlpolicies/README.md#update) - updatePolicy nlpolicies
 - [`organizationsGetInviteByToken`](docs/sdks/organizations/README.md#getinvitebytoken) - getInviteByToken organizations
 - [`organizationsListInvites`](docs/sdks/organizations/README.md#listinvites) - listInvites organizations
 - [`organizationsListUsers`](docs/sdks/organizations/README.md#listusers) - listUsers organizations
@@ -831,6 +858,18 @@ To learn about this feature and how to get started, check
 - [`useMcpRegistriesGetServerDetails`](docs/sdks/mcpregistries/README.md#getserverdetails) - getServerDetails mcpRegistries
 - [`useMcpServers`](docs/sdks/mcpservers/README.md#list) - listMcpServers mcpServers
 - [`useMembers`](docs/sdks/access/README.md#listmembers) - listMembers access
+- [`useNlPoliciesClearSessionVerdictMutation`](docs/sdks/nlpolicies/README.md#clearsessionverdict) - clearSessionVerdict nlpolicies
+- [`useNlPoliciesCreateMutation`](docs/sdks/nlpolicies/README.md#create) - createPolicy nlpolicies
+- [`useNlPoliciesDeleteMutation`](docs/sdks/nlpolicies/README.md#delete) - deletePolicy nlpolicies
+- [`useNlPoliciesGet`](docs/sdks/nlpolicies/README.md#get) - getPolicy nlpolicies
+- [`useNlPoliciesGetReplayRun`](docs/sdks/nlpolicies/README.md#getreplayrun) - getReplayRun nlpolicies
+- [`useNlPoliciesList`](docs/sdks/nlpolicies/README.md#list) - listPolicies nlpolicies
+- [`useNlPoliciesListDecisions`](docs/sdks/nlpolicies/README.md#listdecisions) - listDecisions nlpolicies
+- [`useNlPoliciesListReplayResults`](docs/sdks/nlpolicies/README.md#listreplayresults) - listReplayResults nlpolicies
+- [`useNlPoliciesListSessionVerdicts`](docs/sdks/nlpolicies/README.md#listsessionverdicts) - listSessionVerdicts nlpolicies
+- [`useNlPoliciesReplayMutation`](docs/sdks/nlpolicies/README.md#replay) - replay nlpolicies
+- [`useNlPoliciesSetModeMutation`](docs/sdks/nlpolicies/README.md#setmode) - setMode nlpolicies
+- [`useNlPoliciesUpdateMutation`](docs/sdks/nlpolicies/README.md#update) - updatePolicy nlpolicies
 - [`usePauseTriggerMutation`](docs/sdks/triggers/README.md#pause) - pauseTriggerInstance triggers
 - [`usePlugin`](docs/sdks/plugins/README.md#getplugin) - getPlugin plugins
 - [`usePlugins`](docs/sdks/plugins/README.md#listplugins) - listPlugins plugins

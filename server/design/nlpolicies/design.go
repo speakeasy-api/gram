@@ -1,0 +1,389 @@
+package nlpolicies
+
+import (
+	"github.com/speakeasy-api/gram/server/design/security"
+	"github.com/speakeasy-api/gram/server/design/shared"
+	. "goa.design/goa/v3/dsl"
+)
+
+var _ = Service("nlpolicies", func() {
+	Description("Manage natural-language session policies and view their decisions, quarantines, and replay runs.")
+	Meta("openapi:extension:x-speakeasy-group", "nlpolicies")
+
+	Security(security.ByKey, security.ProjectSlug, func() { Scope("producer") })
+	Security(security.Session, security.ProjectSlug)
+	shared.DeclareErrorResponses()
+
+	Method("createPolicy", func() {
+		Description("Create a new natural-language policy.")
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("name", String)
+			Attribute("description", String)
+			Attribute("nl_prompt", String)
+			Attribute("scope_per_call", Boolean)
+			Attribute("scope_session", Boolean)
+			Attribute("fail_mode", String, "fail_open | fail_closed (default fail_open)")
+			Attribute("static_rules", String, "JSON-encoded rules array (default \"[]\")")
+			Required("name", "nl_prompt")
+		})
+		Result(shared.NLPolicy)
+		HTTP(func() {
+			POST("/rpc/nlpolicies.create")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "createNLPolicy")
+		Meta("openapi:extension:x-speakeasy-group", "nlpolicies")
+		Meta("openapi:extension:x-speakeasy-name-override", "create")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "NLPoliciesCreate", "type": "mutation"}`)
+	})
+
+	Method("listPolicies", func() {
+		Description("List all NL policies for the current project (or org-wide).")
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+		Result(func() {
+			Attribute("policies", ArrayOf(shared.NLPolicy))
+			Required("policies")
+		})
+		HTTP(func() {
+			GET("/rpc/nlpolicies.list")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "listNLPolicies")
+		Meta("openapi:extension:x-speakeasy-group", "nlpolicies")
+		Meta("openapi:extension:x-speakeasy-name-override", "list")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "NLPoliciesList", "type": "query"}`)
+	})
+
+	Method("getPolicy", func() {
+		Description("Get a natural-language policy by ID.")
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("policy_id", String, "The policy ID.", func() {
+				Format(FormatUUID)
+			})
+			Required("policy_id")
+		})
+		Result(shared.NLPolicy)
+		HTTP(func() {
+			GET("/rpc/nlpolicies.get")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Param("policy_id")
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "getNLPolicy")
+		Meta("openapi:extension:x-speakeasy-group", "nlpolicies")
+		Meta("openapi:extension:x-speakeasy-name-override", "get")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "NLPoliciesGet", "type": "query"}`)
+	})
+
+	Method("updatePolicy", func() {
+		Description("Update a natural-language policy.")
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("policy_id", String, "The policy ID.", func() {
+				Format(FormatUUID)
+			})
+			Attribute("name", String)
+			Attribute("description", String)
+			Attribute("nl_prompt", String)
+			Attribute("scope_per_call", Boolean)
+			Attribute("scope_session", Boolean)
+			Attribute("fail_mode", String, "fail_open | fail_closed")
+			Attribute("static_rules", String, "JSON-encoded rules array")
+			Required("policy_id")
+		})
+		Result(shared.NLPolicy)
+		HTTP(func() {
+			POST("/rpc/nlpolicies.update")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "updateNLPolicy")
+		Meta("openapi:extension:x-speakeasy-group", "nlpolicies")
+		Meta("openapi:extension:x-speakeasy-name-override", "update")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "NLPoliciesUpdate", "type": "mutation"}`)
+	})
+
+	Method("setMode", func() {
+		Description("Set the mode of a natural-language policy (audit | enforce | disabled).")
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("policy_id", String, "The policy ID.", func() {
+				Format(FormatUUID)
+			})
+			Attribute("mode", String, "Target mode.", func() {
+				Enum("audit", "enforce", "disabled")
+			})
+			Required("policy_id", "mode")
+		})
+		Result(shared.NLPolicy)
+		HTTP(func() {
+			POST("/rpc/nlpolicies.setMode")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "setNLPolicyMode")
+		Meta("openapi:extension:x-speakeasy-group", "nlpolicies")
+		Meta("openapi:extension:x-speakeasy-name-override", "setMode")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "NLPoliciesSetMode", "type": "mutation"}`)
+	})
+
+	Method("deletePolicy", func() {
+		Description("Delete a natural-language policy.")
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("policy_id", String, "The policy ID.", func() {
+				Format(FormatUUID)
+			})
+			Required("policy_id")
+		})
+		HTTP(func() {
+			POST("/rpc/nlpolicies.delete")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusNoContent)
+		})
+		Meta("openapi:operationId", "deleteNLPolicy")
+		Meta("openapi:extension:x-speakeasy-group", "nlpolicies")
+		Meta("openapi:extension:x-speakeasy-name-override", "delete")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "NLPoliciesDelete", "type": "mutation"}`)
+	})
+
+	Method("listDecisions", func() {
+		Description("List recorded decisions produced by a natural-language policy.")
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("policy_id", String, "The policy ID.", func() {
+				Format(FormatUUID)
+			})
+			Attribute("decision", String, "Filter by decision (ALLOW | BLOCK | JUDGE_ERROR).", func() {
+				Enum("ALLOW", "BLOCK", "JUDGE_ERROR")
+			})
+			Attribute("enforced", Boolean, "Filter by whether the decision was enforced.")
+			Attribute("decided_by", String, "Filter by decider (static_rule | llm_judge | fail_mode | session_quarantine).", func() {
+				Enum("static_rule", "llm_judge", "fail_mode", "session_quarantine")
+			})
+			Attribute("since", String, "Only include decisions at or after this RFC3339 timestamp.", func() {
+				Format(FormatDateTime)
+			})
+			Attribute("session_id", String, "Filter by source MCP session ID.")
+			Attribute("cursor", String, "Cursor to fetch the next page of results.")
+			Attribute("limit", Int, "Maximum number of results to return per page.", func() {
+				Minimum(1)
+				Maximum(200)
+			})
+			Required("policy_id")
+		})
+		Result(func() {
+			Attribute("decisions", ArrayOf(shared.NLPolicyDecision))
+			Attribute("next_cursor", String, "Cursor for the next page of results.")
+			Required("decisions")
+		})
+		HTTP(func() {
+			GET("/rpc/nlpolicies.listDecisions")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Param("policy_id")
+			Param("decision")
+			Param("enforced")
+			Param("decided_by")
+			Param("since")
+			Param("session_id")
+			Param("cursor")
+			Param("limit")
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "listNLPolicyDecisions")
+		Meta("openapi:extension:x-speakeasy-group", "nlpolicies")
+		Meta("openapi:extension:x-speakeasy-name-override", "listDecisions")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "NLPoliciesListDecisions", "type": "query"}`)
+	})
+
+	Method("listSessionVerdicts", func() {
+		Description("List session verdicts for a natural-language policy.")
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("policy_id", String, "The policy ID.", func() {
+				Format(FormatUUID)
+			})
+			Attribute("active_only", Boolean, "If true, only return currently quarantined sessions.")
+			Attribute("cursor", String, "Cursor to fetch the next page of results.")
+			Attribute("limit", Int, "Maximum number of results to return per page.", func() {
+				Minimum(1)
+				Maximum(200)
+			})
+			Required("policy_id")
+		})
+		Result(func() {
+			Attribute("verdicts", ArrayOf(shared.NLPolicySessionVerdict))
+			Attribute("next_cursor", String, "Cursor for the next page of results.")
+			Required("verdicts")
+		})
+		HTTP(func() {
+			GET("/rpc/nlpolicies.listSessionVerdicts")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Param("policy_id")
+			Param("active_only")
+			Param("cursor")
+			Param("limit")
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "listNLPolicySessionVerdicts")
+		Meta("openapi:extension:x-speakeasy-group", "nlpolicies")
+		Meta("openapi:extension:x-speakeasy-name-override", "listSessionVerdicts")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "NLPoliciesListSessionVerdicts", "type": "query"}`)
+	})
+
+	Method("clearSessionVerdict", func() {
+		Description("Clear an active session verdict, releasing the session from quarantine.")
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("verdict_id", String, "The verdict ID.", func() {
+				Format(FormatUUID)
+			})
+			Required("verdict_id")
+		})
+		Result(shared.NLPolicySessionVerdict)
+		HTTP(func() {
+			POST("/rpc/nlpolicies.clearSessionVerdict")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "clearNLPolicySessionVerdict")
+		Meta("openapi:extension:x-speakeasy-group", "nlpolicies")
+		Meta("openapi:extension:x-speakeasy-name-override", "clearSessionVerdict")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "NLPoliciesClearSessionVerdict", "type": "mutation"}`)
+	})
+
+	Method("replay", func() {
+		Description("Start a replay run for a natural-language policy over historical chat samples.")
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("policy_id", String, "The policy ID.", func() {
+				Format(FormatUUID)
+			})
+			Attribute("sample_filter", String, "JSON-encoded sample filter envelope.")
+			Required("policy_id", "sample_filter")
+		})
+		Result(shared.NLPolicyReplayRun)
+		HTTP(func() {
+			POST("/rpc/nlpolicies.replay")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "replayNLPolicy")
+		Meta("openapi:extension:x-speakeasy-group", "nlpolicies")
+		Meta("openapi:extension:x-speakeasy-name-override", "replay")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "NLPoliciesReplay", "type": "mutation"}`)
+	})
+
+	Method("getReplayRun", func() {
+		Description("Get a replay run by ID.")
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("run_id", String, "The replay run ID.", func() {
+				Format(FormatUUID)
+			})
+			Required("run_id")
+		})
+		Result(shared.NLPolicyReplayRun)
+		HTTP(func() {
+			GET("/rpc/nlpolicies.getReplayRun")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Param("run_id")
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "getNLPolicyReplayRun")
+		Meta("openapi:extension:x-speakeasy-group", "nlpolicies")
+		Meta("openapi:extension:x-speakeasy-name-override", "getReplayRun")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "NLPoliciesGetReplayRun", "type": "query"}`)
+	})
+
+	Method("listReplayResults", func() {
+		Description("List per-sample results for a replay run.")
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("run_id", String, "The replay run ID.", func() {
+				Format(FormatUUID)
+			})
+			Attribute("decision", String, "Filter by decision (ALLOW | BLOCK | JUDGE_ERROR).", func() {
+				Enum("ALLOW", "BLOCK", "JUDGE_ERROR")
+			})
+			Attribute("cursor", String, "Cursor to fetch the next page of results.")
+			Attribute("limit", Int, "Maximum number of results to return per page.", func() {
+				Minimum(1)
+				Maximum(200)
+			})
+			Required("run_id")
+		})
+		Result(func() {
+			Attribute("results", ArrayOf(shared.NLPolicyReplayResult))
+			Attribute("next_cursor", String, "Cursor for the next page of results.")
+			Required("results")
+		})
+		HTTP(func() {
+			GET("/rpc/nlpolicies.listReplayResults")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Param("run_id")
+			Param("decision")
+			Param("cursor")
+			Param("limit")
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "listNLPolicyReplayResults")
+		Meta("openapi:extension:x-speakeasy-group", "nlpolicies")
+		Meta("openapi:extension:x-speakeasy-name-override", "listReplayResults")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "NLPoliciesListReplayResults", "type": "query"}`)
+	})
+})

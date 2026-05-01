@@ -37,6 +37,7 @@ import (
 	mcpmetadatac "github.com/speakeasy-api/gram/server/gen/http/mcp_metadata/client"
 	mcpregistriesc "github.com/speakeasy-api/gram/server/gen/http/mcp_registries/client"
 	mcpserversc "github.com/speakeasy-api/gram/server/gen/http/mcp_servers/client"
+	nlpoliciesc "github.com/speakeasy-api/gram/server/gen/http/nlpolicies/client"
 	organizationsc "github.com/speakeasy-api/gram/server/gen/http/organizations/client"
 	packagesc "github.com/speakeasy-api/gram/server/gen/http/packages/client"
 	pluginsc "github.com/speakeasy-api/gram/server/gen/http/plugins/client"
@@ -84,6 +85,7 @@ func UsageCommands() []string {
 		"mcp-endpoints (create-mcp-endpoint|get-mcp-endpoint|list-mcp-endpoints|update-mcp-endpoint|delete-mcp-endpoint)",
 		"mcp-metadata (get-mcp-metadata|set-mcp-metadata|export-mcp-metadata)",
 		"mcp-servers (create-mcp-server|get-mcp-server|list-mcp-servers|update-mcp-server|delete-mcp-server)",
+		"nlpolicies (create-policy|list-policies|get-policy|update-policy|set-mode|delete-policy|list-decisions|list-session-verdicts|clear-session-verdict|replay|get-replay-run|list-replay-results)",
 		"organizations (send-invite|revoke-invite|list-invites|get-invite-by-token|list-users|remove-user)",
 		"packages (create-package|update-package|list-packages|list-versions|publish)",
 		"plugins (list-plugins|get-plugin|create-plugin|update-plugin|delete-plugin|add-plugin-server|update-plugin-server|remove-plugin-server|set-plugin-assignments|download-plugin-package|download-observability-plugin|get-publish-status|publish-plugins)",
@@ -736,6 +738,92 @@ func ParseEndpoint(
 		mcpServersDeleteMcpServerSessionTokenFlag     = mcpServersDeleteMcpServerFlags.String("session-token", "", "")
 		mcpServersDeleteMcpServerApikeyTokenFlag      = mcpServersDeleteMcpServerFlags.String("apikey-token", "", "")
 		mcpServersDeleteMcpServerProjectSlugInputFlag = mcpServersDeleteMcpServerFlags.String("project-slug-input", "", "")
+
+		nlpoliciesFlags = flag.NewFlagSet("nlpolicies", flag.ContinueOnError)
+
+		nlpoliciesCreatePolicyFlags                = flag.NewFlagSet("create-policy", flag.ExitOnError)
+		nlpoliciesCreatePolicyBodyFlag             = nlpoliciesCreatePolicyFlags.String("body", "REQUIRED", "")
+		nlpoliciesCreatePolicyApikeyTokenFlag      = nlpoliciesCreatePolicyFlags.String("apikey-token", "", "")
+		nlpoliciesCreatePolicySessionTokenFlag     = nlpoliciesCreatePolicyFlags.String("session-token", "", "")
+		nlpoliciesCreatePolicyProjectSlugInputFlag = nlpoliciesCreatePolicyFlags.String("project-slug-input", "", "")
+
+		nlpoliciesListPoliciesFlags                = flag.NewFlagSet("list-policies", flag.ExitOnError)
+		nlpoliciesListPoliciesApikeyTokenFlag      = nlpoliciesListPoliciesFlags.String("apikey-token", "", "")
+		nlpoliciesListPoliciesSessionTokenFlag     = nlpoliciesListPoliciesFlags.String("session-token", "", "")
+		nlpoliciesListPoliciesProjectSlugInputFlag = nlpoliciesListPoliciesFlags.String("project-slug-input", "", "")
+
+		nlpoliciesGetPolicyFlags                = flag.NewFlagSet("get-policy", flag.ExitOnError)
+		nlpoliciesGetPolicyPolicyIDFlag         = nlpoliciesGetPolicyFlags.String("policy-id", "REQUIRED", "")
+		nlpoliciesGetPolicyApikeyTokenFlag      = nlpoliciesGetPolicyFlags.String("apikey-token", "", "")
+		nlpoliciesGetPolicySessionTokenFlag     = nlpoliciesGetPolicyFlags.String("session-token", "", "")
+		nlpoliciesGetPolicyProjectSlugInputFlag = nlpoliciesGetPolicyFlags.String("project-slug-input", "", "")
+
+		nlpoliciesUpdatePolicyFlags                = flag.NewFlagSet("update-policy", flag.ExitOnError)
+		nlpoliciesUpdatePolicyBodyFlag             = nlpoliciesUpdatePolicyFlags.String("body", "REQUIRED", "")
+		nlpoliciesUpdatePolicyApikeyTokenFlag      = nlpoliciesUpdatePolicyFlags.String("apikey-token", "", "")
+		nlpoliciesUpdatePolicySessionTokenFlag     = nlpoliciesUpdatePolicyFlags.String("session-token", "", "")
+		nlpoliciesUpdatePolicyProjectSlugInputFlag = nlpoliciesUpdatePolicyFlags.String("project-slug-input", "", "")
+
+		nlpoliciesSetModeFlags                = flag.NewFlagSet("set-mode", flag.ExitOnError)
+		nlpoliciesSetModeBodyFlag             = nlpoliciesSetModeFlags.String("body", "REQUIRED", "")
+		nlpoliciesSetModeApikeyTokenFlag      = nlpoliciesSetModeFlags.String("apikey-token", "", "")
+		nlpoliciesSetModeSessionTokenFlag     = nlpoliciesSetModeFlags.String("session-token", "", "")
+		nlpoliciesSetModeProjectSlugInputFlag = nlpoliciesSetModeFlags.String("project-slug-input", "", "")
+
+		nlpoliciesDeletePolicyFlags                = flag.NewFlagSet("delete-policy", flag.ExitOnError)
+		nlpoliciesDeletePolicyBodyFlag             = nlpoliciesDeletePolicyFlags.String("body", "REQUIRED", "")
+		nlpoliciesDeletePolicyApikeyTokenFlag      = nlpoliciesDeletePolicyFlags.String("apikey-token", "", "")
+		nlpoliciesDeletePolicySessionTokenFlag     = nlpoliciesDeletePolicyFlags.String("session-token", "", "")
+		nlpoliciesDeletePolicyProjectSlugInputFlag = nlpoliciesDeletePolicyFlags.String("project-slug-input", "", "")
+
+		nlpoliciesListDecisionsFlags                = flag.NewFlagSet("list-decisions", flag.ExitOnError)
+		nlpoliciesListDecisionsPolicyIDFlag         = nlpoliciesListDecisionsFlags.String("policy-id", "REQUIRED", "")
+		nlpoliciesListDecisionsDecisionFlag         = nlpoliciesListDecisionsFlags.String("decision", "", "")
+		nlpoliciesListDecisionsEnforcedFlag         = nlpoliciesListDecisionsFlags.String("enforced", "", "")
+		nlpoliciesListDecisionsDecidedByFlag        = nlpoliciesListDecisionsFlags.String("decided-by", "", "")
+		nlpoliciesListDecisionsSinceFlag            = nlpoliciesListDecisionsFlags.String("since", "", "")
+		nlpoliciesListDecisionsSessionIDFlag        = nlpoliciesListDecisionsFlags.String("session-id", "", "")
+		nlpoliciesListDecisionsCursorFlag           = nlpoliciesListDecisionsFlags.String("cursor", "", "")
+		nlpoliciesListDecisionsLimitFlag            = nlpoliciesListDecisionsFlags.String("limit", "", "")
+		nlpoliciesListDecisionsApikeyTokenFlag      = nlpoliciesListDecisionsFlags.String("apikey-token", "", "")
+		nlpoliciesListDecisionsSessionTokenFlag     = nlpoliciesListDecisionsFlags.String("session-token", "", "")
+		nlpoliciesListDecisionsProjectSlugInputFlag = nlpoliciesListDecisionsFlags.String("project-slug-input", "", "")
+
+		nlpoliciesListSessionVerdictsFlags                = flag.NewFlagSet("list-session-verdicts", flag.ExitOnError)
+		nlpoliciesListSessionVerdictsPolicyIDFlag         = nlpoliciesListSessionVerdictsFlags.String("policy-id", "REQUIRED", "")
+		nlpoliciesListSessionVerdictsActiveOnlyFlag       = nlpoliciesListSessionVerdictsFlags.String("active-only", "", "")
+		nlpoliciesListSessionVerdictsCursorFlag           = nlpoliciesListSessionVerdictsFlags.String("cursor", "", "")
+		nlpoliciesListSessionVerdictsLimitFlag            = nlpoliciesListSessionVerdictsFlags.String("limit", "", "")
+		nlpoliciesListSessionVerdictsApikeyTokenFlag      = nlpoliciesListSessionVerdictsFlags.String("apikey-token", "", "")
+		nlpoliciesListSessionVerdictsSessionTokenFlag     = nlpoliciesListSessionVerdictsFlags.String("session-token", "", "")
+		nlpoliciesListSessionVerdictsProjectSlugInputFlag = nlpoliciesListSessionVerdictsFlags.String("project-slug-input", "", "")
+
+		nlpoliciesClearSessionVerdictFlags                = flag.NewFlagSet("clear-session-verdict", flag.ExitOnError)
+		nlpoliciesClearSessionVerdictBodyFlag             = nlpoliciesClearSessionVerdictFlags.String("body", "REQUIRED", "")
+		nlpoliciesClearSessionVerdictApikeyTokenFlag      = nlpoliciesClearSessionVerdictFlags.String("apikey-token", "", "")
+		nlpoliciesClearSessionVerdictSessionTokenFlag     = nlpoliciesClearSessionVerdictFlags.String("session-token", "", "")
+		nlpoliciesClearSessionVerdictProjectSlugInputFlag = nlpoliciesClearSessionVerdictFlags.String("project-slug-input", "", "")
+
+		nlpoliciesReplayFlags                = flag.NewFlagSet("replay", flag.ExitOnError)
+		nlpoliciesReplayBodyFlag             = nlpoliciesReplayFlags.String("body", "REQUIRED", "")
+		nlpoliciesReplayApikeyTokenFlag      = nlpoliciesReplayFlags.String("apikey-token", "", "")
+		nlpoliciesReplaySessionTokenFlag     = nlpoliciesReplayFlags.String("session-token", "", "")
+		nlpoliciesReplayProjectSlugInputFlag = nlpoliciesReplayFlags.String("project-slug-input", "", "")
+
+		nlpoliciesGetReplayRunFlags                = flag.NewFlagSet("get-replay-run", flag.ExitOnError)
+		nlpoliciesGetReplayRunRunIDFlag            = nlpoliciesGetReplayRunFlags.String("run-id", "REQUIRED", "")
+		nlpoliciesGetReplayRunApikeyTokenFlag      = nlpoliciesGetReplayRunFlags.String("apikey-token", "", "")
+		nlpoliciesGetReplayRunSessionTokenFlag     = nlpoliciesGetReplayRunFlags.String("session-token", "", "")
+		nlpoliciesGetReplayRunProjectSlugInputFlag = nlpoliciesGetReplayRunFlags.String("project-slug-input", "", "")
+
+		nlpoliciesListReplayResultsFlags                = flag.NewFlagSet("list-replay-results", flag.ExitOnError)
+		nlpoliciesListReplayResultsRunIDFlag            = nlpoliciesListReplayResultsFlags.String("run-id", "REQUIRED", "")
+		nlpoliciesListReplayResultsDecisionFlag         = nlpoliciesListReplayResultsFlags.String("decision", "", "")
+		nlpoliciesListReplayResultsCursorFlag           = nlpoliciesListReplayResultsFlags.String("cursor", "", "")
+		nlpoliciesListReplayResultsLimitFlag            = nlpoliciesListReplayResultsFlags.String("limit", "", "")
+		nlpoliciesListReplayResultsApikeyTokenFlag      = nlpoliciesListReplayResultsFlags.String("apikey-token", "", "")
+		nlpoliciesListReplayResultsSessionTokenFlag     = nlpoliciesListReplayResultsFlags.String("session-token", "", "")
+		nlpoliciesListReplayResultsProjectSlugInputFlag = nlpoliciesListReplayResultsFlags.String("project-slug-input", "", "")
 
 		organizationsFlags = flag.NewFlagSet("organizations", flag.ContinueOnError)
 
@@ -1478,6 +1566,20 @@ func ParseEndpoint(
 	mcpServersUpdateMcpServerFlags.Usage = mcpServersUpdateMcpServerUsage
 	mcpServersDeleteMcpServerFlags.Usage = mcpServersDeleteMcpServerUsage
 
+	nlpoliciesFlags.Usage = nlpoliciesUsage
+	nlpoliciesCreatePolicyFlags.Usage = nlpoliciesCreatePolicyUsage
+	nlpoliciesListPoliciesFlags.Usage = nlpoliciesListPoliciesUsage
+	nlpoliciesGetPolicyFlags.Usage = nlpoliciesGetPolicyUsage
+	nlpoliciesUpdatePolicyFlags.Usage = nlpoliciesUpdatePolicyUsage
+	nlpoliciesSetModeFlags.Usage = nlpoliciesSetModeUsage
+	nlpoliciesDeletePolicyFlags.Usage = nlpoliciesDeletePolicyUsage
+	nlpoliciesListDecisionsFlags.Usage = nlpoliciesListDecisionsUsage
+	nlpoliciesListSessionVerdictsFlags.Usage = nlpoliciesListSessionVerdictsUsage
+	nlpoliciesClearSessionVerdictFlags.Usage = nlpoliciesClearSessionVerdictUsage
+	nlpoliciesReplayFlags.Usage = nlpoliciesReplayUsage
+	nlpoliciesGetReplayRunFlags.Usage = nlpoliciesGetReplayRunUsage
+	nlpoliciesListReplayResultsFlags.Usage = nlpoliciesListReplayResultsUsage
+
 	organizationsFlags.Usage = organizationsUsage
 	organizationsSendInviteFlags.Usage = organizationsSendInviteUsage
 	organizationsRevokeInviteFlags.Usage = organizationsRevokeInviteUsage
@@ -1674,6 +1776,8 @@ func ParseEndpoint(
 			svcf = mcpMetadataFlags
 		case "mcp-servers":
 			svcf = mcpServersFlags
+		case "nlpolicies":
+			svcf = nlpoliciesFlags
 		case "organizations":
 			svcf = organizationsFlags
 		case "packages":
@@ -2134,6 +2238,46 @@ func ParseEndpoint(
 
 			case "delete-mcp-server":
 				epf = mcpServersDeleteMcpServerFlags
+
+			}
+
+		case "nlpolicies":
+			switch epn {
+			case "create-policy":
+				epf = nlpoliciesCreatePolicyFlags
+
+			case "list-policies":
+				epf = nlpoliciesListPoliciesFlags
+
+			case "get-policy":
+				epf = nlpoliciesGetPolicyFlags
+
+			case "update-policy":
+				epf = nlpoliciesUpdatePolicyFlags
+
+			case "set-mode":
+				epf = nlpoliciesSetModeFlags
+
+			case "delete-policy":
+				epf = nlpoliciesDeletePolicyFlags
+
+			case "list-decisions":
+				epf = nlpoliciesListDecisionsFlags
+
+			case "list-session-verdicts":
+				epf = nlpoliciesListSessionVerdictsFlags
+
+			case "clear-session-verdict":
+				epf = nlpoliciesClearSessionVerdictFlags
+
+			case "replay":
+				epf = nlpoliciesReplayFlags
+
+			case "get-replay-run":
+				epf = nlpoliciesGetReplayRunFlags
+
+			case "list-replay-results":
+				epf = nlpoliciesListReplayResultsFlags
 
 			}
 
@@ -2955,6 +3099,46 @@ func ParseEndpoint(
 			case "delete-mcp-server":
 				endpoint = c.DeleteMcpServer()
 				data, err = mcpserversc.BuildDeleteMcpServerPayload(*mcpServersDeleteMcpServerIDFlag, *mcpServersDeleteMcpServerSessionTokenFlag, *mcpServersDeleteMcpServerApikeyTokenFlag, *mcpServersDeleteMcpServerProjectSlugInputFlag)
+			}
+		case "nlpolicies":
+			c := nlpoliciesc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "create-policy":
+				endpoint = c.CreatePolicy()
+				data, err = nlpoliciesc.BuildCreatePolicyPayload(*nlpoliciesCreatePolicyBodyFlag, *nlpoliciesCreatePolicyApikeyTokenFlag, *nlpoliciesCreatePolicySessionTokenFlag, *nlpoliciesCreatePolicyProjectSlugInputFlag)
+			case "list-policies":
+				endpoint = c.ListPolicies()
+				data, err = nlpoliciesc.BuildListPoliciesPayload(*nlpoliciesListPoliciesApikeyTokenFlag, *nlpoliciesListPoliciesSessionTokenFlag, *nlpoliciesListPoliciesProjectSlugInputFlag)
+			case "get-policy":
+				endpoint = c.GetPolicy()
+				data, err = nlpoliciesc.BuildGetPolicyPayload(*nlpoliciesGetPolicyPolicyIDFlag, *nlpoliciesGetPolicyApikeyTokenFlag, *nlpoliciesGetPolicySessionTokenFlag, *nlpoliciesGetPolicyProjectSlugInputFlag)
+			case "update-policy":
+				endpoint = c.UpdatePolicy()
+				data, err = nlpoliciesc.BuildUpdatePolicyPayload(*nlpoliciesUpdatePolicyBodyFlag, *nlpoliciesUpdatePolicyApikeyTokenFlag, *nlpoliciesUpdatePolicySessionTokenFlag, *nlpoliciesUpdatePolicyProjectSlugInputFlag)
+			case "set-mode":
+				endpoint = c.SetMode()
+				data, err = nlpoliciesc.BuildSetModePayload(*nlpoliciesSetModeBodyFlag, *nlpoliciesSetModeApikeyTokenFlag, *nlpoliciesSetModeSessionTokenFlag, *nlpoliciesSetModeProjectSlugInputFlag)
+			case "delete-policy":
+				endpoint = c.DeletePolicy()
+				data, err = nlpoliciesc.BuildDeletePolicyPayload(*nlpoliciesDeletePolicyBodyFlag, *nlpoliciesDeletePolicyApikeyTokenFlag, *nlpoliciesDeletePolicySessionTokenFlag, *nlpoliciesDeletePolicyProjectSlugInputFlag)
+			case "list-decisions":
+				endpoint = c.ListDecisions()
+				data, err = nlpoliciesc.BuildListDecisionsPayload(*nlpoliciesListDecisionsPolicyIDFlag, *nlpoliciesListDecisionsDecisionFlag, *nlpoliciesListDecisionsEnforcedFlag, *nlpoliciesListDecisionsDecidedByFlag, *nlpoliciesListDecisionsSinceFlag, *nlpoliciesListDecisionsSessionIDFlag, *nlpoliciesListDecisionsCursorFlag, *nlpoliciesListDecisionsLimitFlag, *nlpoliciesListDecisionsApikeyTokenFlag, *nlpoliciesListDecisionsSessionTokenFlag, *nlpoliciesListDecisionsProjectSlugInputFlag)
+			case "list-session-verdicts":
+				endpoint = c.ListSessionVerdicts()
+				data, err = nlpoliciesc.BuildListSessionVerdictsPayload(*nlpoliciesListSessionVerdictsPolicyIDFlag, *nlpoliciesListSessionVerdictsActiveOnlyFlag, *nlpoliciesListSessionVerdictsCursorFlag, *nlpoliciesListSessionVerdictsLimitFlag, *nlpoliciesListSessionVerdictsApikeyTokenFlag, *nlpoliciesListSessionVerdictsSessionTokenFlag, *nlpoliciesListSessionVerdictsProjectSlugInputFlag)
+			case "clear-session-verdict":
+				endpoint = c.ClearSessionVerdict()
+				data, err = nlpoliciesc.BuildClearSessionVerdictPayload(*nlpoliciesClearSessionVerdictBodyFlag, *nlpoliciesClearSessionVerdictApikeyTokenFlag, *nlpoliciesClearSessionVerdictSessionTokenFlag, *nlpoliciesClearSessionVerdictProjectSlugInputFlag)
+			case "replay":
+				endpoint = c.Replay()
+				data, err = nlpoliciesc.BuildReplayPayload(*nlpoliciesReplayBodyFlag, *nlpoliciesReplayApikeyTokenFlag, *nlpoliciesReplaySessionTokenFlag, *nlpoliciesReplayProjectSlugInputFlag)
+			case "get-replay-run":
+				endpoint = c.GetReplayRun()
+				data, err = nlpoliciesc.BuildGetReplayRunPayload(*nlpoliciesGetReplayRunRunIDFlag, *nlpoliciesGetReplayRunApikeyTokenFlag, *nlpoliciesGetReplayRunSessionTokenFlag, *nlpoliciesGetReplayRunProjectSlugInputFlag)
+			case "list-replay-results":
+				endpoint = c.ListReplayResults()
+				data, err = nlpoliciesc.BuildListReplayResultsPayload(*nlpoliciesListReplayResultsRunIDFlag, *nlpoliciesListReplayResultsDecisionFlag, *nlpoliciesListReplayResultsCursorFlag, *nlpoliciesListReplayResultsLimitFlag, *nlpoliciesListReplayResultsApikeyTokenFlag, *nlpoliciesListReplayResultsSessionTokenFlag, *nlpoliciesListReplayResultsProjectSlugInputFlag)
 			}
 		case "organizations":
 			c := organizationsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -6096,6 +6280,340 @@ func mcpServersDeleteMcpServerUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-servers delete-mcp-server --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+// nlpoliciesUsage displays the usage of the nlpolicies command and its
+// subcommands.
+func nlpoliciesUsage() {
+	fmt.Fprintln(os.Stderr, `Manage natural-language session policies and view their decisions, quarantines, and replay runs.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] nlpolicies COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    create-policy: Create a new natural-language policy.`)
+	fmt.Fprintln(os.Stderr, `    list-policies: List all NL policies for the current project (or org-wide).`)
+	fmt.Fprintln(os.Stderr, `    get-policy: Get a natural-language policy by ID.`)
+	fmt.Fprintln(os.Stderr, `    update-policy: Update a natural-language policy.`)
+	fmt.Fprintln(os.Stderr, `    set-mode: Set the mode of a natural-language policy (audit | enforce | disabled).`)
+	fmt.Fprintln(os.Stderr, `    delete-policy: Delete a natural-language policy.`)
+	fmt.Fprintln(os.Stderr, `    list-decisions: List recorded decisions produced by a natural-language policy.`)
+	fmt.Fprintln(os.Stderr, `    list-session-verdicts: List session verdicts for a natural-language policy.`)
+	fmt.Fprintln(os.Stderr, `    clear-session-verdict: Clear an active session verdict, releasing the session from quarantine.`)
+	fmt.Fprintln(os.Stderr, `    replay: Start a replay run for a natural-language policy over historical chat samples.`)
+	fmt.Fprintln(os.Stderr, `    get-replay-run: Get a replay run by ID.`)
+	fmt.Fprintln(os.Stderr, `    list-replay-results: List per-sample results for a replay run.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s nlpolicies COMMAND --help\n", os.Args[0])
+}
+func nlpoliciesCreatePolicyUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] nlpolicies create-policy", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Create a new natural-language policy.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "nlpolicies create-policy --body '{\n      \"description\": \"abc123\",\n      \"fail_mode\": \"abc123\",\n      \"name\": \"abc123\",\n      \"nl_prompt\": \"abc123\",\n      \"scope_per_call\": false,\n      \"scope_session\": false,\n      \"static_rules\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func nlpoliciesListPoliciesUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] nlpolicies list-policies", os.Args[0])
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List all NL policies for the current project (or org-wide).`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "nlpolicies list-policies --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func nlpoliciesGetPolicyUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] nlpolicies get-policy", os.Args[0])
+	fmt.Fprint(os.Stderr, " -policy-id STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get a natural-language policy by ID.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -policy-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "nlpolicies get-policy --policy-id \"550e8400-e29b-41d4-a716-446655440000\" --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func nlpoliciesUpdatePolicyUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] nlpolicies update-policy", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Update a natural-language policy.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "nlpolicies update-policy --body '{\n      \"description\": \"abc123\",\n      \"fail_mode\": \"abc123\",\n      \"name\": \"abc123\",\n      \"nl_prompt\": \"abc123\",\n      \"policy_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"scope_per_call\": false,\n      \"scope_session\": false,\n      \"static_rules\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func nlpoliciesSetModeUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] nlpolicies set-mode", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Set the mode of a natural-language policy (audit | enforce | disabled).`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "nlpolicies set-mode --body '{\n      \"mode\": \"enforce\",\n      \"policy_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func nlpoliciesDeletePolicyUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] nlpolicies delete-policy", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Delete a natural-language policy.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "nlpolicies delete-policy --body '{\n      \"policy_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func nlpoliciesListDecisionsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] nlpolicies list-decisions", os.Args[0])
+	fmt.Fprint(os.Stderr, " -policy-id STRING")
+	fmt.Fprint(os.Stderr, " -decision STRING")
+	fmt.Fprint(os.Stderr, " -enforced BOOL")
+	fmt.Fprint(os.Stderr, " -decided-by STRING")
+	fmt.Fprint(os.Stderr, " -since STRING")
+	fmt.Fprint(os.Stderr, " -session-id STRING")
+	fmt.Fprint(os.Stderr, " -cursor STRING")
+	fmt.Fprint(os.Stderr, " -limit INT")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List recorded decisions produced by a natural-language policy.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -policy-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -decision STRING: `)
+	fmt.Fprintln(os.Stderr, `    -enforced BOOL: `)
+	fmt.Fprintln(os.Stderr, `    -decided-by STRING: `)
+	fmt.Fprintln(os.Stderr, `    -since STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
+	fmt.Fprintln(os.Stderr, `    -limit INT: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "nlpolicies list-decisions --policy-id \"550e8400-e29b-41d4-a716-446655440000\" --decision \"BLOCK\" --enforced false --decided-by \"llm_judge\" --since \"1970-01-01T00:00:01Z\" --session-id \"abc123\" --cursor \"abc123\" --limit 2 --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func nlpoliciesListSessionVerdictsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] nlpolicies list-session-verdicts", os.Args[0])
+	fmt.Fprint(os.Stderr, " -policy-id STRING")
+	fmt.Fprint(os.Stderr, " -active-only BOOL")
+	fmt.Fprint(os.Stderr, " -cursor STRING")
+	fmt.Fprint(os.Stderr, " -limit INT")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List session verdicts for a natural-language policy.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -policy-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -active-only BOOL: `)
+	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
+	fmt.Fprintln(os.Stderr, `    -limit INT: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "nlpolicies list-session-verdicts --policy-id \"550e8400-e29b-41d4-a716-446655440000\" --active-only false --cursor \"abc123\" --limit 2 --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func nlpoliciesClearSessionVerdictUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] nlpolicies clear-session-verdict", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Clear an active session verdict, releasing the session from quarantine.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "nlpolicies clear-session-verdict --body '{\n      \"verdict_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func nlpoliciesReplayUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] nlpolicies replay", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Start a replay run for a natural-language policy over historical chat samples.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "nlpolicies replay --body '{\n      \"policy_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"sample_filter\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func nlpoliciesGetReplayRunUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] nlpolicies get-replay-run", os.Args[0])
+	fmt.Fprint(os.Stderr, " -run-id STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get a replay run by ID.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -run-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "nlpolicies get-replay-run --run-id \"550e8400-e29b-41d4-a716-446655440000\" --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func nlpoliciesListReplayResultsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] nlpolicies list-replay-results", os.Args[0])
+	fmt.Fprint(os.Stderr, " -run-id STRING")
+	fmt.Fprint(os.Stderr, " -decision STRING")
+	fmt.Fprint(os.Stderr, " -cursor STRING")
+	fmt.Fprint(os.Stderr, " -limit INT")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List per-sample results for a replay run.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -run-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -decision STRING: `)
+	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
+	fmt.Fprintln(os.Stderr, `    -limit INT: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "nlpolicies list-replay-results --run-id \"550e8400-e29b-41d4-a716-446655440000\" --decision \"BLOCK\" --cursor \"abc123\" --limit 2 --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // organizationsUsage displays the usage of the organizations command and its

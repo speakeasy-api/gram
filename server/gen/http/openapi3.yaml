@@ -10445,6 +10445,1397 @@ paths:
             x-speakeasy-name-override: update
             x-speakeasy-react-hook:
                 name: UpdateMcpServer
+    /rpc/nlpolicies.clearSessionVerdict:
+        post:
+            description: Clear an active session verdict, releasing the session from quarantine.
+            operationId: clearNLPolicySessionVerdict
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ClearSessionVerdictRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/NLPolicySessionVerdict'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: clearSessionVerdict nlpolicies
+            tags:
+                - nlpolicies
+            x-speakeasy-group: nlpolicies
+            x-speakeasy-name-override: clearSessionVerdict
+            x-speakeasy-react-hook:
+                name: NLPoliciesClearSessionVerdict
+                type: mutation
+    /rpc/nlpolicies.create:
+        post:
+            description: Create a new natural-language policy.
+            operationId: createNLPolicy
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreatePolicyRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/NLPolicy'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: createPolicy nlpolicies
+            tags:
+                - nlpolicies
+            x-speakeasy-group: nlpolicies
+            x-speakeasy-name-override: create
+            x-speakeasy-react-hook:
+                name: NLPoliciesCreate
+                type: mutation
+    /rpc/nlpolicies.delete:
+        post:
+            description: Delete a natural-language policy.
+            operationId: deleteNLPolicy
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/DeletePolicyRequestBody'
+                required: true
+            responses:
+                "204":
+                    description: No Content response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: deletePolicy nlpolicies
+            tags:
+                - nlpolicies
+            x-speakeasy-group: nlpolicies
+            x-speakeasy-name-override: delete
+            x-speakeasy-react-hook:
+                name: NLPoliciesDelete
+                type: mutation
+    /rpc/nlpolicies.get:
+        get:
+            description: Get a natural-language policy by ID.
+            operationId: getNLPolicy
+            parameters:
+                - allowEmptyValue: true
+                  description: The policy ID.
+                  in: query
+                  name: policy_id
+                  required: true
+                  schema:
+                    description: The policy ID.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/NLPolicy'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: getPolicy nlpolicies
+            tags:
+                - nlpolicies
+            x-speakeasy-group: nlpolicies
+            x-speakeasy-name-override: get
+            x-speakeasy-react-hook:
+                name: NLPoliciesGet
+                type: query
+    /rpc/nlpolicies.getReplayRun:
+        get:
+            description: Get a replay run by ID.
+            operationId: getNLPolicyReplayRun
+            parameters:
+                - allowEmptyValue: true
+                  description: The replay run ID.
+                  in: query
+                  name: run_id
+                  required: true
+                  schema:
+                    description: The replay run ID.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/NLPolicyReplayRun'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: getReplayRun nlpolicies
+            tags:
+                - nlpolicies
+            x-speakeasy-group: nlpolicies
+            x-speakeasy-name-override: getReplayRun
+            x-speakeasy-react-hook:
+                name: NLPoliciesGetReplayRun
+                type: query
+    /rpc/nlpolicies.list:
+        get:
+            description: List all NL policies for the current project (or org-wide).
+            operationId: listNLPolicies
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListPoliciesResponseBody'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: listPolicies nlpolicies
+            tags:
+                - nlpolicies
+            x-speakeasy-group: nlpolicies
+            x-speakeasy-name-override: list
+            x-speakeasy-react-hook:
+                name: NLPoliciesList
+                type: query
+    /rpc/nlpolicies.listDecisions:
+        get:
+            description: List recorded decisions produced by a natural-language policy.
+            operationId: listNLPolicyDecisions
+            parameters:
+                - allowEmptyValue: true
+                  description: The policy ID.
+                  in: query
+                  name: policy_id
+                  required: true
+                  schema:
+                    description: The policy ID.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Filter by decision (ALLOW | BLOCK | JUDGE_ERROR).
+                  in: query
+                  name: decision
+                  schema:
+                    description: Filter by decision (ALLOW | BLOCK | JUDGE_ERROR).
+                    enum:
+                        - ALLOW
+                        - BLOCK
+                        - JUDGE_ERROR
+                    type: string
+                - allowEmptyValue: true
+                  description: Filter by whether the decision was enforced.
+                  in: query
+                  name: enforced
+                  schema:
+                    description: Filter by whether the decision was enforced.
+                    type: boolean
+                - allowEmptyValue: true
+                  description: Filter by decider (static_rule | llm_judge | fail_mode | session_quarantine).
+                  in: query
+                  name: decided_by
+                  schema:
+                    description: Filter by decider (static_rule | llm_judge | fail_mode | session_quarantine).
+                    enum:
+                        - static_rule
+                        - llm_judge
+                        - fail_mode
+                        - session_quarantine
+                    type: string
+                - allowEmptyValue: true
+                  description: Only include decisions at or after this RFC3339 timestamp.
+                  in: query
+                  name: since
+                  schema:
+                    description: Only include decisions at or after this RFC3339 timestamp.
+                    format: date-time
+                    type: string
+                - allowEmptyValue: true
+                  description: Filter by source MCP session ID.
+                  in: query
+                  name: session_id
+                  schema:
+                    description: Filter by source MCP session ID.
+                    type: string
+                - allowEmptyValue: true
+                  description: Cursor to fetch the next page of results.
+                  in: query
+                  name: cursor
+                  schema:
+                    description: Cursor to fetch the next page of results.
+                    type: string
+                - allowEmptyValue: true
+                  description: Maximum number of results to return per page.
+                  in: query
+                  name: limit
+                  schema:
+                    description: Maximum number of results to return per page.
+                    format: int64
+                    maximum: 200
+                    minimum: 1
+                    type: integer
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListDecisionsResponseBody'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: listDecisions nlpolicies
+            tags:
+                - nlpolicies
+            x-speakeasy-group: nlpolicies
+            x-speakeasy-name-override: listDecisions
+            x-speakeasy-react-hook:
+                name: NLPoliciesListDecisions
+                type: query
+    /rpc/nlpolicies.listReplayResults:
+        get:
+            description: List per-sample results for a replay run.
+            operationId: listNLPolicyReplayResults
+            parameters:
+                - allowEmptyValue: true
+                  description: The replay run ID.
+                  in: query
+                  name: run_id
+                  required: true
+                  schema:
+                    description: The replay run ID.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Filter by decision (ALLOW | BLOCK | JUDGE_ERROR).
+                  in: query
+                  name: decision
+                  schema:
+                    description: Filter by decision (ALLOW | BLOCK | JUDGE_ERROR).
+                    enum:
+                        - ALLOW
+                        - BLOCK
+                        - JUDGE_ERROR
+                    type: string
+                - allowEmptyValue: true
+                  description: Cursor to fetch the next page of results.
+                  in: query
+                  name: cursor
+                  schema:
+                    description: Cursor to fetch the next page of results.
+                    type: string
+                - allowEmptyValue: true
+                  description: Maximum number of results to return per page.
+                  in: query
+                  name: limit
+                  schema:
+                    description: Maximum number of results to return per page.
+                    format: int64
+                    maximum: 200
+                    minimum: 1
+                    type: integer
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListReplayResultsResponseBody'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: listReplayResults nlpolicies
+            tags:
+                - nlpolicies
+            x-speakeasy-group: nlpolicies
+            x-speakeasy-name-override: listReplayResults
+            x-speakeasy-react-hook:
+                name: NLPoliciesListReplayResults
+                type: query
+    /rpc/nlpolicies.listSessionVerdicts:
+        get:
+            description: List session verdicts for a natural-language policy.
+            operationId: listNLPolicySessionVerdicts
+            parameters:
+                - allowEmptyValue: true
+                  description: The policy ID.
+                  in: query
+                  name: policy_id
+                  required: true
+                  schema:
+                    description: The policy ID.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: If true, only return currently quarantined sessions.
+                  in: query
+                  name: active_only
+                  schema:
+                    description: If true, only return currently quarantined sessions.
+                    type: boolean
+                - allowEmptyValue: true
+                  description: Cursor to fetch the next page of results.
+                  in: query
+                  name: cursor
+                  schema:
+                    description: Cursor to fetch the next page of results.
+                    type: string
+                - allowEmptyValue: true
+                  description: Maximum number of results to return per page.
+                  in: query
+                  name: limit
+                  schema:
+                    description: Maximum number of results to return per page.
+                    format: int64
+                    maximum: 200
+                    minimum: 1
+                    type: integer
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListSessionVerdictsResponseBody'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: listSessionVerdicts nlpolicies
+            tags:
+                - nlpolicies
+            x-speakeasy-group: nlpolicies
+            x-speakeasy-name-override: listSessionVerdicts
+            x-speakeasy-react-hook:
+                name: NLPoliciesListSessionVerdicts
+                type: query
+    /rpc/nlpolicies.replay:
+        post:
+            description: Start a replay run for a natural-language policy over historical chat samples.
+            operationId: replayNLPolicy
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ReplayRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/NLPolicyReplayRun'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: replay nlpolicies
+            tags:
+                - nlpolicies
+            x-speakeasy-group: nlpolicies
+            x-speakeasy-name-override: replay
+            x-speakeasy-react-hook:
+                name: NLPoliciesReplay
+                type: mutation
+    /rpc/nlpolicies.setMode:
+        post:
+            description: Set the mode of a natural-language policy (audit | enforce | disabled).
+            operationId: setNLPolicyMode
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SetModeRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/NLPolicy'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: setMode nlpolicies
+            tags:
+                - nlpolicies
+            x-speakeasy-group: nlpolicies
+            x-speakeasy-name-override: setMode
+            x-speakeasy-react-hook:
+                name: NLPoliciesSetMode
+                type: mutation
+    /rpc/nlpolicies.update:
+        post:
+            description: Update a natural-language policy.
+            operationId: updateNLPolicy
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdatePolicyRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/NLPolicy'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: updatePolicy nlpolicies
+            tags:
+                - nlpolicies
+            x-speakeasy-group: nlpolicies
+            x-speakeasy-name-override: update
+            x-speakeasy-react-hook:
+                name: NLPoliciesUpdate
+                type: mutation
     /rpc/organizations.getInviteByToken:
         get:
             description: Resolve a WorkOS invitation from its token (e.g. accept-flow).
@@ -21748,6 +23139,15 @@ components:
                     type: string
                     description: Warning message shown to the user in the terminal
             description: Unified result for all Claude Code hook events with proper response structure
+        ClearSessionVerdictRequestBody:
+            type: object
+            properties:
+                verdict_id:
+                    type: string
+                    description: The verdict ID.
+                    format: uuid
+            required:
+                - verdict_id
         ConfigureSlackAppRequestBody:
             type: object
             properties:
@@ -22057,6 +23457,28 @@ components:
                     description: Optional URL-safe identifier. Auto-generated from name if omitted.
             required:
                 - name
+        CreatePolicyRequestBody:
+            type: object
+            properties:
+                description:
+                    type: string
+                fail_mode:
+                    type: string
+                    description: fail_open | fail_closed (default fail_open)
+                name:
+                    type: string
+                nl_prompt:
+                    type: string
+                scope_per_call:
+                    type: boolean
+                scope_session:
+                    type: boolean
+                static_rules:
+                    type: string
+                    description: JSON-encoded rules array (default "[]")
+            required:
+                - name
+                - nl_prompt
         CreateProjectForm:
             type: object
             properties:
@@ -22664,6 +24086,15 @@ components:
                     description: The ID of the variation that was deleted
             required:
                 - variation_id
+        DeletePolicyRequestBody:
+            type: object
+            properties:
+                policy_id:
+                    type: string
+                    description: The policy ID.
+                    format: uuid
+            required:
+                - policy_id
         DeleteRequestBody:
             type: object
             properties:
@@ -24822,6 +26253,18 @@ components:
             required:
                 - chats
                 - total
+        ListDecisionsResponseBody:
+            type: object
+            properties:
+                decisions:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/NLPolicyDecision'
+                next_cursor:
+                    type: string
+                    description: Cursor for the next page of results.
+            required:
+                - decisions
         ListDeploymentForm:
             type: object
             properties:
@@ -25038,6 +26481,15 @@ components:
                     description: The plugins in the organization.
             required:
                 - plugins
+        ListPoliciesResponseBody:
+            type: object
+            properties:
+                policies:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/NLPolicy'
+            required:
+                - policies
         ListProjectsPayload:
             type: object
             properties:
@@ -25080,6 +26532,18 @@ components:
                     description: List of MCP registries
             required:
                 - registries
+        ListReplayResultsResponseBody:
+            type: object
+            properties:
+                next_cursor:
+                    type: string
+                    description: Cursor for the next page of results.
+                results:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/NLPolicyReplayResult'
+            required:
+                - results
         ListResourcesResult:
             type: object
             properties:
@@ -25218,6 +26682,18 @@ components:
             description: Result type for listing remote MCP servers
             required:
                 - remote_mcp_servers
+        ListSessionVerdictsResponseBody:
+            type: object
+            properties:
+                next_cursor:
+                    type: string
+                    description: Cursor for the next page of results.
+                verdicts:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/NLPolicySessionVerdict'
+            required:
+                - verdicts
         ListSlackAppsResult:
             type: object
             properties:
@@ -25695,6 +27171,281 @@ components:
             required:
                 - name
                 - count
+        NLPolicy:
+            type: object
+            properties:
+                created_at:
+                    type: string
+                    description: RFC3339 timestamp.
+                    format: date-time
+                description:
+                    type: string
+                    description: Author-facing summary.
+                fail_mode:
+                    type: string
+                    description: fail_open | fail_closed — judge error/timeout behavior in enforce mode.
+                    enum:
+                        - fail_open
+                        - fail_closed
+                id:
+                    type: string
+                    description: The NL policy ID.
+                    format: uuid
+                mode:
+                    type: string
+                    description: audit | enforce | disabled.
+                    enum:
+                        - audit
+                        - enforce
+                        - disabled
+                name:
+                    type: string
+                    description: Policy name.
+                nl_prompt:
+                    type: string
+                    description: The natural-language judge prompt.
+                project_id:
+                    type: string
+                    description: The project ID. Empty when org-wide.
+                    format: uuid
+                scope_per_call:
+                    type: boolean
+                    description: Run inline on each tool call.
+                scope_session:
+                    type: boolean
+                    description: Run async over the rolling chat-session window.
+                static_rules:
+                    type: string
+                    description: JSON-encoded static rule list (see spec §6 grammar).
+                updated_at:
+                    type: string
+                    description: RFC3339 timestamp.
+                    format: date-time
+                version:
+                    type: integer
+                    description: Incremented on each update.
+                    format: int64
+            required:
+                - id
+                - name
+                - nl_prompt
+                - scope_per_call
+                - scope_session
+                - mode
+                - fail_mode
+                - static_rules
+                - version
+                - created_at
+                - updated_at
+        NLPolicyDecision:
+            type: object
+            properties:
+                chat_id:
+                    type: string
+                    description: Source chat (optional).
+                    format: uuid
+                created_at:
+                    type: string
+                    description: RFC3339 timestamp.
+                    format: date-time
+                decided_by:
+                    type: string
+                    description: static_rule | llm_judge | fail_mode | session_quarantine.
+                    enum:
+                        - static_rule
+                        - llm_judge
+                        - fail_mode
+                        - session_quarantine
+                decision:
+                    type: string
+                    description: ALLOW | BLOCK | JUDGE_ERROR.
+                    enum:
+                        - ALLOW
+                        - BLOCK
+                        - JUDGE_ERROR
+                enforced:
+                    type: boolean
+                    description: True when mode=enforce AND decision=BLOCK.
+                id:
+                    type: string
+                    description: Decision row ID.
+                    format: uuid
+                judge_latency_ms:
+                    type: integer
+                    description: Round-trip latency of the LLM call (when applicable).
+                    format: int64
+                mode:
+                    type: string
+                    description: Snapshot of policy mode at decision time.
+                    enum:
+                        - audit
+                        - enforce
+                        - disabled
+                nl_policy_id:
+                    type: string
+                    description: Policy that produced this decision.
+                    format: uuid
+                nl_policy_version:
+                    type: integer
+                    description: Policy version snapshot at decision time.
+                    format: int64
+                reason:
+                    type: string
+                    description: Short human-readable reason.
+                session_id:
+                    type: string
+                    description: Source MCP session ID.
+                tool_urn:
+                    type: string
+                    description: Tool that was being called.
+            required:
+                - id
+                - nl_policy_id
+                - nl_policy_version
+                - tool_urn
+                - decision
+                - decided_by
+                - mode
+                - enforced
+                - created_at
+        NLPolicyReplayResult:
+            type: object
+            properties:
+                chat_message_id:
+                    type: string
+                    description: Source chat message replayed.
+                    format: uuid
+                created_at:
+                    type: string
+                    description: RFC3339.
+                    format: date-time
+                decision:
+                    type: string
+                    description: ALLOW | BLOCK | JUDGE_ERROR.
+                    enum:
+                        - ALLOW
+                        - BLOCK
+                        - JUDGE_ERROR
+                id:
+                    type: string
+                    description: Result row ID.
+                    format: uuid
+                judge_latency_ms:
+                    type: integer
+                    format: int64
+                reason:
+                    type: string
+                    description: Judge reason.
+                replay_run_id:
+                    type: string
+                    description: Parent run.
+                    format: uuid
+                tool_urn:
+                    type: string
+                    description: Tool that was called originally.
+            required:
+                - id
+                - replay_run_id
+                - decision
+                - created_at
+        NLPolicyReplayRun:
+            type: object
+            properties:
+                completed_at:
+                    type: string
+                    description: RFC3339 — null until completed.
+                    format: date-time
+                counts:
+                    type: string
+                    description: 'JSON-encoded counts: {would_block, would_allow, judge_error}.'
+                id:
+                    type: string
+                    description: Run ID.
+                    format: uuid
+                nl_policy_id:
+                    type: string
+                    description: Policy under test.
+                    format: uuid
+                nl_policy_version:
+                    type: integer
+                    description: Policy version snapshot.
+                    format: int64
+                sample_filter:
+                    type: string
+                    description: JSON-encoded filter envelope.
+                started_at:
+                    type: string
+                    description: RFC3339.
+                    format: date-time
+                status:
+                    type: string
+                    description: pending | running | completed | failed.
+                    enum:
+                        - pending
+                        - running
+                        - completed
+                        - failed
+            required:
+                - id
+                - nl_policy_id
+                - nl_policy_version
+                - status
+                - sample_filter
+                - started_at
+        NLPolicySessionVerdict:
+            type: object
+            properties:
+                chat_id:
+                    type: string
+                    description: Source chat.
+                    format: uuid
+                cleared_at:
+                    type: string
+                    description: RFC3339 — non-null when cleared.
+                    format: date-time
+                cleared_by:
+                    type: string
+                    description: Clearing user ID.
+                    format: uuid
+                created_at:
+                    type: string
+                    description: RFC3339.
+                    format: date-time
+                id:
+                    type: string
+                    description: Verdict row ID.
+                    format: uuid
+                nl_policy_id:
+                    type: string
+                    description: Policy that produced the verdict.
+                    format: uuid
+                nl_policy_version:
+                    type: integer
+                    description: Policy version snapshot.
+                    format: int64
+                quarantined_at:
+                    type: string
+                    description: RFC3339 — null when verdict=OK.
+                    format: date-time
+                reason:
+                    type: string
+                    description: Why.
+                session_id:
+                    type: string
+                    description: Quarantined session.
+                verdict:
+                    type: string
+                    description: OK | QUARANTINED.
+                    enum:
+                        - OK
+                        - QUARANTINED
+            required:
+                - id
+                - session_id
+                - nl_policy_id
+                - nl_policy_version
+                - verdict
+                - created_at
         NotModified:
             type: object
             properties:
@@ -27209,6 +28960,19 @@ components:
                     description: The rendered prompt
             required:
                 - prompt
+        ReplayRequestBody:
+            type: object
+            properties:
+                policy_id:
+                    type: string
+                    description: The policy ID.
+                    format: uuid
+                sample_filter:
+                    type: string
+                    description: JSON-encoded sample filter envelope.
+            required:
+                - policy_id
+                - sample_filter
         Resource:
             type: object
             properties:
@@ -28181,6 +29945,23 @@ components:
                     maxLength: 40
             required:
                 - toolset_slug
+        SetModeRequestBody:
+            type: object
+            properties:
+                mode:
+                    type: string
+                    description: Target mode.
+                    enum:
+                        - audit
+                        - enforce
+                        - disabled
+                policy_id:
+                    type: string
+                    description: The policy ID.
+                    format: uuid
+            required:
+                - policy_id
+                - mode
         SetOrganizationWhitelistRequestBody:
             type: object
             properties:
@@ -29609,6 +31390,31 @@ components:
                 - id
                 - plugin_id
                 - display_name
+        UpdatePolicyRequestBody:
+            type: object
+            properties:
+                description:
+                    type: string
+                fail_mode:
+                    type: string
+                    description: fail_open | fail_closed
+                name:
+                    type: string
+                nl_prompt:
+                    type: string
+                policy_id:
+                    type: string
+                    description: The policy ID.
+                    format: uuid
+                scope_per_call:
+                    type: boolean
+                scope_session:
+                    type: boolean
+                static_rules:
+                    type: string
+                    description: JSON-encoded rules array
+            required:
+                - policy_id
         UpdatePromptTemplateForm:
             type: object
             properties:
@@ -30366,6 +32172,8 @@ tags:
       description: Manages metadata for the MCP install page shown to users.
     - name: mcpServers
       description: Managing MCP servers, which configure authentication, environment, and backend selection for an MCP server.
+    - name: nlpolicies
+      description: Manage natural-language session policies and view their decisions, quarantines, and replay runs.
     - name: organizations
       description: Organization membership, invitations, and directory.
     - name: packages
