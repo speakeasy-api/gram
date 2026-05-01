@@ -27,6 +27,7 @@ import {
   Stack,
 } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
+import { ChevronRight, Globe, Lock, Server, Unplug } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useParams } from "react-router";
 import type {
@@ -380,14 +381,25 @@ function PluginServerRow({
     if (!toolset.mcpEnabled) {
       return (
         <Badge variant="outline" className="text-muted-foreground">
+          <Unplug />
           MCP off
         </Badge>
       );
     }
     if (toolset.mcpIsPublic) {
-      return <Badge variant="secondary">Public MCP</Badge>;
+      return (
+        <Badge variant="secondary">
+          <Globe />
+          Public MCP
+        </Badge>
+      );
     }
-    return <Badge variant="outline">Private MCP</Badge>;
+    return (
+      <Badge variant="outline">
+        <Lock />
+        Private MCP
+      </Badge>
+    );
   })();
 
   const body = (
@@ -411,12 +423,17 @@ function PluginServerRow({
   const leftSide = toolset ? (
     <routes.mcp.details.Link
       params={[toolset.slug]}
-      className="hover:text-primary flex min-w-0 flex-1 items-center gap-3 hover:no-underline"
+      className="group hover:text-primary flex min-w-0 flex-1 items-center gap-3 hover:no-underline"
     >
+      <Server className="text-muted-foreground size-5 shrink-0" />
       {body}
+      <ChevronRight className="text-muted-foreground size-4 shrink-0 opacity-0 transition-opacity group-hover:opacity-100" />
     </routes.mcp.details.Link>
   ) : (
-    <div className="flex min-w-0 flex-1 items-center gap-3">{body}</div>
+    <div className="flex min-w-0 flex-1 items-center gap-3">
+      <Server className="text-muted-foreground size-5 shrink-0" />
+      {body}
+    </div>
   );
 
   return (
