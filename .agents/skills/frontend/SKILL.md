@@ -129,3 +129,4 @@ Use `<Tooltip>`, `<TooltipTrigger>`, and `<TooltipContent>` directly — they in
 
 - **ALWAYS use Moonshine design system utilities** from `@speakeasy-api/moonshine` instead of hardcoded Tailwind color values
 - **NEVER use hardcoded Tailwind colors** like `bg-neutral-100`, `border-gray-200`, `text-gray-500`, etc.
+- `@tailwindcss/typography` must remain in `devDependencies` — `@speakeasy-api/moonshine` declares it as a peer dependency and the build will fail without it, even if it appears unused in dashboard source.
