@@ -135,26 +135,39 @@ func (s *Service) buildProxy(logger *slog.Logger, server *repo.RemoteMcpServer, 
 		})
 	}
 
+	serverID := server.ID.String()
+
 	return &proxy.Proxy{
-		GuardianPolicy:            s.guardianPolicy,
-		Logger:                    logger,
-		Tracer:                    s.tracer,
-		NonStreamingTimeout:       proxy.DefaultNonStreamingTimeout,
-		StreamingTimeout:          proxy.DefaultStreamingTimeout,
-		Metrics:                   s.proxyMetrics,
-		MaxBufferedBodyBytes:      proxy.DefaultMaxBufferedBodyBytes,
-		ServerID:                  server.ID.String(),
-		RemoteURL:                 server.Url,
-		Headers:                   configured,
-		UserRequestInterceptors:   nil,
+		GuardianPolicy:          s.guardianPolicy,
+		Logger:                  logger,
+		Tracer:                  s.tracer,
+		NonStreamingTimeout:     proxy.DefaultNonStreamingTimeout,
+		StreamingTimeout:        proxy.DefaultStreamingTimeout,
+		Metrics:                 s.proxyMetrics,
+		MaxBufferedBodyBytes:    proxy.DefaultMaxBufferedBodyBytes,
+		ServerID:                serverID,
+		RemoteURL:               server.Url,
+		Headers:                 configured,
+		UserRequestInterceptors: nil,
+		InitializeRequestInterceptors: []proxy.InitializeRequestInterceptor{
+			s.initializePostHogEventInterceptor,
+		},
 		RemoteMessageInterceptors: nil,
 		ToolsCallRequestInterceptors: []proxy.ToolsCallRequestInterceptor{
-			s.toolUsageLimitsInterceptor,
+			// Counter records every attempted tools/call, including those
+			// later rejected by limits or per-tool authz. This mirrors /mcp,
+			// where RecordMCPToolCall fires before the per-tool RBAC check
+			// in rpc_tools_call.go.
+			s.toolsCallOTELCounterInterceptor,
+			s.toolsCallUsageLimitsInterceptor,
+			NewToolsCallAuthzInterceptor(s.authz, serverID, logger),
 		},
 		ToolsCallResponseInterceptors: []proxy.ToolsCallResponseInterceptor{
-			s.toolUsageTrackingInterceptor,
+			s.toolsCallUsageTrackingInterceptor,
 		},
-		ToolsListRequestInterceptors:  nil,
+		ToolsListRequestInterceptors: []proxy.ToolsListRequestInterceptor{
+			NewToolsListPostHogEventInterceptor(s.posthog, serverID, logger),
+		},
 		ToolsListResponseInterceptors: nil,
 	}
 }

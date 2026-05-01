@@ -13,7 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 )
 
-// ToolUsageTrackingInterceptor emits a [billing.ToolCallUsageEvent] for each
+// ToolsCallUsageTrackingInterceptor emits a [billing.ToolCallUsageEvent] for each
 // tools/call response so Remote MCP Server invocations feed the same Polar
 // meter that gates free-tier usage on the existing /mcp endpoint. It is a
 // [proxy.ToolsCallResponseInterceptor]: it runs after the generic
@@ -25,25 +25,25 @@ import (
 // the inbound request context cancels mid-relay. Missing auth context is
 // treated as a no-op and logged so operators can spot misconfiguration
 // without taking down tool invocation.
-type ToolUsageTrackingInterceptor struct {
+type ToolsCallUsageTrackingInterceptor struct {
 	tracker billing.Tracker
 	logger  *slog.Logger
 }
 
-var _ proxy.ToolsCallResponseInterceptor = (*ToolUsageTrackingInterceptor)(nil)
+var _ proxy.ToolsCallResponseInterceptor = (*ToolsCallUsageTrackingInterceptor)(nil)
 
-// NewToolUsageTrackingInterceptor constructs an interceptor bound to the
+// NewToolsCallUsageTrackingInterceptor constructs an interceptor bound to the
 // given billing tracker. The same instance can be reused across requests.
-func NewToolUsageTrackingInterceptor(tracker billing.Tracker, logger *slog.Logger) *ToolUsageTrackingInterceptor {
-	return &ToolUsageTrackingInterceptor{
+func NewToolsCallUsageTrackingInterceptor(tracker billing.Tracker, logger *slog.Logger) *ToolsCallUsageTrackingInterceptor {
+	return &ToolsCallUsageTrackingInterceptor{
 		tracker: tracker,
 		logger:  logger,
 	}
 }
 
 // Name implements [proxy.ToolsCallResponseInterceptor].
-func (i *ToolUsageTrackingInterceptor) Name() string {
-	return "tool-usage-tracking"
+func (i *ToolsCallUsageTrackingInterceptor) Name() string {
+	return "tools-call-usage-tracking"
 }
 
 // InterceptToolsCallResponse implements [proxy.ToolsCallResponseInterceptor].
@@ -51,7 +51,7 @@ func (i *ToolUsageTrackingInterceptor) Name() string {
 // tiers included — so Polar metering matches the existing /mcp surface.
 // Always returns nil: tracking is best-effort and must not block the response
 // from reaching the user.
-func (i *ToolUsageTrackingInterceptor) InterceptToolsCallResponse(ctx context.Context, call *proxy.ToolsCallResponse) error {
+func (i *ToolsCallUsageTrackingInterceptor) InterceptToolsCallResponse(ctx context.Context, call *proxy.ToolsCallResponse) error {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		i.logger.WarnContext(ctx, "skipping tool call usage tracking: missing auth context",

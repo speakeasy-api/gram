@@ -901,6 +901,108 @@ func TestProxy_Post_ClientCancellationReturnsBadRequest(t *testing.T) {
 	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
 }
 
+const initializeRequestWithParams = `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","clientInfo":{"name":"claude","version":"4.7"},"capabilities":{}}}`
+
+func TestProxy_Post_InitializeRequestInterceptor_RunsForInitialize(t *testing.T) {
+	t.Parallel()
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-03-26","serverInfo":{"name":"upstream"}}}`))
+	}))
+	t.Cleanup(upstream.Close)
+
+	var observed *proxy.InitializeRequest
+	p := newProxyForTest(t, upstream.URL)
+	p.InitializeRequestInterceptors = []proxy.InitializeRequestInterceptor{
+		&mockInitializeRequestInterceptor{name: "typed", lastCall: &observed},
+	}
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(initializeRequestWithParams))
+	req.Header.Set("Content-Type", "application/json")
+
+	rr := httptest.NewRecorder()
+	require.NoError(t, p.Post(rr, req))
+	require.NotNil(t, observed, "typed request interceptor must be invoked for initialize")
+	require.NotNil(t, observed.Params)
+	require.Equal(t, "2025-03-26", observed.Params.ProtocolVersion)
+	require.NotNil(t, observed.Params.ClientInfo)
+	require.Equal(t, "claude", observed.Params.ClientInfo.Name)
+}
+
+func TestProxy_Post_InitializeRequestInterceptor_SkipsForNonInitialize(t *testing.T) {
+	t.Parallel()
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":2,"result":{"tools":[]}}`))
+	}))
+	t.Cleanup(upstream.Close)
+
+	var called int
+	p := newProxyForTest(t, upstream.URL)
+	p.InitializeRequestInterceptors = []proxy.InitializeRequestInterceptor{
+		&mockInitializeRequestInterceptor{name: "typed", called: &called},
+	}
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(toolsListRequest))
+	req.Header.Set("Content-Type", "application/json")
+
+	rr := httptest.NewRecorder()
+	require.NoError(t, p.Post(rr, req))
+	require.Zero(t, called, "typed initialize interceptor must not run for tools/list")
+}
+
+func TestProxy_Post_InitializeRequestInterceptor_RejectionWritesJSONRPCError(t *testing.T) {
+	t.Parallel()
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
+		t.Error("upstream must not be called when a typed interceptor rejects initialize")
+	}))
+	t.Cleanup(upstream.Close)
+
+	p := newProxyForTest(t, upstream.URL)
+	p.InitializeRequestInterceptors = []proxy.InitializeRequestInterceptor{
+		&mockInitializeRequestInterceptor{name: "typed", err: &proxy.RejectError{Code: proxy.RejectCodeServerError, Message: "session blocked", Data: nil}},
+	}
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(initializeRequestWithParams))
+	req.Header.Set("Content-Type", "application/json")
+
+	rr := httptest.NewRecorder()
+	require.NoError(t, p.Post(rr, req), "typed rejection writes a JSON-RPC error envelope")
+	require.Equal(t, http.StatusOK, rr.Code)
+	require.Contains(t, rr.Body.String(), `"id":1`, "envelope must preserve the originating initialize request id")
+	require.Contains(t, rr.Body.String(), `"code":-32000`, "RejectError code must propagate to the envelope")
+	require.Contains(t, rr.Body.String(), "session blocked", "RejectError message must propagate to the envelope")
+}
+
+func TestProxy_Post_InitializeRequestInterceptor_RunsAfterGeneric(t *testing.T) {
+	t.Parallel()
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{}}`))
+	}))
+	t.Cleanup(upstream.Close)
+
+	order := []string{}
+	p := newProxyForTest(t, upstream.URL)
+	p.UserRequestInterceptors = []proxy.UserRequestInterceptor{
+		&mockUserRequestInterceptor{name: "generic-req", order: &order},
+	}
+	p.InitializeRequestInterceptors = []proxy.InitializeRequestInterceptor{
+		&mockInitializeRequestInterceptor{name: "typed-req", order: &order},
+	}
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(initializeRequestWithParams))
+	req.Header.Set("Content-Type", "application/json")
+
+	rr := httptest.NewRecorder()
+	require.NoError(t, p.Post(rr, req))
+	require.Equal(t, []string{"generic-req", "typed-req"}, order, "generic interceptors must run before typed interceptors")
+}
+
 const toolsCallRequest = `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_weather","arguments":{"location":"sf"}}}`
 
 func TestProxy_Post_ToolsCallRequestInterceptor_RunsForToolsCall(t *testing.T) {
