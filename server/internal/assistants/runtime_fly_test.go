@@ -194,6 +194,41 @@ func TestFlyRuntimeBackendEnsureFlapsNotFoundFreshAppPropagates(t *testing.T) {
 	require.Equal(t, 0, apiClient.deleteCalls, "fresh app must not be torn down on a propagation 404")
 }
 
+func TestFlyRuntimeBackendEnsureFreshlyRecreatedAppClearsPriorBootMetadata(t *testing.T) {
+	t.Parallel()
+
+	server := newTestAssistantRuntimeServer(t, true)
+	backend, apiClient, flapsClient := newTestFlyRuntimeBackend(t, server)
+
+	// Metadata can be copied from a failed prior runtime row. If the app was
+	// deleted for confirmed corruption and ensureApp recreates it, those old
+	// machine IDs belong to the previous app incarnation and must not turn
+	// fresh Machines propagation into another corruption teardown.
+	apiClient.getAppErr = errors.New("not found")
+	apiClient.organization = &fly.Organization{ID: "org-123"}
+	flapsClient.listErr = errors.New("app not found")
+
+	rawMetadata, err := json.Marshal(flyRuntimeMetadata{
+		AppName:    "gram-asst-test",
+		AppURL:     server.URL,
+		MachineID:  "machine-from-old-app",
+		Region:     "iad",
+		LastBootID: "boot-from-old-app",
+	})
+	require.NoError(t, err)
+
+	_, err = backend.Ensure(context.Background(), assistantRuntimeRecord{
+		AssistantThreadID:   uuid.New(),
+		AssistantID:         uuid.New(),
+		ProjectID:           uuid.New(),
+		Backend:             runtimeBackendFlyIO,
+		BackendMetadataJSON: rawMetadata,
+	})
+	require.Error(t, err)
+	require.NotErrorIs(t, err, errFlyAppCorrupted)
+	require.Equal(t, 0, apiClient.deleteCalls, "freshly recreated app must not be torn down because of stale prior boot metadata")
+}
+
 func TestFlyRuntimeBackendStopIgnoresMissingApp(t *testing.T) {
 	t.Parallel()
 

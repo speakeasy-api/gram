@@ -286,7 +286,16 @@ INSERT INTO assistant_runtimes (
   @project_id,
   @backend,
   @state,
-  '{}'::jsonb
+  COALESCE((
+    SELECT r.backend_metadata_json
+    FROM assistant_runtimes r
+    WHERE r.project_id = @project_id
+      AND r.assistant_thread_id = @assistant_thread_id
+      AND r.backend = @backend
+      AND r.backend_metadata_json <> '{}'::jsonb
+    ORDER BY r.created_at DESC
+    LIMIT 1
+  ), '{}'::jsonb)
 )
 ON CONFLICT DO NOTHING;
 

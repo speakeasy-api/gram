@@ -208,12 +208,20 @@ func (f *FlyRuntimeBackend) ensureExisting(
 		appURL = flyRuntimeAppURL(appName)
 	}
 
-	appIP, err := f.ensureApp(ctx, appName)
+	appIP, appCreated, err := f.ensureApp(ctx, appName)
 	if err != nil {
 		return RuntimeBackendEnsureResult{}, err
 	}
 	if appIP == "" {
 		appIP = metadata.AppIP
+	}
+	if appCreated {
+		// Metadata may have been recovered from a prior runtime row after a
+		// failed/corrupted app was deleted. Once the app has been recreated,
+		// old machine/boot IDs describe the previous app incarnation and must
+		// not make normal Machines propagation look like established drift.
+		metadata.MachineID = ""
+		metadata.LastBootID = ""
 	}
 
 	machine, err := f.resolveMachine(ctx, flapsClient, appName, runtime.AssistantThreadID, metadata.MachineID, metadata.LastBootID)
@@ -299,16 +307,17 @@ func (f *FlyRuntimeBackend) ensureExisting(
 }
 
 // ensureApp returns the app's shared v4 IP so callers can dial it directly
-// instead of waiting on public DNS propagation (see flyRuntimeTarget).
-func (f *FlyRuntimeBackend) ensureApp(ctx context.Context, appName string) (string, error) {
+// instead of waiting on public DNS propagation (see flyRuntimeTarget). The
+// boolean reports whether this call created the app.
+func (f *FlyRuntimeBackend) ensureApp(ctx context.Context, appName string) (string, bool, error) {
 	app, err := f.client.GetApp(ctx, appName)
 	switch {
 	case err == nil:
-		return app.SharedIPAddress, nil
+		return app.SharedIPAddress, false, nil
 	case isFlyNotFound(err):
 		org, err := f.client.GetOrganizationBySlug(ctx, f.config.DefaultFlyOrg)
 		if err != nil {
-			return "", fmt.Errorf("resolve assistant fly runtime organization: %w", err)
+			return "", false, fmt.Errorf("resolve assistant fly runtime organization: %w", err)
 		}
 		_, err = f.client.CreateApp(ctx, fly.CreateAppInput{
 			OrganizationID:  org.ID,
@@ -316,14 +325,14 @@ func (f *FlyRuntimeBackend) ensureApp(ctx context.Context, appName string) (stri
 			PreferredRegion: new(f.config.DefaultFlyRegion),
 		})
 		if err != nil && !isFlyAppNameTaken(err) {
-			return "", fmt.Errorf("create assistant fly runtime app: %w", err)
+			return "", false, fmt.Errorf("create assistant fly runtime app: %w", err)
 		}
 		if _, getErr := f.client.GetApp(ctx, appName); getErr != nil {
-			return "", fmt.Errorf("verify assistant fly runtime app: %w", getErr)
+			return "", false, fmt.Errorf("verify assistant fly runtime app: %w", getErr)
 		}
 		ip, err := f.client.AllocateSharedIPAddress(ctx, appName)
 		if err != nil && !isFlyIPAlreadyAssigned(err) {
-			return "", fmt.Errorf("allocate assistant fly runtime shared ip: %w", err)
+			return "", false, fmt.Errorf("allocate assistant fly runtime shared ip: %w", err)
 		}
 		ipStr := ""
 		if ip != nil {
@@ -334,7 +343,7 @@ func (f *FlyRuntimeBackend) ensureApp(ctx context.Context, appName string) (stri
 		// propagate, blowing past waitForRuntimeHealth's budget. Allocating
 		// a v6 forces an immediate DNS publish for both records.
 		if _, err := f.client.AllocateIPAddress(ctx, appName, "v6", "", org.ID, ""); err != nil && !isFlyIPAlreadyAssigned(err) {
-			return "", fmt.Errorf("allocate assistant fly runtime v6 ip: %w", err)
+			return "", false, fmt.Errorf("allocate assistant fly runtime v6 ip: %w", err)
 		}
 		if ipStr == "" {
 			// IP was already allocated previously (isFlyIPAlreadyAssigned path
@@ -343,9 +352,9 @@ func (f *FlyRuntimeBackend) ensureApp(ctx context.Context, appName string) (stri
 				ipStr = refreshed.SharedIPAddress
 			}
 		}
-		return ipStr, nil
+		return ipStr, true, nil
 	default:
-		return "", fmt.Errorf("load assistant fly runtime app: %w", err)
+		return "", false, fmt.Errorf("load assistant fly runtime app: %w", err)
 	}
 }
 

@@ -974,7 +974,16 @@ INSERT INTO assistant_runtimes (
   $3,
   $4,
   $5,
-  '{}'::jsonb
+  COALESCE((
+    SELECT r.backend_metadata_json
+    FROM assistant_runtimes r
+    WHERE r.project_id = $3
+      AND r.assistant_thread_id = $1
+      AND r.backend = $4
+      AND r.backend_metadata_json <> '{}'::jsonb
+    ORDER BY r.created_at DESC
+    LIMIT 1
+  ), '{}'::jsonb)
 )
 ON CONFLICT DO NOTHING
 `
