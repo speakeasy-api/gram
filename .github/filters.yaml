@@ -53,11 +53,13 @@ database-changes:
   - "server/migrations/**"
   - "server/clickhouse/**"
 
-# Excludes server/internal/database/** since SQLc-generated output legitimately
-# changes alongside schema.sql edits.
+# Excludes SQLc-generated output paths (per `server/database/sqlc.yaml` `out:`
+# directives) since they legitimately change alongside schema.sql edits.
 server-internal:
   - "server/internal/**"
   - "!server/internal/database/**"
+  - "!server/internal/**/repo/**"
+  - "!server/internal/testenv/testrepo/**"
 
 plog:
   - "go.mod"
