@@ -1354,17 +1354,16 @@ func (s *ServiceCore) tracedBuildStartupConfig(
 		if err != nil {
 			span.SetAttributes(attr.AssistantSetupFailureClass(classifySetupError(err)))
 			span.SetStatus(codes.Error, err.Error())
-			span.RecordError(err)
 		}
 		span.End()
 	}()
-	cfg, err = s.buildRuntimeStartupConfig(ctx, thread, runtime, assistant)
-	return cfg, err
+	return s.buildRuntimeStartupConfig(ctx, thread, runtime, assistant)
 }
 
-// tracedConfigure wraps the runtime Configure call so the inner
-// configureRequest span (and any future runtime-side phases) nests under a
-// span with the cold-start attribute attached.
+// tracedConfigure wraps the runtime Configure call so its latency joins the
+// rest of the setup pipeline in Datadog APM with the cold-start attribute
+// attached. The Fly backend's Configure no longer opens its own span —
+// this is the only span covering the configure HTTP roundtrip.
 func (s *ServiceCore) tracedConfigure(
 	ctx context.Context,
 	runtime assistantRuntimeRecord,
@@ -1378,13 +1377,11 @@ func (s *ServiceCore) tracedConfigure(
 		if err != nil {
 			span.SetAttributes(attr.AssistantSetupFailureClass(classifySetupError(err)))
 			span.SetStatus(codes.Error, err.Error())
-			span.RecordError(err)
 		}
 		span.End()
 	}()
-	if cfgErr := s.runtime.Configure(ctx, runtime, config); cfgErr != nil {
-		err = fmt.Errorf("configure runtime: %w", cfgErr)
-		return err
+	if err := s.runtime.Configure(ctx, runtime, config); err != nil {
+		return fmt.Errorf("configure runtime: %w", err)
 	}
 	return nil
 }

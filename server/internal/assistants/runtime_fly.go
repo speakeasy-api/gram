@@ -499,7 +499,14 @@ func (f *FlyRuntimeBackend) Configure(ctx context.Context, runtime assistantRunt
 	if err != nil {
 		return fmt.Errorf("marshal assistant fly runtime config: %w", err)
 	}
-	if err := f.tracedConfigureRequest(ctx, metadata, body); err != nil {
+	if _, err := f.runtimeRequest(ctx, targetFromMetadata(metadata), runtimeHTTPRequest{
+		Method:         http.MethodPost,
+		Path:           "/configure",
+		ContentType:    "application/json",
+		Body:           body,
+		MaxTimeSeconds: 0,
+		IdempotencyKey: "",
+	}); err != nil {
 		return fmt.Errorf("configure assistant fly runtime: %w", err)
 	}
 	return nil
@@ -511,7 +518,6 @@ func (f *FlyRuntimeBackend) tracedEnsureApp(ctx context.Context, appName string)
 		if err != nil {
 			span.SetAttributes(attr.AssistantSetupFailureClass(classifySetupError(err)))
 			span.SetStatus(codes.Error, err.Error())
-			span.RecordError(err)
 		}
 		span.End()
 	}()
@@ -534,12 +540,10 @@ func (f *FlyRuntimeBackend) tracedResolveMachine(
 		if err != nil {
 			span.SetAttributes(attr.AssistantSetupFailureClass(classifySetupError(err)))
 			span.SetStatus(codes.Error, err.Error())
-			span.RecordError(err)
 		}
 		span.End()
 	}()
-	machine, err = f.resolveMachine(ctx, flapsClient, appName, threadID, machineID, lastBootID, sameAppIncarnation)
-	return machine, err
+	return f.resolveMachine(ctx, flapsClient, appName, threadID, machineID, lastBootID, sameAppIncarnation)
 }
 
 func (f *FlyRuntimeBackend) tracedLaunchMachine(
@@ -555,12 +559,10 @@ func (f *FlyRuntimeBackend) tracedLaunchMachine(
 		if err != nil {
 			span.SetAttributes(attr.AssistantSetupFailureClass(classifySetupError(err)))
 			span.SetStatus(codes.Error, err.Error())
-			span.RecordError(err)
 		}
 		span.End()
 	}()
-	machine, err = f.launchMachine(ctx, flapsClient, runtime, appName)
-	return machine, err
+	return f.launchMachine(ctx, flapsClient, runtime, appName)
 }
 
 func (f *FlyRuntimeBackend) tracedWaitStarted(
@@ -577,13 +579,11 @@ func (f *FlyRuntimeBackend) tracedWaitStarted(
 		if err != nil {
 			span.SetAttributes(attr.AssistantSetupFailureClass(classifySetupError(err)))
 			span.SetStatus(codes.Error, err.Error())
-			span.RecordError(err)
 		}
 		span.End()
 	}()
 	if waitErr := flapsClient.Wait(ctx, appName, machine, "started", defaultFlyRuntimeHealthTimeout); waitErr != nil {
-		err = fmt.Errorf("flaps wait started: %w", waitErr)
-		return err
+		return fmt.Errorf("flaps wait started: %w", waitErr)
 	}
 	return nil
 }
@@ -596,12 +596,10 @@ func (f *FlyRuntimeBackend) tracedWaitHealth(ctx context.Context, target flyRunt
 		if err != nil {
 			span.SetAttributes(attr.AssistantSetupFailureClass(classifySetupError(err)))
 			span.SetStatus(codes.Error, err.Error())
-			span.RecordError(err)
 		}
 		span.End()
 	}()
-	err = f.waitForRuntimeHealth(ctx, target)
-	return err
+	return f.waitForRuntimeHealth(ctx, target)
 }
 
 func (f *FlyRuntimeBackend) tracedRuntimeState(ctx context.Context, target flyRuntimeTarget, coldStart bool) (state flyRuntimeStateResponse, err error) {
@@ -612,33 +610,10 @@ func (f *FlyRuntimeBackend) tracedRuntimeState(ctx context.Context, target flyRu
 		if err != nil {
 			span.SetAttributes(attr.AssistantSetupFailureClass(classifySetupError(err)))
 			span.SetStatus(codes.Error, err.Error())
-			span.RecordError(err)
 		}
 		span.End()
 	}()
-	state, err = f.runtimeState(ctx, target)
-	return state, err
-}
-
-func (f *FlyRuntimeBackend) tracedConfigureRequest(ctx context.Context, metadata flyRuntimeMetadata, body []byte) (err error) {
-	ctx, span := f.tracer.Start(ctx, "assistants.runtime.configureRequest")
-	defer func() {
-		if err != nil {
-			span.SetAttributes(attr.AssistantSetupFailureClass(classifySetupError(err)))
-			span.SetStatus(codes.Error, err.Error())
-			span.RecordError(err)
-		}
-		span.End()
-	}()
-	_, err = f.runtimeRequest(ctx, targetFromMetadata(metadata), runtimeHTTPRequest{
-		Method:         http.MethodPost,
-		Path:           "/configure",
-		ContentType:    "application/json",
-		Body:           body,
-		MaxTimeSeconds: 0,
-		IdempotencyKey: "",
-	})
-	return err
+	return f.runtimeState(ctx, target)
 }
 
 func (f *FlyRuntimeBackend) RunTurn(ctx context.Context, runtime assistantRuntimeRecord, idempotencyKey string, authToken string, prompt string) error {
