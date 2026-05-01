@@ -111,7 +111,7 @@ func TestPresidioAnalyzeBatchSplitsPoisonedBatch(t *testing.T) {
 		srv.URL,
 		otel.GetTracerProvider(),
 		otel.GetMeterProvider(),
-		slog.Default(),
+		testLogger(t),
 		1,
 	)
 
@@ -168,7 +168,7 @@ func TestPresidioAnalyzeBatchSplitsUntilSingleTexts(t *testing.T) {
 		srv.URL,
 		otel.GetTracerProvider(),
 		otel.GetMeterProvider(),
-		slog.Default(),
+		testLogger(t),
 		1,
 	)
 
@@ -195,4 +195,9 @@ func TestPresidioAnalyzeBatchSplitsUntilSingleTexts(t *testing.T) {
 		{"three"},
 		{"four"},
 	}, requests)
+}
+
+func testLogger(t *testing.T) *slog.Logger {
+	t.Helper()
+	return slog.New(slog.NewTextHandler(t.Output(), nil))
 }
