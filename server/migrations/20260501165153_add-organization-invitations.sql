@@ -16,7 +16,8 @@ CREATE TABLE "organization_invitations" (
   CONSTRAINT "organization_invitations_inviter_user_id_fkey" FOREIGN KEY ("inviter_user_id") REFERENCES "users" ("id") ON UPDATE NO ACTION ON DELETE SET NULL,
   CONSTRAINT "organization_invitations_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "organization_metadata" ("id") ON UPDATE NO ACTION ON DELETE CASCADE,
   CONSTRAINT "organization_invitations_email_check" CHECK (email <> ''::text),
-  CONSTRAINT "organization_invitations_state_check" CHECK (state = ANY (ARRAY['pending'::text, 'accepted'::text, 'revoked'::text, 'expired'::text]))
+  CONSTRAINT "organization_invitations_state_check" CHECK (state = ANY (ARRAY['pending'::text, 'accepted'::text, 'revoked'::text, 'expired'::text])),
+  CONSTRAINT "organization_invitations_token_check" CHECK (token <> ''::text)
 );
 -- Create index "organization_invitations_org_email_pending_key" to table: "organization_invitations"
 CREATE UNIQUE INDEX "organization_invitations_org_email_pending_key" ON "organization_invitations" ("organization_id", "email") WHERE (state = 'pending'::text);
