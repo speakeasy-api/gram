@@ -13,7 +13,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 // NewRegistryClient builds an [externalmcp.RegistryClient] wired to a
@@ -29,7 +28,7 @@ func NewRegistryClient(t *testing.T, logger *slog.Logger, tracerProvider trace.T
 	require.NoError(t, err, "expected guardian policy to initialize without error")
 
 	return externalmcp.NewRegistryClient(
-		testenv.NewLogger(t),
+		logger,
 		tracerProvider,
 		guardianPolicy,
 		externalmcp.NewPulseBackend(pulseURL, "test-tenant-id", conv.NewSecret([]byte("test-api-key"))),
