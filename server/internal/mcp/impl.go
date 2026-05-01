@@ -371,8 +371,7 @@ func (s *Service) HandleWellKnownOAuthProtectedResourceMetadata(w http.ResponseW
 		s.db,
 		&s.toolsetCache,
 		toolset,
-		baseURL,
-		mcpSlug,
+		baseURL+"/mcp/"+mcpSlug,
 	)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to resolve OAuth protected resource metadata").Log(ctx, s.logger)
@@ -415,7 +414,7 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 		return oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided")
 	}
 
-	toolset, customDomainCtx, err := s.loadToolsetFromMcpSlug(ctx, mcpSlug)
+	toolset, _, err := s.loadToolsetFromMcpSlug(ctx, mcpSlug)
 	switch {
 	case errors.Is(err, errToolsetNotFound):
 		return oops.E(oops.CodeNotFound, err, "mcp server not found")
@@ -423,18 +422,31 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 		return oops.E(oops.CodeUnexpected, err, "failed to load MCP server").Log(ctx, s.logger)
 	}
 
+	return s.ServeToolsetResolved(w, r, toolset, mcpSlug, "/mcp/")
+}
+
+// ServeToolsetResolved serves an MCP runtime request after the slug has
+// already been resolved to a toolset. It is exported so other runtime
+// surfaces (currently /x/mcp) can delegate the toolset-backed serving body
+// without re-implementing the OAuth/visibility/RBAC and tool dispatch flow.
+//
+// mcpSlug and oauthMetadataPathPrefix are used to build the
+// WWW-Authenticate resource_metadata URL (e.g. "/mcp/" or "/x/mcp/").
+//
+// The caller is responsible for closing r.Body.
+func (s *Service) ServeToolsetResolved(w http.ResponseWriter, r *http.Request, toolset *toolsets_repo.Toolset, mcpSlug, oauthMetadataPathPrefix string) error {
+	ctx := r.Context()
+	var err error
+
 	baseURL := s.serverURL.String()
-	if customDomainCtx != nil {
+	if customDomainCtx := customdomains.FromContext(ctx); customDomainCtx != nil {
 		baseURL = fmt.Sprintf("https://%s", customDomainCtx.Domain)
 	}
 
 	// Extract tokens from headers separately:
 	// - authToken: from Authorization header (for OAuth flows)
 	// - sessionToken: from Gram-Chat-Session header (for chat session fallback on non-OAuth endpoints)
-	authToken := r.Header.Get("Authorization")
-	authToken = strings.TrimPrefix(authToken, "Bearer ")
-	authToken = strings.TrimPrefix(authToken, "bearer ")
-	chatSessionJwt := r.Header.Get(constants.ChatSessionsTokenHeader)
+	authToken := AuthorizationBearerToken(r)
 
 	var tokenInputs []oauthTokenInputs
 
@@ -466,6 +478,7 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 	// Private MCPs still enforce identity auth at this level since that's user
 	// identity, not per-tool security.
 	oauthRequired := toolset.ExternalOauthServerID.Valid || (oAuthProxyProvider != nil)
+	oauthProtectedResourceURL := baseURL + "/.well-known/oauth-protected-resource" + oauthMetadataPathPrefix + mcpSlug
 	switch {
 	case toolset.McpIsPublic && toolset.ExternalOauthServerID.Valid:
 		// External OAuth server flow — collect token if present
@@ -510,42 +523,15 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 			}
 		}
 	case !toolset.McpIsPublic:
-		// Private MCP — identity auth is required at HTTP level
 		isOAuthCapable := oAuthProxyProvider != nil && oAuthProxyProvider.ProviderType == "gram"
-		token := authToken
-		if token == "" {
-			token = chatSessionJwt
+		ctx, err = s.RequirePrivateIdentityAuth(ctx, w, r, isOAuthCapable, toolset.ID, oauthProtectedResourceURL)
+		if err != nil {
+			return err
 		}
-
-		ctx, err = s.authenticateToken(ctx, token, toolset.ID, isOAuthCapable)
-		if err == nil {
-			break
-		}
-
-		if isOAuthCapable {
-			w.Header().Set(
-				"WWW-Authenticate",
-				fmt.Sprintf(`Bearer resource_metadata="%s"`, baseURL+"/.well-known/oauth-protected-resource/mcp/"+mcpSlug),
-			)
-		}
-
-		return oops.E(oops.CodeUnauthorized, nil, "expired or invalid access token")
 	default:
-		// Public MCP without OAuth — allow chatSessionJwt fallback
-		token := authToken
-		if token == "" {
-			token = chatSessionJwt
-		}
-		if token != "" {
-			ctx, err = s.authenticateToken(ctx, token, toolset.ID, false)
-			if err != nil {
-				return err
-			}
-
-			authCtx, ok := contextvalues.GetAuthContext(ctx)
-			if !ok || authCtx == nil {
-				return oops.E(oops.CodeUnauthorized, nil, "no auth context found").Log(ctx, s.logger)
-			}
+		ctx, err = s.TryPublicIdentityAuth(ctx, r, false, toolset.ID)
+		if err != nil {
+			return err
 		}
 	}
 
@@ -668,7 +654,7 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 		if oauthRequired {
 			w.Header().Set(
 				"WWW-Authenticate",
-				fmt.Sprintf(`Bearer resource_metadata="%s"`, baseURL+"/.well-known/oauth-protected-resource/mcp/"+mcpSlug),
+				fmt.Sprintf(`Bearer resource_metadata="%s"`, oauthProtectedResourceURL),
 			)
 		}
 		return oops.C(oops.CodeUnauthorized)
@@ -927,7 +913,92 @@ func parseMcpSessionID(headers http.Header) string {
 	return session
 }
 
-func (s *Service) authenticateToken(ctx context.Context, token string, toolsetID uuid.UUID, isOAuthCapable bool) (context.Context, error) {
+// ResolveOAuthProxyUpstreamToken validates the caller's Gram-issued
+// Bearer for the supplied OAuth proxy server, refreshing stored upstream
+// credentials when needed, and returns the upstream Bearer that should
+// replace the caller's on the outgoing request to the remote MCP server.
+//
+// Returns ("", nil) when no upstream token is available — the caller
+// supplied no Bearer, the lookup found no stored upstream credentials,
+// or token validation failed in a non-fatal way. Callers should fall
+// through to "forward with no Authorization." A non-nil error is fatal
+// and the caller should reject the request.
+//
+// TODO: this method is currently a stub that always returns ("", nil).
+// The supporting oauth machinery (oauthService.ValidateAccessToken,
+// RefreshProxyToken, and the underlying ExternalSecret storage) is keyed
+// by toolset_id today; generalising the resource model so it can be
+// keyed by mcp_servers.id is a prerequisite to wiring this up. Until
+// that lands, OAuth-proxy-backed mcp_servers behave like a public
+// no-token flow at this layer (the upstream remote MCP returns 401 if
+// it requires auth).
+func (s *Service) ResolveOAuthProxyUpstreamToken(_ context.Context, _, _ uuid.UUID, _ string) (string, error) {
+	return "", nil
+}
+
+// RequirePrivateIdentityAuth runs identity authentication for a non-public
+// MCP. It tries the Authorization header first, then the
+// Gram-Chat-Session header, returning the authenticated context on success.
+// On failure, when isOAuthCapable, it sets a WWW-Authenticate header with
+// the supplied resource_metadata URL so MCP clients can initiate OAuth, and
+// returns 401.
+func (s *Service) RequirePrivateIdentityAuth(ctx context.Context, w http.ResponseWriter, r *http.Request, isOAuthCapable bool, oauthResourceID uuid.UUID, wwwAuthResourceMetadataURL string) (context.Context, error) {
+	authToken := AuthorizationBearerToken(r)
+	chatSessionJwt := r.Header.Get(constants.ChatSessionsTokenHeader)
+
+	token := authToken
+	if token == "" {
+		token = chatSessionJwt
+	}
+
+	authedCtx, err := s.authenticateToken(ctx, token, oauthResourceID, isOAuthCapable)
+	if err == nil {
+		return authedCtx, nil
+	}
+
+	if isOAuthCapable {
+		w.Header().Set(
+			"WWW-Authenticate",
+			fmt.Sprintf(`Bearer resource_metadata="%s"`, wwwAuthResourceMetadataURL),
+		)
+	}
+
+	return ctx, oops.E(oops.CodeUnauthorized, nil, "expired or invalid access token")
+}
+
+// TryPublicIdentityAuth optionally authenticates a public MCP request when
+// the caller supplies an Authorization or Gram-Chat-Session token. Missing
+// tokens are not an error; an invalid supplied token is.
+func (s *Service) TryPublicIdentityAuth(ctx context.Context, r *http.Request, isOAuthCapable bool, oauthResourceID uuid.UUID) (context.Context, error) {
+	authToken := AuthorizationBearerToken(r)
+	chatSessionJwt := r.Header.Get(constants.ChatSessionsTokenHeader)
+
+	token := authToken
+	if token == "" {
+		token = chatSessionJwt
+	}
+	if token == "" {
+		return ctx, nil
+	}
+
+	authedCtx, err := s.authenticateToken(ctx, token, oauthResourceID, isOAuthCapable)
+	if err != nil {
+		return ctx, err
+	}
+
+	if authCtx, ok := contextvalues.GetAuthContext(authedCtx); !ok || authCtx == nil {
+		return ctx, oops.E(oops.CodeUnauthorized, nil, "no auth context found").Log(ctx, s.logger)
+	}
+	return authedCtx, nil
+}
+
+// authenticateToken authenticates the caller using the supplied token across
+// several strategies (assistant tokens, gram OAuth via oauthResourceID, API
+// keys, chat sessions). oauthResourceID is consumed only when isOAuthCapable
+// is true — today that path is exercised only by toolset-backed flows so
+// the resource is a toolset id; remote-backend callers pass false and the
+// id is decorative.
+func (s *Service) authenticateToken(ctx context.Context, token string, oauthResourceID uuid.UUID, isOAuthCapable bool) (context.Context, error) {
 	if token == "" {
 		return ctx, oops.C(oops.CodeUnauthorized)
 	}
@@ -939,7 +1010,7 @@ func (s *Service) authenticateToken(ctx context.Context, token string, toolsetID
 	var oAuthToken *oauth.Token
 	var err error
 	if isOAuthCapable {
-		oAuthToken, err = s.oauthService.ValidateAccessToken(ctx, toolsetID, token)
+		oAuthToken, err = s.oauthService.ValidateAccessToken(ctx, oauthResourceID, token)
 	}
 	if err == nil && oAuthToken != nil {
 		// OAuth token validated, authenticate with session
@@ -957,7 +1028,7 @@ func (s *Service) authenticateToken(ctx context.Context, token string, toolsetID
 			return ctx, oops.E(oops.CodeUnauthorized, nil, "no auth context found")
 		}
 
-		s.logger.InfoContext(ctx, "authenticated via gram OAuth", attr.SlogToolsetID(toolsetID.String()))
+		s.logger.InfoContext(ctx, "authenticated via gram OAuth", attr.SlogToolsetID(oauthResourceID.String()))
 		return ctx, nil
 	}
 

@@ -124,6 +124,23 @@ type Proxy struct {
 	// constructing the upstream request.
 	Headers []ConfiguredHeader
 
+	// AuthorizationOverride is the Bearer token to set on the outgoing
+	// Authorization header. The caller's incoming Authorization is
+	// always dropped (Gram-issued credentials — API keys, OAuth tokens,
+	// chat-session JWTs — are not meaningful upstream); when this field
+	// is non-empty the proxy emits "Authorization: Bearer <override>"
+	// instead. Use it for two flows:
+	//
+	//   - External OAuth: forward the caller's Bearer verbatim by
+	//     setting this to the caller's own token (the upstream MCP
+	//     server is the AS).
+	//   - OAuth-proxy token swap: set this to a stored upstream
+	//     credential resolved from the caller's Gram-issued OAuth
+	//     token.
+	//
+	// Leave empty (default) to send no Authorization upstream.
+	AuthorizationOverride string
+
 	UserRequestInterceptors []UserRequestInterceptor
 
 	// RemoteMessageInterceptors run for each JSON-RPC message arriving
