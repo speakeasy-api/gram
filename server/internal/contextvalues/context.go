@@ -9,10 +9,15 @@ import (
 type contextKey string
 
 type AuthContext struct {
-	ActiveOrganizationID  string
-	UserID                string
-	ExternalUserID        string // Customer-provided user identifier (e.g., from chat session JWTs)
-	APIKeyID              string
+	ActiveOrganizationID string
+	UserID               string
+	ExternalUserID       string // Customer-provided user identifier (e.g., from chat session JWTs)
+	APIKeyID             string
+	// APIKeyToolsetID, when set, restricts the API key's authority to MCP
+	// requests targeting this single toolset. Populated for plugin-scoped
+	// keys (rfc-plugin-scoped-keys.md); nil for org-wide keys and non-key
+	// auth (sessions, OAuth). Enforced at the MCP entrypoint.
+	APIKeyToolsetID       *uuid.UUID
 	SessionID             *string
 	ProjectID             *uuid.UUID
 	OrganizationSlug      string

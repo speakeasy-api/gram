@@ -522,6 +522,15 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 			break
 		}
 
+		// A Forbidden from authenticateToken means the credential was valid
+		// but not authorized for this MCP server (e.g. plugin-scoped key
+		// pointed at the wrong toolset, see rfc-plugin-scoped-keys.md).
+		// Preserve that semantic instead of masking it as Unauthorized.
+		var oopsErr *oops.ShareableError
+		if errors.As(err, &oopsErr) && oopsErr.Code == oops.CodeForbidden {
+			return err
+		}
+
 		if isOAuthCapable {
 			w.Header().Set(
 				"WWW-Authenticate",
@@ -974,6 +983,9 @@ func (s *Service) authenticateToken(ctx context.Context, token string, toolsetID
 
 	ctx, err = s.auth.Authorize(ctx, token, &sc)
 	if err == nil {
+		if scopeErr := enforceAPIKeyToolsetScope(ctx, toolsetID); scopeErr != nil {
+			return ctx, scopeErr
+		}
 		return ctx, nil
 	}
 
@@ -985,6 +997,9 @@ func (s *Service) authenticateToken(ctx context.Context, token string, toolsetID
 	}
 	ctx, err = s.auth.Authorize(ctx, token, &sc)
 	if err == nil {
+		if scopeErr := enforceAPIKeyToolsetScope(ctx, toolsetID); scopeErr != nil {
+			return ctx, scopeErr
+		}
 		return ctx, nil
 	}
 
@@ -996,6 +1011,21 @@ func (s *Service) authenticateToken(ctx context.Context, token string, toolsetID
 
 	// All strategies failed
 	return ctx, oops.E(oops.CodeUnauthorized, nil, "failed to authorize").Log(ctx, s.logger)
+}
+
+// enforceAPIKeyToolsetScope rejects an API-key-authenticated request when
+// the key is bound to a different toolset than the one the URL targets.
+// Plugin-scoped keys (rfc-plugin-scoped-keys.md) carry APIKeyToolsetID; if
+// the field is nil the key is org-wide and any toolset is permitted.
+func enforceAPIKeyToolsetScope(ctx context.Context, toolsetID uuid.UUID) error {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.APIKeyToolsetID == nil {
+		return nil
+	}
+	if *authCtx.APIKeyToolsetID != toolsetID {
+		return oops.E(oops.CodeForbidden, nil, "api key not authorized for this MCP server")
+	}
+	return nil
 }
 
 //nolint:unused // kept for follow-up: restore stored-credential resolution for session-authenticated users
