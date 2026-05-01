@@ -228,6 +228,7 @@ run();
 
 ### [Environments](docs/sdks/environments/README.md)
 
+* [clone](docs/sdks/environments/README.md#clone) - cloneEnvironment environments
 * [create](docs/sdks/environments/README.md#create) - createEnvironment environments
 * [deleteBySlug](docs/sdks/environments/README.md#deletebyslug) - deleteEnvironment environments
 * [deleteSourceLink](docs/sdks/environments/README.md#deletesourcelink) - deleteSourceEnvironmentLink environments
@@ -533,6 +534,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`domainsDeleteDomain`](docs/sdks/domains/README.md#deletedomain) - deleteDomain domains
 - [`domainsGetDomain`](docs/sdks/domains/README.md#getdomain) - getDomain domains
 - [`domainsRegisterDomain`](docs/sdks/domains/README.md#registerdomain) - createDomain domains
+- [`environmentsClone`](docs/sdks/environments/README.md#clone) - cloneEnvironment environments
 - [`environmentsCreate`](docs/sdks/environments/README.md#create) - createEnvironment environments
 - [`environmentsDeleteBySlug`](docs/sdks/environments/README.md#deletebyslug) - deleteEnvironment environments
 - [`environmentsDeleteSourceLink`](docs/sdks/environments/README.md#deletesourcelink) - deleteSourceEnvironmentLink environments
@@ -720,6 +722,7 @@ To learn about this feature and how to get started, check
 - [`useChatSessionsRevokeMutation`](docs/sdks/chatsessions/README.md#revoke) - revoke chatSessions
 - [`useChatSubmitFeedbackMutation`](docs/sdks/chat/README.md#submitfeedback) - submitFeedback chat
 - [`useCheckMCPSlugAvailability`](docs/sdks/toolsets/README.md#checkmcpslugavailability) - checkMCPSlugAvailability toolsets
+- [`useCloneEnvironmentMutation`](docs/sdks/environments/README.md#clone) - cloneEnvironment environments
 - [`useCloneToolsetMutation`](docs/sdks/toolsets/README.md#clonebyslug) - cloneToolset toolsets
 - [`useCollectionsAttachServerMutation`](docs/sdks/collections/README.md#attachserver) - attachServer collections
 - [`useCollectionsCreateMutation`](docs/sdks/collections/README.md#create) - create collections

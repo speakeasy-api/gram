@@ -165,6 +165,51 @@ func BuildUpdateEnvironmentPayload(environmentsUpdateEnvironmentBody string, env
 	return v, nil
 }
 
+// BuildCloneEnvironmentPayload builds the payload for the environments
+// cloneEnvironment endpoint from CLI flags.
+func BuildCloneEnvironmentPayload(environmentsCloneEnvironmentBody string, environmentsCloneEnvironmentSlug string, environmentsCloneEnvironmentSessionToken string, environmentsCloneEnvironmentProjectSlugInput string) (*environments.CloneEnvironmentPayload, error) {
+	var err error
+	var body CloneEnvironmentRequestBody
+	{
+		err = json.Unmarshal([]byte(environmentsCloneEnvironmentBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"copy_values\": false,\n      \"new_name\": \"abc123\"\n   }'")
+		}
+	}
+	var slug string
+	{
+		slug = environmentsCloneEnvironmentSlug
+		err = goa.MergeErrors(err, goa.ValidatePattern("slug", slug, "^[a-z0-9_-]{1,128}$"))
+		if utf8.RuneCountInString(slug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("slug", slug, utf8.RuneCountInString(slug), 40, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if environmentsCloneEnvironmentSessionToken != "" {
+			sessionToken = &environmentsCloneEnvironmentSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if environmentsCloneEnvironmentProjectSlugInput != "" {
+			projectSlugInput = &environmentsCloneEnvironmentProjectSlugInput
+		}
+	}
+	v := &environments.CloneEnvironmentPayload{
+		NewName:    body.NewName,
+		CopyValues: body.CopyValues,
+	}
+	v.Slug = types.Slug(slug)
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildDeleteEnvironmentPayload builds the payload for the environments
 // deleteEnvironment endpoint from CLI flags.
 func BuildDeleteEnvironmentPayload(environmentsDeleteEnvironmentSlug string, environmentsDeleteEnvironmentSessionToken string, environmentsDeleteEnvironmentProjectSlugInput string) (*environments.DeleteEnvironmentPayload, error) {

@@ -39,6 +39,16 @@ type UpdateEnvironmentRequestBody struct {
 	EntriesToRemove []string `form:"entries_to_remove,omitempty" json:"entries_to_remove,omitempty" xml:"entries_to_remove,omitempty"`
 }
 
+// CloneEnvironmentRequestBody is the type of the "environments" service
+// "cloneEnvironment" endpoint HTTP request body.
+type CloneEnvironmentRequestBody struct {
+	// The name for the new cloned environment
+	NewName *string `form:"new_name,omitempty" json:"new_name,omitempty" xml:"new_name,omitempty"`
+	// If true, copy the encrypted secret values from the source. If false
+	// (default), copy only variable names with empty placeholder values.
+	CopyValues *bool `form:"copy_values,omitempty" json:"copy_values,omitempty" xml:"copy_values,omitempty"`
+}
+
 // SetSourceEnvironmentLinkRequestBody is the type of the "environments"
 // service "setSourceEnvironmentLink" endpoint HTTP request body.
 type SetSourceEnvironmentLinkRequestBody struct {
@@ -91,6 +101,29 @@ type ListEnvironmentsResponseBody struct {
 // UpdateEnvironmentResponseBody is the type of the "environments" service
 // "updateEnvironment" endpoint HTTP response body.
 type UpdateEnvironmentResponseBody struct {
+	// The ID of the environment
+	ID string `form:"id" json:"id" xml:"id"`
+	// The organization ID this environment belongs to
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// The project ID this environment belongs to
+	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The name of the environment
+	Name string `form:"name" json:"name" xml:"name"`
+	// The slug identifier for the environment
+	Slug string `form:"slug" json:"slug" xml:"slug"`
+	// The description of the environment
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// List of environment entries
+	Entries []*EnvironmentEntryResponseBody `form:"entries" json:"entries" xml:"entries"`
+	// The creation date of the environment
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// When the environment was last updated
+	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// CloneEnvironmentResponseBody is the type of the "environments" service
+// "cloneEnvironment" endpoint HTTP response body.
+type CloneEnvironmentResponseBody struct {
 	// The ID of the environment
 	ID string `form:"id" json:"id" xml:"id"`
 	// The organization ID this environment belongs to
@@ -736,6 +769,196 @@ type UpdateEnvironmentUnexpectedResponseBody struct {
 // service "updateEnvironment" endpoint HTTP response body for the
 // "gateway_error" error.
 type UpdateEnvironmentGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CloneEnvironmentUnauthorizedResponseBody is the type of the "environments"
+// service "cloneEnvironment" endpoint HTTP response body for the
+// "unauthorized" error.
+type CloneEnvironmentUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CloneEnvironmentForbiddenResponseBody is the type of the "environments"
+// service "cloneEnvironment" endpoint HTTP response body for the "forbidden"
+// error.
+type CloneEnvironmentForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CloneEnvironmentBadRequestResponseBody is the type of the "environments"
+// service "cloneEnvironment" endpoint HTTP response body for the "bad_request"
+// error.
+type CloneEnvironmentBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CloneEnvironmentNotFoundResponseBody is the type of the "environments"
+// service "cloneEnvironment" endpoint HTTP response body for the "not_found"
+// error.
+type CloneEnvironmentNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CloneEnvironmentConflictResponseBody is the type of the "environments"
+// service "cloneEnvironment" endpoint HTTP response body for the "conflict"
+// error.
+type CloneEnvironmentConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CloneEnvironmentUnsupportedMediaResponseBody is the type of the
+// "environments" service "cloneEnvironment" endpoint HTTP response body for
+// the "unsupported_media" error.
+type CloneEnvironmentUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CloneEnvironmentInvalidResponseBody is the type of the "environments"
+// service "cloneEnvironment" endpoint HTTP response body for the "invalid"
+// error.
+type CloneEnvironmentInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CloneEnvironmentInvariantViolationResponseBody is the type of the
+// "environments" service "cloneEnvironment" endpoint HTTP response body for
+// the "invariant_violation" error.
+type CloneEnvironmentInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CloneEnvironmentUnexpectedResponseBody is the type of the "environments"
+// service "cloneEnvironment" endpoint HTTP response body for the "unexpected"
+// error.
+type CloneEnvironmentUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CloneEnvironmentGatewayErrorResponseBody is the type of the "environments"
+// service "cloneEnvironment" endpoint HTTP response body for the
+// "gateway_error" error.
+type CloneEnvironmentGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2202,6 +2425,34 @@ func NewUpdateEnvironmentResponseBody(res *types.Environment) *UpdateEnvironment
 	return body
 }
 
+// NewCloneEnvironmentResponseBody builds the HTTP response body from the
+// result of the "cloneEnvironment" endpoint of the "environments" service.
+func NewCloneEnvironmentResponseBody(res *types.Environment) *CloneEnvironmentResponseBody {
+	body := &CloneEnvironmentResponseBody{
+		ID:             res.ID,
+		OrganizationID: res.OrganizationID,
+		ProjectID:      res.ProjectID,
+		Name:           res.Name,
+		Slug:           string(res.Slug),
+		Description:    res.Description,
+		CreatedAt:      res.CreatedAt,
+		UpdatedAt:      res.UpdatedAt,
+	}
+	if res.Entries != nil {
+		body.Entries = make([]*EnvironmentEntryResponseBody, len(res.Entries))
+		for i, val := range res.Entries {
+			if val == nil {
+				body.Entries[i] = nil
+				continue
+			}
+			body.Entries[i] = marshalTypesEnvironmentEntryToEnvironmentEntryResponseBody(val)
+		}
+	} else {
+		body.Entries = []*EnvironmentEntryResponseBody{}
+	}
+	return body
+}
+
 // NewSetSourceEnvironmentLinkResponseBody builds the HTTP response body from
 // the result of the "setSourceEnvironmentLink" endpoint of the "environments"
 // service.
@@ -2709,6 +2960,150 @@ func NewUpdateEnvironmentUnexpectedResponseBody(res *goa.ServiceError) *UpdateEn
 // service.
 func NewUpdateEnvironmentGatewayErrorResponseBody(res *goa.ServiceError) *UpdateEnvironmentGatewayErrorResponseBody {
 	body := &UpdateEnvironmentGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCloneEnvironmentUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "cloneEnvironment" endpoint of the "environments"
+// service.
+func NewCloneEnvironmentUnauthorizedResponseBody(res *goa.ServiceError) *CloneEnvironmentUnauthorizedResponseBody {
+	body := &CloneEnvironmentUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCloneEnvironmentForbiddenResponseBody builds the HTTP response body from
+// the result of the "cloneEnvironment" endpoint of the "environments" service.
+func NewCloneEnvironmentForbiddenResponseBody(res *goa.ServiceError) *CloneEnvironmentForbiddenResponseBody {
+	body := &CloneEnvironmentForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCloneEnvironmentBadRequestResponseBody builds the HTTP response body from
+// the result of the "cloneEnvironment" endpoint of the "environments" service.
+func NewCloneEnvironmentBadRequestResponseBody(res *goa.ServiceError) *CloneEnvironmentBadRequestResponseBody {
+	body := &CloneEnvironmentBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCloneEnvironmentNotFoundResponseBody builds the HTTP response body from
+// the result of the "cloneEnvironment" endpoint of the "environments" service.
+func NewCloneEnvironmentNotFoundResponseBody(res *goa.ServiceError) *CloneEnvironmentNotFoundResponseBody {
+	body := &CloneEnvironmentNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCloneEnvironmentConflictResponseBody builds the HTTP response body from
+// the result of the "cloneEnvironment" endpoint of the "environments" service.
+func NewCloneEnvironmentConflictResponseBody(res *goa.ServiceError) *CloneEnvironmentConflictResponseBody {
+	body := &CloneEnvironmentConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCloneEnvironmentUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "cloneEnvironment" endpoint of the
+// "environments" service.
+func NewCloneEnvironmentUnsupportedMediaResponseBody(res *goa.ServiceError) *CloneEnvironmentUnsupportedMediaResponseBody {
+	body := &CloneEnvironmentUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCloneEnvironmentInvalidResponseBody builds the HTTP response body from
+// the result of the "cloneEnvironment" endpoint of the "environments" service.
+func NewCloneEnvironmentInvalidResponseBody(res *goa.ServiceError) *CloneEnvironmentInvalidResponseBody {
+	body := &CloneEnvironmentInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCloneEnvironmentInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "cloneEnvironment" endpoint of the
+// "environments" service.
+func NewCloneEnvironmentInvariantViolationResponseBody(res *goa.ServiceError) *CloneEnvironmentInvariantViolationResponseBody {
+	body := &CloneEnvironmentInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCloneEnvironmentUnexpectedResponseBody builds the HTTP response body from
+// the result of the "cloneEnvironment" endpoint of the "environments" service.
+func NewCloneEnvironmentUnexpectedResponseBody(res *goa.ServiceError) *CloneEnvironmentUnexpectedResponseBody {
+	body := &CloneEnvironmentUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCloneEnvironmentGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "cloneEnvironment" endpoint of the "environments"
+// service.
+func NewCloneEnvironmentGatewayErrorResponseBody(res *goa.ServiceError) *CloneEnvironmentGatewayErrorResponseBody {
+	body := &CloneEnvironmentGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -3823,6 +4218,20 @@ func NewUpdateEnvironmentPayload(body *UpdateEnvironmentRequestBody, slug string
 	return v
 }
 
+// NewCloneEnvironmentPayload builds a environments service cloneEnvironment
+// endpoint payload.
+func NewCloneEnvironmentPayload(body *CloneEnvironmentRequestBody, slug string, sessionToken *string, projectSlugInput *string) *environments.CloneEnvironmentPayload {
+	v := &environments.CloneEnvironmentPayload{
+		NewName:    *body.NewName,
+		CopyValues: body.CopyValues,
+	}
+	v.Slug = types.Slug(slug)
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
 // NewDeleteEnvironmentPayload builds a environments service deleteEnvironment
 // endpoint payload.
 func NewDeleteEnvironmentPayload(slug string, sessionToken *string, projectSlugInput *string) *environments.DeleteEnvironmentPayload {
@@ -3944,6 +4353,15 @@ func ValidateUpdateEnvironmentRequestBody(body *UpdateEnvironmentRequestBody) (e
 				err = goa.MergeErrors(err, err2)
 			}
 		}
+	}
+	return
+}
+
+// ValidateCloneEnvironmentRequestBody runs the validations defined on
+// CloneEnvironmentRequestBody
+func ValidateCloneEnvironmentRequestBody(body *CloneEnvironmentRequestBody) (err error) {
+	if body.NewName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("new_name", "body"))
 	}
 	return
 }

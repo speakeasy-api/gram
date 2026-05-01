@@ -19,6 +19,7 @@ type Endpoints struct {
 	CreateEnvironment            goa.Endpoint
 	ListEnvironments             goa.Endpoint
 	UpdateEnvironment            goa.Endpoint
+	CloneEnvironment             goa.Endpoint
 	DeleteEnvironment            goa.Endpoint
 	SetSourceEnvironmentLink     goa.Endpoint
 	DeleteSourceEnvironmentLink  goa.Endpoint
@@ -36,6 +37,7 @@ func NewEndpoints(s Service) *Endpoints {
 		CreateEnvironment:            NewCreateEnvironmentEndpoint(s, a.APIKeyAuth),
 		ListEnvironments:             NewListEnvironmentsEndpoint(s, a.APIKeyAuth),
 		UpdateEnvironment:            NewUpdateEnvironmentEndpoint(s, a.APIKeyAuth),
+		CloneEnvironment:             NewCloneEnvironmentEndpoint(s, a.APIKeyAuth),
 		DeleteEnvironment:            NewDeleteEnvironmentEndpoint(s, a.APIKeyAuth),
 		SetSourceEnvironmentLink:     NewSetSourceEnvironmentLinkEndpoint(s, a.APIKeyAuth),
 		DeleteSourceEnvironmentLink:  NewDeleteSourceEnvironmentLinkEndpoint(s, a.APIKeyAuth),
@@ -51,6 +53,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.CreateEnvironment = m(e.CreateEnvironment)
 	e.ListEnvironments = m(e.ListEnvironments)
 	e.UpdateEnvironment = m(e.UpdateEnvironment)
+	e.CloneEnvironment = m(e.CloneEnvironment)
 	e.DeleteEnvironment = m(e.DeleteEnvironment)
 	e.SetSourceEnvironmentLink = m(e.SetSourceEnvironmentLink)
 	e.DeleteSourceEnvironmentLink = m(e.DeleteSourceEnvironmentLink)
@@ -162,6 +165,41 @@ func NewUpdateEnvironmentEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFun
 			return nil, err
 		}
 		return s.UpdateEnvironment(ctx, p)
+	}
+}
+
+// NewCloneEnvironmentEndpoint returns an endpoint function that calls the
+// method "cloneEnvironment" of service "environments".
+func NewCloneEnvironmentEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*CloneEnvironmentPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.CloneEnvironment(ctx, p)
 	}
 }
 
