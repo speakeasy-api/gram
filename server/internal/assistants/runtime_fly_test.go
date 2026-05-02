@@ -509,6 +509,7 @@ func newTestFlyRuntimeBackend(t *testing.T, server *httptest.Server) (*FlyRuntim
 
 	backend := &FlyRuntimeBackend{
 		logger: testenv.NewLogger(t),
+		tracer: testenv.NewTracerProvider(t).Tracer("test"),
 		config: FlyRuntimeConfig{
 			DefaultFlyOrg:     "speakeasy-lab",
 			DefaultFlyRegion:  "iad",

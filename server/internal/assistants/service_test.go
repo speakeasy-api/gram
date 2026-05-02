@@ -51,7 +51,7 @@ func TestServiceCoreAdmitPendingThreadsUsesFlyBackend(t *testing.T) {
 
 	insertAssistantFixture(t, conn, projectID, assistantID, chatID, threadID)
 
-	core := NewServiceCore(testenv.NewLogger(t), conn, testRuntimeBackend{backend: runtimeBackendFlyIO, runTurnErr: nil}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)))
+	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn, testRuntimeBackend{backend: runtimeBackendFlyIO, runTurnErr: nil}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)))
 
 	admitted, err := core.AdmitPendingThreads(t.Context(), assistantID)
 	require.NoError(t, err)
@@ -107,7 +107,7 @@ WHERE id = $3
 `, eventStatusProcessing, time.Now().UTC(), eventID)
 	require.NoError(t, err)
 
-	core := NewServiceCore(testenv.NewLogger(t), conn, testRuntimeBackend{backend: runtimeBackendFlyIO, runTurnErr: nil}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)))
+	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn, testRuntimeBackend{backend: runtimeBackendFlyIO, runTurnErr: nil}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)))
 
 	result, err := core.ReapStuckRuntimes(t.Context())
 	require.NoError(t, err)
@@ -174,7 +174,7 @@ WHERE id = $3
 `, eventStatusProcessing, time.Now().UTC().Add(-(eventProcessingRequeueGrace + time.Minute)), eventID)
 	require.NoError(t, err)
 
-	core := NewServiceCore(testenv.NewLogger(t), conn, testRuntimeBackend{backend: runtimeBackendFlyIO, runTurnErr: nil}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)))
+	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn, testRuntimeBackend{backend: runtimeBackendFlyIO, runTurnErr: nil}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)))
 
 	result, err := core.ReapStuckRuntimes(t.Context())
 	require.NoError(t, err)
@@ -278,7 +278,7 @@ VALUES ($1, $2, $3, $4, $5::jsonb, $6)
 		require.NoError(t, err)
 	}
 
-	core := NewServiceCore(testenv.NewLogger(t), conn, testRuntimeBackend{backend: runtimeBackendFlyIO, runTurnErr: nil}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)))
+	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn, testRuntimeBackend{backend: runtimeBackendFlyIO, runTurnErr: nil}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)))
 
 	history, err := core.loadChatHistory(t.Context(), chatID, projectID)
 	require.NoError(t, err)
@@ -337,7 +337,7 @@ VALUES ($1, $2, 'tool', 'orphan result')
 `, chatID, projectID)
 	require.NoError(t, err)
 
-	core := NewServiceCore(testenv.NewLogger(t), conn, testRuntimeBackend{backend: runtimeBackendFlyIO, runTurnErr: nil}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)))
+	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn, testRuntimeBackend{backend: runtimeBackendFlyIO, runTurnErr: nil}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)))
 
 	_, err = core.loadChatHistory(t.Context(), chatID, projectID)
 	require.ErrorContains(t, err, "tool chat row missing tool_call_id")
@@ -357,7 +357,7 @@ func TestServiceCoreProcessThreadEventsCompletesEvent(t *testing.T) {
 
 	logger := testenv.NewLogger(t)
 	tokens := assistanttokens.New("test-jwt-secret", conn, nil)
-	core := NewServiceCore(logger, conn, testRuntimeBackend{backend: runtimeBackendFlyIO, runTurnErr: nil}, nil, tokens, nil, telemetry.NewStub(logger))
+	core := NewServiceCore(logger, testenv.NewTracerProvider(t), conn, testRuntimeBackend{backend: runtimeBackendFlyIO, runTurnErr: nil}, nil, tokens, nil, telemetry.NewStub(logger))
 
 	admitted, err := core.AdmitPendingThreads(t.Context(), assistantID)
 	require.NoError(t, err)
@@ -405,7 +405,7 @@ func TestServiceCoreProcessThreadEventsRequeuesOnTurnFailure(t *testing.T) {
 	logger := testenv.NewLogger(t)
 	tokens := assistanttokens.New("test-jwt-secret", conn, nil)
 	backend := testRuntimeBackend{backend: runtimeBackendFlyIO, runTurnErr: errors.New("runtime RunTurn blew up")}
-	core := NewServiceCore(logger, conn, backend, nil, tokens, nil, telemetry.NewStub(logger))
+	core := NewServiceCore(logger, testenv.NewTracerProvider(t), conn, backend, nil, tokens, nil, telemetry.NewStub(logger))
 
 	admitted, err := core.AdmitPendingThreads(t.Context(), assistantID)
 	require.NoError(t, err)
@@ -462,7 +462,7 @@ func TestServiceCoreProcessThreadEventsDoesNotStopRuntimeOnConfigureFailure(t *t
 		configureErr: errors.New("runtime Configure blew up"),
 		stopCalls:    &stopCalls,
 	}
-	core := NewServiceCore(logger, conn, backend, nil, tokens, mustParseURLForServiceTest(t, "https://gram.example.com"), telemetry.NewStub(logger))
+	core := NewServiceCore(logger, testenv.NewTracerProvider(t), conn, backend, nil, tokens, mustParseURLForServiceTest(t, "https://gram.example.com"), telemetry.NewStub(logger))
 
 	admitted, err := core.AdmitPendingThreads(t.Context(), assistantID)
 	require.NoError(t, err)

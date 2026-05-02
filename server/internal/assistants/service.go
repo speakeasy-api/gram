@@ -15,6 +15,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/gen/types"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
@@ -244,6 +246,7 @@ type ProcessThreadEventsResult struct {
 
 type ServiceCore struct {
 	logger          *slog.Logger
+	tracer          trace.Tracer
 	db              *pgxpool.Pool
 	runtime         RuntimeBackend
 	slackClient     *slackclient.SlackClient
@@ -254,6 +257,7 @@ type ServiceCore struct {
 
 func NewServiceCore(
 	logger *slog.Logger,
+	tracerProvider trace.TracerProvider,
 	db *pgxpool.Pool,
 	runtime RuntimeBackend,
 	slackClient *slackclient.SlackClient,
@@ -263,6 +267,7 @@ func NewServiceCore(
 ) *ServiceCore {
 	return &ServiceCore{
 		logger:          logger,
+		tracer:          tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/assistants"),
 		db:              db,
 		runtime:         newTelemetryRuntimeBackend(runtime, telemetryLogger),
 		slackClient:     slackClient,
@@ -1105,7 +1110,7 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 	}
 
 	if ensureResult.NeedsConfigure {
-		startupConfig, err := s.buildRuntimeStartupConfig(ctx, thread, runtimeRecord, assistant)
+		startupConfig, err := s.tracedBuildStartupConfig(ctx, thread, runtimeRecord, assistant, ensureResult.ColdStart)
 		if err != nil {
 			s.logger.ErrorContext(ctx, "build runtime startup config failed", attr.SlogAssistantThreadID(thread.ID.String()), attr.SlogError(err))
 			_ = s.stopRuntimeRecord(ctx, thread.ProjectID, thread.ID, runtimeStateFailed)
@@ -1117,7 +1122,7 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 				ProcessedAnyEvent: false,
 			}, nil
 		}
-		if err := s.runtime.Configure(ctx, runtimeRecord, startupConfig); err != nil {
+		if err := s.tracedConfigure(ctx, runtimeRecord, startupConfig, ensureResult.ColdStart); err != nil {
 			s.logger.ErrorContext(ctx, "configure assistant runtime failed", attr.SlogAssistantThreadID(thread.ID.String()), attr.SlogError(err))
 			_ = s.stopRuntimeRecord(ctx, thread.ProjectID, thread.ID, runtimeStateFailed)
 			return ProcessThreadEventsResult{
@@ -1327,6 +1332,56 @@ func (s *ServiceCore) touchProcessingLease(ctx context.Context, projectID, runti
 	})
 	if err != nil {
 		return fmt.Errorf("touch assistant processing lease: %w", err)
+	}
+	return nil
+}
+
+// tracedBuildStartupConfig spans buildRuntimeStartupConfig so its latency
+// joins the rest of the runtime configure pipeline in Datadog APM. Cold
+// start is set as a span attribute since it's the dimension on-call needs
+// to filter setup latency by.
+func (s *ServiceCore) tracedBuildStartupConfig(
+	ctx context.Context,
+	thread assistantThreadRecord,
+	runtime assistantRuntimeRecord,
+	assistant assistantRecord,
+	coldStart bool,
+) (cfg runtimeStartupConfig, err error) {
+	ctx, span := s.tracer.Start(ctx, "assistants.runtime.buildStartupConfig",
+		trace.WithAttributes(attr.AssistantColdStart(coldStart)),
+	)
+	defer func() {
+		if err != nil {
+			span.SetAttributes(attr.AssistantSetupFailureClass(classifySetupError(err)))
+			span.SetStatus(codes.Error, err.Error())
+		}
+		span.End()
+	}()
+	return s.buildRuntimeStartupConfig(ctx, thread, runtime, assistant)
+}
+
+// tracedConfigure wraps the runtime Configure call so its latency joins the
+// rest of the setup pipeline in Datadog APM with the cold-start attribute
+// attached. The Fly backend's Configure no longer opens its own span —
+// this is the only span covering the configure HTTP roundtrip.
+func (s *ServiceCore) tracedConfigure(
+	ctx context.Context,
+	runtime assistantRuntimeRecord,
+	config runtimeStartupConfig,
+	coldStart bool,
+) (err error) {
+	ctx, span := s.tracer.Start(ctx, "assistants.runtime.configure",
+		trace.WithAttributes(attr.AssistantColdStart(coldStart)),
+	)
+	defer func() {
+		if err != nil {
+			span.SetAttributes(attr.AssistantSetupFailureClass(classifySetupError(err)))
+			span.SetStatus(codes.Error, err.Error())
+		}
+		span.End()
+	}()
+	if err := s.runtime.Configure(ctx, runtime, config); err != nil {
+		return fmt.Errorf("configure runtime: %w", err)
 	}
 	return nil
 }
