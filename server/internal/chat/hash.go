@@ -60,7 +60,7 @@ func buildSlot(role, content, toolCallID string, toolCallIDs []string) messageSl
 // it from subsequent wire requests, so the matcher steps over it on either
 // side rather than treating the asymmetry as divergence.
 func (s messageSlot) isBlankAssistant() bool {
-	return s == messageSlot{role: "assistant"}
+	return s == messageSlot{role: "assistant", content: "", toolCallID: "", toolCallIDs: ""}
 }
 
 func toolCallIDsFromIncoming(msg or.ChatMessages) []string {
