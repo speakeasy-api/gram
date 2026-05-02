@@ -1445,7 +1445,7 @@ CREATE TABLE IF NOT EXISTS organization_invitations (
   id UUID NOT NULL DEFAULT generate_uuidv7(),
   organization_id TEXT NOT NULL,
   email TEXT NOT NULL CHECK (email <> ''),
-  token TEXT NOT NULL CHECK (token <> ''),
+  token_hash TEXT NOT NULL CHECK (token_hash <> ''),
   inviter_user_id TEXT,
   role_slug TEXT,
   state TEXT NOT NULL DEFAULT 'pending' CHECK (state IN ('pending', 'accepted', 'revoked', 'expired')),
@@ -1461,8 +1461,8 @@ CREATE TABLE IF NOT EXISTS organization_invitations (
   CONSTRAINT organization_invitations_inviter_user_id_fkey FOREIGN KEY (inviter_user_id) REFERENCES users (id) ON DELETE SET NULL
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS organization_invitations_token_key
-ON organization_invitations (token);
+CREATE UNIQUE INDEX IF NOT EXISTS organization_invitations_token_hash_key
+ON organization_invitations (token_hash);
 
 -- Only one pending invite per email per org at a time.
 CREATE UNIQUE INDEX IF NOT EXISTS organization_invitations_org_email_pending_key
