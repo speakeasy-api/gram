@@ -47,6 +47,8 @@ func ResourceKindForScope(scope Scope) string {
 		return "mcp"
 	case strings.HasPrefix(s, "org:"):
 		return "org"
+	case strings.HasPrefix(s, "environment:"):
+		return "environment"
 	default:
 		return "*"
 	}

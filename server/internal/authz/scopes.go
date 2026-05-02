@@ -9,27 +9,34 @@ import (
 type Scope string
 
 const (
-	ScopeRoot         Scope = "root"
-	ScopeOrgRead      Scope = "org:read"
-	ScopeOrgAdmin     Scope = "org:admin"
-	ScopeProjectRead  Scope = "project:read"
-	ScopeProjectWrite Scope = "project:write"
-	ScopeMCPRead      Scope = "mcp:read"
-	ScopeMCPWrite     Scope = "mcp:write"
-	ScopeMCPConnect   Scope = "mcp:connect"
+	ScopeRoot            Scope = "root"
+	ScopeOrgRead         Scope = "org:read"
+	ScopeOrgAdmin        Scope = "org:admin"
+	ScopeProjectRead     Scope = "project:read"
+	ScopeProjectWrite    Scope = "project:write"
+	ScopeMCPRead         Scope = "mcp:read"
+	ScopeMCPWrite        Scope = "mcp:write"
+	ScopeMCPConnect      Scope = "mcp:connect"
+	ScopeEnvironmentRead Scope = "environment:read"
 )
 
 // scopeExpansions maps a required scope to the higher-privilege scopes that also satisfy it.
 // Scopes with no higher-privilege implication (admin tiers) map to nil.
+//
+// environment:read intentionally expands to project:{read,write} so that callers with
+// project-wide grants keep working without an explicit environment:read grant. Per-resource
+// environment:read grants give RBAC the option to scope reads at the individual environment
+// level (e.g. for fine-grained roles that should not be able to clone a specific environment).
 var scopeExpansions = map[Scope][]Scope{
-	ScopeRoot:         nil,
-	ScopeOrgRead:      {ScopeOrgAdmin},
-	ScopeOrgAdmin:     nil,
-	ScopeProjectRead:  {ScopeProjectWrite},
-	ScopeProjectWrite: nil,
-	ScopeMCPRead:      {ScopeMCPWrite},
-	ScopeMCPWrite:     nil,
-	ScopeMCPConnect:   {ScopeMCPRead, ScopeMCPWrite},
+	ScopeRoot:            nil,
+	ScopeOrgRead:         {ScopeOrgAdmin},
+	ScopeOrgAdmin:        nil,
+	ScopeProjectRead:     {ScopeProjectWrite},
+	ScopeProjectWrite:    nil,
+	ScopeMCPRead:         {ScopeMCPWrite},
+	ScopeMCPWrite:        nil,
+	ScopeMCPConnect:      {ScopeMCPRead, ScopeMCPWrite},
+	ScopeEnvironmentRead: {ScopeProjectRead, ScopeProjectWrite},
 }
 
 // scopeSubScopes is the inverse of scopeExpansions: for each higher-privilege
