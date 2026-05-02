@@ -1,0 +1,174 @@
+---
+title: Schema — usersessions / remotesessions
+---
+classDiagram
+    direction TB
+
+    namespace Postgres {
+        class toolsets {
+            uuid id PK
+            uuid user_session_issuer_id FK
+        }
+        class mcp_servers {
+            uuid id PK
+            uuid user_session_issuer_id FK_pending
+        }
+        class user_session_issuers {
+            uuid id PK
+            uuid project_id FK
+            text slug
+            text authn_challenge_mode
+            interval session_duration
+            timestamptz created_at
+            timestamptz updated_at
+            timestamptz deleted_at
+            boolean deleted
+        }
+        class user_session_clients {
+            uuid id PK
+            uuid user_session_issuer_id FK
+            text client_id
+            text client_secret_hash
+            text client_name
+            text_array redirect_uris
+            timestamptz client_id_issued_at
+            timestamptz client_secret_expires_at
+            timestamptz created_at
+            timestamptz updated_at
+            timestamptz deleted_at
+            boolean deleted
+        }
+        class remote_session_issuers {
+            uuid id PK
+            uuid project_id FK
+            text slug
+            text issuer
+            text authorization_endpoint
+            text token_endpoint
+            text registration_endpoint
+            text jwks_uri
+            text_array scopes_supported
+            text_array grant_types_supported
+            text_array response_types_supported
+            text_array token_endpoint_auth_methods_supported
+            boolean oidc
+            boolean passthrough
+            timestamptz created_at
+            timestamptz updated_at
+            timestamptz deleted_at
+            boolean deleted
+        }
+        class remote_session_clients {
+            uuid id PK
+            uuid project_id FK
+            uuid remote_session_issuer_id FK
+            uuid user_session_issuer_id FK
+            text client_id
+            text client_secret_encrypted
+            timestamptz client_id_issued_at
+            timestamptz client_secret_expires_at
+            timestamptz created_at
+            timestamptz updated_at
+            timestamptz deleted_at
+            boolean deleted
+        }
+        class user_session_consents {
+            uuid id PK
+            text principal_urn
+            uuid user_session_client_id FK
+            text remote_set_hash
+            timestamptz consented_at
+            timestamptz created_at
+            timestamptz updated_at
+            timestamptz deleted_at
+            boolean deleted
+        }
+        class user_sessions {
+            uuid id PK
+            uuid user_session_issuer_id FK
+            text principal_urn
+            text jti
+            text refresh_token_hash UK
+            timestamptz refresh_expires_at
+            timestamptz expires_at
+            timestamptz created_at
+            timestamptz updated_at
+            timestamptz deleted_at
+            boolean deleted
+        }
+        class remote_sessions {
+            uuid id PK
+            text principal_urn
+            uuid user_session_issuer_id FK
+            uuid remote_session_client_id FK
+            text access_token_encrypted
+            timestamptz access_expires_at
+            text refresh_token_encrypted
+            timestamptz refresh_expires_at
+            text_array scopes
+            timestamptz created_at
+            timestamptz updated_at
+            timestamptz deleted_at
+            boolean deleted
+        }
+    }
+
+    namespace Redis {
+        class AuthnChallengeState {
+            <<TTL ~10 min>>
+            string id KEY
+            uuid user_session_issuer_id
+            string principal_urn
+            string mcp_client_id
+            string mcp_client_redirect_uri
+            string mcp_client_code_challenge
+            string mcp_client_state
+            string scope
+            time created_at
+            time expires_at
+        }
+        class UserSessionGrant {
+            <<TTL ~10 min>>
+            uuid user_session_issuer_id KEY
+            string code KEY
+            string client_id
+            string redirect_uri
+            string scope
+            string state
+            string code_challenge
+            string code_challenge_method
+            string principal_urn
+            time created_at
+            time expires_at
+        }
+        class RemoteSessionAuthState {
+            <<TTL ~10 min>>
+            string state_id KEY
+            string principal_urn
+            uuid user_session_issuer_id
+            uuid remote_session_issuer_id
+            uuid remote_session_client_id
+            string code_verifier
+            string redirect_uri
+            time created_at
+            time expires_at
+        }
+        class RemoteSessionPKCE {
+            <<TTL 10 min fixed>>
+            string nonce KEY
+            string verifier
+        }
+    }
+
+    toolsets    "*" --> "1" user_session_issuers : gated by
+    mcp_servers "*" --> "1" user_session_issuers : gated by (pending)
+
+    user_session_issuers "1" --> "*" user_session_clients : registers (DCR)
+    user_session_issuers "1" --> "*" remote_session_clients : credentialed by
+    remote_session_issuers   "1" --> "*" remote_session_clients : registers
+
+    user_session_clients "1" --> "*" user_session_consents : scopes consent
+
+    user_session_issuers "1" --> "*" user_sessions : issues
+    user_session_issuers "1" --> "*" remote_sessions : scopes
+    remote_session_clients   "1" --> "*" remote_sessions : authorizes via

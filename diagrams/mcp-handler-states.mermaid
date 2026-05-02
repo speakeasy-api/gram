@@ -12,21 +12,21 @@ stateDiagram-v2
     PolicyGate --> CollectingRemoteCredentials: server is public (no auth policy)
 
     ResolvingPrincipal --> Authorizing: JWT validates and principal still exists
-    ResolvingPrincipal --> ClientSessionChallenge: ClientSessionManager raises ChallengeRequiredError (JWT invalid or principal missing)
+    ResolvingPrincipal --> UserSessionAuthnChallenge: UserSessionManager raises AuthnChallengeRequiredError (JWT invalid or principal missing)
 
     Authorizing --> CollectingRemoteCredentials: RBAC pass
     Authorizing --> Forbidden: RBAC fail
 
     CollectingRemoteCredentials --> MergingCredentials: all RemoteSessions current (or silently refreshed)
-    CollectingRemoteCredentials --> RemoteSessionChallenge: RemoteSessionManager raises ChallengeRequiredError
+    CollectingRemoteCredentials --> RemoteSessionAuthnChallenge: RemoteSessionManager raises AuthnChallengeRequiredError
 
     MergingCredentials --> DispatchToBackend: OAuth credentials merged with static environment
 
     DispatchToBackend --> Success: backend returns
 
     Success --> [*]: 200
-    ClientSessionChallenge --> [*]: handler coerces to 401 + WWW-Authenticate → /mcp/authorize
-    RemoteSessionChallenge --> [*]: handler coerces to URL-mode elicitation (M#8 if available) — otherwise falls back to 401 auth challenge
+    UserSessionAuthnChallenge --> [*]: handler coerces to 401 + WWW-Authenticate → /mcp/authorize
+    RemoteSessionAuthnChallenge --> [*]: handler coerces to URL-mode elicitation (M#8 if available) — otherwise falls back to 401 authn challenge
     Forbidden --> [*]: 403
 
     note right of DispatchToBackend

@@ -1,14 +1,14 @@
 ---
-title: Unified Challenge — Lifecycle (covers both chain and interactive modes)
+title: Unified Authn Challenge — Lifecycle (covers both chain and interactive modes)
 ---
 stateDiagram-v2
     direction LR
 
-    [*] --> ResolvingChallenges: GET /mcp/authorize
+    [*] --> ResolvingAuthnChallenges: GET /mcp/authorize
 
-    ResolvingChallenges --> EstablishingClientSession: ChallengeState written
+    ResolvingAuthnChallenges --> EstablishingUserSession: AuthnChallengeState written
 
-    state EstablishingClientSession {
+    state EstablishingUserSession {
         direction LR
         [*] --> ResolvingPrincipal
         ResolvingPrincipal --> Reused: existing session matches identity level
@@ -23,8 +23,8 @@ stateDiagram-v2
             direction LR
             [*] --> NextRemote
             NextRemote --> SessionReady: existing session valid or silently refreshed
-            NextRemote --> SessionReady: completed remote OAuth challenge
-            SessionReady --> NextRemote: more remote_oauth_clients pending
+            NextRemote --> SessionReady: completed remote OAuth authn challenge
+            SessionReady --> NextRemote: more remote_session_clients pending
             SessionReady --> [*]: all RemoteSessions present
 
             note right of NextRemote
@@ -42,7 +42,7 @@ stateDiagram-v2
         CollectingConsent --> IssuingGrant: user submits consent
 
         IssuingGrant --> TokenExchange: redirect MCP Client with auth code
-        TokenExchange --> [*]: JWT issued, ClientSession created
+        TokenExchange --> [*]: JWT issued, UserSession created
 
         note right of IssuingGrant
             Browser ownership transfers to

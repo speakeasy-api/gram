@@ -1,7 +1,7 @@
 // /schemas/redis.go
 //
 // Redis types — short-TTL in-flight records only. Durable session state
-// (client_sessions, remote_sessions) lives in Postgres — see schemas/postgres.sql
+// (user_sessions, remote_sessions) lives in Postgres — see schemas/postgres.sql
 // and spike.md §4.1.
 //
 // All types implement cache.CacheableObject[T]; values are JSON-serialised by
@@ -22,19 +22,19 @@ import (
 )
 
 // ---------------------------------------------------------------------------
-// 1. ChallengeState — thin re-entry handle for the challenge flow.
-//    Cache key: "challengeState:{id}"
+// 1. AuthnChallengeState — thin re-entry handle for the authn challenge flow.
+//    Cache key: "authnChallenge:{id}"
 //    TTL: time.Until(ExpiresAt) (~10 min)
 //
 // Holds the MCP Client's OAuth request context plus the resolved principal
-// (set after Phase 2). Each callback in the challenge flow re-loads it by id
-// and re-runs buildRequiredChallenge to decide the next 302.
+// (set after Phase 2). Each callback in the authn challenge flow re-loads it
+// by id and re-runs buildRequiredAuthnChallenge to decide the next 302.
 // ---------------------------------------------------------------------------
 
-type ChallengeState struct {
-	ID                    string    `json:"id"`
-	ClientSessionIssuerID uuid.UUID `json:"client_session_issuer_id"`
-	PrincipalURN          string    `json:"principal_urn,omitempty"` // resolved after Phase 2
+type AuthnChallengeState struct {
+	ID                  string    `json:"id"`
+	UserSessionIssuerID uuid.UUID `json:"user_session_issuer_id"`
+	PrincipalURN        string    `json:"principal_urn,omitempty"` // resolved after Phase 2
 
 	// MCP Client's OAuth request context — needed to complete the code grant in Phase 4.
 	MCPClientID            string `json:"mcp_client_id"`
@@ -47,41 +47,41 @@ type ChallengeState struct {
 	ExpiresAt time.Time `json:"expires_at"`
 }
 
-func ChallengeStateCacheKey(id string) string {
-	return "challengeState:" + id
+func AuthnChallengeStateCacheKey(id string) string {
+	return "authnChallenge:" + id
 }
 
-func (c ChallengeState) CacheKey() string   { return ChallengeStateCacheKey(c.ID) }
-func (c ChallengeState) TTL() time.Duration { return time.Until(c.ExpiresAt) }
+func (c AuthnChallengeState) CacheKey() string   { return AuthnChallengeStateCacheKey(c.ID) }
+func (c AuthnChallengeState) TTL() time.Duration { return time.Until(c.ExpiresAt) }
 
 // ---------------------------------------------------------------------------
-// 2. ClientSessionGrant — short-lived authorization-code grant on the AS path.
-//    Cache key: "clientSessionGrant:{clientSessionIssuerID}:{code}"
+// 2. UserSessionGrant — short-lived authorization-code grant on the AS path.
+//    Cache key: "userSessionGrant:{userSessionIssuerID}:{code}"
 //    TTL: time.Until(ExpiresAt) (~10 min)
 // ---------------------------------------------------------------------------
 
-type ClientSessionGrant struct {
-	ClientSessionIssuerID uuid.UUID `json:"client_session_issuer_id"`
-	Code                  string    `json:"code"`
-	ClientID              string    `json:"client_id"`
-	RedirectURI           string    `json:"redirect_uri"`
-	Scope                 string    `json:"scope"`
-	State                 string    `json:"state"`
-	CodeChallenge         string    `json:"code_challenge"`
-	CodeChallengeMethod   string    `json:"code_challenge_method"`
-	PrincipalURN          string    `json:"principal_urn"`
-	CreatedAt             time.Time `json:"created_at"`
-	ExpiresAt             time.Time `json:"expires_at"`
+type UserSessionGrant struct {
+	UserSessionIssuerID uuid.UUID `json:"user_session_issuer_id"`
+	Code                string    `json:"code"`
+	ClientID            string    `json:"client_id"`
+	RedirectURI         string    `json:"redirect_uri"`
+	Scope               string    `json:"scope"`
+	State               string    `json:"state"`
+	CodeChallenge       string    `json:"code_challenge"`
+	CodeChallengeMethod string    `json:"code_challenge_method"`
+	PrincipalURN        string    `json:"principal_urn"`
+	CreatedAt           time.Time `json:"created_at"`
+	ExpiresAt           time.Time `json:"expires_at"`
 }
 
-func ClientSessionGrantCacheKey(clientSessionIssuerID uuid.UUID, code string) string {
-	return "clientSessionGrant:" + clientSessionIssuerID.String() + ":" + code
+func UserSessionGrantCacheKey(userSessionIssuerID uuid.UUID, code string) string {
+	return "userSessionGrant:" + userSessionIssuerID.String() + ":" + code
 }
 
-func (g ClientSessionGrant) CacheKey() string {
-	return ClientSessionGrantCacheKey(g.ClientSessionIssuerID, g.Code)
+func (g UserSessionGrant) CacheKey() string {
+	return UserSessionGrantCacheKey(g.UserSessionIssuerID, g.Code)
 }
-func (g ClientSessionGrant) TTL() time.Duration { return time.Until(g.ExpiresAt) }
+func (g UserSessionGrant) TTL() time.Duration { return time.Until(g.ExpiresAt) }
 
 // ---------------------------------------------------------------------------
 // 3. RemoteSessionAuthState — in-flight remote OAuth authorization state.
@@ -96,9 +96,9 @@ func (g ClientSessionGrant) TTL() time.Duration { return time.Until(g.ExpiresAt)
 type RemoteSessionAuthState struct {
 	StateID               string    `json:"state_id"`
 	PrincipalURN          string    `json:"principal_urn"`
-	ClientSessionIssuerID uuid.UUID `json:"client_session_issuer_id"`
-	RemoteOAuthIssuerID   uuid.UUID `json:"remote_oauth_issuer_id"`
-	RemoteOAuthClientID   uuid.UUID `json:"remote_oauth_client_id"`
+	UserSessionIssuerID   uuid.UUID `json:"user_session_issuer_id"`
+	RemoteSessionIssuerID uuid.UUID `json:"remote_session_issuer_id"`
+	RemoteSessionClientID uuid.UUID `json:"remote_session_client_id"`
 	CodeVerifier          string    `json:"code_verifier"`
 	RedirectURI           string    `json:"redirect_uri"`
 	CreatedAt             time.Time `json:"created_at"`

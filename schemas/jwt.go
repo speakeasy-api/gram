@@ -1,6 +1,6 @@
 // /schemas/jwt.go
 //
-// Unified SessionClaims: one JWT shape for chat sessions and client sessions.
+// Unified SessionClaims: one JWT shape for chat sessions and user sessions.
 // See spike.md §4.5 for rationale.
 //
 // Signing:    HS256 with GRAM_JWT_SIGNING_KEY (existing chat-session manager key).
@@ -9,7 +9,7 @@
 // Revocation: by JTI in the existing chat_session_revoked:{jti} Redis cache (24h TTL).
 //
 // The two flows differ only in `sub` and `aud`:
-//   - Client session: sub = principal URN; aud = toolset slug.
+//   - User session: sub = principal URN; aud = toolset slug.
 //   - Chat session:   sub = principal URN; aud = embed origin.
 //
 // Valid `sub` URN shapes (enforced at sign time):
@@ -46,7 +46,7 @@ type SessionClaims struct {
 	//   ID        string         — JTI: UUIDv4, used for revocation tracking
 	//   Issuer    string         — Gram issuer URL
 	//   Subject   string         — principal URN (see file header)
-	//   Audience  []string       — toolset slug (client session) | embed origin (chat session)
+	//   Audience  []string       — toolset slug (user session) | embed origin (chat session)
 	//   IssuedAt  *NumericDate
 	//   ExpiresAt *NumericDate
 	//   NotBefore *NumericDate   — nil (not set)
