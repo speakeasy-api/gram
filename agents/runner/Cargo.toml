@@ -2,21 +2,22 @@
 name = "gram-assistant-runner"
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.91"
+rust-version = "1.92"
 
 [[bin]]
 name = "gram-assistant-runner"
 path = "src/main.rs"
 
 [dependencies]
-agentkit-adapter-completions = "0.4.0"
-agentkit-core = "0.4.0"
-agentkit-http = { version = "0.4.0", features = ["reqwest-middleware-client"] }
-agentkit-loop = "0.4.0"
-agentkit-mcp = "0.4.0"
-agentkit-provider-openrouter = "0.4.0"
-agentkit-reporting = { version = "0.4.0", features = ["tracing"] }
-agentkit-tools-core = "0.4.0"
+agentkit-adapter-completions = { path = "../../../../agentkit/crates/agentkit-adapter-completions" }
+agentkit-core = { path = "../../../../agentkit/crates/agentkit-core" }
+agentkit-http = { path = "../../../../agentkit/crates/agentkit-http", features = ["reqwest-middleware-client"] }
+agentkit-loop = { path = "../../../../agentkit/crates/agentkit-loop" }
+agentkit-mcp = { path = "../../../../agentkit/crates/agentkit-mcp" }
+agentkit-provider-openrouter = { path = "../../../../agentkit/crates/agentkit-provider-openrouter" }
+agentkit-reporting = { path = "../../../../agentkit/crates/agentkit-reporting", features = ["tracing"] }
+agentkit-tools-core = { path = "../../../../agentkit/crates/agentkit-tools-core" }
+rmcp = { version = "1.5.0", default-features = false, features = ["client", "transport-streamable-http-client-reqwest", "reqwest"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 
