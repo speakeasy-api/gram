@@ -1197,10 +1197,7 @@ const listLatestGenerationChatMessages = `-- name: ListLatestGenerationChatMessa
 SELECT cm.id, cm.seq, cm.chat_id, cm.project_id, cm.role, cm.content, cm.content_raw, cm.content_asset_url, cm.model, cm.message_id, cm.finish_reason, cm.tool_calls, cm.prompt_tokens, cm.completion_tokens, cm.total_tokens, cm.storage_error, cm.user_id, cm.external_user_id, cm.origin, cm.user_agent, cm.ip_address, cm.source, cm.tool_call_id, cm.tool_urn, cm.tool_outcome, cm.tool_outcome_notes, cm.content_hash, cm.generation, cm.created_at FROM chat_messages cm
 WHERE cm.chat_id = $1
   AND (cm.project_id IS NULL OR cm.project_id = $2::uuid)
-  AND cm.generation = COALESCE(
-    (SELECT MAX(generation) FROM chat_messages WHERE chat_id = $1),
-    0
-  )
+  AND cm.generation = (SELECT MAX(generation) FROM chat_messages WHERE chat_id = $1)
 ORDER BY cm.seq ASC
 `
 
@@ -1209,11 +1206,7 @@ type ListLatestGenerationChatMessagesParams struct {
 	ProjectID uuid.UUID
 }
 
-// Replay-only view of a chat: all rows from the highest generation. Older
-// generations stay in the table for audit but never ship to the runner —
-// otherwise a chat with N divergences carries N cumulative snapshots in
-// /configure (see AGE-2092). The MAX subquery is COALESCE'd to 0 so
-// never-stored chats return zero rows instead of NULL.
+// Returns only the latest-generation rows; older generations are audit-only.
 func (q *Queries) ListLatestGenerationChatMessages(ctx context.Context, arg ListLatestGenerationChatMessagesParams) ([]ChatMessage, error) {
 	rows, err := q.db.Query(ctx, listLatestGenerationChatMessages, arg.ChatID, arg.ProjectID)
 	if err != nil {

@@ -310,9 +310,6 @@ VALUES ($1, $2, $3, $4, $5::jsonb, $6)
 	require.Equal(t, "thanks", history[4].Content)
 }
 
-// loadChatHistory must replay only the latest generation. Older generations
-// are audit-only — replaying them blows up /configure body size on chats
-// with many divergences (see AGE-2091 incident).
 func TestServiceCoreLoadChatHistoryReturnsOnlyLatestGeneration(t *testing.T) {
 	t.Parallel()
 
@@ -334,7 +331,6 @@ VALUES ($1, $2, 'org-test')
 `, chatID, projectID)
 	require.NoError(t, err)
 
-	// Three generations of history. Only gen 2 should land in the runner payload.
 	rows := []struct {
 		gen     int
 		role    string
