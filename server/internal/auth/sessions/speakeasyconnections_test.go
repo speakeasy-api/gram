@@ -166,7 +166,7 @@ func newManagerWithFakeWorkOSConfig(t *testing.T, fake *fakeWorkOSServer, idpCfg
 	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 
-	workosClient := workos.NewClient(guardianPolicy, "test-api-key", workos.ClientOpts{
+	workosClient := workos.NewClient(guardianPolicy, "test-api-key", "test-client-id", workos.ClientOpts{
 		Endpoint:   wosSrv.URL,
 		HTTPClient: &http.Client{Timeout: 5 * time.Second},
 	})

@@ -67,7 +67,6 @@ import SlackAppDetailPage from "./pages/slackapp/SlackAppDetail";
 import SecurityOverview from "./pages/security/SecurityOverview";
 import PolicyCenter from "./pages/security/PolicyCenter";
 import Team from "./pages/team/Team";
-import AcceptInvite from "./pages/invite/AcceptInvite";
 import SourceDetails from "./pages/sources/SourceDetails";
 import {
   AddFromCatalogGate,
@@ -150,12 +149,6 @@ const ROUTE_STRUCTURE = {
     title: "Register",
     url: "/register",
     component: Register,
-    unauthenticated: true,
-  },
-  invite: {
-    title: "Accept Invite",
-    url: "/invite",
-    component: AcceptInvite,
     unauthenticated: true,
   },
   onboarding: {

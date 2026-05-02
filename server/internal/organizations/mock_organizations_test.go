@@ -26,65 +26,25 @@ func newMockOrganizationProvider(t *testing.T) *MockOrganizationProvider {
 	return orgs
 }
 
-func (m *MockOrganizationProvider) SendInvitation(ctx context.Context, opts thirdpartyworkos.SendInvitationOpts) (*thirdpartyworkos.Invitation, error) {
+func (m *MockOrganizationProvider) CreatePasswordlessSession(ctx context.Context, opts thirdpartyworkos.CreatePasswordlessSessionOpts) (*thirdpartyworkos.PasswordlessSession, error) {
 	args := m.Called(ctx, opts)
 	if err := args.Error(1); err != nil {
-		inv, _ := args.Get(0).(*thirdpartyworkos.Invitation)
-		return inv, mockErr(args, 1)
+		sess, _ := args.Get(0).(*thirdpartyworkos.PasswordlessSession)
+		return sess, mockErr(args, 1)
 	}
-	if invite, ok := args.Get(0).(*thirdpartyworkos.Invitation); ok {
-		return invite, nil
-	}
-	return nil, nil
-}
-
-func (m *MockOrganizationProvider) ListInvitations(ctx context.Context, orgID string) ([]thirdpartyworkos.Invitation, error) {
-	args := m.Called(ctx, orgID)
-	if err := args.Error(1); err != nil {
-		var list []thirdpartyworkos.Invitation
-		if v, ok := args.Get(0).([]thirdpartyworkos.Invitation); ok {
-			list = v
-		}
-		return list, mockErr(args, 1)
-	}
-	if invitations, ok := args.Get(0).([]thirdpartyworkos.Invitation); ok {
-		return invitations, nil
+	if sess, ok := args.Get(0).(*thirdpartyworkos.PasswordlessSession); ok {
+		return sess, nil
 	}
 	return nil, nil
 }
 
-func (m *MockOrganizationProvider) GetInvitation(ctx context.Context, invitationID string) (*thirdpartyworkos.Invitation, error) {
-	args := m.Called(ctx, invitationID)
+func (m *MockOrganizationProvider) AuthenticateWithInviteLink(ctx context.Context, code string) (*thirdpartyworkos.InviteLinkProfile, error) {
+	args := m.Called(ctx, code)
 	if err := args.Error(1); err != nil {
-		inv, _ := args.Get(0).(*thirdpartyworkos.Invitation)
-		return inv, mockErr(args, 1)
+		return nil, mockErr(args, 1)
 	}
-	if invitation, ok := args.Get(0).(*thirdpartyworkos.Invitation); ok {
-		return invitation, nil
-	}
-	return nil, nil
-}
-
-func (m *MockOrganizationProvider) RevokeInvitation(ctx context.Context, invitationID string) (*thirdpartyworkos.Invitation, error) {
-	args := m.Called(ctx, invitationID)
-	if err := args.Error(1); err != nil {
-		inv, _ := args.Get(0).(*thirdpartyworkos.Invitation)
-		return inv, mockErr(args, 1)
-	}
-	if invitation, ok := args.Get(0).(*thirdpartyworkos.Invitation); ok {
-		return invitation, nil
-	}
-	return nil, nil
-}
-
-func (m *MockOrganizationProvider) FindInvitationByToken(ctx context.Context, token string) (*thirdpartyworkos.Invitation, error) {
-	args := m.Called(ctx, token)
-	if err := args.Error(1); err != nil {
-		inv, _ := args.Get(0).(*thirdpartyworkos.Invitation)
-		return inv, mockErr(args, 1)
-	}
-	if invitation, ok := args.Get(0).(*thirdpartyworkos.Invitation); ok {
-		return invitation, nil
+	if profile, ok := args.Get(0).(*thirdpartyworkos.InviteLinkProfile); ok {
+		return profile, nil
 	}
 	return nil, nil
 }
@@ -95,30 +55,6 @@ func (m *MockOrganizationProvider) DeleteOrganizationMembership(ctx context.Cont
 		return fmt.Errorf("mock DeleteOrganizationMembership: %w", err)
 	}
 	return nil
-}
-
-func (m *MockOrganizationProvider) GetUserByEmail(ctx context.Context, email string) (*thirdpartyworkos.User, error) {
-	args := m.Called(ctx, email)
-	if err := args.Error(1); err != nil {
-		u, _ := args.Get(0).(*thirdpartyworkos.User)
-		return u, mockErr(args, 1)
-	}
-	if u, ok := args.Get(0).(*thirdpartyworkos.User); ok {
-		return u, nil
-	}
-	return nil, nil
-}
-
-func (m *MockOrganizationProvider) GetOrgMembership(ctx context.Context, workOSUserID, workOSOrgID string) (*thirdpartyworkos.Member, error) {
-	args := m.Called(ctx, workOSUserID, workOSOrgID)
-	if err := args.Error(1); err != nil {
-		mem, _ := args.Get(0).(*thirdpartyworkos.Member)
-		return mem, mockErr(args, 1)
-	}
-	if mem, ok := args.Get(0).(*thirdpartyworkos.Member); ok {
-		return mem, nil
-	}
-	return nil, nil
 }
 
 func mockErr(args mock.Arguments, index int) error {

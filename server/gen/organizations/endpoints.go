@@ -16,12 +16,11 @@ import (
 
 // Endpoints wraps the "organizations" service endpoints.
 type Endpoints struct {
-	SendInvite       goa.Endpoint
-	RevokeInvite     goa.Endpoint
-	ListInvites      goa.Endpoint
-	GetInviteByToken goa.Endpoint
-	ListUsers        goa.Endpoint
-	RemoveUser       goa.Endpoint
+	SendInvite   goa.Endpoint
+	RevokeInvite goa.Endpoint
+	ListInvites  goa.Endpoint
+	ListUsers    goa.Endpoint
+	RemoveUser   goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "organizations" service with endpoints.
@@ -29,12 +28,11 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		SendInvite:       NewSendInviteEndpoint(s, a.APIKeyAuth),
-		RevokeInvite:     NewRevokeInviteEndpoint(s, a.APIKeyAuth),
-		ListInvites:      NewListInvitesEndpoint(s, a.APIKeyAuth),
-		GetInviteByToken: NewGetInviteByTokenEndpoint(s),
-		ListUsers:        NewListUsersEndpoint(s, a.APIKeyAuth),
-		RemoveUser:       NewRemoveUserEndpoint(s, a.APIKeyAuth),
+		SendInvite:   NewSendInviteEndpoint(s, a.APIKeyAuth),
+		RevokeInvite: NewRevokeInviteEndpoint(s, a.APIKeyAuth),
+		ListInvites:  NewListInvitesEndpoint(s, a.APIKeyAuth),
+		ListUsers:    NewListUsersEndpoint(s, a.APIKeyAuth),
+		RemoveUser:   NewRemoveUserEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -44,7 +42,6 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.SendInvite = m(e.SendInvite)
 	e.RevokeInvite = m(e.RevokeInvite)
 	e.ListInvites = m(e.ListInvites)
-	e.GetInviteByToken = m(e.GetInviteByToken)
 	e.ListUsers = m(e.ListUsers)
 	e.RemoveUser = m(e.RemoveUser)
 }
@@ -115,15 +112,6 @@ func NewListInvitesEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa
 			return nil, err
 		}
 		return s.ListInvites(ctx, p)
-	}
-}
-
-// NewGetInviteByTokenEndpoint returns an endpoint function that calls the
-// method "getInviteByToken" of service "organizations".
-func NewGetInviteByTokenEndpoint(s Service) goa.Endpoint {
-	return func(ctx context.Context, req any) (any, error) {
-		p := req.(*GetInviteByTokenPayload)
-		return s.GetInviteByToken(ctx, p)
 	}
 }
 

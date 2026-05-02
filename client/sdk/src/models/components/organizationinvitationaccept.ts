@@ -25,10 +25,6 @@ export type State = ClosedEnum<typeof State>;
 
 export type OrganizationInvitationAccept = {
   /**
-   * URL to complete acceptance in WorkOS (may be empty when not actionable).
-   */
-  acceptInvitationUrl: string;
-  /**
    * Invitee email address.
    */
   email: string;
@@ -51,14 +47,12 @@ export const OrganizationInvitationAccept$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
-    accept_invitation_url: z.string(),
     email: z.string(),
     organization_name: z.string(),
     state: State$inboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
-      "accept_invitation_url": "acceptInvitationUrl",
       "organization_name": "organizationName",
     });
   }),

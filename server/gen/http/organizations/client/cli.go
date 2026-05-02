@@ -75,19 +75,6 @@ func BuildListInvitesPayload(organizationsListInvitesSessionToken string) (*orga
 	return v, nil
 }
 
-// BuildGetInviteByTokenPayload builds the payload for the organizations
-// getInviteByToken endpoint from CLI flags.
-func BuildGetInviteByTokenPayload(organizationsGetInviteByTokenToken string) (*organizations.GetInviteByTokenPayload, error) {
-	var token string
-	{
-		token = organizationsGetInviteByTokenToken
-	}
-	v := &organizations.GetInviteByTokenPayload{}
-	v.Token = token
-
-	return v, nil
-}
-
 // BuildListUsersPayload builds the payload for the organizations listUsers
 // endpoint from CLI flags.
 func BuildListUsersPayload(organizationsListUsersSessionToken string) (*organizations.ListUsersPayload, error) {

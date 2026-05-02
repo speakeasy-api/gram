@@ -148,3 +148,54 @@ SET workos_id = @workos_id,
 WHERE id = @organization_id AND
     workos_id IS NULL
 RETURNING *;
+
+-- name: CreateInvitation :one
+INSERT INTO organization_invitations (
+    organization_id,
+    email,
+    token_hash,
+    inviter_user_id,
+    role_slug,
+    expires_at
+) VALUES (
+    @organization_id,
+    @email,
+    @token_hash,
+    @inviter_user_id,
+    @role_slug,
+    clock_timestamp() + make_interval(days => @expires_in_days::int)
+)
+RETURNING *;
+
+-- name: GetInvitationByID :one
+SELECT *
+FROM organization_invitations
+WHERE id = @id;
+
+-- name: ListPendingInvitations :many
+SELECT *
+FROM organization_invitations
+WHERE organization_id = @organization_id
+  AND state = 'pending'
+ORDER BY created_at DESC;
+
+-- name: RevokeInvitation :exec
+UPDATE organization_invitations
+SET state = 'revoked',
+    revoked_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE id = @id
+  AND state = 'pending';
+
+-- name: AcceptInvitation :exec
+UPDATE organization_invitations
+SET state = 'accepted',
+    accepted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE id = @id
+  AND state = 'pending';
+
+-- name: GetInvitationByTokenHash :one
+SELECT *
+FROM organization_invitations
+WHERE token_hash = @token_hash;

@@ -26406,9 +26406,6 @@ components:
     OrganizationInvitationAccept:
       type: object
       properties:
-        accept_invitation_url:
-          type: string
-          description: URL to complete acceptance in WorkOS (may be empty when not actionable).
         email:
           type: string
           description: Invitee email address.
@@ -26427,7 +26424,6 @@ components:
         - email
         - state
         - organization_name
-        - accept_invitation_url
     OrganizationUser:
       type: object
       properties:

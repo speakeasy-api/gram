@@ -5,8 +5,24 @@
 package repo
 
 import (
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
+
+type OrganizationInvitation struct {
+	ID             uuid.UUID
+	OrganizationID string
+	Email          string
+	TokenHash      string
+	InviterUserID  pgtype.Text
+	RoleSlug       pgtype.Text
+	State          string
+	ExpiresAt      pgtype.Timestamptz
+	AcceptedAt     pgtype.Timestamptz
+	RevokedAt      pgtype.Timestamptz
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
 
 type OrganizationMetadatum struct {
 	ID                 string

@@ -33,18 +33,6 @@ var OrganizationInvitation = Type("OrganizationInvitation", func() {
 	Required("id", "email", "state", "created_at", "updated_at")
 })
 
-// OrganizationInvitationAccept is the public accept-flow view: enough to render copy and redirect,
-// without WorkOS invitation IDs or audit timestamps.
-var OrganizationInvitationAccept = Type("OrganizationInvitationAccept", func() {
-	Attribute("email", String, "Invitee email address.")
-	Attribute("state", String, "Invitation lifecycle state.", func() {
-		Enum("pending", "accepted", "expired", "revoked")
-	})
-	Attribute("organization_name", String, "Gram organization display name when the org is linked in Gram; empty if unknown.")
-	Attribute("accept_invitation_url", String, "URL to complete acceptance in WorkOS (may be empty when not actionable).")
-	Required("email", "state", "organization_name", "accept_invitation_url")
-})
-
 // OrganizationUser is a row from organization_user_relationships joined with the users table.
 var OrganizationUser = Type("OrganizationUser", func() {
 	Attribute("id", String, "Gram relationship row ID.")
@@ -141,29 +129,6 @@ var _ = Service("organizations", func() {
 		Meta("openapi:operationId", "listInvites")
 		Meta("openapi:extension:x-speakeasy-name-override", "listInvites")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListInvites"}`)
-	})
-
-	Method("getInviteByToken", func() {
-		Description("Resolve a WorkOS invitation from its token (e.g. accept-flow).")
-
-		NoSecurity()
-
-		Payload(func() {
-			Attribute("token", String, "Invitation token from the invite link.")
-			Required("token")
-		})
-
-		Result(OrganizationInvitationAccept)
-
-		HTTP(func() {
-			GET("/rpc/organizations.getInviteByToken")
-			Param("token")
-			Response(StatusOK)
-		})
-
-		Meta("openapi:operationId", "getInviteByToken")
-		Meta("openapi:extension:x-speakeasy-name-override", "getInviteByToken")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetInviteByToken"}`)
 	})
 
 	Method("listUsers", func() {

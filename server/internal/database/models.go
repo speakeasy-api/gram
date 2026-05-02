@@ -714,6 +714,21 @@ type OrganizationFeature struct {
 	Deleted        bool
 }
 
+type OrganizationInvitation struct {
+	ID             uuid.UUID
+	OrganizationID string
+	Email          string
+	TokenHash      string
+	InviterUserID  pgtype.Text
+	RoleSlug       pgtype.Text
+	State          string
+	ExpiresAt      pgtype.Timestamptz
+	AcceptedAt     pgtype.Timestamptz
+	RevokedAt      pgtype.Timestamptz
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
 type OrganizationMcpCollection struct {
 	ID             uuid.UUID
 	OrganizationID string

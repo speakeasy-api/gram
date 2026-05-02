@@ -8,8 +8,23 @@ package repo
 import (
 	"context"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
+
+const acceptInvitation = `-- name: AcceptInvitation :exec
+UPDATE organization_invitations
+SET state = 'accepted',
+    accepted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE id = $1
+  AND state = 'pending'
+`
+
+func (q *Queries) AcceptInvitation(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, acceptInvitation, id)
+	return err
+}
 
 const attachWorkOSUserToOrg = `-- name: AttachWorkOSUserToOrg :exec
 INSERT INTO organization_user_relationships (
@@ -42,6 +57,61 @@ func (q *Queries) AttachWorkOSUserToOrg(ctx context.Context, arg AttachWorkOSUse
 	return err
 }
 
+const createInvitation = `-- name: CreateInvitation :one
+INSERT INTO organization_invitations (
+    organization_id,
+    email,
+    token_hash,
+    inviter_user_id,
+    role_slug,
+    expires_at
+) VALUES (
+    $1,
+    $2,
+    $3,
+    $4,
+    $5,
+    clock_timestamp() + make_interval(days => $6::int)
+)
+RETURNING id, organization_id, email, token_hash, inviter_user_id, role_slug, state, expires_at, accepted_at, revoked_at, created_at, updated_at
+`
+
+type CreateInvitationParams struct {
+	OrganizationID string
+	Email          string
+	TokenHash      string
+	InviterUserID  pgtype.Text
+	RoleSlug       pgtype.Text
+	ExpiresInDays  int32
+}
+
+func (q *Queries) CreateInvitation(ctx context.Context, arg CreateInvitationParams) (OrganizationInvitation, error) {
+	row := q.db.QueryRow(ctx, createInvitation,
+		arg.OrganizationID,
+		arg.Email,
+		arg.TokenHash,
+		arg.InviterUserID,
+		arg.RoleSlug,
+		arg.ExpiresInDays,
+	)
+	var i OrganizationInvitation
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.Email,
+		&i.TokenHash,
+		&i.InviterUserID,
+		&i.RoleSlug,
+		&i.State,
+		&i.ExpiresAt,
+		&i.AcceptedAt,
+		&i.RevokedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const deleteOrganizationUserRelationship = `-- name: DeleteOrganizationUserRelationship :exec
 UPDATE organization_user_relationships
 SET deleted_at = clock_timestamp()
@@ -57,6 +127,58 @@ type DeleteOrganizationUserRelationshipParams struct {
 func (q *Queries) DeleteOrganizationUserRelationship(ctx context.Context, arg DeleteOrganizationUserRelationshipParams) error {
 	_, err := q.db.Exec(ctx, deleteOrganizationUserRelationship, arg.OrganizationID, arg.UserID)
 	return err
+}
+
+const getInvitationByID = `-- name: GetInvitationByID :one
+SELECT id, organization_id, email, token_hash, inviter_user_id, role_slug, state, expires_at, accepted_at, revoked_at, created_at, updated_at
+FROM organization_invitations
+WHERE id = $1
+`
+
+func (q *Queries) GetInvitationByID(ctx context.Context, id uuid.UUID) (OrganizationInvitation, error) {
+	row := q.db.QueryRow(ctx, getInvitationByID, id)
+	var i OrganizationInvitation
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.Email,
+		&i.TokenHash,
+		&i.InviterUserID,
+		&i.RoleSlug,
+		&i.State,
+		&i.ExpiresAt,
+		&i.AcceptedAt,
+		&i.RevokedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getInvitationByTokenHash = `-- name: GetInvitationByTokenHash :one
+SELECT id, organization_id, email, token_hash, inviter_user_id, role_slug, state, expires_at, accepted_at, revoked_at, created_at, updated_at
+FROM organization_invitations
+WHERE token_hash = $1
+`
+
+func (q *Queries) GetInvitationByTokenHash(ctx context.Context, tokenHash string) (OrganizationInvitation, error) {
+	row := q.db.QueryRow(ctx, getInvitationByTokenHash, tokenHash)
+	var i OrganizationInvitation
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.Email,
+		&i.TokenHash,
+		&i.InviterUserID,
+		&i.RoleSlug,
+		&i.State,
+		&i.ExpiresAt,
+		&i.AcceptedAt,
+		&i.RevokedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const getOrganizationMetadata = `-- name: GetOrganizationMetadata :one
@@ -206,6 +328,61 @@ func (q *Queries) ListOrganizationUsers(ctx context.Context, organizationID stri
 		return nil, err
 	}
 	return items, nil
+}
+
+const listPendingInvitations = `-- name: ListPendingInvitations :many
+SELECT id, organization_id, email, token_hash, inviter_user_id, role_slug, state, expires_at, accepted_at, revoked_at, created_at, updated_at
+FROM organization_invitations
+WHERE organization_id = $1
+  AND state = 'pending'
+ORDER BY created_at DESC
+`
+
+func (q *Queries) ListPendingInvitations(ctx context.Context, organizationID string) ([]OrganizationInvitation, error) {
+	rows, err := q.db.Query(ctx, listPendingInvitations, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []OrganizationInvitation
+	for rows.Next() {
+		var i OrganizationInvitation
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.Email,
+			&i.TokenHash,
+			&i.InviterUserID,
+			&i.RoleSlug,
+			&i.State,
+			&i.ExpiresAt,
+			&i.AcceptedAt,
+			&i.RevokedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const revokeInvitation = `-- name: RevokeInvitation :exec
+UPDATE organization_invitations
+SET state = 'revoked',
+    revoked_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE id = $1
+  AND state = 'pending'
+`
+
+func (q *Queries) RevokeInvitation(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, revokeInvitation, id)
+	return err
 }
 
 const setAccountType = `-- name: SetAccountType :exec
