@@ -158,6 +158,21 @@ ORDER BY seq ASC;
 SELECT COUNT(*) FROM chat_messages
 WHERE chat_id = @chat_id AND (project_id IS NULL OR project_id = @project_id::uuid);
 
+-- name: ListLatestGenerationChatMessages :many
+-- Replay-only view of a chat: all rows from the highest generation. Older
+-- generations stay in the table for audit but never ship to the runner —
+-- otherwise a chat with N divergences carries N cumulative snapshots in
+-- /configure (see AGE-2092). The MAX subquery is COALESCE'd to 0 so
+-- never-stored chats return zero rows instead of NULL.
+SELECT cm.* FROM chat_messages cm
+WHERE cm.chat_id = @chat_id
+  AND (cm.project_id IS NULL OR cm.project_id = @project_id::uuid)
+  AND cm.generation = COALESCE(
+    (SELECT MAX(generation) FROM chat_messages WHERE chat_id = @chat_id),
+    0
+  )
+ORDER BY cm.seq ASC;
+
 -- name: GetMaxGenerationForChat :one
 SELECT COALESCE(MAX(generation), 0)::integer AS generation FROM chat_messages WHERE chat_id = @chat_id;
 

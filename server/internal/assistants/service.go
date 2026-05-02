@@ -1614,7 +1614,11 @@ func (s *ServiceCore) loadActiveRuntimeRecord(ctx context.Context, projectID, th
 }
 
 func (s *ServiceCore) loadChatHistory(ctx context.Context, chatID uuid.UUID, projectID uuid.UUID) ([]runtimeMessage, error) {
-	messages, err := chatrepo.New(s.db).ListChatMessages(ctx, chatrepo.ListChatMessagesParams{
+	// Only the latest generation is the live transcript — earlier generations
+	// are audit-only snapshots from past divergences (see message_capture_strategy.go).
+	// Replaying every generation grows the /configure body roughly quadratically
+	// in turn count after a divergence cascade and trips the runner's body limit.
+	messages, err := chatrepo.New(s.db).ListLatestGenerationChatMessages(ctx, chatrepo.ListLatestGenerationChatMessagesParams{
 		ChatID:    chatID,
 		ProjectID: projectID,
 	})
