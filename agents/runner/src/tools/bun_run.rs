@@ -3,8 +3,7 @@ use std::time::{Duration, Instant};
 
 use agentkit_core::{MetadataMap, ToolOutput, ToolResultPart};
 use agentkit_tools_core::{
-    Tool, ToolAnnotations, ToolContext, ToolError, ToolName, ToolRegistry, ToolRequest, ToolResult,
-    ToolSpec,
+    Tool, ToolAnnotations, ToolContext, ToolError, ToolName, ToolRequest, ToolResult, ToolSpec,
 };
 use async_trait::async_trait;
 use serde::Deserialize;
@@ -18,10 +17,6 @@ const STDOUT_LIMIT: usize = 50_000;
 const STDERR_LIMIT: usize = 10_000;
 const SCRIPT_NAME: &str = "script.ts";
 const SANDBOX_ROOT: &str = "/tmp/bun-sandbox";
-
-pub fn registry() -> ToolRegistry {
-    ToolRegistry::new().with(BunRunTool::default())
-}
 
 #[derive(Clone, Debug)]
 pub struct BunRunTool {
