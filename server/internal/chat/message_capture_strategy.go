@@ -130,8 +130,12 @@ type matchResult struct {
 
 // matchIncomingAgainstStored walks the current generation's stored messages
 // against the incoming request to find the longest matching prefix by message
-// slot identity. The first slot mismatch (or a stored row past the end of
-// incoming) signals divergence and triggers a new generation.
+// slot identity. Empty-assistant rows are skipped on both sides so that a
+// no-op turn captured server-side (e.g. an Anthropic blank-stop response)
+// or replayed wire-side as `{content:null, tool_calls:[]}` doesn't
+// register as a divergence. Any other slot mismatch — or stored content
+// remaining after both sides have been drained of empties — signals
+// divergence and triggers a new generation.
 func (s *ChatMessageCaptureStrategy) matchIncomingAgainstStored(ctx context.Context, chatID uuid.UUID, incoming []or.ChatMessages) (matchResult, error) {
 	currentGen, err := s.repo.GetMaxGenerationForChat(ctx, chatID)
 	if err != nil {
@@ -148,23 +152,43 @@ func (s *ChatMessageCaptureStrategy) matchIncomingAgainstStored(ctx context.Cont
 		return matchResult{}, oops.E(oops.CodeUnexpected, err, "list chat messages for match")
 	}
 
-	matchedPrefix := 0
+	si, ii := 0, 0
 	diverged := false
-	for i, row := range stored {
-		if i >= len(incoming) {
+	for si < len(stored) && ii < len(incoming) {
+		if isStoredEmptyAsst(stored[si].Role, stored[si].Content, stored[si].ToolCallID.String, stored[si].ToolCalls) {
+			si++
+			continue
+		}
+		if isIncomingEmptyAsst(incoming[ii]) {
+			ii++
+			continue
+		}
+		if slotFromStored(stored[si].Role, stored[si].Content, stored[si].ToolCallID.String, stored[si].ToolCalls) != slotFromIncoming(incoming[ii]) {
 			diverged = true
 			break
 		}
-		if slotFromStored(row.Role, row.Content, row.ToolCallID.String, row.ToolCalls) != slotFromIncoming(incoming[i]) {
-			diverged = true
-			break
+		si++
+		ii++
+	}
+
+	if !diverged {
+		// Drain trailing empties so we can tell whether stored has a real
+		// row past the end of incoming, and so phantom empties at the head
+		// of the new tail don't get re-persisted by buildPendingRows.
+		for si < len(stored) && isStoredEmptyAsst(stored[si].Role, stored[si].Content, stored[si].ToolCallID.String, stored[si].ToolCalls) {
+			si++
 		}
-		matchedPrefix = i + 1
+		if si < len(stored) {
+			diverged = true
+		}
+		for ii < len(incoming) && isIncomingEmptyAsst(incoming[ii]) {
+			ii++
+		}
 	}
 
 	return matchResult{
 		generation:    currentGen,
-		matchedPrefix: matchedPrefix,
+		matchedPrefix: ii,
 		diverged:      diverged,
 	}, nil
 }

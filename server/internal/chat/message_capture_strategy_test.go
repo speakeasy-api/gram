@@ -63,6 +63,37 @@ func makeAssistantToolOnly(toolCalls ...or.ChatToolCall) or.ChatMessages {
 	})
 }
 
+// makeAssistantBlank builds an assistant wire message with no content, no
+// tool_calls, and no tool_call_id — the shape some clients send for a
+// no-op/blank-stop turn (e.g. agentkit 0.4.0 emits this when it has no
+// usable parts to encode).
+func makeAssistantBlank() or.ChatMessages {
+	return or.CreateChatMessagesAssistant(or.ChatAssistantMessage{
+		Role:             or.ChatAssistantMessageRoleAssistant,
+		Content:          optionalnullable.From[or.ChatAssistantMessageContent](nil),
+		Name:             nil,
+		ToolCalls:        nil,
+		Refusal:          nil,
+		Reasoning:        nil,
+		ReasoningDetails: nil,
+		Images:           nil,
+		Audio:            nil,
+	})
+}
+
+// blankResponse mimics the Anthropic Sonnet "blank stop" we observed in prod:
+// finish_reason=stop, no content, no tool_calls. CaptureMessage still writes
+// a row, which the matcher must learn to step over.
+func blankResponse() openrouter.CompletionResponse {
+	stop := "stop"
+	return openrouter.CompletionResponse{
+		Content:      "",
+		Model:        "test-model",
+		MessageID:    "msg-blank",
+		FinishReason: &stop,
+	}
+}
+
 // runTurn threads a single request through StartOrResumeChat + CaptureMessage
 // the same way the unified client does — so tests exercise the session handoff.
 func runTurn(t *testing.T, ctx context.Context, s *chat.ChatMessageCaptureStrategy, req openrouter.CompletionRequest, resp openrouter.CompletionResponse) {
@@ -380,6 +411,195 @@ func TestMatcher_ToolResultBodyDriftDoesNotBumpGeneration(t *testing.T) {
 	for i, r := range rows {
 		require.Equal(t, int32(0), r.Generation, "row %d stays on gen 0 — tool result body drift is not part of identity", i)
 	}
+}
+
+// A blank-stop assistant response ends up in the DB as content="",
+// tool_calls=null. The next turn's wire request omits that turn (no useful
+// parts to encode). Pre-fix this asymmetry tripped a generation bump on
+// every follow-up — the bug behind the gram-asst-prod crash loop on chat
+// 6d5bee05-9809-5678-8512-b3b2fb390120.
+func TestMatcher_StoredEmptyAssistantSkippedOnFollowUp(t *testing.T) {
+	t.Parallel()
+
+	ctx, conn, projectID, orgID := newTestChatContext(t)
+	s := newCaptureStrategy(t, conn)
+	chatID := uuid.New()
+
+	// Turn 1: real user → blank-stop response. Server stores [user, asst-empty].
+	runTurn(t, ctx, s,
+		makeRequest(chatID, projectID, orgID, openrouter.CreateMessageUser("hi")),
+		blankResponse(),
+	)
+
+	rows := listAllMessages(t, ctx, conn, chatID, projectID)
+	require.Len(t, rows, 2, "blank stop still produces an audit row")
+	require.Equal(t, "assistant", rows[1].Role)
+	require.Empty(t, rows[1].Content)
+
+	// Turn 2: client sends [user, user_new] — the empty asst is silently
+	// dropped from the wire. Matcher must skip the stored empty so the new
+	// user is the only row appended on gen 0.
+	runTurn(t, ctx, s,
+		makeRequest(chatID, projectID, orgID,
+			openrouter.CreateMessageUser("hi"),
+			openrouter.CreateMessageUser("still there?"),
+		),
+		makeResponse("yes"),
+	)
+
+	rows = listAllMessages(t, ctx, conn, chatID, projectID)
+	require.Len(t, rows, 4)
+	for i, r := range rows {
+		require.Equal(t, int32(0), r.Generation, "row %d stays on gen 0 — empty asst no longer trips divergence", i)
+	}
+	require.Equal(t, []string{"user", "assistant", "user", "assistant"}, roles(rows))
+}
+
+// Defensive: a client that sends `{role:asst, content:null, tool_calls:[]}`
+// in the wire request should not trip divergence either, regardless of
+// whether stored has the corresponding row.
+func TestMatcher_IncomingEmptyAssistantSkipped(t *testing.T) {
+	t.Parallel()
+
+	ctx, conn, projectID, orgID := newTestChatContext(t)
+	s := newCaptureStrategy(t, conn)
+	chatID := uuid.New()
+
+	runTurn(t, ctx, s,
+		makeRequest(chatID, projectID, orgID, openrouter.CreateMessageUser("first")),
+		makeResponse("real-1"),
+	)
+
+	// Replay with a phantom blank assistant inserted between the matched
+	// prefix and the new user message. Nothing in stored corresponds to it;
+	// the matcher must walk past it without consuming a stored row.
+	runTurn(t, ctx, s,
+		makeRequest(chatID, projectID, orgID,
+			openrouter.CreateMessageUser("first"),
+			openrouter.CreateMessageAssistant("real-1"),
+			makeAssistantBlank(),
+			openrouter.CreateMessageUser("second"),
+		),
+		makeResponse("real-2"),
+	)
+
+	rows := listAllMessages(t, ctx, conn, chatID, projectID)
+	require.Len(t, rows, 4, "phantom empty asst is dropped from persistence too")
+	for i, r := range rows {
+		require.Equal(t, int32(0), r.Generation, "row %d stays on gen 0", i)
+	}
+	require.Equal(t, []string{"user", "assistant", "user", "assistant"}, roles(rows))
+}
+
+// Empty asst rows in the middle of stored history (not just at the end)
+// must also be skipped over so a real row past them can still match.
+func TestMatcher_StoredEmptyAssistantInMiddleSkipped(t *testing.T) {
+	t.Parallel()
+
+	ctx, conn, projectID, orgID := newTestChatContext(t)
+	s := newCaptureStrategy(t, conn)
+	chatID := uuid.New()
+
+	// Turn 1: user → blank stop.
+	runTurn(t, ctx, s,
+		makeRequest(chatID, projectID, orgID, openrouter.CreateMessageUser("u1")),
+		blankResponse(),
+	)
+	// Turn 2: client appends a real user follow-up; matcher skips the stored
+	// empty and stays on gen 0.
+	runTurn(t, ctx, s,
+		makeRequest(chatID, projectID, orgID,
+			openrouter.CreateMessageUser("u1"),
+			openrouter.CreateMessageUser("u2"),
+		),
+		makeResponse("real"),
+	)
+	// Turn 3: replay full so far. The stored empty asst sits between user
+	// rows — middle of history, not the trailing slot.
+	runTurn(t, ctx, s,
+		makeRequest(chatID, projectID, orgID,
+			openrouter.CreateMessageUser("u1"),
+			openrouter.CreateMessageUser("u2"),
+			openrouter.CreateMessageAssistant("real"),
+			openrouter.CreateMessageUser("u3"),
+		),
+		makeResponse("done"),
+	)
+
+	rows := listAllMessages(t, ctx, conn, chatID, projectID)
+	for i, r := range rows {
+		require.Equal(t, int32(0), r.Generation, "row %d stays on gen 0 — mid-history empty does not block prefix match", i)
+	}
+}
+
+// Empty asst on both sides at the same position is the symmetric case:
+// stored and incoming each have a no-op turn, server matcher should not
+// confuse the two and should still match the surrounding rows by identity.
+func TestMatcher_EmptyAssistantOnBothSides(t *testing.T) {
+	t.Parallel()
+
+	ctx, conn, projectID, orgID := newTestChatContext(t)
+	s := newCaptureStrategy(t, conn)
+	chatID := uuid.New()
+
+	runTurn(t, ctx, s,
+		makeRequest(chatID, projectID, orgID, openrouter.CreateMessageUser("u1")),
+		blankResponse(),
+	)
+
+	runTurn(t, ctx, s,
+		makeRequest(chatID, projectID, orgID,
+			openrouter.CreateMessageUser("u1"),
+			makeAssistantBlank(),
+			openrouter.CreateMessageUser("u2"),
+		),
+		makeResponse("ok"),
+	)
+
+	rows := listAllMessages(t, ctx, conn, chatID, projectID)
+	for i, r := range rows {
+		require.Equal(t, int32(0), r.Generation, "row %d stays on gen 0", i)
+	}
+}
+
+// A mismatched real slot past a stored empty must still trip divergence —
+// empty-skip should not paper over a genuine edit/compaction.
+func TestMatcher_MismatchAfterEmptyStillDiverges(t *testing.T) {
+	t.Parallel()
+
+	ctx, conn, projectID, orgID := newTestChatContext(t)
+	s := newCaptureStrategy(t, conn)
+	chatID := uuid.New()
+
+	// Turn 1: stored ends up [user, asst-real].
+	runTurn(t, ctx, s,
+		makeRequest(chatID, projectID, orgID, openrouter.CreateMessageUser("original")),
+		makeResponse("answer"),
+	)
+	// Turn 2: stored becomes [user, asst-real, user, asst-empty] (blank stop).
+	runTurn(t, ctx, s,
+		makeRequest(chatID, projectID, orgID,
+			openrouter.CreateMessageUser("original"),
+			openrouter.CreateMessageAssistant("answer"),
+			openrouter.CreateMessageUser("ping"),
+		),
+		blankResponse(),
+	)
+	// Turn 3: client edits the FIRST user — divergence at position 0,
+	// regardless of whatever empties live downstream.
+	runTurn(t, ctx, s,
+		makeRequest(chatID, projectID, orgID,
+			openrouter.CreateMessageUser("edited"),
+		),
+		makeResponse("new answer"),
+	)
+
+	rows := listAllMessages(t, ctx, conn, chatID, projectID)
+	gens := map[int32]int{}
+	for _, r := range rows {
+		gens[r.Generation]++
+	}
+	require.Positive(t, gens[1], "edit at index 0 still bumps generation past empties")
 }
 
 func roles(rows []repo.ChatMessage) []string {
