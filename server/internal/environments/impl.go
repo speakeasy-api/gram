@@ -353,6 +353,10 @@ func (s *Service) CloneEnvironment(ctx context.Context, payload *gen.CloneEnviro
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to fetch source environment").Log(ctx, logger)
 	}
 
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeEnvironmentRead, ResourceKind: "", ResourceID: sourceEnv.ID.String(), Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
 	newName := payload.NewName
 	newSlug := conv.ToSlug(newName)
 
