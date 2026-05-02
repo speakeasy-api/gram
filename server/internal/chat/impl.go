@@ -942,8 +942,7 @@ func (s *Service) SubmitFeedback(ctx context.Context, payload *gen.SubmitFeedbac
 		return nil, oops.E(oops.CodeInvalid, nil, "feedback must be 'success' or 'failure'")
 	}
 
-	// Get the most recent message ID to track where user gave feedback
-	messages, err := s.repo.ListChatMessages(ctx, repo.ListChatMessagesParams{
+	messages, err := s.repo.ListLatestGenerationChatMessages(ctx, repo.ListLatestGenerationChatMessagesParams{
 		ChatID:    chatID,
 		ProjectID: *authCtx.ProjectID,
 	})
