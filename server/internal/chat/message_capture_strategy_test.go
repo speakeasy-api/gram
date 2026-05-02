@@ -63,10 +63,9 @@ func makeAssistantToolOnly(toolCalls ...or.ChatToolCall) or.ChatMessages {
 	})
 }
 
-// makeAssistantBlank builds an assistant wire message with no content, no
-// tool_calls, and no tool_call_id — the shape some clients send for a
-// no-op/blank-stop turn (e.g. agentkit 0.4.0 emits this when it has no
-// usable parts to encode).
+// makeAssistantBlank builds an assistant wire message with null content,
+// no tool_calls, and no tool_call_id — the shape clients send for a no-op
+// turn.
 func makeAssistantBlank() or.ChatMessages {
 	return or.CreateChatMessagesAssistant(or.ChatAssistantMessage{
 		Role:             or.ChatAssistantMessageRoleAssistant,
@@ -81,9 +80,9 @@ func makeAssistantBlank() or.ChatMessages {
 	})
 }
 
-// blankResponse mimics the Anthropic Sonnet "blank stop" we observed in prod:
-// finish_reason=stop, no content, no tool_calls. CaptureMessage still writes
-// a row, which the matcher must learn to step over.
+// blankResponse builds a completion response with finish_reason=stop, no
+// content, and no tool_calls — the shape providers can emit for a no-op
+// turn. CaptureMessage still writes a row for it.
 func blankResponse() openrouter.CompletionResponse {
 	stop := "stop"
 	return openrouter.CompletionResponse{
@@ -413,11 +412,9 @@ func TestMatcher_ToolResultBodyDriftDoesNotBumpGeneration(t *testing.T) {
 	}
 }
 
-// A blank-stop assistant response ends up in the DB as content="",
-// tool_calls=null. The next turn's wire request omits that turn (no useful
-// parts to encode). Pre-fix this asymmetry tripped a generation bump on
-// every follow-up — the bug behind the gram-asst-prod crash loop on chat
-// 6d5bee05-9809-5678-8512-b3b2fb390120.
+// A blank-stop assistant row sits in stored as content="", tool_calls=null.
+// The next turn's wire request omits that turn entirely; the matcher must
+// step over the stored row instead of treating the asymmetry as divergence.
 func TestMatcher_StoredEmptyAssistantSkippedOnFollowUp(t *testing.T) {
 	t.Parallel()
 

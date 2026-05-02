@@ -54,42 +54,13 @@ func buildSlot(role, content, toolCallID string, toolCallIDs []string) messageSl
 	}
 }
 
-// isStoredEmptyAsst reports whether a stored row collapses to an
-// "empty assistant" — role=assistant, no text, no tool_calls, no
-// tool_call_id. These rows arrive when the upstream model returns
-// finish_reason=stop with nothing to say (Anthropic Sonnet
-// extended-thinking blank stops, observed on prod chat
-// 6d5bee05-9809-5678-8512-b3b2fb390120). The runner-side transcript
-// (and other clients) treat such turns as no-ops and don't include
-// them on the next request, so the stored row has no counterpart.
-// The matcher steps over these so the asymmetry doesn't trip a
-// false-positive divergence.
-func isStoredEmptyAsst(role, content, toolCallID string, toolCallsJSON []byte) bool {
-	if role != "assistant" {
-		return false
-	}
-	if content != "" {
-		return false
-	}
-	if toolCallID != "" {
-		return false
-	}
-	return len(toolCallIDsFromStoredJSON(toolCallsJSON)) == 0
-}
-
-// isIncomingEmptyAsst is the wire-side counterpart to isStoredEmptyAsst:
-// an assistant message with no text, no tool_calls, no tool_call_id.
-// Defensive — the endpoint serves clients beyond the agentkit runner,
-// any of which may send the wire shape `{role:asst, content:null,
-// tool_calls:[]}` for a no-op turn.
-func isIncomingEmptyAsst(msg or.ChatMessages) bool {
-	if msg.Type != or.ChatMessagesTypeAssistant {
-		return false
-	}
-	if openrouter.GetText(msg) != "" {
-		return false
-	}
-	return len(toolCallIDsFromIncoming(msg)) == 0
+// isBlankAssistant reports whether the slot is a no-op assistant turn:
+// role=assistant with no text, no tool_call_id, no tool_calls. The server
+// can persist such a row (model returns an empty stop) while clients drop
+// it from subsequent wire requests, so the matcher steps over it on either
+// side rather than treating the asymmetry as divergence.
+func (s messageSlot) isBlankAssistant() bool {
+	return s == messageSlot{role: "assistant"}
 }
 
 func toolCallIDsFromIncoming(msg or.ChatMessages) []string {

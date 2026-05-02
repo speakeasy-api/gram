@@ -128,14 +128,11 @@ type matchResult struct {
 	diverged      bool
 }
 
-// matchIncomingAgainstStored walks the current generation's stored messages
-// against the incoming request to find the longest matching prefix by message
-// slot identity. Empty-assistant rows are skipped on both sides so that a
-// no-op turn captured server-side (e.g. an Anthropic blank-stop response)
-// or replayed wire-side as `{content:null, tool_calls:[]}` doesn't
-// register as a divergence. Any other slot mismatch — or stored content
-// remaining after both sides have been drained of empties — signals
-// divergence and triggers a new generation.
+// matchIncomingAgainstStored finds the longest matching prefix between
+// stored and incoming by slot identity. Blank-assistant slots are skipped
+// on both sides — the server may persist them while clients omit them on
+// replay. Any other mismatch, or stored content past the end of incoming,
+// signals divergence and triggers a new generation.
 func (s *ChatMessageCaptureStrategy) matchIncomingAgainstStored(ctx context.Context, chatID uuid.UUID, incoming []or.ChatMessages) (matchResult, error) {
 	currentGen, err := s.repo.GetMaxGenerationForChat(ctx, chatID)
 	if err != nil {
@@ -152,18 +149,25 @@ func (s *ChatMessageCaptureStrategy) matchIncomingAgainstStored(ctx context.Cont
 		return matchResult{}, oops.E(oops.CodeUnexpected, err, "list chat messages for match")
 	}
 
+	storedSlotAt := func(i int) messageSlot {
+		row := stored[i]
+		return slotFromStored(row.Role, row.Content, row.ToolCallID.String, row.ToolCalls)
+	}
+
 	si, ii := 0, 0
 	diverged := false
 	for si < len(stored) && ii < len(incoming) {
-		if isStoredEmptyAsst(stored[si].Role, stored[si].Content, stored[si].ToolCallID.String, stored[si].ToolCalls) {
+		storedSlot := storedSlotAt(si)
+		if storedSlot.isBlankAssistant() {
 			si++
 			continue
 		}
-		if isIncomingEmptyAsst(incoming[ii]) {
+		incomingSlot := slotFromIncoming(incoming[ii])
+		if incomingSlot.isBlankAssistant() {
 			ii++
 			continue
 		}
-		if slotFromStored(stored[si].Role, stored[si].Content, stored[si].ToolCallID.String, stored[si].ToolCalls) != slotFromIncoming(incoming[ii]) {
+		if storedSlot != incomingSlot {
 			diverged = true
 			break
 		}
@@ -172,17 +176,17 @@ func (s *ChatMessageCaptureStrategy) matchIncomingAgainstStored(ctx context.Cont
 	}
 
 	if !diverged {
-		// Drain trailing empties so we can tell whether stored has a real
-		// row past the end of incoming, and so phantom empties at the head
-		// of the new tail don't get re-persisted by buildPendingRows.
-		for si < len(stored) && isStoredEmptyAsst(stored[si].Role, stored[si].Content, stored[si].ToolCallID.String, stored[si].ToolCalls) {
+		// Drain trailing blanks on both sides: a real stored row past
+		// incoming must trip divergence, and phantom blanks at the head of
+		// the new tail must not be re-persisted by buildPendingRows.
+		for si < len(stored) && storedSlotAt(si).isBlankAssistant() {
 			si++
+		}
+		for ii < len(incoming) && slotFromIncoming(incoming[ii]).isBlankAssistant() {
+			ii++
 		}
 		if si < len(stored) {
 			diverged = true
-		}
-		for ii < len(incoming) && isIncomingEmptyAsst(incoming[ii]) {
-			ii++
 		}
 	}
 
