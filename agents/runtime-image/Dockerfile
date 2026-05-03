@@ -1,4 +1,4 @@
-FROM rust:1.91-bookworm AS runner-builder
+FROM rust:1.95-bookworm AS runner-builder
 
 WORKDIR /src
 COPY agents/runner/Cargo.toml agents/runner/Cargo.lock ./agents/runner/

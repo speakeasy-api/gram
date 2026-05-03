@@ -616,7 +616,7 @@ func newTestAssistantRuntimeServer(t *testing.T, configured bool) *httptest.Serv
 	})
 	mux.HandleFunc("/state", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(flyRuntimeStateResponse{Configured: configured})
+		_ = json.NewEncoder(w).Encode(runnerStateResponse{Configured: configured})
 	})
 	mux.HandleFunc("/configure", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNoContent)

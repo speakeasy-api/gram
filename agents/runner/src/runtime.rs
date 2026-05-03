@@ -24,7 +24,6 @@ use crate::idempotency::IdempotencyCache;
 use crate::tools;
 use crate::wire::{McpServer, RunnerConfig, RunnerMessage, RunnerRequest};
 
-const SHUTDOWN_GRACE: Duration = Duration::from_secs(60);
 const MCP_CMD_CAPACITY: usize = 32;
 
 pub type AppState = Arc<AsyncMutex<RuntimeHost>>;
@@ -55,7 +54,10 @@ pub struct RuntimeHost {
 pub struct ConfiguredRuntime {
     tokens: TokenRegistry,
     inbox_tx: UnboundedSender<String>,
-    last_active: Arc<Mutex<Instant>>,
+    /// `None` while a turn is in flight; `Some(t)` when idle since `t`. The two
+    /// signals are inherently exclusive — a single optional instant prevents
+    /// representing "in-flight AND idle since X" by construction.
+    idle_since: Arc<Mutex<Option<Instant>>>,
     // Non-rotating fields of the RunnerConfig this runtime was built from.
     // `auth_token` is excluded — it rolls on every /turn — so a caller retrying
     // /configure with a refreshed token is still treated as an identical config.
@@ -65,11 +67,12 @@ pub struct ConfiguredRuntime {
 }
 
 impl ConfiguredRuntime {
-    pub fn last_active_ago(&self) -> Option<Duration> {
-        self.last_active
-            .lock()
-            .ok()
-            .map(|last| Instant::now().saturating_duration_since(*last))
+    pub fn idle_for(&self) -> Option<Duration> {
+        let guard = self.idle_since.lock().ok()?;
+        Some(match *guard {
+            None => Duration::ZERO,
+            Some(t) => Instant::now().saturating_duration_since(t),
+        })
     }
 
     pub fn rotate_token(&self, token: &str) -> Result<(), RunnerError> {
@@ -83,7 +86,11 @@ impl ConfiguredRuntime {
     pub fn enqueue(&self, request: RunnerRequest) -> Result<(), RunnerError> {
         self.inbox_tx
             .send(request.input)
-            .map_err(|_| RunnerError::SubmitInput("loop inbox closed".into()))
+            .map_err(|_| RunnerError::SubmitInput("loop inbox closed".into()))?;
+        // Mark busy synchronously so /state can't report a stale idle window
+        // between enqueue and the loop's mark_busy on AwaitingInput.
+        mark_busy(&self.idle_since);
+        Ok(())
     }
 }
 
@@ -96,7 +103,6 @@ fn fingerprint(config: &RunnerConfig) -> u64 {
     config.chat_id.hash(&mut hasher);
     config.mcp_servers.hash(&mut hasher);
     config.history.hash(&mut hasher);
-    config.warm_ttl_seconds.hash(&mut hasher);
     hasher.finish()
 }
 
@@ -145,11 +151,9 @@ pub async fn build_runtime(
     let (mcp_cmd_tx, mcp_cmd_rx) = mpsc::channel(MCP_CMD_CAPACITY);
     let mcp_actor = tokio::spawn(run_mcp_actor(manager, mcp_cmd_rx));
 
-    let native_tools = ToolRegistry::new()
-        .with(tools::bun_run::bun_run)
-        .with(tools::mcp_force_reconnect::McpForceReconnectTool::new(
-            mcp_cmd_tx.clone(),
-        ));
+    let native_tools = ToolRegistry::new().with(tools::bun_run::bun_run).with(
+        tools::mcp_force_reconnect::McpForceReconnectTool::new(mcp_cmd_tx.clone()),
+    );
 
     let base_url = config
         .completions_url
@@ -187,19 +191,13 @@ pub async fn build_runtime(
         .await
         .map_err(|e| RunnerError::AgentStart(e.to_string()))?;
 
-    let warm_ttl = config
-        .warm_ttl_seconds
-        .map(Duration::from_secs)
-        .ok_or_else(|| RunnerError::ConfigError {
-            key: "warm_ttl".to_string(),
-        })?;
-    let last_active = Arc::new(Mutex::new(Instant::now()));
+    let idle_since = Arc::new(Mutex::new(Some(Instant::now())));
 
     let (inbox_tx, inbox_rx) = mpsc::unbounded_channel::<String>();
 
-    let loop_last_active = Arc::clone(&last_active);
+    let loop_idle_since = Arc::clone(&idle_since);
     let loop_handle = tokio::spawn(async move {
-        let outcome = run_loop(driver, inbox_rx, loop_last_active, warm_ttl).await;
+        let outcome = run_loop(driver, inbox_rx, loop_idle_since).await;
         match outcome {
             Ok(reason) => tracing::info!(reason = %reason, "loop exited"),
             Err(err) => tracing::error!(error = %err, "loop exited with error"),
@@ -212,7 +210,7 @@ pub async fn build_runtime(
     Ok(ConfiguredRuntime {
         tokens,
         inbox_tx,
-        last_active,
+        idle_since,
         fingerprint: fingerprint(config),
         _mcp_actor: mcp_actor,
         _loop_handle: loop_handle,
@@ -233,13 +231,12 @@ fn build_mcp_server_config(
                 source,
             }
         })?;
-        let value = http::HeaderValue::from_str(v).map_err(|source| {
-            RunnerError::McpHeaderValue {
+        let value =
+            http::HeaderValue::from_str(v).map_err(|source| RunnerError::McpHeaderValue {
                 server: server.id.clone(),
                 name: k.clone(),
                 source,
-            }
-        })?;
+            })?;
         server_headers.insert(name, value);
     }
     let mcp_http = Arc::new(McpRotatingClient::new(
@@ -292,18 +289,19 @@ async fn run_mcp_actor(mut manager: McpServerManager, mut cmd_rx: mpsc::Receiver
     }
 }
 
-/// Drives the agent loop until warm TTL + grace elapse idle, or a fatal
-/// error occurs. Input arrives via `inbox`; `/turn` pushes there and returns
-/// immediately. The driver's transcript is preloaded with instructions +
-/// history, so the very first `next()` yields `AwaitingInput` and the first
-/// /turn supplies the first user message — same code path as every later turn.
+/// Drives the agent loop until the inbox closes or a fatal error occurs.
+/// Lifecycle (warm-window eviction, shutdown) is owned by the backend, which
+/// polls `/state` for `idle_seconds` and stops the runner externally.
+///
+/// Input arrives via `inbox`; `/turn` pushes there and returns immediately.
+/// The driver's transcript is preloaded with instructions + history, so the
+/// very first `next()` yields `AwaitingInput` and the first `/turn` supplies
+/// the first user message — same code path as every later turn.
 ///
 /// Agent loop events the runner cares about:
-/// - `LoopStep::Finished`: turn ended. Loop back into `next()`; the driver
-///   will yield `AwaitingInput` once it has nothing pending, where we wait.
-/// - `LoopInterrupt::AwaitingInput`: drain queued inputs and submit. If none,
-///   race a timer (warm_ttl + 60s grace) against the next inbox arrival.
-///   Timer wins -> exit.
+/// - `LoopStep::Finished`: turn ended. Mark idle and loop back into `next()`.
+/// - `LoopInterrupt::AwaitingInput`: drain queued inputs and submit, or block
+///   on the inbox until the next message (or close).
 /// - `LoopInterrupt::AfterToolResult`: cooperative mid-turn yield. Drain any
 ///   queued inputs and submit before the next model call.
 /// - `LoopInterrupt::ApprovalRequest`: tools in this environment should not
@@ -311,43 +309,32 @@ async fn run_mcp_actor(mut manager: McpServerManager, mut cmd_rx: mpsc::Receiver
 async fn run_loop<S>(
     mut driver: LoopDriver<S>,
     mut inbox: UnboundedReceiver<String>,
-    last_active: Arc<Mutex<Instant>>,
-    warm_ttl: Duration,
+    idle_since: Arc<Mutex<Option<Instant>>>,
 ) -> Result<&'static str, RunnerError>
 where
     S: ModelSession,
 {
-    bump(&last_active);
     loop {
         match driver.next().await? {
             LoopStep::Finished(_turn) => {
-                bump(&last_active);
+                mark_idle(&idle_since);
             }
             LoopStep::Interrupt(LoopInterrupt::AwaitingInput(req)) => {
                 let drained = drain(&mut inbox);
                 if !drained.is_empty() {
+                    mark_busy(&idle_since);
                     req.submit(&mut driver, drained_into_items(drained))?;
-                    bump(&last_active);
                     continue;
                 }
-                let wait_budget = warm_ttl + SHUTDOWN_GRACE;
-                tokio::select! {
-                    maybe = inbox.recv() => {
-                        match maybe {
-                            Some(msg) => {
-                                req.submit(&mut driver, vec![Item::text(ItemKind::User, &msg)])?;
-                                bump(&last_active);
-                            }
-                            None => return Ok("inbox closed"),
-                        }
+                match inbox.recv().await {
+                    Some(msg) => {
+                        mark_busy(&idle_since);
+                        req.submit(&mut driver, vec![Item::text(ItemKind::User, &msg)])?;
                     }
-                    _ = tokio::time::sleep(wait_budget) => {
-                        return Ok("warm ttl elapsed");
-                    }
+                    None => return Ok("inbox closed"),
                 }
             }
             LoopStep::Interrupt(LoopInterrupt::AfterToolResult(info)) => {
-                bump(&last_active);
                 let drained = drain(&mut inbox);
                 if !drained.is_empty() {
                     info.submit(&mut driver, drained_into_items(drained))?;
@@ -379,9 +366,15 @@ fn drain(inbox: &mut UnboundedReceiver<String>) -> Vec<String> {
     out
 }
 
-fn bump(last_active: &Arc<Mutex<Instant>>) {
-    if let Ok(mut slot) = last_active.lock() {
-        *slot = Instant::now();
+fn mark_busy(idle_since: &Arc<Mutex<Option<Instant>>>) {
+    if let Ok(mut slot) = idle_since.lock() {
+        *slot = None;
+    }
+}
+
+fn mark_idle(idle_since: &Arc<Mutex<Option<Instant>>>) {
+    if let Ok(mut slot) = idle_since.lock() {
+        *slot = Some(Instant::now());
     }
 }
 

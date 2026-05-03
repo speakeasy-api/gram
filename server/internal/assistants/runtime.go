@@ -429,6 +429,32 @@ func (m *RuntimeManager) Configure(ctx context.Context, runtime assistantRuntime
 	return nil
 }
 
+func (m *RuntimeManager) Status(ctx context.Context, runtime assistantRuntimeRecord) (RuntimeBackendStatus, error) {
+	if err := validateRuntimeBackend(m, runtime.Backend); err != nil {
+		return RuntimeBackendStatus{}, err
+	}
+	state, err := m.getRuntime(runtime.AssistantThreadID)
+	if err != nil {
+		return RuntimeBackendStatus{}, fmt.Errorf("%w: %w", ErrRuntimeUnhealthy, err)
+	}
+	body, err := m.runtimeRequest(ctx, state, runtimeHTTPRequest{
+		Method:         http.MethodGet,
+		Path:           "/state",
+		ContentType:    "",
+		Body:           nil,
+		MaxTimeSeconds: 0,
+		IdempotencyKey: "",
+	})
+	if err != nil {
+		return RuntimeBackendStatus{}, fmt.Errorf("%w: load assistant runtime state: %w", ErrRuntimeUnhealthy, err)
+	}
+	var resp runnerStateResponse
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return RuntimeBackendStatus{}, fmt.Errorf("decode assistant runtime state: %w", err)
+	}
+	return RuntimeBackendStatus(resp), nil
+}
+
 func (m *RuntimeManager) Stop(_ context.Context, runtime assistantRuntimeRecord) error {
 	if err := validateRuntimeBackend(m, runtime.Backend); err != nil {
 		return err
