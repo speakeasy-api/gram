@@ -9,6 +9,19 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type AuthCode struct {
+	Code                string
+	Mode                string
+	UserID              uuid.UUID
+	ClientID            string
+	RedirectUri         string
+	CodeChallenge       pgtype.Text
+	CodeChallengeMethod pgtype.Text
+	Scope               pgtype.Text
+	ExpiresAt           pgtype.Timestamptz
+	CreatedAt           pgtype.Timestamptz
+}
+
 type CurrentUser struct {
 	Mode       string
 	SubjectRef string
@@ -32,6 +45,18 @@ type Organization struct {
 	WorkosID    pgtype.Text
 	CreatedAt   pgtype.Timestamptz
 	UpdatedAt   pgtype.Timestamptz
+}
+
+type Token struct {
+	Token     string
+	Mode      string
+	UserID    uuid.UUID
+	ClientID  string
+	Kind      string
+	Scope     pgtype.Text
+	ExpiresAt pgtype.Timestamptz
+	RevokedAt pgtype.Timestamptz
+	CreatedAt pgtype.Timestamptz
 }
 
 type User struct {

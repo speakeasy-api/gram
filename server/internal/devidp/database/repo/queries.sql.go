@@ -12,6 +12,97 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const consumeAuthCode = `-- name: ConsumeAuthCode :one
+DELETE FROM auth_codes
+WHERE code = $1
+  AND mode = $2
+  AND expires_at > clock_timestamp()
+RETURNING code, mode, user_id, client_id, redirect_uri, code_challenge, code_challenge_method, scope, expires_at, created_at
+`
+
+type ConsumeAuthCodeParams struct {
+	Code string
+	Mode string
+}
+
+// ConsumeAuthCode atomically reads-and-deletes an auth code, enforcing
+// single-use. Returns ErrNoRows when the code is unknown for that mode,
+// already consumed, or expired.
+func (q *Queries) ConsumeAuthCode(ctx context.Context, arg ConsumeAuthCodeParams) (AuthCode, error) {
+	row := q.db.QueryRow(ctx, consumeAuthCode, arg.Code, arg.Mode)
+	var i AuthCode
+	err := row.Scan(
+		&i.Code,
+		&i.Mode,
+		&i.UserID,
+		&i.ClientID,
+		&i.RedirectUri,
+		&i.CodeChallenge,
+		&i.CodeChallengeMethod,
+		&i.Scope,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const createAuthCode = `-- name: CreateAuthCode :one
+
+INSERT INTO auth_codes (
+  code, mode, user_id, client_id, redirect_uri,
+  code_challenge, code_challenge_method, scope, expires_at
+)
+VALUES (
+  $1, $2, $3, $4, $5,
+  $6, $7,
+  $8, $9
+)
+RETURNING code, mode, user_id, client_id, redirect_uri, code_challenge, code_challenge_method, scope, expires_at, created_at
+`
+
+type CreateAuthCodeParams struct {
+	Code                string
+	Mode                string
+	UserID              uuid.UUID
+	ClientID            string
+	RedirectUri         string
+	CodeChallenge       pgtype.Text
+	CodeChallengeMethod pgtype.Text
+	Scope               pgtype.Text
+	ExpiresAt           pgtype.Timestamptz
+}
+
+// =============================================================================
+// auth_codes / tokens (shared by every OAuth-shaped mode; idp-design.md §5)
+// =============================================================================
+func (q *Queries) CreateAuthCode(ctx context.Context, arg CreateAuthCodeParams) (AuthCode, error) {
+	row := q.db.QueryRow(ctx, createAuthCode,
+		arg.Code,
+		arg.Mode,
+		arg.UserID,
+		arg.ClientID,
+		arg.RedirectUri,
+		arg.CodeChallenge,
+		arg.CodeChallengeMethod,
+		arg.Scope,
+		arg.ExpiresAt,
+	)
+	var i AuthCode
+	err := row.Scan(
+		&i.Code,
+		&i.Mode,
+		&i.UserID,
+		&i.ClientID,
+		&i.RedirectUri,
+		&i.CodeChallenge,
+		&i.CodeChallengeMethod,
+		&i.Scope,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const createMembership = `-- name: CreateMembership :one
 
 INSERT INTO memberships (user_id, organization_id, role)
@@ -87,6 +178,51 @@ func (q *Queries) CreateOrganization(ctx context.Context, arg CreateOrganization
 		&i.WorkosID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const createToken = `-- name: CreateToken :one
+INSERT INTO tokens (
+  token, mode, user_id, client_id, kind, scope, expires_at
+)
+VALUES (
+  $1, $2, $3, $4, $5, $6, $7
+)
+RETURNING token, mode, user_id, client_id, kind, scope, expires_at, revoked_at, created_at
+`
+
+type CreateTokenParams struct {
+	Token     string
+	Mode      string
+	UserID    uuid.UUID
+	ClientID  string
+	Kind      string
+	Scope     pgtype.Text
+	ExpiresAt pgtype.Timestamptz
+}
+
+func (q *Queries) CreateToken(ctx context.Context, arg CreateTokenParams) (Token, error) {
+	row := q.db.QueryRow(ctx, createToken,
+		arg.Token,
+		arg.Mode,
+		arg.UserID,
+		arg.ClientID,
+		arg.Kind,
+		arg.Scope,
+		arg.ExpiresAt,
+	)
+	var i Token
+	err := row.Scan(
+		&i.Token,
+		&i.Mode,
+		&i.UserID,
+		&i.ClientID,
+		&i.Kind,
+		&i.Scope,
+		&i.ExpiresAt,
+		&i.RevokedAt,
+		&i.CreatedAt,
 	)
 	return i, err
 }
@@ -179,6 +315,36 @@ DELETE FROM users WHERE id = $1
 func (q *Queries) DeleteUser(ctx context.Context, id uuid.UUID) error {
 	_, err := q.db.Exec(ctx, deleteUser, id)
 	return err
+}
+
+const getActiveToken = `-- name: GetActiveToken :one
+SELECT token, mode, user_id, client_id, kind, scope, expires_at, revoked_at, created_at FROM tokens
+WHERE token = $1
+  AND mode = $2
+  AND revoked_at IS NULL
+  AND expires_at > clock_timestamp()
+`
+
+type GetActiveTokenParams struct {
+	Token string
+	Mode  string
+}
+
+func (q *Queries) GetActiveToken(ctx context.Context, arg GetActiveTokenParams) (Token, error) {
+	row := q.db.QueryRow(ctx, getActiveToken, arg.Token, arg.Mode)
+	var i Token
+	err := row.Scan(
+		&i.Token,
+		&i.Mode,
+		&i.UserID,
+		&i.ClientID,
+		&i.Kind,
+		&i.Scope,
+		&i.ExpiresAt,
+		&i.RevokedAt,
+		&i.CreatedAt,
+	)
+	return i, err
 }
 
 const getCurrentUserPointer = `-- name: GetCurrentUserPointer :one
@@ -349,6 +515,41 @@ func (q *Queries) ListOrganizations(ctx context.Context, arg ListOrganizationsPa
 	return items, nil
 }
 
+const listOrganizationsForUser = `-- name: ListOrganizationsForUser :many
+SELECT o.id, o.name, o.slug, o.account_type, o.workos_id, o.created_at, o.updated_at FROM organizations o
+JOIN memberships m ON m.organization_id = o.id
+WHERE m.user_id = $1
+ORDER BY o.name ASC
+`
+
+func (q *Queries) ListOrganizationsForUser(ctx context.Context, userID uuid.UUID) ([]Organization, error) {
+	rows, err := q.db.Query(ctx, listOrganizationsForUser, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Organization
+	for rows.Next() {
+		var i Organization
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Slug,
+			&i.AccountType,
+			&i.WorkosID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listUsers = `-- name: ListUsers :many
 SELECT id, email, display_name, photo_url, github_handle, admin, whitelisted, created_at, updated_at FROM users
 WHERE id > $1
@@ -389,6 +590,22 @@ func (q *Queries) ListUsers(ctx context.Context, arg ListUsersParams) ([]User, e
 		return nil, err
 	}
 	return items, nil
+}
+
+const revokeToken = `-- name: RevokeToken :exec
+UPDATE tokens
+SET revoked_at = clock_timestamp()
+WHERE token = $1 AND mode = $2 AND revoked_at IS NULL
+`
+
+type RevokeTokenParams struct {
+	Token string
+	Mode  string
+}
+
+func (q *Queries) RevokeToken(ctx context.Context, arg RevokeTokenParams) error {
+	_, err := q.db.Exec(ctx, revokeToken, arg.Token, arg.Mode)
+	return err
 }
 
 const updateMembership = `-- name: UpdateMembership :one

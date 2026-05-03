@@ -149,3 +149,56 @@ ON CONFLICT (mode) DO UPDATE SET
   subject_ref = EXCLUDED.subject_ref,
   updated_at = clock_timestamp()
 RETURNING *;
+
+-- =============================================================================
+-- auth_codes / tokens (shared by every OAuth-shaped mode; idp-design.md §5)
+-- =============================================================================
+
+-- name: CreateAuthCode :one
+INSERT INTO auth_codes (
+  code, mode, user_id, client_id, redirect_uri,
+  code_challenge, code_challenge_method, scope, expires_at
+)
+VALUES (
+  @code, @mode, @user_id, @client_id, @redirect_uri,
+  sqlc.narg('code_challenge'), sqlc.narg('code_challenge_method'),
+  sqlc.narg('scope'), @expires_at
+)
+RETURNING *;
+
+-- ConsumeAuthCode atomically reads-and-deletes an auth code, enforcing
+-- single-use. Returns ErrNoRows when the code is unknown for that mode,
+-- already consumed, or expired.
+-- name: ConsumeAuthCode :one
+DELETE FROM auth_codes
+WHERE code = @code
+  AND mode = @mode
+  AND expires_at > clock_timestamp()
+RETURNING *;
+
+-- name: CreateToken :one
+INSERT INTO tokens (
+  token, mode, user_id, client_id, kind, scope, expires_at
+)
+VALUES (
+  @token, @mode, @user_id, @client_id, @kind, sqlc.narg('scope'), @expires_at
+)
+RETURNING *;
+
+-- name: GetActiveToken :one
+SELECT * FROM tokens
+WHERE token = @token
+  AND mode = @mode
+  AND revoked_at IS NULL
+  AND expires_at > clock_timestamp();
+
+-- name: RevokeToken :exec
+UPDATE tokens
+SET revoked_at = clock_timestamp()
+WHERE token = @token AND mode = @mode AND revoked_at IS NULL;
+
+-- name: ListOrganizationsForUser :many
+SELECT o.* FROM organizations o
+JOIN memberships m ON m.organization_id = o.id
+WHERE m.user_id = @user_id
+ORDER BY o.name ASC;
