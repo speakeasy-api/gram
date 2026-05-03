@@ -1,7 +1,7 @@
 // Package mockspeakeasy implements the dev-idp's mock-speakeasy mode — a
 // drop-in port of the standalone mock-speakeasy-idp binary's
 // /v1/speakeasy_provider/* surface (idp-design.md §7.1) onto the dev-idp's
-// shared Postgres store and per-mode currentUser pointer.
+// shared Postgres store and per-mode currentUser.
 //
 // Wire-shape compatibility is preserved byte-for-byte (including the
 // `user_workspaces_slugs` JSON-tag typo) so existing Gram-side callers
@@ -347,14 +347,14 @@ func (h *Handler) handleRegister(w http.ResponseWriter, r *http.Request) {
 // =============================================================================
 
 // errCurrentUserNotSet is returned when /login or /exchange runs before any
-// operator/test has bound the mock-speakeasy currentUser pointer via
+// operator/test has bound the mock-speakeasy currentUser via
 // /rpc/devIdp.setCurrentUser. Surfaced as a 400 on the wire.
 var errCurrentUserNotSet = errors.New("no currentUser set for mock-speakeasy mode (call /rpc/devIdp.setCurrentUser)")
 
-// errCurrentUserMissing is returned when the currentUser pointer names a
+// errCurrentUserMissing is returned when the currentUser names a
 // users.id that no longer exists in the local users table. Surfaced as a
 // 500 on the wire — this is an integrity error, not a request error.
-var errCurrentUserMissing = errors.New("currentUser pointer references a missing user row")
+var errCurrentUserMissing = errors.New("currentUser references a missing user row")
 
 func statusForCurrentUserErr(err error) int {
 	if errors.Is(err, errCurrentUserNotSet) {
@@ -365,14 +365,14 @@ func statusForCurrentUserErr(err error) int {
 
 func (h *Handler) resolveCurrentUserID(ctx context.Context) (uuid.UUID, error) {
 	queries := repo.New(h.db)
-	pointer, err := queries.GetCurrentUserPointer(ctx, Mode)
+	row, err := queries.GetCurrentUser(ctx, Mode)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return uuid.Nil, errCurrentUserNotSet
 	}
 	if err != nil {
-		return uuid.Nil, fmt.Errorf("read currentUser pointer: %w", err)
+		return uuid.Nil, fmt.Errorf("read currentUser: %w", err)
 	}
-	id, err := uuid.Parse(pointer.SubjectRef)
+	id, err := uuid.Parse(row.SubjectRef)
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("parse currentUser subject_ref: %w", err)
 	}

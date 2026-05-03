@@ -16,14 +16,14 @@ import (
 // GetCurrentUserRequestBody is the type of the "devIdp" service
 // "getCurrentUser" endpoint HTTP request body.
 type GetCurrentUserRequestBody struct {
-	// Which mode's pointer to read.
+	// Which mode's currentUser to read.
 	Mode *string `form:"mode,omitempty" json:"mode,omitempty" xml:"mode,omitempty"`
 }
 
 // SetCurrentUserRequestBody is the type of the "devIdp" service
 // "setCurrentUser" endpoint HTTP request body.
 type SetCurrentUserRequestBody struct {
-	// Which mode's pointer to write.
+	// Which mode's currentUser to write.
 	Mode *string `form:"mode,omitempty" json:"mode,omitempty" xml:"mode,omitempty"`
 	// Local user UUID. Required for non-workos modes.
 	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`

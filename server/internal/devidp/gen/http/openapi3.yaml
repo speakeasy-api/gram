@@ -12,7 +12,7 @@ paths:
             tags:
                 - devIdp
             summary: getCurrentUser devIdp
-            description: Read the per-mode currentUser pointer. 404s when no row exists yet for that mode.
+            description: Read the per-mode currentUser. 404s when no row exists yet for that mode.
             operationId: devIdp#getCurrentUser
             requestBody:
                 required: true
@@ -32,7 +32,7 @@ paths:
             tags:
                 - devIdp
             summary: setCurrentUser devIdp
-            description: UPSERT the per-mode currentUser pointer. Local modes accept `user_id` (a UUID into the local users table); workos mode accepts `workos_sub` (a literal WorkOS user id; not validated).
+            description: UPSERT the per-mode currentUser. Local modes accept `user_id` (a UUID into the local users table); workos mode accepts `workos_sub` (a literal WorkOS user id; not validated).
             operationId: devIdp#setCurrentUser
             requestBody:
                 required: true
@@ -367,7 +367,7 @@ components:
             properties:
                 mode:
                     type: string
-                    description: Which mode's pointer to read.
+                    description: Which mode's currentUser to read.
                     enum:
                         - mock-speakeasy
                         - oauth2-1
@@ -519,7 +519,7 @@ components:
             properties:
                 mode:
                     type: string
-                    description: Which mode's pointer to write.
+                    description: Which mode's currentUser to write.
                     enum:
                         - mock-speakeasy
                         - oauth2-1
@@ -650,10 +650,10 @@ components:
                 - workos_sub
 tags:
     - name: devIdp
-      description: Dev-only RPCs for the dev-idp itself. Per-mode currentUser pointer get/set (idp-design.md §3, §6.2). Permanently unauthenticated.
+      description: Dev-only RPCs for the dev-idp itself. Per-mode currentUser get/set (idp-design.md §3, §6.2). Permanently unauthenticated.
     - name: organizations
       description: Dev-idp organizations CRUD. Backs both mock-speakeasy and oauth2 modes' org metadata. Permanently unauthenticated (idp-design.md §6).
     - name: memberships
       description: Dev-idp memberships CRUD. Idempotent on (user_id, organization_id) for create. Permanently unauthenticated.
     - name: users
-      description: Dev-idp users CRUD. The local-mode currentUser pointers (mock-speakeasy / oauth2-1 / oauth2) reference rows in this table by id (idp-design.md §3, §5). Permanently unauthenticated.
+      description: Dev-idp users CRUD. The local-mode currentUser (mock-speakeasy / oauth2-1 / oauth2) references rows in this table by id (idp-design.md §3, §5). Permanently unauthenticated.

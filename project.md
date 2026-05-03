@@ -48,7 +48,7 @@ Tracker for the work landing the design in `spike.md`. Per the process in `promp
 
 - Replace `mock-speakeasy-idp/` with `gram dev-idp`, a `cmd/gram/` subcommand running four modes simultaneously at `/mock-speakeasy/`, `/workos/`, `/oauth2-1/`, `/oauth2/`.
 - Postgres-backed (its own logical database `gram_devidp` in the existing `gram-db` container), declarative `schema.sql`, no migration files.
-- Authentication is non-interactive across every mode (no login screens, no consent screens) — identity resolves from a per-mode `currentUser` pointer in the `current_users` table.
+- Authentication is non-interactive across every mode (no login screens, no consent screens) — identity resolves from a per-mode `currentUser` row in the `current_users` table.
 - `oauth2-1` and `oauth2` are OIDC-compliant; ID tokens are RS256-signed via an RSA keypair (ephemeral by default; `--rsa-private-key` for stable JWKS).
 - `workos` mode uniquely proxies the live WorkOS REST API (does not use the dev-idp DB for identity); keyed by `WORKOS_API_KEY` + `WORKOS_HOST`.
 - Goa design + gen nested under `server/internal/devidp/` (not under `server/design/` or `server/gen/`).
@@ -76,7 +76,7 @@ _Implementation order matches dependency order; later tickets assume earlier one
 
 #### Mode handlers
 
-- [ ] **`mock-speakeasy` mode.** Port `mock-speakeasy-idp/`'s `/v1/speakeasy_provider/*` endpoints under the `/mock-speakeasy/` prefix. Replace the hardcoded `MockUserID` with the mock-speakeasy `currentUser` pointer. Keep the `secret-key` middleware (env: `SPEAKEASY_SECRET_KEY`).
+- [ ] **`mock-speakeasy` mode.** Port `mock-speakeasy-idp/`'s `/v1/speakeasy_provider/*` endpoints under the `/mock-speakeasy/` prefix. Replace the hardcoded `MockUserID` with the mock-speakeasy `currentUser`. Keep the `secret-key` middleware (env: `SPEAKEASY_SECRET_KEY`).
 - [ ] **`workos` mode.** Thin REST proxy over `WORKOS_HOST` using `WORKOS_API_KEY`. Endpoints: `/workos/users/{id_or_email}`, `/workos/organizations/{id}`, `/workos/currentUser`. Mode is unmounted when `WORKOS_API_KEY` is unset. **Does not** read `users` / `organizations` / `memberships` from the dev-idp DB.
 - [ ] **`oauth2-1` mode.** OAuth 2.1 AS, PKCE-required, stateless DCR, OIDC-compliant. Endpoints: `/.well-known/oauth-authorization-server`, `/.well-known/openid-configuration`, `/.well-known/jwks.json`, `/register`, `/authorize`, `/token`, `/userinfo`, `/revoke`. Accepts any `client_id` / `client_secret`.
 - [ ] **`oauth2` mode.** OAuth 2.0 AS, PKCE optional (honored when present), no DCR, OIDC-compliant. Endpoints: same as `oauth2-1` minus `/register`. Accepts any `client_id` / `client_secret`.
@@ -93,7 +93,7 @@ _Implementation order matches dependency order; later tickets assume earlier one
 
 #### Dashboard (separate top-level project)
 
-- [ ] **`dev-idp-dashboard` skeleton.** New top-level Hono package using `@hono/react-renderer`. Operator-only — no end-user surface. Renders panes for users / orgs / memberships / tokens / auth codes / per-mode currentUser pointers. The `workos` pane is rendered differently (free-form `workos_sub` input + WorkOS-API "preview" button instead of a local-users picker; lists data live from `/workos/...`).
+- [ ] **`dev-idp-dashboard` skeleton.** New top-level Hono package using `@hono/react-renderer`. Operator-only — no end-user surface. Renders panes for users / orgs / memberships / tokens / auth codes / per-mode currentUser. The `workos` pane is rendered differently (free-form `workos_sub` input + WorkOS-API "preview" button instead of a local-users picker; lists data live from `/workos/...`).
 
 ---
 

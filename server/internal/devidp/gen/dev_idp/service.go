@@ -12,15 +12,14 @@ import (
 	"context"
 )
 
-// Dev-only RPCs for the dev-idp itself. Per-mode currentUser pointer get/set
+// Dev-only RPCs for the dev-idp itself. Per-mode currentUser get/set
 // (idp-design.md §3, §6.2). Permanently unauthenticated.
 type Service interface {
-	// Read the per-mode currentUser pointer. 404s when no row exists yet for that
-	// mode.
+	// Read the per-mode currentUser. 404s when no row exists yet for that mode.
 	GetCurrentUser(context.Context, *GetCurrentUserPayload) (res *CurrentUser, err error)
-	// UPSERT the per-mode currentUser pointer. Local modes accept `user_id` (a
-	// UUID into the local users table); workos mode accepts `workos_sub` (a
-	// literal WorkOS user id; not validated).
+	// UPSERT the per-mode currentUser. Local modes accept `user_id` (a UUID into
+	// the local users table); workos mode accepts `workos_sub` (a literal WorkOS
+	// user id; not validated).
 	SetCurrentUser(context.Context, *SetCurrentUserPayload) (res *CurrentUser, err error)
 }
 
@@ -53,14 +52,14 @@ type CurrentUser struct {
 // GetCurrentUserPayload is the payload type of the devIdp service
 // getCurrentUser method.
 type GetCurrentUserPayload struct {
-	// Which mode's pointer to read.
+	// Which mode's currentUser to read.
 	Mode string
 }
 
 // SetCurrentUserPayload is the payload type of the devIdp service
 // setCurrentUser method.
 type SetCurrentUserPayload struct {
-	// Which mode's pointer to write.
+	// Which mode's currentUser to write.
 	Mode string
 	// Local user UUID. Required for non-workos modes.
 	UserID *string

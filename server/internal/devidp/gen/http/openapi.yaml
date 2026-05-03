@@ -18,7 +18,7 @@ paths:
             tags:
                 - devIdp
             summary: getCurrentUser devIdp
-            description: Read the per-mode currentUser pointer. 404s when no row exists yet for that mode.
+            description: Read the per-mode currentUser. 404s when no row exists yet for that mode.
             operationId: devIdp#getCurrentUser
             parameters:
                 - name: GetCurrentUserRequestBody
@@ -42,7 +42,7 @@ paths:
             tags:
                 - devIdp
             summary: setCurrentUser devIdp
-            description: UPSERT the per-mode currentUser pointer. Local modes accept `user_id` (a UUID into the local users table); workos mode accepts `workos_sub` (a literal WorkOS user id; not validated).
+            description: UPSERT the per-mode currentUser. Local modes accept `user_id` (a UUID into the local users table); workos mode accepts `workos_sub` (a literal WorkOS user id; not validated).
             operationId: devIdp#setCurrentUser
             parameters:
                 - name: SetCurrentUserRequestBody
@@ -415,7 +415,7 @@ definitions:
         properties:
             mode:
                 type: string
-                description: Which mode's pointer to read.
+                description: Which mode's currentUser to read.
                 example: oauth2-1
                 enum:
                     - mock-speakeasy
@@ -432,7 +432,7 @@ definitions:
         properties:
             mode:
                 type: string
-                description: Which mode's pointer to write.
+                description: Which mode's currentUser to write.
                 example: oauth2-1
                 enum:
                     - mock-speakeasy

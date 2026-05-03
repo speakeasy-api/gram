@@ -282,7 +282,7 @@ DELETE FROM current_users WHERE subject_ref = $1
 `
 
 // DeleteCurrentUsersBySubjectRef sweeps any current_users row whose
-// subject_ref matches the given text (local-mode pointers store
+// subject_ref matches the given text (local-mode rows store
 // users.id.String()). No FK exists because workos-mode subject_refs are
 // external WorkOS subs, not UUIDs — see idp-design.md §5.
 func (q *Queries) DeleteCurrentUsersBySubjectRef(ctx context.Context, subjectRef string) error {
@@ -347,16 +347,16 @@ func (q *Queries) GetActiveToken(ctx context.Context, arg GetActiveTokenParams) 
 	return i, err
 }
 
-const getCurrentUserPointer = `-- name: GetCurrentUserPointer :one
+const getCurrentUser = `-- name: GetCurrentUser :one
 
 SELECT mode, subject_ref, updated_at FROM current_users WHERE mode = $1
 `
 
 // =============================================================================
-// current_users (per-mode pointers; idp-design.md §3, §6.2)
+// current_users (per-mode currentUser; idp-design.md §3, §6.2)
 // =============================================================================
-func (q *Queries) GetCurrentUserPointer(ctx context.Context, mode string) (CurrentUser, error) {
-	row := q.db.QueryRow(ctx, getCurrentUserPointer, mode)
+func (q *Queries) GetCurrentUser(ctx context.Context, mode string) (CurrentUser, error) {
+	row := q.db.QueryRow(ctx, getCurrentUser, mode)
 	var i CurrentUser
 	err := row.Scan(&i.Mode, &i.SubjectRef, &i.UpdatedAt)
 	return i, err
@@ -735,7 +735,7 @@ func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (User, e
 	return i, err
 }
 
-const upsertCurrentUserPointer = `-- name: UpsertCurrentUserPointer :one
+const upsertCurrentUser = `-- name: UpsertCurrentUser :one
 INSERT INTO current_users (mode, subject_ref)
 VALUES ($1, $2)
 ON CONFLICT (mode) DO UPDATE SET
@@ -744,13 +744,13 @@ ON CONFLICT (mode) DO UPDATE SET
 RETURNING mode, subject_ref, updated_at
 `
 
-type UpsertCurrentUserPointerParams struct {
+type UpsertCurrentUserParams struct {
 	Mode       string
 	SubjectRef string
 }
 
-func (q *Queries) UpsertCurrentUserPointer(ctx context.Context, arg UpsertCurrentUserPointerParams) (CurrentUser, error) {
-	row := q.db.QueryRow(ctx, upsertCurrentUserPointer, arg.Mode, arg.SubjectRef)
+func (q *Queries) UpsertCurrentUser(ctx context.Context, arg UpsertCurrentUserParams) (CurrentUser, error) {
+	row := q.db.QueryRow(ctx, upsertCurrentUser, arg.Mode, arg.SubjectRef)
 	var i CurrentUser
 	err := row.Scan(&i.Mode, &i.SubjectRef, &i.UpdatedAt)
 	return i, err

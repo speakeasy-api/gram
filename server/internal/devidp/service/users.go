@@ -117,7 +117,7 @@ func (s *UsersService) List(ctx context.Context, p *gen.ListPayload) (*gen.ListU
 	return &gen.ListUsersResult{Items: items, NextCursor: nextCursor}, nil
 }
 
-// Delete tombstones the user and sweeps any current_users pointer that names
+// Delete tombstones the user and sweeps any current_users row that names
 // it. memberships, auth_codes, and tokens cascade automatically through their
 // FK ON DELETE CASCADE constraints. current_users has no FK (workos
 // subject_refs are external WorkOS subs, not UUIDs — idp-design.md §5), so

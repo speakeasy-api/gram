@@ -85,7 +85,7 @@ ORDER BY id ASC
 LIMIT @max_rows;
 
 -- DeleteCurrentUsersBySubjectRef sweeps any current_users row whose
--- subject_ref matches the given text (local-mode pointers store
+-- subject_ref matches the given text (local-mode rows store
 -- users.id.String()). No FK exists because workos-mode subject_refs are
 -- external WorkOS subs, not UUIDs — see idp-design.md §5.
 -- name: DeleteCurrentUsersBySubjectRef :exec
@@ -136,13 +136,13 @@ LIMIT @max_rows;
 DELETE FROM memberships WHERE id = @id;
 
 -- =============================================================================
--- current_users (per-mode pointers; idp-design.md §3, §6.2)
+-- current_users (per-mode currentUser; idp-design.md §3, §6.2)
 -- =============================================================================
 
--- name: GetCurrentUserPointer :one
+-- name: GetCurrentUser :one
 SELECT * FROM current_users WHERE mode = @mode;
 
--- name: UpsertCurrentUserPointer :one
+-- name: UpsertCurrentUser :one
 INSERT INTO current_users (mode, subject_ref)
 VALUES (@mode, @subject_ref)
 ON CONFLICT (mode) DO UPDATE SET

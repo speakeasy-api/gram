@@ -21,7 +21,7 @@ var WorkosCurrentUser = Type("WorkosCurrentUser", func() {
 })
 
 // CurrentUser is the discriminated payload returned by devIdp.getCurrentUser.
-// `mode` tells the consumer which pointer was read. Local modes populate
+// `mode` tells the consumer which mode was read. Local modes populate
 // `user`; the workos mode populates `workos`.
 var CurrentUser = Type("CurrentUser", func() {
 	Attribute("mode", String, "Mode whose currentUser is being reported.", func() {
@@ -34,13 +34,13 @@ var CurrentUser = Type("CurrentUser", func() {
 })
 
 var _ = Service("devIdp", func() {
-	Description("Dev-only RPCs for the dev-idp itself. Per-mode currentUser pointer get/set (idp-design.md §3, §6.2). Permanently unauthenticated.")
+	Description("Dev-only RPCs for the dev-idp itself. Per-mode currentUser get/set (idp-design.md §3, §6.2). Permanently unauthenticated.")
 
 	Method("getCurrentUser", func() {
-		Description("Read the per-mode currentUser pointer. 404s when no row exists yet for that mode.")
+		Description("Read the per-mode currentUser. 404s when no row exists yet for that mode.")
 
 		Payload(func() {
-			Attribute("mode", String, "Which mode's pointer to read.", func() {
+			Attribute("mode", String, "Which mode's currentUser to read.", func() {
 				Enum("mock-speakeasy", "oauth2-1", "oauth2", "workos")
 			})
 			Required("mode")
@@ -55,10 +55,10 @@ var _ = Service("devIdp", func() {
 	})
 
 	Method("setCurrentUser", func() {
-		Description("UPSERT the per-mode currentUser pointer. Local modes accept `user_id` (a UUID into the local users table); workos mode accepts `workos_sub` (a literal WorkOS user id; not validated).")
+		Description("UPSERT the per-mode currentUser. Local modes accept `user_id` (a UUID into the local users table); workos mode accepts `workos_sub` (a literal WorkOS user id; not validated).")
 
 		Payload(func() {
-			Attribute("mode", String, "Which mode's pointer to write.", func() {
+			Attribute("mode", String, "Which mode's currentUser to write.", func() {
 				Enum("mock-speakeasy", "oauth2-1", "oauth2", "workos")
 			})
 			Attribute("user_id", String, "Local user UUID. Required for non-workos modes.", func() {

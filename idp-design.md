@@ -32,7 +32,7 @@ testing of the new auth surfaces this RFC introduces:
 `dev-idp` upgrades the mock so a single binary can stand in for **all** of
 these IDPs simultaneously, backed by one shared Postgres store of users,
 organizations, and applications, and provides the test hooks (currentUser
-pointer, app/user/org seeding via management API) the integration suite
+selection, app/user/org seeding via management API) the integration suite
 needs.
 
 It absorbs `mock-speakeasy-idp` — the existing `/v1/speakeasy_provider/*`
@@ -63,15 +63,15 @@ top-level handler dispatch table.
 
 **Authentication in dev-idp is always automatic, never interactive.** No
 mode ever renders a login form, password prompt, or consent screen. Every
-`/authorize`-equivalent endpoint resolves identity from an in-memory
-**`currentUser`** pointer and immediately redirects with the issued code.
-This is a non-negotiable design property — it is what makes the dev-idp
-usable from non-browser integration tests and headless CI.
+`/authorize`-equivalent endpoint resolves identity from a per-mode
+**`currentUser`** and immediately redirects with the issued code. This is
+a non-negotiable design property — it is what makes the dev-idp usable
+from non-browser integration tests and headless CI.
 
-The pointer is **per mode** (per issuer type), not global:
+The currentUser is **per mode** (per issuer type), not global:
 
 ```
-state.currentUser = {
+currentUser = {
   "mock-speakeasy": users.id,
   "workos":         users.id,
   "oauth2-1":       users.id,
@@ -84,12 +84,12 @@ the **MCP traffic and the management-API traffic in the same Gram process
 should be allowed to belong to different users**. If currentUser were
 global, hitting `/mcp/{slug}` as Alice while a dashboard tab in the same
 browser is signed in as Bob would force a contradiction; one of the two
-sessions would have to be torn down. Splitting the pointer per issuer type
-sneaks around that requirement: `mock-speakeasy`'s pointer governs
-management-API login (Bob), `oauth2-1`'s pointer governs the MCP-side
+sessions would have to be torn down. Splitting per issuer type sneaks
+around that requirement: `mock-speakeasy`'s currentUser governs
+management-API login (Bob), `oauth2-1`'s currentUser governs the MCP-side
 upstream OAuth identity (Alice), and the two never have to agree.
 
-- Each pointer is a **subject ref** persisted in the `current_users`
+- Each currentUser is a **subject ref** persisted in the `current_users`
   Postgres table (§5). The string semantics are mode-specific:
   - For `mock-speakeasy` / `oauth2-1` / `oauth2`: a `users.id` UUID into
     the local `users` table.
@@ -112,11 +112,11 @@ There is no `auto_consent` flag, no "auto bypass" toggle, no consent
 record table — those are all knobs you only need if interactive auth is
 in scope, and it isn't.
 
-Because the pointers are global per dev-idp process (just sharded by mode),
-parallel tests sharing one dev-idp binary need to coordinate or stand up
-their own instance. We do not introduce a per-request override header —
-that surface risks leaking into outbound `doHTTP` calls and is not worth
-the fragility.
+Because the currentUser is global per dev-idp process (just sharded by
+mode), parallel tests sharing one dev-idp binary need to coordinate or
+stand up their own instance. We do not introduce a per-request override
+header — that surface risks leaking into outbound `doHTTP` calls and is
+not worth the fragility.
 
 ---
 
@@ -175,8 +175,8 @@ server/cmd/gram/
 
 dev-idp-dashboard/            — separate top-level project. Hono package using
                               @hono/react-renderer. Operator-only surface — lists
-                              users / orgs / tokens, shows the per-mode current
-                              currentUser pointers, exposes a "switch to user X"
+                              users / orgs / tokens, shows the per-mode
+                              currentUser, exposes a "switch to user X"
                               button. Does NOT render any login or consent
                               screen (auth is always non-interactive — §3).
                               Designed and tracked separately under milestone
@@ -238,14 +238,14 @@ The dev-idp expects to talk to its **own** Postgres database (separate
 database is unsupported — atlas declarative apply would happily drop tables
 it doesn't recognise.
 
-| Table           | Purpose                                                                                                                                                                                                                                                                                                                                                                                     |
-| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `users`         | Identity rows. `id`, `email`, `display_name`, `photo_url?`, `github_handle?`, `admin`, `whitelisted`, timestamps.                                                                                                                                                                                                                                                                           |
-| `organizations` | Org records. `id`, `name`, `slug`, `account_type`, `workos_id?`, timestamps. Consumed by `mock-speakeasy` (the `workos` mode reads its identity entirely from live WorkOS, not this table).                                                                                                                                                                                                 |
-| `memberships`   | `(user_id, organization_id)` join with `role` (default `member`).                                                                                                                                                                                                                                                                                                                           |
-| `current_users` | Per-mode `currentUser` pointer (§3). `(mode TEXT PK, subject_ref TEXT NOT NULL, updated_at)`. `subject_ref` is mode-specific: `users.id` UUID for `mock-speakeasy`/`oauth2-1`/`oauth2`; WorkOS `sub` for `workos`. **No FK** because the workos value is external. **Not seeded** — row appears the first time `setCurrentUser` is called for that mode. Modes return an error before that. |
-| `auth_codes`    | Short-TTL `/authorize` codes. `(code, mode, user_id, client_id, redirect_uri, code_challenge?, code_challenge_method?, scope?, expires_at)`. `client_id` is **recorded for inspection only** — see §5.2.                                                                                                                                                                                    |
-| `tokens`        | Issued access / id / refresh tokens. `(token, mode, user_id, client_id, kind, scope?, expires_at, revoked_at?)`. `client_id` is recorded for inspection only.                                                                                                                                                                                                                               |
+| Table           | Purpose                                                                                                                                                                                                                                                                                                                                                                             |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `users`         | Identity rows. `id`, `email`, `display_name`, `photo_url?`, `github_handle?`, `admin`, `whitelisted`, timestamps.                                                                                                                                                                                                                                                                   |
+| `organizations` | Org records. `id`, `name`, `slug`, `account_type`, `workos_id?`, timestamps. Consumed by `mock-speakeasy` (the `workos` mode reads its identity entirely from live WorkOS, not this table).                                                                                                                                                                                         |
+| `memberships`   | `(user_id, organization_id)` join with `role` (default `member`).                                                                                                                                                                                                                                                                                                                   |
+| `current_users` | Per-mode `currentUser` (§3). `(mode TEXT PK, subject_ref TEXT NOT NULL, updated_at)`. `subject_ref` is mode-specific: `users.id` UUID for `mock-speakeasy`/`oauth2-1`/`oauth2`; WorkOS `sub` for `workos`. **No FK** because the workos value is external. **Not seeded** — row appears the first time `setCurrentUser` is called for that mode. Modes return an error before that. |
+| `auth_codes`    | Short-TTL `/authorize` codes. `(code, mode, user_id, client_id, redirect_uri, code_challenge?, code_challenge_method?, scope?, expires_at)`. `client_id` is **recorded for inspection only** — see §5.2.                                                                                                                                                                            |
+| `tokens`        | Issued access / id / refresh tokens. `(token, mode, user_id, client_id, kind, scope?, expires_at, revoked_at?)`. `client_id` is recorded for inspection only.                                                                                                                                                                                                                       |
 
 ### 5.1 Cross-mode sharing
 
@@ -353,7 +353,7 @@ Two layers:
 - **§6.1 — Resource CRUD** for `organizations`, `users`, and `memberships`.
   The dashboard, integration-test setup helpers, and CLI seed scripts are
   the consumers. Notably absent: `applications` (§5.2).
-- **§6.2 — Dev-only RPC** for the currentUser pointer, the read-only
+- **§6.2 — Dev-only RPC** for the currentUser, the read-only
   applications view, and the test-reset hook.
 
 All endpoints are POST to `/rpc/<service>.<method>` (Gram convention).
@@ -556,7 +556,7 @@ prefix:
 | `/register` | `tokens`                                            | `organizations`, `memberships` (creates org for user) |
 
 Behaviour matches the existing impl: the auto-login form binds the
-mock-speakeasy `currentUser` pointer (no longer a hard-coded `MockUserID`),
+mock-speakeasy `currentUser` (no longer a hard-coded `MockUserID`),
 and the `secret-key` middleware accepts `SPEAKEASY_SECRET_KEY` from env or
 flag. mock-speakeasy is a fully local mode — its identity universe is the
 dev-idp's `users` / `organizations` / `memberships` tables. To exercise
@@ -633,7 +633,7 @@ The dashboard renders the workos mode differently from the rest:
 
 If `--workos-api-key` is unset, the `workos` mode is not mounted at all.
 The other three modes are unaffected — each carries its own per-mode
-`currentUser` pointer (§3) and never reads from the others.
+`currentUser` (§3) and never reads from the others.
 
 ### 7.3 `/oauth2-1/`
 
@@ -708,7 +708,7 @@ There is **no** registration endpoint.
 ### 7.5 Shared protocol behaviours
 
 - All modes resolve user identity from the **per-mode** `currentUser`
-  pointer (§3) at any point a real IDP would render a login screen, and
+  (§3) at any point a real IDP would render a login screen, and
   immediately redirect with the issued code. **No mode ever renders an
   interactive surface.**
 - All modes accept any inbound `client_id` / `client_secret` / `redirect_uri`
@@ -786,7 +786,7 @@ Steps 1 and 5 each become Cleanup tickets in `project.md`.
   `--rsa-private-key` PEM at boot.
 - Federation between modes (i.e. logging in via `/workos/` should leave
   `/oauth2-1/` unauthenticated). Each mode keeps its own token bag and
-  its own currentUser pointer.
+  its own currentUser.
 - Any UX that isn't operator-visibility — the `dev-idp-dashboard`'s full
   design is its own doc, but it never renders anything end-user-facing
   (auth is non-interactive, §3).
@@ -818,8 +818,8 @@ list below.
   table at all — register is stateless and clients are unauthenticated
   (§5.2).
 - ~~`auto_consent` toggle.~~ Removed. Auth is always non-interactive (§3).
-- ~~Single global `currentUser` pointer.~~ Replaced by **per-mode**
-  pointers (§3) so MCP traffic and management-API traffic in the same
+- ~~Single global `currentUser`.~~ Replaced by **per-mode**
+  currentUser (§3) so MCP traffic and management-API traffic in the same
   Gram process can belong to different users without contradiction.
 - ~~Stateful client registration.~~ `oauth2-1/register` is stateless;
   every mode accepts every `client_id` / `client_secret` (§5.2).
@@ -827,7 +827,7 @@ list below.
 - ~~Goa design + gen at top-level (`server/design/`, `server/gen/`).~~
   Both nested inside `server/internal/devidp/` (§4 layout, §6.3) — keeps
   dev-idp encapsulated and trivially deletable.
-- ~~In-memory currentUser pointers.~~ Persisted in the `current_users`
+- ~~In-memory currentUser.~~ Persisted in the `current_users`
   Postgres table (§3, §5) — survives dev-idp restarts. Wipe by going
   through Postgres directly or running `mise db:devidp:reset` (which
   drops the whole schema).

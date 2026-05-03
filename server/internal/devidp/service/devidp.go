@@ -20,7 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
-// Per-mode currentUser pointer values. Mirrors the design's enum
+// Per-mode currentUser values. Mirrors the design's enum
 // (idp-design.md §3): the three "local" modes resolve subject_ref as a UUID
 // into the local users table; workos resolves it as an external WorkOS sub.
 const (
@@ -64,15 +64,15 @@ func AttachDevIdp(mux goahttp.Muxer, service *DevIdpService) {
 func (s *DevIdpService) GetCurrentUser(ctx context.Context, p *gen.GetCurrentUserPayload) (*gen.CurrentUser, error) {
 	queries := repo.New(s.db)
 
-	pointer, err := queries.GetCurrentUserPointer(ctx, p.Mode)
+	row, err := queries.GetCurrentUser(ctx, p.Mode)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return nil, oops.E(oops.CodeNotFound, nil, "no currentUser set for mode %q", p.Mode)
 	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "read currentUser pointer").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "read currentUser").Log(ctx, s.logger)
 	}
 
-	return s.buildCurrentUserView(ctx, queries, pointer.Mode, pointer.SubjectRef)
+	return s.buildCurrentUserView(ctx, queries, row.Mode, row.SubjectRef)
 }
 
 func (s *DevIdpService) SetCurrentUser(ctx context.Context, p *gen.SetCurrentUserPayload) (*gen.CurrentUser, error) {
@@ -82,15 +82,15 @@ func (s *DevIdpService) SetCurrentUser(ctx context.Context, p *gen.SetCurrentUse
 	}
 
 	queries := repo.New(s.db)
-	pointer, err := queries.UpsertCurrentUserPointer(ctx, repo.UpsertCurrentUserPointerParams{
+	row, err := queries.UpsertCurrentUser(ctx, repo.UpsertCurrentUserParams{
 		Mode:       p.Mode,
 		SubjectRef: subjectRef,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "upsert currentUser pointer").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "upsert currentUser").Log(ctx, s.logger)
 	}
 
-	return s.buildCurrentUserView(ctx, queries, pointer.Mode, pointer.SubjectRef)
+	return s.buildCurrentUserView(ctx, queries, row.Mode, row.SubjectRef)
 }
 
 // subjectRefForSet validates the per-mode body shape (idp-design.md §6.2):
@@ -119,7 +119,7 @@ func (s *DevIdpService) subjectRefForSet(ctx context.Context, p *gen.SetCurrentU
 	}
 
 	// Pre-validate the user exists. Without this, a typo would silently set a
-	// stale pointer that mock-speakeasy /validate would later refuse.
+	// stale currentUser that mock-speakeasy /validate would later refuse.
 	if _, err := repo.New(s.db).GetUser(ctx, id); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return "", oops.E(oops.CodeNotFound, nil, "user %s not found", id)
@@ -159,7 +159,7 @@ func (s *DevIdpService) buildCurrentUserView(ctx context.Context, queries *repo.
 	user, err := queries.GetUser(ctx, id)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return nil, oops.E(oops.CodeNotFound, nil, "currentUser pointer for mode %q references missing user %s", mode, id)
+		return nil, oops.E(oops.CodeNotFound, nil, "currentUser for mode %q references missing user %s", mode, id)
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "look up user for currentUser").Log(ctx, s.logger)
 	}

@@ -310,11 +310,11 @@ func ParseEndpoint(
 
 // devIdpUsage displays the usage of the dev-idp command and its subcommands.
 func devIdpUsage() {
-	fmt.Fprintln(os.Stderr, `Dev-only RPCs for the dev-idp itself. Per-mode currentUser pointer get/set (idp-design.md §3, §6.2). Permanently unauthenticated.`)
+	fmt.Fprintln(os.Stderr, `Dev-only RPCs for the dev-idp itself. Per-mode currentUser get/set (idp-design.md §3, §6.2). Permanently unauthenticated.`)
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] dev-idp COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
-	fmt.Fprintln(os.Stderr, `    get-current-user: Read the per-mode currentUser pointer. 404s when no row exists yet for that mode.`)
-	fmt.Fprintln(os.Stderr, `    set-current-user: UPSERT the per-mode currentUser pointer. Local modes accept `+"`"+`user_id`+"`"+` (a UUID into the local users table); workos mode accepts `+"`"+`workos_sub`+"`"+` (a literal WorkOS user id; not validated).`)
+	fmt.Fprintln(os.Stderr, `    get-current-user: Read the per-mode currentUser. 404s when no row exists yet for that mode.`)
+	fmt.Fprintln(os.Stderr, `    set-current-user: UPSERT the per-mode currentUser. Local modes accept `+"`"+`user_id`+"`"+` (a UUID into the local users table); workos mode accepts `+"`"+`workos_sub`+"`"+` (a literal WorkOS user id; not validated).`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s dev-idp COMMAND --help\n", os.Args[0])
@@ -327,7 +327,7 @@ func devIdpGetCurrentUserUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Read the per-mode currentUser pointer. 404s when no row exists yet for that mode.`)
+	fmt.Fprintln(os.Stderr, `Read the per-mode currentUser. 404s when no row exists yet for that mode.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -345,7 +345,7 @@ func devIdpSetCurrentUserUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `UPSERT the per-mode currentUser pointer. Local modes accept `+"`"+`user_id`+"`"+` (a UUID into the local users table); workos mode accepts `+"`"+`workos_sub`+"`"+` (a literal WorkOS user id; not validated).`)
+	fmt.Fprintln(os.Stderr, `UPSERT the per-mode currentUser. Local modes accept `+"`"+`user_id`+"`"+` (a UUID into the local users table); workos mode accepts `+"`"+`workos_sub`+"`"+` (a literal WorkOS user id; not validated).`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -529,7 +529,7 @@ func membershipsDeleteUsage() {
 
 // usersUsage displays the usage of the users command and its subcommands.
 func usersUsage() {
-	fmt.Fprintln(os.Stderr, `Dev-idp users CRUD. The local-mode currentUser pointers (mock-speakeasy / oauth2-1 / oauth2) reference rows in this table by id (idp-design.md §3, §5). Permanently unauthenticated.`)
+	fmt.Fprintln(os.Stderr, `Dev-idp users CRUD. The local-mode currentUser (mock-speakeasy / oauth2-1 / oauth2) references rows in this table by id (idp-design.md §3, §5). Permanently unauthenticated.`)
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] users COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    create: Create a user.`)

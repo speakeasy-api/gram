@@ -4,7 +4,7 @@
 // used in remote-session tests.
 //
 // Identity resolution is non-interactive (idp-design.md §3) — every
-// /authorize call resolves the per-mode currentUser pointer and
+// /authorize call resolves the per-mode currentUser and
 // immediately redirects with the issued code. Client authentication is
 // permissive (idp-design.md §5.2) — every client_id / client_secret /
 // redirect_uri is accepted as-is.
@@ -558,19 +558,19 @@ func (h *Handler) handleRevoke(w http.ResponseWriter, r *http.Request) {
 
 var (
 	errCurrentUserNotSet  = errors.New("no currentUser set for oauth2-1 mode (call /rpc/devIdp.setCurrentUser)")
-	errCurrentUserMissing = errors.New("currentUser pointer references a missing user row")
+	errCurrentUserMissing = errors.New("currentUser references a missing user row")
 )
 
 func (h *Handler) resolveCurrentUserID(ctx context.Context) (uuid.UUID, error) {
 	queries := repo.New(h.db)
-	pointer, err := queries.GetCurrentUserPointer(ctx, Mode)
+	row, err := queries.GetCurrentUser(ctx, Mode)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return uuid.Nil, errCurrentUserNotSet
 	}
 	if err != nil {
-		return uuid.Nil, fmt.Errorf("read currentUser pointer: %w", err)
+		return uuid.Nil, fmt.Errorf("read currentUser: %w", err)
 	}
-	id, err := uuid.Parse(pointer.SubjectRef)
+	id, err := uuid.Parse(row.SubjectRef)
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("parse currentUser subject_ref: %w", err)
 	}

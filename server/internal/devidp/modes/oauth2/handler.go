@@ -11,7 +11,7 @@
 //     that need rotation should target oauth2-1.
 //
 // Shared with oauth21: the keystore + JWKS surface, the auth_codes /
-// tokens schema, the per-mode currentUser pointer (idp-design.md §3),
+// tokens schema, the per-mode currentUser (idp-design.md §3),
 // and the permissive client-authentication posture (§5.2).
 package oauth2
 
@@ -530,19 +530,19 @@ func (h *Handler) handleRevoke(w http.ResponseWriter, r *http.Request) {
 
 var (
 	errCurrentUserNotSet  = errors.New("no currentUser set for oauth2 mode (call /rpc/devIdp.setCurrentUser)")
-	errCurrentUserMissing = errors.New("currentUser pointer references a missing user row")
+	errCurrentUserMissing = errors.New("currentUser references a missing user row")
 )
 
 func (h *Handler) resolveCurrentUserID(ctx context.Context) (uuid.UUID, error) {
 	queries := repo.New(h.db)
-	pointer, err := queries.GetCurrentUserPointer(ctx, Mode)
+	row, err := queries.GetCurrentUser(ctx, Mode)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return uuid.Nil, errCurrentUserNotSet
 	}
 	if err != nil {
-		return uuid.Nil, fmt.Errorf("read currentUser pointer: %w", err)
+		return uuid.Nil, fmt.Errorf("read currentUser: %w", err)
 	}
-	id, err := uuid.Parse(pointer.SubjectRef)
+	id, err := uuid.Parse(row.SubjectRef)
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("parse currentUser subject_ref: %w", err)
 	}

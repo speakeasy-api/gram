@@ -141,32 +141,32 @@ func (h *Handler) handleGetOrganization(w http.ResponseWriter, r *http.Request) 
 func (h *Handler) handleGetCurrentUser(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	pointer, err := repo.New(h.db).GetCurrentUserPointer(ctx, Mode)
+	row, err := repo.New(h.db).GetCurrentUser(ctx, Mode)
 	if errors.Is(err, pgx.ErrNoRows) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "no currentUser set for workos mode (call /rpc/devIdp.setCurrentUser)"})
 		return
 	}
 	if err != nil {
-		h.logger.ErrorContext(ctx, "read currentUser pointer", attr.SlogError(err))
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to read currentUser pointer"})
+		h.logger.ErrorContext(ctx, "read currentUser", attr.SlogError(err))
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to read currentUser"})
 		return
 	}
 
 	resp := currentUserJSON{
-		WorkosSub:         pointer.SubjectRef,
+		WorkosSub:         row.SubjectRef,
 		Email:             nil,
 		FirstName:         nil,
 		LastName:          nil,
 		ProfilePictureURL: nil,
 	}
 
-	user, err := h.client.GetUser(ctx, pointer.SubjectRef)
+	user, err := h.client.GetUser(ctx, row.SubjectRef)
 	switch {
 	case err != nil && gramworkos.IsNotFound(err):
-		// Pointer set to a non-existent WorkOS sub. Return what we have so
-		// the operator can see the broken pointer in the dashboard rather
+		// currentUser set to a non-existent WorkOS sub. Return what we have
+		// so the operator can see the broken state in the dashboard rather
 		// than getting a 5xx.
-		h.logger.WarnContext(ctx, "currentUser pointer not found in WorkOS", attr.SlogError(err))
+		h.logger.WarnContext(ctx, "currentUser not found in WorkOS", attr.SlogError(err))
 	case err != nil:
 		h.logger.ErrorContext(ctx, "fetch live workos user", attr.SlogError(err))
 	case user != nil:

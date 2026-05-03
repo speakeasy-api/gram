@@ -12,9 +12,9 @@ import (
 	"context"
 )
 
-// Dev-idp users CRUD. The local-mode currentUser pointers (mock-speakeasy /
-// oauth2-1 / oauth2) reference rows in this table by id (idp-design.md §3,
-// §5). Permanently unauthenticated.
+// Dev-idp users CRUD. The local-mode currentUser (mock-speakeasy / oauth2-1 /
+// oauth2) references rows in this table by id (idp-design.md §3, §5).
+// Permanently unauthenticated.
 type Service interface {
 	// Create a user.
 	Create(context.Context, *CreatePayload) (res *User, err error)
