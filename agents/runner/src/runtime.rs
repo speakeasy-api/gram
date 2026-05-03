@@ -146,7 +146,7 @@ pub async fn build_runtime(
     let mcp_actor = tokio::spawn(run_mcp_actor(manager, mcp_cmd_rx));
 
     let native_tools = ToolRegistry::new()
-        .with(tools::bun_run::BunRunTool::default())
+        .with(tools::bun_run::bun_run)
         .with(tools::mcp_force_reconnect::McpForceReconnectTool::new(
             mcp_cmd_tx.clone(),
         ));
@@ -163,26 +163,27 @@ pub async fn build_runtime(
     let completions_http = build_http(http_client.clone(), tokens.clone());
     let adapter = CompletionsAdapter::with_client(provider, completions_http);
 
-    let agent = Agent::builder()
-        .model(adapter)
-        .add_tool_source(native_tools)
-        .add_tool_source(mcp_source)
-        .permissions(AllowAll)
-        .observer(TracingReporter::new())
-        .build()
-        .map_err(|e| RunnerError::AgentBuild(e.to_string()))?;
-
     let mut transcript = Vec::new();
     if let Some(instructions) = &config.instructions {
         transcript.push(Item::text(ItemKind::System, instructions));
     }
     transcript.extend(normalize_history(&config.history)?);
 
+    let agent = Agent::builder()
+        .model(adapter)
+        .add_tool_source(native_tools)
+        .add_tool_source(mcp_source)
+        .permissions(AllowAll)
+        .observer(TracingReporter::new())
+        .transcript(transcript)
+        .build()
+        .map_err(|e| RunnerError::AgentBuild(e.to_string()))?;
+
     let session = SessionConfig::new(config.chat_id.clone())
         .with_cache(PromptCacheRequest::automatic().with_retention(PromptCacheRetention::Short));
 
     let driver = agent
-        .start(session, transcript)
+        .start(session)
         .await
         .map_err(|e| RunnerError::AgentStart(e.to_string()))?;
 
