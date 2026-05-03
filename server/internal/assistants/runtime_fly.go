@@ -63,8 +63,9 @@ type flyRuntimeAppIdentity struct {
 }
 
 // runnerStateResponse mirrors agents/runner/src/wire.rs::RunnerStateResponse.
-// IdleSeconds is omitted while a turn is in flight; the runner clears it on
-// /turn enqueue, so this is the same source the manager polls to gate expiry.
+// IdleSeconds is `0` while a turn is in flight (the runner clears its idle
+// clock on /turn enqueue) and absent only when the runner has never been
+// /configured. Both shapes are the source the manager polls to gate expiry.
 type runnerStateResponse struct {
 	Configured  bool    `json:"configured"`
 	IdleSeconds *uint64 `json:"idle_seconds,omitempty"`
