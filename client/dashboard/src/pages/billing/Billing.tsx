@@ -104,6 +104,9 @@ const UsageSection = () => {
         A summary of your organization's usage this period. Please visit the
         billing portal to see complete details or manage your account.
       </Page.Section.Description>
+      <RequireScope scope="org:admin" level="section">
+        <TopUpCTA />
+      </RequireScope>
       <Page.Section.Body>
         <div className="space-y-4">
           {periodUsage ? (
@@ -433,6 +436,38 @@ const UsageTiers = () => {
         </Stack>
       </Page.Section.Body>
     </Page.Section>
+  );
+};
+
+const TopUpCTA = () => {
+  const client = useSdkClient();
+  const telemetry = useTelemetry();
+  const [busy, setBusy] = useState(false);
+
+  const handleClick = useCallback(async () => {
+    setBusy(true);
+    try {
+      const link = await client.usage.createTopUpCheckout();
+      if (!link) {
+        telemetry.capture("topup_checkout_error", { error: "empty link" });
+        return;
+      }
+      window.open(link, "_blank");
+    } catch (err) {
+      telemetry.capture("topup_checkout_error", {
+        error: err instanceof Error ? err.message : "unknown",
+      });
+    } finally {
+      setBusy(false);
+    }
+  }, [client, telemetry]);
+
+  return (
+    <Page.Section.CTA>
+      <Button onClick={handleClick} disabled={busy}>
+        TOP UP CREDITS
+      </Button>
+    </Page.Section.CTA>
   );
 };
 

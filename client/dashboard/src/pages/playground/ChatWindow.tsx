@@ -418,6 +418,10 @@ function ChatInner({
             displayMessage =
               "You have reached your monthly credit limit. Reach out to the Speakeasy team to upgrade your account.";
           }
+          if (displayMessage.includes("token balance exhausted")) {
+            displayMessage =
+              "Your token balance is exhausted. [Top up credits](/billing) to keep chatting.";
+          }
           appendDisplayOnlyMessage(`**Model Error:** *${displayMessage}*`);
         }
       },
