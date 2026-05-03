@@ -42,16 +42,60 @@ Tracker for the work landing the design in `spike.md`. Per the process in `promp
 
 ### Milestone #0b — Mock IDP upgrade
 
-**Goal.** Make the mock IDP adequate for end-to-end testing of every authentication mode in this RFC.
+**Goal.** Make the mock IDP adequate for end-to-end testing of every authentication mode in this RFC. Full design lives in [`idp-design.md`](./idp-design.md).
 
 **Scope.**
 
-- Run the mock IDP in many modes simultaneously, mounted at `/workos/`, `/mock-speakeasy/`, `/oauth2dot1/`, `/oauth2/`.
-- Back all modes with a single SQLite database of applications.
-- Runnable as its own binary alongside `cmd/server` and `cmd/worker`.
-- New project directory `mock-idp-ui` — a Hono package using `@hono/react-renderer` (or equivalent client-side React integration) — to serve the static login/consent surface.
+- Replace `mock-speakeasy-idp/` with `gram dev-idp`, a `cmd/gram/` subcommand running four modes simultaneously at `/mock-speakeasy/`, `/workos/`, `/oauth2-1/`, `/oauth2/`.
+- Postgres-backed (its own logical database `gram_devidp` in the existing `gram-db` container), declarative `schema.sql`, no migration files.
+- Authentication is non-interactive across every mode (no login screens, no consent screens) — identity resolves from a per-mode `currentUser` pointer in the `current_users` table.
+- `oauth2-1` and `oauth2` are OIDC-compliant; ID tokens are RS256-signed via an RSA keypair (ephemeral by default; `--rsa-private-key` for stable JWKS).
+- `workos` mode uniquely proxies the live WorkOS REST API (does not use the dev-idp DB for identity); keyed by `WORKOS_API_KEY` + `WORKOS_HOST`.
+- Goa design + gen nested under `server/internal/devidp/` (not under `server/design/` or `server/gen/`).
+- New top-level project `dev-idp-dashboard` — Hono package using `@hono/react-renderer` — for operator-only inspection (no end-user surface).
 
-**Tickets.** _Populated in step 3._
+**Tickets.**
+
+_Implementation order matches dependency order; later tickets assume earlier ones have landed._
+
+#### Foundation
+
+- [ ] **mig: dev-idp Postgres schema.** Add `server/internal/devidp/database/schema.sql` with `users`, `organizations`, `memberships`, `current_users`, `auth_codes`, `tokens`. Add `server/internal/devidp/database/sqlc.yaml` and the generated `repo/`. Add `mise db:devidp:apply`, `mise db:devidp:reset`, `mise db:devidp:gen` tasks. Atlas declarative apply only — no `mise db:devidp:diff`.
+- [ ] **Compose + zero wiring.** Add `docker-entrypoint-initdb.d/` script creating `gram_devidp` in the existing `gram-db` container. Add `GRAM_DEVIDP_DATABASE_URL` to `mise.toml`. Wire `mise db:devidp:apply` into the `zero` script alongside `mise db:migrate` / `mise clickhouse:migrate`.
+
+#### Goa surface (nested)
+
+- [ ] **Nested Goa API skeleton.** Create `server/internal/devidp/design/api.go` declaring `API("gram-dev-idp", …)`. Add `mise gen:devidp` task: `goa gen .../internal/devidp/design -o internal/devidp` from `server/`. First-cut services: `organizations`, `users`, `memberships`, `devidp` (currentUser get/set). Plain `http.ServeMux` for the four mode handlers — not Goa.
+- [ ] **OpenAPI embed.** Add `server/internal/devidp/embed.go` with `//go:embed gen/http/openapi3.yaml` and an accessor for the dashboard.
+
+#### Management API impls (Goa)
+
+- [ ] **`organizations.{create,update,list,delete}` impl.** Standard CRUD against the `organizations` table. Cascades to `memberships` on delete.
+- [ ] **`users.{create,update,list,delete}` impl.** Standard CRUD. Delete cascades to `memberships`, `auth_codes`, `tokens`, and any `current_users` rows whose `subject_ref` is this user's id.
+- [ ] **`memberships.{create,update,list,delete}` impl.** Idempotent on `(user_id, organization_id)` for create.
+- [ ] **`devIdp.{getCurrentUser, setCurrentUser}` impl.** Per-mode body shapes — local modes accept `{mode, user_id}`; `workos` accepts `{mode: "workos", workos_sub}`. UPSERTs `current_users`. No `reset` / `resetCurrentUsers` — wipe via `mise db:devidp:reset`.
+
+#### Mode handlers
+
+- [ ] **`mock-speakeasy` mode.** Port `mock-speakeasy-idp/`'s `/v1/speakeasy_provider/*` endpoints under the `/mock-speakeasy/` prefix. Replace the hardcoded `MockUserID` with the mock-speakeasy `currentUser` pointer. Keep the `secret-key` middleware (env: `SPEAKEASY_SECRET_KEY`).
+- [ ] **`workos` mode.** Thin REST proxy over `WORKOS_HOST` using `WORKOS_API_KEY`. Endpoints: `/workos/users/{id_or_email}`, `/workos/organizations/{id}`, `/workos/currentUser`. Mode is unmounted when `WORKOS_API_KEY` is unset. **Does not** read `users` / `organizations` / `memberships` from the dev-idp DB.
+- [ ] **`mock-speakeasy` ↔ `workos` bridge.** When `WORKOS_API_KEY` is configured, mock-speakeasy resolves user/org metadata via `/workos/currentUser` instead of the local DB. Still issues the speakeasy provider auth code itself.
+- [ ] **`oauth2-1` mode.** OAuth 2.1 AS, PKCE-required, stateless DCR, OIDC-compliant. Endpoints: `/.well-known/oauth-authorization-server`, `/.well-known/openid-configuration`, `/.well-known/jwks.json`, `/register`, `/authorize`, `/token`, `/userinfo`, `/revoke`. Accepts any `client_id` / `client_secret`.
+- [ ] **`oauth2` mode.** OAuth 2.0 AS, PKCE optional (honored when present), no DCR, OIDC-compliant. Endpoints: same as `oauth2-1` minus `/register`. Accepts any `client_id` / `client_secret`.
+- [ ] **JWKS + RSA keypair.** Single dev-idp-wide RSA private key (env: `GRAM_DEVIDP_RSA_PRIVATE_KEY`, otherwise generated at boot). Public key derived via `privateKey.Public()` and served at each OIDC mode's `/.well-known/jwks.json`. **`GRAM_JWT_SIGNING_KEY` is never consumed by dev-idp.**
+
+#### Cmd entrypoint + ops
+
+- [ ] **`server/cmd/gram/dev-idp.go`.** Sibling of `admin.go`. Wires CLI flags (every flag has a backing env var per `idp-design.md` §8), spins up the listener, mounts the Goa management mux + four mode handlers + `/control/healthz`. The binary trusts schema is already applied; errors normally on mismatch.
+- [ ] **mprocs wiring.** Add a `dev-idp` proc to `mprocs.yaml` invoking `mise start:dev-idp` (a thin wrapper). Run alongside `mock-idp` during cutover.
+
+#### Cleanup (each its own PR)
+
+- [ ] **Delete `mock-speakeasy-idp/`.** Once no caller references it, remove the standalone binary and its `mprocs.yaml` proc.
+
+#### Dashboard (separate top-level project)
+
+- [ ] **`dev-idp-dashboard` skeleton.** New top-level Hono package using `@hono/react-renderer`. Operator-only — no end-user surface. Renders panes for users / orgs / memberships / tokens / auth codes / per-mode currentUser pointers. The `workos` pane is rendered differently (free-form `workos_sub` input + WorkOS-API "preview" button instead of a local-users picker; lists data live from `/workos/...`).
 
 ---
 
