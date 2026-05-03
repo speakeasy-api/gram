@@ -56,9 +56,16 @@ const (
 	// loop forever.
 	maxEventAttempts = 5
 
-	runtimeStartupReapGrace      = 2 * time.Minute
-	runtimeWarmExpiryReapGrace   = 1 * time.Minute
-	runtimeProcessingLeaseGrace  = 2 * time.Minute
+	runtimeStartupReapGrace     = 2 * time.Minute
+	runtimeWarmExpiryReapGrace  = 1 * time.Minute
+	runtimeProcessingLeaseGrace = 2 * time.Minute
+	// runtimeExpiringReapGrace is the cushion the reaper waits before
+	// reclaiming a row stuck in `expiring`. It must exceed the worst-case
+	// total budget of the ExpireThreadRuntime activity (Temporal
+	// ScheduleToCloseTimeout = 25m) so a still-retrying activity isn't
+	// stomped mid-flight; the row only becomes reapable after Temporal
+	// gives up.
+	runtimeExpiringReapGrace     = 30 * time.Minute
 	eventProcessingRequeueGrace  = 3 * time.Minute
 	processingLeaseHeartbeatTick = 30 * time.Second
 	admitFailureBackoff          = 30 * time.Second
@@ -374,12 +381,17 @@ func (s *ServiceCore) ReapStuckRuntimes(ctx context.Context) (ReapStuckRuntimesR
 	affected := map[uuid.UUID]struct{}{}
 
 	// 1. Retire runtime rows whose liveness markers indicate the owning
-	// process is gone:
+	// process is gone or its driving workflow has given up:
 	//   - 'starting' rows that never transitioned to active within the
 	//     startup grace window (usually server crashed mid-boot).
 	//   - 'active' rows whose warm_until passed a grace window ago (usually
 	//     server crashed after a turn; unexpected-exit callback didn't fire
 	//     because the whole process died).
+	//   - 'expiring' rows whose updated_at is older than the activity's full
+	//     retry budget — the ExpireThreadRuntime activity exhausted Temporal
+	//     attempts after CAS active->expiring without reaching Stop or
+	//     Revert. Without this the row blocks the partial unique index
+	//     ReserveAssistantRuntime depends on.
 	queries := assistantrepo.New(s.db)
 	runtimeAssistantIDs, err := queries.ReapStuckAssistantRuntimes(ctx, assistantrepo.ReapStuckAssistantRuntimesParams{
 		StoppedState:    runtimeStateStopped,
@@ -388,6 +400,8 @@ func (s *ServiceCore) ReapStuckRuntimes(ctx context.Context) (ReapStuckRuntimesR
 		ActiveState:     runtimeStateActive,
 		WarmCutoff:      conv.ToPGTimestamptz(now.Add(-runtimeWarmExpiryReapGrace)),
 		HeartbeatCutoff: conv.ToPGTimestamptz(now.Add(-runtimeProcessingLeaseGrace)),
+		ExpiringState:   runtimeStateExpiring,
+		ExpiringCutoff:  conv.ToPGTimestamptz(now.Add(-runtimeExpiringReapGrace)),
 	})
 	if err != nil {
 		return out, fmt.Errorf("reap stuck assistant runtimes: %w", err)

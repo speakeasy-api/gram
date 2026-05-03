@@ -26,7 +26,7 @@ SET
   updated_at = clock_timestamp()
 WHERE project_id = $2
   AND assistant_thread_id = $3
-  AND state = $4
+  AND state IN ($4, $1)
   AND deleted IS FALSE
   AND ended IS FALSE
 RETURNING id, assistant_thread_id, assistant_id, project_id, backend, backend_metadata_json, state, warm_until
@@ -50,11 +50,14 @@ type BeginExpireAssistantRuntimeRow struct {
 	WarmUntil           pgtype.Timestamptz
 }
 
-// Atomic CAS active -> expiring on a single thread's runtime row, returning
-// the row needed to drive backend Status/Stop. ErrNoRows means another actor
-// (Stop, reaper, manual API) already moved the row, so the caller should not
-// subsequently call Stop. Relies on the partial unique index on
-// (assistant_thread_id) WHERE deleted IS FALSE AND ended IS FALSE.
+// Atomic CAS to `expiring` on a single thread's runtime row, returning the row
+// needed to drive backend Status/Stop. Accepts both `active` (first attempt)
+// and `expiring` (Temporal-retried attempt after a previous Stop failure) so
+// the caller can re-enter the Status/Stop path idempotently. ErrNoRows means
+// another actor (Stop, reaper, manual API) moved the row to a terminal state,
+// so the caller should not subsequently call Stop. Relies on the partial
+// unique index on (assistant_thread_id) WHERE deleted IS FALSE AND ended IS
+// FALSE.
 func (q *Queries) BeginExpireAssistantRuntime(ctx context.Context, arg BeginExpireAssistantRuntimeParams) (BeginExpireAssistantRuntimeRow, error) {
 	row := q.db.QueryRow(ctx, beginExpireAssistantRuntime,
 		arg.ExpiringState,
@@ -907,6 +910,11 @@ WHERE deleted IS FALSE
       AND warm_until < $5
       AND COALESCE(last_heartbeat_at, updated_at) < $6
     )
+    -- Backstop for ExpireThreadRuntime activities that exhaust Temporal's
+    -- retry budget after CAS active->expiring but before Stop or Revert.
+    -- Without this the row stays in ` + "`" + `expiring` + "`" + ` indefinitely, blocking the
+    -- partial unique index that ReserveAssistantRuntime relies on.
+    OR (state = $7 AND updated_at < $8)
   )
 RETURNING assistant_id
 `
@@ -918,6 +926,8 @@ type ReapStuckAssistantRuntimesParams struct {
 	ActiveState     string
 	WarmCutoff      pgtype.Timestamptz
 	HeartbeatCutoff pgtype.Timestamptz
+	ExpiringState   string
+	ExpiringCutoff  pgtype.Timestamptz
 }
 
 func (q *Queries) ReapStuckAssistantRuntimes(ctx context.Context, arg ReapStuckAssistantRuntimesParams) ([]uuid.UUID, error) {
@@ -928,6 +938,8 @@ func (q *Queries) ReapStuckAssistantRuntimes(ctx context.Context, arg ReapStuckA
 		arg.ActiveState,
 		arg.WarmCutoff,
 		arg.HeartbeatCutoff,
+		arg.ExpiringState,
+		arg.ExpiringCutoff,
 	)
 	if err != nil {
 		return nil, err

@@ -13,6 +13,11 @@ WHERE deleted IS FALSE
       AND warm_until < @warm_cutoff
       AND COALESCE(last_heartbeat_at, updated_at) < @heartbeat_cutoff
     )
+    -- Backstop for ExpireThreadRuntime activities that exhaust Temporal's
+    -- retry budget after CAS active->expiring but before Stop or Revert.
+    -- Without this the row stays in `expiring` indefinitely, blocking the
+    -- partial unique index that ReserveAssistantRuntime relies on.
+    OR (state = @expiring_state AND updated_at < @expiring_cutoff)
   )
 RETURNING assistant_id;
 
@@ -456,18 +461,21 @@ WHERE project_id = @project_id
   AND state IN (@starting_state, @active_state, @expiring_state);
 
 -- name: BeginExpireAssistantRuntime :one
--- Atomic CAS active -> expiring on a single thread's runtime row, returning
--- the row needed to drive backend Status/Stop. ErrNoRows means another actor
--- (Stop, reaper, manual API) already moved the row, so the caller should not
--- subsequently call Stop. Relies on the partial unique index on
--- (assistant_thread_id) WHERE deleted IS FALSE AND ended IS FALSE.
+-- Atomic CAS to `expiring` on a single thread's runtime row, returning the row
+-- needed to drive backend Status/Stop. Accepts both `active` (first attempt)
+-- and `expiring` (Temporal-retried attempt after a previous Stop failure) so
+-- the caller can re-enter the Status/Stop path idempotently. ErrNoRows means
+-- another actor (Stop, reaper, manual API) moved the row to a terminal state,
+-- so the caller should not subsequently call Stop. Relies on the partial
+-- unique index on (assistant_thread_id) WHERE deleted IS FALSE AND ended IS
+-- FALSE.
 UPDATE assistant_runtimes
 SET
   state = @expiring_state,
   updated_at = clock_timestamp()
 WHERE project_id = @project_id
   AND assistant_thread_id = @thread_id
-  AND state = @active_state
+  AND state IN (@active_state, @expiring_state)
   AND deleted IS FALSE
   AND ended IS FALSE
 RETURNING id, assistant_thread_id, assistant_id, project_id, backend, backend_metadata_json, state, warm_until;

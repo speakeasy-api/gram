@@ -30,8 +30,9 @@ type RuntimeBackendEnsureResult struct {
 }
 
 // RuntimeBackendStatus mirrors the runner's `/state` response. IdleSeconds is
-// nil while a turn is in flight; the runner sets it to None synchronously on
-// /turn enqueue so this signal does not lag the request that started work.
+// `&0` while a turn is in flight (the runner clears its idle clock
+// synchronously on /turn enqueue so this signal does not lag the request that
+// started work) and `nil` only when the runner has never been /configured.
 type RuntimeBackendStatus struct {
 	Configured  bool
 	IdleSeconds *uint64
