@@ -46,30 +46,25 @@ type Committer struct {
 // names committer email/name as the default-user source so callers can
 // surface it directly.
 func GitCommitter(ctx context.Context) (Committer, error) {
-	email, err := gitConfig(ctx, "user.email")
+	emailOut, err := exec.CommandContext(ctx, "git", "config", "--get", "user.email").Output()
 	if err != nil {
 		return Committer{}, fmt.Errorf("the default user relies on committer email from `git config user.email`: %w", err)
 	}
-	name, err := gitConfig(ctx, "user.name")
+	email := strings.TrimSpace(string(emailOut))
+	if email == "" {
+		return Committer{}, errors.New("the default user relies on committer email from `git config user.email`: returned empty")
+	}
+
+	nameOut, err := exec.CommandContext(ctx, "git", "config", "--get", "user.name").Output()
 	if err != nil {
 		return Committer{}, fmt.Errorf("the default user relies on committer name from `git config user.name`: %w", err)
 	}
-	return Committer{Email: email, Name: name}, nil
-}
+	name := strings.TrimSpace(string(nameOut))
+	if name == "" {
+		return Committer{}, errors.New("the default user relies on committer name from `git config user.name`: returned empty")
+	}
 
-func gitConfig(ctx context.Context, key string) (string, error) {
-	// `key` is constrained to the two hardcoded callers above. Surfaced as
-	// a parameter only to keep the wiring readable, so gosec's G204 is a
-	// false positive here.
-	out, err := exec.CommandContext(ctx, "git", "config", "--get", key).Output() //nolint:gosec // hardcoded keys; dev-idp is local-only test infra
-	if err != nil {
-		return "", fmt.Errorf("run git config --get %s: %w", key, err)
-	}
-	v := strings.TrimSpace(string(out))
-	if v == "" {
-		return "", errors.New("git config returned an empty value")
-	}
-	return v, nil
+	return Committer{Email: email, Name: name}, nil
 }
 
 // BootstrapLocalUser is the local-mode bootstrap path. Idempotent —
