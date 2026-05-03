@@ -9,6 +9,15 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type Membership struct {
+	ID             uuid.UUID
+	UserID         uuid.UUID
+	OrganizationID uuid.UUID
+	Role           string
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
 type Organization struct {
 	ID          uuid.UUID
 	Name        string

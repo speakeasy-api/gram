@@ -12,6 +12,43 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const createMembership = `-- name: CreateMembership :one
+
+INSERT INTO memberships (user_id, organization_id, role)
+VALUES ($1, $2, COALESCE($3::text, 'member'))
+ON CONFLICT (user_id, organization_id) DO UPDATE SET
+  user_id = EXCLUDED.user_id
+RETURNING id, user_id, organization_id, role, created_at, updated_at
+`
+
+type CreateMembershipParams struct {
+	UserID         uuid.UUID
+	OrganizationID uuid.UUID
+	Role           pgtype.Text
+}
+
+// =============================================================================
+// memberships
+// =============================================================================
+// CreateMembership is idempotent on (user_id, organization_id) per
+// idp-design.md §6.1. ON CONFLICT DO UPDATE with a no-op SET lets RETURNING
+// fire on the existing row so callers always get the canonical record back.
+// The role from the original insert wins; callers wanting a different role
+// on an existing membership should call UpdateMembership.
+func (q *Queries) CreateMembership(ctx context.Context, arg CreateMembershipParams) (Membership, error) {
+	row := q.db.QueryRow(ctx, createMembership, arg.UserID, arg.OrganizationID, arg.Role)
+	var i Membership
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.OrganizationID,
+		&i.Role,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const createOrganization = `-- name: CreateOrganization :one
 
 INSERT INTO organizations (name, slug, account_type, workos_id)
@@ -117,6 +154,15 @@ func (q *Queries) DeleteCurrentUsersBySubjectRef(ctx context.Context, subjectRef
 	return err
 }
 
+const deleteMembership = `-- name: DeleteMembership :exec
+DELETE FROM memberships WHERE id = $1
+`
+
+func (q *Queries) DeleteMembership(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteMembership, id)
+	return err
+}
+
 const deleteOrganization = `-- name: DeleteOrganization :exec
 DELETE FROM organizations WHERE id = $1
 `
@@ -133,6 +179,24 @@ DELETE FROM users WHERE id = $1
 func (q *Queries) DeleteUser(ctx context.Context, id uuid.UUID) error {
 	_, err := q.db.Exec(ctx, deleteUser, id)
 	return err
+}
+
+const getMembership = `-- name: GetMembership :one
+SELECT id, user_id, organization_id, role, created_at, updated_at FROM memberships WHERE id = $1
+`
+
+func (q *Queries) GetMembership(ctx context.Context, id uuid.UUID) (Membership, error) {
+	row := q.db.QueryRow(ctx, getMembership, id)
+	var i Membership
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.OrganizationID,
+		&i.Role,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const getOrganization = `-- name: GetOrganization :one
@@ -173,6 +237,57 @@ func (q *Queries) GetUser(ctx context.Context, id uuid.UUID) (User, error) {
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const listMemberships = `-- name: ListMemberships :many
+SELECT id, user_id, organization_id, role, created_at, updated_at FROM memberships
+WHERE id > $1
+  AND ($2::uuid IS NULL OR user_id = $2::uuid)
+  AND ($3::uuid IS NULL OR organization_id = $3::uuid)
+ORDER BY id ASC
+LIMIT $4
+`
+
+type ListMembershipsParams struct {
+	After          uuid.UUID
+	UserID         uuid.NullUUID
+	OrganizationID uuid.NullUUID
+	MaxRows        int32
+}
+
+// ListMemberships keyset-paginates by id with optional (user_id,
+// organization_id) exact-match filters. Either or both narg parameters
+// may be NULL, in which case the corresponding filter is not applied.
+func (q *Queries) ListMemberships(ctx context.Context, arg ListMembershipsParams) ([]Membership, error) {
+	rows, err := q.db.Query(ctx, listMemberships,
+		arg.After,
+		arg.UserID,
+		arg.OrganizationID,
+		arg.MaxRows,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Membership
+	for rows.Next() {
+		var i Membership
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.OrganizationID,
+			&i.Role,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listOrganizations = `-- name: ListOrganizations :many
@@ -259,6 +374,34 @@ func (q *Queries) ListUsers(ctx context.Context, arg ListUsersParams) ([]User, e
 		return nil, err
 	}
 	return items, nil
+}
+
+const updateMembership = `-- name: UpdateMembership :one
+UPDATE memberships
+SET
+  role = $1,
+  updated_at = clock_timestamp()
+WHERE id = $2
+RETURNING id, user_id, organization_id, role, created_at, updated_at
+`
+
+type UpdateMembershipParams struct {
+	Role string
+	ID   uuid.UUID
+}
+
+func (q *Queries) UpdateMembership(ctx context.Context, arg UpdateMembershipParams) (Membership, error) {
+	row := q.db.QueryRow(ctx, updateMembership, arg.Role, arg.ID)
+	var i Membership
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.OrganizationID,
+		&i.Role,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const updateOrganization = `-- name: UpdateOrganization :one

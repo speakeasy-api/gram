@@ -93,3 +93,44 @@ DELETE FROM current_users WHERE subject_ref = @subject_ref;
 
 -- name: DeleteUser :exec
 DELETE FROM users WHERE id = @id;
+
+-- =============================================================================
+-- memberships
+-- =============================================================================
+
+-- CreateMembership is idempotent on (user_id, organization_id) per
+-- idp-design.md §6.1. ON CONFLICT DO UPDATE with a no-op SET lets RETURNING
+-- fire on the existing row so callers always get the canonical record back.
+-- The role from the original insert wins; callers wanting a different role
+-- on an existing membership should call UpdateMembership.
+-- name: CreateMembership :one
+INSERT INTO memberships (user_id, organization_id, role)
+VALUES (@user_id, @organization_id, COALESCE(sqlc.narg('role')::text, 'member'))
+ON CONFLICT (user_id, organization_id) DO UPDATE SET
+  user_id = EXCLUDED.user_id
+RETURNING *;
+
+-- name: UpdateMembership :one
+UPDATE memberships
+SET
+  role = @role,
+  updated_at = clock_timestamp()
+WHERE id = @id
+RETURNING *;
+
+-- name: GetMembership :one
+SELECT * FROM memberships WHERE id = @id;
+
+-- ListMemberships keyset-paginates by id with optional (user_id,
+-- organization_id) exact-match filters. Either or both narg parameters
+-- may be NULL, in which case the corresponding filter is not applied.
+-- name: ListMemberships :many
+SELECT * FROM memberships
+WHERE id > @after
+  AND (sqlc.narg('user_id')::uuid IS NULL OR user_id = sqlc.narg('user_id')::uuid)
+  AND (sqlc.narg('organization_id')::uuid IS NULL OR organization_id = sqlc.narg('organization_id')::uuid)
+ORDER BY id ASC
+LIMIT @max_rows;
+
+-- name: DeleteMembership :exec
+DELETE FROM memberships WHERE id = @id;
