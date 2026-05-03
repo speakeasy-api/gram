@@ -101,12 +101,20 @@ upstream OAuth identity (Alice), and the two never have to agree.
 - Settable via `POST /rpc/devIdp.setCurrentUser` (§6.2); readable via
   `GET /rpc/devIdp.getCurrentUser`. Both methods take a `mode` parameter
   and a mode-appropriate body.
-- **There is no boot default and no reset.** A mode whose row in
-  `current_users` is missing returns a clear error from any
-  identity-resolving endpoint until an operator/test sets one via
-  `setCurrentUser`. Once set, the row persists across dev-idp restarts.
-  Wiping it requires going through Postgres directly (or
-  `mise db:devidp:reset`, which drops the schema entirely).
+- **A mode with no `current_users` row falls back to a default user
+  derived from the local git committer.** For local modes
+  (`mock-speakeasy`/`oauth2-1`/`oauth2`), the dev-idp shells out to
+  `git config user.{email,name}`, find-or-creates a row in `users` for
+  that email, places the user in a "Speakeasy" organization
+  (find-or-created by slug), and persists `current_users[mode]` so the
+  bootstrap fires at most once per mode per dev-idp database. For
+  `workos`, the committer email is looked up live via
+  `GetUserByEmail`; the resulting WorkOS sub is persisted the same way.
+  Either path errors with a message naming committer email/name as the
+  default-user source if `git config` is unset (or, for workos, if
+  WorkOS rejects the lookup). Operators wanting a non-default user
+  override via `setCurrentUser`. Once set, the row persists across
+  dev-idp restarts; wipe via `mise db:devidp:reset`.
 
 There is no `auto_consent` flag, no "auto bypass" toggle, no consent
 record table — those are all knobs you only need if interactive auth is
@@ -867,7 +875,3 @@ list below.
   the dev-idp DB** for identity. It proxies the real WorkOS API and
   keys its currentUser by WorkOS `sub` (§7.2). Its dashboard surface is
   separate from the local-mode panes.
-- ~~`--default-user-email` and reset RPCs.~~ Removed. There is no
-  default user and no in-band reset; `current_users` rows appear only
-  when explicitly set, and the only way to wipe them is through Postgres
-  directly or `mise db:devidp:reset` (§3, §6.2).

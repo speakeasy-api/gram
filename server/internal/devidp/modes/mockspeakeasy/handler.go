@@ -31,6 +31,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/devidp/database/repo"
+	"github.com/speakeasy-api/gram/server/internal/devidp/defaultuser"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
 
@@ -166,7 +167,7 @@ func (h *Handler) handleLogin(w http.ResponseWriter, r *http.Request) {
 
 	userID, err := h.resolveCurrentUserID(ctx)
 	if err != nil {
-		writeJSON(w, statusForCurrentUserErr(err), map[string]string{"error": err.Error()})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
 
@@ -346,28 +347,22 @@ func (h *Handler) handleRegister(w http.ResponseWriter, r *http.Request) {
 // Helpers
 // =============================================================================
 
-// errCurrentUserNotSet is returned when /login or /exchange runs before any
-// operator/test has bound the mock-speakeasy currentUser via
-// /rpc/devIdp.setCurrentUser. Surfaced as a 400 on the wire.
-var errCurrentUserNotSet = errors.New("no currentUser set for mock-speakeasy mode (call /rpc/devIdp.setCurrentUser)")
-
 // errCurrentUserMissing is returned when the currentUser names a
 // users.id that no longer exists in the local users table. Surfaced as a
 // 500 on the wire — this is an integrity error, not a request error.
 var errCurrentUserMissing = errors.New("currentUser references a missing user row")
 
-func statusForCurrentUserErr(err error) int {
-	if errors.Is(err, errCurrentUserNotSet) {
-		return http.StatusBadRequest
-	}
-	return http.StatusInternalServerError
-}
-
 func (h *Handler) resolveCurrentUserID(ctx context.Context) (uuid.UUID, error) {
 	queries := repo.New(h.db)
 	row, err := queries.GetCurrentUser(ctx, Mode)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return uuid.Nil, errCurrentUserNotSet
+		// First touch on this mode: bootstrap the default user from the
+		// local git committer (idp-design.md §3).
+		uid, berr := defaultuser.BootstrapLocalUser(ctx, h.db, Mode)
+		if berr != nil {
+			return uuid.Nil, fmt.Errorf("bootstrap default currentUser: %w", berr)
+		}
+		return uid, nil
 	}
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("read currentUser: %w", err)

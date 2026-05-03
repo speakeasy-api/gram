@@ -42,6 +42,14 @@ LIMIT @max_rows;
 -- name: DeleteOrganization :exec
 DELETE FROM organizations WHERE id = @id;
 
+-- UpsertOrganizationBySlug is the find-or-create path used by the
+-- default-user bootstrap. Same no-op-update trick as UpsertUserByEmail.
+-- name: UpsertOrganizationBySlug :one
+INSERT INTO organizations (name, slug)
+VALUES (@name, @slug)
+ON CONFLICT (slug) DO UPDATE SET slug = EXCLUDED.slug
+RETURNING *;
+
 -- =============================================================================
 -- users
 -- =============================================================================
@@ -83,6 +91,17 @@ SELECT * FROM users
 WHERE id > @after
 ORDER BY id ASC
 LIMIT @max_rows;
+
+-- UpsertUserByEmail is the find-or-create path used by the default-user
+-- bootstrap (idp-design.md §3). The DO UPDATE SET email=EXCLUDED.email is
+-- a no-op overwrite so RETURNING fires on the existing row; the rest of
+-- the user's fields are NEVER overwritten — once a user exists, only
+-- explicit users.update mutates it.
+-- name: UpsertUserByEmail :one
+INSERT INTO users (email, display_name)
+VALUES (@email, @display_name)
+ON CONFLICT (email) DO UPDATE SET email = EXCLUDED.email
+RETURNING *;
 
 -- DeleteCurrentUsersBySubjectRef sweeps any current_users row whose
 -- subject_ref matches the given text (local-mode rows store

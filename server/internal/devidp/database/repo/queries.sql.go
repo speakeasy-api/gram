@@ -755,3 +755,66 @@ func (q *Queries) UpsertCurrentUser(ctx context.Context, arg UpsertCurrentUserPa
 	err := row.Scan(&i.Mode, &i.SubjectRef, &i.UpdatedAt)
 	return i, err
 }
+
+const upsertOrganizationBySlug = `-- name: UpsertOrganizationBySlug :one
+INSERT INTO organizations (name, slug)
+VALUES ($1, $2)
+ON CONFLICT (slug) DO UPDATE SET slug = EXCLUDED.slug
+RETURNING id, name, slug, account_type, workos_id, created_at, updated_at
+`
+
+type UpsertOrganizationBySlugParams struct {
+	Name string
+	Slug string
+}
+
+// UpsertOrganizationBySlug is the find-or-create path used by the
+// default-user bootstrap. Same no-op-update trick as UpsertUserByEmail.
+func (q *Queries) UpsertOrganizationBySlug(ctx context.Context, arg UpsertOrganizationBySlugParams) (Organization, error) {
+	row := q.db.QueryRow(ctx, upsertOrganizationBySlug, arg.Name, arg.Slug)
+	var i Organization
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.AccountType,
+		&i.WorkosID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const upsertUserByEmail = `-- name: UpsertUserByEmail :one
+INSERT INTO users (email, display_name)
+VALUES ($1, $2)
+ON CONFLICT (email) DO UPDATE SET email = EXCLUDED.email
+RETURNING id, email, display_name, photo_url, github_handle, admin, whitelisted, created_at, updated_at
+`
+
+type UpsertUserByEmailParams struct {
+	Email       string
+	DisplayName string
+}
+
+// UpsertUserByEmail is the find-or-create path used by the default-user
+// bootstrap (idp-design.md §3). The DO UPDATE SET email=EXCLUDED.email is
+// a no-op overwrite so RETURNING fires on the existing row; the rest of
+// the user's fields are NEVER overwritten — once a user exists, only
+// explicit users.update mutates it.
+func (q *Queries) UpsertUserByEmail(ctx context.Context, arg UpsertUserByEmailParams) (User, error) {
+	row := q.db.QueryRow(ctx, upsertUserByEmail, arg.Email, arg.DisplayName)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.DisplayName,
+		&i.PhotoUrl,
+		&i.GithubHandle,
+		&i.Admin,
+		&i.Whitelisted,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}

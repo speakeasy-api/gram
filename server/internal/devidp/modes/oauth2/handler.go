@@ -40,6 +40,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/devidp/database/repo"
+	"github.com/speakeasy-api/gram/server/internal/devidp/defaultuser"
 	"github.com/speakeasy-api/gram/server/internal/devidp/keystore"
 )
 
@@ -528,16 +529,18 @@ func (h *Handler) handleRevoke(w http.ResponseWriter, r *http.Request) {
 // Helpers
 // =============================================================================
 
-var (
-	errCurrentUserNotSet  = errors.New("no currentUser set for oauth2 mode (call /rpc/devIdp.setCurrentUser)")
-	errCurrentUserMissing = errors.New("currentUser references a missing user row")
-)
+var errCurrentUserMissing = errors.New("currentUser references a missing user row")
 
 func (h *Handler) resolveCurrentUserID(ctx context.Context) (uuid.UUID, error) {
 	queries := repo.New(h.db)
 	row, err := queries.GetCurrentUser(ctx, Mode)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return uuid.Nil, errCurrentUserNotSet
+		// First touch on this mode: bootstrap from git committer.
+		uid, berr := defaultuser.BootstrapLocalUser(ctx, h.db, Mode)
+		if berr != nil {
+			return uuid.Nil, fmt.Errorf("bootstrap default currentUser: %w", berr)
+		}
+		return uid, nil
 	}
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("read currentUser: %w", err)

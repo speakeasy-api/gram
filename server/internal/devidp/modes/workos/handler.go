@@ -28,6 +28,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/devidp/database/repo"
+	"github.com/speakeasy-api/gram/server/internal/devidp/defaultuser"
 	gramworkos "github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
 
@@ -143,10 +144,16 @@ func (h *Handler) handleGetCurrentUser(w http.ResponseWriter, r *http.Request) {
 
 	row, err := repo.New(h.db).GetCurrentUser(ctx, Mode)
 	if errors.Is(err, pgx.ErrNoRows) {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "no currentUser set for workos mode (call /rpc/devIdp.setCurrentUser)"})
-		return
-	}
-	if err != nil {
+		// First touch on this mode: bootstrap from git committer email by
+		// looking it up in WorkOS.
+		bootstrapped, berr := h.bootstrapDefaultUser(ctx)
+		if berr != nil {
+			h.logger.WarnContext(ctx, "bootstrap default workos currentUser", attr.SlogError(berr))
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": berr.Error()})
+			return
+		}
+		row = bootstrapped
+	} else if err != nil {
 		h.logger.ErrorContext(ctx, "read currentUser", attr.SlogError(err))
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to read currentUser"})
 		return
@@ -177,6 +184,34 @@ func (h *Handler) handleGetCurrentUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, resp)
+}
+
+// bootstrapDefaultUser is the workos-mode bootstrap path (idp-design.md §3):
+// resolve the local git committer's email, look it up in WorkOS, and
+// persist the resulting WorkOS sub as current_users[mode='workos']. Errors
+// out of this path surface to /workos/currentUser as a 404 — the operator
+// can't log in without either fixing the git config, registering the
+// committer in WorkOS, or calling /rpc/devIdp.setCurrentUser explicitly.
+func (h *Handler) bootstrapDefaultUser(ctx context.Context) (repo.CurrentUser, error) {
+	committer, err := defaultuser.GitCommitter(ctx)
+	if err != nil {
+		return repo.CurrentUser{}, fmt.Errorf("resolve git committer: %w", err)
+	}
+	user, err := h.client.GetUserByEmail(ctx, committer.Email)
+	if err != nil {
+		return repo.CurrentUser{}, fmt.Errorf("the default user relies on committer email — WorkOS lookup failed for %s: %w", committer.Email, err)
+	}
+	if user == nil {
+		return repo.CurrentUser{}, fmt.Errorf("the default user relies on committer email — no WorkOS user found for %s", committer.Email)
+	}
+	row, err := repo.New(h.db).UpsertCurrentUser(ctx, repo.UpsertCurrentUserParams{
+		Mode:       Mode,
+		SubjectRef: user.ID,
+	})
+	if err != nil {
+		return repo.CurrentUser{}, fmt.Errorf("persist default workos currentUser: %w", err)
+	}
+	return row, nil
 }
 
 // =============================================================================
