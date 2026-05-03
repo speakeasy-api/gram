@@ -7,19 +7,167 @@ package repo
 
 import (
 	"context"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const stubQuery = `-- name: StubQuery :one
+const createOrganization = `-- name: CreateOrganization :one
 
-SELECT 1::int AS one
+INSERT INTO organizations (name, slug, account_type, workos_id)
+VALUES (
+  $1,
+  $2,
+  COALESCE($3::text, 'free'),
+  $4
+)
+RETURNING id, name, slug, account_type, workos_id, created_at, updated_at
 `
 
-// Stub query so sqlc has something to generate against this schema. Real
-// CRUD queries are added in subsequent management-API tickets (organizations,
-// users, memberships, devidp.currentUser).
-func (q *Queries) StubQuery(ctx context.Context) (int32, error) {
-	row := q.db.QueryRow(ctx, stubQuery)
-	var one int32
-	err := row.Scan(&one)
-	return one, err
+type CreateOrganizationParams struct {
+	Name        string
+	Slug        string
+	AccountType pgtype.Text
+	WorkosID    pgtype.Text
+}
+
+// =============================================================================
+// organizations
+// =============================================================================
+func (q *Queries) CreateOrganization(ctx context.Context, arg CreateOrganizationParams) (Organization, error) {
+	row := q.db.QueryRow(ctx, createOrganization,
+		arg.Name,
+		arg.Slug,
+		arg.AccountType,
+		arg.WorkosID,
+	)
+	var i Organization
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.AccountType,
+		&i.WorkosID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const deleteOrganization = `-- name: DeleteOrganization :exec
+DELETE FROM organizations WHERE id = $1
+`
+
+func (q *Queries) DeleteOrganization(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteOrganization, id)
+	return err
+}
+
+const getOrganization = `-- name: GetOrganization :one
+SELECT id, name, slug, account_type, workos_id, created_at, updated_at FROM organizations WHERE id = $1
+`
+
+func (q *Queries) GetOrganization(ctx context.Context, id uuid.UUID) (Organization, error) {
+	row := q.db.QueryRow(ctx, getOrganization, id)
+	var i Organization
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.AccountType,
+		&i.WorkosID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const listOrganizations = `-- name: ListOrganizations :many
+SELECT id, name, slug, account_type, workos_id, created_at, updated_at FROM organizations
+WHERE id > $1
+ORDER BY id ASC
+LIMIT $2
+`
+
+type ListOrganizationsParams struct {
+	After   uuid.UUID
+	MaxRows int32
+}
+
+// ListOrganizations uses keyset pagination on the (random) uuid id. Stable
+// across concurrent inserts but not insertion-ordered. Caller passes
+// uuid.Nil for the first page and the last returned id for subsequent ones.
+// Caller is also responsible for fetching limit+1 to detect `next_cursor`.
+func (q *Queries) ListOrganizations(ctx context.Context, arg ListOrganizationsParams) ([]Organization, error) {
+	rows, err := q.db.Query(ctx, listOrganizations, arg.After, arg.MaxRows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Organization
+	for rows.Next() {
+		var i Organization
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Slug,
+			&i.AccountType,
+			&i.WorkosID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const updateOrganization = `-- name: UpdateOrganization :one
+UPDATE organizations
+SET
+  name = COALESCE($1, name),
+  slug = COALESCE($2, slug),
+  account_type = COALESCE($3, account_type),
+  workos_id = CASE
+    WHEN $4::boolean THEN NULL
+    ELSE COALESCE($5, workos_id)
+  END,
+  updated_at = clock_timestamp()
+WHERE id = $6
+RETURNING id, name, slug, account_type, workos_id, created_at, updated_at
+`
+
+type UpdateOrganizationParams struct {
+	Name          pgtype.Text
+	Slug          pgtype.Text
+	AccountType   pgtype.Text
+	ClearWorkosID bool
+	WorkosID      pgtype.Text
+	ID            uuid.UUID
+}
+
+func (q *Queries) UpdateOrganization(ctx context.Context, arg UpdateOrganizationParams) (Organization, error) {
+	row := q.db.QueryRow(ctx, updateOrganization,
+		arg.Name,
+		arg.Slug,
+		arg.AccountType,
+		arg.ClearWorkosID,
+		arg.WorkosID,
+		arg.ID,
+	)
+	var i Organization
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.AccountType,
+		&i.WorkosID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
