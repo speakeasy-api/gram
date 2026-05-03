@@ -8,6 +8,15 @@ mount -t devtmpfs dev /dev || true
 mkdir -p /dev/pts /run /tmp
 mount -t devpts devpts /dev/pts || true
 
+# Provision the assistant workdir from the prebuilt ext4 template. The rootfs
+# is per-VM (FC) or per-machine (Fly) so we can mount the template directly —
+# any mutations stay isolated to this VM and the loop mount enforces the hard
+# size cap baked into the template at image build time.
+workdir_image=/usr/share/gram/workdir-template.ext4
+workdir_mount=/var/lib/gram-assistant/work
+mkdir -p "$workdir_mount"
+mount -o loop "$workdir_image" "$workdir_mount"
+
 ip link set lo up || true
 cat >/etc/resolv.conf <<'EOF'
 nameserver 1.1.1.1

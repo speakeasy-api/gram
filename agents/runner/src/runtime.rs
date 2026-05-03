@@ -13,7 +13,10 @@ use agentkit_mcp::{
 };
 use agentkit_provider_openrouter::{OpenRouterConfig, OpenRouterProvider};
 use agentkit_reporting::TracingReporter;
-use agentkit_tools_core::{PermissionChecker, ToolRegistry};
+use agentkit_tool_fs::{FileSystemToolPolicy, FileSystemToolResources};
+use agentkit_tools_core::{
+    CompositePermissionChecker, PathPolicy, PermissionDecision, ToolRegistry,
+};
 use serde_json::Value;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::sync::{Mutex as AsyncMutex, Notify, oneshot};
@@ -23,6 +26,7 @@ use crate::http_layer::{McpRotatingClient, TokenRegistry, build_http};
 use crate::idempotency::IdempotencyCache;
 use crate::tools;
 use crate::wire::{McpServer, RunnerConfig, RunnerMessage, RunnerRequest};
+use crate::workdir::ASSISTANT_WORKDIR;
 
 const MCP_CMD_CAPACITY: usize = 32;
 
@@ -106,17 +110,6 @@ fn fingerprint(config: &RunnerConfig) -> u64 {
     hasher.finish()
 }
 
-struct AllowAll;
-
-impl PermissionChecker for AllowAll {
-    fn evaluate(
-        &self,
-        _request: &dyn agentkit_tools_core::PermissionRequest,
-    ) -> agentkit_tools_core::PermissionDecision {
-        agentkit_tools_core::PermissionDecision::Allow
-    }
-}
-
 pub async fn build_runtime(
     config: &RunnerConfig,
     shutdown: Arc<Notify>,
@@ -155,6 +148,19 @@ pub async fn build_runtime(
         tools::mcp_force_reconnect::McpForceReconnectTool::new(mcp_cmd_tx.clone()),
     );
 
+    // Sandbox helpers stay readable so user code can `import` them, but writes
+    // to those paths must fail so an assistant can't shadow `browser.ts` etc.
+    let permissions = CompositePermissionChecker::new(PermissionDecision::Allow).with_policy(
+        PathPolicy::new()
+            .allow_root(ASSISTANT_WORKDIR)
+            .read_only_root(format!("{ASSISTANT_WORKDIR}/node_modules"))
+            .read_only_root(format!("{ASSISTANT_WORKDIR}/browser.ts"))
+            .read_only_root(format!("{ASSISTANT_WORKDIR}/package.json")),
+    );
+
+    let fs_resources = FileSystemToolResources::new()
+        .with_policy(FileSystemToolPolicy::new().require_read_before_write(true));
+
     let base_url = config
         .completions_url
         .clone()
@@ -176,8 +182,10 @@ pub async fn build_runtime(
     let agent = Agent::builder()
         .model(adapter)
         .add_tool_source(native_tools)
+        .add_tool_source(agentkit_tool_fs::registry())
         .add_tool_source(mcp_source)
-        .permissions(AllowAll)
+        .permissions(permissions)
+        .resources(fs_resources)
         .observer(TracingReporter::new())
         .transcript(transcript)
         .build()

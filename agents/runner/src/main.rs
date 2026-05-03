@@ -5,6 +5,7 @@ mod runtime;
 mod server;
 mod tools;
 mod wire;
+mod workdir;
 
 use std::net::SocketAddr;
 use std::process::ExitCode;
