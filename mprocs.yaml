@@ -12,10 +12,6 @@ procs:
     cmd: ["docker", "compose", "logs", "-f", "prometheus"]
     stop:
       send-keys: ["<C-c>"]
-  mock-idp:
-    cmd: ["mise", "run", "start:mock-idp"]
-    stop:
-      send-keys: ["<C-c>"]
   dev-idp:
     cmd: ["mise", "run", "start:dev-idp"]
     stop: SIGTERM
