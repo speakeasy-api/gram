@@ -140,6 +140,15 @@ func (t *telemetryRuntimeBackend) ServerURL(ctx context.Context, runtime assista
 	return u, nil
 }
 
+func (t *telemetryRuntimeBackend) Status(ctx context.Context, runtime assistantRuntimeRecord) (RuntimeBackendStatus, error) {
+	status, err := t.inner.Status(ctx, runtime)
+	if err != nil {
+		t.emit(ctx, runtime, "runtime_status", "runtime status failed", "ERROR", err)
+		return status, fmt.Errorf("runtime status: %w", err)
+	}
+	return status, nil
+}
+
 func (t *telemetryRuntimeBackend) Stop(ctx context.Context, runtime assistantRuntimeRecord) error {
 	err := t.inner.Stop(ctx, runtime)
 	if err != nil {

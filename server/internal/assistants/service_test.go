@@ -630,6 +630,8 @@ type testRuntimeBackend struct {
 	ensureErr    error
 	configureErr error
 	runTurnErr   error
+	statusResult RuntimeBackendStatus
+	statusErr    error
 	stopCalls    *atomic.Int64
 }
 
@@ -662,6 +664,13 @@ func (t testRuntimeBackend) ServerURL(context.Context, assistantRuntimeRecord, *
 		return nil, fmt.Errorf("parse test server url: %w", err)
 	}
 	return parsed, nil
+}
+
+func (t testRuntimeBackend) Status(context.Context, assistantRuntimeRecord) (RuntimeBackendStatus, error) {
+	if t.statusErr != nil {
+		return RuntimeBackendStatus{}, t.statusErr
+	}
+	return t.statusResult, nil
 }
 
 func (t testRuntimeBackend) Stop(context.Context, assistantRuntimeRecord) error {

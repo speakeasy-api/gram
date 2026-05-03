@@ -114,9 +114,7 @@ impl McpRotatingClient {
         mut custom: HashMap<HeaderName, HeaderValue>,
     ) -> HashMap<HeaderName, HeaderValue> {
         for (name, value) in self.static_headers.iter() {
-            custom
-                .entry(name.clone())
-                .or_insert_with(|| value.clone());
+            custom.entry(name.clone()).or_insert_with(|| value.clone());
         }
         custom
     }
@@ -138,8 +136,15 @@ impl McpHttpClient for McpRotatingClient {
     ) -> Result<McpStreamableHttpPostResponse, McpStreamableHttpError<reqwest::Error>> {
         let token = self.current_token();
         let headers = self.merged_headers(custom_headers);
-        RmcpStreamableHttpClient::post_message(&self.inner, uri, message, session_id, token, headers)
-            .await
+        RmcpStreamableHttpClient::post_message(
+            &self.inner,
+            uri,
+            message,
+            session_id,
+            token,
+            headers,
+        )
+        .await
     }
 
     async fn delete_session(

@@ -5,6 +5,7 @@ version = 4
 [[package]]
 name = "agentkit-adapter-completions"
 version = "0.5.0"
+source = "git+https://github.com/danielkov/agentkit.git?rev=32b313b#32b313bb2692bd4a7903374dca781df91f9c14f6"
 dependencies = [
  "agentkit-core",
  "agentkit-http",
@@ -22,6 +23,7 @@ dependencies = [
 [[package]]
 name = "agentkit-capabilities"
 version = "0.5.0"
+source = "git+https://github.com/danielkov/agentkit.git?rev=32b313b#32b313bb2692bd4a7903374dca781df91f9c14f6"
 dependencies = [
  "agentkit-core",
  "async-trait",
@@ -33,6 +35,7 @@ dependencies = [
 [[package]]
 name = "agentkit-compaction"
 version = "0.5.0"
+source = "git+https://github.com/danielkov/agentkit.git?rev=32b313b#32b313bb2692bd4a7903374dca781df91f9c14f6"
 dependencies = [
  "agentkit-core",
  "async-trait",
@@ -43,6 +46,7 @@ dependencies = [
 [[package]]
 name = "agentkit-core"
 version = "0.5.0"
+source = "git+https://github.com/danielkov/agentkit.git?rev=32b313b#32b313bb2692bd4a7903374dca781df91f9c14f6"
 dependencies = [
  "futures-timer",
  "serde",
@@ -53,6 +57,7 @@ dependencies = [
 [[package]]
 name = "agentkit-http"
 version = "0.5.0"
+source = "git+https://github.com/danielkov/agentkit.git?rev=32b313b#32b313bb2692bd4a7903374dca781df91f9c14f6"
 dependencies = [
  "async-trait",
  "bytes",
@@ -68,6 +73,7 @@ dependencies = [
 [[package]]
 name = "agentkit-loop"
 version = "0.5.0"
+source = "git+https://github.com/danielkov/agentkit.git?rev=32b313b#32b313bb2692bd4a7903374dca781df91f9c14f6"
 dependencies = [
  "agentkit-capabilities",
  "agentkit-compaction",
@@ -84,6 +90,7 @@ dependencies = [
 [[package]]
 name = "agentkit-mcp"
 version = "0.5.0"
+source = "git+https://github.com/danielkov/agentkit.git?rev=32b313b#32b313bb2692bd4a7903374dca781df91f9c14f6"
 dependencies = [
  "agentkit-capabilities",
  "agentkit-core",
@@ -103,6 +110,7 @@ dependencies = [
 [[package]]
 name = "agentkit-provider-openrouter"
 version = "0.5.0"
+source = "git+https://github.com/danielkov/agentkit.git?rev=32b313b#32b313bb2692bd4a7903374dca781df91f9c14f6"
 dependencies = [
  "agentkit-adapter-completions",
  "agentkit-core",
@@ -118,6 +126,7 @@ dependencies = [
 [[package]]
 name = "agentkit-reporting"
 version = "0.5.0"
+source = "git+https://github.com/danielkov/agentkit.git?rev=32b313b#32b313bb2692bd4a7903374dca781df91f9c14f6"
 dependencies = [
  "agentkit-core",
  "agentkit-loop",
@@ -130,6 +139,7 @@ dependencies = [
 [[package]]
 name = "agentkit-task-manager"
 version = "0.5.0"
+source = "git+https://github.com/danielkov/agentkit.git?rev=32b313b#32b313bb2692bd4a7903374dca781df91f9c14f6"
 dependencies = [
  "agentkit-core",
  "agentkit-tools-core",
@@ -141,6 +151,7 @@ dependencies = [
 [[package]]
 name = "agentkit-tools-core"
 version = "0.5.0"
+source = "git+https://github.com/danielkov/agentkit.git?rev=32b313b#32b313bb2692bd4a7903374dca781df91f9c14f6"
 dependencies = [
  "agentkit-capabilities",
  "agentkit-core",
@@ -155,6 +166,7 @@ dependencies = [
 [[package]]
 name = "agentkit-tools-derive"
 version = "0.5.0"
+source = "git+https://github.com/danielkov/agentkit.git?rev=32b313b#32b313bb2692bd4a7903374dca781df91f9c14f6"
 dependencies = [
  "proc-macro2",
  "quote",

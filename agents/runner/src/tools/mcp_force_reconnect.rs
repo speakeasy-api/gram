@@ -50,10 +50,7 @@ impl McpForceReconnectTool {
             .map_err(|_| ToolError::ExecutionFailed("mcp actor dropped reply".into()))?;
 
         let (text, is_error) = match outcome {
-            Ok(()) => (
-                format!("reconnected mcp server {}", input.server_id),
-                false,
-            ),
+            Ok(()) => (format!("reconnected mcp server {}", input.server_id), false),
             Err(e) => (
                 format!("failed to reconnect mcp server {}: {e}", input.server_id),
                 true,

@@ -16,11 +16,6 @@ pub struct RunnerConfig {
     /// comes up already hydrated; /turn carries only new user input after that.
     #[serde(default)]
     pub history: Vec<RunnerMessage>,
-    /// Target warm window in seconds. After the driver yields LoopStep::Finished
-    /// and no further input arrives within warm_ttl_seconds + 60s of grace, the
-    /// loop exits and the runtime marks itself not-running.
-    #[serde(default)]
-    pub warm_ttl_seconds: Option<u64>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, Hash)]
@@ -96,9 +91,9 @@ impl RunnerResponse {
 #[derive(Debug, Serialize)]
 pub struct RunnerStateResponse {
     pub configured: bool,
-    /// Seconds since the loop last made forward progress. Backend reapers read
-    /// this to refresh TTL instead of `/turn` return time. Absent when the
-    /// runner has never been /configured.
+    /// Seconds the loop has been idle (between turns). `0` while a turn is in
+    /// flight. Backend reapers read this to decide TTL eviction. Absent when
+    /// the runner has never been /configured.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub last_active_seconds_ago: Option<u64>,
+    pub idle_seconds: Option<u64>,
 }

@@ -62,8 +62,12 @@ type flyRuntimeAppIdentity struct {
 	Created  bool
 }
 
-type flyRuntimeStateResponse struct {
-	Configured bool `json:"configured"`
+// runnerStateResponse mirrors agents/runner/src/wire.rs::RunnerStateResponse.
+// IdleSeconds is omitted while a turn is in flight; the runner clears it on
+// /turn enqueue, so this is the same source the manager polls to gate expiry.
+type runnerStateResponse struct {
+	Configured  bool    `json:"configured"`
+	IdleSeconds *uint64 `json:"idle_seconds,omitempty"`
 }
 
 type flyRuntimeAPIClient interface {
@@ -603,7 +607,7 @@ func (f *FlyRuntimeBackend) tracedWaitHealth(ctx context.Context, target flyRunt
 	return f.waitForRuntimeHealth(ctx, target)
 }
 
-func (f *FlyRuntimeBackend) tracedRuntimeState(ctx context.Context, target flyRuntimeTarget, coldStart bool) (state flyRuntimeStateResponse, err error) {
+func (f *FlyRuntimeBackend) tracedRuntimeState(ctx context.Context, target flyRuntimeTarget, coldStart bool) (state runnerStateResponse, err error) {
 	ctx, span := f.tracer.Start(ctx, "assistants.runtime.runtimeState",
 		trace.WithAttributes(attr.AssistantColdStart(coldStart)),
 	)
@@ -687,6 +691,24 @@ func (f *FlyRuntimeBackend) ServerURL(_ context.Context, runtime assistantRuntim
 
 	cloned := *candidate
 	return &cloned, nil
+}
+
+func (f *FlyRuntimeBackend) Status(ctx context.Context, runtime assistantRuntimeRecord) (RuntimeBackendStatus, error) {
+	if err := validateRuntimeBackend(f, runtime.Backend); err != nil {
+		return RuntimeBackendStatus{}, err
+	}
+	metadata, err := decodeFlyRuntimeMetadata(runtime.BackendMetadataJSON)
+	if err != nil {
+		return RuntimeBackendStatus{}, err
+	}
+	if metadata.AppURL == "" {
+		return RuntimeBackendStatus{}, fmt.Errorf("assistant fly runtime app url is not available")
+	}
+	state, err := f.runtimeState(ctx, targetFromMetadata(metadata))
+	if err != nil {
+		return RuntimeBackendStatus{}, fmt.Errorf("load assistant fly runtime state: %w", err)
+	}
+	return RuntimeBackendStatus(state), nil
 }
 
 // Stop pauses the machine but preserves the app, allocated IP, and backend
@@ -817,7 +839,7 @@ func (f *FlyRuntimeBackend) waitForRuntimeHealth(ctx context.Context, target fly
 	}
 }
 
-func (f *FlyRuntimeBackend) runtimeState(ctx context.Context, target flyRuntimeTarget) (flyRuntimeStateResponse, error) {
+func (f *FlyRuntimeBackend) runtimeState(ctx context.Context, target flyRuntimeTarget) (runnerStateResponse, error) {
 	body, err := f.runtimeRequest(ctx, target, runtimeHTTPRequest{
 		Method:         http.MethodGet,
 		Path:           "/state",
@@ -827,11 +849,11 @@ func (f *FlyRuntimeBackend) runtimeState(ctx context.Context, target flyRuntimeT
 		IdempotencyKey: "",
 	})
 	if err != nil {
-		return flyRuntimeStateResponse{}, err
+		return runnerStateResponse{}, err
 	}
-	var state flyRuntimeStateResponse
+	var state runnerStateResponse
 	if err := json.Unmarshal(body, &state); err != nil {
-		return flyRuntimeStateResponse{}, fmt.Errorf("decode assistant fly runtime state: %w", err)
+		return runnerStateResponse{}, fmt.Errorf("decode assistant fly runtime state: %w", err)
 	}
 	return state, nil
 }

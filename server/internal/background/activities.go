@@ -286,7 +286,7 @@ func (a *Activities) ProcessAssistantThread(ctx context.Context, input activitie
 	return a.processAssistantThread.Do(ctx, input)
 }
 
-func (a *Activities) ExpireAssistantThreadRuntime(ctx context.Context, input activities.ExpireAssistantThreadRuntimeInput) error {
+func (a *Activities) ExpireAssistantThreadRuntime(ctx context.Context, input activities.ExpireAssistantThreadRuntimeInput) (*activities.ExpireAssistantThreadRuntimeResult, error) {
 	return a.expireAssistantThreadRuntime.Do(ctx, input)
 }
 

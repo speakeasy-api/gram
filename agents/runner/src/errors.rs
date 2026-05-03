@@ -76,9 +76,9 @@ impl RunnerError {
             | RunnerError::MissingToolCallId
             | RunnerError::ToolCallArguments { .. }
             | RunnerError::ConfigError { .. } => StatusCode::BAD_REQUEST,
-            RunnerError::AgentBuild(_)
-            | RunnerError::Loop(_)
-            | RunnerError::SubmitInput(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            RunnerError::AgentBuild(_) | RunnerError::Loop(_) | RunnerError::SubmitInput(_) => {
+                StatusCode::INTERNAL_SERVER_ERROR
+            }
         }
     }
 }
