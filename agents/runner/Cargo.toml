@@ -16,7 +16,8 @@ agentkit-loop = { path = "../../../../agentkit/crates/agentkit-loop" }
 agentkit-mcp = { path = "../../../../agentkit/crates/agentkit-mcp" }
 agentkit-provider-openrouter = { path = "../../../../agentkit/crates/agentkit-provider-openrouter" }
 agentkit-reporting = { path = "../../../../agentkit/crates/agentkit-reporting", features = ["tracing"] }
-agentkit-tools-core = { path = "../../../../agentkit/crates/agentkit-tools-core" }
+agentkit-tools-core = { path = "../../../../agentkit/crates/agentkit-tools-core", features = ["schemars"] }
+agentkit-tools-derive = { path = "../../../../agentkit/crates/agentkit-tools-derive" }
 rmcp = { version = "1.5.0", default-features = false, features = ["client", "transport-streamable-http-client-reqwest", "reqwest"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
@@ -29,6 +30,7 @@ http = "1"
 reqwest = "0.13.2"
 reqwest-middleware = "0.5"
 reqwest-retry = "0.9.1"
+schemars = { version = "1", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tempfile = "3"
