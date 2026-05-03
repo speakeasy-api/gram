@@ -768,6 +768,51 @@ func TestServiceCoreReapInactiveAssistantRuntimesSkipsAssistantWithRecentActivit
 	require.Equal(t, runtimeStateStopped, oldState)
 }
 
+func TestServiceCoreReapInactiveAssistantRuntimesReapsSiblingsAcrossSweeps(t *testing.T) {
+	t.Parallel()
+
+	conn, err := assistantsInfra.CloneTestDatabase(t, "reap_inactive_siblings")
+	require.NoError(t, err)
+
+	// Two stale runtime rows on the same assistant (different threads so the
+	// active-runtime unique index doesn't collide). The first sweep reaps one
+	// and bumps its updated_at — without the metadata-cleared filter on the
+	// NOT EXISTS guard, that bump would block the sibling for another full
+	// inactivity window.
+	projectID, assistantID, threadA := insertReapableProject(t, conn, "siblings")
+	threadB := uuid.New()
+	chatB := uuid.New()
+	_, err = conn.Exec(t.Context(), `INSERT INTO chats (id, project_id, organization_id) VALUES ($1, $2, 'org-test')`, chatB, projectID)
+	require.NoError(t, err)
+	_, err = conn.Exec(t.Context(), `
+INSERT INTO assistant_threads (id, assistant_id, project_id, correlation_id, chat_id, source_kind, source_ref_json, last_event_at)
+VALUES ($1, $2, $3, 'corr-siblings-b', $4, 'slack', '{}'::jsonb, clock_timestamp())
+`, threadB, assistantID, projectID, chatB)
+	require.NoError(t, err)
+
+	insertReapableRuntimeRow(t, conn, projectID, assistantID, threadA, runtimeStateStopped, "gram-asst-sibling-a", time.Now().UTC().Add(-30*24*time.Hour))
+	insertReapableRuntimeRow(t, conn, projectID, assistantID, threadB, runtimeStateStopped, "gram-asst-sibling-b", time.Now().UTC().Add(-30*24*time.Hour))
+
+	reapCalls := &atomic.Int64{}
+	backend := testRuntimeBackend{backend: runtimeBackendFlyIO, reapCalls: reapCalls}
+	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn, backend, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)))
+
+	first, err := core.ReapInactiveAssistantRuntimes(t.Context(), ReapInactiveAssistantRuntimesParams{
+		InactivityThreshold: 7 * 24 * time.Hour,
+		BatchSize:           1,
+	})
+	require.NoError(t, err)
+	require.Equal(t, 1, first.Reaped)
+
+	second, err := core.ReapInactiveAssistantRuntimes(t.Context(), ReapInactiveAssistantRuntimesParams{
+		InactivityThreshold: 7 * 24 * time.Hour,
+		BatchSize:           10,
+	})
+	require.NoError(t, err)
+	require.Equal(t, 1, second.Reaped, "sibling row must remain a candidate after the first reap")
+	require.EqualValues(t, 2, reapCalls.Load())
+}
+
 func TestServiceCoreReapInactiveAssistantRuntimesIgnoresActiveAndStarting(t *testing.T) {
 	t.Parallel()
 

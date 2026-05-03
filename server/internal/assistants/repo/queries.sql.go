@@ -640,6 +640,7 @@ WHERE r.backend_metadata_json <> '{}'::jsonb
     FROM assistant_runtimes r2
     WHERE r2.assistant_id = r.assistant_id
       AND r2.updated_at >= $3
+      AND r2.backend_metadata_json <> '{}'::jsonb
   )
 ORDER BY r.updated_at ASC
 LIMIT $4
