@@ -162,13 +162,18 @@ func (s *Service) HandlePolarWebhook(w http.ResponseWriter, r *http.Request) err
 		return oops.E(oops.CodeUnexpected, err, "failed to get period usage").Log(ctx, logger)
 	}
 
+	productName, productType := "", ""
+	if webhookPayload.Data.Product != nil {
+		productName = webhookPayload.Data.Product.Name
+		productType = webhookPayload.Data.Product.Type
+	}
 	if err = s.posthogClient.CaptureEvent(ctx, "gram_subscription_changed", webhookPayload.Data.Customer.ExternalID, map[string]any{
 		"org_id":       webhookPayload.Data.Customer.ExternalID,
 		"org_name":     webhookPayload.Data.Customer.Name,
 		"org_slug":     webhookPayload.Data.Customer.ExternalID,
 		"is_gram":      true,
-		"product":      webhookPayload.Data.Product.Name,
-		"product_type": webhookPayload.Data.Product.Type,
+		"product":      productName,
+		"product_type": productType,
 		"event":        webhookPayload.Type,
 		"email":        webhookPayload.Data.Customer.Email,
 	}); err != nil {
@@ -258,7 +263,7 @@ func (s *Service) CreateTopUpCheckout(ctx context.Context, payload *gen.CreateTo
 
 	checkoutURL, err := s.billingRepo.CreateTopUpCheckout(ctx, authCtx.ActiveOrganizationID, s.serverURL.String(), successURL)
 	if err != nil {
-		return "", oops.E(oops.CodeBadRequest, err, "failed to create top-up checkout").Log(ctx, s.logger)
+		return "", oops.E(oops.CodeUnexpected, err, "failed to create top-up checkout").Log(ctx, s.logger)
 	}
 	return checkoutURL, nil
 }
