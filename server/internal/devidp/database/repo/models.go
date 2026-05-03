@@ -9,6 +9,12 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type CurrentUser struct {
+	Mode       string
+	SubjectRef string
+	UpdatedAt  pgtype.Timestamptz
+}
+
 type Membership struct {
 	ID             uuid.UUID
 	UserID         uuid.UUID

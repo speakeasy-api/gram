@@ -134,3 +134,18 @@ LIMIT @max_rows;
 
 -- name: DeleteMembership :exec
 DELETE FROM memberships WHERE id = @id;
+
+-- =============================================================================
+-- current_users (per-mode pointers; idp-design.md §3, §6.2)
+-- =============================================================================
+
+-- name: GetCurrentUserPointer :one
+SELECT * FROM current_users WHERE mode = @mode;
+
+-- name: UpsertCurrentUserPointer :one
+INSERT INTO current_users (mode, subject_ref)
+VALUES (@mode, @subject_ref)
+ON CONFLICT (mode) DO UPDATE SET
+  subject_ref = EXCLUDED.subject_ref,
+  updated_at = clock_timestamp()
+RETURNING *;

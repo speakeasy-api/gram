@@ -181,6 +181,21 @@ func (q *Queries) DeleteUser(ctx context.Context, id uuid.UUID) error {
 	return err
 }
 
+const getCurrentUserPointer = `-- name: GetCurrentUserPointer :one
+
+SELECT mode, subject_ref, updated_at FROM current_users WHERE mode = $1
+`
+
+// =============================================================================
+// current_users (per-mode pointers; idp-design.md §3, §6.2)
+// =============================================================================
+func (q *Queries) GetCurrentUserPointer(ctx context.Context, mode string) (CurrentUser, error) {
+	row := q.db.QueryRow(ctx, getCurrentUserPointer, mode)
+	var i CurrentUser
+	err := row.Scan(&i.Mode, &i.SubjectRef, &i.UpdatedAt)
+	return i, err
+}
+
 const getMembership = `-- name: GetMembership :one
 SELECT id, user_id, organization_id, role, created_at, updated_at FROM memberships WHERE id = $1
 `
@@ -500,5 +515,26 @@ func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (User, e
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
+	return i, err
+}
+
+const upsertCurrentUserPointer = `-- name: UpsertCurrentUserPointer :one
+INSERT INTO current_users (mode, subject_ref)
+VALUES ($1, $2)
+ON CONFLICT (mode) DO UPDATE SET
+  subject_ref = EXCLUDED.subject_ref,
+  updated_at = clock_timestamp()
+RETURNING mode, subject_ref, updated_at
+`
+
+type UpsertCurrentUserPointerParams struct {
+	Mode       string
+	SubjectRef string
+}
+
+func (q *Queries) UpsertCurrentUserPointer(ctx context.Context, arg UpsertCurrentUserPointerParams) (CurrentUser, error) {
+	row := q.db.QueryRow(ctx, upsertCurrentUserPointer, arg.Mode, arg.SubjectRef)
+	var i CurrentUser
+	err := row.Scan(&i.Mode, &i.SubjectRef, &i.UpdatedAt)
 	return i, err
 }
