@@ -69,6 +69,65 @@ WHERE assistant_thread_id = $1
 	require.Equal(t, runtimeBackendFlyIO, backend)
 }
 
+func TestWarmRemainingSecondsKeepsBusyRunnerAlive(t *testing.T) {
+	t.Parallel()
+
+	// idle == nil is the runner's "turn in flight" signal (see RuntimeBackendStatus
+	// and runnerStateResponse). It must never collapse to a Stop decision.
+	got := warmRemainingSeconds(nil, 300)
+	require.Positive(t, got, "busy runner (idle=nil) must keep a positive warm window so ExpireThreadRuntime reverts instead of stopping")
+}
+
+func TestServiceCoreExpireThreadRuntimeRevertsWhenTurnInFlight(t *testing.T) {
+	t.Parallel()
+
+	conn, err := assistantsInfra.CloneTestDatabase(t, "assistants_expire_busy")
+	require.NoError(t, err)
+
+	projectID := uuid.New()
+	assistantID := uuid.New()
+	chatID := uuid.New()
+	threadID := uuid.New()
+	insertAssistantFixture(t, conn, projectID, assistantID, chatID, threadID)
+
+	runtimeID := uuid.New()
+	warmUntil := time.Now().UTC().Add(-1 * time.Second)
+	_, err = conn.Exec(t.Context(), `
+INSERT INTO assistant_runtimes (
+  id, assistant_thread_id, assistant_id, project_id, backend, backend_metadata_json, state, warm_until, last_heartbeat_at, updated_at
+) VALUES (
+  $1, $2, $3, $4, $5, '{}'::jsonb, $6, $7, clock_timestamp(), clock_timestamp()
+)
+`, runtimeID, threadID, assistantID, projectID, runtimeBackendFlyIO, runtimeStateActive, warmUntil)
+	require.NoError(t, err)
+
+	var stopCalls atomic.Int64
+	logger := testenv.NewLogger(t)
+	backend := testRuntimeBackend{
+		backend:      runtimeBackendFlyIO,
+		statusResult: RuntimeBackendStatus{Configured: true, IdleSeconds: nil},
+		stopCalls:    &stopCalls,
+	}
+	core := NewServiceCore(logger, conn, backend, nil, nil, nil, telemetry.NewStub(logger))
+
+	result, err := core.ExpireThreadRuntime(t.Context(), projectID, threadID, DefaultWarmTTLSeconds)
+	require.NoError(t, err)
+	require.False(t, result.Stopped, "runner reports turn in flight (idle=nil); expiry must revert, not tear down")
+	require.Positive(t, result.RemainingSeconds, "revert path must hand back a positive warm window for the workflow to re-arm")
+	require.Equal(t, int64(0), stopCalls.Load(), "Stop must not be invoked while a turn is executing")
+
+	var state string
+	var deleted bool
+	err = conn.QueryRow(t.Context(), `
+SELECT state, deleted
+FROM assistant_runtimes
+WHERE id = $1
+`, runtimeID).Scan(&state, &deleted)
+	require.NoError(t, err)
+	require.Equal(t, runtimeStateActive, state, "runtime row must be reverted from expiring back to active")
+	require.False(t, deleted)
+}
+
 func TestServiceCoreReapStuckRuntimesSkipsLiveProcessingLease(t *testing.T) {
 	t.Parallel()
 

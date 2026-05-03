@@ -458,12 +458,12 @@ func NewUnexpectedRuntimeExitHandler(logger *slog.Logger, db *pgxpool.Pool) func
 	}
 }
 
-// warmRemainingSeconds returns the seconds left before the runner's reported
-// idle window crosses ttl. Returns 0 if the runner is busy (idle = nil), if
-// idle has already met or exceeded ttl, or if ttl is non-positive.
 func warmRemainingSeconds(idleSeconds *uint64, ttlSeconds int) int {
-	if idleSeconds == nil || ttlSeconds <= 0 {
+	if ttlSeconds <= 0 {
 		return 0
+	}
+	if idleSeconds == nil {
+		return ttlSeconds
 	}
 	if *idleSeconds >= uint64(ttlSeconds) {
 		return 0
