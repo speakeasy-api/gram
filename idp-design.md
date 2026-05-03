@@ -420,7 +420,7 @@ Returns full `User` record.
 
 #### `users.list`
 
-Standard pagination + optional `email` exact-match filter.
+Standard pagination.
 
 #### `users.delete`
 

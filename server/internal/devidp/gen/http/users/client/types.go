@@ -50,8 +50,6 @@ type ListRequestBody struct {
 	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty" xml:"cursor,omitempty"`
 	// Maximum items to return.
 	Limit int `form:"limit" json:"limit" xml:"limit"`
-	// Optional exact-match email filter.
-	Email *string `form:"email,omitempty" json:"email,omitempty" xml:"email,omitempty"`
 }
 
 // DeleteRequestBody is the type of the "users" service "delete" endpoint HTTP
@@ -167,7 +165,6 @@ func NewListRequestBody(p *users.ListPayload) *ListRequestBody {
 	body := &ListRequestBody{
 		Cursor: p.Cursor,
 		Limit:  p.Limit,
-		Email:  p.Email,
 	}
 	{
 		var zero int

@@ -18,3 +18,15 @@ type Organization struct {
 	CreatedAt   pgtype.Timestamptz
 	UpdatedAt   pgtype.Timestamptz
 }
+
+type User struct {
+	ID           uuid.UUID
+	Email        string
+	DisplayName  string
+	PhotoUrl     pgtype.Text
+	GithubHandle pgtype.Text
+	Admin        bool
+	Whitelisted  bool
+	CreatedAt    pgtype.Timestamptz
+	UpdatedAt    pgtype.Timestamptz
+}

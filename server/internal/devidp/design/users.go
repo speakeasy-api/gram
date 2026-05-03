@@ -59,11 +59,10 @@ var _ = Service("users", func() {
 	})
 
 	Method("list", func() {
-		Description("List users. Optional `email` exact-match filter (idp-design.md §6.1).")
+		Description("List users.")
 
 		Payload(func() {
 			PaginationPayload()
-			Attribute("email", String, "Optional exact-match email filter.")
 		})
 
 		Result(ListUsersResult)

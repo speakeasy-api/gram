@@ -20,7 +20,7 @@ type Service interface {
 	Create(context.Context, *CreatePayload) (res *User, err error)
 	// Patch a user.
 	Update(context.Context, *UpdatePayload) (res *User, err error)
-	// List users. Optional `email` exact-match filter (idp-design.md §6.1).
+	// List users.
 	List(context.Context, *ListPayload) (res *ListUsersResult, err error)
 	// Hard-delete a user. Cascades to memberships, auth_codes, tokens, and any
 	// current_users row whose subject_ref matches (idp-design.md §6.1).
@@ -71,8 +71,6 @@ type ListPayload struct {
 	Cursor *string
 	// Maximum items to return.
 	Limit int
-	// Optional exact-match email filter.
-	Email *string
 }
 
 // ListUsersResult is the result type of the users service list method.

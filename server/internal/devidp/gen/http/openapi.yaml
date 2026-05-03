@@ -322,7 +322,7 @@ paths:
             tags:
                 - users
             summary: list users
-            description: List users. Optional `email` exact-match filter (idp-design.md §6.1).
+            description: List users.
             operationId: users#list
             parameters:
                 - name: ListRequestBody
@@ -950,10 +950,6 @@ definitions:
                 type: string
                 description: Opaque cursor returned by a previous list call.
                 example: abc123
-            email:
-                type: string
-                description: Optional exact-match email filter.
-                example: abc123
             limit:
                 type: integer
                 description: Maximum items to return.
@@ -964,7 +960,6 @@ definitions:
                 maximum: 100
         example:
             cursor: abc123
-            email: abc123
             limit: 2
     UsersUpdateRequestBody:
         title: UsersUpdateRequestBody

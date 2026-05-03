@@ -240,14 +240,14 @@ paths:
             tags:
                 - users
             summary: list users
-            description: List users. Optional `email` exact-match filter (idp-design.md §6.1).
+            description: List users.
             operationId: users#list
             requestBody:
                 required: true
                 content:
                     application/json:
                         schema:
-                            $ref: '#/components/schemas/ListRequestBody3'
+                            $ref: '#/components/schemas/ListRequestBody'
             responses:
                 "200":
                     description: OK response.
@@ -437,22 +437,6 @@ components:
                     type: string
                     description: Optional user filter.
                     format: uuid
-        ListRequestBody3:
-            type: object
-            properties:
-                cursor:
-                    type: string
-                    description: Opaque cursor returned by a previous list call.
-                email:
-                    type: string
-                    description: Optional exact-match email filter.
-                limit:
-                    type: integer
-                    description: Maximum items to return.
-                    default: 50
-                    format: int64
-                    minimum: 1
-                    maximum: 100
         ListUsersResult:
             type: object
             properties:

@@ -54,12 +54,84 @@ func (q *Queries) CreateOrganization(ctx context.Context, arg CreateOrganization
 	return i, err
 }
 
+const createUser = `-- name: CreateUser :one
+
+INSERT INTO users (email, display_name, photo_url, github_handle, admin, whitelisted)
+VALUES (
+  $1,
+  $2,
+  $3,
+  $4,
+  COALESCE($5::boolean, FALSE),
+  COALESCE($6::boolean, TRUE)
+)
+RETURNING id, email, display_name, photo_url, github_handle, admin, whitelisted, created_at, updated_at
+`
+
+type CreateUserParams struct {
+	Email        string
+	DisplayName  string
+	PhotoUrl     pgtype.Text
+	GithubHandle pgtype.Text
+	Admin        pgtype.Bool
+	Whitelisted  pgtype.Bool
+}
+
+// =============================================================================
+// users
+// =============================================================================
+func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, error) {
+	row := q.db.QueryRow(ctx, createUser,
+		arg.Email,
+		arg.DisplayName,
+		arg.PhotoUrl,
+		arg.GithubHandle,
+		arg.Admin,
+		arg.Whitelisted,
+	)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.DisplayName,
+		&i.PhotoUrl,
+		&i.GithubHandle,
+		&i.Admin,
+		&i.Whitelisted,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const deleteCurrentUsersBySubjectRef = `-- name: DeleteCurrentUsersBySubjectRef :exec
+DELETE FROM current_users WHERE subject_ref = $1
+`
+
+// DeleteCurrentUsersBySubjectRef sweeps any current_users row whose
+// subject_ref matches the given text (local-mode pointers store
+// users.id.String()). No FK exists because workos-mode subject_refs are
+// external WorkOS subs, not UUIDs — see idp-design.md §5.
+func (q *Queries) DeleteCurrentUsersBySubjectRef(ctx context.Context, subjectRef string) error {
+	_, err := q.db.Exec(ctx, deleteCurrentUsersBySubjectRef, subjectRef)
+	return err
+}
+
 const deleteOrganization = `-- name: DeleteOrganization :exec
 DELETE FROM organizations WHERE id = $1
 `
 
 func (q *Queries) DeleteOrganization(ctx context.Context, id uuid.UUID) error {
 	_, err := q.db.Exec(ctx, deleteOrganization, id)
+	return err
+}
+
+const deleteUser = `-- name: DeleteUser :exec
+DELETE FROM users WHERE id = $1
+`
+
+func (q *Queries) DeleteUser(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteUser, id)
 	return err
 }
 
@@ -76,6 +148,27 @@ func (q *Queries) GetOrganization(ctx context.Context, id uuid.UUID) (Organizati
 		&i.Slug,
 		&i.AccountType,
 		&i.WorkosID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getUser = `-- name: GetUser :one
+SELECT id, email, display_name, photo_url, github_handle, admin, whitelisted, created_at, updated_at FROM users WHERE id = $1
+`
+
+func (q *Queries) GetUser(ctx context.Context, id uuid.UUID) (User, error) {
+	row := q.db.QueryRow(ctx, getUser, id)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.DisplayName,
+		&i.PhotoUrl,
+		&i.GithubHandle,
+		&i.Admin,
+		&i.Whitelisted,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -113,6 +206,48 @@ func (q *Queries) ListOrganizations(ctx context.Context, arg ListOrganizationsPa
 			&i.Slug,
 			&i.AccountType,
 			&i.WorkosID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listUsers = `-- name: ListUsers :many
+SELECT id, email, display_name, photo_url, github_handle, admin, whitelisted, created_at, updated_at FROM users
+WHERE id > $1
+ORDER BY id ASC
+LIMIT $2
+`
+
+type ListUsersParams struct {
+	After   uuid.UUID
+	MaxRows int32
+}
+
+func (q *Queries) ListUsers(ctx context.Context, arg ListUsersParams) ([]User, error) {
+	rows, err := q.db.Query(ctx, listUsers, arg.After, arg.MaxRows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []User
+	for rows.Next() {
+		var i User
+		if err := rows.Scan(
+			&i.ID,
+			&i.Email,
+			&i.DisplayName,
+			&i.PhotoUrl,
+			&i.GithubHandle,
+			&i.Admin,
+			&i.Whitelisted,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -166,6 +301,59 @@ func (q *Queries) UpdateOrganization(ctx context.Context, arg UpdateOrganization
 		&i.Slug,
 		&i.AccountType,
 		&i.WorkosID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const updateUser = `-- name: UpdateUser :one
+UPDATE users
+SET
+  email = COALESCE($1, email),
+  display_name = COALESCE($2, display_name),
+  photo_url = COALESCE($3, photo_url),
+  github_handle = COALESCE($4, github_handle),
+  admin = COALESCE($5::boolean, admin),
+  whitelisted = COALESCE($6::boolean, whitelisted),
+  updated_at = clock_timestamp()
+WHERE id = $7
+RETURNING id, email, display_name, photo_url, github_handle, admin, whitelisted, created_at, updated_at
+`
+
+type UpdateUserParams struct {
+	Email        pgtype.Text
+	DisplayName  pgtype.Text
+	PhotoUrl     pgtype.Text
+	GithubHandle pgtype.Text
+	Admin        pgtype.Bool
+	Whitelisted  pgtype.Bool
+	ID           uuid.UUID
+}
+
+// UpdateUser is a partial patch: every COALESCE leaves the column unchanged
+// when the corresponding sqlc.narg parameter is NULL. There is no
+// clear-via-empty semantics on the optional text columns; if a test needs to
+// null out photo_url or github_handle, recreate the user.
+func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (User, error) {
+	row := q.db.QueryRow(ctx, updateUser,
+		arg.Email,
+		arg.DisplayName,
+		arg.PhotoUrl,
+		arg.GithubHandle,
+		arg.Admin,
+		arg.Whitelisted,
+		arg.ID,
+	)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.DisplayName,
+		&i.PhotoUrl,
+		&i.GithubHandle,
+		&i.Admin,
+		&i.Whitelisted,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)

@@ -534,7 +534,7 @@ func usersUsage() {
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    create: Create a user.`)
 	fmt.Fprintln(os.Stderr, `    update: Patch a user.`)
-	fmt.Fprintln(os.Stderr, `    list: List users. Optional `+"`"+`email`+"`"+` exact-match filter (idp-design.md §6.1).`)
+	fmt.Fprintln(os.Stderr, `    list: List users.`)
 	fmt.Fprintln(os.Stderr, `    delete: Hard-delete a user. Cascades to memberships, auth_codes, tokens, and any current_users row whose subject_ref matches (idp-design.md §6.1).`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
@@ -584,14 +584,14 @@ func usersListUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List users. Optional `+"`"+`email`+"`"+` exact-match filter (idp-design.md §6.1).`)
+	fmt.Fprintln(os.Stderr, `List users.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "users list --body '{\n      \"cursor\": \"abc123\",\n      \"email\": \"abc123\",\n      \"limit\": 2\n   }'")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "users list --body '{\n      \"cursor\": \"abc123\",\n      \"limit\": 2\n   }'")
 }
 
 func usersDeleteUsage() {

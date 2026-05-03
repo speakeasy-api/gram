@@ -75,13 +75,12 @@ func BuildListPayload(usersListBody string) (*users.ListPayload, error) {
 	{
 		err = json.Unmarshal([]byte(usersListBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"cursor\": \"abc123\",\n      \"email\": \"abc123\",\n      \"limit\": 2\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"cursor\": \"abc123\",\n      \"limit\": 2\n   }'")
 		}
 	}
 	v := &users.ListPayload{
 		Cursor: body.Cursor,
 		Limit:  body.Limit,
-		Email:  body.Email,
 	}
 	{
 		var zero int
