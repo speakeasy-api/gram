@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: efffcdcad58d7b8d616bdcf0d2132315
+  docChecksum: c58fc78352685ecd5a2f8f961277cef3
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -1074,6 +1074,10 @@ trackedFiles:
     last_write_checksum: sha1:085ae7dd15ac9d7e11aa0944077b08296a2f5d94
   docs/models/operations/createtoolsetsecurityoption2.md:
     last_write_checksum: sha1:83cb2637ca0f4d4477e3fc31ffe72d881f3ddf3e
+  docs/models/operations/createtopupcheckoutrequest.md:
+    last_write_checksum: sha1:28312be697719c1470fd884bd4373c23cc307c7c
+  docs/models/operations/createtopupcheckoutsecurity.md:
+    last_write_checksum: sha1:ac49361ffd5902f99639f7c419ea0203d17a1727
   docs/models/operations/createtriggerinstancerequest.md:
     last_write_checksum: sha1:efa13997fcea1c58259bdd08df21d9b6b64a2400
   docs/models/operations/createtriggerinstancesecurity.md:
@@ -2221,7 +2225,7 @@ trackedFiles:
   docs/sdks/triggers/README.md:
     last_write_checksum: sha1:83cba427bf9553fb5cd63ce59def4d855d272e77
   docs/sdks/usage/README.md:
-    last_write_checksum: sha1:49dd4432d8fc21406bbcee1c80f1aa1dd3459080
+    last_write_checksum: sha1:2a9d579e507aa4e8d0cfacb4e3444530595cc043
   docs/sdks/variations/README.md:
     last_write_checksum: sha1:ac7be50470c1a57d2c1553c0594fa665a4d6e1ef
   eslint.config.mjs:
@@ -2844,6 +2848,8 @@ trackedFiles:
     id: 70fab1c9fc32
     last_write_checksum: sha1:04b8e9945240f5422b530c943ae607bbe966ea9b
     pristine_git_object: 7d9a4c5c07e220d4e7e9f70c9b5fecd4b67130b9
+  src/funcs/usageCreateTopUpCheckout.ts:
+    last_write_checksum: sha1:cdc086722644dcb788ac7ecf208d3f8c99397661
   src/funcs/usageGetPeriodUsage.ts:
     id: b1b560633a2d
     last_write_checksum: sha1:5bcb0810593702d42658d2e35d1ff9ea7f1071c3
@@ -4052,6 +4058,8 @@ trackedFiles:
     id: 207e67167dad
     last_write_checksum: sha1:50c9a0b73737e44d4c179f39577411a48a790939
     pristine_git_object: 24965389c96963207001e24b64ebaaf7bb1fb879
+  src/models/operations/createtopupcheckout.ts:
+    last_write_checksum: sha1:2b083ab929710d0c19af1337d4f4690a0d5ab229
   src/models/operations/createtriggerinstance.ts:
     last_write_checksum: sha1:45af9fac3f99716eea1039327735ed8b85882299
   src/models/operations/creditusage.ts:
@@ -4240,7 +4248,7 @@ trackedFiles:
     last_write_checksum: sha1:68a17ba4375c98a861ba8ea4838401238e9caf7e
   src/models/operations/index.ts:
     id: 0d9ffaf774d2
-    last_write_checksum: sha1:05f8e2b5f8a53cb2f4ec9b7239cdf3df66eb4063
+    last_write_checksum: sha1:7c6db5f8c672e5f47480a4b10d99c6f71e781ed3
     pristine_git_object: dfbbde8a33b65de59f2ddc44b5a1200061eeacb0
   src/models/operations/integrationsnumberget.ts:
     id: 0417380c9c27
@@ -4708,6 +4716,8 @@ trackedFiles:
     id: 2e85912f4860
     last_write_checksum: sha1:7d667dc07ae9564062b312a299b3f7cbd13f90c2
     pristine_git_object: e52d58e5eeb5555dfd615cf9eac74ab5be15d1af
+  src/react-query/createTopUpCheckout.ts:
+    last_write_checksum: sha1:5fd853e7b95ce30bf4b67acf084d4144e6ee01a0
   src/react-query/createTrigger.ts:
     last_write_checksum: sha1:16eb6b63cfa6691d7c713e90f4f59d315b61b764
   src/react-query/deleteDomain.ts:
@@ -4920,7 +4930,7 @@ trackedFiles:
     last_write_checksum: sha1:4aa2ad3f103ef14ea31e605c1d9430e7ec3de3f1
   src/react-query/index.ts:
     id: 9e975471aa65
-    last_write_checksum: sha1:dc54d59b5914aee5414daa0650f95c2386a77253
+    last_write_checksum: sha1:fe7bad28f4fbf33cfe8bf884f9f37c3c3d729614
     pristine_git_object: ee9cacb2ccb4e0631e0e1fcf4e467454534d2b35
   src/react-query/instance.core.ts:
     id: b18e0a042b11
@@ -5578,7 +5588,7 @@ trackedFiles:
     last_write_checksum: sha1:e38ef614f5ad5706d131c34193150531a46af67b
   src/sdk/usage.ts:
     id: e4cbe77b260e
-    last_write_checksum: sha1:3a1cd8c4ce0f913402842121b8b4581b340c5d05
+    last_write_checksum: sha1:16e642118a955199bb88dd177c5995dc2c277b93
     pristine_git_object: cfbc9506774d640903139cd6c6d0dc0d09a8cb62
   src/sdk/variations.ts:
     id: 88902c6c67ca
@@ -8231,6 +8241,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  createTopUpCheckout:
+    speakeasy-default-create-top-up-checkout:
+      requestBody:
+        application/json: {"product_id": "<id>"}
+      responses:
+        "200":
+          application/json: "<value>"
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
 examplesVersion: 1.0.2
 generatedTests: {}
 generatedFiles:

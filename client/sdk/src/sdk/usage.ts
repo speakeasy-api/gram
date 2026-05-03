@@ -4,6 +4,7 @@
 
 import { usageCreateCheckout } from "../funcs/usageCreateCheckout.js";
 import { usageCreateCustomerSession } from "../funcs/usageCreateCustomerSession.js";
+import { usageCreateTopUpCheckout } from "../funcs/usageCreateTopUpCheckout.js";
 import { usageGetPeriodUsage } from "../funcs/usageGetPeriodUsage.js";
 import { usageGetUsageTiers } from "../funcs/usageGetUsageTiers.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
@@ -43,6 +44,25 @@ export class Usage extends ClientSDK {
     options?: RequestOptions,
   ): Promise<string> {
     return unwrapAsync(usageCreateCustomerSession(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * createTopUpCheckout usage
+   *
+   * @remarks
+   * Create a checkout link for a one-time credit top-up purchase
+   */
+  async createTopUpCheckout(
+    request?: operations.CreateTopUpCheckoutRequest | undefined,
+    security?: operations.CreateTopUpCheckoutSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<string> {
+    return unwrapAsync(usageCreateTopUpCheckout(
       this,
       request,
       security,

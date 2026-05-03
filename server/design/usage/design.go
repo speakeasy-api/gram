@@ -126,4 +126,24 @@ var _ = Service("usage", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "createCheckout")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "createCheckout"}`)
 	})
+
+	Method("createTopUpCheckout", func() {
+		Description("Create a checkout link for a one-time credit top-up purchase")
+
+		Payload(func() {
+			security.SessionPayload()
+		})
+
+		Result(String)
+
+		HTTP(func() {
+			POST("/rpc/usage.createTopUpCheckout")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "createTopUpCheckout")
+		Meta("openapi:extension:x-speakeasy-name-override", "createTopUpCheckout")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "createTopUpCheckout"}`)
+	})
 })

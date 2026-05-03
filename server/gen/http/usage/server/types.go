@@ -778,6 +778,191 @@ type CreateCheckoutGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// CreateTopUpCheckoutUnauthorizedResponseBody is the type of the "usage"
+// service "createTopUpCheckout" endpoint HTTP response body for the
+// "unauthorized" error.
+type CreateTopUpCheckoutUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateTopUpCheckoutForbiddenResponseBody is the type of the "usage" service
+// "createTopUpCheckout" endpoint HTTP response body for the "forbidden" error.
+type CreateTopUpCheckoutForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateTopUpCheckoutBadRequestResponseBody is the type of the "usage" service
+// "createTopUpCheckout" endpoint HTTP response body for the "bad_request"
+// error.
+type CreateTopUpCheckoutBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateTopUpCheckoutNotFoundResponseBody is the type of the "usage" service
+// "createTopUpCheckout" endpoint HTTP response body for the "not_found" error.
+type CreateTopUpCheckoutNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateTopUpCheckoutConflictResponseBody is the type of the "usage" service
+// "createTopUpCheckout" endpoint HTTP response body for the "conflict" error.
+type CreateTopUpCheckoutConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateTopUpCheckoutUnsupportedMediaResponseBody is the type of the "usage"
+// service "createTopUpCheckout" endpoint HTTP response body for the
+// "unsupported_media" error.
+type CreateTopUpCheckoutUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateTopUpCheckoutInvalidResponseBody is the type of the "usage" service
+// "createTopUpCheckout" endpoint HTTP response body for the "invalid" error.
+type CreateTopUpCheckoutInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateTopUpCheckoutInvariantViolationResponseBody is the type of the "usage"
+// service "createTopUpCheckout" endpoint HTTP response body for the
+// "invariant_violation" error.
+type CreateTopUpCheckoutInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateTopUpCheckoutUnexpectedResponseBody is the type of the "usage" service
+// "createTopUpCheckout" endpoint HTTP response body for the "unexpected" error.
+type CreateTopUpCheckoutUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateTopUpCheckoutGatewayErrorResponseBody is the type of the "usage"
+// service "createTopUpCheckout" endpoint HTTP response body for the
+// "gateway_error" error.
+type CreateTopUpCheckoutGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // TierLimitsResponseBody is used to define fields on response body types.
 type TierLimitsResponseBody struct {
 	// The base price for the tier
@@ -1403,6 +1588,148 @@ func NewCreateCheckoutGatewayErrorResponseBody(res *goa.ServiceError) *CreateChe
 	return body
 }
 
+// NewCreateTopUpCheckoutUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "createTopUpCheckout" endpoint of the "usage" service.
+func NewCreateTopUpCheckoutUnauthorizedResponseBody(res *goa.ServiceError) *CreateTopUpCheckoutUnauthorizedResponseBody {
+	body := &CreateTopUpCheckoutUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateTopUpCheckoutForbiddenResponseBody builds the HTTP response body
+// from the result of the "createTopUpCheckout" endpoint of the "usage" service.
+func NewCreateTopUpCheckoutForbiddenResponseBody(res *goa.ServiceError) *CreateTopUpCheckoutForbiddenResponseBody {
+	body := &CreateTopUpCheckoutForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateTopUpCheckoutBadRequestResponseBody builds the HTTP response body
+// from the result of the "createTopUpCheckout" endpoint of the "usage" service.
+func NewCreateTopUpCheckoutBadRequestResponseBody(res *goa.ServiceError) *CreateTopUpCheckoutBadRequestResponseBody {
+	body := &CreateTopUpCheckoutBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateTopUpCheckoutNotFoundResponseBody builds the HTTP response body
+// from the result of the "createTopUpCheckout" endpoint of the "usage" service.
+func NewCreateTopUpCheckoutNotFoundResponseBody(res *goa.ServiceError) *CreateTopUpCheckoutNotFoundResponseBody {
+	body := &CreateTopUpCheckoutNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateTopUpCheckoutConflictResponseBody builds the HTTP response body
+// from the result of the "createTopUpCheckout" endpoint of the "usage" service.
+func NewCreateTopUpCheckoutConflictResponseBody(res *goa.ServiceError) *CreateTopUpCheckoutConflictResponseBody {
+	body := &CreateTopUpCheckoutConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateTopUpCheckoutUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "createTopUpCheckout" endpoint of the "usage"
+// service.
+func NewCreateTopUpCheckoutUnsupportedMediaResponseBody(res *goa.ServiceError) *CreateTopUpCheckoutUnsupportedMediaResponseBody {
+	body := &CreateTopUpCheckoutUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateTopUpCheckoutInvalidResponseBody builds the HTTP response body from
+// the result of the "createTopUpCheckout" endpoint of the "usage" service.
+func NewCreateTopUpCheckoutInvalidResponseBody(res *goa.ServiceError) *CreateTopUpCheckoutInvalidResponseBody {
+	body := &CreateTopUpCheckoutInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateTopUpCheckoutInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "createTopUpCheckout" endpoint of the
+// "usage" service.
+func NewCreateTopUpCheckoutInvariantViolationResponseBody(res *goa.ServiceError) *CreateTopUpCheckoutInvariantViolationResponseBody {
+	body := &CreateTopUpCheckoutInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateTopUpCheckoutUnexpectedResponseBody builds the HTTP response body
+// from the result of the "createTopUpCheckout" endpoint of the "usage" service.
+func NewCreateTopUpCheckoutUnexpectedResponseBody(res *goa.ServiceError) *CreateTopUpCheckoutUnexpectedResponseBody {
+	body := &CreateTopUpCheckoutUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateTopUpCheckoutGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "createTopUpCheckout" endpoint of the "usage" service.
+func NewCreateTopUpCheckoutGatewayErrorResponseBody(res *goa.ServiceError) *CreateTopUpCheckoutGatewayErrorResponseBody {
+	body := &CreateTopUpCheckoutGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewGetPeriodUsagePayload builds a usage service getPeriodUsage endpoint
 // payload.
 func NewGetPeriodUsagePayload(sessionToken *string) *usage.GetPeriodUsagePayload {
@@ -1425,6 +1752,15 @@ func NewCreateCustomerSessionPayload(sessionToken *string) *usage.CreateCustomer
 // payload.
 func NewCreateCheckoutPayload(sessionToken *string) *usage.CreateCheckoutPayload {
 	v := &usage.CreateCheckoutPayload{}
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewCreateTopUpCheckoutPayload builds a usage service createTopUpCheckout
+// endpoint payload.
+func NewCreateTopUpCheckoutPayload(sessionToken *string) *usage.CreateTopUpCheckoutPayload {
+	v := &usage.CreateTopUpCheckoutPayload{}
 	v.SessionToken = sessionToken
 
 	return v

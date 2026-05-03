@@ -19,15 +19,17 @@ type Client struct {
 	GetUsageTiersEndpoint         goa.Endpoint
 	CreateCustomerSessionEndpoint goa.Endpoint
 	CreateCheckoutEndpoint        goa.Endpoint
+	CreateTopUpCheckoutEndpoint   goa.Endpoint
 }
 
 // NewClient initializes a "usage" service client given the endpoints.
-func NewClient(getPeriodUsage, getUsageTiers, createCustomerSession, createCheckout goa.Endpoint) *Client {
+func NewClient(getPeriodUsage, getUsageTiers, createCustomerSession, createCheckout, createTopUpCheckout goa.Endpoint) *Client {
 	return &Client{
 		GetPeriodUsageEndpoint:        getPeriodUsage,
 		GetUsageTiersEndpoint:         getUsageTiers,
 		CreateCustomerSessionEndpoint: createCustomerSession,
 		CreateCheckoutEndpoint:        createCheckout,
+		CreateTopUpCheckoutEndpoint:   createTopUpCheckout,
 	}
 }
 
@@ -114,6 +116,29 @@ func (c *Client) CreateCustomerSession(ctx context.Context, p *CreateCustomerSes
 func (c *Client) CreateCheckout(ctx context.Context, p *CreateCheckoutPayload) (res string, err error) {
 	var ires any
 	ires, err = c.CreateCheckoutEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(string), nil
+}
+
+// CreateTopUpCheckout calls the "createTopUpCheckout" endpoint of the "usage"
+// service.
+// CreateTopUpCheckout may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) CreateTopUpCheckout(ctx context.Context, p *CreateTopUpCheckoutPayload) (res string, err error) {
+	var ires any
+	ires, err = c.CreateTopUpCheckoutEndpoint(ctx, p)
 	if err != nil {
 		return
 	}

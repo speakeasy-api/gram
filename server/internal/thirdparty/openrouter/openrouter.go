@@ -115,6 +115,11 @@ var specialLimitOrgs = []string{
 	"5a25158b-24dc-4d49-b03d-e85acfbea59c", // speakeasy-team
 }
 
+// IsSpecialLimitOrg reports whether the org bypasses standard credit limits.
+func IsSpecialLimitOrg(orgID string) bool {
+	return slices.Contains(specialLimitOrgs, orgID)
+}
+
 type Provisioner interface {
 	ProvisionAPIKey(ctx context.Context, orgID string) (string, error)
 	RefreshAPIKeyLimit(ctx context.Context, orgID string, limit *int) (int, error)

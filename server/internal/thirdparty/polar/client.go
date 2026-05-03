@@ -8,8 +8,10 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"time"
 
@@ -32,12 +34,26 @@ import (
 )
 
 type Catalog struct {
-	ProductIDBase string
-	ProductIDPro  string
+	ProductIDBase   string
+	ProductIDPro    string
+	ProductIDsTopUp []string
 
 	MeterIDToolCalls string
 	MeterIDServers   string
 	MeterIDCredits   string
+}
+
+// IsTopUpProductID reports whether the given product ID is a configured
+// one-time credit top-up product.
+func (c *Catalog) IsTopUpProductID(id string) bool {
+	return slices.Contains(c.ProductIDsTopUp, id)
+}
+
+// costToCredits converts a per-turn dollar cost from OpenRouter into the
+// integer credit unit aggregated by the Polar credits meter. 1 credit =
+// $0.001; partial credits round up so any non-zero cost debits at least 1.
+func costToCredits(costDollars float64) float64 {
+	return math.Ceil(costDollars * 1000)
 }
 
 func (c *Catalog) Validate() error {
@@ -230,6 +246,10 @@ func (p *Client) TrackModelUsage(ctx context.Context, event billing.ModelUsageEv
 	if event.Cost != nil {
 		metadata["cost"] = polarComponents.EventMetadataInput{
 			Number: event.Cost,
+		}
+		credits := costToCredits(*event.Cost)
+		metadata["credits"] = polarComponents.EventMetadataInput{
+			Number: &credits,
 		}
 	}
 
@@ -811,8 +831,8 @@ func (p *Client) GetStoredPeriodUsage(ctx context.Context, orgID string) (pu *ge
 	return &state.PeriodUsage, nil
 }
 
-func (p *Client) CreateCheckout(ctx context.Context, orgID string, serverURL string, successURL string) (u string, err error) {
-	ctx, span := p.tracer.Start(ctx, "polar_client.create_checkout", trace.WithAttributes(attr.OrganizationID(orgID)))
+func (p *Client) createCheckoutForProducts(ctx context.Context, spanName, orgID, serverURL, successURL string, productIDs []string) (u string, err error) {
+	ctx, span := p.tracer.Start(ctx, spanName, trace.WithAttributes(attr.OrganizationID(orgID)))
 	defer func() {
 		if err != nil {
 			span.SetStatus(codes.Error, err.Error())
@@ -828,16 +848,24 @@ func (p *Client) CreateCheckout(ctx context.Context, orgID string, serverURL str
 		ExternalCustomerID: &orgID,
 		EmbedOrigin:        &serverURL,
 		SuccessURL:         &successURL,
-		Products: []string{
-			p.catalog.ProductIDBase,
-		},
+		Products:           productIDs,
 	})
-
 	if err != nil {
-		return "", fmt.Errorf("create link: %w", err)
+		return "", fmt.Errorf("create checkout: %w", err)
 	}
 
 	return res.Checkout.URL, nil
+}
+
+func (p *Client) CreateCheckout(ctx context.Context, orgID, serverURL, successURL string) (string, error) {
+	return p.createCheckoutForProducts(ctx, "polar_client.create_checkout", orgID, serverURL, successURL, []string{p.catalog.ProductIDBase})
+}
+
+func (p *Client) CreateTopUpCheckout(ctx context.Context, orgID, serverURL, successURL string) (string, error) {
+	if len(p.catalog.ProductIDsTopUp) == 0 {
+		return "", errors.New("no top-up products configured")
+	}
+	return p.createCheckoutForProducts(ctx, "polar_client.create_topup_checkout", orgID, serverURL, successURL, []string{p.catalog.ProductIDsTopUp[0]})
 }
 
 func (p *Client) CreateCustomerSession(ctx context.Context, orgID string) (cpu string, err error) {

@@ -91,6 +91,7 @@ func (s *Service) HandlePolarWebhook(w http.ResponseWriter, r *http.Request) err
 		"benefit_grant.cycled",
 		"benefit_grant.updated",
 		"benefit_grant.revoked",
+		"order.paid",
 	}
 	ctx := r.Context()
 
@@ -240,6 +241,24 @@ func (s *Service) CreateCheckout(ctx context.Context, payload *gen.CreateCheckou
 	checkoutURL, err := s.billingRepo.CreateCheckout(ctx, authCtx.ActiveOrganizationID, s.serverURL.String(), successURL)
 	if err != nil {
 		return "", oops.E(oops.CodeUnexpected, err, "failed to create checkout").Log(ctx, s.logger)
+	}
+	return checkoutURL, nil
+}
+
+func (s *Service) CreateTopUpCheckout(ctx context.Context, payload *gen.CreateTopUpCheckoutPayload) (res string, err error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
+		return "", oops.C(oops.CodeUnauthorized)
+	}
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return "", err
+	}
+
+	successURL := fmt.Sprintf("%s/%s/billing", s.serverURL.String(), authCtx.OrganizationSlug)
+
+	checkoutURL, err := s.billingRepo.CreateTopUpCheckout(ctx, authCtx.ActiveOrganizationID, s.serverURL.String(), successURL)
+	if err != nil {
+		return "", oops.E(oops.CodeBadRequest, err, "failed to create top-up checkout").Log(ctx, s.logger)
 	}
 	return checkoutURL, nil
 }

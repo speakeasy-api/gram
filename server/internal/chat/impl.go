@@ -70,6 +70,7 @@ type Service struct {
 	assetStorage     assets.BlobStore
 	posthog          *posthog.Posthog
 	telemetryService *telemetry.Service
+	billingRepo      billing.Repository
 }
 
 func NewService(
@@ -85,6 +86,7 @@ func NewService(
 	assetStorage assets.BlobStore,
 	authzEngine *authz.Engine,
 	assistantTokens *assistanttokens.Manager,
+	billingRepo billing.Repository,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("chat"))
 
@@ -102,6 +104,7 @@ func NewService(
 		assetStorage:     assetStorage,
 		posthog:          posthog,
 		telemetryService: telemetryService,
+		billingRepo:      billingRepo,
 	}
 }
 
@@ -618,10 +621,42 @@ func extractHTTPMetadata(r *http.Request) httpMetadata {
 	}
 }
 
+// checkCreditBalance rejects the request when the org has consumed its granted
+// credits. Reads only the cached period usage so the gate stays cheap; on
+// cache miss we fail open and rely on the OpenRouter per-key monthly limit as
+// the hard backstop. Speakeasy-internal orgs (specialLimitOrgs) bypass.
+func (s *Service) checkCreditBalance(ctx context.Context, orgID string) error {
+	if openrouter.IsSpecialLimitOrg(orgID) {
+		return nil
+	}
+
+	pu, err := s.billingRepo.GetStoredPeriodUsage(ctx, orgID)
+	if err != nil {
+		s.logger.WarnContext(ctx, "credit balance cache miss; allowing request",
+			attr.SlogError(err),
+			attr.SlogOrganizationID(orgID),
+		)
+		return nil
+	}
+
+	if pu.IncludedCredits > 0 && pu.Credits >= pu.IncludedCredits {
+		return oops.C(oops.CodeInsufficientCredits).Log(
+			ctx, s.logger,
+			attr.SlogOrganizationID(orgID),
+		)
+	}
+
+	return nil
+}
+
 // HandleCompletion is a proxy to the OpenAI API that logs request and response data.
 func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error {
 	ctx, authCtx, err := s.directAuthorize(r.Context(), r)
 	if err != nil {
+		return err
+	}
+
+	if err := s.checkCreditBalance(ctx, authCtx.ActiveOrganizationID); err != nil {
 		return err
 	}
 

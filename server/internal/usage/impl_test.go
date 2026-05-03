@@ -64,6 +64,11 @@ func (m *mockBillingRepo) CreateCheckout(ctx context.Context, orgID, serverURL, 
 	return "", fmt.Errorf("not implemented")
 }
 
+func (m *mockBillingRepo) CreateTopUpCheckout(ctx context.Context, orgID, serverURL, successURL string) (string, error) {
+	args := m.Called(ctx, orgID, serverURL, successURL)
+	return args.String(0), args.Error(1)
+}
+
 func (m *mockBillingRepo) CreateCustomerSession(ctx context.Context, orgID string) (string, error) {
 	return "", fmt.Errorf("not implemented")
 }
