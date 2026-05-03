@@ -451,3 +451,45 @@ WHERE project_id = @project_id
   AND deleted IS FALSE
   AND ended IS FALSE
   AND state IN (@starting_state, @active_state);
+
+-- name: ListAssistantRuntimesForReap :many
+-- Returns every runtime row for an assistant that still carries backend
+-- metadata, regardless of soft-delete state. A stopped row whose Fly app
+-- was not collected leaves its app_name in metadata and would otherwise
+-- be invisible to deleted-aware queries.
+SELECT id, assistant_thread_id, assistant_id, project_id, backend, backend_metadata_json, state, warm_until
+FROM assistant_runtimes
+WHERE assistant_id = @assistant_id
+  AND project_id = @project_id
+  AND backend_metadata_json <> '{}'::jsonb;
+
+-- name: ListInactiveAssistantRuntimesForReap :many
+-- Returns runtime rows that still carry backend metadata and whose owning
+-- assistant has had no runtime activity since @inactive_before. Active and
+-- starting rows are excluded so a long-running session that updated_at
+-- recently is never collected mid-flight.
+SELECT r.id, r.assistant_thread_id, r.assistant_id, r.project_id, r.backend, r.backend_metadata_json, r.state, r.warm_until
+FROM assistant_runtimes r
+WHERE r.backend_metadata_json <> '{}'::jsonb
+  AND r.state NOT IN (@starting_state, @active_state)
+  AND NOT EXISTS (
+    SELECT 1
+    FROM assistant_runtimes r2
+    WHERE r2.assistant_id = r.assistant_id
+      AND r2.updated_at >= @inactive_before
+  )
+ORDER BY r.updated_at ASC
+LIMIT @limit_count;
+
+-- name: MarkAssistantRuntimeReaped :exec
+-- Records that the backend resource (e.g. Fly app) for this runtime has
+-- been torn down. Clearing backend_metadata_json removes it from the reap
+-- candidate set so the janitor stops re-scanning it.
+UPDATE assistant_runtimes
+SET state = @reaped_state,
+    backend_metadata_json = '{}'::jsonb,
+    updated_at = clock_timestamp(),
+    ended_at = COALESCE(ended_at, clock_timestamp()),
+    deleted_at = COALESCE(deleted_at, clock_timestamp())
+WHERE id = @runtime_id
+  AND project_id = @project_id;

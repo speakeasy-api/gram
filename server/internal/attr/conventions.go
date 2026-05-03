@@ -1276,6 +1276,16 @@ func SlogStatsToolCallCount(v int) slog.Attr      { return slog.Int(string(Stats
 func StatsMCPServerCount(v int) attribute.KeyValue { return StatsMCPServerCountKey.Int(v) }
 func SlogStatsMCPServerCount(v int) slog.Attr      { return slog.Int(string(StatsMCPServerCountKey), v) }
 
+func AssistantID(v string) attribute.KeyValue { return AssistantIDKey.String(v) }
+func SlogAssistantID(v string) slog.Attr      { return slog.String(string(AssistantIDKey), v) }
+
+func AssistantRuntimeBackend(v string) attribute.KeyValue {
+	return AssistantRuntimeBackendKey.String(v)
+}
+func SlogAssistantRuntimeBackend(v string) slog.Attr {
+	return slog.String(string(AssistantRuntimeBackendKey), v)
+}
+
 func AssistantThreadID(v string) attribute.KeyValue { return AssistantThreadIDKey.String(v) }
 func SlogAssistantThreadID(v string) slog.Attr      { return slog.String(string(AssistantThreadIDKey), v) }
 

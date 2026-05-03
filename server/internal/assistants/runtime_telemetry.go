@@ -150,6 +150,16 @@ func (t *telemetryRuntimeBackend) Stop(ctx context.Context, runtime assistantRun
 	return nil
 }
 
+func (t *telemetryRuntimeBackend) Reap(ctx context.Context, runtime assistantRuntimeRecord) error {
+	err := t.inner.Reap(ctx, runtime)
+	if err != nil {
+		t.emit(ctx, runtime, "runtime_reap", "runtime reap failed", "ERROR", err)
+		return fmt.Errorf("runtime reap: %w", err)
+	}
+	t.emit(ctx, runtime, "runtime_reap", "runtime reaped", "INFO", nil)
+	return nil
+}
+
 func (t *telemetryRuntimeBackend) emit(
 	ctx context.Context,
 	runtime assistantRuntimeRecord,

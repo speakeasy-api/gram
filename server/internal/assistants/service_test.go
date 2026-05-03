@@ -504,6 +504,295 @@ LIMIT 1
 	require.JSONEq(t, string(backend.ensureResult.BackendMetadataJSON), string(nextMetadata))
 }
 
+// insertReapableProject inserts an isolated project + assistant + thread so a
+// single test can host several independent fixtures without colliding on the
+// project slug or the per-thread-active runtime unique index.
+func insertReapableProject(t *testing.T, conn *pgxpool.Pool, slug string) (projectID, assistantID, threadID uuid.UUID) {
+	t.Helper()
+
+	projectID = uuid.New()
+	assistantID = uuid.New()
+	chatID := uuid.New()
+	threadID = uuid.New()
+
+	_, err := conn.Exec(t.Context(), `
+INSERT INTO projects (id, name, slug, organization_id) VALUES ($1, $2, $3, 'org-test')
+`, projectID, slug, slug)
+	require.NoError(t, err)
+
+	_, err = conn.Exec(t.Context(), `
+INSERT INTO assistants (id, project_id, organization_id, name, model, instructions, warm_ttl_seconds, max_concurrency, status)
+VALUES ($1, $2, 'org-test', 'Assistant', 'openai/gpt-4o-mini', '', 300, 1, 'active')
+`, assistantID, projectID)
+	require.NoError(t, err)
+
+	_, err = conn.Exec(t.Context(), `INSERT INTO chats (id, project_id, organization_id) VALUES ($1, $2, 'org-test')`, chatID, projectID)
+	require.NoError(t, err)
+
+	_, err = conn.Exec(t.Context(), `
+INSERT INTO assistant_threads (id, assistant_id, project_id, correlation_id, chat_id, source_kind, source_ref_json, last_event_at)
+VALUES ($1, $2, $3, $4, $5, 'slack', '{}'::jsonb, clock_timestamp())
+`, threadID, assistantID, projectID, "corr-"+slug, chatID)
+	require.NoError(t, err)
+
+	return projectID, assistantID, threadID
+}
+
+// insertReapableRuntimeRow seeds an assistant_runtimes row with non-empty
+// backend metadata so the reap queries can find it. ended_at is set so
+// multiple rows can coexist on the same thread without colliding on the
+// active-runtime unique index.
+func insertReapableRuntimeRow(
+	t *testing.T,
+	conn *pgxpool.Pool,
+	projectID, assistantID, threadID uuid.UUID,
+	state string,
+	appName string,
+	updatedAt time.Time,
+) uuid.UUID {
+	t.Helper()
+
+	runtimeID := uuid.New()
+	metadata := fmt.Sprintf(`{"app_name":%q}`, appName)
+	endedAt := pgNullTimeFor(state, updatedAt)
+	_, err := conn.Exec(t.Context(), `
+INSERT INTO assistant_runtimes (
+  id, assistant_thread_id, assistant_id, project_id, backend, backend_metadata_json, state, updated_at, ended_at
+) VALUES (
+  $1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9
+)
+`, runtimeID, threadID, assistantID, projectID, runtimeBackendFlyIO, metadata, state, updatedAt, endedAt)
+	require.NoError(t, err)
+	return runtimeID
+}
+
+func pgNullTimeFor(state string, updatedAt time.Time) sql.NullTime {
+	switch state {
+	case runtimeStateActive, runtimeStateStarting:
+		return sql.NullTime{Time: time.Time{}, Valid: false}
+	default:
+		return sql.NullTime{Time: updatedAt, Valid: true}
+	}
+}
+
+func TestServiceCoreDeleteAssistantReapsRuntimes(t *testing.T) {
+	t.Parallel()
+
+	conn, err := assistantsInfra.CloneTestDatabase(t, "delete_assistant_reaps")
+	require.NoError(t, err)
+
+	projectID := uuid.New()
+	assistantID := uuid.New()
+	chatID := uuid.New()
+	threadID := uuid.New()
+	insertAssistantFixture(t, conn, projectID, assistantID, chatID, threadID)
+
+	runtimeID := insertReapableRuntimeRow(t, conn, projectID, assistantID, threadID, runtimeStateStopped, "gram-asst-delete-target", time.Now().UTC().Add(-time.Hour))
+
+	reapCalls := &atomic.Int64{}
+	backend := testRuntimeBackend{backend: runtimeBackendFlyIO, reapCalls: reapCalls}
+	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn, backend, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)))
+
+	require.NoError(t, core.DeleteAssistant(t.Context(), projectID, assistantID))
+	require.EqualValues(t, 1, reapCalls.Load())
+
+	var state, metadataJSON string
+	err = conn.QueryRow(t.Context(), `SELECT state, backend_metadata_json::text FROM assistant_runtimes WHERE id = $1`, runtimeID).Scan(&state, &metadataJSON)
+	require.NoError(t, err)
+	require.Equal(t, runtimeStateReaped, state)
+	require.JSONEq(t, `{}`, metadataJSON)
+
+	var deletedAt sql.NullTime
+	require.NoError(t, conn.QueryRow(t.Context(), `SELECT deleted_at FROM assistants WHERE id = $1`, assistantID).Scan(&deletedAt))
+	require.True(t, deletedAt.Valid)
+}
+
+func TestServiceCoreDeleteAssistantSucceedsEvenWhenReapErrors(t *testing.T) {
+	t.Parallel()
+
+	conn, err := assistantsInfra.CloneTestDatabase(t, "delete_assistant_reap_error")
+	require.NoError(t, err)
+
+	projectID := uuid.New()
+	assistantID := uuid.New()
+	chatID := uuid.New()
+	threadID := uuid.New()
+	insertAssistantFixture(t, conn, projectID, assistantID, chatID, threadID)
+	insertReapableRuntimeRow(t, conn, projectID, assistantID, threadID, runtimeStateStopped, "gram-asst-flaky", time.Now().UTC().Add(-time.Hour))
+
+	reapCalls := &atomic.Int64{}
+	backend := testRuntimeBackend{
+		backend:   runtimeBackendFlyIO,
+		reapCalls: reapCalls,
+		reapErr:   errors.New("fly api 503"),
+	}
+	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn, backend, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)))
+
+	require.NoError(t, core.DeleteAssistant(t.Context(), projectID, assistantID))
+	require.EqualValues(t, 1, reapCalls.Load())
+
+	// Soft-delete still landed; the janitor will retry the orphan later.
+	var deletedAt sql.NullTime
+	require.NoError(t, conn.QueryRow(t.Context(), `SELECT deleted_at FROM assistants WHERE id = $1`, assistantID).Scan(&deletedAt))
+	require.True(t, deletedAt.Valid)
+}
+
+func TestServiceCoreReapAssistantRuntimesCallsBackendAndClearsMetadata(t *testing.T) {
+	t.Parallel()
+
+	conn, err := assistantsInfra.CloneTestDatabase(t, "reap_assistant_runtimes")
+	require.NoError(t, err)
+
+	projectID := uuid.New()
+	assistantID := uuid.New()
+	chatID := uuid.New()
+	threadID := uuid.New()
+	insertAssistantFixture(t, conn, projectID, assistantID, chatID, threadID)
+
+	runtimeID := insertReapableRuntimeRow(t, conn, projectID, assistantID, threadID, runtimeStateStopped, "gram-asst-orphan", time.Now().UTC().Add(-time.Hour))
+
+	reapCalls := &atomic.Int64{}
+	backend := testRuntimeBackend{backend: runtimeBackendFlyIO, reapCalls: reapCalls}
+	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn, backend, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)))
+
+	result, err := core.ReapAssistantRuntimes(t.Context(), projectID, assistantID)
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Reaped)
+	require.Equal(t, 0, result.Errors)
+	require.EqualValues(t, 1, reapCalls.Load())
+
+	var state string
+	var metadataJSON string
+	err = conn.QueryRow(t.Context(), `
+SELECT state, backend_metadata_json::text
+FROM assistant_runtimes
+WHERE id = $1
+`, runtimeID).Scan(&state, &metadataJSON)
+	require.NoError(t, err)
+	require.Equal(t, runtimeStateReaped, state)
+	require.JSONEq(t, `{}`, metadataJSON)
+}
+
+func TestServiceCoreReapAssistantRuntimesSkipsRowsWithoutMetadata(t *testing.T) {
+	t.Parallel()
+
+	conn, err := assistantsInfra.CloneTestDatabase(t, "reap_assistant_runtimes_skip")
+	require.NoError(t, err)
+
+	projectID := uuid.New()
+	assistantID := uuid.New()
+	chatID := uuid.New()
+	threadID := uuid.New()
+	insertAssistantFixture(t, conn, projectID, assistantID, chatID, threadID)
+
+	runtimeID := uuid.New()
+	_, err = conn.Exec(t.Context(), `
+INSERT INTO assistant_runtimes (id, assistant_thread_id, assistant_id, project_id, backend, backend_metadata_json, state)
+VALUES ($1, $2, $3, $4, $5, '{}'::jsonb, $6)
+`, runtimeID, threadID, assistantID, projectID, runtimeBackendFlyIO, runtimeStateStopped)
+	require.NoError(t, err)
+
+	reapCalls := &atomic.Int64{}
+	backend := testRuntimeBackend{backend: runtimeBackendFlyIO, reapCalls: reapCalls}
+	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn, backend, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)))
+
+	result, err := core.ReapAssistantRuntimes(t.Context(), projectID, assistantID)
+	require.NoError(t, err)
+	require.Equal(t, 0, result.Reaped)
+	require.EqualValues(t, 0, reapCalls.Load())
+}
+
+func TestServiceCoreReapInactiveAssistantRuntimesCollectsOnlyInactive(t *testing.T) {
+	t.Parallel()
+
+	conn, err := assistantsInfra.CloneTestDatabase(t, "reap_inactive_runtimes")
+	require.NoError(t, err)
+
+	stale, staleAssistantID, staleThreadID := insertReapableProject(t, conn, "stale")
+	staleRuntimeID := insertReapableRuntimeRow(t, conn, stale, staleAssistantID, staleThreadID, runtimeStateStopped, "gram-asst-stale", time.Now().UTC().Add(-30*24*time.Hour))
+
+	fresh, freshAssistantID, freshThreadID := insertReapableProject(t, conn, "fresh")
+	freshRuntimeID := insertReapableRuntimeRow(t, conn, fresh, freshAssistantID, freshThreadID, runtimeStateStopped, "gram-asst-fresh", time.Now().UTC().Add(-time.Hour))
+
+	reapCalls := &atomic.Int64{}
+	backend := testRuntimeBackend{backend: runtimeBackendFlyIO, reapCalls: reapCalls}
+	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn, backend, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)))
+
+	result, err := core.ReapInactiveAssistantRuntimes(t.Context(), ReapInactiveAssistantRuntimesParams{
+		InactivityThreshold: 7 * 24 * time.Hour,
+		BatchSize:           10,
+	})
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Reaped)
+	require.Equal(t, 0, result.Errors)
+	require.EqualValues(t, 1, reapCalls.Load())
+
+	var staleState, freshState string
+	require.NoError(t, conn.QueryRow(t.Context(), `SELECT state FROM assistant_runtimes WHERE id = $1`, staleRuntimeID).Scan(&staleState))
+	require.NoError(t, conn.QueryRow(t.Context(), `SELECT state FROM assistant_runtimes WHERE id = $1`, freshRuntimeID).Scan(&freshState))
+	require.Equal(t, runtimeStateReaped, staleState)
+	require.Equal(t, runtimeStateStopped, freshState)
+}
+
+func TestServiceCoreReapInactiveAssistantRuntimesSkipsAssistantWithRecentActivity(t *testing.T) {
+	t.Parallel()
+
+	conn, err := assistantsInfra.CloneTestDatabase(t, "reap_inactive_recent_activity")
+	require.NoError(t, err)
+
+	projectID := uuid.New()
+	assistantID := uuid.New()
+	chatID := uuid.New()
+	threadID := uuid.New()
+	insertAssistantFixture(t, conn, projectID, assistantID, chatID, threadID)
+
+	// Old runtime row + a fresh row on the same assistant. The recent
+	// activity must keep the entire assistant out of the candidate set.
+	oldRuntimeID := insertReapableRuntimeRow(t, conn, projectID, assistantID, threadID, runtimeStateStopped, "gram-asst-old", time.Now().UTC().Add(-30*24*time.Hour))
+	insertReapableRuntimeRow(t, conn, projectID, assistantID, threadID, runtimeStateStopped, "gram-asst-recent", time.Now().UTC().Add(-time.Hour))
+
+	reapCalls := &atomic.Int64{}
+	backend := testRuntimeBackend{backend: runtimeBackendFlyIO, reapCalls: reapCalls}
+	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn, backend, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)))
+
+	result, err := core.ReapInactiveAssistantRuntimes(t.Context(), ReapInactiveAssistantRuntimesParams{
+		InactivityThreshold: 7 * 24 * time.Hour,
+		BatchSize:           10,
+	})
+	require.NoError(t, err)
+	require.Equal(t, 0, result.Reaped)
+	require.EqualValues(t, 0, reapCalls.Load())
+
+	var oldState string
+	require.NoError(t, conn.QueryRow(t.Context(), `SELECT state FROM assistant_runtimes WHERE id = $1`, oldRuntimeID).Scan(&oldState))
+	require.Equal(t, runtimeStateStopped, oldState)
+}
+
+func TestServiceCoreReapInactiveAssistantRuntimesIgnoresActiveAndStarting(t *testing.T) {
+	t.Parallel()
+
+	conn, err := assistantsInfra.CloneTestDatabase(t, "reap_inactive_state_filter")
+	require.NoError(t, err)
+
+	projectID, assistantID, threadID := insertReapableProject(t, conn, "active-state")
+	insertReapableRuntimeRow(t, conn, projectID, assistantID, threadID, runtimeStateActive, "gram-asst-active", time.Now().UTC().Add(-30*24*time.Hour))
+
+	startingProject, startingAssistantID, startingThreadID := insertReapableProject(t, conn, "starting-state")
+	insertReapableRuntimeRow(t, conn, startingProject, startingAssistantID, startingThreadID, runtimeStateStarting, "gram-asst-starting", time.Now().UTC().Add(-30*24*time.Hour))
+
+	reapCalls := &atomic.Int64{}
+	backend := testRuntimeBackend{backend: runtimeBackendFlyIO, reapCalls: reapCalls}
+	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn, backend, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)))
+
+	result, err := core.ReapInactiveAssistantRuntimes(t.Context(), ReapInactiveAssistantRuntimesParams{
+		InactivityThreshold: 7 * 24 * time.Hour,
+		BatchSize:           10,
+	})
+	require.NoError(t, err)
+	require.Equal(t, 0, result.Reaped)
+	require.EqualValues(t, 0, reapCalls.Load())
+}
+
 type testRuntimeBackend struct {
 	backend      string
 	ensureResult RuntimeBackendEnsureResult
@@ -511,6 +800,8 @@ type testRuntimeBackend struct {
 	configureErr error
 	runTurnErr   error
 	stopCalls    *atomic.Int64
+	reapCalls    *atomic.Int64
+	reapErr      error
 }
 
 func (t testRuntimeBackend) Backend() string {
@@ -549,6 +840,13 @@ func (t testRuntimeBackend) Stop(context.Context, assistantRuntimeRecord) error 
 		t.stopCalls.Add(1)
 	}
 	return nil
+}
+
+func (t testRuntimeBackend) Reap(context.Context, assistantRuntimeRecord) error {
+	if t.reapCalls != nil {
+		t.reapCalls.Add(1)
+	}
+	return t.reapErr
 }
 
 func mustParseURLForServiceTest(t *testing.T, raw string) *url.URL {

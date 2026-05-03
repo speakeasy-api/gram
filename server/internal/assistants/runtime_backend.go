@@ -19,7 +19,13 @@ type RuntimeBackend interface {
 	Configure(ctx context.Context, runtime assistantRuntimeRecord, config runtimeStartupConfig) error
 	RunTurn(ctx context.Context, runtime assistantRuntimeRecord, idempotencyKey string, authToken string, prompt string) error
 	ServerURL(ctx context.Context, runtime assistantRuntimeRecord, raw *url.URL) (*url.URL, error)
+	// Stop halts the active runtime so it can be re-admitted later. Backends
+	// may keep persisted state (e.g. Fly app + IP) intact for warm reuse.
 	Stop(ctx context.Context, runtime assistantRuntimeRecord) error
+	// Reap permanently tears down all backend resources tied to the runtime
+	// (e.g. deletes the Fly app). Idempotent: must succeed when the resource
+	// is already gone. Distinct from Stop, which may preserve state for reuse.
+	Reap(ctx context.Context, runtime assistantRuntimeRecord) error
 }
 
 type RuntimeBackendEnsureResult struct {

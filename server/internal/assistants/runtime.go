@@ -454,6 +454,12 @@ func (m *RuntimeManager) Stop(_ context.Context, runtime assistantRuntimeRecord)
 	return nil
 }
 
+// Reap on the local Firecracker manager has the same effect as Stop: there
+// is no out-of-process resource that survives Stop, so cleanup is identical.
+func (m *RuntimeManager) Reap(ctx context.Context, runtime assistantRuntimeRecord) error {
+	return m.Stop(ctx, runtime)
+}
+
 func (m *RuntimeManager) ServerURL(_ context.Context, runtime assistantRuntimeRecord, raw *url.URL) (*url.URL, error) {
 	if err := validateRuntimeBackend(m, runtime.Backend); err != nil {
 		return nil, err
