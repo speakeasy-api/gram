@@ -114,7 +114,7 @@ INSERT INTO assistant_runtimes (
 		statusResult: RuntimeBackendStatus{Configured: true, IdleSeconds: &busyIdle},
 		stopCalls:    &stopCalls,
 	}
-	core := NewServiceCore(logger, conn, backend, nil, nil, nil, telemetry.NewStub(logger))
+	core := NewServiceCore(logger, testenv.NewTracerProvider(t), conn, backend, nil, nil, nil, telemetry.NewStub(logger))
 
 	result, err := core.ExpireThreadRuntime(t.Context(), projectID, threadID, DefaultWarmTTLSeconds)
 	require.NoError(t, err)
@@ -172,7 +172,7 @@ INSERT INTO assistant_runtimes (
 		stopErr:      errors.New("fly delete app blew up"),
 		stopCalls:    &stopCalls,
 	}
-	core := NewServiceCore(logger, conn, failingBackend, nil, nil, nil, telemetry.NewStub(logger))
+	core := NewServiceCore(logger, testenv.NewTracerProvider(t), conn, failingBackend, nil, nil, nil, telemetry.NewStub(logger))
 
 	_, err = core.ExpireThreadRuntime(t.Context(), projectID, threadID, DefaultWarmTTLSeconds)
 	require.Error(t, err, "first attempt with failing Stop must surface the error so Temporal retries")
@@ -188,7 +188,7 @@ INSERT INTO assistant_runtimes (
 		statusResult: RuntimeBackendStatus{Configured: true, IdleSeconds: new(uint64(DefaultWarmTTLSeconds + 60))},
 		stopCalls:    &stopCalls,
 	}
-	core = NewServiceCore(logger, conn, healingBackend, nil, nil, nil, telemetry.NewStub(logger))
+	core = NewServiceCore(logger, testenv.NewTracerProvider(t), conn, healingBackend, nil, nil, nil, telemetry.NewStub(logger))
 
 	result, err := core.ExpireThreadRuntime(t.Context(), projectID, threadID, DefaultWarmTTLSeconds)
 	require.NoError(t, err, "retry must drive the existing expiring row to a terminal state")
@@ -230,7 +230,7 @@ INSERT INTO assistant_runtimes (
 `, runtimeID, threadID, assistantID, projectID, runtimeBackendFlyIO, runtimeStateExpiring, staleUpdatedAt)
 	require.NoError(t, err)
 
-	core := NewServiceCore(testenv.NewLogger(t), conn, testRuntimeBackend{backend: runtimeBackendFlyIO, runTurnErr: nil}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)))
+	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn, testRuntimeBackend{backend: runtimeBackendFlyIO, runTurnErr: nil}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)))
 
 	result, err := core.ReapStuckRuntimes(t.Context())
 	require.NoError(t, err)
@@ -270,7 +270,7 @@ INSERT INTO assistant_runtimes (
 `, runtimeID, threadID, assistantID, projectID, runtimeBackendFlyIO, runtimeStateExpiring)
 	require.NoError(t, err)
 
-	core := NewServiceCore(testenv.NewLogger(t), conn, testRuntimeBackend{backend: runtimeBackendFlyIO}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)))
+	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn, testRuntimeBackend{backend: runtimeBackendFlyIO}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)))
 
 	result, err := core.ReapStuckRuntimes(t.Context())
 	require.NoError(t, err)
@@ -892,11 +892,6 @@ func (t testRuntimeBackend) Stop(context.Context, assistantRuntimeRecord) error 
 		t.stopCalls.Add(1)
 	}
 	return t.stopErr
-}
-
-//go:fix inline
-func ptrUint64ForServiceTest(v uint64) *uint64 {
-	return new(v)
 }
 
 func mustParseURLForServiceTest(t *testing.T, raw string) *url.URL {
