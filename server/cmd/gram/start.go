@@ -365,7 +365,7 @@ func newStartCommand() *cli.Command {
 		&cli.StringFlag{
 			Name:     "workos-endpoint",
 			Usage:    "Base URL for WorkOS API calls. Leave unset for production (defaults to https://api.workos.com); set to the dev-idp's local-speakeasy mode for fully-local development.",
-			EnvVars:  []string{"WORKOS_API_BASE_URL"},
+			EnvVars:  []string{"WORKOS_API_URL"},
 			Required: false,
 		},
 		&cli.StringFlag{

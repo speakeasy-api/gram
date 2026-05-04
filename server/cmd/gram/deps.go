@@ -453,7 +453,7 @@ func newBillingProvider(
 
 // workosClientOpts builds the ClientOpts threaded into every workos.NewClient
 // call site below. Pulls the optional --workos-endpoint override (env:
-// WORKOS_API_BASE_URL) so local dev can point both real-WorkOS callers at
+// WORKOS_API_URL) so local dev can point both real-WorkOS callers at
 // the dev-idp's local-speakeasy emulator without changing any wiring.
 func workosClientOpts(c *cli.Context) workos.ClientOpts {
 	return workos.ClientOpts{

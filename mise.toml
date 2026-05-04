@@ -131,10 +131,10 @@ GRAM_DEVIDP_DATABASE_URL = "postgres://{{env.DB_USER}}:{{env.DB_PASSWORD}}@{{env
 ## localspeakeasy.Handler.
 SPEAKEASY_SERVER_ADDRESS = "{{env.GRAM_DEVIDP_EXTERNAL_URL}}/local-speakeasy"
 SPEAKEASY_SECRET_KEY = "test-secret"
-## WORKOS_API_BASE_URL points Gram's WorkOS client at the dev-idp's
+## WORKOS_API_URL points Gram's WorkOS client at the dev-idp's
 ## WorkOS-emulation surface (also mounted under /local-speakeasy/). Unset
 ## this in mise.local.toml to talk to real api.workos.com instead.
-WORKOS_API_BASE_URL = "{{env.GRAM_DEVIDP_EXTERNAL_URL}}/local-speakeasy"
+WORKOS_API_URL = "{{env.GRAM_DEVIDP_EXTERNAL_URL}}/local-speakeasy"
 ## The following variables are only needed if you want to do one of the following:
 ## - Run the server with SSL enabled and not rely on SSL termination at a load balancer.
 ## - Local development with SSL enabled.
