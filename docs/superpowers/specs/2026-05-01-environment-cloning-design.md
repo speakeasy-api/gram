@@ -13,7 +13,9 @@ Let users clone an existing environment from the dashboard's Environments page. 
 1. **Plaintext never leaves the database.** The "copy values" path uses a single SQL `INSERT INTO environment_entries (...) SELECT ... FROM environment_entries WHERE environment_id = $src` — ciphertext bytes flow row-to-row server-side and are never decrypted in Go. The masked `"*"` shown in the UI is irrelevant to the clone path.
 2. **Source is read-only.** Clone issues exactly one `SELECT` against the source env and `INSERT`s into a brand-new `environment_id`. No `UPDATE`/`DELETE` against the source.
 3. **Project boundary at SQL.** Source fetch uses `WHERE project_id = $caller_project_id AND slug = $src_slug AND deleted IS FALSE` — same pattern as existing `GetEnvironmentBySlug`. Cross-project clone is impossible even with a guessed slug.
-4. **Authz gate.** Single `authz.ScopeProjectWrite` check (matches `createEnvironment`).
+4. **Authz gates (two layers, updated 2026-05-03 in response to PR #2561 review).**
+   - Project-level: `authz.ScopeEnvironmentWrite` at the project resource — authority to add a new environment to this project. Backward-compatible with existing `project:write` grants via `scopeExpansions[ScopeEnvironmentWrite] = {ScopeProjectWrite}`.
+   - Source-level: `authz.RequireAny` of `{ScopeEnvironmentRead at sourceEnv.ID}` OR `{ScopeProjectRead at projectID}` — authority to read this specific environment. `RequireAny` is used (rather than expansion-based satisfaction) because `Check.expand()` preserves the `ResourceID` across scope variants, so an `env:read` check at an environment's UUID cannot expand into a `project:read` variant that would match a project-pinned grant — the IDs are for different resource types and would never align.
 5. **No client-supplied ciphertext.** Clone API accepts `{ slug, new_name, copy_values }` only. Clients cannot smuggle attacker-controlled ciphertext into the encrypted column.
 6. **Audit log.** `audit.LogEnvironmentCreate` is emitted on the new env (same as a normal create).
 
@@ -35,15 +37,16 @@ Returns `shared.Environment`.
 
 ### Service flow (single transaction)
 
-1. `authz.Require(ScopeProjectWrite)`.
+1. `authz.Require(ScopeEnvironmentWrite at projectID)` — authority to add envs to this project.
 2. `GetEnvironmentBySlug` with caller's `project_id`. 404 on miss.
-3. Generate slug from `new_name` via `conv.ToSlug`.
-4. `CreateEnvironment` with `(name=new_name, slug=new_slug, description=source.description)`. On unique-violation → `CodeConflict` with a clean message; the user picks a different name.
-5. If `copy_values = true`: `CloneEnvironmentEntriesWithValues(new_id, source_id)` — pure SQL `INSERT … SELECT`, no decrypt path.
-6. If `copy_values = false`: encrypt `""` once in Go, then `CloneEnvironmentEntryNames(new_id, source_id, placeholder)` — `INSERT … SELECT name, $placeholder` so names are preserved with empty placeholder values.
-7. `ListEnvironmentEntries(redacted=true)` to build the response view.
-8. `audit.LogEnvironmentCreate(newEnv)`.
-9. Commit.
+3. `authz.RequireAny({env:read at sourceEnv.ID}, {project:read at projectID})` — authority to read the source.
+4. Generate slug from `new_name` via `conv.ToSlug`.
+5. `CreateEnvironment` with `(name=new_name, slug=new_slug, description=source.description)`. On unique-violation → `CodeConflict` with a clean message; the user picks a different name.
+6. If `copy_values = true`: `CloneEnvironmentEntriesWithValues(new_id, source_id)` — pure SQL `INSERT … SELECT`, no decrypt path.
+7. If `copy_values = false`: encrypt `""` once in Go, then `CloneEnvironmentEntryNames(new_id, source_id, placeholder)` — `INSERT … SELECT name, $placeholder` so names are preserved with empty placeholder values.
+8. `ListEnvironmentEntries(redacted=true)` to build the response view.
+9. `audit.LogEnvironmentCreate(newEnv)`.
+10. Commit.
 
 We **do not** copy `source_environments` or `toolset_environments` links. The clone is a fresh, unattached environment.
 

@@ -24,11 +24,16 @@ const (
 // scopeExpansions maps a required scope to the higher-privilege scopes that also satisfy it.
 // Scopes with no higher-privilege implication (admin tiers) map to nil.
 //
-// environment:{read,write} intentionally expand to project:{read,write} so callers
-// with project-wide grants keep working without explicit environment grants. Per-resource
-// environment grants give RBAC the option to scope reads/writes at the individual
-// environment level (e.g. fine-grained roles that should not clone a specific environment,
-// or that should be able to add environments without other project-write authority).
+// environment:write expands to project:write because both target the project as the
+// resource (env:write at projectID is satisfied by project:write at projectID — same kind,
+// same ID — so the cross-scope check resolves correctly via selector matching).
+//
+// environment:read does NOT expand to project:read/project:write because the resource IDs
+// differ across kinds: env:read is checked at the environment's UUID, but expansion would
+// produce a project:read variant still bound to that env UUID, which can never match a
+// fine-grained project:read grant pinned to the project UUID. Callers that need to honor
+// project-level read grants for environment reads must use Engine.RequireAny with explicit
+// {env:read at envID} and {project:read at projectID} alternatives.
 var scopeExpansions = map[Scope][]Scope{
 	ScopeRoot:             nil,
 	ScopeOrgRead:          {ScopeOrgAdmin},
@@ -38,7 +43,7 @@ var scopeExpansions = map[Scope][]Scope{
 	ScopeMCPRead:          {ScopeMCPWrite},
 	ScopeMCPWrite:         nil,
 	ScopeMCPConnect:       {ScopeMCPRead, ScopeMCPWrite},
-	ScopeEnvironmentRead:  {ScopeEnvironmentWrite, ScopeProjectRead, ScopeProjectWrite},
+	ScopeEnvironmentRead:  {ScopeEnvironmentWrite},
 	ScopeEnvironmentWrite: {ScopeProjectWrite},
 }
 
