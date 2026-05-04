@@ -1,0 +1,29 @@
+version: 1
+
+# Hot queries to plan-check on every PR.
+# Add an entry here when introducing a query that hits a growth table
+# (chat_messages, risk_results, tool_logs, audit_events, ...).
+queries:
+  - name: FetchUnanalyzedMessageIDs
+    file: server/internal/risk/queries.sql
+    params:
+      project_id: { type: uuid, value: "00000000-0000-0000-0000-000000000001" }
+      risk_policy_id:
+        { type: uuid, value: "00000000-0000-0000-0000-000000000002" }
+      risk_policy_version: { type: int, value: 1 }
+      batch_limit: { type: int, value: 1000 }
+    # Fail if the planner picks Seq Scan on a relation expected to grow.
+    forbid_seq_scan_on:
+      - chat_messages
+      - risk_results
+    # Soft cap on planner-estimated total cost. Tune as the query and
+    # seed data evolve; bump in a follow-up PR with justification.
+    max_total_cost: 2500.0
+
+  - name: CountTotalMessages
+    file: server/internal/risk/queries.sql
+    params:
+      project_id: { type: uuid, value: "00000000-0000-0000-0000-000000000001" }
+    forbid_seq_scan_on:
+      - chat_messages
+    max_total_cost: 2000.0
