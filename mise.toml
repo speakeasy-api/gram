@@ -111,11 +111,7 @@ GRAM_REDIS_CACHE_ADDR = "{{env.GRAM_REDIS_CACHE_HOST}}:{{env.GRAM_REDIS_CACHE_PO
 GRAM_REDIS_CACHE_PASSWORD = "xi9XILbY"
 GRAM_REDIS_ENABLE_TRACING = "false"
 OPENROUTER_DEV_KEY = "unset"
-## The dev-idp (`gram dev-idp`) is the local-dev IDP, replacing the
-## standalone mock-speakeasy-idp binary. It runs four modes simultaneously
-## (mock-speakeasy / workos / oauth2-1 / oauth2) on a single listener and
-## uses its own Postgres logical database `gram_devidp` (created by
-## local/postgres-init/).
+## The dev-idp (`gram dev-idp`) replaces the standalone mock-speakeasy-idp.
 ## GRAM_DEVIDP_PORT is auto-remapped by `mise work:init` for parallel worktrees.
 GRAM_DEVIDP_HOST = "localhost"
 GRAM_DEVIDP_PORT = "35291"
@@ -125,16 +121,14 @@ GRAM_DEVIDP_ADDRESS = ":{{env.GRAM_DEVIDP_PORT}}"
 GRAM_DEVIDP_CONTROL_ADDRESS = ":{{env.GRAM_DEVIDP_CONTROL_PORT}}"
 GRAM_DEVIDP_EXTERNAL_URL = "http://{{env.GRAM_DEVIDP_HOST}}:{{env.GRAM_DEVIDP_PORT}}"
 GRAM_DEVIDP_DATABASE_URL = "postgres://{{env.DB_USER}}:{{env.DB_PASSWORD}}@{{env.DB_HOST}}:{{env.DB_PORT}}/gram_devidp?sslmode=disable&search_path=public"
-## SPEAKEASY_SERVER_ADDRESS points Gram at the dev-idp's local-speakeasy
-## mode (mounted at /local-speakeasy). The Gram-side sessions.Manager
-## appends /v1/speakeasy_provider/... so the full URL lands on
-## localspeakeasy.Handler.
 SPEAKEASY_SERVER_ADDRESS = "{{env.GRAM_DEVIDP_EXTERNAL_URL}}/local-speakeasy"
 SPEAKEASY_SECRET_KEY = "test-secret"
-## WORKOS_API_URL points Gram's WorkOS client at the dev-idp's
-## WorkOS-emulation surface (also mounted under /local-speakeasy/). Unset
-## this in mise.local.toml to talk to real api.workos.com instead.
-WORKOS_API_URL = "{{env.GRAM_DEVIDP_EXTERNAL_URL}}/local-speakeasy"
+## Override base URL for Gram's WorkOS client (defaults to api.workos.com).
+# WORKOS_API_URL = ""
+## PEM-encoded RSA private key for stable JWKS across dev-idp restarts.
+# GRAM_DEVIDP_RSA_PRIVATE_KEY = ""
+## Override base URL for the dev-idp's WorkOS client (defaults to api.workos.com).
+# WORKOS_HOST = ""
 ## The following variables are only needed if you want to do one of the following:
 ## - Run the server with SSL enabled and not rely on SSL termination at a load balancer.
 ## - Local development with SSL enabled.
