@@ -55,7 +55,7 @@ var _ = Service("devIdp", func() {
 	})
 
 	Method("setCurrentUser", func() {
-		Description("UPSERT the per-mode currentUser. Local modes accept `user_id` (a UUID into the local users table); workos mode accepts `workos_sub` (a literal WorkOS user id; not validated).")
+		Description("UPSERT or clear the per-mode currentUser. Local modes accept `user_id` (a UUID into the local users table); workos mode accepts `workos_sub` (a literal WorkOS user id; not validated). Pass null (or omit both fields entirely) to clear the currentUser — the next identity-resolving request on the mode then falls through to the default-user bootstrap.")
 
 		Payload(func() {
 			Attribute("mode", String, "Which mode's currentUser to write.", func() {

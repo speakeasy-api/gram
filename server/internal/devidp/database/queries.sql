@@ -321,6 +321,12 @@ ON CONFLICT (mode) DO UPDATE SET
   updated_at = clock_timestamp()
 RETURNING *;
 
+-- DeleteCurrentUser is the clear path — wipes the row entirely. The next
+-- identity-resolving request on the mode will fall through to the
+-- default-user bootstrap (idp-design.md §3).
+-- name: DeleteCurrentUser :exec
+DELETE FROM current_users WHERE mode = @mode;
+
 -- =============================================================================
 -- auth_codes / tokens (shared by every OAuth-shaped mode; idp-design.md §5)
 -- =============================================================================

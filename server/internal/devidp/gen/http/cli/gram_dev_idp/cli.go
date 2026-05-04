@@ -457,7 +457,7 @@ func devIdpUsage() {
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] dev-idp COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    get-current-user: Read the per-mode currentUser. 404s when no row exists yet for that mode.`)
-	fmt.Fprintln(os.Stderr, `    set-current-user: UPSERT the per-mode currentUser. Local modes accept `+"`"+`user_id`+"`"+` (a UUID into the local users table); workos mode accepts `+"`"+`workos_sub`+"`"+` (a literal WorkOS user id; not validated).`)
+	fmt.Fprintln(os.Stderr, `    set-current-user: UPSERT or clear the per-mode currentUser. Local modes accept `+"`"+`user_id`+"`"+` (a UUID into the local users table); workos mode accepts `+"`"+`workos_sub`+"`"+` (a literal WorkOS user id; not validated). Pass null (or omit both fields entirely) to clear the currentUser — the next identity-resolving request on the mode then falls through to the default-user bootstrap.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s dev-idp COMMAND --help\n", os.Args[0])
@@ -488,7 +488,7 @@ func devIdpSetCurrentUserUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `UPSERT the per-mode currentUser. Local modes accept `+"`"+`user_id`+"`"+` (a UUID into the local users table); workos mode accepts `+"`"+`workos_sub`+"`"+` (a literal WorkOS user id; not validated).`)
+	fmt.Fprintln(os.Stderr, `UPSERT or clear the per-mode currentUser. Local modes accept `+"`"+`user_id`+"`"+` (a UUID into the local users table); workos mode accepts `+"`"+`workos_sub`+"`"+` (a literal WorkOS user id; not validated). Pass null (or omit both fields entirely) to clear the currentUser — the next identity-resolving request on the mode then falls through to the default-user bootstrap.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)

@@ -76,6 +76,16 @@ func (s *DevIdpService) GetCurrentUser(ctx context.Context, p *gen.GetCurrentUse
 }
 
 func (s *DevIdpService) SetCurrentUser(ctx context.Context, p *gen.SetCurrentUserPayload) (*gen.CurrentUser, error) {
+	if isClearRequest(p) {
+		if !isKnownMode(p.Mode) {
+			return nil, oops.E(oops.CodeBadRequest, nil, "unknown mode %q", p.Mode)
+		}
+		if err := repo.New(s.db).DeleteCurrentUser(ctx, p.Mode); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "clear currentUser").Log(ctx, s.logger)
+		}
+		return &gen.CurrentUser{Mode: p.Mode, User: nil, Workos: nil}, nil
+	}
+
 	subjectRef, err := s.subjectRefForSet(ctx, p)
 	if err != nil {
 		return nil, err
@@ -91,6 +101,19 @@ func (s *DevIdpService) SetCurrentUser(ctx context.Context, p *gen.SetCurrentUse
 	}
 
 	return s.buildCurrentUserView(ctx, queries, row.Mode, row.SubjectRef)
+}
+
+// isClearRequest detects the overloaded clear shape: both subject-ref
+// fields absent (or explicitly empty). When true, SetCurrentUser tombstones
+// the row instead of upserting.
+func isClearRequest(p *gen.SetCurrentUserPayload) bool {
+	userIDEmpty := p.UserID == nil || *p.UserID == ""
+	workosEmpty := p.WorkosSub == nil || *p.WorkosSub == ""
+	return userIDEmpty && workosEmpty
+}
+
+func isKnownMode(mode string) bool {
+	return mode == modeMockSpeakeasy || mode == modeOAuth21 || mode == modeOAuth2 || mode == modeWorkos
 }
 
 // subjectRefForSet validates the per-mode body shape (idp-design.md §6.2):

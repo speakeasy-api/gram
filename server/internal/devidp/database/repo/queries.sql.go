@@ -389,6 +389,18 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 	return i, err
 }
 
+const deleteCurrentUser = `-- name: DeleteCurrentUser :exec
+DELETE FROM current_users WHERE mode = $1
+`
+
+// DeleteCurrentUser is the clear path — wipes the row entirely. The next
+// identity-resolving request on the mode will fall through to the
+// default-user bootstrap (idp-design.md §3).
+func (q *Queries) DeleteCurrentUser(ctx context.Context, mode string) error {
+	_, err := q.db.Exec(ctx, deleteCurrentUser, mode)
+	return err
+}
+
 const deleteCurrentUsersBySubjectRef = `-- name: DeleteCurrentUsersBySubjectRef :exec
 DELETE FROM current_users WHERE subject_ref = $1
 `

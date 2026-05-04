@@ -17,9 +17,11 @@ import (
 type Service interface {
 	// Read the per-mode currentUser. 404s when no row exists yet for that mode.
 	GetCurrentUser(context.Context, *GetCurrentUserPayload) (res *CurrentUser, err error)
-	// UPSERT the per-mode currentUser. Local modes accept `user_id` (a UUID into
-	// the local users table); workos mode accepts `workos_sub` (a literal WorkOS
-	// user id; not validated).
+	// UPSERT or clear the per-mode currentUser. Local modes accept `user_id` (a
+	// UUID into the local users table); workos mode accepts `workos_sub` (a
+	// literal WorkOS user id; not validated). Pass null (or omit both fields
+	// entirely) to clear the currentUser — the next identity-resolving request on
+	// the mode then falls through to the default-user bootstrap.
 	SetCurrentUser(context.Context, *SetCurrentUserPayload) (res *CurrentUser, err error)
 }
 
