@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	mockidp "github.com/speakeasy-api/gram/mock-speakeasy-idp"
+	mockidp "github.com/speakeasy-api/gram/server/internal/testenv/testidp"
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"

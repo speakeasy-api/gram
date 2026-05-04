@@ -8,7 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
-	mockidp "github.com/speakeasy-api/gram/mock-speakeasy-idp"
+	mockidp "github.com/speakeasy-api/gram/server/internal/testenv/testidp"
 	gen "github.com/speakeasy-api/gram/server/gen/collections"
 	collectionsRepo "github.com/speakeasy-api/gram/server/internal/collections/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"

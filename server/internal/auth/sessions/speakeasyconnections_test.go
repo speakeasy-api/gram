@@ -16,7 +16,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
-	mockidp "github.com/speakeasy-api/gram/mock-speakeasy-idp"
+	mockidp "github.com/speakeasy-api/gram/server/internal/testenv/testidp"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"

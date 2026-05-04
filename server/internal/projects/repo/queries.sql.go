@@ -63,6 +63,35 @@ func (q *Queries) DeleteProject(ctx context.Context, id uuid.UUID) (uuid.UUID, e
 	return id, err
 }
 
+const getFirstProject = `-- name: GetFirstProject :one
+SELECT id, name, slug, organization_id, logo_asset_id, functions_runner_version, created_at, updated_at, deleted_at, deleted
+FROM projects
+WHERE deleted IS FALSE
+ORDER BY id ASC
+LIMIT 1
+`
+
+// GetFirstProject returns any non-deleted project. Used by the hooks
+// local-dev session-cache fallback to pick a target project without
+// needing to know which org owns it. Local-dev only.
+func (q *Queries) GetFirstProject(ctx context.Context) (Project, error) {
+	row := q.db.QueryRow(ctx, getFirstProject)
+	var i Project
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.OrganizationID,
+		&i.LogoAssetID,
+		&i.FunctionsRunnerVersion,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const getProjectByID = `-- name: GetProjectByID :one
 SELECT id, name, slug, organization_id, logo_asset_id, functions_runner_version, created_at, updated_at, deleted_at, deleted
 FROM projects

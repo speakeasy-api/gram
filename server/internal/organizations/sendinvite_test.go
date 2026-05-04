@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	mockidp "github.com/speakeasy-api/gram/mock-speakeasy-idp"
+	mockidp "github.com/speakeasy-api/gram/server/internal/testenv/testidp"
 
 	gen "github.com/speakeasy-api/gram/server/gen/organizations"
 	"github.com/speakeasy-api/gram/server/internal/authz"
