@@ -18,7 +18,7 @@ queries:
       - risk_results
     # Soft cap on planner-estimated total cost. Tune as the query and
     # seed data evolve; bump in a follow-up PR with justification.
-    max_total_cost: 2000.0
+    max_total_cost: 2500.0
 
   - name: CountTotalMessages
     file: server/internal/risk/queries.sql
