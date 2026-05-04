@@ -70,6 +70,10 @@ func (m *mockBillingRepo) CreateTopUpCheckout(ctx context.Context, orgID, server
 	return args.String(0), args.Error(1)
 }
 
+func (m *mockBillingRepo) IsTopUpProductID(productID string) bool {
+	return false
+}
+
 func (m *mockBillingRepo) CreateCustomerSession(ctx context.Context, orgID string) (string, error) {
 	return "", fmt.Errorf("not implemented")
 }

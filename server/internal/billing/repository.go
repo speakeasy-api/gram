@@ -54,6 +54,7 @@ type Repository interface {
 	GetStoredPeriodUsage(ctx context.Context, orgID string) (*gen.PeriodUsage, error)
 	CreateCheckout(ctx context.Context, orgID string, serverURL string, successURL string) (string, error)
 	CreateTopUpCheckout(ctx context.Context, orgID, serverURL, successURL string) (string, error)
+	IsTopUpProductID(productID string) bool
 	CreateCustomerSession(ctx context.Context, orgID string) (string, error)
 	GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error)
 	ValidateAndParseWebhookEvent(ctx context.Context, payload []byte, webhookHeader http.Header) (*PolarWebhookPayload, error)

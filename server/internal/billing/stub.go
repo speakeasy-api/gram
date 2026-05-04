@@ -74,6 +74,10 @@ func (s *StubClient) CreateTopUpCheckout(ctx context.Context, orgID, serverURL, 
 	return "", fmt.Errorf("not implemented")
 }
 
+func (s *StubClient) IsTopUpProductID(productID string) bool {
+	return false
+}
+
 func (s *StubClient) CreateCustomerSession(ctx context.Context, orgID string) (string, error) {
 	_, span := s.tracer.Start(ctx, "stub_client.create_customer_session")
 	span.SetStatus(codes.Error, "not implemented")

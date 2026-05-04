@@ -120,6 +120,14 @@ func (s *Service) HandlePolarWebhook(w http.ResponseWriter, r *http.Request) err
 		return nil
 	}
 
+	// Top-up orders never change subscription tier; skip the tier-refresh path
+	// and emit a distinct event so analytics don't conflate them with subscription changes.
+	if webhookPayload.Type == "order.paid" &&
+		webhookPayload.Data.Product != nil &&
+		s.billingRepo.IsTopUpProductID(webhookPayload.Data.Product.ID) {
+		return s.handleTopUpOrder(ctx, logger, webhookPayload)
+	}
+
 	existingOrgMetadata, err := s.orgRepo.GetOrganizationMetadata(ctx, webhookPayload.Data.Customer.ExternalID)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to get organization metadata").Log(ctx, logger)
@@ -176,6 +184,30 @@ func (s *Service) HandlePolarWebhook(w http.ResponseWriter, r *http.Request) err
 		"product_type": productType,
 		"event":        webhookPayload.Type,
 		"email":        webhookPayload.Data.Customer.Email,
+	}); err != nil {
+		logger.ErrorContext(ctx, "failed to capture posthog event", attr.SlogError(err))
+	}
+
+	return nil
+}
+
+func (s *Service) handleTopUpOrder(ctx context.Context, logger *slog.Logger, webhookPayload *billing.PolarWebhookPayload) error {
+	orgID := webhookPayload.Data.Customer.ExternalID
+
+	if err := s.billingRepo.InvalidateBillingCustomerCaches(ctx, orgID); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to invalidate customer tier cache").Log(ctx, logger)
+	}
+	if _, err := s.billingRepo.GetPeriodUsage(ctx, orgID); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to get period usage").Log(ctx, logger)
+	}
+
+	if err := s.posthogClient.CaptureEvent(ctx, "gram_topup_purchased", orgID, map[string]any{
+		"org_id":     orgID,
+		"org_name":   webhookPayload.Data.Customer.Name,
+		"org_slug":   orgID,
+		"is_gram":    true,
+		"product_id": webhookPayload.Data.Product.ID,
+		"email":      webhookPayload.Data.Customer.Email,
 	}); err != nil {
 		logger.ErrorContext(ctx, "failed to capture posthog event", attr.SlogError(err))
 	}
