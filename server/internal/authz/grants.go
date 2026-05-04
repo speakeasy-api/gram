@@ -39,6 +39,7 @@ var SystemRoleGrants = map[string][]*RoleGrant{
 		{Scope: string(ScopeMCPWrite)},
 		{Scope: string(ScopeMCPConnect)},
 		{Scope: string(ScopeEnvironmentRead)},
+		{Scope: string(ScopeEnvironmentWrite)},
 	},
 	SystemRoleMember: {
 		{Scope: string(ScopeOrgRead)},

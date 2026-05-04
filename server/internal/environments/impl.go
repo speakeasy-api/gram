@@ -327,7 +327,7 @@ func (s *Service) CloneEnvironment(ctx context.Context, payload *gen.CloneEnviro
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeEnvironmentWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
 		return nil, err
 	}
 
