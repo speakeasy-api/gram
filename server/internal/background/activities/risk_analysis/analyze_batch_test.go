@@ -13,6 +13,7 @@ import (
 
 	risk_analysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/chat"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	deploymentsrepo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
@@ -293,7 +294,9 @@ func insertAssistantToolCall(t *testing.T, conn *pgxpool.Pool, td testData, call
 	require.NoError(t, err)
 
 	messageID := "msg-" + uuid.NewString()
-	_, err = chatrepo.New(conn).CreateChatMessage(t.Context(), []chatrepo.CreateChatMessageParams{{
+	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), conn, nil)
+	t.Cleanup(func() { _ = shutdown(t.Context()) })
+	_, err = writer.Write(t.Context(), td.projectID, []chatrepo.CreateChatMessageParams{{
 		ChatID:           td.chatID,
 		Role:             "assistant",
 		ProjectID:        td.projectID,
