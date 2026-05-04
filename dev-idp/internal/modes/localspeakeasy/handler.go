@@ -11,6 +11,7 @@ package localspeakeasy
 
 import (
 	"context"
+	"database/sql"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -24,15 +25,11 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 
-	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/devidp/database/repo"
-	"github.com/speakeasy-api/gram/server/internal/devidp/defaultuser"
-	"github.com/speakeasy-api/gram/server/internal/o11y"
+	
+	"github.com/speakeasy-api/gram/dev-idp/internal/database/repo"
+	"github.com/speakeasy-api/gram/dev-idp/internal/defaultuser"
 )
 
 // Mode is the discriminator persisted on every auth_codes / tokens /
@@ -67,14 +64,14 @@ type Handler struct {
 	cfg    Config
 	tracer trace.Tracer
 	logger *slog.Logger
-	db     *pgxpool.Pool
+	db     *sql.DB
 }
 
-func NewHandler(cfg Config, logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool) *Handler {
+func NewHandler(cfg Config, logger *slog.Logger, tracerProvider trace.TracerProvider, db *sql.DB) *Handler {
 	return &Handler{
 		cfg:    cfg,
-		tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/devidp/modes/localspeakeasy"),
-		logger: logger.With(attr.SlogComponent("devidp." + Mode)),
+		tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/dev-idp/internal/modes/localspeakeasy"),
+		logger: logger.With(slog.String("component", "devidp." + Mode)),
 		db:     db,
 	}
 }
@@ -139,7 +136,7 @@ func (h *Handler) withSecretKey(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		key := r.Header.Get("speakeasy-auth-provider-key")
 		if key != h.cfg.SecretKey {
-			h.logger.WarnContext(r.Context(), "rejected: invalid provider key", attr.SlogHTTPRoute(r.URL.Path))
+			h.logger.WarnContext(r.Context(), "rejected: invalid provider key", slog.String("http.route", r.URL.Path))
 			writeJSON(w, http.StatusUnauthorized, map[string]string{
 				"error": "Unauthorized: invalid or missing provider key",
 			})
@@ -159,8 +156,8 @@ func (h *Handler) handleLogin(w http.ResponseWriter, r *http.Request) {
 	state := r.URL.Query().Get("state")
 
 	h.logger.InfoContext(ctx, "auth flow initiated",
-		attr.SlogEvent("devidp.mode.used"),
-		attr.SlogHTTPRoute(r.URL.Path),
+		slog.String("event", "devidp.mode.used"),
+		slog.String("http.route", r.URL.Path),
 	)
 
 	if returnURL == "" {
@@ -184,7 +181,7 @@ func (h *Handler) handleLogin(w http.ResponseWriter, r *http.Request) {
 
 	code, err := h.issueAuthCode(ctx, userID, returnURL)
 	if err != nil {
-		h.logger.ErrorContext(ctx, "issue auth code", attr.SlogError(err))
+		h.logger.ErrorContext(ctx, "issue auth code", slog.Any("error", err))
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to issue auth code"})
 		return
 	}
@@ -225,7 +222,7 @@ func (h *Handler) handleExchange(w http.ResponseWriter, r *http.Request) {
 		}
 		token, terr := h.issueIDToken(ctx, uid)
 		if terr != nil {
-			h.logger.ErrorContext(ctx, "issue id_token (fallback)", attr.SlogError(terr))
+			h.logger.ErrorContext(ctx, "issue id_token (fallback)", slog.Any("error", terr))
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to issue token"})
 			return
 		}
@@ -235,7 +232,7 @@ func (h *Handler) handleExchange(w http.ResponseWriter, r *http.Request) {
 
 	token, err := h.issueIDToken(ctx, codeRow.UserID)
 	if err != nil {
-		h.logger.ErrorContext(ctx, "issue id_token", attr.SlogError(err))
+		h.logger.ErrorContext(ctx, "issue id_token", slog.Any("error", err))
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to issue token"})
 		return
 	}
@@ -259,7 +256,7 @@ func (h *Handler) handleValidate(w http.ResponseWriter, r *http.Request) {
 
 	resp, err := h.validateResponseFor(ctx, queries, tokenRow.UserID)
 	if err != nil {
-		h.logger.ErrorContext(ctx, "build validate response", attr.SlogError(err))
+		h.logger.ErrorContext(ctx, "build validate response", slog.Any("error", err))
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to load user"})
 		return
 	}
@@ -271,7 +268,7 @@ func (h *Handler) handleRevoke(w http.ResponseWriter, r *http.Request) {
 	idToken := r.Header.Get("speakeasy-auth-provider-id-token")
 	if idToken != "" {
 		if err := repo.New(h.db).RevokeToken(ctx, repo.RevokeTokenParams{Token: idToken, Mode: Mode}); err != nil {
-			h.logger.WarnContext(ctx, "revoke token", attr.SlogError(err))
+			h.logger.WarnContext(ctx, "revoke token", slog.Any("error", err))
 		}
 	}
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
@@ -310,44 +307,44 @@ func (h *Handler) handleRegister(w http.ResponseWriter, r *http.Request) {
 		accountType = "free"
 	}
 
-	dbtx, err := h.db.Begin(ctx)
+	dbtx, err := h.db.BeginTx(ctx, nil)
 	if err != nil {
-		h.logger.ErrorContext(ctx, "begin register tx", attr.SlogError(err))
+		h.logger.ErrorContext(ctx, "begin register tx", slog.Any("error", err))
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to register"})
 		return
 	}
-	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+	defer func() { _ = dbtx.Rollback() }()
 
 	q := repo.New(dbtx)
 	org, err := q.CreateOrganization(ctx, repo.CreateOrganizationParams{
 		Name:        body.OrganizationName,
 		Slug:        slugify(body.OrganizationName),
-		AccountType: pgtype.Text{String: accountType, Valid: true},
-		WorkosID:    pgtype.Text{String: "", Valid: false},
+		AccountType: sql.NullString{String: accountType, Valid: true},
+		WorkosID:    sql.NullString{String: "", Valid: false},
 	})
 	if err != nil {
-		h.logger.ErrorContext(ctx, "create organization", attr.SlogError(err))
+		h.logger.ErrorContext(ctx, "create organization", slog.Any("error", err))
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to create organization"})
 		return
 	}
 	if _, err := q.CreateMembership(ctx, repo.CreateMembershipParams{
 		UserID:         tokenRow.UserID,
 		OrganizationID: org.ID,
-		Role:           pgtype.Text{String: "member", Valid: true},
+		Role:           sql.NullString{String: "member", Valid: true},
 	}); err != nil {
-		h.logger.ErrorContext(ctx, "create membership", attr.SlogError(err))
+		h.logger.ErrorContext(ctx, "create membership", slog.Any("error", err))
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to attach membership"})
 		return
 	}
-	if err := dbtx.Commit(ctx); err != nil {
-		h.logger.ErrorContext(ctx, "commit register tx", attr.SlogError(err))
+	if err := dbtx.Commit(); err != nil {
+		h.logger.ErrorContext(ctx, "commit register tx", slog.Any("error", err))
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to register"})
 		return
 	}
 
 	resp, err := h.validateResponseFor(ctx, repo.New(h.db), tokenRow.UserID)
 	if err != nil {
-		h.logger.ErrorContext(ctx, "build register response", attr.SlogError(err))
+		h.logger.ErrorContext(ctx, "build register response", slog.Any("error", err))
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to load user"})
 		return
 	}
@@ -366,7 +363,7 @@ var errCurrentUserMissing = errors.New("currentUser references a missing user ro
 func (h *Handler) resolveCurrentUserID(ctx context.Context) (uuid.UUID, error) {
 	queries := repo.New(h.db)
 	row, err := queries.GetCurrentUser(ctx, Mode)
-	if errors.Is(err, pgx.ErrNoRows) {
+	if errors.Is(err, sql.ErrNoRows) {
 		// First touch on this mode: bootstrap the default user from the
 		// local git committer (idp-design.md §3).
 		uid, berr := defaultuser.BootstrapLocalUser(ctx, h.db, Mode)
@@ -383,7 +380,7 @@ func (h *Handler) resolveCurrentUserID(ctx context.Context) (uuid.UUID, error) {
 		return uuid.Nil, fmt.Errorf("parse currentUser subject_ref: %w", err)
 	}
 	if _, err := queries.GetUser(ctx, id); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if errors.Is(err, sql.ErrNoRows) {
 			return uuid.Nil, errCurrentUserMissing
 		}
 		return uuid.Nil, fmt.Errorf("look up currentUser: %w", err)
@@ -399,10 +396,10 @@ func (h *Handler) issueAuthCode(ctx context.Context, userID uuid.UUID, returnURL
 		UserID:              userID,
 		ClientID:            clientIDSentinel,
 		RedirectUri:         returnURL,
-		CodeChallenge:       pgtype.Text{String: "", Valid: false},
-		CodeChallengeMethod: pgtype.Text{String: "", Valid: false},
-		Scope:               pgtype.Text{String: "", Valid: false},
-		ExpiresAt:           pgtype.Timestamptz{Time: time.Now().Add(authCodeLifetime), Valid: true, InfinityModifier: pgtype.Finite},
+		CodeChallenge:       sql.NullString{String: "", Valid: false},
+		CodeChallengeMethod: sql.NullString{String: "", Valid: false},
+		Scope:               sql.NullString{String: "", Valid: false},
+		ExpiresAt:           time.Now().Add(authCodeLifetime),
 	})
 	if err != nil {
 		return "", fmt.Errorf("insert auth_code: %w", err)
@@ -418,8 +415,8 @@ func (h *Handler) issueIDToken(ctx context.Context, userID uuid.UUID) (string, e
 		UserID:    userID,
 		ClientID:  clientIDSentinel,
 		Kind:      "id_token",
-		Scope:     pgtype.Text{String: "", Valid: false},
-		ExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(tokenLifetime), Valid: true, InfinityModifier: pgtype.Finite},
+		Scope:     sql.NullString{String: "", Valid: false},
+		ExpiresAt: time.Now().Add(tokenLifetime),
 	})
 	if err != nil {
 		return "", fmt.Errorf("insert id_token: %w", err)
@@ -445,8 +442,8 @@ func (h *Handler) validateResponseFor(ctx context.Context, queries *repo.Queries
 			PhotoURL:     pgTextPtr(user.PhotoUrl),
 			GithubHandle: pgTextPtr(user.GithubHandle),
 			Admin:        user.Admin,
-			CreatedAt:    user.CreatedAt.Time.UTC().Format(time.RFC3339),
-			UpdatedAt:    user.UpdatedAt.Time.UTC().Format(time.RFC3339),
+			CreatedAt:    user.CreatedAt.UTC().Format(time.RFC3339),
+			UpdatedAt:    user.UpdatedAt.UTC().Format(time.RFC3339),
 			Whitelisted:  user.Whitelisted,
 		},
 		Organizations: make([]orgJSON, 0, len(orgs)),
@@ -456,8 +453,8 @@ func (h *Handler) validateResponseFor(ctx context.Context, queries *repo.Queries
 			ID:                 o.ID.String(),
 			Name:               o.Name,
 			Slug:               o.Slug,
-			CreatedAt:          o.CreatedAt.Time.UTC().Format(time.RFC3339),
-			UpdatedAt:          o.UpdatedAt.Time.UTC().Format(time.RFC3339),
+			CreatedAt:          o.CreatedAt.UTC().Format(time.RFC3339),
+			UpdatedAt:          o.UpdatedAt.UTC().Format(time.RFC3339),
 			AccountType:        o.AccountType,
 			SSOConnectionID:    nil,
 			WorkOSID:           pgTextPtr(o.WorkosID),
@@ -479,7 +476,7 @@ func randomToken() string {
 	return hex.EncodeToString(b)
 }
 
-func pgTextPtr(t pgtype.Text) *string {
+func pgTextPtr(t sql.NullString) *string {
 	if !t.Valid {
 		return nil
 	}
@@ -498,3 +495,4 @@ func slugify(name string) string {
 	s = leadingTrailingDash.ReplaceAllString(s, "")
 	return s
 }
+

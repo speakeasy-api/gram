@@ -2,38 +2,36 @@ package service
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"log/slog"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
 
-	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/devidp/database/repo"
-	srv "github.com/speakeasy-api/gram/server/internal/devidp/gen/http/users/server"
-	gen "github.com/speakeasy-api/gram/server/internal/devidp/gen/users"
-	"github.com/speakeasy-api/gram/server/internal/middleware"
-	"github.com/speakeasy-api/gram/server/internal/o11y"
-	"github.com/speakeasy-api/gram/server/internal/oops"
+	
+	"github.com/speakeasy-api/gram/dev-idp/internal/conv"
+	"github.com/speakeasy-api/gram/dev-idp/internal/database/repo"
+	srv "github.com/speakeasy-api/gram/dev-idp/gen/http/users/server"
+	gen "github.com/speakeasy-api/gram/dev-idp/gen/users"
+	"github.com/speakeasy-api/gram/dev-idp/internal/middleware"
+	"github.com/speakeasy-api/gram/dev-idp/internal/oops"
 )
 
 // UsersService is the dev-idp /rpc/users.* implementation.
 type UsersService struct {
 	tracer trace.Tracer
 	logger *slog.Logger
-	db     *pgxpool.Pool
+	db     *sql.DB
 }
 
 var _ gen.Service = (*UsersService)(nil)
 
-func NewUsersService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool) *UsersService {
+func NewUsersService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *sql.DB) *UsersService {
 	return &UsersService{
-		tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/devidp/service/users"),
-		logger: logger.With(attr.SlogComponent("devidp.users")),
+		tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/dev-idp/internal/service/users"),
+		logger: logger.With(slog.String("component", "devidp.users")),
 		db:     db,
 	}
 }
@@ -52,10 +50,10 @@ func (s *UsersService) Create(ctx context.Context, p *gen.CreatePayload) (*gen.U
 	row, err := repo.New(s.db).CreateUser(ctx, repo.CreateUserParams{
 		Email:        p.Email,
 		DisplayName:  p.DisplayName,
-		PhotoUrl:     conv.PtrToPGTextEmpty(p.PhotoURL),
-		GithubHandle: conv.PtrToPGTextEmpty(p.GithubHandle),
-		Admin:        conv.PtrToPGBool(p.Admin),
-		Whitelisted:  conv.PtrToPGBool(p.Whitelisted),
+		PhotoUrl:     conv.PtrToNullString(p.PhotoURL),
+		GithubHandle: conv.PtrToNullString(p.GithubHandle),
+		Admin:        conv.PtrBool(p.Admin, false),
+		Whitelisted:  conv.PtrBool(p.Whitelisted, true),
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "create user").Log(ctx, s.logger)
@@ -72,15 +70,15 @@ func (s *UsersService) Update(ctx context.Context, p *gen.UpdatePayload) (*gen.U
 
 	row, err := repo.New(s.db).UpdateUser(ctx, repo.UpdateUserParams{
 		ID:           id,
-		Email:        conv.PtrToPGTextEmpty(p.Email),
-		DisplayName:  conv.PtrToPGTextEmpty(p.DisplayName),
-		PhotoUrl:     conv.PtrToPGTextEmpty(p.PhotoURL),
-		GithubHandle: conv.PtrToPGTextEmpty(p.GithubHandle),
-		Admin:        conv.PtrToPGBool(p.Admin),
-		Whitelisted:  conv.PtrToPGBool(p.Whitelisted),
+		Email:        conv.PtrToNullString(p.Email),
+		DisplayName:  conv.PtrToNullString(p.DisplayName),
+		PhotoUrl:     conv.PtrToNullString(p.PhotoURL),
+		GithubHandle: conv.PtrToNullString(p.GithubHandle),
+		Admin:        conv.PtrBool(p.Admin, false),
+		Whitelisted:  conv.PtrBool(p.Whitelisted, true),
 	})
 	switch {
-	case errors.Is(err, pgx.ErrNoRows):
+	case errors.Is(err, sql.ErrNoRows):
 		return nil, oops.E(oops.CodeNotFound, nil, "user not found")
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "update user").Log(ctx, s.logger)
@@ -101,7 +99,7 @@ func (s *UsersService) List(ctx context.Context, p *gen.ListPayload) (*gen.ListU
 
 	rows, err := repo.New(s.db).ListUsers(ctx, repo.ListUsersParams{
 		After:   after,
-		MaxRows: int32(p.Limit) + 1, //nolint:gosec // Goa validates Limit ∈ [1, 100]
+		MaxRows: int64(p.Limit) + 1, //nolint:gosec // Goa validates Limit ∈ [1, 100]
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list users").Log(ctx, s.logger)
@@ -128,11 +126,11 @@ func (s *UsersService) Delete(ctx context.Context, p *gen.DeletePayload) error {
 		return oops.E(oops.CodeBadRequest, err, "invalid user id")
 	}
 
-	dbtx, err := s.db.Begin(ctx)
+	dbtx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "begin delete-user tx").Log(ctx, s.logger)
 	}
-	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+	defer func() { _ = dbtx.Rollback() }()
 
 	q := repo.New(dbtx)
 	if err := q.DeleteCurrentUsersBySubjectRef(ctx, id.String()); err != nil {
@@ -141,7 +139,7 @@ func (s *UsersService) Delete(ctx context.Context, p *gen.DeletePayload) error {
 	if err := q.DeleteUser(ctx, id); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "delete user").Log(ctx, s.logger)
 	}
-	if err := dbtx.Commit(ctx); err != nil {
+	if err := dbtx.Commit(); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "commit delete-user tx").Log(ctx, s.logger)
 	}
 
@@ -153,11 +151,12 @@ func userView(r repo.User) *gen.User {
 		ID:           r.ID.String(),
 		Email:        r.Email,
 		DisplayName:  r.DisplayName,
-		PhotoURL:     conv.FromPGText[string](r.PhotoUrl),
-		GithubHandle: conv.FromPGText[string](r.GithubHandle),
+		PhotoURL:     conv.FromNullString(r.PhotoUrl),
+		GithubHandle: conv.FromNullString(r.GithubHandle),
 		Admin:        r.Admin,
 		Whitelisted:  r.Whitelisted,
-		CreatedAt:    r.CreatedAt.Time.UTC().Format(timeFormat),
-		UpdatedAt:    r.UpdatedAt.Time.UTC().Format(timeFormat),
+		CreatedAt:    r.CreatedAt.UTC().Format(timeFormat),
+		UpdatedAt:    r.UpdatedAt.UTC().Format(timeFormat),
 	}
 }
+

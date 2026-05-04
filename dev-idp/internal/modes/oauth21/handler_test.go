@@ -4,15 +4,29 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/trace"
+	tracenoop "go.opentelemetry.io/otel/trace/noop"
 
-	"github.com/speakeasy-api/gram/server/internal/devidp/keystore"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/dev-idp/internal/keystore"
+	"github.com/speakeasy-api/gram/plog"
 )
+
+func newTestLogger(t *testing.T) *slog.Logger {
+	t.Helper()
+	return plog.NewLogger(io.Discard)
+}
+
+func newTestTracer(t *testing.T) trace.TracerProvider {
+	t.Helper()
+	return tracenoop.NewTracerProvider()
+}
 
 func TestValidatePKCES256_AcceptsCorrectVerifier(t *testing.T) {
 	t.Parallel()
@@ -47,13 +61,13 @@ func TestScopeContains(t *testing.T) {
 func TestOIDCDiscoveryDocumentShape(t *testing.T) {
 	t.Parallel()
 
-	ks, err := keystore.New(nil, testenv.NewLogger(t))
+	ks, err := keystore.New(nil, newTestLogger(t))
 	require.NoError(t, err)
 	h := NewHandler(
 		Config{ExternalURL: "https://idp.example.com"},
 		ks,
-		testenv.NewLogger(t),
-		testenv.NewTracerProvider(t),
+		newTestLogger(t),
+		newTestTracer(t),
 		nil,
 	)
 
@@ -86,13 +100,13 @@ func TestOIDCDiscoveryDocumentShape(t *testing.T) {
 func TestAuthorizeRejectsRequestsWithoutPKCE(t *testing.T) {
 	t.Parallel()
 
-	ks, err := keystore.New(nil, testenv.NewLogger(t))
+	ks, err := keystore.New(nil, newTestLogger(t))
 	require.NoError(t, err)
 	h := NewHandler(
 		Config{ExternalURL: "https://idp.example.com"},
 		ks,
-		testenv.NewLogger(t),
-		testenv.NewTracerProvider(t),
+		newTestLogger(t),
+		newTestTracer(t),
 		nil, // db unused: PKCE check fires before any DB call
 	)
 
@@ -112,13 +126,13 @@ func TestAuthorizeRejectsRequestsWithoutPKCE(t *testing.T) {
 func TestAuthorizeRejectsNonS256Challenge(t *testing.T) {
 	t.Parallel()
 
-	ks, err := keystore.New(nil, testenv.NewLogger(t))
+	ks, err := keystore.New(nil, newTestLogger(t))
 	require.NoError(t, err)
 	h := NewHandler(
 		Config{ExternalURL: "https://idp.example.com"},
 		ks,
-		testenv.NewLogger(t),
-		testenv.NewTracerProvider(t),
+		newTestLogger(t),
+		newTestTracer(t),
 		nil,
 	)
 
@@ -134,3 +148,4 @@ func TestAuthorizeRejectsNonS256Challenge(t *testing.T) {
 	require.Equal(t, "invalid_request", body["error"])
 	require.Contains(t, body["error_description"], "S256")
 }
+

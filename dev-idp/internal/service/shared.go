@@ -8,7 +8,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/dev-idp/internal/oops"
 )
 
 // timeFormat is the wire format for every timestamptz the dev-idp returns
@@ -44,3 +44,4 @@ func optionalUUID(in *string, field string) (uuid.NullUUID, error) {
 	}
 	return uuid.NullUUID{UUID: parsed, Valid: true}, nil
 }
+

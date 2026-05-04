@@ -6,20 +6,27 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"encoding/pem"
+	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/devidp/keystore"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/dev-idp/internal/keystore"
+	"github.com/speakeasy-api/gram/plog"
 )
+
+func newLogger(t *testing.T) *slog.Logger {
+	t.Helper()
+	return plog.NewLogger(io.Discard)
+}
 
 func TestNewGeneratesEphemeralKey(t *testing.T) {
 	t.Parallel()
 
-	ks, err := keystore.New(nil, testenv.NewLogger(t))
+	ks, err := keystore.New(nil, newLogger(t))
 	require.NoError(t, err)
 	require.NotNil(t, ks.PrivateKey())
 	require.NotEmpty(t, ks.KID())
@@ -35,7 +42,7 @@ func TestNewLoadsPKCS8PEM(t *testing.T) {
 	require.NoError(t, err)
 	pemBytes := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: der})
 
-	ks, err := keystore.New(pemBytes, testenv.NewLogger(t))
+	ks, err := keystore.New(pemBytes, newLogger(t))
 	require.NoError(t, err)
 	require.True(t, ks.PrivateKey().Equal(priv))
 }
@@ -48,7 +55,7 @@ func TestNewLoadsPKCS1PEM(t *testing.T) {
 	der := x509.MarshalPKCS1PrivateKey(priv)
 	pemBytes := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: der})
 
-	ks, err := keystore.New(pemBytes, testenv.NewLogger(t))
+	ks, err := keystore.New(pemBytes, newLogger(t))
 	require.NoError(t, err)
 	require.True(t, ks.PrivateKey().Equal(priv))
 }
@@ -62,9 +69,9 @@ func TestKIDIsStableAcrossInstances(t *testing.T) {
 	require.NoError(t, err)
 	pemBytes := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: der})
 
-	a, err := keystore.New(pemBytes, testenv.NewLogger(t))
+	a, err := keystore.New(pemBytes, newLogger(t))
 	require.NoError(t, err)
-	b, err := keystore.New(pemBytes, testenv.NewLogger(t))
+	b, err := keystore.New(pemBytes, newLogger(t))
 	require.NoError(t, err)
 
 	require.Equal(t, a.KID(), b.KID())
@@ -73,7 +80,7 @@ func TestKIDIsStableAcrossInstances(t *testing.T) {
 func TestJWKSHandlerServesValidDocument(t *testing.T) {
 	t.Parallel()
 
-	ks, err := keystore.New(nil, testenv.NewLogger(t))
+	ks, err := keystore.New(nil, newLogger(t))
 	require.NoError(t, err)
 
 	rec := httptest.NewRecorder()
@@ -107,6 +114,6 @@ func TestJWKSHandlerServesValidDocument(t *testing.T) {
 func TestNewRejectsInvalidPEM(t *testing.T) {
 	t.Parallel()
 
-	_, err := keystore.New([]byte("not a pem"), testenv.NewLogger(t))
+	_, err := keystore.New([]byte("not a pem"), newLogger(t))
 	require.Error(t, err)
 }

@@ -2,25 +2,39 @@ package oauth2
 
 import (
 	"encoding/json"
+	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/trace"
+	tracenoop "go.opentelemetry.io/otel/trace/noop"
 
-	"github.com/speakeasy-api/gram/server/internal/devidp/keystore"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/dev-idp/internal/keystore"
+	"github.com/speakeasy-api/gram/plog"
 )
+
+func newTestLogger(t *testing.T) *slog.Logger {
+	t.Helper()
+	return plog.NewLogger(io.Discard)
+}
+
+func newTestTracer(t *testing.T) trace.TracerProvider {
+	t.Helper()
+	return tracenoop.NewTracerProvider()
+}
 
 func newTestHandler(t *testing.T) *Handler {
 	t.Helper()
-	ks, err := keystore.New(nil, testenv.NewLogger(t))
+	ks, err := keystore.New(nil, newTestLogger(t))
 	require.NoError(t, err)
 	return NewHandler(
 		Config{ExternalURL: "https://idp.example.com"},
 		ks,
-		testenv.NewLogger(t),
-		testenv.NewTracerProvider(t),
+		newTestLogger(t),
+		newTestTracer(t),
 		nil,
 	)
 }
@@ -89,3 +103,4 @@ func TestAuthorizeRejectsBadPKCEMethod(t *testing.T) {
 // would have been validated, and that path needs the current_users
 // row). It belongs in the integration test ticket — covered there
 // alongside the rest of the per-mode end-to-end coverage.
+

@@ -12,6 +12,7 @@ package oauth21
 
 import (
 	"context"
+	"database/sql"
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
@@ -28,15 +29,12 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 
-	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/devidp/database/repo"
-	"github.com/speakeasy-api/gram/server/internal/devidp/defaultuser"
-	"github.com/speakeasy-api/gram/server/internal/devidp/keystore"
+	
+	"github.com/speakeasy-api/gram/dev-idp/internal/database/repo"
+	"github.com/speakeasy-api/gram/dev-idp/internal/defaultuser"
+	"github.com/speakeasy-api/gram/dev-idp/internal/keystore"
 )
 
 // Mode is the discriminator persisted on auth_codes / tokens /
@@ -71,15 +69,15 @@ type Handler struct {
 	cfg      Config
 	tracer   trace.Tracer
 	logger   *slog.Logger
-	db       *pgxpool.Pool
+	db       *sql.DB
 	keystore *keystore.Keystore
 }
 
-func NewHandler(cfg Config, ks *keystore.Keystore, logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool) *Handler {
+func NewHandler(cfg Config, ks *keystore.Keystore, logger *slog.Logger, tracerProvider trace.TracerProvider, db *sql.DB) *Handler {
 	return &Handler{
 		cfg:      cfg,
-		tracer:   tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/devidp/modes/oauth21"),
-		logger:   logger.With(attr.SlogComponent("devidp." + Mode)),
+		tracer:   tracerProvider.Tracer("github.com/speakeasy-api/gram/dev-idp/internal/modes/oauth21"),
+		logger:   logger.With(slog.String("component", "devidp." + Mode)),
 		db:       db,
 		keystore: ks,
 	}
@@ -211,8 +209,8 @@ func (h *Handler) handleAuthorize(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 
 	h.logger.InfoContext(ctx, "auth flow initiated",
-		attr.SlogEvent("devidp.mode.used"),
-		attr.SlogHTTPRoute(r.URL.Path),
+		slog.String("event", "devidp.mode.used"),
+		slog.String("http.route", r.URL.Path),
 	)
 
 	responseType := q.Get("response_type")
@@ -262,12 +260,12 @@ func (h *Handler) handleAuthorize(w http.ResponseWriter, r *http.Request) {
 		UserID:              userID,
 		ClientID:            clientID,
 		RedirectUri:         redirectURI,
-		CodeChallenge:       pgtype.Text{String: codeChallenge, Valid: true},
-		CodeChallengeMethod: pgtype.Text{String: codeChallengeMethod, Valid: true},
-		Scope:               pgtype.Text{String: scope, Valid: scope != ""},
-		ExpiresAt:           pgtype.Timestamptz{Time: time.Now().Add(authCodeLifetime), Valid: true, InfinityModifier: pgtype.Finite},
+		CodeChallenge:       sql.NullString{String: codeChallenge, Valid: true},
+		CodeChallengeMethod: sql.NullString{String: codeChallengeMethod, Valid: true},
+		Scope:               sql.NullString{String: scope, Valid: scope != ""},
+		ExpiresAt:           time.Now().Add(authCodeLifetime),
 	}); err != nil {
-		h.logger.ErrorContext(ctx, "create auth code", attr.SlogError(err))
+		h.logger.ErrorContext(ctx, "create auth code", slog.Any("error", err))
 		oauthError(w, http.StatusInternalServerError, "server_error", "failed to issue auth code")
 		return
 	}
@@ -347,7 +345,7 @@ func (h *Handler) handleAuthorizationCodeGrant(ctx context.Context, w http.Respo
 	scope := pgTextOrEmpty(stored.Scope)
 	tokens, err := h.issueTokenSet(ctx, queries, stored.UserID, stored.ClientID, scope)
 	if err != nil {
-		h.logger.ErrorContext(ctx, "issue token set", attr.SlogError(err))
+		h.logger.ErrorContext(ctx, "issue token set", slog.Any("error", err))
 		oauthError(w, http.StatusInternalServerError, "server_error", "failed to issue tokens")
 		return
 	}
@@ -375,14 +373,14 @@ func (h *Handler) handleRefreshTokenGrant(ctx context.Context, w http.ResponseWr
 	// OAuth 2.1 recommends rotating refresh tokens on use. Revoke the
 	// presented token; issueTokenSet mints a fresh pair.
 	if err := queries.RevokeToken(ctx, repo.RevokeTokenParams{Token: refreshToken, Mode: Mode}); err != nil {
-		h.logger.ErrorContext(ctx, "revoke rotated refresh token", attr.SlogError(err))
+		h.logger.ErrorContext(ctx, "revoke rotated refresh token", slog.Any("error", err))
 		oauthError(w, http.StatusInternalServerError, "server_error", "failed to rotate refresh token")
 		return
 	}
 
 	tokens, err := h.issueTokenSet(ctx, queries, stored.UserID, stored.ClientID, pgTextOrEmpty(stored.Scope))
 	if err != nil {
-		h.logger.ErrorContext(ctx, "issue token set on refresh", attr.SlogError(err))
+		h.logger.ErrorContext(ctx, "issue token set on refresh", slog.Any("error", err))
 		oauthError(w, http.StatusInternalServerError, "server_error", "failed to issue tokens")
 		return
 	}
@@ -402,8 +400,8 @@ func (h *Handler) issueTokenSet(ctx context.Context, queries *repo.Queries, user
 		UserID:    userID,
 		ClientID:  clientID,
 		Kind:      "access_token",
-		Scope:     pgtype.Text{String: scope, Valid: scope != ""},
-		ExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(accessTokenLifetime), Valid: true, InfinityModifier: pgtype.Finite},
+		Scope:     sql.NullString{String: scope, Valid: scope != ""},
+		ExpiresAt: time.Now().Add(accessTokenLifetime),
 	}); err != nil {
 		return tokenResponse{}, fmt.Errorf("insert access_token: %w", err)
 	}
@@ -413,8 +411,8 @@ func (h *Handler) issueTokenSet(ctx context.Context, queries *repo.Queries, user
 		UserID:    userID,
 		ClientID:  clientID,
 		Kind:      "refresh_token",
-		Scope:     pgtype.Text{String: scope, Valid: scope != ""},
-		ExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(refreshTokenLifetime), Valid: true, InfinityModifier: pgtype.Finite},
+		Scope:     sql.NullString{String: scope, Valid: scope != ""},
+		ExpiresAt: time.Now().Add(refreshTokenLifetime),
 	}); err != nil {
 		return tokenResponse{}, fmt.Errorf("insert refresh_token: %w", err)
 	}
@@ -439,8 +437,8 @@ func (h *Handler) issueTokenSet(ctx context.Context, queries *repo.Queries, user
 			UserID:    userID,
 			ClientID:  clientID,
 			Kind:      "id_token",
-			Scope:     pgtype.Text{String: scope, Valid: true},
-			ExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(idTokenLifetime), Valid: true, InfinityModifier: pgtype.Finite},
+			Scope:     sql.NullString{String: scope, Valid: true},
+			ExpiresAt: time.Now().Add(idTokenLifetime),
 		}); err != nil {
 			return tokenResponse{}, fmt.Errorf("insert id_token: %w", err)
 		}
@@ -522,7 +520,7 @@ func (h *Handler) handleUserinfo(w http.ResponseWriter, r *http.Request) {
 
 	user, err := queries.GetUser(ctx, stored.UserID)
 	if err != nil {
-		h.logger.ErrorContext(ctx, "look up user for userinfo", attr.SlogError(err))
+		h.logger.ErrorContext(ctx, "look up user for userinfo", slog.Any("error", err))
 		oauthError(w, http.StatusInternalServerError, "server_error", "failed to load user")
 		return
 	}
@@ -545,14 +543,14 @@ func (h *Handler) handleRevoke(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		// RFC 7009 still wants 200 here; the AS is "best effort." Log and
 		// return success.
-		h.logger.WarnContext(ctx, "revoke parse form", attr.SlogError(err))
+		h.logger.WarnContext(ctx, "revoke parse form", slog.Any("error", err))
 		w.WriteHeader(http.StatusOK)
 		return
 	}
 	token := r.Form.Get("token")
 	if token != "" {
 		if err := repo.New(h.db).RevokeToken(ctx, repo.RevokeTokenParams{Token: token, Mode: Mode}); err != nil {
-			h.logger.WarnContext(ctx, "revoke token", attr.SlogError(err))
+			h.logger.WarnContext(ctx, "revoke token", slog.Any("error", err))
 		}
 	}
 	w.WriteHeader(http.StatusOK)
@@ -567,7 +565,7 @@ var errCurrentUserMissing = errors.New("currentUser references a missing user ro
 func (h *Handler) resolveCurrentUserID(ctx context.Context) (uuid.UUID, error) {
 	queries := repo.New(h.db)
 	row, err := queries.GetCurrentUser(ctx, Mode)
-	if errors.Is(err, pgx.ErrNoRows) {
+	if errors.Is(err, sql.ErrNoRows) {
 		// First touch on this mode: bootstrap from git committer.
 		uid, berr := defaultuser.BootstrapLocalUser(ctx, h.db, Mode)
 		if berr != nil {
@@ -583,7 +581,7 @@ func (h *Handler) resolveCurrentUserID(ctx context.Context) (uuid.UUID, error) {
 		return uuid.Nil, fmt.Errorf("parse currentUser subject_ref: %w", err)
 	}
 	if _, err := queries.GetUser(ctx, id); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if errors.Is(err, sql.ErrNoRows) {
 			return uuid.Nil, errCurrentUserMissing
 		}
 		return uuid.Nil, fmt.Errorf("look up currentUser: %w", err)
@@ -616,7 +614,7 @@ func bearerToken(r *http.Request) string {
 	return strings.TrimSpace(strings.TrimPrefix(h, "Bearer "))
 }
 
-func pgTextOrEmpty(t pgtype.Text) string {
+func pgTextOrEmpty(t sql.NullString) string {
 	if !t.Valid {
 		return ""
 	}
@@ -642,3 +640,4 @@ func oauthError(w http.ResponseWriter, status int, code, description string) {
 		"error_description": description,
 	})
 }
+

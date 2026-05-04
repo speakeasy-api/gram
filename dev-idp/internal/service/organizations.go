@@ -2,38 +2,37 @@ package service
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"log/slog"
+	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
 
-	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/devidp/database/repo"
-	srv "github.com/speakeasy-api/gram/server/internal/devidp/gen/http/organizations/server"
-	gen "github.com/speakeasy-api/gram/server/internal/devidp/gen/organizations"
-	"github.com/speakeasy-api/gram/server/internal/middleware"
-	"github.com/speakeasy-api/gram/server/internal/oops"
+	
+	"github.com/speakeasy-api/gram/dev-idp/internal/conv"
+	"github.com/speakeasy-api/gram/dev-idp/internal/database/repo"
+	srv "github.com/speakeasy-api/gram/dev-idp/gen/http/organizations/server"
+	gen "github.com/speakeasy-api/gram/dev-idp/gen/organizations"
+	"github.com/speakeasy-api/gram/dev-idp/internal/middleware"
+	"github.com/speakeasy-api/gram/dev-idp/internal/oops"
 )
 
 // OrganizationsService is the dev-idp /rpc/organizations.* implementation.
 type OrganizationsService struct {
 	tracer trace.Tracer
 	logger *slog.Logger
-	db     *pgxpool.Pool
+	db     *sql.DB
 }
 
 var _ gen.Service = (*OrganizationsService)(nil)
 
-func NewOrganizationsService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool) *OrganizationsService {
+func NewOrganizationsService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *sql.DB) *OrganizationsService {
 	return &OrganizationsService{
-		tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/devidp/service/organizations"),
-		logger: logger.With(attr.SlogComponent("devidp.organizations")),
+		tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/dev-idp/internal/service/organizations"),
+		logger: logger.With(slog.String("component", "devidp.organizations")),
 		db:     db,
 	}
 }
@@ -54,8 +53,8 @@ func (s *OrganizationsService) Create(ctx context.Context, p *gen.CreatePayload)
 	row, err := queries.CreateOrganization(ctx, repo.CreateOrganizationParams{
 		Name:        p.Name,
 		Slug:        p.Slug,
-		AccountType: conv.PtrToPGTextEmpty(p.AccountType),
-		WorkosID:    conv.PtrToPGTextEmpty(p.WorkosID),
+		AccountType: conv.PtrToNullString(p.AccountType),
+		WorkosID:    conv.PtrToNullString(p.WorkosID),
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "create organization").Log(ctx, s.logger)
@@ -71,23 +70,32 @@ func (s *OrganizationsService) Update(ctx context.Context, p *gen.UpdatePayload)
 	}
 
 	// Empty string on workos_id means "clear"; absent means "leave alone";
-	// non-empty means "set". The SQL CASE/COALESCE pair handles all three.
+	// non-empty means "set". Clearing routes through a dedicated query so
+	// the partial-update path stays a simple COALESCE.
 	clearWorkos := p.WorkosID != nil && *p.WorkosID == ""
-	workosNarg := pgtype.Text{Valid: false, String: ""}
-	if !clearWorkos {
-		workosNarg = conv.PtrToPGTextEmpty(p.WorkosID)
+
+	queries := repo.New(s.db)
+	now := time.Now()
+
+	if clearWorkos {
+		if _, err := queries.ClearOrganizationWorkosID(ctx, repo.ClearOrganizationWorkosIDParams{ID: id, Ts: now}); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return nil, oops.E(oops.CodeNotFound, nil, "organization not found")
+			}
+			return nil, oops.E(oops.CodeUnexpected, err, "clear organization workos_id").Log(ctx, s.logger)
+		}
 	}
 
-	row, err := repo.New(s.db).UpdateOrganization(ctx, repo.UpdateOrganizationParams{
-		Name:          conv.PtrToPGTextEmpty(p.Name),
-		Slug:          conv.PtrToPGTextEmpty(p.Slug),
-		AccountType:   conv.PtrToPGTextEmpty(p.AccountType),
-		ClearWorkosID: clearWorkos,
-		WorkosID:      workosNarg,
-		ID:            id,
+	row, err := queries.UpdateOrganization(ctx, repo.UpdateOrganizationParams{
+		Name:        conv.PtrToNullString(p.Name),
+		Slug:        conv.PtrToNullString(p.Slug),
+		AccountType: conv.PtrToNullString(p.AccountType),
+		WorkosID:    conv.PtrToNullString(p.WorkosID),
+		Ts:          now,
+		ID:          id,
 	})
 	switch {
-	case errors.Is(err, pgx.ErrNoRows):
+	case errors.Is(err, sql.ErrNoRows):
 		return nil, oops.E(oops.CodeNotFound, nil, "organization not found")
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "update organization").Log(ctx, s.logger)
@@ -109,7 +117,7 @@ func (s *OrganizationsService) List(ctx context.Context, p *gen.ListPayload) (*g
 	queries := repo.New(s.db)
 	rows, err := queries.ListOrganizations(ctx, repo.ListOrganizationsParams{
 		After:   after,
-		MaxRows: int32(p.Limit) + 1, //nolint:gosec // Goa validates Limit ∈ [1, 100]
+		MaxRows: int64(p.Limit) + 1, //nolint:gosec // Goa validates Limit ∈ [1, 100]
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list organizations").Log(ctx, s.logger)
@@ -144,8 +152,9 @@ func organizationView(r repo.Organization) *gen.Organization {
 		Name:        r.Name,
 		Slug:        r.Slug,
 		AccountType: r.AccountType,
-		WorkosID:    conv.FromPGText[string](r.WorkosID),
-		CreatedAt:   r.CreatedAt.Time.UTC().Format(timeFormat),
-		UpdatedAt:   r.UpdatedAt.Time.UTC().Format(timeFormat),
+		WorkosID:    conv.FromNullString(r.WorkosID),
+		CreatedAt:   r.CreatedAt.UTC().Format(timeFormat),
+		UpdatedAt:   r.UpdatedAt.UTC().Format(timeFormat),
 	}
 }
+

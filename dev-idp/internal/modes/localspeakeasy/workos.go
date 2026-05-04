@@ -24,20 +24,19 @@
 package localspeakeasy
 
 import (
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/devidp/database/repo"
+	"github.com/speakeasy-api/gram/dev-idp/internal/database/repo"
 )
 
 // invitationLifetime is how long an emulated invitation stays in the
@@ -93,12 +92,12 @@ func (h *Handler) handleWorkosGetUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	user, err := repo.New(h.db).GetUser(ctx, id)
-	if errors.Is(err, pgx.ErrNoRows) {
+	if errors.Is(err, sql.ErrNoRows) {
 		writeWorkosError(w, http.StatusNotFound, "user not found")
 		return
 	}
 	if err != nil {
-		h.logger.ErrorContext(ctx, "workos get user", attr.SlogError(err))
+		h.logger.ErrorContext(ctx, "workos get user", slog.Any("error", err))
 		writeWorkosError(w, http.StatusInternalServerError, "failed to load user")
 		return
 	}
@@ -115,9 +114,9 @@ func (h *Handler) handleWorkosListUsers(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	emailNarg := pgtype.Text{String: "", Valid: false}
+	emailNarg := sql.NullString{String: "", Valid: false}
 	if email := q.Get("email"); email != "" {
-		emailNarg = pgtype.Text{String: email, Valid: true}
+		emailNarg = sql.NullString{String: email, Valid: true}
 	}
 	orgFilter, err := optionalQueryUUID(q, "organization_id")
 	if err != nil {
@@ -129,10 +128,10 @@ func (h *Handler) handleWorkosListUsers(w http.ResponseWriter, r *http.Request) 
 		After:          after,
 		Email:          emailNarg,
 		OrganizationID: orgFilter,
-		MaxRows:        int32(limit) + 1, //nolint:gosec // limit is clamped above
+		MaxRows:        int64(limit) + 1, //nolint:gosec // limit is clamped above
 	})
 	if err != nil {
-		h.logger.ErrorContext(ctx, "workos list users", attr.SlogError(err))
+		h.logger.ErrorContext(ctx, "workos list users", slog.Any("error", err))
 		writeWorkosError(w, http.StatusInternalServerError, "failed to list users")
 		return
 	}
@@ -161,12 +160,12 @@ func (h *Handler) handleWorkosGetOrganization(w http.ResponseWriter, r *http.Req
 		return
 	}
 	org, err := repo.New(h.db).GetOrganization(ctx, id)
-	if errors.Is(err, pgx.ErrNoRows) {
+	if errors.Is(err, sql.ErrNoRows) {
 		writeWorkosError(w, http.StatusNotFound, "organization not found")
 		return
 	}
 	if err != nil {
-		h.logger.ErrorContext(ctx, "workos get organization", attr.SlogError(err))
+		h.logger.ErrorContext(ctx, "workos get organization", slog.Any("error", err))
 		writeWorkosError(w, http.StatusInternalServerError, "failed to load organization")
 		return
 	}
@@ -201,10 +200,10 @@ func (h *Handler) handleWorkosListMemberships(w http.ResponseWriter, r *http.Req
 		After:          after,
 		UserID:         userFilter,
 		OrganizationID: orgFilter,
-		MaxRows:        int32(limit) + 1, //nolint:gosec // clamped
+		MaxRows:        int64(limit) + 1, //nolint:gosec // clamped
 	})
 	if err != nil {
-		h.logger.ErrorContext(ctx, "workos list memberships", attr.SlogError(err))
+		h.logger.ErrorContext(ctx, "workos list memberships", slog.Any("error", err))
 		writeWorkosError(w, http.StatusInternalServerError, "failed to list memberships")
 		return
 	}
@@ -242,17 +241,17 @@ func (h *Handler) handleWorkosUpdateMembership(w http.ResponseWriter, r *http.Re
 
 	queries := repo.New(h.db)
 	if _, err := queries.UpdateMembership(ctx, repo.UpdateMembershipParams{ID: id, Role: body.RoleSlug}); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if errors.Is(err, sql.ErrNoRows) {
 			writeWorkosError(w, http.StatusNotFound, "membership not found")
 			return
 		}
-		h.logger.ErrorContext(ctx, "workos update membership", attr.SlogError(err))
+		h.logger.ErrorContext(ctx, "workos update membership", slog.Any("error", err))
 		writeWorkosError(w, http.StatusInternalServerError, "failed to update membership")
 		return
 	}
 	row, err := queries.GetMembershipWithOrgName(ctx, id)
 	if err != nil {
-		h.logger.ErrorContext(ctx, "workos refetch membership", attr.SlogError(err))
+		h.logger.ErrorContext(ctx, "workos refetch membership", slog.Any("error", err))
 		writeWorkosError(w, http.StatusInternalServerError, "failed to load membership")
 		return
 	}
@@ -267,7 +266,7 @@ func (h *Handler) handleWorkosDeleteMembership(w http.ResponseWriter, r *http.Re
 		return
 	}
 	if err := repo.New(h.db).DeleteMembership(ctx, id); err != nil {
-		h.logger.ErrorContext(ctx, "workos delete membership", attr.SlogError(err))
+		h.logger.ErrorContext(ctx, "workos delete membership", slog.Any("error", err))
 		writeWorkosError(w, http.StatusInternalServerError, "failed to delete membership")
 		return
 	}
@@ -315,10 +314,10 @@ func (h *Handler) handleWorkosSendInvitation(w http.ResponseWriter, r *http.Requ
 		OrganizationID: orgID,
 		Token:          randomToken(),
 		InviterUserID:  inviterNarg,
-		ExpiresAt:      pgtype.Timestamptz{Time: time.Now().Add(invitationLifetime), Valid: true, InfinityModifier: pgtype.Finite},
+		ExpiresAt:      time.Now().Add(invitationLifetime),
 	})
 	if err != nil {
-		h.logger.ErrorContext(ctx, "workos send invitation", attr.SlogError(err))
+		h.logger.ErrorContext(ctx, "workos send invitation", slog.Any("error", err))
 		writeWorkosError(w, http.StatusInternalServerError, "failed to create invitation")
 		return
 	}
@@ -347,10 +346,10 @@ func (h *Handler) handleWorkosListInvitations(w http.ResponseWriter, r *http.Req
 	rows, err := repo.New(h.db).ListInvitationsByOrg(ctx, repo.ListInvitationsByOrgParams{
 		OrganizationID: orgID,
 		After:          after,
-		MaxRows:        int32(limit) + 1, //nolint:gosec // clamped
+		MaxRows:        int64(limit) + 1, //nolint:gosec // clamped
 	})
 	if err != nil {
-		h.logger.ErrorContext(ctx, "workos list invitations", attr.SlogError(err))
+		h.logger.ErrorContext(ctx, "workos list invitations", slog.Any("error", err))
 		writeWorkosError(w, http.StatusInternalServerError, "failed to list invitations")
 		return
 	}
@@ -374,12 +373,12 @@ func (h *Handler) handleWorkosGetInvitation(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	row, err := repo.New(h.db).GetInvitation(ctx, id)
-	if errors.Is(err, pgx.ErrNoRows) {
+	if errors.Is(err, sql.ErrNoRows) {
 		writeWorkosError(w, http.StatusNotFound, "invitation not found")
 		return
 	}
 	if err != nil {
-		h.logger.ErrorContext(ctx, "workos get invitation", attr.SlogError(err))
+		h.logger.ErrorContext(ctx, "workos get invitation", slog.Any("error", err))
 		writeWorkosError(w, http.StatusInternalServerError, "failed to load invitation")
 		return
 	}
@@ -390,12 +389,12 @@ func (h *Handler) handleWorkosFindInvitationByToken(w http.ResponseWriter, r *ht
 	ctx := r.Context()
 	token := r.PathValue("token")
 	row, err := repo.New(h.db).GetInvitationByToken(ctx, token)
-	if errors.Is(err, pgx.ErrNoRows) {
+	if errors.Is(err, sql.ErrNoRows) {
 		writeWorkosError(w, http.StatusNotFound, "invitation not found")
 		return
 	}
 	if err != nil {
-		h.logger.ErrorContext(ctx, "workos find invitation", attr.SlogError(err))
+		h.logger.ErrorContext(ctx, "workos find invitation", slog.Any("error", err))
 		writeWorkosError(w, http.StatusInternalServerError, "failed to load invitation")
 		return
 	}
@@ -409,13 +408,13 @@ func (h *Handler) handleWorkosRevokeInvitation(w http.ResponseWriter, r *http.Re
 		writeWorkosError(w, http.StatusBadRequest, "invalid invitation id")
 		return
 	}
-	row, err := repo.New(h.db).RevokeInvitation(ctx, id)
-	if errors.Is(err, pgx.ErrNoRows) {
+	row, err := repo.New(h.db).RevokeInvitation(ctx, repo.RevokeInvitationParams{ID: id, Ts: time.Now()})
+	if errors.Is(err, sql.ErrNoRows) {
 		writeWorkosError(w, http.StatusNotFound, "invitation not found")
 		return
 	}
 	if err != nil {
-		h.logger.ErrorContext(ctx, "workos revoke invitation", attr.SlogError(err))
+		h.logger.ErrorContext(ctx, "workos revoke invitation", slog.Any("error", err))
 		writeWorkosError(w, http.StatusInternalServerError, "failed to revoke invitation")
 		return
 	}
@@ -429,13 +428,13 @@ func (h *Handler) handleWorkosResendInvitation(w http.ResponseWriter, r *http.Re
 		writeWorkosError(w, http.StatusBadRequest, "invalid invitation id")
 		return
 	}
-	row, err := repo.New(h.db).TouchInvitation(ctx, id)
-	if errors.Is(err, pgx.ErrNoRows) {
+	row, err := repo.New(h.db).TouchInvitation(ctx, repo.TouchInvitationParams{ID: id, Ts: time.Now()})
+	if errors.Is(err, sql.ErrNoRows) {
 		writeWorkosError(w, http.StatusNotFound, "invitation not found")
 		return
 	}
 	if err != nil {
-		h.logger.ErrorContext(ctx, "workos resend invitation", attr.SlogError(err))
+		h.logger.ErrorContext(ctx, "workos resend invitation", slog.Any("error", err))
 		writeWorkosError(w, http.StatusInternalServerError, "failed to touch invitation")
 		return
 	}
@@ -457,12 +456,12 @@ func (h *Handler) handleWorkosAcceptInvitation(w http.ResponseWriter, r *http.Re
 
 	queries := repo.New(h.db)
 	inv, err := queries.GetInvitation(ctx, id)
-	if errors.Is(err, pgx.ErrNoRows) {
+	if errors.Is(err, sql.ErrNoRows) {
 		writeWorkosError(w, http.StatusNotFound, "invitation not found")
 		return
 	}
 	if err != nil {
-		h.logger.ErrorContext(ctx, "workos accept: load invitation", attr.SlogError(err))
+		h.logger.ErrorContext(ctx, "workos accept: load invitation", slog.Any("error", err))
 		writeWorkosError(w, http.StatusInternalServerError, "failed to load invitation")
 		return
 	}
@@ -478,23 +477,23 @@ func (h *Handler) handleWorkosAcceptInvitation(w http.ResponseWriter, r *http.Re
 		DisplayName: emailLocalPart(inv.Email),
 	})
 	if err != nil {
-		h.logger.ErrorContext(ctx, "workos accept: upsert user", attr.SlogError(err))
+		h.logger.ErrorContext(ctx, "workos accept: upsert user", slog.Any("error", err))
 		writeWorkosError(w, http.StatusInternalServerError, "failed to provision user")
 		return
 	}
 	if _, err := queries.CreateMembership(ctx, repo.CreateMembershipParams{
 		UserID:         user.ID,
 		OrganizationID: inv.OrganizationID,
-		Role:           pgtype.Text{String: "member", Valid: true},
+		Role:           sql.NullString{String: "member", Valid: true},
 	}); err != nil {
-		h.logger.ErrorContext(ctx, "workos accept: upsert membership", attr.SlogError(err))
+		h.logger.ErrorContext(ctx, "workos accept: upsert membership", slog.Any("error", err))
 		writeWorkosError(w, http.StatusInternalServerError, "failed to attach membership")
 		return
 	}
 
-	row, err := queries.AcceptInvitation(ctx, id)
+	row, err := queries.AcceptInvitation(ctx, repo.AcceptInvitationParams{ID: id, Ts: time.Now()})
 	if err != nil {
-		h.logger.ErrorContext(ctx, "workos accept: flip state", attr.SlogError(err))
+		h.logger.ErrorContext(ctx, "workos accept: flip state", slog.Any("error", err))
 		writeWorkosError(w, http.StatusInternalServerError, "failed to accept invitation")
 		return
 	}
@@ -514,7 +513,7 @@ func (h *Handler) handleWorkosListRoles(w http.ResponseWriter, r *http.Request) 
 	}
 	rows, err := repo.New(h.db).ListOrganizationRoles(ctx, orgID)
 	if err != nil {
-		h.logger.ErrorContext(ctx, "workos list roles", attr.SlogError(err))
+		h.logger.ErrorContext(ctx, "workos list roles", slog.Any("error", err))
 		writeWorkosError(w, http.StatusInternalServerError, "failed to list roles")
 		return
 	}
@@ -552,10 +551,10 @@ func (h *Handler) handleWorkosCreateRole(w http.ResponseWriter, r *http.Request)
 		OrganizationID: orgID,
 		Slug:           body.Slug,
 		Name:           body.Name,
-		Description:    pgtype.Text{String: body.Description, Valid: body.Description != ""},
+		Description:    sql.NullString{String: body.Description, Valid: body.Description != ""},
 	})
 	if err != nil {
-		h.logger.ErrorContext(ctx, "workos create role", attr.SlogError(err))
+		h.logger.ErrorContext(ctx, "workos create role", slog.Any("error", err))
 		writeWorkosError(w, http.StatusConflict, "role exists or insert failed")
 		return
 	}
@@ -581,15 +580,15 @@ func (h *Handler) handleWorkosUpdateRole(w http.ResponseWriter, r *http.Request)
 	row, err := repo.New(h.db).UpdateOrganizationRole(ctx, repo.UpdateOrganizationRoleParams{
 		OrganizationID: orgID,
 		Slug:           slug,
-		Name:           ptrToPGText(body.Name),
-		Description:    ptrToPGText(body.Description),
+		Name:           ptrToNullString(body.Name),
+		Description:    ptrToNullString(body.Description),
 	})
-	if errors.Is(err, pgx.ErrNoRows) {
+	if errors.Is(err, sql.ErrNoRows) {
 		writeWorkosError(w, http.StatusNotFound, "role not found")
 		return
 	}
 	if err != nil {
-		h.logger.ErrorContext(ctx, "workos update role", attr.SlogError(err))
+		h.logger.ErrorContext(ctx, "workos update role", slog.Any("error", err))
 		writeWorkosError(w, http.StatusInternalServerError, "failed to update role")
 		return
 	}
@@ -608,7 +607,7 @@ func (h *Handler) handleWorkosDeleteRole(w http.ResponseWriter, r *http.Request)
 		OrganizationID: orgID,
 		Slug:           slug,
 	}); err != nil {
-		h.logger.ErrorContext(ctx, "workos delete role", attr.SlogError(err))
+		h.logger.ErrorContext(ctx, "workos delete role", slog.Any("error", err))
 		writeWorkosError(w, http.StatusInternalServerError, "failed to delete role")
 		return
 	}
@@ -628,8 +627,8 @@ func workosUserView(u repo.User) workosUser {
 		Email:             u.Email,
 		EmailVerified:     true,
 		ProfilePictureURL: pgTextOrEmpty(u.PhotoUrl),
-		CreatedAt:         u.CreatedAt.Time.UTC().Format(time.RFC3339),
-		UpdatedAt:         u.UpdatedAt.Time.UTC().Format(time.RFC3339),
+		CreatedAt:         u.CreatedAt.UTC().Format(time.RFC3339),
+		UpdatedAt:         u.UpdatedAt.UTC().Format(time.RFC3339),
 		LastSignInAt:      "",
 		ExternalID:        "",
 		Metadata:          map[string]string{},
@@ -643,8 +642,8 @@ func workosOrganizationView(o repo.Organization) workosOrganization {
 		AllowProfilesOutsideOrganization: false,
 		Domains:                          []workosOrganizationDomain{},
 		StripeCustomerID:                 "",
-		CreatedAt:                        o.CreatedAt.Time.UTC().Format(time.RFC3339),
-		UpdatedAt:                        o.UpdatedAt.Time.UTC().Format(time.RFC3339),
+		CreatedAt:                        o.CreatedAt.UTC().Format(time.RFC3339),
+		UpdatedAt:                        o.UpdatedAt.UTC().Format(time.RFC3339),
 		ExternalID:                       pgTextOrEmpty(o.WorkosID),
 	}
 }
@@ -657,8 +656,8 @@ func workosMembershipView(m repo.ListMembershipsWithOrgNameRow) workosOrganizati
 		OrganizationName: m.OrganizationName,
 		Role:             workosRoleSlug{Slug: m.Role},
 		Status:           "active",
-		CreatedAt:        m.CreatedAt.Time.UTC().Format(time.RFC3339),
-		UpdatedAt:        m.UpdatedAt.Time.UTC().Format(time.RFC3339),
+		CreatedAt:        m.CreatedAt.UTC().Format(time.RFC3339),
+		UpdatedAt:        m.UpdatedAt.UTC().Format(time.RFC3339),
 	}
 }
 
@@ -673,9 +672,9 @@ func workosInvitationView(inv repo.Invitation) workosInvitation {
 		AcceptInvitationURL: "",
 		OrganizationID:      inv.OrganizationID.String(),
 		InviterUserID:       nullUUIDOrEmpty(inv.InviterUserID),
-		ExpiresAt:           inv.ExpiresAt.Time.UTC().Format(time.RFC3339),
-		CreatedAt:           inv.CreatedAt.Time.UTC().Format(time.RFC3339),
-		UpdatedAt:           inv.UpdatedAt.Time.UTC().Format(time.RFC3339),
+		ExpiresAt:           inv.ExpiresAt.UTC().Format(time.RFC3339),
+		CreatedAt:           inv.CreatedAt.UTC().Format(time.RFC3339),
+		UpdatedAt:           inv.UpdatedAt.UTC().Format(time.RFC3339),
 	}
 }
 
@@ -686,8 +685,8 @@ func workosRoleView(r repo.OrganizationRole) workosRole {
 		Slug:        r.Slug,
 		Description: r.Description,
 		Type:        "EnvironmentRole",
-		CreatedAt:   r.CreatedAt.Time.UTC().Format(time.RFC3339),
-		UpdatedAt:   r.UpdatedAt.Time.UTC().Format(time.RFC3339),
+		CreatedAt:   r.CreatedAt.UTC().Format(time.RFC3339),
+		UpdatedAt:   r.UpdatedAt.UTC().Format(time.RFC3339),
 	}
 }
 
@@ -771,14 +770,14 @@ func emailLocalPart(email string) string {
 	return before
 }
 
-func pgTextOrEmpty(t pgtype.Text) string {
+func pgTextOrEmpty(t sql.NullString) string {
 	if !t.Valid {
 		return ""
 	}
 	return t.String
 }
 
-func pgTimestamptzOrEmpty(t pgtype.Timestamptz) string {
+func pgTimestamptzOrEmpty(t sql.NullTime) string {
 	if !t.Valid {
 		return ""
 	}
@@ -792,11 +791,11 @@ func nullUUIDOrEmpty(u uuid.NullUUID) string {
 	return u.UUID.String()
 }
 
-func ptrToPGText(p *string) pgtype.Text {
+func ptrToNullString(p *string) sql.NullString {
 	if p == nil {
-		return pgtype.Text{String: "", Valid: false}
+		return sql.NullString{}
 	}
-	return pgtype.Text{String: *p, Valid: true}
+	return sql.NullString{String: *p, Valid: true}
 }
 
 // writeWorkosError follows the WorkOS error envelope shape closely enough
@@ -822,3 +821,4 @@ func statusCodeForJSON(status int) string {
 		return "server_error"
 	}
 }
+

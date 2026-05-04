@@ -2,22 +2,21 @@ package service
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"log/slog"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
 
-	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/devidp/database/repo"
-	srv "github.com/speakeasy-api/gram/server/internal/devidp/gen/http/organization_roles/server"
-	gen "github.com/speakeasy-api/gram/server/internal/devidp/gen/organization_roles"
-	"github.com/speakeasy-api/gram/server/internal/middleware"
-	"github.com/speakeasy-api/gram/server/internal/oops"
+	
+	"github.com/speakeasy-api/gram/dev-idp/internal/conv"
+	"github.com/speakeasy-api/gram/dev-idp/internal/database/repo"
+	srv "github.com/speakeasy-api/gram/dev-idp/gen/http/organization_roles/server"
+	gen "github.com/speakeasy-api/gram/dev-idp/gen/organization_roles"
+	"github.com/speakeasy-api/gram/dev-idp/internal/middleware"
+	"github.com/speakeasy-api/gram/dev-idp/internal/oops"
 )
 
 // OrganizationRolesService implements /rpc/organizationRoles.* — the Goa
@@ -25,15 +24,15 @@ import (
 type OrganizationRolesService struct {
 	tracer trace.Tracer
 	logger *slog.Logger
-	db     *pgxpool.Pool
+	db     *sql.DB
 }
 
 var _ gen.Service = (*OrganizationRolesService)(nil)
 
-func NewOrganizationRolesService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool) *OrganizationRolesService {
+func NewOrganizationRolesService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *sql.DB) *OrganizationRolesService {
 	return &OrganizationRolesService{
-		tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/devidp/service/organization_roles"),
-		logger: logger.With(attr.SlogComponent("devidp.organizationRoles")),
+		tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/dev-idp/internal/service/organization_roles"),
+		logger: logger.With(slog.String("component", "devidp.organizationRoles")),
 		db:     db,
 	}
 }
@@ -58,7 +57,7 @@ func (s *OrganizationRolesService) Create(ctx context.Context, p *gen.CreatePayl
 		OrganizationID: orgID,
 		Slug:           p.Slug,
 		Name:           p.Name,
-		Description:    conv.PtrToPGTextEmpty(p.Description),
+		Description:    conv.PtrToNullString(p.Description),
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "create organization role").Log(ctx, s.logger)
@@ -76,11 +75,11 @@ func (s *OrganizationRolesService) Update(ctx context.Context, p *gen.UpdatePayl
 	row, err := repo.New(s.db).UpdateOrganizationRole(ctx, repo.UpdateOrganizationRoleParams{
 		OrganizationID: orgID,
 		Slug:           p.Slug,
-		Name:           conv.PtrToPGTextEmpty(p.Name),
-		Description:    conv.PtrToPGTextEmpty(p.Description),
+		Name:           conv.PtrToNullString(p.Name),
+		Description:    conv.PtrToNullString(p.Description),
 	})
 	switch {
-	case errors.Is(err, pgx.ErrNoRows):
+	case errors.Is(err, sql.ErrNoRows):
 		return nil, oops.E(oops.CodeNotFound, nil, "role not found")
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "update organization role").Log(ctx, s.logger)
@@ -129,7 +128,8 @@ func organizationRoleView(r repo.OrganizationRole) *gen.OrganizationRole {
 		Slug:           r.Slug,
 		Name:           r.Name,
 		Description:    r.Description,
-		CreatedAt:      r.CreatedAt.Time.UTC().Format(timeFormat),
-		UpdatedAt:      r.UpdatedAt.Time.UTC().Format(timeFormat),
+		CreatedAt:      r.CreatedAt.UTC().Format(timeFormat),
+		UpdatedAt:      r.UpdatedAt.UTC().Format(timeFormat),
 	}
 }
+

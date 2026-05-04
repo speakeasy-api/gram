@@ -108,3 +108,4 @@ type workosRoleList struct {
 	Data         []workosRole `json:"data"`
 	ListMetadata listMetadata `json:"list_metadata"`
 }
+

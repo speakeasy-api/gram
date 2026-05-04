@@ -2,37 +2,36 @@ package service
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"log/slog"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
 
-	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/devidp/database/repo"
-	srv "github.com/speakeasy-api/gram/server/internal/devidp/gen/http/memberships/server"
-	gen "github.com/speakeasy-api/gram/server/internal/devidp/gen/memberships"
-	"github.com/speakeasy-api/gram/server/internal/middleware"
-	"github.com/speakeasy-api/gram/server/internal/oops"
+	
+	"github.com/speakeasy-api/gram/dev-idp/internal/conv"
+	"github.com/speakeasy-api/gram/dev-idp/internal/database/repo"
+	srv "github.com/speakeasy-api/gram/dev-idp/gen/http/memberships/server"
+	gen "github.com/speakeasy-api/gram/dev-idp/gen/memberships"
+	"github.com/speakeasy-api/gram/dev-idp/internal/middleware"
+	"github.com/speakeasy-api/gram/dev-idp/internal/oops"
 )
 
 // MembershipsService is the dev-idp /rpc/memberships.* implementation.
 type MembershipsService struct {
 	tracer trace.Tracer
 	logger *slog.Logger
-	db     *pgxpool.Pool
+	db     *sql.DB
 }
 
 var _ gen.Service = (*MembershipsService)(nil)
 
-func NewMembershipsService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool) *MembershipsService {
+func NewMembershipsService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *sql.DB) *MembershipsService {
 	return &MembershipsService{
-		tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/devidp/service/memberships"),
-		logger: logger.With(attr.SlogComponent("devidp.memberships")),
+		tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/dev-idp/internal/service/memberships"),
+		logger: logger.With(slog.String("component", "devidp.memberships")),
 		db:     db,
 	}
 }
@@ -60,7 +59,7 @@ func (s *MembershipsService) Create(ctx context.Context, p *gen.CreatePayload) (
 	row, err := repo.New(s.db).CreateMembership(ctx, repo.CreateMembershipParams{
 		UserID:         userID,
 		OrganizationID: orgID,
-		Role:           conv.PtrToPGTextEmpty(p.Role),
+		Role:           conv.PtrToNullString(p.Role),
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "create membership").Log(ctx, s.logger)
@@ -80,7 +79,7 @@ func (s *MembershipsService) Update(ctx context.Context, p *gen.UpdatePayload) (
 		Role: p.Role,
 	})
 	switch {
-	case errors.Is(err, pgx.ErrNoRows):
+	case errors.Is(err, sql.ErrNoRows):
 		return nil, oops.E(oops.CodeNotFound, nil, "membership not found")
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "update membership").Log(ctx, s.logger)
@@ -112,7 +111,7 @@ func (s *MembershipsService) List(ctx context.Context, p *gen.ListPayload) (*gen
 		After:          after,
 		UserID:         userFilter,
 		OrganizationID: orgFilter,
-		MaxRows:        int32(p.Limit) + 1, //nolint:gosec // Goa validates Limit ∈ [1, 100]
+		MaxRows:        int64(p.Limit) + 1, //nolint:gosec // Goa validates Limit ∈ [1, 100]
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list memberships").Log(ctx, s.logger)
@@ -147,7 +146,8 @@ func membershipView(r repo.Membership) *gen.Membership {
 		UserID:         r.UserID.String(),
 		OrganizationID: r.OrganizationID.String(),
 		Role:           r.Role,
-		CreatedAt:      r.CreatedAt.Time.UTC().Format(timeFormat),
-		UpdatedAt:      r.UpdatedAt.Time.UTC().Format(timeFormat),
+		CreatedAt:      r.CreatedAt.UTC().Format(timeFormat),
+		UpdatedAt:      r.UpdatedAt.UTC().Format(timeFormat),
 	}
 }
+

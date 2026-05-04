@@ -1,13 +1,13 @@
 // Package testidp serves an in-process Speakeasy IDP for tests. It's a
 // stripped-down successor to the standalone mock-speakeasy-idp binary's
-// mock-mode behavior — drops the OIDC bridge entirely (tests never
+// mock-mode behavior -- drops the OIDC bridge entirely (tests never
 // exercised it) and keeps just the /v1/speakeasy_provider/{login,
 // exchange,validate,revoke,register} surface against in-memory state.
 //
-// Production code does not import this package. The dev-idp's
-// `localspeakeasy` mode (server/internal/devidp/modes/localspeakeasy)
-// owns the same wire shape against a real Postgres store and is what
-// runs in `madprocs` / dev workflows.
+// The dev-idp's `localspeakeasy` mode (dev-idp/internal/modes/localspeakeasy)
+// owns the same wire shape against a real SQLite store and is what runs
+// in `madprocs` / dev workflows. This package is the public, in-process
+// entry point for server-side tests that don't want a process boundary.
 package testidp
 
 import (

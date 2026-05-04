@@ -1,12 +1,11 @@
 // Package design declares the Goa API for the dev-idp management surface.
 //
-// This API is intentionally separate from the production gram API: it lives
-// nested under server/internal/devidp/ so its design and generated code
-// cannot leak into the production binary. See idp-design.md §6.3 for the
-// rationale; CLAUDE.md describes the production design under server/design/.
+// This API is intentionally separate from the production gram API. It lives
+// under the top-level dev-idp/ project so its design and generated code
+// cannot leak into the production binary.
 //
 // Every method in every service here is unauthenticated. dev-idp is a
-// localhost-only tool — see idp-design.md §6.
+// localhost-only tool.
 package design
 
 import (

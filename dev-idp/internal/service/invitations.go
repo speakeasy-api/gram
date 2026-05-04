@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"database/sql"
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
@@ -10,18 +11,15 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
 
-	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/devidp/database/repo"
-	srv "github.com/speakeasy-api/gram/server/internal/devidp/gen/http/invitations/server"
-	gen "github.com/speakeasy-api/gram/server/internal/devidp/gen/invitations"
-	"github.com/speakeasy-api/gram/server/internal/middleware"
-	"github.com/speakeasy-api/gram/server/internal/oops"
+	
+	"github.com/speakeasy-api/gram/dev-idp/internal/database/repo"
+	srv "github.com/speakeasy-api/gram/dev-idp/gen/http/invitations/server"
+	gen "github.com/speakeasy-api/gram/dev-idp/gen/invitations"
+	"github.com/speakeasy-api/gram/dev-idp/internal/middleware"
+	"github.com/speakeasy-api/gram/dev-idp/internal/oops"
 )
 
 // invitationLifetime is how long a freshly-created invitation stays
@@ -36,15 +34,15 @@ const invitationLifetime = 30 * 24 * time.Hour
 type InvitationsService struct {
 	tracer trace.Tracer
 	logger *slog.Logger
-	db     *pgxpool.Pool
+	db     *sql.DB
 }
 
 var _ gen.Service = (*InvitationsService)(nil)
 
-func NewInvitationsService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool) *InvitationsService {
+func NewInvitationsService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *sql.DB) *InvitationsService {
 	return &InvitationsService{
-		tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/devidp/service/invitations"),
-		logger: logger.With(attr.SlogComponent("devidp.invitations")),
+		tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/dev-idp/internal/service/invitations"),
+		logger: logger.With(slog.String("component", "devidp.invitations")),
 		db:     db,
 	}
 }
@@ -79,7 +77,7 @@ func (s *InvitationsService) Create(ctx context.Context, p *gen.CreatePayload) (
 		OrganizationID: orgID,
 		Token:          newInvitationToken(),
 		InviterUserID:  inviterNarg,
-		ExpiresAt:      pgtype.Timestamptz{Time: time.Now().Add(invitationLifetime), Valid: true, InfinityModifier: pgtype.Finite},
+		ExpiresAt:      time.Now().Add(invitationLifetime),
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "create invitation").Log(ctx, s.logger)
@@ -105,7 +103,7 @@ func (s *InvitationsService) List(ctx context.Context, p *gen.ListPayload) (*gen
 	rows, err := repo.New(s.db).ListInvitationsByOrg(ctx, repo.ListInvitationsByOrgParams{
 		OrganizationID: orgID,
 		After:          after,
-		MaxRows:        int32(p.Limit) + 1, //nolint:gosec // Goa validates Limit ∈ [1, 100]
+		MaxRows:        int64(p.Limit) + 1, //nolint:gosec // Goa validates Limit ∈ [1, 100]
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list invitations").Log(ctx, s.logger)
@@ -127,7 +125,7 @@ func (s *InvitationsService) Get(ctx context.Context, p *gen.GetPayload) (*gen.I
 	}
 	row, err := repo.New(s.db).GetInvitation(ctx, id)
 	switch {
-	case errors.Is(err, pgx.ErrNoRows):
+	case errors.Is(err, sql.ErrNoRows):
 		return nil, oops.E(oops.CodeNotFound, nil, "invitation not found")
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "get invitation").Log(ctx, s.logger)
@@ -138,7 +136,7 @@ func (s *InvitationsService) Get(ctx context.Context, p *gen.GetPayload) (*gen.I
 func (s *InvitationsService) FindByToken(ctx context.Context, p *gen.FindByTokenPayload) (*gen.Invitation, error) {
 	row, err := repo.New(s.db).GetInvitationByToken(ctx, p.Token)
 	switch {
-	case errors.Is(err, pgx.ErrNoRows):
+	case errors.Is(err, sql.ErrNoRows):
 		return nil, oops.E(oops.CodeNotFound, nil, "invitation not found")
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "find invitation by token").Log(ctx, s.logger)
@@ -151,9 +149,9 @@ func (s *InvitationsService) Revoke(ctx context.Context, p *gen.RevokePayload) (
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid invitation id")
 	}
-	row, err := repo.New(s.db).RevokeInvitation(ctx, id)
+	row, err := repo.New(s.db).RevokeInvitation(ctx, repo.RevokeInvitationParams{ID: id, Ts: time.Now()})
 	switch {
-	case errors.Is(err, pgx.ErrNoRows):
+	case errors.Is(err, sql.ErrNoRows):
 		return nil, oops.E(oops.CodeNotFound, nil, "invitation not found")
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "revoke invitation").Log(ctx, s.logger)
@@ -166,9 +164,9 @@ func (s *InvitationsService) Resend(ctx context.Context, p *gen.ResendPayload) (
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid invitation id")
 	}
-	row, err := repo.New(s.db).TouchInvitation(ctx, id)
+	row, err := repo.New(s.db).TouchInvitation(ctx, repo.TouchInvitationParams{ID: id, Ts: time.Now()})
 	switch {
-	case errors.Is(err, pgx.ErrNoRows):
+	case errors.Is(err, sql.ErrNoRows):
 		return nil, oops.E(oops.CodeNotFound, nil, "invitation not found")
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "resend invitation").Log(ctx, s.logger)
@@ -191,7 +189,7 @@ func (s *InvitationsService) Accept(ctx context.Context, p *gen.AcceptPayload) (
 	queries := repo.New(s.db)
 	inv, err := queries.GetInvitation(ctx, id)
 	switch {
-	case errors.Is(err, pgx.ErrNoRows):
+	case errors.Is(err, sql.ErrNoRows):
 		return nil, oops.E(oops.CodeNotFound, nil, "invitation not found")
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "load invitation").Log(ctx, s.logger)
@@ -210,12 +208,12 @@ func (s *InvitationsService) Accept(ctx context.Context, p *gen.AcceptPayload) (
 	if _, err := queries.CreateMembership(ctx, repo.CreateMembershipParams{
 		UserID:         user.ID,
 		OrganizationID: inv.OrganizationID,
-		Role:           pgtype.Text{String: "member", Valid: true},
+		Role:           sql.NullString{String: "member", Valid: true},
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "attach membership for invited user").Log(ctx, s.logger)
 	}
 
-	row, err := queries.AcceptInvitation(ctx, id)
+	row, err := queries.AcceptInvitation(ctx, repo.AcceptInvitationParams{ID: id, Ts: time.Now()})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "accept invitation").Log(ctx, s.logger)
 	}
@@ -236,9 +234,9 @@ func invitationView(inv repo.Invitation) *gen.Invitation {
 		InviterUserID:  nil,
 		AcceptedAt:     nil,
 		RevokedAt:      nil,
-		ExpiresAt:      inv.ExpiresAt.Time.UTC().Format(timeFormat),
-		CreatedAt:      inv.CreatedAt.Time.UTC().Format(timeFormat),
-		UpdatedAt:      inv.UpdatedAt.Time.UTC().Format(timeFormat),
+		ExpiresAt:      inv.ExpiresAt.UTC().Format(timeFormat),
+		CreatedAt:      inv.CreatedAt.UTC().Format(timeFormat),
+		UpdatedAt:      inv.UpdatedAt.UTC().Format(timeFormat),
 	}
 	if inv.InviterUserID.Valid {
 		s := inv.InviterUserID.UUID.String()
@@ -273,3 +271,4 @@ func emailLocalPart(email string) string {
 	}
 	return email
 }
+

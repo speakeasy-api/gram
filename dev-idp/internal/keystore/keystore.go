@@ -23,8 +23,6 @@ import (
 	"log/slog"
 	"math/big"
 	"net/http"
-
-	"github.com/speakeasy-api/gram/server/internal/attr"
 )
 
 const rsaKeyBits = 2048
@@ -44,7 +42,7 @@ type Keystore struct {
 // The freshly-generated path is the dev-idp's default; tests that need a
 // stable JWKS across restarts pass `--rsa-private-key`.
 func New(pemBytes []byte, logger *slog.Logger) (*Keystore, error) {
-	logger = logger.With(attr.SlogComponent("devidp.keystore"))
+	logger = logger.With(slog.String("component", "devidp.keystore"))
 
 	priv, err := loadOrGenerate(pemBytes)
 	if err != nil {

@@ -1,7 +1,7 @@
-// Package defaultuser implements the dev-idp's "default user" bootstrap
-// (idp-design.md §3) — when an identity-resolving endpoint runs before
-// any operator/test has called /rpc/devIdp.setCurrentUser, the dev-idp
-// falls back to a user derived from the local git committer config.
+// Package defaultuser implements the dev-idp's "default user" bootstrap.
+// When an identity-resolving endpoint runs before any operator/test has
+// called /rpc/devIdp.setCurrentUser, the dev-idp falls back to a user
+// derived from the local git committer config.
 //
 // Local modes (local-speakeasy / oauth2-1 / oauth2) synthesize a row in
 // the dev-idp's users table with the committer email + name and place it
@@ -9,27 +9,25 @@
 // to point at that user, so the bootstrap fires at most once per mode
 // per dev-idp database.
 //
-// The workos mode does its own bootstrap path (it can't synthesize — its
+// The workos mode does its own bootstrap path (it can't synthesize -- its
 // identity universe is the live WorkOS account) and only borrows the
 // GitCommitter helper from this package.
 package defaultuser
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/speakeasy-api/gram/server/internal/devidp/database/repo"
+	"github.com/speakeasy-api/gram/dev-idp/internal/database/repo"
 )
 
-// DefaultOrgName is the organization the bootstrap places the default
-// user in. The slug is the lowercased name.
 const (
 	DefaultOrgName = "Speakeasy"
 	DefaultOrgSlug = "speakeasy"
@@ -42,9 +40,7 @@ type Committer struct {
 }
 
 // GitCommitter shells out to `git config --get user.email` and
-// `git config --get user.name`. Returns a wrapped error whose message
-// names committer email/name as the default-user source so callers can
-// surface it directly.
+// `git config --get user.name`.
 func GitCommitter(ctx context.Context) (Committer, error) {
 	emailOut, err := exec.CommandContext(ctx, "git", "config", "--get", "user.email").Output()
 	if err != nil {
@@ -67,18 +63,20 @@ func GitCommitter(ctx context.Context) (Committer, error) {
 	return Committer{Email: email, Name: name}, nil
 }
 
-// BootstrapLocalUser is the local-mode bootstrap path. Idempotent —
+// BootstrapLocalUser is the local-mode bootstrap path. Idempotent --
 // repeated calls converge on the same user/org/membership rows and the
 // same currentUser entry. Returns the bootstrapped user's id.
-func BootstrapLocalUser(ctx context.Context, db *pgxpool.Pool, mode string) (uuid.UUID, error) {
+func BootstrapLocalUser(ctx context.Context, db *sql.DB, mode string) (uuid.UUID, error) {
 	committer, err := GitCommitter(ctx)
 	if err != nil {
 		return uuid.Nil, err
 	}
 
 	queries := repo.New(db)
+	now := time.Now()
 
 	user, err := queries.UpsertUserByEmail(ctx, repo.UpsertUserByEmailParams{
+		ID:          uuid.New(),
 		Email:       committer.Email,
 		DisplayName: committer.Name,
 	})
@@ -87,6 +85,7 @@ func BootstrapLocalUser(ctx context.Context, db *pgxpool.Pool, mode string) (uui
 	}
 
 	org, err := queries.UpsertOrganizationBySlug(ctx, repo.UpsertOrganizationBySlugParams{
+		ID:   uuid.New(),
 		Name: DefaultOrgName,
 		Slug: DefaultOrgSlug,
 	})
@@ -98,19 +97,28 @@ func BootstrapLocalUser(ctx context.Context, db *pgxpool.Pool, mode string) (uui
 	// local-speakeasy WorkOS-emulation endpoints have something to return
 	// from /authorization/organizations/{id}/roles even before any test
 	// calls CreateRole.
-	for _, r := range []repo.UpsertOrganizationRoleParams{
-		{OrganizationID: org.ID, Slug: "admin", Name: "Admin", Description: pgtype.Text{String: "", Valid: false}},
-		{OrganizationID: org.ID, Slug: "member", Name: "Member", Description: pgtype.Text{String: "", Valid: false}},
+	for _, r := range []struct {
+		Slug, Name string
+	}{
+		{Slug: "admin", Name: "Admin"},
+		{Slug: "member", Name: "Member"},
 	} {
-		if _, err := queries.UpsertOrganizationRole(ctx, r); err != nil {
+		if _, err := queries.UpsertOrganizationRole(ctx, repo.UpsertOrganizationRoleParams{
+			ID:             uuid.New(),
+			OrganizationID: org.ID,
+			Slug:           r.Slug,
+			Name:           r.Name,
+			Description:    sql.NullString{},
+		}); err != nil {
 			return uuid.Nil, fmt.Errorf("seed default org role %q: %w", r.Slug, err)
 		}
 	}
 
 	if _, err := queries.CreateMembership(ctx, repo.CreateMembershipParams{
+		ID:             uuid.New(),
 		UserID:         user.ID,
 		OrganizationID: org.ID,
-		Role:           pgtype.Text{String: "", Valid: false},
+		Role:           sql.NullString{},
 	}); err != nil {
 		return uuid.Nil, fmt.Errorf("upsert default membership: %w", err)
 	}
@@ -118,6 +126,7 @@ func BootstrapLocalUser(ctx context.Context, db *pgxpool.Pool, mode string) (uui
 	if _, err := queries.UpsertCurrentUser(ctx, repo.UpsertCurrentUserParams{
 		Mode:       mode,
 		SubjectRef: user.ID.String(),
+		Ts:         now,
 	}); err != nil {
 		return uuid.Nil, fmt.Errorf("upsert default currentUser for %s: %w", mode, err)
 	}
