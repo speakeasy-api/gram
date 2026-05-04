@@ -99,7 +99,7 @@ func TestService_ListScopes_AllowsOrgReadGrant(t *testing.T) {
 
 	result, err := ti.service.ListScopes(ctx, &gen.ListScopesPayload{})
 	require.NoError(t, err)
-	require.Len(t, result.Scopes, 7)
+	require.Len(t, result.Scopes, 9)
 }
 
 func TestService_ListMembers_ForbiddenWithoutOrgReadGrant(t *testing.T) {
