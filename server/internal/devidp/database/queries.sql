@@ -7,7 +7,7 @@ INSERT INTO organizations (name, slug, account_type, workos_id)
 VALUES (
   @name,
   @slug,
-  COALESCE(sqlc.narg('account_type')::text, 'free'),
+  COALESCE(sqlc.narg('account_type')::text, 'enterprise'),
   sqlc.narg('workos_id')
 )
 RETURNING *;

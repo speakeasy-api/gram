@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS organizations (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   name TEXT NOT NULL,
   slug TEXT NOT NULL,
-  account_type TEXT NOT NULL DEFAULT 'free',
+  account_type TEXT NOT NULL DEFAULT 'enterprise',
   workos_id TEXT,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),

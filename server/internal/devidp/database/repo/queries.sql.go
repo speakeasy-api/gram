@@ -221,7 +221,7 @@ INSERT INTO organizations (name, slug, account_type, workos_id)
 VALUES (
   $1,
   $2,
-  COALESCE($3::text, 'free'),
+  COALESCE($3::text, 'enterprise'),
   $4
 )
 RETURNING id, name, slug, account_type, workos_id, created_at, updated_at
