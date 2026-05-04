@@ -496,6 +496,39 @@ func TestService_Info_ProjectFiltering(t *testing.T) {
 		require.ErrorIs(t, err, authz.ErrMissingGrants)
 		require.Nil(t, result)
 	})
+
+	t.Run("admin impersonating returns all projects", func(t *testing.T) {
+		t.Parallel()
+
+		userInfo := adminMockUserInfo()
+		userInfo.UserID = "admin-impersonate-user"
+		userInfo.Email = "admin-impersonate@speakeasyapi.dev"
+		userInfo.Organizations[0].ID = "admin-impersonate-org"
+		_, instance := newTestAuthServiceWithAuthz(t, userInfo)
+		ctx := setupInfoCtx(t, instance, userInfo)
+
+		orgID := userInfo.Organizations[0].ID
+		p1, err := instance.createTestProject(ctx, orgID, "ProjectA", "project-a")
+		require.NoError(t, err)
+		p2, err := instance.createTestProject(ctx, orgID, "ProjectB", "project-b")
+		require.NoError(t, err)
+
+		// Set admin override in context — no grants configured, so authz.Filter
+		// would fail or return empty. The override must bypass filtering entirely.
+		ctx = contextvalues.SetAdminOverrideInContext(ctx, orgID)
+
+		result, err := instance.service.Info(ctx, &gen.InfoPayload{})
+		require.NoError(t, err)
+		require.Len(t, result.Organizations, 1)
+		require.Len(t, result.Organizations[0].Projects, 2)
+
+		projectIDs := make(map[string]struct{}, 2)
+		for _, p := range result.Organizations[0].Projects {
+			projectIDs[p.ID] = struct{}{}
+		}
+		assert.Contains(t, projectIDs, p1.ID.String())
+		assert.Contains(t, projectIDs, p2.ID.String())
+	})
 }
 
 // TestService_Info_AdminVisitingCustomerOrgDoesNotUpsertRelationship verifies that

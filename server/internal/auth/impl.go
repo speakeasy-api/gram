@@ -417,7 +417,16 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 		}
 
 		allowedIDs := projectIDs
-		if len(projectIDs) > 0 && org.ID == authCtx.ActiveOrganizationID {
+		// Admins impersonating a customer org have the customer org in
+		// userInfo.Organizations (Speakeasy returns all orgs for admins),
+		// so the loop reaches it and org.ID == activeOrg is true. However
+		// the admin has no organization_users row in Gram's DB, which
+		// means authz.Filter has no grants to resolve. Skip filtering so
+		// they see all projects — mirrors ListGrants (PR #2502).
+		_, hasAdminOverride := contextvalues.GetAdminOverrideFromContext(ctx)
+		skipFilter := userInfo.Admin && hasAdminOverride
+
+		if len(projectIDs) > 0 && org.ID == authCtx.ActiveOrganizationID && !skipFilter {
 			checks := make([]authz.Check, len(projectIDs))
 			for i, id := range projectIDs {
 				checks[i] = authz.Check{Scope: authz.ScopeProjectRead, ResourceID: id, ResourceKind: "", Dimensions: nil}
