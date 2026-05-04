@@ -37,7 +37,13 @@ func newApp() *cli.App {
 				EnvVars: []string{"GRAM_LOG_PRETTY"},
 			},
 		},
-		Commands: []*cli.Command{newStartCommand(), newWorkerCommand(), newAdminCommand(), newVersionCommand()},
+		Commands: []*cli.Command{
+			newInitCommand(),
+			newStartCommand(),
+			newWorkerCommand(),
+			newAdminCommand(),
+			newVersionCommand(),
+		},
 		Before: func(c *cli.Context) error {
 			c.Context = o11y.PushAppInfo(c.Context, &o11y.AppInfo{
 				Name:    "gram",

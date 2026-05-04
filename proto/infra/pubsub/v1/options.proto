@@ -1,0 +1,18 @@
+edition = "2024";
+
+package infra.pubsub.v1;
+
+import "google/protobuf/descriptor.proto";
+import "google/protobuf/duration.proto";
+
+option go_package = "github.com/speakeasy-api/gram/protogen/infra/pubsub/v1;pubsubv1";
+
+message TopicOptions {
+  string name = 1;
+  google.protobuf.Duration retention_hint = 2;
+  map<string, string> labels = 3;
+}
+
+extend google.protobuf.MessageOptions {
+  TopicOptions topic = 50001;
+}

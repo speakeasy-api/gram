@@ -104,6 +104,20 @@ services:
         soft: 262144
         hard: 262144
 
+  pubsub-emulator:
+    image: google/cloud-sdk:489.0.0-emulators
+    ports:
+      - "${PUBSUB_EMULATOR_PORT}:8085"
+    command:
+      [
+        "gcloud",
+        "beta",
+        "emulators",
+        "pubsub",
+        "start",
+        "--host-port=0.0.0.0:8085",
+      ]
+
   gram-presidio:
     image: mcr.microsoft.com/presidio-analyzer:2.2.362
     restart: unless-stopped
