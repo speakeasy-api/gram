@@ -13,6 +13,26 @@ produces:
     - application/xml
     - application/gob
 paths:
+    /rpc/devIdp.clearCurrentUser:
+        post:
+            tags:
+                - devIdp
+            summary: clearCurrentUser devIdp
+            description: Clear the per-mode currentUser. The next identity-resolving request on the mode then falls through to the default-user bootstrap (idp-design.md §3) — git committer for local modes, WorkOS lookup for workos. Idempotent — clearing an already-cleared mode is a no-op.
+            operationId: devIdp#clearCurrentUser
+            parameters:
+                - name: ClearCurrentUserRequestBody
+                  in: body
+                  required: true
+                  schema:
+                    $ref: '#/definitions/DevIdpClearCurrentUserRequestBody'
+                    required:
+                        - mode
+            responses:
+                "204":
+                    description: No Content response.
+            schemes:
+                - http
     /rpc/devIdp.getCurrentUser:
         post:
             tags:
@@ -42,7 +62,7 @@ paths:
             tags:
                 - devIdp
             summary: setCurrentUser devIdp
-            description: UPSERT or clear the per-mode currentUser. Local modes accept `user_id` (a UUID into the local users table); workos mode accepts `workos_sub` (a literal WorkOS user id; not validated). Pass null (or omit both fields entirely) to clear the currentUser — the next identity-resolving request on the mode then falls through to the default-user bootstrap.
+            description: UPSERT the per-mode currentUser. Local modes accept `user_id` (a UUID into the local users table); workos mode accepts `workos_sub` (a literal WorkOS user id; not validated). To clear the currentUser instead, call `clearCurrentUser`.
             operationId: devIdp#setCurrentUser
             parameters:
                 - name: SetCurrentUserRequestBody
@@ -727,6 +747,23 @@ definitions:
                 organization_id: abc123
                 profile_picture_url: abc123
                 workos_sub: abc123
+        required:
+            - mode
+    DevIdpClearCurrentUserRequestBody:
+        title: DevIdpClearCurrentUserRequestBody
+        type: object
+        properties:
+            mode:
+                type: string
+                description: Which mode's currentUser to clear.
+                example: oauth2-1
+                enum:
+                    - local-speakeasy
+                    - oauth2-1
+                    - oauth2
+                    - workos
+        example:
+            mode: oauth2-1
         required:
             - mode
     DevIdpGetCurrentUserRequestBody:

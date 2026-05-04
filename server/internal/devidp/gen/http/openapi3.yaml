@@ -7,6 +7,22 @@ servers:
     - url: http://localhost:80
       description: Default server for gram-dev-idp
 paths:
+    /rpc/devIdp.clearCurrentUser:
+        post:
+            tags:
+                - devIdp
+            summary: clearCurrentUser devIdp
+            description: Clear the per-mode currentUser. The next identity-resolving request on the mode then falls through to the default-user bootstrap (idp-design.md §3) — git committer for local modes, WorkOS lookup for workos. Idempotent — clearing an already-cleared mode is a no-op.
+            operationId: devIdp#clearCurrentUser
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/GetCurrentUserRequestBody'
+            responses:
+                "204":
+                    description: No Content response.
     /rpc/devIdp.getCurrentUser:
         post:
             tags:
@@ -32,7 +48,7 @@ paths:
             tags:
                 - devIdp
             summary: setCurrentUser devIdp
-            description: UPSERT or clear the per-mode currentUser. Local modes accept `user_id` (a UUID into the local users table); workos mode accepts `workos_sub` (a literal WorkOS user id; not validated). Pass null (or omit both fields entirely) to clear the currentUser — the next identity-resolving request on the mode then falls through to the default-user bootstrap.
+            description: UPSERT the per-mode currentUser. Local modes accept `user_id` (a UUID into the local users table); workos mode accepts `workos_sub` (a literal WorkOS user id; not validated). To clear the currentUser instead, call `clearCurrentUser`.
             operationId: devIdp#setCurrentUser
             requestBody:
                 required: true

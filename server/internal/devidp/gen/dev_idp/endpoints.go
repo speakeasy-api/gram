@@ -16,15 +16,17 @@ import (
 
 // Endpoints wraps the "devIdp" service endpoints.
 type Endpoints struct {
-	GetCurrentUser goa.Endpoint
-	SetCurrentUser goa.Endpoint
+	GetCurrentUser   goa.Endpoint
+	SetCurrentUser   goa.Endpoint
+	ClearCurrentUser goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "devIdp" service with endpoints.
 func NewEndpoints(s Service) *Endpoints {
 	return &Endpoints{
-		GetCurrentUser: NewGetCurrentUserEndpoint(s),
-		SetCurrentUser: NewSetCurrentUserEndpoint(s),
+		GetCurrentUser:   NewGetCurrentUserEndpoint(s),
+		SetCurrentUser:   NewSetCurrentUserEndpoint(s),
+		ClearCurrentUser: NewClearCurrentUserEndpoint(s),
 	}
 }
 
@@ -32,6 +34,7 @@ func NewEndpoints(s Service) *Endpoints {
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.GetCurrentUser = m(e.GetCurrentUser)
 	e.SetCurrentUser = m(e.SetCurrentUser)
+	e.ClearCurrentUser = m(e.ClearCurrentUser)
 }
 
 // NewGetCurrentUserEndpoint returns an endpoint function that calls the method
@@ -49,5 +52,14 @@ func NewSetCurrentUserEndpoint(s Service) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
 		p := req.(*SetCurrentUserPayload)
 		return s.SetCurrentUser(ctx, p)
+	}
+}
+
+// NewClearCurrentUserEndpoint returns an endpoint function that calls the
+// method "clearCurrentUser" of service "devIdp".
+func NewClearCurrentUserEndpoint(s Service) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ClearCurrentUserPayload)
+		return nil, s.ClearCurrentUser(ctx, p)
 	}
 }

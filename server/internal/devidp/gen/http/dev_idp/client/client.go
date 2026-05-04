@@ -26,6 +26,10 @@ type Client struct {
 	// setCurrentUser endpoint.
 	SetCurrentUserDoer goahttp.Doer
 
+	// ClearCurrentUser Doer is the HTTP client used to make requests to the
+	// clearCurrentUser endpoint.
+	ClearCurrentUserDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -46,13 +50,14 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		GetCurrentUserDoer:  doer,
-		SetCurrentUserDoer:  doer,
-		RestoreResponseBody: restoreBody,
-		scheme:              scheme,
-		host:                host,
-		decoder:             dec,
-		encoder:             enc,
+		GetCurrentUserDoer:   doer,
+		SetCurrentUserDoer:   doer,
+		ClearCurrentUserDoer: doer,
+		RestoreResponseBody:  restoreBody,
+		scheme:               scheme,
+		host:                 host,
+		decoder:              dec,
+		encoder:              enc,
 	}
 }
 
@@ -99,6 +104,30 @@ func (c *Client) SetCurrentUser() goa.Endpoint {
 		resp, err := c.SetCurrentUserDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("devIdp", "setCurrentUser", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ClearCurrentUser returns an endpoint that makes HTTP requests to the devIdp
+// service clearCurrentUser server.
+func (c *Client) ClearCurrentUser() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeClearCurrentUserRequest(c.encoder)
+		decodeResponse = DecodeClearCurrentUserResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildClearCurrentUserRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ClearCurrentUserDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("devIdp", "clearCurrentUser", err)
 		}
 		return decodeResponse(resp)
 	}

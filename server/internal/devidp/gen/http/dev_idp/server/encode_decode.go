@@ -103,6 +103,45 @@ func DecodeSetCurrentUserRequest(mux goahttp.Muxer, decoder func(*http.Request) 
 	}
 }
 
+// EncodeClearCurrentUserResponse returns an encoder for responses returned by
+// the devIdp clearCurrentUser endpoint.
+func EncodeClearCurrentUserResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		w.WriteHeader(http.StatusNoContent)
+		return nil
+	}
+}
+
+// DecodeClearCurrentUserRequest returns a decoder for requests sent to the
+// devIdp clearCurrentUser endpoint.
+func DecodeClearCurrentUserRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*devidp.ClearCurrentUserPayload, error) {
+	return func(r *http.Request) (*devidp.ClearCurrentUserPayload, error) {
+		var payload *devidp.ClearCurrentUserPayload
+		var (
+			body ClearCurrentUserRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateClearCurrentUserRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+		payload = NewClearCurrentUserPayload(&body)
+
+		return payload, nil
+	}
+}
+
 // marshalDevidpUserToUserResponseBody builds a value of type *UserResponseBody
 // from a value of type *devidp.User.
 func marshalDevidpUserToUserResponseBody(v *devidp.User) *UserResponseBody {

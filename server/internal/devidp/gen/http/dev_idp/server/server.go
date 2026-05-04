@@ -19,9 +19,10 @@ import (
 
 // Server lists the devIdp service endpoint HTTP handlers.
 type Server struct {
-	Mounts         []*MountPoint
-	GetCurrentUser http.Handler
-	SetCurrentUser http.Handler
+	Mounts           []*MountPoint
+	GetCurrentUser   http.Handler
+	SetCurrentUser   http.Handler
+	ClearCurrentUser http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -53,9 +54,11 @@ func New(
 		Mounts: []*MountPoint{
 			{"GetCurrentUser", "POST", "/rpc/devIdp.getCurrentUser"},
 			{"SetCurrentUser", "POST", "/rpc/devIdp.setCurrentUser"},
+			{"ClearCurrentUser", "POST", "/rpc/devIdp.clearCurrentUser"},
 		},
-		GetCurrentUser: NewGetCurrentUserHandler(e.GetCurrentUser, mux, decoder, encoder, errhandler, formatter),
-		SetCurrentUser: NewSetCurrentUserHandler(e.SetCurrentUser, mux, decoder, encoder, errhandler, formatter),
+		GetCurrentUser:   NewGetCurrentUserHandler(e.GetCurrentUser, mux, decoder, encoder, errhandler, formatter),
+		SetCurrentUser:   NewSetCurrentUserHandler(e.SetCurrentUser, mux, decoder, encoder, errhandler, formatter),
+		ClearCurrentUser: NewClearCurrentUserHandler(e.ClearCurrentUser, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -66,6 +69,7 @@ func (s *Server) Service() string { return "devIdp" }
 func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.GetCurrentUser = m(s.GetCurrentUser)
 	s.SetCurrentUser = m(s.SetCurrentUser)
+	s.ClearCurrentUser = m(s.ClearCurrentUser)
 }
 
 // MethodNames returns the methods served.
@@ -75,6 +79,7 @@ func (s *Server) MethodNames() []string { return devidp.MethodNames[:] }
 func Mount(mux goahttp.Muxer, h *Server) {
 	MountGetCurrentUserHandler(mux, h.GetCurrentUser)
 	MountSetCurrentUserHandler(mux, h.SetCurrentUser)
+	MountClearCurrentUserHandler(mux, h.ClearCurrentUser)
 }
 
 // Mount configures the mux to serve the devIdp endpoints.
@@ -165,6 +170,59 @@ func NewSetCurrentUserHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "setCurrentUser")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "devIdp")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountClearCurrentUserHandler configures the mux to serve the "devIdp"
+// service "clearCurrentUser" endpoint.
+func MountClearCurrentUserHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/devIdp.clearCurrentUser", f)
+}
+
+// NewClearCurrentUserHandler creates a HTTP handler which loads the HTTP
+// request and calls the "devIdp" service "clearCurrentUser" endpoint.
+func NewClearCurrentUserHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeClearCurrentUserRequest(mux, decoder)
+		encodeResponse = EncodeClearCurrentUserResponse(encoder)
+		encodeError    = goahttp.ErrorEncoder(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "clearCurrentUser")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "devIdp")
 		payload, err := decodeRequest(r)
 		if err != nil {

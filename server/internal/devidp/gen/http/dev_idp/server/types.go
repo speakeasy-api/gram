@@ -31,6 +31,13 @@ type SetCurrentUserRequestBody struct {
 	WorkosSub *string `form:"workos_sub,omitempty" json:"workos_sub,omitempty" xml:"workos_sub,omitempty"`
 }
 
+// ClearCurrentUserRequestBody is the type of the "devIdp" service
+// "clearCurrentUser" endpoint HTTP request body.
+type ClearCurrentUserRequestBody struct {
+	// Which mode's currentUser to clear.
+	Mode *string `form:"mode,omitempty" json:"mode,omitempty" xml:"mode,omitempty"`
+}
+
 // GetCurrentUserResponseBody is the type of the "devIdp" service
 // "getCurrentUser" endpoint HTTP response body.
 type GetCurrentUserResponseBody struct {
@@ -139,6 +146,16 @@ func NewSetCurrentUserPayload(body *SetCurrentUserRequestBody) *devidp.SetCurren
 	return v
 }
 
+// NewClearCurrentUserPayload builds a devIdp service clearCurrentUser endpoint
+// payload.
+func NewClearCurrentUserPayload(body *ClearCurrentUserRequestBody) *devidp.ClearCurrentUserPayload {
+	v := &devidp.ClearCurrentUserPayload{
+		Mode: *body.Mode,
+	}
+
+	return v
+}
+
 // ValidateGetCurrentUserRequestBody runs the validations defined on
 // GetCurrentUserRequestBody
 func ValidateGetCurrentUserRequestBody(body *GetCurrentUserRequestBody) (err error) {
@@ -166,6 +183,20 @@ func ValidateSetCurrentUserRequestBody(body *SetCurrentUserRequestBody) (err err
 	}
 	if body.UserID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_id", *body.UserID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateClearCurrentUserRequestBody runs the validations defined on
+// ClearCurrentUserRequestBody
+func ValidateClearCurrentUserRequestBody(body *ClearCurrentUserRequestBody) (err error) {
+	if body.Mode == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("mode", "body"))
+	}
+	if body.Mode != nil {
+		if !(*body.Mode == "local-speakeasy" || *body.Mode == "oauth2-1" || *body.Mode == "oauth2" || *body.Mode == "workos") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.mode", *body.Mode, []any{"local-speakeasy", "oauth2-1", "oauth2", "workos"}))
+		}
 	}
 	return
 }

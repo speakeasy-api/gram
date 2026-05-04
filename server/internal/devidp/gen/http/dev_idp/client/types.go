@@ -31,6 +31,13 @@ type SetCurrentUserRequestBody struct {
 	WorkosSub *string `form:"workos_sub,omitempty" json:"workos_sub,omitempty" xml:"workos_sub,omitempty"`
 }
 
+// ClearCurrentUserRequestBody is the type of the "devIdp" service
+// "clearCurrentUser" endpoint HTTP request body.
+type ClearCurrentUserRequestBody struct {
+	// Which mode's currentUser to clear.
+	Mode string `form:"mode" json:"mode" xml:"mode"`
+}
+
 // GetCurrentUserResponseBody is the type of the "devIdp" service
 // "getCurrentUser" endpoint HTTP response body.
 type GetCurrentUserResponseBody struct {
@@ -103,6 +110,15 @@ func NewSetCurrentUserRequestBody(p *devidp.SetCurrentUserPayload) *SetCurrentUs
 		Mode:      p.Mode,
 		UserID:    p.UserID,
 		WorkosSub: p.WorkosSub,
+	}
+	return body
+}
+
+// NewClearCurrentUserRequestBody builds the HTTP request body from the payload
+// of the "clearCurrentUser" endpoint of the "devIdp" service.
+func NewClearCurrentUserRequestBody(p *devidp.ClearCurrentUserPayload) *ClearCurrentUserRequestBody {
+	body := &ClearCurrentUserRequestBody{
+		Mode: p.Mode,
 	}
 	return body
 }

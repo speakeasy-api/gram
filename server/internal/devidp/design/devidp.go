@@ -55,7 +55,7 @@ var _ = Service("devIdp", func() {
 	})
 
 	Method("setCurrentUser", func() {
-		Description("UPSERT or clear the per-mode currentUser. Local modes accept `user_id` (a UUID into the local users table); workos mode accepts `workos_sub` (a literal WorkOS user id; not validated). Pass null (or omit both fields entirely) to clear the currentUser — the next identity-resolving request on the mode then falls through to the default-user bootstrap.")
+		Description("UPSERT the per-mode currentUser. Local modes accept `user_id` (a UUID into the local users table); workos mode accepts `workos_sub` (a literal WorkOS user id; not validated). To clear the currentUser instead, call `clearCurrentUser`.")
 
 		Payload(func() {
 			Attribute("mode", String, "Which mode's currentUser to write.", func() {
@@ -73,6 +73,22 @@ var _ = Service("devIdp", func() {
 		HTTP(func() {
 			POST("/rpc/devIdp.setCurrentUser")
 			Response(StatusOK)
+		})
+	})
+
+	Method("clearCurrentUser", func() {
+		Description("Clear the per-mode currentUser. The next identity-resolving request on the mode then falls through to the default-user bootstrap (idp-design.md §3) — git committer for local modes, WorkOS lookup for workos. Idempotent — clearing an already-cleared mode is a no-op.")
+
+		Payload(func() {
+			Attribute("mode", String, "Which mode's currentUser to clear.", func() {
+				Enum("local-speakeasy", "oauth2-1", "oauth2", "workos")
+			})
+			Required("mode")
+		})
+
+		HTTP(func() {
+			POST("/rpc/devIdp.clearCurrentUser")
+			Response(StatusNoContent)
 		})
 	})
 })

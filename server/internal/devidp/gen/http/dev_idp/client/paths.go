@@ -17,3 +17,8 @@ func GetCurrentUserDevIdpPath() string {
 func SetCurrentUserDevIdpPath() string {
 	return "/rpc/devIdp.setCurrentUser"
 }
+
+// ClearCurrentUserDevIdpPath returns the URL path to the devIdp service clearCurrentUser HTTP endpoint.
+func ClearCurrentUserDevIdpPath() string {
+	return "/rpc/devIdp.clearCurrentUser"
+}

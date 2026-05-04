@@ -16,15 +16,17 @@ import (
 
 // Client is the "devIdp" service client.
 type Client struct {
-	GetCurrentUserEndpoint goa.Endpoint
-	SetCurrentUserEndpoint goa.Endpoint
+	GetCurrentUserEndpoint   goa.Endpoint
+	SetCurrentUserEndpoint   goa.Endpoint
+	ClearCurrentUserEndpoint goa.Endpoint
 }
 
 // NewClient initializes a "devIdp" service client given the endpoints.
-func NewClient(getCurrentUser, setCurrentUser goa.Endpoint) *Client {
+func NewClient(getCurrentUser, setCurrentUser, clearCurrentUser goa.Endpoint) *Client {
 	return &Client{
-		GetCurrentUserEndpoint: getCurrentUser,
-		SetCurrentUserEndpoint: setCurrentUser,
+		GetCurrentUserEndpoint:   getCurrentUser,
+		SetCurrentUserEndpoint:   setCurrentUser,
+		ClearCurrentUserEndpoint: clearCurrentUser,
 	}
 }
 
@@ -46,4 +48,11 @@ func (c *Client) SetCurrentUser(ctx context.Context, p *SetCurrentUserPayload) (
 		return
 	}
 	return ires.(*CurrentUser), nil
+}
+
+// ClearCurrentUser calls the "clearCurrentUser" endpoint of the "devIdp"
+// service.
+func (c *Client) ClearCurrentUser(ctx context.Context, p *ClearCurrentUserPayload) (err error) {
+	_, err = c.ClearCurrentUserEndpoint(ctx, p)
+	return
 }

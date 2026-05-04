@@ -161,6 +161,64 @@ func DecodeSetCurrentUserResponse(decoder func(*http.Response) goahttp.Decoder, 
 	}
 }
 
+// BuildClearCurrentUserRequest instantiates a HTTP request object with method
+// and path set to call the "devIdp" service "clearCurrentUser" endpoint
+func (c *Client) BuildClearCurrentUserRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ClearCurrentUserDevIdpPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("devIdp", "clearCurrentUser", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeClearCurrentUserRequest returns an encoder for requests sent to the
+// devIdp clearCurrentUser server.
+func EncodeClearCurrentUserRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*devidp.ClearCurrentUserPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("devIdp", "clearCurrentUser", "*devidp.ClearCurrentUserPayload", v)
+		}
+		body := NewClearCurrentUserRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("devIdp", "clearCurrentUser", err)
+		}
+		return nil
+	}
+}
+
+// DecodeClearCurrentUserResponse returns a decoder for responses returned by
+// the devIdp clearCurrentUser endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+func DecodeClearCurrentUserResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusNoContent:
+			return nil, nil
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("devIdp", "clearCurrentUser", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // unmarshalUserResponseBodyToDevidpUser builds a value of type *devidp.User
 // from a value of type *UserResponseBody.
 func unmarshalUserResponseBodyToDevidpUser(v *UserResponseBody) *devidp.User {

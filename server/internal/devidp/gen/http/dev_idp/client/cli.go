@@ -68,3 +68,27 @@ func BuildSetCurrentUserPayload(devIdpSetCurrentUserBody string) (*devidp.SetCur
 
 	return v, nil
 }
+
+// BuildClearCurrentUserPayload builds the payload for the devIdp
+// clearCurrentUser endpoint from CLI flags.
+func BuildClearCurrentUserPayload(devIdpClearCurrentUserBody string) (*devidp.ClearCurrentUserPayload, error) {
+	var err error
+	var body ClearCurrentUserRequestBody
+	{
+		err = json.Unmarshal([]byte(devIdpClearCurrentUserBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"mode\": \"oauth2-1\"\n   }'")
+		}
+		if !(body.Mode == "local-speakeasy" || body.Mode == "oauth2-1" || body.Mode == "oauth2" || body.Mode == "workos") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.mode", body.Mode, []any{"local-speakeasy", "oauth2-1", "oauth2", "workos"}))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	v := &devidp.ClearCurrentUserPayload{
+		Mode: body.Mode,
+	}
+
+	return v, nil
+}

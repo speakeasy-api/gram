@@ -17,12 +17,16 @@ import (
 type Service interface {
 	// Read the per-mode currentUser. 404s when no row exists yet for that mode.
 	GetCurrentUser(context.Context, *GetCurrentUserPayload) (res *CurrentUser, err error)
-	// UPSERT or clear the per-mode currentUser. Local modes accept `user_id` (a
-	// UUID into the local users table); workos mode accepts `workos_sub` (a
-	// literal WorkOS user id; not validated). Pass null (or omit both fields
-	// entirely) to clear the currentUser — the next identity-resolving request on
-	// the mode then falls through to the default-user bootstrap.
+	// UPSERT the per-mode currentUser. Local modes accept `user_id` (a UUID into
+	// the local users table); workos mode accepts `workos_sub` (a literal WorkOS
+	// user id; not validated). To clear the currentUser instead, call
+	// `clearCurrentUser`.
 	SetCurrentUser(context.Context, *SetCurrentUserPayload) (res *CurrentUser, err error)
+	// Clear the per-mode currentUser. The next identity-resolving request on the
+	// mode then falls through to the default-user bootstrap (idp-design.md §3) —
+	// git committer for local modes, WorkOS lookup for workos. Idempotent —
+	// clearing an already-cleared mode is a no-op.
+	ClearCurrentUser(context.Context, *ClearCurrentUserPayload) (err error)
 }
 
 // APIName is the name of the API as defined in the design.
@@ -39,7 +43,14 @@ const ServiceName = "devIdp"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [2]string{"getCurrentUser", "setCurrentUser"}
+var MethodNames = [3]string{"getCurrentUser", "setCurrentUser", "clearCurrentUser"}
+
+// ClearCurrentUserPayload is the payload type of the devIdp service
+// clearCurrentUser method.
+type ClearCurrentUserPayload struct {
+	// Which mode's currentUser to clear.
+	Mode string
+}
 
 // CurrentUser is the result type of the devIdp service getCurrentUser method.
 type CurrentUser struct {

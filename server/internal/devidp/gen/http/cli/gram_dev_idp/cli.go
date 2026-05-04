@@ -29,7 +29,7 @@ import (
 //	command (subcommand1|subcommand2|...)
 func UsageCommands() []string {
 	return []string{
-		"dev-idp (get-current-user|set-current-user)",
+		"dev-idp (get-current-user|set-current-user|clear-current-user)",
 		"organizations (create|update|list|delete)",
 		"organization-roles (create|update|list|delete)",
 		"invitations (create|list|get|find-by-token|revoke|resend|accept)",
@@ -65,6 +65,9 @@ func ParseEndpoint(
 
 		devIdpSetCurrentUserFlags    = flag.NewFlagSet("set-current-user", flag.ExitOnError)
 		devIdpSetCurrentUserBodyFlag = devIdpSetCurrentUserFlags.String("body", "REQUIRED", "")
+
+		devIdpClearCurrentUserFlags    = flag.NewFlagSet("clear-current-user", flag.ExitOnError)
+		devIdpClearCurrentUserBodyFlag = devIdpClearCurrentUserFlags.String("body", "REQUIRED", "")
 
 		organizationsFlags = flag.NewFlagSet("organizations", flag.ContinueOnError)
 
@@ -148,6 +151,7 @@ func ParseEndpoint(
 	devIdpFlags.Usage = devIdpUsage
 	devIdpGetCurrentUserFlags.Usage = devIdpGetCurrentUserUsage
 	devIdpSetCurrentUserFlags.Usage = devIdpSetCurrentUserUsage
+	devIdpClearCurrentUserFlags.Usage = devIdpClearCurrentUserUsage
 
 	organizationsFlags.Usage = organizationsUsage
 	organizationsCreateFlags.Usage = organizationsCreateUsage
@@ -231,6 +235,9 @@ func ParseEndpoint(
 
 			case "set-current-user":
 				epf = devIdpSetCurrentUserFlags
+
+			case "clear-current-user":
+				epf = devIdpClearCurrentUserFlags
 
 			}
 
@@ -352,6 +359,9 @@ func ParseEndpoint(
 			case "set-current-user":
 				endpoint = c.SetCurrentUser()
 				data, err = devidpc.BuildSetCurrentUserPayload(*devIdpSetCurrentUserBodyFlag)
+			case "clear-current-user":
+				endpoint = c.ClearCurrentUser()
+				data, err = devidpc.BuildClearCurrentUserPayload(*devIdpClearCurrentUserBodyFlag)
 			}
 		case "organizations":
 			c := organizationsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -457,7 +467,8 @@ func devIdpUsage() {
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] dev-idp COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    get-current-user: Read the per-mode currentUser. 404s when no row exists yet for that mode.`)
-	fmt.Fprintln(os.Stderr, `    set-current-user: UPSERT or clear the per-mode currentUser. Local modes accept `+"`"+`user_id`+"`"+` (a UUID into the local users table); workos mode accepts `+"`"+`workos_sub`+"`"+` (a literal WorkOS user id; not validated). Pass null (or omit both fields entirely) to clear the currentUser — the next identity-resolving request on the mode then falls through to the default-user bootstrap.`)
+	fmt.Fprintln(os.Stderr, `    set-current-user: UPSERT the per-mode currentUser. Local modes accept `+"`"+`user_id`+"`"+` (a UUID into the local users table); workos mode accepts `+"`"+`workos_sub`+"`"+` (a literal WorkOS user id; not validated). To clear the currentUser instead, call `+"`"+`clearCurrentUser`+"`"+`.`)
+	fmt.Fprintln(os.Stderr, `    clear-current-user: Clear the per-mode currentUser. The next identity-resolving request on the mode then falls through to the default-user bootstrap (idp-design.md §3) — git committer for local modes, WorkOS lookup for workos. Idempotent — clearing an already-cleared mode is a no-op.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s dev-idp COMMAND --help\n", os.Args[0])
@@ -488,7 +499,7 @@ func devIdpSetCurrentUserUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `UPSERT or clear the per-mode currentUser. Local modes accept `+"`"+`user_id`+"`"+` (a UUID into the local users table); workos mode accepts `+"`"+`workos_sub`+"`"+` (a literal WorkOS user id; not validated). Pass null (or omit both fields entirely) to clear the currentUser — the next identity-resolving request on the mode then falls through to the default-user bootstrap.`)
+	fmt.Fprintln(os.Stderr, `UPSERT the per-mode currentUser. Local modes accept `+"`"+`user_id`+"`"+` (a UUID into the local users table); workos mode accepts `+"`"+`workos_sub`+"`"+` (a literal WorkOS user id; not validated). To clear the currentUser instead, call `+"`"+`clearCurrentUser`+"`"+`.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -496,6 +507,24 @@ func devIdpSetCurrentUserUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "dev-idp set-current-user --body '{\n      \"mode\": \"oauth2-1\",\n      \"user_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"workos_sub\": \"abc123\"\n   }'")
+}
+
+func devIdpClearCurrentUserUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] dev-idp clear-current-user", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Clear the per-mode currentUser. The next identity-resolving request on the mode then falls through to the default-user bootstrap (idp-design.md §3) — git committer for local modes, WorkOS lookup for workos. Idempotent — clearing an already-cleared mode is a no-op.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "dev-idp clear-current-user --body '{\n      \"mode\": \"oauth2-1\"\n   }'")
 }
 
 // organizationsUsage displays the usage of the organizations command and its
