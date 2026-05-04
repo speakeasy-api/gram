@@ -64,7 +64,7 @@ export const RULE_CATEGORY_META: Record<
   },
   pii: {
     label: "Personal Identifiable Information",
-    description: "Names, addresses, phone numbers, email addresses",
+    description: "Phone numbers, email addresses, IP and MAC addresses",
     icon: "user",
   },
   government_ids: {
@@ -1219,11 +1219,6 @@ export const DETECTION_RULES: Record<RuleCategory, DetectionRule[]> = {
     // a scoped allow-list.
     { id: "EMAIL_ADDRESS", title: "Email address", source: "presidio" },
     { id: "PHONE_NUMBER", title: "Telephone number", source: "presidio" },
-    {
-      id: "LOCATION",
-      title: "Geographically defined location",
-      source: "presidio",
-    },
     {
       id: "IP_ADDRESS",
       title: "IPv4 or IPv6 address",
