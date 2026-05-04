@@ -239,8 +239,10 @@ WHERE cm.project_id = $1
     SELECT 1
     FROM risk_results rr
     WHERE rr.chat_message_id = cm.id
+      AND rr.project_id = $1
       AND rr.risk_policy_id = $2
       AND rr.risk_policy_version = $3
+    LIMIT 1
   )
 LIMIT $4
 `
