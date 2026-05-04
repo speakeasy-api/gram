@@ -12,6 +12,38 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const acceptInvitation = `-- name: AcceptInvitation :one
+UPDATE invitations
+SET
+  state = 'accepted',
+  accepted_at = COALESCE(accepted_at, clock_timestamp()),
+  updated_at = clock_timestamp()
+WHERE id = $1
+RETURNING id, email, organization_id, state, token, inviter_user_id, accepted_at, revoked_at, expires_at, created_at, updated_at
+`
+
+// AcceptInvitation flips the state, stamps accepted_at, and lets the
+// caller (the dashboard's accept-flow handler) follow up with the
+// membership creation. Idempotent.
+func (q *Queries) AcceptInvitation(ctx context.Context, id uuid.UUID) (Invitation, error) {
+	row := q.db.QueryRow(ctx, acceptInvitation, id)
+	var i Invitation
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.OrganizationID,
+		&i.State,
+		&i.Token,
+		&i.InviterUserID,
+		&i.AcceptedAt,
+		&i.RevokedAt,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const consumeAuthCode = `-- name: ConsumeAuthCode :one
 DELETE FROM auth_codes
 WHERE code = $1
@@ -103,6 +135,49 @@ func (q *Queries) CreateAuthCode(ctx context.Context, arg CreateAuthCodeParams) 
 	return i, err
 }
 
+const createInvitation = `-- name: CreateInvitation :one
+
+INSERT INTO invitations (email, organization_id, token, inviter_user_id, expires_at)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING id, email, organization_id, state, token, inviter_user_id, accepted_at, revoked_at, expires_at, created_at, updated_at
+`
+
+type CreateInvitationParams struct {
+	Email          string
+	OrganizationID uuid.UUID
+	Token          string
+	InviterUserID  uuid.NullUUID
+	ExpiresAt      pgtype.Timestamptz
+}
+
+// =============================================================================
+// WorkOS emulation: invitations
+// =============================================================================
+func (q *Queries) CreateInvitation(ctx context.Context, arg CreateInvitationParams) (Invitation, error) {
+	row := q.db.QueryRow(ctx, createInvitation,
+		arg.Email,
+		arg.OrganizationID,
+		arg.Token,
+		arg.InviterUserID,
+		arg.ExpiresAt,
+	)
+	var i Invitation
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.OrganizationID,
+		&i.State,
+		&i.Token,
+		&i.InviterUserID,
+		&i.AcceptedAt,
+		&i.RevokedAt,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const createMembership = `-- name: CreateMembership :one
 
 INSERT INTO memberships (user_id, organization_id, role)
@@ -176,6 +251,43 @@ func (q *Queries) CreateOrganization(ctx context.Context, arg CreateOrganization
 		&i.Slug,
 		&i.AccountType,
 		&i.WorkosID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const createOrganizationRole = `-- name: CreateOrganizationRole :one
+
+INSERT INTO organization_roles (organization_id, slug, name, description)
+VALUES ($1, $2, $3, COALESCE($4::text, ''))
+RETURNING id, organization_id, slug, name, description, created_at, updated_at
+`
+
+type CreateOrganizationRoleParams struct {
+	OrganizationID uuid.UUID
+	Slug           string
+	Name           string
+	Description    pgtype.Text
+}
+
+// =============================================================================
+// WorkOS emulation: organization roles
+// =============================================================================
+func (q *Queries) CreateOrganizationRole(ctx context.Context, arg CreateOrganizationRoleParams) (OrganizationRole, error) {
+	row := q.db.QueryRow(ctx, createOrganizationRole,
+		arg.OrganizationID,
+		arg.Slug,
+		arg.Name,
+		arg.Description,
+	)
+	var i OrganizationRole
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.Slug,
+		&i.Name,
+		&i.Description,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -308,6 +420,21 @@ func (q *Queries) DeleteOrganization(ctx context.Context, id uuid.UUID) error {
 	return err
 }
 
+const deleteOrganizationRole = `-- name: DeleteOrganizationRole :exec
+DELETE FROM organization_roles
+WHERE organization_id = $1 AND slug = $2
+`
+
+type DeleteOrganizationRoleParams struct {
+	OrganizationID uuid.UUID
+	Slug           string
+}
+
+func (q *Queries) DeleteOrganizationRole(ctx context.Context, arg DeleteOrganizationRoleParams) error {
+	_, err := q.db.Exec(ctx, deleteOrganizationRole, arg.OrganizationID, arg.Slug)
+	return err
+}
+
 const deleteUser = `-- name: DeleteUser :exec
 DELETE FROM users WHERE id = $1
 `
@@ -362,6 +489,52 @@ func (q *Queries) GetCurrentUser(ctx context.Context, mode string) (CurrentUser,
 	return i, err
 }
 
+const getInvitation = `-- name: GetInvitation :one
+SELECT id, email, organization_id, state, token, inviter_user_id, accepted_at, revoked_at, expires_at, created_at, updated_at FROM invitations WHERE id = $1
+`
+
+func (q *Queries) GetInvitation(ctx context.Context, id uuid.UUID) (Invitation, error) {
+	row := q.db.QueryRow(ctx, getInvitation, id)
+	var i Invitation
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.OrganizationID,
+		&i.State,
+		&i.Token,
+		&i.InviterUserID,
+		&i.AcceptedAt,
+		&i.RevokedAt,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getInvitationByToken = `-- name: GetInvitationByToken :one
+SELECT id, email, organization_id, state, token, inviter_user_id, accepted_at, revoked_at, expires_at, created_at, updated_at FROM invitations WHERE token = $1
+`
+
+func (q *Queries) GetInvitationByToken(ctx context.Context, token string) (Invitation, error) {
+	row := q.db.QueryRow(ctx, getInvitationByToken, token)
+	var i Invitation
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.OrganizationID,
+		&i.State,
+		&i.Token,
+		&i.InviterUserID,
+		&i.AcceptedAt,
+		&i.RevokedAt,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getMembership = `-- name: GetMembership :one
 SELECT id, user_id, organization_id, role, created_at, updated_at FROM memberships WHERE id = $1
 `
@@ -373,6 +546,47 @@ func (q *Queries) GetMembership(ctx context.Context, id uuid.UUID) (Membership, 
 		&i.ID,
 		&i.UserID,
 		&i.OrganizationID,
+		&i.Role,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getMembershipWithOrgName = `-- name: GetMembershipWithOrgName :one
+SELECT
+  m.id,
+  m.user_id,
+  m.organization_id,
+  o.name AS organization_name,
+  m.role,
+  m.created_at,
+  m.updated_at
+FROM memberships m
+JOIN organizations o ON o.id = m.organization_id
+WHERE m.id = $1
+`
+
+type GetMembershipWithOrgNameRow struct {
+	ID               uuid.UUID
+	UserID           uuid.UUID
+	OrganizationID   uuid.UUID
+	OrganizationName string
+	Role             string
+	CreatedAt        pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
+}
+
+// GetMembershipWithOrgName is the by-id variant used by the membership
+// update/delete endpoints to render the response.
+func (q *Queries) GetMembershipWithOrgName(ctx context.Context, id uuid.UUID) (GetMembershipWithOrgNameRow, error) {
+	row := q.db.QueryRow(ctx, getMembershipWithOrgName, id)
+	var i GetMembershipWithOrgNameRow
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.OrganizationID,
+		&i.OrganizationName,
 		&i.Role,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -399,6 +613,31 @@ func (q *Queries) GetOrganization(ctx context.Context, id uuid.UUID) (Organizati
 	return i, err
 }
 
+const getOrganizationRoleBySlug = `-- name: GetOrganizationRoleBySlug :one
+SELECT id, organization_id, slug, name, description, created_at, updated_at FROM organization_roles
+WHERE organization_id = $1 AND slug = $2
+`
+
+type GetOrganizationRoleBySlugParams struct {
+	OrganizationID uuid.UUID
+	Slug           string
+}
+
+func (q *Queries) GetOrganizationRoleBySlug(ctx context.Context, arg GetOrganizationRoleBySlugParams) (OrganizationRole, error) {
+	row := q.db.QueryRow(ctx, getOrganizationRoleBySlug, arg.OrganizationID, arg.Slug)
+	var i OrganizationRole
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.Slug,
+		&i.Name,
+		&i.Description,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getUser = `-- name: GetUser :one
 SELECT id, email, display_name, photo_url, github_handle, admin, whitelisted, created_at, updated_at FROM users WHERE id = $1
 `
@@ -418,6 +657,53 @@ func (q *Queries) GetUser(ctx context.Context, id uuid.UUID) (User, error) {
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const listInvitationsByOrg = `-- name: ListInvitationsByOrg :many
+SELECT id, email, organization_id, state, token, inviter_user_id, accepted_at, revoked_at, expires_at, created_at, updated_at FROM invitations
+WHERE organization_id = $1
+  AND id > $2
+ORDER BY id ASC
+LIMIT $3
+`
+
+type ListInvitationsByOrgParams struct {
+	OrganizationID uuid.UUID
+	After          uuid.UUID
+	MaxRows        int32
+}
+
+// ListInvitationsByOrg keyset-paginates within an organization.
+func (q *Queries) ListInvitationsByOrg(ctx context.Context, arg ListInvitationsByOrgParams) ([]Invitation, error) {
+	rows, err := q.db.Query(ctx, listInvitationsByOrg, arg.OrganizationID, arg.After, arg.MaxRows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Invitation
+	for rows.Next() {
+		var i Invitation
+		if err := rows.Scan(
+			&i.ID,
+			&i.Email,
+			&i.OrganizationID,
+			&i.State,
+			&i.Token,
+			&i.InviterUserID,
+			&i.AcceptedAt,
+			&i.RevokedAt,
+			&i.ExpiresAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listMemberships = `-- name: ListMemberships :many
@@ -458,6 +744,115 @@ func (q *Queries) ListMemberships(ctx context.Context, arg ListMembershipsParams
 			&i.UserID,
 			&i.OrganizationID,
 			&i.Role,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listMembershipsWithOrgName = `-- name: ListMembershipsWithOrgName :many
+
+SELECT
+  m.id,
+  m.user_id,
+  m.organization_id,
+  o.name AS organization_name,
+  m.role,
+  m.created_at,
+  m.updated_at
+FROM memberships m
+JOIN organizations o ON o.id = m.organization_id
+WHERE m.id > $1
+  AND ($2::uuid IS NULL OR m.user_id = $2::uuid)
+  AND ($3::uuid IS NULL OR m.organization_id = $3::uuid)
+ORDER BY m.id ASC
+LIMIT $4
+`
+
+type ListMembershipsWithOrgNameParams struct {
+	After          uuid.UUID
+	UserID         uuid.NullUUID
+	OrganizationID uuid.NullUUID
+	MaxRows        int32
+}
+
+type ListMembershipsWithOrgNameRow struct {
+	ID               uuid.UUID
+	UserID           uuid.UUID
+	OrganizationID   uuid.UUID
+	OrganizationName string
+	Role             string
+	CreatedAt        pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
+}
+
+// =============================================================================
+// WorkOS emulation: memberships (ListOrganizationMemberships, GetMembership)
+// =============================================================================
+// ListMembershipsWithOrgName joins memberships with organizations so the
+// WorkOS-shaped response can include `organization_name` (the SDK's
+// OrganizationMembership type carries it).
+func (q *Queries) ListMembershipsWithOrgName(ctx context.Context, arg ListMembershipsWithOrgNameParams) ([]ListMembershipsWithOrgNameRow, error) {
+	rows, err := q.db.Query(ctx, listMembershipsWithOrgName,
+		arg.After,
+		arg.UserID,
+		arg.OrganizationID,
+		arg.MaxRows,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListMembershipsWithOrgNameRow
+	for rows.Next() {
+		var i ListMembershipsWithOrgNameRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.OrganizationID,
+			&i.OrganizationName,
+			&i.Role,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOrganizationRoles = `-- name: ListOrganizationRoles :many
+SELECT id, organization_id, slug, name, description, created_at, updated_at FROM organization_roles
+WHERE organization_id = $1
+ORDER BY slug ASC
+`
+
+func (q *Queries) ListOrganizationRoles(ctx context.Context, organizationID uuid.UUID) ([]OrganizationRole, error) {
+	rows, err := q.db.Query(ctx, listOrganizationRoles, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []OrganizationRole
+	for rows.Next() {
+		var i OrganizationRole
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.Slug,
+			&i.Name,
+			&i.Description,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -592,6 +987,99 @@ func (q *Queries) ListUsers(ctx context.Context, arg ListUsersParams) ([]User, e
 	return items, nil
 }
 
+const listUsersFiltered = `-- name: ListUsersFiltered :many
+
+SELECT u.id, u.email, u.display_name, u.photo_url, u.github_handle, u.admin, u.whitelisted, u.created_at, u.updated_at FROM users u
+WHERE u.id > $1
+  AND ($2::text IS NULL OR u.email = $2::text)
+  AND ($3::uuid IS NULL OR EXISTS (
+    SELECT 1 FROM memberships m
+    WHERE m.user_id = u.id AND m.organization_id = $3::uuid
+  ))
+ORDER BY u.id ASC
+LIMIT $4
+`
+
+type ListUsersFilteredParams struct {
+	After          uuid.UUID
+	Email          pgtype.Text
+	OrganizationID uuid.NullUUID
+	MaxRows        int32
+}
+
+// =============================================================================
+// WorkOS emulation: users (ListUsers with filters)
+// =============================================================================
+// ListUsersFiltered is the WorkOS user_management ListUsers shape: keyset
+// pagination on id with optional email-equality and organization-membership
+// filters. Both filters are NULL-aware sqlc.narg parameters so a single
+// query handles every combination.
+func (q *Queries) ListUsersFiltered(ctx context.Context, arg ListUsersFilteredParams) ([]User, error) {
+	rows, err := q.db.Query(ctx, listUsersFiltered,
+		arg.After,
+		arg.Email,
+		arg.OrganizationID,
+		arg.MaxRows,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []User
+	for rows.Next() {
+		var i User
+		if err := rows.Scan(
+			&i.ID,
+			&i.Email,
+			&i.DisplayName,
+			&i.PhotoUrl,
+			&i.GithubHandle,
+			&i.Admin,
+			&i.Whitelisted,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const revokeInvitation = `-- name: RevokeInvitation :one
+UPDATE invitations
+SET
+  state = 'revoked',
+  revoked_at = COALESCE(revoked_at, clock_timestamp()),
+  updated_at = clock_timestamp()
+WHERE id = $1
+RETURNING id, email, organization_id, state, token, inviter_user_id, accepted_at, revoked_at, expires_at, created_at, updated_at
+`
+
+// RevokeInvitation flips the state and stamps revoked_at. Idempotent —
+// repeated revokes return the same row.
+func (q *Queries) RevokeInvitation(ctx context.Context, id uuid.UUID) (Invitation, error) {
+	row := q.db.QueryRow(ctx, revokeInvitation, id)
+	var i Invitation
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.OrganizationID,
+		&i.State,
+		&i.Token,
+		&i.InviterUserID,
+		&i.AcceptedAt,
+		&i.RevokedAt,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const revokeToken = `-- name: RevokeToken :exec
 UPDATE tokens
 SET revoked_at = clock_timestamp()
@@ -606,6 +1094,35 @@ type RevokeTokenParams struct {
 func (q *Queries) RevokeToken(ctx context.Context, arg RevokeTokenParams) error {
 	_, err := q.db.Exec(ctx, revokeToken, arg.Token, arg.Mode)
 	return err
+}
+
+const touchInvitation = `-- name: TouchInvitation :one
+UPDATE invitations
+SET updated_at = clock_timestamp()
+WHERE id = $1
+RETURNING id, email, organization_id, state, token, inviter_user_id, accepted_at, revoked_at, expires_at, created_at, updated_at
+`
+
+// TouchInvitation bumps updated_at without changing state. Used by the
+// /resend endpoint (which doesn't actually re-send anything in local dev,
+// but the timestamp matters for the dashboard).
+func (q *Queries) TouchInvitation(ctx context.Context, id uuid.UUID) (Invitation, error) {
+	row := q.db.QueryRow(ctx, touchInvitation, id)
+	var i Invitation
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.OrganizationID,
+		&i.State,
+		&i.Token,
+		&i.InviterUserID,
+		&i.AcceptedAt,
+		&i.RevokedAt,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const updateMembership = `-- name: UpdateMembership :one
@@ -676,6 +1193,43 @@ func (q *Queries) UpdateOrganization(ctx context.Context, arg UpdateOrganization
 		&i.Slug,
 		&i.AccountType,
 		&i.WorkosID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const updateOrganizationRole = `-- name: UpdateOrganizationRole :one
+UPDATE organization_roles
+SET
+  name = COALESCE($1, name),
+  description = COALESCE($2, description),
+  updated_at = clock_timestamp()
+WHERE organization_id = $3 AND slug = $4
+RETURNING id, organization_id, slug, name, description, created_at, updated_at
+`
+
+type UpdateOrganizationRoleParams struct {
+	Name           pgtype.Text
+	Description    pgtype.Text
+	OrganizationID uuid.UUID
+	Slug           string
+}
+
+func (q *Queries) UpdateOrganizationRole(ctx context.Context, arg UpdateOrganizationRoleParams) (OrganizationRole, error) {
+	row := q.db.QueryRow(ctx, updateOrganizationRole,
+		arg.Name,
+		arg.Description,
+		arg.OrganizationID,
+		arg.Slug,
+	)
+	var i OrganizationRole
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.Slug,
+		&i.Name,
+		&i.Description,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -779,6 +1333,42 @@ func (q *Queries) UpsertOrganizationBySlug(ctx context.Context, arg UpsertOrgani
 		&i.Slug,
 		&i.AccountType,
 		&i.WorkosID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const upsertOrganizationRole = `-- name: UpsertOrganizationRole :one
+INSERT INTO organization_roles (organization_id, slug, name, description)
+VALUES ($1, $2, $3, COALESCE($4::text, ''))
+ON CONFLICT (organization_id, slug) DO UPDATE SET slug = EXCLUDED.slug
+RETURNING id, organization_id, slug, name, description, created_at, updated_at
+`
+
+type UpsertOrganizationRoleParams struct {
+	OrganizationID uuid.UUID
+	Slug           string
+	Name           string
+	Description    pgtype.Text
+}
+
+// UpsertOrganizationRole is the seed path used by the default-user
+// bootstrap to ensure (admin, member) exist on the Speakeasy org.
+func (q *Queries) UpsertOrganizationRole(ctx context.Context, arg UpsertOrganizationRoleParams) (OrganizationRole, error) {
+	row := q.db.QueryRow(ctx, upsertOrganizationRole,
+		arg.OrganizationID,
+		arg.Slug,
+		arg.Name,
+		arg.Description,
+	)
+	var i OrganizationRole
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.Slug,
+		&i.Name,
+		&i.Description,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)

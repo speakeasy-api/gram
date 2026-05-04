@@ -51,6 +51,158 @@ ON CONFLICT (slug) DO UPDATE SET slug = EXCLUDED.slug
 RETURNING *;
 
 -- =============================================================================
+-- WorkOS emulation: users (ListUsers with filters)
+-- =============================================================================
+
+-- ListUsersFiltered is the WorkOS user_management ListUsers shape: keyset
+-- pagination on id with optional email-equality and organization-membership
+-- filters. Both filters are NULL-aware sqlc.narg parameters so a single
+-- query handles every combination.
+-- name: ListUsersFiltered :many
+SELECT u.* FROM users u
+WHERE u.id > @after
+  AND (sqlc.narg('email')::text IS NULL OR u.email = sqlc.narg('email')::text)
+  AND (sqlc.narg('organization_id')::uuid IS NULL OR EXISTS (
+    SELECT 1 FROM memberships m
+    WHERE m.user_id = u.id AND m.organization_id = sqlc.narg('organization_id')::uuid
+  ))
+ORDER BY u.id ASC
+LIMIT @max_rows;
+
+-- =============================================================================
+-- WorkOS emulation: memberships (ListOrganizationMemberships, GetMembership)
+-- =============================================================================
+
+-- ListMembershipsWithOrgName joins memberships with organizations so the
+-- WorkOS-shaped response can include `organization_name` (the SDK's
+-- OrganizationMembership type carries it).
+-- name: ListMembershipsWithOrgName :many
+SELECT
+  m.id,
+  m.user_id,
+  m.organization_id,
+  o.name AS organization_name,
+  m.role,
+  m.created_at,
+  m.updated_at
+FROM memberships m
+JOIN organizations o ON o.id = m.organization_id
+WHERE m.id > @after
+  AND (sqlc.narg('user_id')::uuid IS NULL OR m.user_id = sqlc.narg('user_id')::uuid)
+  AND (sqlc.narg('organization_id')::uuid IS NULL OR m.organization_id = sqlc.narg('organization_id')::uuid)
+ORDER BY m.id ASC
+LIMIT @max_rows;
+
+-- GetMembershipWithOrgName is the by-id variant used by the membership
+-- update/delete endpoints to render the response.
+-- name: GetMembershipWithOrgName :one
+SELECT
+  m.id,
+  m.user_id,
+  m.organization_id,
+  o.name AS organization_name,
+  m.role,
+  m.created_at,
+  m.updated_at
+FROM memberships m
+JOIN organizations o ON o.id = m.organization_id
+WHERE m.id = @id;
+
+-- =============================================================================
+-- WorkOS emulation: invitations
+-- =============================================================================
+
+-- name: CreateInvitation :one
+INSERT INTO invitations (email, organization_id, token, inviter_user_id, expires_at)
+VALUES (@email, @organization_id, @token, sqlc.narg('inviter_user_id'), @expires_at)
+RETURNING *;
+
+-- name: GetInvitation :one
+SELECT * FROM invitations WHERE id = @id;
+
+-- name: GetInvitationByToken :one
+SELECT * FROM invitations WHERE token = @token;
+
+-- ListInvitationsByOrg keyset-paginates within an organization.
+-- name: ListInvitationsByOrg :many
+SELECT * FROM invitations
+WHERE organization_id = @organization_id
+  AND id > @after
+ORDER BY id ASC
+LIMIT @max_rows;
+
+-- RevokeInvitation flips the state and stamps revoked_at. Idempotent —
+-- repeated revokes return the same row.
+-- name: RevokeInvitation :one
+UPDATE invitations
+SET
+  state = 'revoked',
+  revoked_at = COALESCE(revoked_at, clock_timestamp()),
+  updated_at = clock_timestamp()
+WHERE id = @id
+RETURNING *;
+
+-- TouchInvitation bumps updated_at without changing state. Used by the
+-- /resend endpoint (which doesn't actually re-send anything in local dev,
+-- but the timestamp matters for the dashboard).
+-- name: TouchInvitation :one
+UPDATE invitations
+SET updated_at = clock_timestamp()
+WHERE id = @id
+RETURNING *;
+
+-- AcceptInvitation flips the state, stamps accepted_at, and lets the
+-- caller (the dashboard's accept-flow handler) follow up with the
+-- membership creation. Idempotent.
+-- name: AcceptInvitation :one
+UPDATE invitations
+SET
+  state = 'accepted',
+  accepted_at = COALESCE(accepted_at, clock_timestamp()),
+  updated_at = clock_timestamp()
+WHERE id = @id
+RETURNING *;
+
+-- =============================================================================
+-- WorkOS emulation: organization roles
+-- =============================================================================
+
+-- name: CreateOrganizationRole :one
+INSERT INTO organization_roles (organization_id, slug, name, description)
+VALUES (@organization_id, @slug, @name, COALESCE(sqlc.narg('description')::text, ''))
+RETURNING *;
+
+-- UpsertOrganizationRole is the seed path used by the default-user
+-- bootstrap to ensure (admin, member) exist on the Speakeasy org.
+-- name: UpsertOrganizationRole :one
+INSERT INTO organization_roles (organization_id, slug, name, description)
+VALUES (@organization_id, @slug, @name, COALESCE(sqlc.narg('description')::text, ''))
+ON CONFLICT (organization_id, slug) DO UPDATE SET slug = EXCLUDED.slug
+RETURNING *;
+
+-- name: GetOrganizationRoleBySlug :one
+SELECT * FROM organization_roles
+WHERE organization_id = @organization_id AND slug = @slug;
+
+-- name: ListOrganizationRoles :many
+SELECT * FROM organization_roles
+WHERE organization_id = @organization_id
+ORDER BY slug ASC;
+
+-- name: UpdateOrganizationRole :one
+UPDATE organization_roles
+SET
+  name = COALESCE(sqlc.narg('name'), name),
+  description = COALESCE(sqlc.narg('description'), description),
+  updated_at = clock_timestamp()
+WHERE organization_id = @organization_id AND slug = @slug
+RETURNING *;
+
+-- name: DeleteOrganizationRole :exec
+DELETE FROM organization_roles
+WHERE organization_id = @organization_id AND slug = @slug;
+
+-- =============================================================================
 -- users
 -- =============================================================================
 

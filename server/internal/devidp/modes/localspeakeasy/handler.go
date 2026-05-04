@@ -84,11 +84,17 @@ func NewHandler(cfg Config, logger *slog.Logger, tracerProvider trace.TracerProv
 // that prefix.
 func (h *Handler) Handler() http.Handler {
 	mux := http.NewServeMux()
+	// Speakeasy provider exchange (drop-in replacement for the standalone
+	// mock-speakeasy-idp binary).
 	mux.HandleFunc("GET /v1/speakeasy_provider/login", h.handleLogin)
 	mux.HandleFunc("POST /v1/speakeasy_provider/exchange", h.withSecretKey(h.handleExchange))
 	mux.HandleFunc("GET /v1/speakeasy_provider/validate", h.withSecretKey(h.handleValidate))
 	mux.HandleFunc("POST /v1/speakeasy_provider/revoke", h.withSecretKey(h.handleRevoke))
 	mux.HandleFunc("POST /v1/speakeasy_provider/register", h.withSecretKey(h.handleRegister))
+	// WorkOS-shaped REST surface (see workos.go) — lets gram-side
+	// `*workos.Client` swap api.workos.com for this listener with no code
+	// changes.
+	h.registerWorkosRoutes(mux)
 	return mux
 }
 

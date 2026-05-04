@@ -94,6 +94,19 @@ func BootstrapLocalUser(ctx context.Context, db *pgxpool.Pool, mode string) (uui
 		return uuid.Nil, fmt.Errorf("upsert default organization: %w", err)
 	}
 
+	// Seed the two default roles WorkOS provisions on every org so the
+	// local-speakeasy WorkOS-emulation endpoints have something to return
+	// from /authorization/organizations/{id}/roles even before any test
+	// calls CreateRole.
+	for _, r := range []repo.UpsertOrganizationRoleParams{
+		{OrganizationID: org.ID, Slug: "admin", Name: "Admin", Description: pgtype.Text{String: "", Valid: false}},
+		{OrganizationID: org.ID, Slug: "member", Name: "Member", Description: pgtype.Text{String: "", Valid: false}},
+	} {
+		if _, err := queries.UpsertOrganizationRole(ctx, r); err != nil {
+			return uuid.Nil, fmt.Errorf("seed default org role %q: %w", r.Slug, err)
+		}
+	}
+
 	if _, err := queries.CreateMembership(ctx, repo.CreateMembershipParams{
 		UserID:         user.ID,
 		OrganizationID: org.ID,

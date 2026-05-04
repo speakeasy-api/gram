@@ -28,6 +28,20 @@ type CurrentUser struct {
 	UpdatedAt  pgtype.Timestamptz
 }
 
+type Invitation struct {
+	ID             uuid.UUID
+	Email          string
+	OrganizationID uuid.UUID
+	State          string
+	Token          string
+	InviterUserID  uuid.NullUUID
+	AcceptedAt     pgtype.Timestamptz
+	RevokedAt      pgtype.Timestamptz
+	ExpiresAt      pgtype.Timestamptz
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
 type Membership struct {
 	ID             uuid.UUID
 	UserID         uuid.UUID
@@ -45,6 +59,16 @@ type Organization struct {
 	WorkosID    pgtype.Text
 	CreatedAt   pgtype.Timestamptz
 	UpdatedAt   pgtype.Timestamptz
+}
+
+type OrganizationRole struct {
+	ID             uuid.UUID
+	OrganizationID uuid.UUID
+	Slug           string
+	Name           string
+	Description    string
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
 }
 
 type Token struct {
