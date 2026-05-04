@@ -95,6 +95,22 @@ WHERE cm.project_id = '00000000-0000-0000-0000-000000000001'::uuid
 ORDER BY cm.seq
 LIMIT 800;
 
+-- Distractor risk_results: bulk up the table so a Seq Scan on risk_results
+-- becomes more expensive than an index lookup for the hot project's slice.
+INSERT INTO risk_results (
+    project_id, organization_id, risk_policy_id, risk_policy_version,
+    chat_message_id, source, found
+)
+SELECT cm.project_id,
+       'plan-check-org',
+       '00000000-0000-0000-0000-000000000002'::uuid,
+       1,
+       cm.id,
+       'content',
+       FALSE
+FROM chat_messages cm
+WHERE cm.project_id <> '00000000-0000-0000-0000-000000000001'::uuid;
+
 ANALYZE chat_messages;
 ANALYZE risk_results;
 ANALYZE risk_policies;
