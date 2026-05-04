@@ -1,7 +1,7 @@
 package access
 
 import (
-	mockidp "github.com/speakeasy-api/gram/server/internal/testenv/testidp"
+	mockidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
 	"testing"
 
 	"github.com/stretchr/testify/mock"

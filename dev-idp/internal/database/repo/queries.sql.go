@@ -50,6 +50,35 @@ func (q *Queries) AcceptInvitation(ctx context.Context, arg AcceptInvitationPara
 	return i, err
 }
 
+const clearOrganizationWorkosID = `-- name: ClearOrganizationWorkosID :one
+UPDATE organizations
+SET workos_id = NULL, updated_at = ?1
+WHERE id = ?2
+RETURNING id, name, slug, account_type, workos_id, created_at, updated_at
+`
+
+type ClearOrganizationWorkosIDParams struct {
+	Ts time.Time
+	ID uuid.UUID
+}
+
+// ClearOrganizationWorkosID nulls out workos_id explicitly. Used by the
+// service layer when the caller passes `clearWorkosID=true`.
+func (q *Queries) ClearOrganizationWorkosID(ctx context.Context, arg ClearOrganizationWorkosIDParams) (Organization, error) {
+	row := q.db.QueryRowContext(ctx, clearOrganizationWorkosID, arg.Ts, arg.ID)
+	var i Organization
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.AccountType,
+		&i.WorkosID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const consumeAuthCode = `-- name: ConsumeAuthCode :one
 DELETE FROM auth_codes
 WHERE code = ?1
@@ -1230,23 +1259,19 @@ SET
   name = COALESCE(?1, name),
   slug = COALESCE(?2, slug),
   account_type = COALESCE(?3, account_type),
-  workos_id = CASE
-    WHEN ?4 THEN NULL
-    ELSE COALESCE(?5, workos_id)
-  END,
-  updated_at = ?6
-WHERE id = ?7
+  workos_id = COALESCE(?4, workos_id),
+  updated_at = ?5
+WHERE id = ?6
 RETURNING id, name, slug, account_type, workos_id, created_at, updated_at
 `
 
 type UpdateOrganizationParams struct {
-	Name          sql.NullString
-	Slug          sql.NullString
-	AccountType   sql.NullString
-	ClearWorkosID sql.NullString
-	WorkosID      sql.NullString
-	Ts            time.Time
-	ID            uuid.UUID
+	Name        sql.NullString
+	Slug        sql.NullString
+	AccountType sql.NullString
+	WorkosID    sql.NullString
+	Ts          time.Time
+	ID          uuid.UUID
 }
 
 func (q *Queries) UpdateOrganization(ctx context.Context, arg UpdateOrganizationParams) (Organization, error) {
@@ -1254,7 +1279,6 @@ func (q *Queries) UpdateOrganization(ctx context.Context, arg UpdateOrganization
 		arg.Name,
 		arg.Slug,
 		arg.AccountType,
-		arg.ClearWorkosID,
 		arg.WorkosID,
 		arg.Ts,
 		arg.ID,

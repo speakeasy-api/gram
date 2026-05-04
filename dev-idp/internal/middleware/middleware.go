@@ -14,7 +14,10 @@ import (
 	"runtime/debug"
 	"time"
 
+	"go.opentelemetry.io/otel/trace"
 	goa "goa.design/goa/v3/pkg"
+
+	"github.com/speakeasy-api/gram/dev-idp/internal/oops"
 )
 
 // NewRecovery catches panics from downstream handlers, logs the stack and
@@ -89,12 +92,28 @@ func (w *statusWriter) WriteHeader(code int) {
 	w.ResponseWriter.WriteHeader(code)
 }
 
-// PassthroughErrors is a Goa endpoint middleware that ensures returned
-// errors flow through to the HTTP encoder unchanged. Goa's HTTP encoder
-// then formats them by name (declared in design) or as the wrapped
-// internal-error envelope. Kept as a hook so future error-shape needs
-// have a single place to land.
-func PassthroughErrors() func(goa.Endpoint) goa.Endpoint {
+// MapErrors is a Goa endpoint middleware that translates dev-idp's
+// internal *oops.ShareableError into the Goa wire shape. Plain errors
+// pass through unchanged (Goa's HTTP encoder + dev-idp's permissive
+// error encoder turn them into a verbose 500 response).
+func MapErrors() func(goa.Endpoint) goa.Endpoint {
+	return func(next goa.Endpoint) goa.Endpoint {
+		return func(ctx context.Context, req any) (any, error) {
+			val, err := next(ctx, req)
+
+			var se *oops.ShareableError
+			if err != nil && errors.As(err, &se) {
+				return nil, se.AsGoa()
+			}
+			return val, err
+		}
+	}
+}
+
+// TraceMethods is a no-op endpoint middleware kept for API parity with
+// the gram-server middleware. dev-idp uses a noop tracer so there is
+// nothing to record.
+func TraceMethods(_ trace.Tracer) func(goa.Endpoint) goa.Endpoint {
 	return func(next goa.Endpoint) goa.Endpoint {
 		return func(ctx context.Context, req any) (any, error) {
 			return next(ctx, req)

@@ -19,11 +19,16 @@ SET
   name = COALESCE(sqlc.narg('name'), name),
   slug = COALESCE(sqlc.narg('slug'), slug),
   account_type = COALESCE(sqlc.narg('account_type'), account_type),
-  workos_id = CASE
-    WHEN @clear_workos_id THEN NULL
-    ELSE COALESCE(sqlc.narg('workos_id'), workos_id)
-  END,
+  workos_id = COALESCE(sqlc.narg('workos_id'), workos_id),
   updated_at = @ts
+WHERE id = @id
+RETURNING *;
+
+-- ClearOrganizationWorkosID nulls out workos_id explicitly. Used by the
+-- service layer when the caller passes `clearWorkosID=true`.
+-- name: ClearOrganizationWorkosID :one
+UPDATE organizations
+SET workos_id = NULL, updated_at = @ts
 WHERE id = @id
 RETURNING *;
 

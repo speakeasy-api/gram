@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/workos/workos-go/v6/pkg/organizations"
 	"github.com/workos/workos-go/v6/pkg/usermanagement"
 	"github.com/workos/workos-go/v6/pkg/workos_errors"
 )
@@ -26,9 +27,32 @@ type User struct {
 	ProfilePictureURL string
 }
 
-// Client wraps the WorkOS user-management SDK.
+// Organization mirrors the WorkOS organization fields dev-idp consumes.
+type Organization struct {
+	ID        string
+	Name      string
+	CreatedAt string
+	UpdatedAt string
+}
+
+// Member is one row of a user's organization-membership list. The
+// embedded Organization name is what WorkOS returns in
+// OrganizationMembership.OrganizationName.
+type Member struct {
+	ID             string
+	UserID         string
+	OrganizationID string
+	Organization   string
+	RoleSlug       string
+	Status         string
+	CreatedAt      string
+	UpdatedAt      string
+}
+
+// Client wraps the WorkOS user-management + organizations SDKs.
 type Client struct {
-	um *usermanagement.Client
+	um   *usermanagement.Client
+	orgs *organizations.Client
 }
 
 // Opts configures optional overrides for NewClient.
@@ -46,16 +70,67 @@ func NewClient(apiKey string, opts ...Opts) *Client {
 	}
 
 	um := usermanagement.NewClient(apiKey)
+	orgs := &organizations.Client{APIKey: apiKey}
 	if opt.HTTPClient != nil {
 		um.HTTPClient = opt.HTTPClient
+		orgs.HTTPClient = opt.HTTPClient
 	}
 	if opt.Endpoint != "" {
 		um.Endpoint = opt.Endpoint
+		orgs.Endpoint = opt.Endpoint
 	} else {
 		um.Endpoint = defaultBaseURL
 	}
 
-	return &Client{um: um}
+	return &Client{um: um, orgs: orgs}
+}
+
+// GetOrganization fetches a WorkOS organization by id.
+func (c *Client) GetOrganization(ctx context.Context, orgID string) (*Organization, error) {
+	o, err := c.orgs.GetOrganization(ctx, organizations.GetOrganizationOpts{Organization: orgID})
+	if err != nil {
+		return nil, fmt.Errorf("workos get organization: %w", err)
+	}
+	return &Organization{
+		ID:        o.ID,
+		Name:      o.Name,
+		CreatedAt: o.CreatedAt,
+		UpdatedAt: o.UpdatedAt,
+	}, nil
+}
+
+// ListUserMemberships paginates through every membership a user has
+// across all organizations they belong to.
+func (c *Client) ListUserMemberships(ctx context.Context, userID string) ([]Member, error) {
+	var all []Member
+	after := ""
+	for {
+		resp, err := c.um.ListOrganizationMemberships(ctx, usermanagement.ListOrganizationMembershipsOpts{
+			UserID: userID,
+			Limit:  100,
+			After:  after,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("workos list user memberships: %w", err)
+		}
+		for _, m := range resp.Data {
+			all = append(all, Member{
+				ID:             m.ID,
+				UserID:         m.UserID,
+				OrganizationID: m.OrganizationID,
+				Organization:   m.OrganizationName,
+				RoleSlug:       m.Role.Slug,
+				Status:         string(m.Status),
+				CreatedAt:      m.CreatedAt,
+				UpdatedAt:      m.UpdatedAt,
+			})
+		}
+		if resp.ListMetadata.After == "" {
+			break
+		}
+		after = resp.ListMetadata.After
+	}
+	return all, nil
 }
 
 // GetUser fetches a WorkOS user by ID. Returns an error wrapping a 404
