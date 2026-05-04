@@ -63,7 +63,7 @@ type segmentAnalysisResult struct {
 }
 
 func (a *AnalyzeSegment) Do(ctx context.Context, args AnalyzeSegmentArgs) error {
-	allMessages, err := a.repo.ListChatMessages(ctx, repo.ListChatMessagesParams{
+	allMessages, err := a.repo.ListLatestGenerationChatMessages(ctx, repo.ListLatestGenerationChatMessagesParams{
 		ChatID:    args.ChatID,
 		ProjectID: args.ProjectID,
 	})

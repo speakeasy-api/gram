@@ -3,8 +3,8 @@ import { DotRow } from "@/components/ui/dot-row";
 import { Button } from "@/components/ui/button";
 import { Type } from "@/components/ui/type";
 import { useMcpUrl } from "@/hooks/useToolsetUrl";
-import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
+import { MCPStatusIndicator } from "./MCPStatusIndicator";
 import { ToolsetEntry } from "@gram/client/models/components";
 import { useLatestDeployment } from "@gram/client/react-query";
 import { AlertTriangleIcon, Link2, Network, Package } from "lucide-react";
@@ -49,22 +49,6 @@ export function MCPTableRow({ toolset }: { toolset: ToolsetEntry }) {
     return { slug, logoUrl };
   }, [toolset.toolUrns, catalogIconMap, deploymentResult]);
 
-  const getStatusConfig = () => {
-    if (!toolset.mcpEnabled) {
-      return {
-        color: "bg-red-500",
-        pulseColor: "bg-red-400",
-        label: "Disabled",
-      };
-    }
-    return {
-      color: "bg-green-500",
-      pulseColor: "bg-green-400",
-      label: toolset.mcpIsPublic ? "Public" : "Private",
-    };
-  };
-
-  const status = getStatusConfig();
   const installSourceTooltip = toolset.origin?.registrySpecifier
     ? `Installed from ${toolset.origin.registrySpecifier}`
     : undefined;
@@ -109,27 +93,11 @@ export function MCPTableRow({ toolset }: { toolset: ToolsetEntry }) {
 
       {/* Status */}
       <td className="px-3 py-3">
-        <div className="flex items-center gap-2">
-          <div className="relative flex h-2 w-2">
-            {toolset.mcpEnabled && (
-              <span
-                className={cn(
-                  "absolute inline-flex h-full w-full animate-ping rounded-full opacity-75",
-                  status.pulseColor,
-                )}
-              />
-            )}
-            <span
-              className={cn(
-                "relative inline-flex h-2 w-2 rounded-full",
-                status.color,
-              )}
-            />
-          </div>
-          <Type variant="small" muted>
-            {status.label}
-          </Type>
-        </div>
+        <MCPStatusIndicator
+          mcpEnabled={toolset.mcpEnabled}
+          mcpIsPublic={toolset.mcpIsPublic}
+          size="sm"
+        />
       </td>
 
       {/* URL */}

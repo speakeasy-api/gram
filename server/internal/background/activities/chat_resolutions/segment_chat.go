@@ -50,8 +50,7 @@ type SegmentChatOutput struct {
 }
 
 func (s *SegmentChat) Do(ctx context.Context, args SegmentChatArgs) (*SegmentChatOutput, error) {
-	// Get all messages for this chat
-	messages, err := s.repo.ListChatMessages(ctx, repo.ListChatMessagesParams{
+	messages, err := s.repo.ListLatestGenerationChatMessages(ctx, repo.ListLatestGenerationChatMessagesParams{
 		ChatID:    args.ChatID,
 		ProjectID: args.ProjectID,
 	})

@@ -261,6 +261,20 @@ WHERE t.project_id = @project_id
         OR (r.state = @active_state AND (r.warm_until IS NULL OR r.warm_until > clock_timestamp()))
       )
   )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM assistant_runtimes lr
+    WHERE lr.project_id = t.project_id
+      AND lr.assistant_thread_id = t.id
+      AND lr.state = @failed_state
+      AND lr.updated_at > @admit_failure_backoff_cutoff
+      AND lr.created_at = (
+        SELECT MAX(rlatest.created_at)
+        FROM assistant_runtimes rlatest
+        WHERE rlatest.project_id = t.project_id
+          AND rlatest.assistant_thread_id = t.id
+      )
+  )
 ORDER BY (
   SELECT MIN(e.created_at)
   FROM assistant_thread_events e
