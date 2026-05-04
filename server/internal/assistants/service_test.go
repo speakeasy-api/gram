@@ -432,6 +432,60 @@ WHERE assistant_thread_id = $1
 	require.Contains(t, lastError.String, "runtime RunTurn blew up")
 }
 
+func TestServiceCoreProcessThreadEventsMarksRuntimeFailedOnUnhealthyTurn(t *testing.T) {
+	t.Parallel()
+
+	conn, err := assistantsInfra.CloneTestDatabase(t, "assistants_unhealthy_turn")
+	require.NoError(t, err)
+
+	projectID := uuid.New()
+	assistantID := uuid.New()
+	chatID := uuid.New()
+	threadID := uuid.New()
+	insertAssistantFixture(t, conn, projectID, assistantID, chatID, threadID)
+
+	var stopCalls atomic.Int64
+	logger := testenv.NewLogger(t)
+	tokens := assistanttokens.New("test-jwt-secret", conn, nil)
+	backend := testRuntimeBackend{
+		backend:    runtimeBackendFlyIO,
+		runTurnErr: ErrRuntimeUnhealthy,
+		stopCalls:  &stopCalls,
+	}
+	core := NewServiceCore(logger, testenv.NewTracerProvider(t), conn, backend, nil, tokens, mustParseURLForServiceTest(t, "https://gram.example.com"), telemetry.NewStub(logger))
+
+	admitted, err := core.AdmitPendingThreads(t.Context(), assistantID)
+	require.NoError(t, err)
+	require.Equal(t, []uuid.UUID{threadID}, admitted.ThreadIDs)
+
+	result, err := core.ProcessThreadEvents(t.Context(), projectID, threadID)
+	require.NoError(t, err)
+	require.True(t, result.RetryAdmission)
+	require.False(t, result.RuntimeActive)
+	require.False(t, result.ProcessedAnyEvent)
+	require.Equal(t, int64(1), stopCalls.Load(), "unhealthy turn must tear the VM down")
+
+	var state string
+	var deleted bool
+	err = conn.QueryRow(t.Context(), `
+SELECT state, deleted
+FROM assistant_runtimes
+WHERE assistant_thread_id = $1
+`, threadID).Scan(&state, &deleted)
+	require.NoError(t, err)
+	require.Equal(t, runtimeStateFailed, state, "unhealthy turn must mark runtime failed so the admission backoff applies")
+	require.True(t, deleted)
+
+	var eventStatus string
+	err = conn.QueryRow(t.Context(), `
+SELECT status
+FROM assistant_thread_events
+WHERE assistant_thread_id = $1
+`, threadID).Scan(&eventStatus)
+	require.NoError(t, err)
+	require.Equal(t, eventStatusProcessing, eventStatus, "unhealthy turn leaves the event in processing for the reaper")
+}
+
 func TestServiceCoreProcessThreadEventsDoesNotStopRuntimeOnConfigureFailure(t *testing.T) {
 	t.Parallel()
 
@@ -486,6 +540,19 @@ WHERE assistant_thread_id = $1
 	require.Equal(t, runtimeStateFailed, state)
 	require.True(t, deleted)
 	require.JSONEq(t, string(backend.ensureResult.BackendMetadataJSON), string(metadata))
+
+	hotAdmit, err := core.AdmitPendingThreads(t.Context(), assistantID)
+	require.NoError(t, err)
+	require.Empty(t, hotAdmit.ThreadIDs, "admission backoff must block re-admit immediately after a setup failure")
+
+	// Simulate the backoff window elapsing so the next admit is eligible.
+	_, err = conn.Exec(t.Context(), `
+UPDATE assistant_runtimes
+SET updated_at = clock_timestamp() - INTERVAL '1 hour'
+WHERE assistant_thread_id = $1
+  AND state = $2
+`, threadID, runtimeStateFailed)
+	require.NoError(t, err)
 
 	admittedAgain, err := core.AdmitPendingThreads(t.Context(), assistantID)
 	require.NoError(t, err)

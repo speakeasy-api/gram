@@ -80,6 +80,7 @@ type flyRuntimeFlapsClient interface {
 	Launch(ctx context.Context, appName string, input fly.LaunchMachineInput) (*fly.Machine, error)
 	List(ctx context.Context, appName, state string) ([]*fly.Machine, error)
 	Start(ctx context.Context, appName, machineID string, nonce string) (*fly.MachineStartResponse, error)
+	Stop(ctx context.Context, appName string, in fly.StopMachineInput, nonce string) error
 	Wait(ctx context.Context, appName string, machine *fly.Machine, state string, timeout time.Duration) error
 }
 
@@ -688,6 +689,8 @@ func (f *FlyRuntimeBackend) ServerURL(_ context.Context, runtime assistantRuntim
 	return &cloned, nil
 }
 
+// Stop pauses the machine but preserves the app, allocated IP, and backend
+// metadata so a subsequent admit can resume the same incarnation.
 func (f *FlyRuntimeBackend) Stop(ctx context.Context, runtime assistantRuntimeRecord) error {
 	if err := validateRuntimeBackend(f, runtime.Backend); err != nil {
 		return err
@@ -696,10 +699,21 @@ func (f *FlyRuntimeBackend) Stop(ctx context.Context, runtime assistantRuntimeRe
 	if err != nil {
 		return err
 	}
-	if metadata.AppName == "" {
+	if metadata.AppName == "" || metadata.MachineID == "" {
 		return nil
 	}
-	return f.deleteApp(ctx, metadata.AppName)
+
+	flapsClient, err := f.flapsFactory.New(ctx)
+	if err != nil {
+		return fmt.Errorf("create fly runtime flaps client: %w", err)
+	}
+
+	if err := flapsClient.Stop(ctx, metadata.AppName, fly.StopMachineInput{
+		ID: metadata.MachineID,
+	}, ""); err != nil && !isFlyNotFound(err) {
+		return fmt.Errorf("stop assistant fly runtime machine: %w", err)
+	}
+	return nil
 }
 
 func (f *FlyRuntimeBackend) deleteApp(ctx context.Context, appName string) error {

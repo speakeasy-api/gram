@@ -60,6 +60,7 @@ const (
 	runtimeProcessingLeaseGrace  = 2 * time.Minute
 	eventProcessingRequeueGrace  = 3 * time.Minute
 	processingLeaseHeartbeatTick = 30 * time.Second
+	admitFailureBackoff          = 30 * time.Second
 )
 
 var errAssistantValidation = errors.New("assistant validation")
@@ -1036,12 +1037,14 @@ func (s *ServiceCore) AdmitPendingThreads(ctx context.Context, assistantID uuid.
 	available := max(assistant.MaxConcurrency-conv.SafeInt(activeCount), 0)
 	if available > 0 {
 		coldThreads, err := queries.ListColdPendingThreadsForAdmit(ctx, assistantrepo.ListColdPendingThreadsForAdmitParams{
-			ProjectID:     assistant.ProjectID,
-			AssistantID:   assistantID,
-			PendingStatus: eventStatusPending,
-			StartingState: runtimeStateStarting,
-			ActiveState:   runtimeStateActive,
-			LimitCount:    conv.SafeInt32(available),
+			ProjectID:                 assistant.ProjectID,
+			AssistantID:               assistantID,
+			PendingStatus:             eventStatusPending,
+			StartingState:             runtimeStateStarting,
+			ActiveState:               runtimeStateActive,
+			FailedState:               runtimeStateFailed,
+			AdmitFailureBackoffCutoff: conv.ToPGTimestamptz(time.Now().UTC().Add(-admitFailureBackoff)),
+			LimitCount:                conv.SafeInt32(available),
 		})
 		if err != nil {
 			return AdmitPendingThreadsResult{}, fmt.Errorf("select cold assistant threads: %w", err)
@@ -1174,7 +1177,7 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 			// window so they flow through cleanly under a fresh VM.
 			if errors.Is(runErr, ErrRuntimeUnhealthy) {
 				_ = s.runtime.Stop(ctx, runtimeRecord)
-				_ = s.stopRuntimeRecord(ctx, thread.ProjectID, thread.ID, runtimeStateStopped)
+				_ = s.stopRuntimeRecord(ctx, thread.ProjectID, thread.ID, runtimeStateFailed)
 				return ProcessThreadEventsResult{
 					AssistantID:       assistant.ID,
 					WarmUntil:         time.Time{},
