@@ -27691,6 +27691,7 @@ components:
             - org
             - project
             - mcp
+            - tools
         slug:
           type: string
           description: Unique scope identifier.
@@ -27702,6 +27703,7 @@ components:
             - mcp:read
             - mcp:write
             - mcp:connect
+            - tools:execute_destructive
       required:
         - slug
         - description

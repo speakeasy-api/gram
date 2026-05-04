@@ -17,6 +17,7 @@ const (
 	subjectTypeEnvironment     subjectType = "environment"
 	subjectTypeMcpEndpoint     subjectType = "mcp_endpoint"
 	subjectTypeMcpServer       subjectType = "mcp_server"
+	subjectTypeToolCall        subjectType = "tool_call"
 	subjectTypePlugin          subjectType = "plugin"
 	subjectTypeProject         subjectType = "project"
 	subjectTypeTemplate        subjectType = "template"

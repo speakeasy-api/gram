@@ -3,6 +3,7 @@ package hooks
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -16,10 +17,14 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
+	"github.com/speakeasy-api/gram/server/internal/urn"
+	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
 // claudeRequestDecoder is a custom decoder that handles both JSON and form-urlencoded content types
@@ -346,14 +351,33 @@ func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePaylo
 	result := makeHookResult(payload.HookEventName)
 	output, _ := result.HookSpecificOutput.(*HookSpecificOutput)
 
-	// Only Gram-hosted (non-local) tool calls carry the x-gram-toolset-id
-	// property. In Claude Code, MCP-routed tools are identified by the
-	// "mcp__<server>__<tool>" name convention; native tools (Read, Edit, Bash,
-	// ...) are skipped.
 	rawToolName := ""
 	if payload.ToolName != nil {
 		rawToolName = *payload.ToolName
 	}
+
+	// Resolve session metadata once and reuse for the destructive checks
+	// below. metadataOK is false when we cannot derive an org/project, in
+	// which case we fall through to the existing allow path — destructive
+	// enforcement requires at minimum an org id.
+	metadata, metadataOK := s.resolveClaudePreToolUseMetadata(ctx, payload)
+
+	// Content trigger — runs for every tool call (native Bash/Edit/Write and
+	// MCP alike) so curated patterns like "rm -rf", "DROP TABLE", or "aws ec2
+	// terminate-instances" are caught regardless of the tool name. Order matters:
+	// runs before the MCP-only branch below so native tools that aren't routed
+	// through Gram still get gated.
+	if matched, ok := scanForDestructive(payload.ToolInput); ok && metadataOK {
+		denyReason := fmt.Sprintf("matched destructive pattern: %s", matched.FullName())
+		if blocked := s.applyDestructiveScopeDeny(ctx, payload, &metadata, rawToolName, denyReason, matched.FullName(), result, output, deny); blocked {
+			return result, nil
+		}
+	}
+
+	// Only Gram-hosted (non-local) tool calls carry the x-gram-toolset-id
+	// property. In Claude Code, MCP-routed tools are identified by the
+	// "mcp__<server>__<tool>" name convention; native tools (Read, Edit, Bash,
+	// ...) are skipped.
 	mcpToolName, isMCP := claudeMCPToolName(rawToolName)
 	if !isMCP {
 		if output != nil {
@@ -362,11 +386,7 @@ func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePaylo
 		return result, nil
 	}
 
-	sessionID := ""
-	if payload.SessionID != nil {
-		sessionID = *payload.SessionID
-	}
-	if sessionID == "" {
+	if !metadataOK {
 		// No session yet to derive org from — fall back to allow rather than
 		// breaking the tool call. Hook event will still be buffered.
 		if output != nil {
@@ -374,53 +394,22 @@ func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePaylo
 		}
 		return result, nil
 	}
-	// Plugin path: when the request authenticated via Gram-Key + Gram-Project,
-	// org/project come from the auth context — same pattern as recordHook.
-	// This lets the shadow-MCP guard run on the very first PreToolUse of a
-	// session, before OTEL Logs has had a chance to seed Redis. Redis is still
-	// consulted to enrich UserEmail / ServiceName / ClaudeOrgID for the
-	// downstream ClickHouse row, but absence of cached fields is non-fatal.
-	var metadata SessionMetadata
-	if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil && authCtx.ProjectID != nil {
-		metadata = SessionMetadata{
-			SessionID:   sessionID,
-			ServiceName: "",
-			UserEmail:   "",
-			ClaudeOrgID: "",
-			GramOrgID:   authCtx.ActiveOrganizationID,
-			ProjectID:   authCtx.ProjectID.String(),
-		}
-		if cached, err := s.getSessionMetadata(ctx, sessionID); err == nil {
-			metadata.ServiceName = cached.ServiceName
-			metadata.UserEmail = cached.UserEmail
-			metadata.ClaudeOrgID = cached.ClaudeOrgID
-		}
-	} else {
-		var err error
-		metadata, err = s.getSessionMetadata(ctx, sessionID)
-		if err != nil {
-			// OTEL path with no cached metadata yet — allow this call; the
-			// buffered hook will be re-persisted once metadata arrives.
-			s.logger.WarnContext(ctx, "claude PreToolUse fired before session metadata available; allowing tool call",
-				attr.SlogEvent("claude_hook_pretooluse_no_metadata"),
-				attr.SlogError(err),
-			)
-			if output != nil {
-				output.PermissionDecision = &allow
-			}
-			return result, nil
-		}
-	}
 
 	policy := s.lookupShadowMCPBlockingPolicy(ctx, metadata.ProjectID)
 	if policy == nil {
+		// Annotation trigger still runs even when no shadow-MCP policy is
+		// active: a destructive MCP tool with DestructiveHint=true requires
+		// the scope regardless of toolset signing.
+		if denied := s.maybeEnforceMCPAnnotation(ctx, payload, &metadata, rawToolName, mcpToolName, result, output, deny); denied {
+			return result, nil
+		}
 		if output != nil {
 			output.PermissionDecision = &allow
 		}
 		return result, nil
 	}
 
-	detail, denied := s.shadowMCPClient.ValidateToolsetCall(ctx, payload.ToolInput, mcpToolName, metadata.GramOrgID)
+	detail, denied, tool := s.shadowMCPClient.LookupToolsetCall(ctx, payload.ToolInput, mcpToolName, metadata.GramOrgID)
 	if denied {
 		s.logger.InfoContext(ctx, "denying claude tool call: failed gram toolset validation",
 			attr.SlogEvent("claude_hook_denied"),
@@ -450,10 +439,171 @@ func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePaylo
 		return result, nil
 	}
 
+	// Annotation trigger: if shadow-MCP allowed but the tool is annotated
+	// destructive, the destructive scope is still required.
+	if tool != nil && tool.Annotations != nil && tool.Annotations.DestructiveHint != nil && *tool.Annotations.DestructiveHint {
+		if denied := s.applyDestructiveScopeDeny(ctx, payload, &metadata, rawToolName, "tool annotated DestructiveHint=true", "", result, output, deny); denied {
+			return result, nil
+		}
+	}
+
 	if output != nil {
 		output.PermissionDecision = &allow
 	}
 	return result, nil
+}
+
+// resolveClaudePreToolUseMetadata attempts to derive the org+project context
+// for a Claude PreToolUse hook. Returns (metadata, true) when at least the
+// org id is known, (zero, false) otherwise — callers fall back to allow when
+// false. Plugin auth supplies org/project directly; OTEL-only sessions need
+// the Redis cache to have been seeded by /rpc/hooks.otel.logs.
+func (s *Service) resolveClaudePreToolUseMetadata(ctx context.Context, payload *gen.ClaudePayload) (SessionMetadata, bool) {
+	sessionID := ""
+	if payload.SessionID != nil {
+		sessionID = *payload.SessionID
+	}
+
+	if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil && authCtx.ProjectID != nil {
+		metadata := SessionMetadata{
+			SessionID:   sessionID,
+			ServiceName: "",
+			UserEmail:   "",
+			ClaudeOrgID: "",
+			GramOrgID:   authCtx.ActiveOrganizationID,
+			ProjectID:   authCtx.ProjectID.String(),
+		}
+		if sessionID != "" {
+			if cached, err := s.getSessionMetadata(ctx, sessionID); err == nil {
+				metadata.ServiceName = cached.ServiceName
+				metadata.UserEmail = cached.UserEmail
+				metadata.ClaudeOrgID = cached.ClaudeOrgID
+			}
+		}
+		return metadata, true
+	}
+
+	if sessionID == "" {
+		return SessionMetadata{}, false //nolint:exhaustruct // sentinel zero value; second return signals absence
+	}
+
+	metadata, err := s.getSessionMetadata(ctx, sessionID)
+	if err != nil {
+		s.logger.WarnContext(ctx, "claude PreToolUse fired before session metadata available; allowing tool call",
+			attr.SlogEvent("claude_hook_pretooluse_no_metadata"),
+			attr.SlogError(err),
+		)
+		return SessionMetadata{}, false //nolint:exhaustruct // sentinel zero value; second return signals absence
+	}
+	return metadata, true
+}
+
+// maybeEnforceMCPAnnotation runs the annotation trigger for an MCP tool
+// reachable via the shadow-MCP toolset cache when there's no active blocking
+// policy. Returns true when the call has been denied (and the result struct
+// has been populated for return).
+func (s *Service) maybeEnforceMCPAnnotation(ctx context.Context, payload *gen.ClaudePayload, metadata *SessionMetadata, rawToolName, mcpToolName string, result *gen.ClaudeHookResult, output *HookSpecificOutput, deny string) bool {
+	_, lookupDenied, tool := s.shadowMCPClient.LookupToolsetCall(ctx, payload.ToolInput, mcpToolName, metadata.GramOrgID)
+	if lookupDenied || tool == nil || tool.Annotations == nil || tool.Annotations.DestructiveHint == nil || !*tool.Annotations.DestructiveHint {
+		return false
+	}
+	return s.applyDestructiveScopeDeny(ctx, payload, metadata, rawToolName, "tool annotated DestructiveHint=true", "", result, output, deny)
+}
+
+// applyDestructiveScopeDeny evaluates the destructive scope check and, when
+// the caller is denied, populates the result struct with a self-branded deny
+// message, writes the companion ClickHouse block-reason row, and emits an
+// audit event. Returns true when the call was denied. Returns false when the
+// scope check passes or RBAC enforcement is skipped (non-enterprise org,
+// flag off, no auth context).
+func (s *Service) applyDestructiveScopeDeny(ctx context.Context, payload *gen.ClaudePayload, metadata *SessionMetadata, rawToolName, reasonContext, matchedPattern string, result *gen.ClaudeHookResult, output *HookSpecificOutput, deny string) bool {
+	if s.authz == nil {
+		return false
+	}
+	gramUserID := s.lookupGramUserIDByEmail(ctx, metadata.UserEmail)
+	checkErr := s.authz.RequireForHookPrincipal(ctx, gramUserID, metadata.GramOrgID,
+		authz.Check{Scope: authz.ScopeToolsExecuteDestructive, ResourceKind: "", ResourceID: metadata.GramOrgID, Dimensions: nil},
+	)
+	if checkErr == nil {
+		return false
+	}
+	var oopsErr *oops.ShareableError
+	if !errors.As(checkErr, &oopsErr) || oopsErr.Code != oops.CodeForbidden {
+		// Unexpected auth-engine failure (e.g. DB error). Surface the failure
+		// in logs, but fall through to allow so we don't accidentally break
+		// every tool call when authz is misconfigured.
+		s.logger.ErrorContext(ctx, "destructive scope check errored; falling through to allow",
+			attr.SlogEvent("claude_hook_destructive_check_error"),
+			attr.SlogError(checkErr),
+		)
+		return false
+	}
+
+	reason := fmt.Sprintf("Speakeasy blocked this destructive tool call: caller lacks the %s scope (%s)", string(authz.ScopeToolsExecuteDestructive), reasonContext)
+	s.logger.InfoContext(ctx, "denying claude tool call: missing destructive scope",
+		attr.SlogEvent("claude_hook_destructive_denied"),
+		attr.SlogValueAny(map[string]any{
+			"toolName":       rawToolName,
+			"reasonContext":  reasonContext,
+			"matchedPattern": matchedPattern,
+		}),
+	)
+	s.writeClaudeBlockToClickHouse(ctx, payload, metadata, reason)
+
+	s.recordDestructiveDenyAudit(ctx, metadata, gramUserID, rawToolName, reasonContext, matchedPattern)
+
+	result.SystemMessage = &reason
+	if output != nil {
+		output.PermissionDecision = &deny
+		output.PermissionDecisionReason = &reason
+	}
+	return true
+}
+
+// lookupGramUserIDByEmail resolves a Claude/Cursor session email to a Gram
+// user ID. Returns "" when email is empty or no Gram user matches; the
+// destructive check treats either case as Forbidden.
+func (s *Service) lookupGramUserIDByEmail(ctx context.Context, email string) string {
+	if email == "" || s.db == nil {
+		return ""
+	}
+	user, err := usersrepo.New(s.db).GetUserByEmail(ctx, email)
+	if err != nil {
+		return ""
+	}
+	return user.ID
+}
+
+func (s *Service) recordDestructiveDenyAudit(ctx context.Context, metadata *SessionMetadata, gramUserID, toolName, reasonContext, matchedPattern string) {
+	if s.db == nil {
+		return
+	}
+	projectID, err := uuid.Parse(metadata.ProjectID)
+	if err != nil {
+		projectID = uuid.Nil
+	}
+	actor := urn.NewPrincipal(urn.PrincipalTypeUser, gramUserID)
+	if gramUserID == "" {
+		// Anonymous attribution — record the email as the display name so
+		// reviewers can correlate without a Gram user binding.
+		actor = urn.Principal{Type: urn.PrincipalTypeUser, ID: ""}
+	}
+	displayName := metadata.UserEmail
+	if err := audit.LogToolExecuteDestructiveDeny(ctx, s.db, audit.LogToolExecuteDestructiveDenyEvent{
+		OrganizationID:   metadata.GramOrgID,
+		ProjectID:        projectID,
+		Actor:            actor,
+		ActorDisplayName: &displayName,
+		ActorSlug:        nil,
+		ToolName:         toolName,
+		Reason:           reasonContext,
+		MatchedPattern:   matchedPattern,
+	}); err != nil {
+		s.logger.WarnContext(ctx, "failed to record destructive deny audit event",
+			attr.SlogEvent("claude_hook_destructive_audit_error"),
+			attr.SlogError(err),
+		)
+	}
 }
 
 // claudeMCPToolName returns the bare tool name and true if rawName follows the

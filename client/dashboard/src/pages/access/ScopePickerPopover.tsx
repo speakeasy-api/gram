@@ -164,8 +164,9 @@ export function ScopePickerPopover({
   // selectors have content, so clearing it eagerly only causes the UI to
   // jump back to "servers" when the user deselects all items.
 
-  // Org-scoped permissions have no resource picker — they're always org-wide
-  if (resourceType === "org") {
+  // Org- and tools-scoped permissions have no resource picker — they're
+  // org-wide capabilities that are either granted or not.
+  if (resourceType === "org" || resourceType === "tools") {
     return (
       <span className="border-input text-muted-foreground inline-flex h-7 items-center rounded-md border bg-transparent px-2 py-1 text-xs">
         All
