@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"math/rand/v2"
 	"net/http"
-	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -170,30 +169,36 @@ func (p *PresidioClient) AnalyzeBatch(ctx context.Context, texts []string, entit
 	}
 	entities = filtered
 
-	// Skip texts above presidio's max length to avoid OOMing the analyzer.
-	// Replace each oversize entry with an empty string so result indices stay
-	// aligned; the empty slot returns no findings to the caller.
-	var clipped []string
+	// Drop texts that presidio doesn't need to see: empties have nothing to
+	// detect, and oversize texts OOM the spaCy model. Both produce zero
+	// findings, so skipping them gives the same result as sending and saves
+	// the round-trip (and, for oversize, prevents the analyzer crash).
+	results := make([][]Finding, n)
+	sendTexts := make([]string, 0, n)
+	sendOriginalIdx := make([]int, 0, n)
 	for i, t := range texts {
-		if len(t) <= presidioMaxTextBytes {
+		if t == "" {
 			continue
 		}
-		if clipped == nil {
-			clipped = slices.Clone(texts)
+		if len(t) > presidioMaxTextBytes {
+			p.logger.WarnContext(ctx, "presidio analyze: text exceeds max size, skipping",
+				attr.SlogRiskPresidioTextIndex(i),
+				attr.SlogRiskPresidioTextBytes(len(t)),
+				attr.SlogRiskPresidioMaxBytes(presidioMaxTextBytes),
+			)
+			continue
 		}
-		clipped[i] = ""
-		p.logger.WarnContext(ctx, "presidio analyze: text exceeds max size, skipping",
-			attr.SlogRiskPresidioTextIndex(i),
-			attr.SlogRiskPresidioTextBytes(len(t)),
-			attr.SlogRiskPresidioMaxBytes(presidioMaxTextBytes),
-		)
+		sendTexts = append(sendTexts, t)
+		sendOriginalIdx = append(sendOriginalIdx, i)
 	}
-	if clipped != nil {
-		texts = clipped
+
+	if len(sendTexts) == 0 {
+		return results, nil
 	}
 
 	ctx, span := p.tracer.Start(ctx, "presidio.analyzeBatch", trace.WithAttributes(
 		attribute.Int("presidio.batch_size", n),
+		attribute.Int("presidio.send_size", len(sendTexts)),
 		attribute.Int("presidio.http_batch_size", presidioHTTPBatchSize),
 	))
 	defer func() {
@@ -203,8 +208,8 @@ func (p *PresidioClient) AnalyzeBatch(ctx context.Context, texts []string, entit
 		span.End()
 	}()
 
-	results := make([][]Finding, n)
-	batches := chunkTextIndexes(n, presidioHTTPBatchSize)
+	sendResults := make([][]Finding, len(sendTexts))
+	batches := chunkTextIndexes(len(sendTexts), presidioHTTPBatchSize)
 	workers := min(max(1, p.maxWorkers), len(batches))
 
 	ch := make(chan indexRange, len(batches))
@@ -217,12 +222,16 @@ func (p *PresidioClient) AnalyzeBatch(ctx context.Context, texts []string, entit
 	for range workers {
 		wg.Go(func() {
 			for batch := range ch {
-				p.analyzeRange(ctx, texts, entities, batch, results, onProgress)
+				p.analyzeRange(ctx, sendTexts, entities, batch, sendResults, onProgress)
 			}
 		})
 	}
 
 	wg.Wait()
+
+	for j, originalIdx := range sendOriginalIdx {
+		results[originalIdx] = sendResults[j]
+	}
 	return results, nil
 }
 

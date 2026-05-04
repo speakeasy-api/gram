@@ -253,31 +253,54 @@ func TestPresidioAnalyzeBatchSkipsOversizeText(t *testing.T) {
 	results, err := client.AnalyzeBatch(t.Context(), []string{
 		"contact alice@example.com",
 		oversize,
+		"",
 		"backup alice@example.com",
 	}, nil, nil)
 	require.NoError(t, err)
-	require.Len(t, results, 3)
+	require.Len(t, results, 4)
 
 	require.Len(t, results[0], 1)
 	assert.Equal(t, "alice@example.com", results[0][0].Match)
-	assert.Empty(t, results[1])
-	require.Len(t, results[2], 1)
-	assert.Equal(t, "alice@example.com", results[2][0].Match)
+	assert.Empty(t, results[1], "oversize text should produce no findings")
+	assert.Empty(t, results[2], "empty text should produce no findings")
+	require.Len(t, results[3], 1)
+	assert.Equal(t, "alice@example.com", results[3][0].Match)
 
 	mu.Lock()
 	defer mu.Unlock()
-	require.Len(t, requests, 1)
+	require.Len(t, requests, 1, "single batch with only the eligible texts")
 	assert.Equal(t, []string{
 		"contact alice@example.com",
-		"",
 		"backup alice@example.com",
-	}, requests[0], "oversize text should be replaced with empty string before send")
+	}, requests[0], "oversize and empty texts should not be sent to presidio")
 
 	logMu.Lock()
 	defer logMu.Unlock()
 	logs := logBuf.String()
 	assert.Contains(t, logs, "presidio analyze: text exceeds max size")
-	assert.Contains(t, logs, "text_index=1")
+	assert.Contains(t, logs, "gram.risk.presidio.text_index=1")
+}
+
+func TestPresidioAnalyzeBatchAllEmptyOrOversizeSkipsRequest(t *testing.T) {
+	t.Parallel()
+
+	var called bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		called = true
+		http.Error(w, "should not be called", http.StatusInternalServerError)
+	}))
+	t.Cleanup(srv.Close)
+
+	client := NewPresidioClientWithWorkers(srv.URL, otel.GetTracerProvider(), otel.GetMeterProvider(), testLogger(t), 1)
+
+	oversize := strings.Repeat("b", presidioMaxTextBytes+1)
+	results, err := client.AnalyzeBatch(t.Context(), []string{"", oversize, ""}, nil, nil)
+	require.NoError(t, err)
+	require.Len(t, results, 3)
+	for _, r := range results {
+		assert.Empty(t, r)
+	}
+	assert.False(t, called, "presidio should not be called when every text is empty or oversize")
 }
 
 type syncWriter struct {
