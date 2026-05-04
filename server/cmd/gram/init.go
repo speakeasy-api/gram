@@ -93,14 +93,17 @@ func newInitCommand() *cli.Command {
 				return fmt.Errorf("failed to create pubsub client: %w", err)
 			}
 
-			desiredTopics, err := platforminit.DiscoverTopicsFromBytes(descriptors)
+			desiredTopics, desiredSubs, err := platforminit.DiscoverPubSubFromBytes(descriptors)
 			if err != nil {
-				return fmt.Errorf("failed to discover topics: %w", err)
+				return fmt.Errorf("discover pubsub topology: %w", err)
 			}
 
-			err = platforminit.ReconcileTopics(ctx, logger, projectID, client, desiredTopics)
-			if err != nil {
-				return fmt.Errorf("failed to reconcile topics: %w", err)
+			if err := platforminit.ReconcileTopics(ctx, logger, projectID, client, desiredTopics); err != nil {
+				return fmt.Errorf("reconcile topics: %w", err)
+			}
+
+			if err := platforminit.ReconcileSubscriptions(ctx, logger, projectID, client, desiredSubs); err != nil {
+				return fmt.Errorf("reconcile subscriptions: %w", err)
 			}
 
 			return nil

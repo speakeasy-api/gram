@@ -13,6 +13,39 @@ message TopicOptions {
   map<string, string> labels = 3;
 }
 
+message SubscriptionOptions {
+  // Optional. Defaults to the kebab-cased local name of the subscription
+  // marker message (e.g. message OutboxProcessor → "outbox-processor").
+  string name = 1;
+  google.protobuf.Duration retention = 2;
+  bool retain_acked_messages = 3;
+  google.protobuf.Duration ack_deadline = 4;
+  google.protobuf.Duration expiration_ttl = 5;
+  RetryPolicy retry_policy = 6;
+  map<string, string> labels = 7;
+  string filter = 8;
+  DeadLetterPolicy dead_letter = 9;
+  // Required. Proto FullName of the topic-declaring message this subscription
+  // consumes from (e.g. "outbox.event.v1.Event"). Validated against the
+  // discovered topic set during reconciliation.
+  string topic = 10;
+}
+
+message RetryPolicy {
+  google.protobuf.Duration minimum_backoff = 1;
+  google.protobuf.Duration maximum_backoff = 2;
+}
+
+message DeadLetterPolicy {
+  // DLQ topic ID. If unset, defaults to "dlq-<subscription-name>". The DLQ
+  // topic carries the same message schema as the source topic and is created
+  // automatically during reconciliation; no separate proto declaration is
+  // needed.
+  string name = 1;
+  int32 max_delivery_attempts = 2;
+}
+
 extend google.protobuf.MessageOptions {
   TopicOptions topic = 50001;
+  SubscriptionOptions subscription = 50002;
 }
