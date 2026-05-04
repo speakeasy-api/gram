@@ -2,15 +2,18 @@ package risk_analysis
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
 )
 
@@ -62,6 +65,16 @@ func (a *FetchUnanalyzed) Do(ctx context.Context, args FetchUnanalyzedArgs) (_ *
 		ID:        args.RiskPolicyID,
 		ProjectID: args.ProjectID,
 	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		// Policy was hard-deleted (or soft-deleted: GetRiskPolicy filters
+		// deleted IS FALSE). Nothing to do, no infinite loop because the
+		// drain workflow stops scheduling activities for a missing policy.
+		span.SetAttributes(attribute.Bool("risk.policy_deleted", true))
+		a.logger.InfoContext(ctx, "risk policy deleted, skipping fetch",
+			attr.SlogRiskPolicyID(args.RiskPolicyID.String()),
+		)
+		return &FetchUnanalyzedResult{}, nil
+	}
 	if err != nil {
 		return nil, fmt.Errorf("get risk policy: %w", err)
 	}
