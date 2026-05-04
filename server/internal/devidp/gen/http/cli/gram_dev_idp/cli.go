@@ -358,7 +358,7 @@ func devIdpSetCurrentUserUsage() {
 // organizationsUsage displays the usage of the organizations command and its
 // subcommands.
 func organizationsUsage() {
-	fmt.Fprintln(os.Stderr, `Dev-idp organizations CRUD. Backs both mock-speakeasy and oauth2 modes' org metadata. Permanently unauthenticated (idp-design.md §6).`)
+	fmt.Fprintln(os.Stderr, `Dev-idp organizations CRUD. Backs both local-speakeasy and oauth2 modes' org metadata. Permanently unauthenticated (idp-design.md §6).`)
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] organizations COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    create: Create an organization.`)
@@ -529,7 +529,7 @@ func membershipsDeleteUsage() {
 
 // usersUsage displays the usage of the users command and its subcommands.
 func usersUsage() {
-	fmt.Fprintln(os.Stderr, `Dev-idp users CRUD. The local-mode currentUser (mock-speakeasy / oauth2-1 / oauth2) references rows in this table by id (idp-design.md §3, §5). Permanently unauthenticated.`)
+	fmt.Fprintln(os.Stderr, `Dev-idp users CRUD. The local-mode currentUser (local-speakeasy / oauth2-1 / oauth2) references rows in this table by id (idp-design.md §3, §5). Permanently unauthenticated.`)
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] users COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    create: Create a user.`)

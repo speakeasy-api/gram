@@ -36,7 +36,7 @@ type SetCurrentUserRequestBody struct {
 type GetCurrentUserResponseBody struct {
 	// Mode whose currentUser is being reported.
 	Mode *string `form:"mode,omitempty" json:"mode,omitempty" xml:"mode,omitempty"`
-	// Local user record. Populated for mock-speakeasy / oauth2-1 / oauth2.
+	// Local user record. Populated for local-speakeasy / oauth2-1 / oauth2.
 	User *UserResponseBody `form:"user,omitempty" json:"user,omitempty" xml:"user,omitempty"`
 	// Live WorkOS profile. Populated for workos mode only.
 	Workos *WorkosCurrentUserResponseBody `form:"workos,omitempty" json:"workos,omitempty" xml:"workos,omitempty"`
@@ -47,7 +47,7 @@ type GetCurrentUserResponseBody struct {
 type SetCurrentUserResponseBody struct {
 	// Mode whose currentUser is being reported.
 	Mode *string `form:"mode,omitempty" json:"mode,omitempty" xml:"mode,omitempty"`
-	// Local user record. Populated for mock-speakeasy / oauth2-1 / oauth2.
+	// Local user record. Populated for local-speakeasy / oauth2-1 / oauth2.
 	User *UserResponseBody `form:"user,omitempty" json:"user,omitempty" xml:"user,omitempty"`
 	// Live WorkOS profile. Populated for workos mode only.
 	Workos *WorkosCurrentUserResponseBody `form:"workos,omitempty" json:"workos,omitempty" xml:"workos,omitempty"`
@@ -65,9 +65,9 @@ type UserResponseBody struct {
 	PhotoURL *string `form:"photo_url,omitempty" json:"photo_url,omitempty" xml:"photo_url,omitempty"`
 	// Optional GitHub handle.
 	GithubHandle *string `form:"github_handle,omitempty" json:"github_handle,omitempty" xml:"github_handle,omitempty"`
-	// Admin flag echoed by mock-speakeasy validate.
+	// Admin flag echoed by local-speakeasy validate.
 	Admin *bool `form:"admin,omitempty" json:"admin,omitempty" xml:"admin,omitempty"`
-	// Whitelist flag echoed by mock-speakeasy validate.
+	// Whitelist flag echoed by local-speakeasy validate.
 	Whitelisted *bool   `form:"whitelisted,omitempty" json:"whitelisted,omitempty" xml:"whitelisted,omitempty"`
 	CreatedAt   *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	UpdatedAt   *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
@@ -146,8 +146,8 @@ func ValidateGetCurrentUserResponseBody(body *GetCurrentUserResponseBody) (err e
 		err = goa.MergeErrors(err, goa.MissingFieldError("mode", "body"))
 	}
 	if body.Mode != nil {
-		if !(*body.Mode == "mock-speakeasy" || *body.Mode == "oauth2-1" || *body.Mode == "oauth2" || *body.Mode == "workos") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.mode", *body.Mode, []any{"mock-speakeasy", "oauth2-1", "oauth2", "workos"}))
+		if !(*body.Mode == "local-speakeasy" || *body.Mode == "oauth2-1" || *body.Mode == "oauth2" || *body.Mode == "workos") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.mode", *body.Mode, []any{"local-speakeasy", "oauth2-1", "oauth2", "workos"}))
 		}
 	}
 	if body.User != nil {
@@ -170,8 +170,8 @@ func ValidateSetCurrentUserResponseBody(body *SetCurrentUserResponseBody) (err e
 		err = goa.MergeErrors(err, goa.MissingFieldError("mode", "body"))
 	}
 	if body.Mode != nil {
-		if !(*body.Mode == "mock-speakeasy" || *body.Mode == "oauth2-1" || *body.Mode == "oauth2" || *body.Mode == "workos") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.mode", *body.Mode, []any{"mock-speakeasy", "oauth2-1", "oauth2", "workos"}))
+		if !(*body.Mode == "local-speakeasy" || *body.Mode == "oauth2-1" || *body.Mode == "oauth2" || *body.Mode == "workos") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.mode", *body.Mode, []any{"local-speakeasy", "oauth2-1", "oauth2", "workos"}))
 		}
 	}
 	if body.User != nil {

@@ -11,7 +11,7 @@ var ListUsersResult = Type("ListUsersResult", func() {
 })
 
 var _ = Service("users", func() {
-	Description("Dev-idp users CRUD. The local-mode currentUser (mock-speakeasy / oauth2-1 / oauth2) references rows in this table by id (idp-design.md §3, §5). Permanently unauthenticated.")
+	Description("Dev-idp users CRUD. The local-mode currentUser (local-speakeasy / oauth2-1 / oauth2) references rows in this table by id (idp-design.md §3, §5). Permanently unauthenticated.")
 
 	Method("create", func() {
 		Description("Create a user.")

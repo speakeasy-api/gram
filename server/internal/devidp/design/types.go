@@ -13,8 +13,8 @@ var User = Type("User", func() {
 	Attribute("display_name", String, "Display name.")
 	Attribute("photo_url", String, "Optional photo URL.")
 	Attribute("github_handle", String, "Optional GitHub handle.")
-	Attribute("admin", Boolean, "Admin flag echoed by mock-speakeasy validate.")
-	Attribute("whitelisted", Boolean, "Whitelist flag echoed by mock-speakeasy validate.")
+	Attribute("admin", Boolean, "Admin flag echoed by local-speakeasy validate.")
+	Attribute("whitelisted", Boolean, "Whitelist flag echoed by local-speakeasy validate.")
 	Attribute("created_at", String, func() {
 		Format(FormatDateTime)
 	})
@@ -33,7 +33,7 @@ var Organization = Type("Organization", func() {
 	Attribute("name", String, "Display name.")
 	Attribute("slug", String, "URL slug (unique).")
 	Attribute("account_type", String, "Plan tier (`free`, etc.).")
-	Attribute("workos_id", String, "Optional WorkOS organization id echoed by mock-speakeasy validate.")
+	Attribute("workos_id", String, "Optional WorkOS organization id echoed by local-speakeasy validate.")
 	Attribute("created_at", String, func() {
 		Format(FormatDateTime)
 	})

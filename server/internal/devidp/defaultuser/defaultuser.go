@@ -3,7 +3,7 @@
 // any operator/test has called /rpc/devIdp.setCurrentUser, the dev-idp
 // falls back to a user derived from the local git committer config.
 //
-// Local modes (mock-speakeasy / oauth2-1 / oauth2) synthesize a row in
+// Local modes (local-speakeasy / oauth2-1 / oauth2) synthesize a row in
 // the dev-idp's users table with the committer email + name and place it
 // in a "Speakeasy" organization. Each mode's currentUser is then upserted
 // to point at that user, so the bootstrap fires at most once per mode

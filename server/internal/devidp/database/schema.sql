@@ -56,7 +56,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS memberships_user_id_organization_id_key
   ON memberships (user_id, organization_id);
 
 -- Per-mode currentUser. `subject_ref` is mode-specific (idp-design.md §3):
--- a `users.id` UUID for `mock-speakeasy`/`oauth2-1`/`oauth2`, a WorkOS
+-- a `users.id` UUID for `local-speakeasy`/`oauth2-1`/`oauth2`, a WorkOS
 -- `sub` for `workos`. Stored as TEXT with no FK because the workos value
 -- is external. Cascading deletes for local users are handled in the
 -- service layer.

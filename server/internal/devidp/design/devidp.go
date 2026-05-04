@@ -25,9 +25,9 @@ var WorkosCurrentUser = Type("WorkosCurrentUser", func() {
 // `user`; the workos mode populates `workos`.
 var CurrentUser = Type("CurrentUser", func() {
 	Attribute("mode", String, "Mode whose currentUser is being reported.", func() {
-		Enum("mock-speakeasy", "oauth2-1", "oauth2", "workos")
+		Enum("local-speakeasy", "oauth2-1", "oauth2", "workos")
 	})
-	Attribute("user", User, "Local user record. Populated for mock-speakeasy / oauth2-1 / oauth2.")
+	Attribute("user", User, "Local user record. Populated for local-speakeasy / oauth2-1 / oauth2.")
 	Attribute("workos", WorkosCurrentUser, "Live WorkOS profile. Populated for workos mode only.")
 
 	Required("mode")
@@ -41,7 +41,7 @@ var _ = Service("devIdp", func() {
 
 		Payload(func() {
 			Attribute("mode", String, "Which mode's currentUser to read.", func() {
-				Enum("mock-speakeasy", "oauth2-1", "oauth2", "workos")
+				Enum("local-speakeasy", "oauth2-1", "oauth2", "workos")
 			})
 			Required("mode")
 		})
@@ -59,7 +59,7 @@ var _ = Service("devIdp", func() {
 
 		Payload(func() {
 			Attribute("mode", String, "Which mode's currentUser to write.", func() {
-				Enum("mock-speakeasy", "oauth2-1", "oauth2", "workos")
+				Enum("local-speakeasy", "oauth2-1", "oauth2", "workos")
 			})
 			Attribute("user_id", String, "Local user UUID. Required for non-workos modes.", func() {
 				Format(FormatUUID)

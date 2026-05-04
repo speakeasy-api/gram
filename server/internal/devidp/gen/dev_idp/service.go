@@ -43,7 +43,7 @@ var MethodNames = [2]string{"getCurrentUser", "setCurrentUser"}
 type CurrentUser struct {
 	// Mode whose currentUser is being reported.
 	Mode string
-	// Local user record. Populated for mock-speakeasy / oauth2-1 / oauth2.
+	// Local user record. Populated for local-speakeasy / oauth2-1 / oauth2.
 	User *User
 	// Live WorkOS profile. Populated for workos mode only.
 	Workos *WorkosCurrentUser
@@ -78,9 +78,9 @@ type User struct {
 	PhotoURL *string
 	// Optional GitHub handle.
 	GithubHandle *string
-	// Admin flag echoed by mock-speakeasy validate.
+	// Admin flag echoed by local-speakeasy validate.
 	Admin bool
-	// Whitelist flag echoed by mock-speakeasy validate.
+	// Whitelist flag echoed by local-speakeasy validate.
 	Whitelisted bool
 	CreatedAt   string
 	UpdatedAt   string

@@ -22,7 +22,7 @@ type CreateRequestBody struct {
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// Plan tier; defaults to `free`.
 	AccountType *string `form:"account_type,omitempty" json:"account_type,omitempty" xml:"account_type,omitempty"`
-	// Optional WorkOS organization id echoed by mock-speakeasy validate.
+	// Optional WorkOS organization id echoed by local-speakeasy validate.
 	WorkosID *string `form:"workos_id,omitempty" json:"workos_id,omitempty" xml:"workos_id,omitempty"`
 }
 
@@ -68,7 +68,7 @@ type CreateResponseBody struct {
 	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// Plan tier (`free`, etc.).
 	AccountType string `form:"account_type" json:"account_type" xml:"account_type"`
-	// Optional WorkOS organization id echoed by mock-speakeasy validate.
+	// Optional WorkOS organization id echoed by local-speakeasy validate.
 	WorkosID  *string `form:"workos_id,omitempty" json:"workos_id,omitempty" xml:"workos_id,omitempty"`
 	CreatedAt string  `form:"created_at" json:"created_at" xml:"created_at"`
 	UpdatedAt string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
@@ -85,7 +85,7 @@ type UpdateResponseBody struct {
 	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// Plan tier (`free`, etc.).
 	AccountType string `form:"account_type" json:"account_type" xml:"account_type"`
-	// Optional WorkOS organization id echoed by mock-speakeasy validate.
+	// Optional WorkOS organization id echoed by local-speakeasy validate.
 	WorkosID  *string `form:"workos_id,omitempty" json:"workos_id,omitempty" xml:"workos_id,omitempty"`
 	CreatedAt string  `form:"created_at" json:"created_at" xml:"created_at"`
 	UpdatedAt string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
@@ -110,7 +110,7 @@ type OrganizationResponseBody struct {
 	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// Plan tier (`free`, etc.).
 	AccountType string `form:"account_type" json:"account_type" xml:"account_type"`
-	// Optional WorkOS organization id echoed by mock-speakeasy validate.
+	// Optional WorkOS organization id echoed by local-speakeasy validate.
 	WorkosID  *string `form:"workos_id,omitempty" json:"workos_id,omitempty" xml:"workos_id,omitempty"`
 	CreatedAt string  `form:"created_at" json:"created_at" xml:"created_at"`
 	UpdatedAt string  `form:"updated_at" json:"updated_at" xml:"updated_at"`

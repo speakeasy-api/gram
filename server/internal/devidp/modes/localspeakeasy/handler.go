@@ -1,13 +1,13 @@
-// Package mockspeakeasy implements the dev-idp's mock-speakeasy mode — a
-// drop-in port of the standalone mock-speakeasy-idp binary's
+// Package localspeakeasy implements the dev-idp's local-speakeasy mode — a
+// drop-in port of the standalone local-speakeasy-idp binary's
 // /v1/speakeasy_provider/* surface (idp-design.md §7.1) onto the dev-idp's
 // shared Postgres store and per-mode currentUser.
 //
 // Wire-shape compatibility is preserved byte-for-byte (including the
 // `user_workspaces_slugs` JSON-tag typo) so existing Gram-side callers
 // don't need to change when they switch SPEAKEASY_SERVER_ADDRESS over to
-// the dev-idp's /mock-speakeasy/ prefix.
-package mockspeakeasy
+// the dev-idp's /local-speakeasy/ prefix.
+package localspeakeasy
 
 import (
 	"context"
@@ -37,24 +37,24 @@ import (
 
 // Mode is the discriminator persisted on every auth_codes / tokens /
 // current_users row owned by this handler.
-const Mode = "mock-speakeasy"
+const Mode = "local-speakeasy"
 
-// Prefix is the URL prefix the dev-idp listener mounts the mock-speakeasy
+// Prefix is the URL prefix the dev-idp listener mounts the local-speakeasy
 // handler under. Compose it with http.StripPrefix when wiring.
-const Prefix = "/mock-speakeasy"
+const Prefix = "/local-speakeasy"
 
 // clientIDSentinel is the string written to auth_codes.client_id and
-// tokens.client_id for mock-speakeasy traffic. The Speakeasy provider
+// tokens.client_id for local-speakeasy traffic. The Speakeasy provider
 // exchange has no real client concept; the column is NOT NULL on the
 // schema, so we stamp this constant for inspection in the dashboard.
-const clientIDSentinel = "mock-speakeasy"
+const clientIDSentinel = "local-speakeasy"
 
 const (
 	authCodeLifetime = 5 * time.Minute
 	tokenLifetime    = 24 * time.Hour
 )
 
-// Config carries the static configuration for the mock-speakeasy mode.
+// Config carries the static configuration for the local-speakeasy mode.
 type Config struct {
 	// SecretKey is the value the `speakeasy-auth-provider-key` request
 	// header must match for /exchange, /validate, /revoke, /register.
@@ -62,7 +62,7 @@ type Config struct {
 	SecretKey string
 }
 
-// Handler serves the mock-speakeasy mode's HTTP routes.
+// Handler serves the local-speakeasy mode's HTTP routes.
 type Handler struct {
 	cfg    Config
 	tracer trace.Tracer
@@ -73,7 +73,7 @@ type Handler struct {
 func NewHandler(cfg Config, logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool) *Handler {
 	return &Handler{
 		cfg:    cfg,
-		tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/devidp/modes/mockspeakeasy"),
+		tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/devidp/modes/localspeakeasy"),
 		logger: logger.With(attr.SlogComponent("devidp." + Mode)),
 		db:     db,
 	}
@@ -93,7 +93,7 @@ func (h *Handler) Handler() http.Handler {
 }
 
 // =============================================================================
-// JSON wire types — mirror mock-speakeasy-idp/mockidp.go exactly.
+// JSON wire types — mirror local-speakeasy-idp/mockidp.go exactly.
 // =============================================================================
 
 type userJSON struct {

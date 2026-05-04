@@ -25,7 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/control"
 	"github.com/speakeasy-api/gram/server/internal/devidp/keystore"
-	"github.com/speakeasy-api/gram/server/internal/devidp/modes/mockspeakeasy"
+	"github.com/speakeasy-api/gram/server/internal/devidp/modes/localspeakeasy"
 	"github.com/speakeasy-api/gram/server/internal/devidp/modes/oauth2"
 	"github.com/speakeasy-api/gram/server/internal/devidp/modes/oauth21"
 	devidpworkos "github.com/speakeasy-api/gram/server/internal/devidp/modes/workos"
@@ -71,7 +71,7 @@ func newDevIdpCommand() *cli.Command {
 		&cli.StringFlag{
 			Name:    "speakeasy-secret-key",
 			Value:   "test-secret",
-			Usage:   "The legacy mock-speakeasy header secret. Reuses SPEAKEASY_SECRET_KEY so the start/worker procs share the value.",
+			Usage:   "The legacy local-speakeasy header secret. Reuses SPEAKEASY_SECRET_KEY so the start/worker procs share the value.",
 			EnvVars: []string{"SPEAKEASY_SECRET_KEY"},
 		},
 		&cli.StringFlag{
@@ -110,7 +110,7 @@ func newDevIdpCommand() *cli.Command {
 
 	return &cli.Command{
 		Name:  "dev-idp",
-		Usage: "Start the local-development IDP (mock-speakeasy + workos + oauth2-1 + oauth2 modes)",
+		Usage: "Start the local-development IDP (local-speakeasy + workos + oauth2-1 + oauth2 modes)",
 		Flags: flags,
 		Action: func(c *cli.Context) error {
 			ctx, cancel := context.WithCancel(c.Context)
@@ -197,11 +197,11 @@ func newDevIdpCommand() *cli.Command {
 
 			outer := http.NewServeMux()
 
-			mockHandler := mockspeakeasy.NewHandler(
-				mockspeakeasy.Config{SecretKey: c.String("speakeasy-secret-key")},
+			mockHandler := localspeakeasy.NewHandler(
+				localspeakeasy.Config{SecretKey: c.String("speakeasy-secret-key")},
 				logger, tracerProvider, db,
 			)
-			outer.Handle(mockspeakeasy.Prefix+"/", http.StripPrefix(mockspeakeasy.Prefix, mockHandler.Handler()))
+			outer.Handle(localspeakeasy.Prefix+"/", http.StripPrefix(localspeakeasy.Prefix, mockHandler.Handler()))
 
 			oauth21Handler := oauth21.NewHandler(
 				oauth21.Config{ExternalURL: externalURL},

@@ -120,15 +120,16 @@ OPENROUTER_DEV_KEY = "unset"
 GRAM_DEVIDP_HOST = "localhost"
 GRAM_DEVIDP_PORT = "35291"
 GRAM_DEVIDP_CONTROL_PORT = "35292"
+GRAM_DEVIDP_DASHBOARD_PORT = "35293"
 GRAM_DEVIDP_ADDRESS = ":{{env.GRAM_DEVIDP_PORT}}"
 GRAM_DEVIDP_CONTROL_ADDRESS = ":{{env.GRAM_DEVIDP_CONTROL_PORT}}"
 GRAM_DEVIDP_EXTERNAL_URL = "http://{{env.GRAM_DEVIDP_HOST}}:{{env.GRAM_DEVIDP_PORT}}"
 GRAM_DEVIDP_DATABASE_URL = "postgres://{{env.DB_USER}}:{{env.DB_PASSWORD}}@{{env.DB_HOST}}:{{env.DB_PORT}}/gram_devidp?sslmode=disable&search_path=public"
-## SPEAKEASY_SERVER_ADDRESS points Gram at the dev-idp's mock-speakeasy
-## mode (mounted at /mock-speakeasy). The Gram-side sessions.Manager
+## SPEAKEASY_SERVER_ADDRESS points Gram at the dev-idp's local-speakeasy
+## mode (mounted at /local-speakeasy). The Gram-side sessions.Manager
 ## appends /v1/speakeasy_provider/... so the full URL lands on
-## mockspeakeasy.Handler.
-SPEAKEASY_SERVER_ADDRESS = "{{env.GRAM_DEVIDP_EXTERNAL_URL}}/mock-speakeasy"
+## localspeakeasy.Handler.
+SPEAKEASY_SERVER_ADDRESS = "{{env.GRAM_DEVIDP_EXTERNAL_URL}}/local-speakeasy"
 SPEAKEASY_SECRET_KEY = "test-secret"
 ## The following variables are only needed if you want to do one of the following:
 ## - Run the server with SSL enabled and not rely on SSL termination at a load balancer.

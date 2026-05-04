@@ -17,7 +17,7 @@
 
 ## 1. Why this exists
 
-Today's mock IDP (`/mock-speakeasy-idp/`) speaks **one** protocol — the
+Today's mock IDP (`/local-speakeasy-idp/`) speaks **one** protocol — the
 Speakeasy auth-provider exchange — and supports one in-memory user. That is
 adequate for spinning up Gram locally but is **not** adequate for end-to-end
 testing of the new auth surfaces this RFC introduces:
@@ -35,8 +35,8 @@ organizations, and applications, and provides the test hooks (currentUser
 selection, app/user/org seeding via management API) the integration suite
 needs.
 
-It absorbs `mock-speakeasy-idp` — the existing `/v1/speakeasy_provider/*`
-surface moves under the new `mock-speakeasy` mode and the standalone binary
+It absorbs `local-speakeasy-idp` — the existing `/v1/speakeasy_provider/*`
+surface moves under the new `local-speakeasy` mode and the standalone binary
 goes away once we cut over.
 
 ---
@@ -46,12 +46,12 @@ goes away once we cut over.
 Each mode is mounted at a fixed URL prefix on the same listener. All four
 share a single Postgres store (§5).
 
-| Prefix             | Protocol                                                                                   | What it backs in tests                                                                                                                                                                      |
-| ------------------ | ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `/mock-speakeasy/` | Speakeasy IDP bridge (secret-key authed exchange/validate)                                 | Drop-in replacement for today's `mock-speakeasy-idp`. Powers Gram management-API login during local dev.                                                                                    |
-| `/workos/`         | Thin proxy over the real WorkOS REST API (configured with a WorkOS API key). **Not OIDC.** | Standalone identity universe: tests/dashboard that need a real WorkOS user/org pin a WorkOS `sub` via `current_users[mode='workos']`. No browser redirects, no `/authorize`, no `/token`.   |
-| `/oauth2-1/`       | OAuth 2.1 AS — PKCE required, DCR enabled (stateless), **OIDC-compliant**                  | Backs `remote_session_issuer` rows used in chain / interactive remote-session tests (spike §5.2 / §5.3). Also a candidate `user_session_issuer` upstream once we wire that flow end-to-end. |
-| `/oauth2/`         | OAuth 2.0 AS — PKCE supported (optional, not required), no DCR, **OIDC-compliant**         | Backs the legacy `remote_session_issuer` shape for migration testing of currently-existing customer servers (milestone #7 / #8).                                                            |
+| Prefix              | Protocol                                                                                   | What it backs in tests                                                                                                                                                                      |
+| ------------------- | ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/local-speakeasy/` | Speakeasy IDP bridge (secret-key authed exchange/validate)                                 | Drop-in replacement for today's `local-speakeasy-idp`. Powers Gram management-API login during local dev.                                                                                   |
+| `/workos/`          | Thin proxy over the real WorkOS REST API (configured with a WorkOS API key). **Not OIDC.** | Standalone identity universe: tests/dashboard that need a real WorkOS user/org pin a WorkOS `sub` via `current_users[mode='workos']`. No browser redirects, no `/authorize`, no `/token`.   |
+| `/oauth2-1/`        | OAuth 2.1 AS — PKCE required, DCR enabled (stateless), **OIDC-compliant**                  | Backs `remote_session_issuer` rows used in chain / interactive remote-session tests (spike §5.2 / §5.3). Also a candidate `user_session_issuer` upstream once we wire that flow end-to-end. |
+| `/oauth2/`          | OAuth 2.0 AS — PKCE supported (optional, not required), no DCR, **OIDC-compliant**         | Backs the legacy `remote_session_issuer` shape for migration testing of currently-existing customer servers (milestone #7 / #8).                                                            |
 
 The mode set is deliberately small but extensible. Adding a mode is a new
 sub-package under `server/internal/devidp/modes/` and one line in the
@@ -72,7 +72,7 @@ The currentUser is **per mode** (per issuer type), not global:
 
 ```
 currentUser = {
-  "mock-speakeasy": users.id,
+  "local-speakeasy": users.id,
   "workos":         users.id,
   "oauth2-1":       users.id,
   "oauth2":         users.id,
@@ -85,13 +85,13 @@ should be allowed to belong to different users**. If currentUser were
 global, hitting `/mcp/{slug}` as Alice while a dashboard tab in the same
 browser is signed in as Bob would force a contradiction; one of the two
 sessions would have to be torn down. Splitting per issuer type sneaks
-around that requirement: `mock-speakeasy`'s currentUser governs
+around that requirement: `local-speakeasy`'s currentUser governs
 management-API login (Bob), `oauth2-1`'s currentUser governs the MCP-side
 upstream OAuth identity (Alice), and the two never have to agree.
 
 - Each currentUser is a **subject ref** persisted in the `current_users`
   Postgres table (§5). The string semantics are mode-specific:
-  - For `mock-speakeasy` / `oauth2-1` / `oauth2`: a `users.id` UUID into
+  - For `local-speakeasy` / `oauth2-1` / `oauth2`: a `users.id` UUID into
     the local `users` table.
   - For `workos`: a **WorkOS `sub`** (the WorkOS user id, e.g.
     `user_01H...`) — **not** a ref to the local `users` table. The
@@ -103,7 +103,7 @@ upstream OAuth identity (Alice), and the two never have to agree.
   and a mode-appropriate body.
 - **A mode with no `current_users` row falls back to a default user
   derived from the local git committer.** For local modes
-  (`mock-speakeasy`/`oauth2-1`/`oauth2`), the dev-idp shells out to
+  (`local-speakeasy`/`oauth2-1`/`oauth2`), the dev-idp shells out to
   `git config user.{email,name}`, find-or-creates a row in `users` for
   that email, places the user in a "Speakeasy" organization
   (find-or-created by slug), and persists `current_users[mode]` so the
@@ -246,14 +246,14 @@ The dev-idp expects to talk to its **own** Postgres database (separate
 database is unsupported — atlas declarative apply would happily drop tables
 it doesn't recognise.
 
-| Table           | Purpose                                                                                                                                                                                                                                                                                                                                                                             |
-| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `users`         | Identity rows. `id`, `email`, `display_name`, `photo_url?`, `github_handle?`, `admin`, `whitelisted`, timestamps.                                                                                                                                                                                                                                                                   |
-| `organizations` | Org records. `id`, `name`, `slug`, `account_type`, `workos_id?`, timestamps. Consumed by `mock-speakeasy` (the `workos` mode reads its identity entirely from live WorkOS, not this table).                                                                                                                                                                                         |
-| `memberships`   | `(user_id, organization_id)` join with `role` (default `member`).                                                                                                                                                                                                                                                                                                                   |
-| `current_users` | Per-mode `currentUser` (§3). `(mode TEXT PK, subject_ref TEXT NOT NULL, updated_at)`. `subject_ref` is mode-specific: `users.id` UUID for `mock-speakeasy`/`oauth2-1`/`oauth2`; WorkOS `sub` for `workos`. **No FK** because the workos value is external. **Not seeded** — row appears the first time `setCurrentUser` is called for that mode. Modes return an error before that. |
-| `auth_codes`    | Short-TTL `/authorize` codes. `(code, mode, user_id, client_id, redirect_uri, code_challenge?, code_challenge_method?, scope?, expires_at)`. `client_id` is **recorded for inspection only** — see §5.2.                                                                                                                                                                            |
-| `tokens`        | Issued access / id / refresh tokens. `(token, mode, user_id, client_id, kind, scope?, expires_at, revoked_at?)`. `client_id` is recorded for inspection only.                                                                                                                                                                                                                       |
+| Table           | Purpose                                                                                                                                                                                                                                                                                                                                                                              |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `users`         | Identity rows. `id`, `email`, `display_name`, `photo_url?`, `github_handle?`, `admin`, `whitelisted`, timestamps.                                                                                                                                                                                                                                                                    |
+| `organizations` | Org records. `id`, `name`, `slug`, `account_type`, `workos_id?`, timestamps. Consumed by `local-speakeasy` (the `workos` mode reads its identity entirely from live WorkOS, not this table).                                                                                                                                                                                         |
+| `memberships`   | `(user_id, organization_id)` join with `role` (default `member`).                                                                                                                                                                                                                                                                                                                    |
+| `current_users` | Per-mode `currentUser` (§3). `(mode TEXT PK, subject_ref TEXT NOT NULL, updated_at)`. `subject_ref` is mode-specific: `users.id` UUID for `local-speakeasy`/`oauth2-1`/`oauth2`; WorkOS `sub` for `workos`. **No FK** because the workos value is external. **Not seeded** — row appears the first time `setCurrentUser` is called for that mode. Modes return an error before that. |
+| `auth_codes`    | Short-TTL `/authorize` codes. `(code, mode, user_id, client_id, redirect_uri, code_challenge?, code_challenge_method?, scope?, expires_at)`. `client_id` is **recorded for inspection only** — see §5.2.                                                                                                                                                                             |
+| `tokens`        | Issued access / id / refresh tokens. `(token, mode, user_id, client_id, kind, scope?, expires_at, revoked_at?)`. `client_id` is recorded for inspection only.                                                                                                                                                                                                                        |
 
 ### 5.1 Cross-mode sharing
 
@@ -309,10 +309,10 @@ metadata, never a constraint.
   - OIDC `id_token`s issued by `/oauth2-1/` and `/oauth2/` are RS256-signed
     with the private key. The derived public key is served at each mode's
     JWKS endpoint.
-  - Access tokens, refresh tokens, and `mock-speakeasy` id tokens are
+  - Access tokens, refresh tokens, and `local-speakeasy` id tokens are
     **opaque random bytes**, looked up server-side via the `tokens` table.
     They are not JWTs and need no signing key. (This matches today's
-    `mock-speakeasy-idp` behaviour and keeps JWKS the only verification
+    `local-speakeasy-idp` behaviour and keeps JWKS the only verification
     surface tests have to wire up.)
 
 ### 5.4 Atlas, mise tasks, and `zero` integration
@@ -378,12 +378,12 @@ key.
 
 #### `organizations.create`
 
-| Field          | Type   | Required | Notes                                      |
-| -------------- | ------ | -------- | ------------------------------------------ |
-| `name`         | string | required |                                            |
-| `slug`         | string | required | unique                                     |
-| `account_type` | string | optional | default `free`                             |
-| `workos_id`    | string | optional | echoed by `/mock-speakeasy/` validate flow |
+| Field          | Type   | Required | Notes                                       |
+| -------------- | ------ | -------- | ------------------------------------------- |
+| `name`         | string | required |                                             |
+| `slug`         | string | required | unique                                      |
+| `account_type` | string | optional | default `free`                              |
+| `workos_id`    | string | optional | echoed by `/local-speakeasy/` validate flow |
 
 Returns full `Organization` record.
 
@@ -478,7 +478,7 @@ writes the `current_users` table (§5).
 
 | Method                  | Purpose                                                                                                                                                                                                                                                                                                                                                                |
 | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `devIdp.getCurrentUser` | Returns the currentUser for a mode. Body: `{mode}`. Response shape varies by mode: local modes (`mock-speakeasy`/`oauth2-1`/`oauth2`) return the full `users` row from the dev-idp DB; `workos` mode returns `{workos_sub, …live workos profile fields…}` resolved via the WorkOS API (§7.2). Returns 404 when no row exists yet for that mode.                        |
+| `devIdp.getCurrentUser` | Returns the currentUser for a mode. Body: `{mode}`. Response shape varies by mode: local modes (`local-speakeasy`/`oauth2-1`/`oauth2`) return the full `users` row from the dev-idp DB; `workos` mode returns `{workos_sub, …live workos profile fields…}` resolved via the WorkOS API (§7.2). Returns 404 when no row exists yet for that mode.                       |
 | `devIdp.setCurrentUser` | UPSERTs `current_users` for a mode. Body shape per mode: local modes accept `{mode, user_id}` (a UUID into the local `users` table — fetch first via `users.list` if you only have the email); `workos` accepts `{mode: "workos", workos_sub}` (the literal WorkOS user id, no DB validation — the workos mode trusts the operator). Persists across dev-idp restarts. |
 
 There is **no** `devIdp.reset` and no `devIdp.resetCurrentUsers`. If a
@@ -541,32 +541,32 @@ not RPC-shaped). Each mode reads from the §6.1-managed resources to resolve
 identities, but **does not validate inbound `client_id` / `client_secret`**
 (§5.2) — every mode is permissive on the client side.
 
-### 7.1 `/mock-speakeasy/`
+### 7.1 `/local-speakeasy/`
 
 Drop-in replacement for `/v1/speakeasy_provider/*` from
-`mock-speakeasy-idp/`. Endpoints retain their existing paths under the new
+`local-speakeasy-idp/`. Endpoints retain their existing paths under the new
 prefix:
 
-- `GET  /mock-speakeasy/v1/speakeasy_provider/login`
-- `POST /mock-speakeasy/v1/speakeasy_provider/exchange`
-- `GET  /mock-speakeasy/v1/speakeasy_provider/validate`
-- `POST /mock-speakeasy/v1/speakeasy_provider/revoke`
-- `POST /mock-speakeasy/v1/speakeasy_provider/register`
+- `GET  /local-speakeasy/v1/speakeasy_provider/login`
+- `POST /local-speakeasy/v1/speakeasy_provider/exchange`
+- `GET  /local-speakeasy/v1/speakeasy_provider/validate`
+- `POST /local-speakeasy/v1/speakeasy_provider/revoke`
+- `POST /local-speakeasy/v1/speakeasy_provider/register`
 
 **Resources consumed:**
 
-| Endpoint    | Reads                                               | Writes                                                |
-| ----------- | --------------------------------------------------- | ----------------------------------------------------- |
-| `/login`    | `users` (resolves currentUser for `mock-speakeasy`) | `auth_codes` (mode=`mock-speakeasy`)                  |
-| `/exchange` | `auth_codes`                                        | `tokens` (mode=`mock-speakeasy`, kind=`id_token`)     |
-| `/validate` | `tokens`, `users`, `memberships`, `organizations`   | —                                                     |
-| `/revoke`   | `tokens`                                            | `tokens.revoked_at`                                   |
-| `/register` | `tokens`                                            | `organizations`, `memberships` (creates org for user) |
+| Endpoint    | Reads                                                | Writes                                                |
+| ----------- | ---------------------------------------------------- | ----------------------------------------------------- |
+| `/login`    | `users` (resolves currentUser for `local-speakeasy`) | `auth_codes` (mode=`local-speakeasy`)                 |
+| `/exchange` | `auth_codes`                                         | `tokens` (mode=`local-speakeasy`, kind=`id_token`)    |
+| `/validate` | `tokens`, `users`, `memberships`, `organizations`    | —                                                     |
+| `/revoke`   | `tokens`                                             | `tokens.revoked_at`                                   |
+| `/register` | `tokens`                                             | `organizations`, `memberships` (creates org for user) |
 
 Behaviour matches the existing impl: the auto-login form binds the
-mock-speakeasy `currentUser` (no longer a hard-coded `MockUserID`),
+local-speakeasy `currentUser` (no longer a hard-coded `MockUserID`),
 and the `secret-key` middleware accepts `SPEAKEASY_SECRET_KEY` from env or
-flag. mock-speakeasy is a fully local mode — its identity universe is the
+flag. local-speakeasy is a fully local mode — its identity universe is the
 dev-idp's `users` / `organizations` / `memberships` tables. To exercise
 WorkOS-backed identity end-to-end, point Gram at the `/workos/` mode
 (§7.2) directly; the per-mode `currentUser` design (§3) keeps the two
@@ -745,11 +745,11 @@ a JWKS surface; dev-idp uses its own RSA keypair instead (§5.3, §10).
 
 | Flag                     | Env var                       | Default                  | Notes                                                                                                                                                                                                                                                                                         |
 | ------------------------ | ----------------------------- | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `--address`              | `GRAM_DEVIDP_ADDRESS`         | `:35291`                 | `host:port` listen string. Bare `:35291` binds all interfaces; `127.0.0.1:35291` binds loopback. Default port matches today's `mock-speakeasy-idp`.                                                                                                                                           |
+| `--address`              | `GRAM_DEVIDP_ADDRESS`         | `:35291`                 | `host:port` listen string. Bare `:35291` binds all interfaces; `127.0.0.1:35291` binds loopback. Default port matches today's `local-speakeasy-idp`.                                                                                                                                          |
 | `--control-address`      | `GRAM_DEVIDP_CONTROL_ADDRESS` | `:35292`                 | health / pprof / control listener.                                                                                                                                                                                                                                                            |
 | `--external-url`         | `GRAM_DEVIDP_EXTERNAL_URL`    | derived from address     | Public base URL the modes embed in discovery docs and redirect URIs. Set this when dev-idp is reachable through ngrok / a reverse proxy / a worktree-local hostname.                                                                                                                          |
 | `--database-url`         | `GRAM_DEVIDP_DATABASE_URL`    | required                 | dev-idp's **own** Postgres database. Atlas declarative apply will reshape it to match SDL — never point this at production.                                                                                                                                                                   |
-| `--speakeasy-secret-key` | `SPEAKEASY_SECRET_KEY`        | `test-secret`            | The legacy `mock-speakeasy` header secret. Reuses the existing env var so the `start` / `worker` procs can continue to share their value.                                                                                                                                                     |
+| `--speakeasy-secret-key` | `SPEAKEASY_SECRET_KEY`        | `test-secret`            | The legacy `local-speakeasy` header secret. Reuses the existing env var so the `start` / `worker` procs can continue to share their value.                                                                                                                                                    |
 | `--rsa-private-key`      | `GRAM_DEVIDP_RSA_PRIVATE_KEY` | ephemeral per boot       | PEM-encoded RSA private key — the **only** signing key dev-idp uses (§5.3). Signs OIDC `id_token`s; public half published via JWKS. When omitted, dev-idp generates a fresh keypair on boot. dev-idp does **not** consume `GRAM_JWT_SIGNING_KEY` (that key is HS256, incompatible with JWKS). |
 | `--workos-api-key`       | `WORKOS_API_KEY`              | (none)                   | When set, mounts the `/workos/` mode (§7.2). Unset → `/workos/` is not mounted; the other three modes are unaffected. Reuses the existing project env var.                                                                                                                                    |
 | `--workos-host`          | `WORKOS_HOST`                 | `https://api.workos.com` | Base URL of the WorkOS API. Override for staging / sandbox / a recorded fixture host.                                                                                                                                                                                                         |
@@ -767,20 +767,20 @@ The dev-idp binary is registered alongside `start`, `worker`, `admin`,
 
 ---
 
-## 9. Process for cutting over from `mock-speakeasy-idp`
+## 9. Process for cutting over from `local-speakeasy-idp`
 
 Sequence (each step its own commit):
 
 1. Land `server/internal/devidp/` skeleton with the Postgres store, the
    organizations / users / memberships management API, and the
-   `mock-speakeasy` mode behaving identically to today's
-   `mock-speakeasy-idp`. Verify by pointing local Gram at `gram dev-idp`
+   `local-speakeasy` mode behaving identically to today's
+   `local-speakeasy-idp`. Verify by pointing local Gram at `gram dev-idp`
    instead of the standalone binary.
 2. Land `oauth2-1` + `oauth2` modes plus the `devIdp.*` dev RPC.
 3. Land `workos` mode (real WorkOS API proxy, §7.2).
 4. Wire integration tests onto `gram dev-idp`. `dev-idp-dashboard` ships in
    parallel (separate top-level project, not embedded).
-5. Delete `mock-speakeasy-idp/` once no caller references it.
+5. Delete `local-speakeasy-idp/` once no caller references it.
 
 Steps 1 and 5 each become Cleanup tickets in `project.md`.
 
@@ -846,7 +846,7 @@ list below.
   needing a fifth mode.
 - ~~Mixed HS256 + RS256 signing.~~ dev-idp uses **only** an RSA keypair
   for any JWT it signs (just OIDC `id_token`s, today). Access tokens,
-  refresh tokens, and mock-speakeasy id tokens are **opaque random
+  refresh tokens, and local-speakeasy id tokens are **opaque random
   bytes** — not JWTs, not signed (§5.3, §10). `GRAM_JWT_SIGNING_KEY` is
   not consumed by dev-idp at all; that key is HS256 and incompatible
   with JWKS.

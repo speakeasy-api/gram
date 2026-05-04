@@ -291,7 +291,7 @@ components:
                     description: URL slug. Must be unique.
                 workos_id:
                     type: string
-                    description: Optional WorkOS organization id echoed by mock-speakeasy validate.
+                    description: Optional WorkOS organization id echoed by local-speakeasy validate.
             required:
                 - name
                 - slug
@@ -343,7 +343,7 @@ components:
                     type: string
                     description: Mode whose currentUser is being reported.
                     enum:
-                        - mock-speakeasy
+                        - local-speakeasy
                         - oauth2-1
                         - oauth2
                         - workos
@@ -369,7 +369,7 @@ components:
                     type: string
                     description: Which mode's currentUser to read.
                     enum:
-                        - mock-speakeasy
+                        - local-speakeasy
                         - oauth2-1
                         - oauth2
                         - workos
@@ -506,7 +506,7 @@ components:
                     format: date-time
                 workos_id:
                     type: string
-                    description: Optional WorkOS organization id echoed by mock-speakeasy validate.
+                    description: Optional WorkOS organization id echoed by local-speakeasy validate.
             required:
                 - id
                 - name
@@ -521,7 +521,7 @@ components:
                     type: string
                     description: Which mode's currentUser to write.
                     enum:
-                        - mock-speakeasy
+                        - local-speakeasy
                         - oauth2-1
                         - oauth2
                         - workos
@@ -594,7 +594,7 @@ components:
             properties:
                 admin:
                     type: boolean
-                    description: Admin flag echoed by mock-speakeasy validate.
+                    description: Admin flag echoed by local-speakeasy validate.
                 created_at:
                     type: string
                     format: date-time
@@ -619,7 +619,7 @@ components:
                     format: date-time
                 whitelisted:
                     type: boolean
-                    description: Whitelist flag echoed by mock-speakeasy validate.
+                    description: Whitelist flag echoed by local-speakeasy validate.
             required:
                 - id
                 - email
@@ -652,8 +652,8 @@ tags:
     - name: devIdp
       description: Dev-only RPCs for the dev-idp itself. Per-mode currentUser get/set (idp-design.md §3, §6.2). Permanently unauthenticated.
     - name: organizations
-      description: Dev-idp organizations CRUD. Backs both mock-speakeasy and oauth2 modes' org metadata. Permanently unauthenticated (idp-design.md §6).
+      description: Dev-idp organizations CRUD. Backs both local-speakeasy and oauth2 modes' org metadata. Permanently unauthenticated (idp-design.md §6).
     - name: memberships
       description: Dev-idp memberships CRUD. Idempotent on (user_id, organization_id) for create. Permanently unauthenticated.
     - name: users
-      description: Dev-idp users CRUD. The local-mode currentUser (mock-speakeasy / oauth2-1 / oauth2) references rows in this table by id (idp-design.md §3, §5). Permanently unauthenticated.
+      description: Dev-idp users CRUD. The local-mode currentUser (local-speakeasy / oauth2-1 / oauth2) references rows in this table by id (idp-design.md §3, §5). Permanently unauthenticated.

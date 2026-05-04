@@ -11,7 +11,7 @@ var ListOrganizationsResult = Type("ListOrganizationsResult", func() {
 })
 
 var _ = Service("organizations", func() {
-	Description("Dev-idp organizations CRUD. Backs both mock-speakeasy and oauth2 modes' org metadata. Permanently unauthenticated (idp-design.md §6).")
+	Description("Dev-idp organizations CRUD. Backs both local-speakeasy and oauth2 modes' org metadata. Permanently unauthenticated (idp-design.md §6).")
 
 	Method("create", func() {
 		Description("Create an organization.")
@@ -20,7 +20,7 @@ var _ = Service("organizations", func() {
 			Attribute("name", String, "Display name.")
 			Attribute("slug", String, "URL slug. Must be unique.")
 			Attribute("account_type", String, "Plan tier; defaults to `free`.")
-			Attribute("workos_id", String, "Optional WorkOS organization id echoed by mock-speakeasy validate.")
+			Attribute("workos_id", String, "Optional WorkOS organization id echoed by local-speakeasy validate.")
 			Required("name", "slug")
 		})
 
