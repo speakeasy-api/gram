@@ -45,5 +45,5 @@ func TestConcurrencyLimits_ZeroMemory(t *testing.T) {
 	t.Parallel()
 	soft, hard := concurrencyLimits(0)
 	require.Equal(t, 4, hard, "hard limit floors at 4")
-	require.Equal(t, 2, soft, "soft limit floors at 2 but 1/5 of 4 = 3")
+	require.Equal(t, 2, soft, "soft limit floors at 2 because 1/5 of 4 = 0")
 }
