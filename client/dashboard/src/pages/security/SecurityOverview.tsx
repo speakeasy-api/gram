@@ -25,30 +25,16 @@ import {
 import { ChatDetailPanel } from "@/pages/chatLogs/ChatDetailPanel";
 import { Drawer, DrawerContent } from "@/components/ui/drawer";
 
-// Rules that are no longer selectable in the Policy Center but may still
-// surface in historical findings or in policies whose presidio_entities
-// haven't been cleaned up yet. Without this fallback, getCategoryForRule
-// would default these to "secrets" and the UI would render the wrong
-// category badge.
-const RETIRED_RULE_TO_CATEGORY: Record<string, RuleCategory> = {
-  LOCATION: "pii",
-  PERSON: "pii",
-};
-
-// Build a ruleId -> category lookup from the detection rules registry.
 const RULE_ID_TO_CATEGORY = new Map<string, RuleCategory>();
 for (const [category, rules] of Object.entries(DETECTION_RULES)) {
   for (const rule of rules) {
     RULE_ID_TO_CATEGORY.set(rule.id, category as RuleCategory);
   }
 }
-for (const [ruleId, category] of Object.entries(RETIRED_RULE_TO_CATEGORY)) {
-  RULE_ID_TO_CATEGORY.set(ruleId, category);
-}
 
-function getCategoryForRule(ruleId: string | undefined): RuleCategory {
-  if (!ruleId) return "secrets";
-  return RULE_ID_TO_CATEGORY.get(ruleId) ?? "secrets";
+function getCategoryForRule(ruleId: string | undefined): RuleCategory | null {
+  if (!ruleId) return null;
+  return RULE_ID_TO_CATEGORY.get(ruleId) ?? null;
 }
 
 export default function SecurityOverview() {
@@ -328,13 +314,17 @@ function SecurityOverviewContent() {
                           }}
                         >
                           <TableCell>
-                            <Badge variant="secondary">
-                              {
-                                RULE_CATEGORY_META[
-                                  getCategoryForRule(result.ruleId)
-                                ].label
-                              }
-                            </Badge>
+                            {(() => {
+                              const category = getCategoryForRule(
+                                result.ruleId,
+                              );
+                              if (!category) return null;
+                              return (
+                                <Badge variant="secondary">
+                                  {RULE_CATEGORY_META[category].label}
+                                </Badge>
+                              );
+                            })()}
                           </TableCell>
                           <TableCell className="font-mono text-xs">
                             {result.ruleId ?? "-"}
