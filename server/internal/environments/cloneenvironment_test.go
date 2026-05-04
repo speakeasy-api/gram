@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/environments"
+	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -106,7 +107,7 @@ func TestEnvironmentsService_CloneEnvironment(t *testing.T) {
 		// Note: ValueHash hashes the redacted display string (not the raw plaintext) — see
 		// computeValueHash in impl.go. We assert hashes match as a structural check only;
 		// the redaction equality above is what proves the values were actually copied.
-		sourceByName := make(map[string]*gen.EnvironmentEntry, len(source.Entries))
+		sourceByName := make(map[string]*types.EnvironmentEntry, len(source.Entries))
 		for _, e := range source.Entries {
 			sourceByName[e.Name] = e
 		}
