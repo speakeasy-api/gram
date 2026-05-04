@@ -1617,7 +1617,8 @@ func (s *ServiceCore) loadActiveRuntimeRecord(ctx context.Context, projectID, th
 }
 
 func (s *ServiceCore) loadChatHistory(ctx context.Context, chatID uuid.UUID, projectID uuid.UUID) ([]runtimeMessage, error) {
-	messages, err := chatrepo.New(s.db).ListChatMessages(ctx, chatrepo.ListChatMessagesParams{
+	// Earlier generations are audit-only snapshots; only the latest is the live transcript.
+	messages, err := chatrepo.New(s.db).ListLatestGenerationChatMessages(ctx, chatrepo.ListLatestGenerationChatMessagesParams{
 		ChatID:    chatID,
 		ProjectID: projectID,
 	})

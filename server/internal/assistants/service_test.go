@@ -310,6 +310,59 @@ VALUES ($1, $2, $3, $4, $5::jsonb, $6)
 	require.Equal(t, "thanks", history[4].Content)
 }
 
+func TestServiceCoreLoadChatHistoryReturnsOnlyLatestGeneration(t *testing.T) {
+	t.Parallel()
+
+	conn, err := assistantsInfra.CloneTestDatabase(t, "assistants_load_history_gens")
+	require.NoError(t, err)
+
+	projectID := uuid.New()
+	chatID := uuid.New()
+
+	_, err = conn.Exec(t.Context(), `
+INSERT INTO projects (id, name, slug, organization_id)
+VALUES ($1, 'Project', 'project', 'org-test')
+`, projectID)
+	require.NoError(t, err)
+
+	_, err = conn.Exec(t.Context(), `
+INSERT INTO chats (id, project_id, organization_id)
+VALUES ($1, $2, 'org-test')
+`, chatID, projectID)
+	require.NoError(t, err)
+
+	rows := []struct {
+		gen     int
+		role    string
+		content string
+	}{
+		{gen: 0, role: "user", content: "gen-0-user"},
+		{gen: 0, role: "assistant", content: "gen-0-asst"},
+		{gen: 1, role: "user", content: "gen-1-user"},
+		{gen: 1, role: "assistant", content: "gen-1-asst"},
+		{gen: 2, role: "user", content: "gen-2-user-a"},
+		{gen: 2, role: "assistant", content: "gen-2-asst"},
+		{gen: 2, role: "user", content: "gen-2-user-b"},
+	}
+	for _, r := range rows {
+		_, err = conn.Exec(t.Context(), `
+INSERT INTO chat_messages (chat_id, project_id, role, content, generation)
+VALUES ($1, $2, $3, $4, $5)
+`, chatID, projectID, r.role, r.content, r.gen)
+		require.NoError(t, err)
+	}
+
+	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn, testRuntimeBackend{backend: runtimeBackendFlyIO, runTurnErr: nil}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)))
+
+	history, err := core.loadChatHistory(t.Context(), chatID, projectID)
+	require.NoError(t, err)
+
+	require.Len(t, history, 3, "only gen 2 rows make it into the replay")
+	require.Equal(t, "gen-2-user-a", history[0].Content)
+	require.Equal(t, "gen-2-asst", history[1].Content)
+	require.Equal(t, "gen-2-user-b", history[2].Content)
+}
+
 func TestServiceCoreLoadChatHistoryFailsWhenToolRowMissingCallID(t *testing.T) {
 	t.Parallel()
 
