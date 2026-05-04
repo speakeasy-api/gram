@@ -26,7 +26,7 @@ export type ListUserSessionIssuersSecurity = {
 
 export type ListUserSessionIssuersRequest = {
   /**
-   * Pagination cursor.
+   * Pagination cursor: id of the last item from the previous page.
    */
   cursor?: string | undefined;
   /**

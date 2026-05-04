@@ -24,7 +24,7 @@ func BuildCreateUserSessionIssuerPayload(userSessionIssuersCreateUserSessionIssu
 	{
 		err = json.Unmarshal([]byte(userSessionIssuersCreateUserSessionIssuerBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"authn_challenge_mode\": \"interactive\",\n      \"session_duration\": \"abc123\",\n      \"slug\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"authn_challenge_mode\": \"interactive\",\n      \"session_duration_hours\": 1,\n      \"slug\": \"abc123\"\n   }'")
 		}
 		if !(body.AuthnChallengeMode == "chain" || body.AuthnChallengeMode == "interactive") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.authn_challenge_mode", body.AuthnChallengeMode, []any{"chain", "interactive"}))
@@ -52,9 +52,9 @@ func BuildCreateUserSessionIssuerPayload(userSessionIssuersCreateUserSessionIssu
 		}
 	}
 	v := &usersessionissuers.CreateUserSessionIssuerPayload{
-		Slug:               body.Slug,
-		AuthnChallengeMode: body.AuthnChallengeMode,
-		SessionDuration:    body.SessionDuration,
+		Slug:                 body.Slug,
+		AuthnChallengeMode:   body.AuthnChallengeMode,
+		SessionDurationHours: body.SessionDurationHours,
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
@@ -71,7 +71,7 @@ func BuildUpdateUserSessionIssuerPayload(userSessionIssuersUpdateUserSessionIssu
 	{
 		err = json.Unmarshal([]byte(userSessionIssuersUpdateUserSessionIssuerBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"authn_challenge_mode\": \"interactive\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"session_duration\": \"abc123\",\n      \"slug\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"authn_challenge_mode\": \"interactive\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"session_duration_hours\": 1,\n      \"slug\": \"abc123\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
 		if body.AuthnChallengeMode != nil {
@@ -102,10 +102,10 @@ func BuildUpdateUserSessionIssuerPayload(userSessionIssuersUpdateUserSessionIssu
 		}
 	}
 	v := &usersessionissuers.UpdateUserSessionIssuerPayload{
-		ID:                 body.ID,
-		Slug:               body.Slug,
-		AuthnChallengeMode: body.AuthnChallengeMode,
-		SessionDuration:    body.SessionDuration,
+		ID:                   body.ID,
+		Slug:                 body.Slug,
+		AuthnChallengeMode:   body.AuthnChallengeMode,
+		SessionDurationHours: body.SessionDurationHours,
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
@@ -122,6 +122,10 @@ func BuildListUserSessionIssuersPayload(userSessionIssuersListUserSessionIssuers
 	{
 		if userSessionIssuersListUserSessionIssuersCursor != "" {
 			cursor = &userSessionIssuersListUserSessionIssuersCursor
+			err = goa.MergeErrors(err, goa.ValidateFormat("cursor", *cursor, goa.FormatUUID))
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 	var limit *int

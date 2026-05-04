@@ -70,11 +70,11 @@ overrides:
         go_type:
           import: github.com/speakeasy-api/gram/server/internal/urn
           type: Principal
-      - column: user_sessions.principal_urn
+      - column: user_sessions.subject_urn
         go_type:
           import: github.com/speakeasy-api/gram/server/internal/urn
           type: SessionSubject
-      - column: user_session_consents.principal_urn
+      - column: user_session_consents.subject_urn
         go_type:
           import: github.com/speakeasy-api/gram/server/internal/urn
           type: SessionSubject

@@ -27,9 +27,9 @@ export type CreateUserSessionIssuerForm = {
    */
   authnChallengeMode: AuthnChallengeMode;
   /**
-   * ISO 8601 duration (e.g. PT24H) bounding the issued user session lifetime.
+   * Issued user session lifetime, in hours.
    */
-  sessionDuration: string;
+  sessionDurationHours: number;
   /**
    * Project-unique slug.
    */
@@ -44,7 +44,7 @@ export const AuthnChallengeMode$outboundSchema: z.ZodMiniEnum<
 /** @internal */
 export type CreateUserSessionIssuerForm$Outbound = {
   authn_challenge_mode: string;
-  session_duration: string;
+  session_duration_hours: number;
   slug: string;
 };
 
@@ -55,13 +55,13 @@ export const CreateUserSessionIssuerForm$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     authnChallengeMode: AuthnChallengeMode$outboundSchema,
-    sessionDuration: z.string(),
+    sessionDurationHours: z.int(),
     slug: z.string(),
   }),
   z.transform((v) => {
     return remap$(v, {
       authnChallengeMode: "authn_challenge_mode",
-      sessionDuration: "session_duration",
+      sessionDurationHours: "session_duration_hours",
     });
   }),
 );

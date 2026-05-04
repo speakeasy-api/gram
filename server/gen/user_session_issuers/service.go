@@ -63,8 +63,8 @@ type CreateUserSessionIssuerPayload struct {
 	Slug string
 	// How multi-remote authn challenges are presented: chain | interactive.
 	AuthnChallengeMode string
-	// ISO 8601 duration (e.g. PT24H) bounding the issued user session lifetime.
-	SessionDuration string
+	// Issued user session lifetime, in hours.
+	SessionDurationHours int
 }
 
 // DeleteUserSessionIssuerPayload is the payload type of the userSessionIssuers
@@ -92,7 +92,7 @@ type GetUserSessionIssuerPayload struct {
 // ListUserSessionIssuersPayload is the payload type of the userSessionIssuers
 // service listUserSessionIssuers method.
 type ListUserSessionIssuersPayload struct {
-	// Pagination cursor.
+	// Pagination cursor: id of the last item from the previous page.
 	Cursor *string
 	// Page size (default 50, max 100).
 	Limit            *int
@@ -121,8 +121,8 @@ type UpdateUserSessionIssuerPayload struct {
 	Slug *string
 	// chain | interactive.
 	AuthnChallengeMode *string
-	// ISO 8601 duration.
-	SessionDuration *string
+	// Issued user session lifetime, in hours.
+	SessionDurationHours *int
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

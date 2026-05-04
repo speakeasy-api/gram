@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 51b0ee330541d7ec2595047f71d8c097
+  docChecksum: 9d11ffb90c17178e03ca7e2de878203e
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -211,7 +211,7 @@ trackedFiles:
   docs/models/components/createtriggerinstanceformstatus.md:
     last_write_checksum: sha1:f0600b1953f703f46134fa064d1ea990c34d7046
   docs/models/components/createusersessionissuerform.md:
-    last_write_checksum: sha1:f3d2147c1c1c76a033ff0c91b17057b6deda73fb
+    last_write_checksum: sha1:b4e5ca49d930449c0d14f53fb8f3ead9983e6891
   docs/models/components/creditusageresponsebody.md:
     last_write_checksum: sha1:34bbdfb51d51d5942a0c7f19f4d3fd408867dc64
   docs/models/components/cursorhookpayload.md:
@@ -461,7 +461,7 @@ trackedFiles:
   docs/models/components/listusersessionconsentsresult.md:
     last_write_checksum: sha1:06925296ffdff9f582c9cc80cae31ac683973251
   docs/models/components/listusersessionissuersresult.md:
-    last_write_checksum: sha1:77e4a525c2bef2a83b69fd43a8730daf613f7b5b
+    last_write_checksum: sha1:0b4f3327748f819c01b225d3d0d7b59a2c9577fc
   docs/models/components/listusersessionsresult.md:
     last_write_checksum: sha1:9a3b024fbd8425fec0d48033a8d6414946079114
   docs/models/components/listusersresult.md:
@@ -881,7 +881,7 @@ trackedFiles:
   docs/models/components/updatetriggerinstanceformtargetkind.md:
     last_write_checksum: sha1:6ae48f0f33e598907e2a41229b470e2e8af945a3
   docs/models/components/updateusersessionissuerform.md:
-    last_write_checksum: sha1:75e110142e5a772481a7d526e1477509009b353e
+    last_write_checksum: sha1:454ceeefded5166821cfea4090ab3e8dda9cfe87
   docs/models/components/updateusersessionissuerformauthnchallengemode.md:
     last_write_checksum: sha1:2a80ac2d74765b2db978eb4b20083d9b157d24f6
   docs/models/components/uploadchatattachmentresult.md:
@@ -913,7 +913,7 @@ trackedFiles:
   docs/models/components/usersessionconsent.md:
     last_write_checksum: sha1:0d4e50bf89b57ccd3a2ffad335643fd65bd18c93
   docs/models/components/usersessionissuer.md:
-    last_write_checksum: sha1:536f663d623c71d353c768df71b2e66294fe5af8
+    last_write_checksum: sha1:cb4a44081b5bdf72a62ede5ae3c7e4d78d887ae8
   docs/models/components/usersummary.md:
     last_write_checksum: sha1:47ce930c9cc9215c9803e5a7056c36780ec4cae5
   docs/models/components/usertype.md:
@@ -1131,7 +1131,7 @@ trackedFiles:
   docs/models/operations/createtriggerinstancesecurity.md:
     last_write_checksum: sha1:1776eda6273aa88f815714014141984daa8c7409
   docs/models/operations/createusersessionissuerrequest.md:
-    last_write_checksum: sha1:706e7bc2d4dc43435ae5dcbb7af94a3ca8637b1e
+    last_write_checksum: sha1:ef5646139b3ef4254db770bbf6bd733b32138822
   docs/models/operations/createusersessionissuersecurity.md:
     last_write_checksum: sha1:665964e6c3ca9776acec8b93fa81d737819b1e36
   docs/models/operations/createusersessionissuersecurityoption1.md:
@@ -1847,9 +1847,9 @@ trackedFiles:
   docs/models/operations/listusersessionconsentssecurityoption2.md:
     last_write_checksum: sha1:4f0f50bd587309f00f7da5c21792817f09225dbb
   docs/models/operations/listusersessionissuersrequest.md:
-    last_write_checksum: sha1:53a3e8bb6e3ae78ac6a2b4f23f784c38a1e8aa12
+    last_write_checksum: sha1:d1f2ddd9de87eb582a8f0b88908cf03c86d947d3
   docs/models/operations/listusersessionissuersresponse.md:
-    last_write_checksum: sha1:cbbaa36a6e21e2c49d15fbf662d284c1f6aca164
+    last_write_checksum: sha1:a17cbc781cb486c62a83482291de4ec313b7d56a
   docs/models/operations/listusersessionissuerssecurity.md:
     last_write_checksum: sha1:b84d0d864de310273f1b3e63ebc52939a354153a
   docs/models/operations/listusersessionissuerssecurityoption1.md:
@@ -2393,7 +2393,7 @@ trackedFiles:
   docs/sdks/usersessionconsents/README.md:
     last_write_checksum: sha1:8f5437b4b6009b27dfc5c0758f776cf3670d7226
   docs/sdks/usersessionissuers/README.md:
-    last_write_checksum: sha1:d8fc351da24ba7bcea6ac4d6110162243e147351
+    last_write_checksum: sha1:415dc3bce3245319c634dd1b69723039174bcacf
   docs/sdks/usersessions/README.md:
     last_write_checksum: sha1:b3b214708bb706388c86220ae79df1f642ed6897
   docs/sdks/variations/README.md:
@@ -3325,7 +3325,7 @@ trackedFiles:
   src/models/components/createtriggerinstanceform.ts:
     last_write_checksum: sha1:542f18a62640b3a1ede8959c0321096b8c6697dd
   src/models/components/createusersessionissuerform.ts:
-    last_write_checksum: sha1:b3ab7ac5a3dbb0cae8ceb7af1f2271793fb4feb1
+    last_write_checksum: sha1:b85fac9eedf0f932923a820b64a3853859831ce9
   src/models/components/creditusageresponsebody.ts:
     id: 54eee7097f6b
     last_write_checksum: sha1:4dadf315b4b01174dc91b836b05d74186fbe65e0
@@ -4099,7 +4099,7 @@ trackedFiles:
   src/models/components/updatetriggerinstanceform.ts:
     last_write_checksum: sha1:d790e17d24a219591f71cdd504ca21487921c20d
   src/models/components/updateusersessionissuerform.ts:
-    last_write_checksum: sha1:665fe814f955a06ddb041d9d1f3767ac807400fb
+    last_write_checksum: sha1:753d31cebd8cfe21cf1763106104e72bcecafc27
   src/models/components/uploadchatattachmentresult.ts:
     id: 33b436acacb0
     last_write_checksum: sha1:460f97b1566637c815b027a5948f897f32e7ddc0
@@ -4145,7 +4145,7 @@ trackedFiles:
   src/models/components/usersessionconsent.ts:
     last_write_checksum: sha1:e798f1ed9a5f9be460d6e69dc313e7a7f60a9980
   src/models/components/usersessionissuer.ts:
-    last_write_checksum: sha1:9e48061f2c222939203ab5838fe929eee331ef25
+    last_write_checksum: sha1:05c87961878e6f1d346676d08336bffcdc96c101
   src/models/components/usersummary.ts:
     last_write_checksum: sha1:4c7ce9304b9899727c3f8976dacc8e684f114fdf
   src/models/components/validatekeyorganization.ts:
@@ -4613,7 +4613,7 @@ trackedFiles:
   src/models/operations/listusersessionconsents.ts:
     last_write_checksum: sha1:65ad9711fd27c7f1f2da405887c2a49fc07a8c61
   src/models/operations/listusersessionissuers.ts:
-    last_write_checksum: sha1:b36861cc01c3f93c82ae1eaf23328a289d706f42
+    last_write_checksum: sha1:bb5f48f42268070974da3cc9f4f19ff0cc458806
   src/models/operations/listusersessions.ts:
     last_write_checksum: sha1:69a98b5c41397292a4262b14621016451413694b
   src/models/operations/listversions.ts:
@@ -8547,30 +8547,6 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
-  listChallenges:
-    speakeasy-default-list-challenges:
-      parameters:
-        query:
-          limit: 50
-          offset: 0
-      responses:
-        "200":
-          application/json: {"challenges": [], "total": 916893}
-        "400":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
-        "500":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
-  resolveChallenge:
-    speakeasy-default-resolve-challenge:
-      requestBody:
-        application/json: {"challenge_ids": ["<value 1>"], "principal_urn": "<value>", "resolution_type": "role_assigned", "scope": "<value>"}
-      responses:
-        "201":
-          application/json: {"resolutions": []}
-        "400":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
-        "500":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   getUserSessionClient:
     speakeasy-default-get-user-session-client:
       parameters:
@@ -8622,10 +8598,10 @@ examples:
   createUserSessionIssuer:
     speakeasy-default-create-user-session-issuer:
       requestBody:
-        application/json: {"authn_challenge_mode": "chain", "session_duration": "<value>", "slug": "<value>"}
+        application/json: {"authn_challenge_mode": "chain", "session_duration_hours": 258583, "slug": "<value>"}
       responses:
         "200":
-          application/json: {"authn_challenge_mode": "<value>", "created_at": "2026-05-06T16:44:45.182Z", "id": "797212a9-f79f-4e5b-a48c-819febc81785", "project_id": "66111c8e-2ed9-4cca-b7b3-430333d4acfa", "session_duration": "<value>", "slug": "<value>", "updated_at": "2024-05-08T22:40:59.273Z"}
+          application/json: {"authn_challenge_mode": "<value>", "created_at": "2026-05-06T16:44:45.182Z", "id": "797212a9-f79f-4e5b-a48c-819febc81785", "project_id": "66111c8e-2ed9-4cca-b7b3-430333d4acfa", "session_duration_hours": 781659, "slug": "<value>", "updated_at": "2024-05-08T22:40:59.273Z"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -8644,7 +8620,7 @@ examples:
     speakeasy-default-get-user-session-issuer:
       responses:
         "200":
-          application/json: {"authn_challenge_mode": "<value>", "created_at": "2024-12-02T02:00:23.894Z", "id": "1eed0621-72c9-4036-8a06-daa8a040be48", "project_id": "57ff9343-9875-4960-9ee5-7e4aa2e06a70", "session_duration": "<value>", "slug": "<value>", "updated_at": "2024-09-04T07:39:59.919Z"}
+          application/json: {"authn_challenge_mode": "<value>", "created_at": "2024-12-02T02:00:23.894Z", "id": "1eed0621-72c9-4036-8a06-daa8a040be48", "project_id": "57ff9343-9875-4960-9ee5-7e4aa2e06a70", "session_duration_hours": 306645, "slug": "<value>", "updated_at": "2024-09-04T07:39:59.919Z"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -8664,7 +8640,7 @@ examples:
         application/json: {"id": "dad21314-e682-4be0-b8cf-097f268dafb1"}
       responses:
         "200":
-          application/json: {"authn_challenge_mode": "<value>", "created_at": "2024-11-25T09:16:20.983Z", "id": "ae2557ad-d034-4496-9cc1-323f5e93e0d3", "project_id": "c159fbc4-0e4f-4bee-a37b-46aba130899e", "session_duration": "<value>", "slug": "<value>", "updated_at": "2025-12-18T09:38:54.035Z"}
+          application/json: {"authn_challenge_mode": "<value>", "created_at": "2024-11-25T09:16:20.983Z", "id": "ae2557ad-d034-4496-9cc1-323f5e93e0d3", "project_id": "c159fbc4-0e4f-4bee-a37b-46aba130899e", "session_duration_hours": 862271, "slug": "<value>", "updated_at": "2025-12-18T09:38:54.035Z"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -8687,6 +8663,30 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  listChallenges:
+    speakeasy-default-list-challenges:
+      parameters:
+        query:
+          limit: 50
+          offset: 0
+      responses:
+        "200":
+          application/json: {"challenges": [], "total": 916893}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  resolveChallenge:
+    speakeasy-default-resolve-challenge:
+      requestBody:
+        application/json: {"challenge_ids": ["<value 1>"], "principal_urn": "<value>", "resolution_type": "role_assigned", "scope": "<value>"}
+      responses:
+        "201":
+          application/json: {"resolutions": []}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   createTopUpCheckout:
     speakeasy-default-create-top-up-checkout:
       responses:

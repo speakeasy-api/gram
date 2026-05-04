@@ -26,9 +26,9 @@ export type UserSessionIssuer = {
    */
   projectId: string;
   /**
-   * ISO 8601 duration (e.g. PT24H).
+   * Issued user session lifetime, in hours.
    */
-  sessionDuration: string;
+  sessionDurationHours: number;
   /**
    * Project-unique slug.
    */
@@ -49,7 +49,7 @@ export const UserSessionIssuer$inboundSchema: z.ZodMiniType<
     ),
     id: z.string(),
     project_id: z.string(),
-    session_duration: z.string(),
+    session_duration_hours: z.int(),
     slug: z.string(),
     updated_at: z.pipe(
       z.iso.datetime({ offset: true }),
@@ -61,7 +61,7 @@ export const UserSessionIssuer$inboundSchema: z.ZodMiniType<
       "authn_challenge_mode": "authnChallengeMode",
       "created_at": "createdAt",
       "project_id": "projectId",
-      "session_duration": "sessionDuration",
+      "session_duration_hours": "sessionDurationHours",
       "updated_at": "updatedAt",
     });
   }),

@@ -163,6 +163,15 @@ func PtrToPGTimestamptz(t *time.Time) pgtype.Timestamptz {
 	return pgtype.Timestamptz{Time: *t, Valid: true, InfinityModifier: pgtype.Finite}
 }
 
+// PtrToPGInterval converts a *time.Duration to a pgtype.Interval. If the
+// pointer is nil, the result has Valid set to false (which becomes SQL NULL).
+func PtrToPGInterval(d *time.Duration) pgtype.Interval {
+	if d == nil {
+		return pgtype.Interval{Microseconds: 0, Days: 0, Months: 0, Valid: false}
+	}
+	return pgtype.Interval{Microseconds: d.Microseconds(), Days: 0, Months: 0, Valid: true}
+}
+
 // PtrToPGInt8 converts an int pointer to a pgtype.Int8. If the pointer is nil,
 // the result has Valid set to false.
 func PtrToPGInt8(v *int) pgtype.Int8 {

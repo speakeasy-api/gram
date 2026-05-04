@@ -525,6 +525,9 @@ func DecodeListUserSessionIssuersRequest(mux goahttp.Muxer, decoder func(*http.R
 		if cursorRaw != "" {
 			cursor = &cursorRaw
 		}
+		if cursor != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("cursor", *cursor, goa.FormatUUID))
+		}
 		{
 			limitRaw := qp.Get("limit")
 			if limitRaw != "" {
@@ -1198,13 +1201,13 @@ func EncodeDeleteUserSessionIssuerError(encoder func(context.Context, http.Respo
 // *types.UserSessionIssuer.
 func marshalTypesUserSessionIssuerToUserSessionIssuerResponseBody(v *types.UserSessionIssuer) *UserSessionIssuerResponseBody {
 	res := &UserSessionIssuerResponseBody{
-		ID:                 v.ID,
-		ProjectID:          v.ProjectID,
-		Slug:               v.Slug,
-		AuthnChallengeMode: v.AuthnChallengeMode,
-		SessionDuration:    v.SessionDuration,
-		CreatedAt:          v.CreatedAt,
-		UpdatedAt:          v.UpdatedAt,
+		ID:                   v.ID,
+		ProjectID:            v.ProjectID,
+		Slug:                 v.Slug,
+		AuthnChallengeMode:   v.AuthnChallengeMode,
+		SessionDurationHours: v.SessionDurationHours,
+		CreatedAt:            v.CreatedAt,
+		UpdatedAt:            v.UpdatedAt,
 	}
 
 	return res

@@ -21629,11 +21629,12 @@ paths:
             operationId: listUserSessionIssuers
             parameters:
                 - allowEmptyValue: true
-                  description: Pagination cursor.
+                  description: 'Pagination cursor: id of the last item from the previous page.'
                   in: query
                   name: cursor
                   schema:
-                    description: Pagination cursor.
+                    description: 'Pagination cursor: id of the last item from the previous page.'
+                    format: uuid
                     type: string
                 - allowEmptyValue: true
                   description: Page size (default 50, max 100).
@@ -24329,9 +24330,10 @@ components:
                     enum:
                         - chain
                         - interactive
-                session_duration:
-                    type: string
-                    description: ISO 8601 duration (e.g. PT24H) bounding the issued user session lifetime.
+                session_duration_hours:
+                    type: integer
+                    description: Issued user session lifetime, in hours.
+                    format: int64
                 slug:
                     type: string
                     description: Project-unique slug.
@@ -24339,7 +24341,7 @@ components:
             required:
                 - slug
                 - authn_challenge_mode
-                - session_duration
+                - session_duration_hours
         CreditUsageResponseBody:
             type: object
             properties:
@@ -31937,9 +31939,10 @@ components:
                     type: string
                     description: The user_session_issuer id.
                     format: uuid
-                session_duration:
-                    type: string
-                    description: ISO 8601 duration.
+                session_duration_hours:
+                    type: integer
+                    description: Issued user session lifetime, in hours.
+                    format: int64
                 slug:
                     type: string
                     description: Rename the slug.
@@ -32296,9 +32299,10 @@ components:
                     type: string
                     description: The owning project id.
                     format: uuid
-                session_duration:
-                    type: string
-                    description: ISO 8601 duration (e.g. PT24H).
+                session_duration_hours:
+                    type: integer
+                    description: Issued user session lifetime, in hours.
+                    format: int64
                 slug:
                     type: string
                     description: Project-unique slug.
@@ -32311,7 +32315,7 @@ components:
                 - project_id
                 - slug
                 - authn_challenge_mode
-                - session_duration
+                - session_duration_hours
                 - created_at
                 - updated_at
         UserSummary:

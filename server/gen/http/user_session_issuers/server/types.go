@@ -20,8 +20,8 @@ type CreateUserSessionIssuerRequestBody struct {
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// How multi-remote authn challenges are presented: chain | interactive.
 	AuthnChallengeMode *string `form:"authn_challenge_mode,omitempty" json:"authn_challenge_mode,omitempty" xml:"authn_challenge_mode,omitempty"`
-	// ISO 8601 duration (e.g. PT24H) bounding the issued user session lifetime.
-	SessionDuration *string `form:"session_duration,omitempty" json:"session_duration,omitempty" xml:"session_duration,omitempty"`
+	// Issued user session lifetime, in hours.
+	SessionDurationHours *int `form:"session_duration_hours,omitempty" json:"session_duration_hours,omitempty" xml:"session_duration_hours,omitempty"`
 }
 
 // UpdateUserSessionIssuerRequestBody is the type of the "userSessionIssuers"
@@ -33,8 +33,8 @@ type UpdateUserSessionIssuerRequestBody struct {
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// chain | interactive.
 	AuthnChallengeMode *string `form:"authn_challenge_mode,omitempty" json:"authn_challenge_mode,omitempty" xml:"authn_challenge_mode,omitempty"`
-	// ISO 8601 duration.
-	SessionDuration *string `form:"session_duration,omitempty" json:"session_duration,omitempty" xml:"session_duration,omitempty"`
+	// Issued user session lifetime, in hours.
+	SessionDurationHours *int `form:"session_duration_hours,omitempty" json:"session_duration_hours,omitempty" xml:"session_duration_hours,omitempty"`
 }
 
 // CreateUserSessionIssuerResponseBody is the type of the "userSessionIssuers"
@@ -48,10 +48,10 @@ type CreateUserSessionIssuerResponseBody struct {
 	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// chain | interactive.
 	AuthnChallengeMode string `form:"authn_challenge_mode" json:"authn_challenge_mode" xml:"authn_challenge_mode"`
-	// ISO 8601 duration (e.g. PT24H).
-	SessionDuration string `form:"session_duration" json:"session_duration" xml:"session_duration"`
-	CreatedAt       string `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt       string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// Issued user session lifetime, in hours.
+	SessionDurationHours int    `form:"session_duration_hours" json:"session_duration_hours" xml:"session_duration_hours"`
+	CreatedAt            string `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt            string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // UpdateUserSessionIssuerResponseBody is the type of the "userSessionIssuers"
@@ -65,10 +65,10 @@ type UpdateUserSessionIssuerResponseBody struct {
 	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// chain | interactive.
 	AuthnChallengeMode string `form:"authn_challenge_mode" json:"authn_challenge_mode" xml:"authn_challenge_mode"`
-	// ISO 8601 duration (e.g. PT24H).
-	SessionDuration string `form:"session_duration" json:"session_duration" xml:"session_duration"`
-	CreatedAt       string `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt       string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// Issued user session lifetime, in hours.
+	SessionDurationHours int    `form:"session_duration_hours" json:"session_duration_hours" xml:"session_duration_hours"`
+	CreatedAt            string `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt            string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // ListUserSessionIssuersResponseBody is the type of the "userSessionIssuers"
@@ -90,10 +90,10 @@ type GetUserSessionIssuerResponseBody struct {
 	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// chain | interactive.
 	AuthnChallengeMode string `form:"authn_challenge_mode" json:"authn_challenge_mode" xml:"authn_challenge_mode"`
-	// ISO 8601 duration (e.g. PT24H).
-	SessionDuration string `form:"session_duration" json:"session_duration" xml:"session_duration"`
-	CreatedAt       string `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt       string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// Issued user session lifetime, in hours.
+	SessionDurationHours int    `form:"session_duration_hours" json:"session_duration_hours" xml:"session_duration_hours"`
+	CreatedAt            string `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt            string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // CreateUserSessionIssuerUnauthorizedResponseBody is the type of the
@@ -1057,10 +1057,10 @@ type UserSessionIssuerResponseBody struct {
 	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// chain | interactive.
 	AuthnChallengeMode string `form:"authn_challenge_mode" json:"authn_challenge_mode" xml:"authn_challenge_mode"`
-	// ISO 8601 duration (e.g. PT24H).
-	SessionDuration string `form:"session_duration" json:"session_duration" xml:"session_duration"`
-	CreatedAt       string `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt       string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// Issued user session lifetime, in hours.
+	SessionDurationHours int    `form:"session_duration_hours" json:"session_duration_hours" xml:"session_duration_hours"`
+	CreatedAt            string `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt            string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // NewCreateUserSessionIssuerResponseBody builds the HTTP response body from
@@ -1068,13 +1068,13 @@ type UserSessionIssuerResponseBody struct {
 // "userSessionIssuers" service.
 func NewCreateUserSessionIssuerResponseBody(res *types.UserSessionIssuer) *CreateUserSessionIssuerResponseBody {
 	body := &CreateUserSessionIssuerResponseBody{
-		ID:                 res.ID,
-		ProjectID:          res.ProjectID,
-		Slug:               res.Slug,
-		AuthnChallengeMode: res.AuthnChallengeMode,
-		SessionDuration:    res.SessionDuration,
-		CreatedAt:          res.CreatedAt,
-		UpdatedAt:          res.UpdatedAt,
+		ID:                   res.ID,
+		ProjectID:            res.ProjectID,
+		Slug:                 res.Slug,
+		AuthnChallengeMode:   res.AuthnChallengeMode,
+		SessionDurationHours: res.SessionDurationHours,
+		CreatedAt:            res.CreatedAt,
+		UpdatedAt:            res.UpdatedAt,
 	}
 	return body
 }
@@ -1084,13 +1084,13 @@ func NewCreateUserSessionIssuerResponseBody(res *types.UserSessionIssuer) *Creat
 // "userSessionIssuers" service.
 func NewUpdateUserSessionIssuerResponseBody(res *types.UserSessionIssuer) *UpdateUserSessionIssuerResponseBody {
 	body := &UpdateUserSessionIssuerResponseBody{
-		ID:                 res.ID,
-		ProjectID:          res.ProjectID,
-		Slug:               res.Slug,
-		AuthnChallengeMode: res.AuthnChallengeMode,
-		SessionDuration:    res.SessionDuration,
-		CreatedAt:          res.CreatedAt,
-		UpdatedAt:          res.UpdatedAt,
+		ID:                   res.ID,
+		ProjectID:            res.ProjectID,
+		Slug:                 res.Slug,
+		AuthnChallengeMode:   res.AuthnChallengeMode,
+		SessionDurationHours: res.SessionDurationHours,
+		CreatedAt:            res.CreatedAt,
+		UpdatedAt:            res.UpdatedAt,
 	}
 	return body
 }
@@ -1122,13 +1122,13 @@ func NewListUserSessionIssuersResponseBody(res *usersessionissuers.ListUserSessi
 // service.
 func NewGetUserSessionIssuerResponseBody(res *types.UserSessionIssuer) *GetUserSessionIssuerResponseBody {
 	body := &GetUserSessionIssuerResponseBody{
-		ID:                 res.ID,
-		ProjectID:          res.ProjectID,
-		Slug:               res.Slug,
-		AuthnChallengeMode: res.AuthnChallengeMode,
-		SessionDuration:    res.SessionDuration,
-		CreatedAt:          res.CreatedAt,
-		UpdatedAt:          res.UpdatedAt,
+		ID:                   res.ID,
+		ProjectID:            res.ProjectID,
+		Slug:                 res.Slug,
+		AuthnChallengeMode:   res.AuthnChallengeMode,
+		SessionDurationHours: res.SessionDurationHours,
+		CreatedAt:            res.CreatedAt,
+		UpdatedAt:            res.UpdatedAt,
 	}
 	return body
 }
@@ -1887,9 +1887,9 @@ func NewDeleteUserSessionIssuerGatewayErrorResponseBody(res *goa.ServiceError) *
 // createUserSessionIssuer endpoint payload.
 func NewCreateUserSessionIssuerPayload(body *CreateUserSessionIssuerRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *usersessionissuers.CreateUserSessionIssuerPayload {
 	v := &usersessionissuers.CreateUserSessionIssuerPayload{
-		Slug:               *body.Slug,
-		AuthnChallengeMode: *body.AuthnChallengeMode,
-		SessionDuration:    *body.SessionDuration,
+		Slug:                 *body.Slug,
+		AuthnChallengeMode:   *body.AuthnChallengeMode,
+		SessionDurationHours: *body.SessionDurationHours,
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
@@ -1902,10 +1902,10 @@ func NewCreateUserSessionIssuerPayload(body *CreateUserSessionIssuerRequestBody,
 // updateUserSessionIssuer endpoint payload.
 func NewUpdateUserSessionIssuerPayload(body *UpdateUserSessionIssuerRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *usersessionissuers.UpdateUserSessionIssuerPayload {
 	v := &usersessionissuers.UpdateUserSessionIssuerPayload{
-		ID:                 *body.ID,
-		Slug:               body.Slug,
-		AuthnChallengeMode: body.AuthnChallengeMode,
-		SessionDuration:    body.SessionDuration,
+		ID:                   *body.ID,
+		Slug:                 body.Slug,
+		AuthnChallengeMode:   body.AuthnChallengeMode,
+		SessionDurationHours: body.SessionDurationHours,
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
@@ -1961,8 +1961,8 @@ func ValidateCreateUserSessionIssuerRequestBody(body *CreateUserSessionIssuerReq
 	if body.AuthnChallengeMode == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("authn_challenge_mode", "body"))
 	}
-	if body.SessionDuration == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("session_duration", "body"))
+	if body.SessionDurationHours == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("session_duration_hours", "body"))
 	}
 	if body.AuthnChallengeMode != nil {
 		if !(*body.AuthnChallengeMode == "chain" || *body.AuthnChallengeMode == "interactive") {
