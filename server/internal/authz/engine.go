@@ -108,6 +108,35 @@ func (e *Engine) PrepareContext(ctx context.Context) (context.Context, error) {
 		return ctx, nil
 	}
 
+	// API-key requests load grants on the api_key principal directly,
+	// regardless of AccountType or RBAC feature flag. Plugin-scoped keys
+	// (rfc-plugin-scoped-keys.md) are a security primitive that must
+	// enforce for every org. Scope overrides do not apply to api-key auth
+	// — see ShouldEnforce.
+	//
+	// system_managed is a cheap pre-check: user-managed keys can't carry
+	// per-key grants, so we skip the load entirely. Empty load result for
+	// a system-managed key (e.g. the org-wide hooks key) is also fine —
+	// ShouldEnforce treats zero grants as "bypass".
+	if authCtx.APIKeyID != "" {
+		if !authCtx.APIKeySystemManaged {
+			return ctx, nil
+		}
+		principals := []urn.Principal{urn.NewPrincipal(urn.PrincipalTypeAPIKey, authCtx.APIKeyID)}
+		grants, err := LoadGrants(ctx, e.db, authCtx.ActiveOrganizationID, principals)
+		if err != nil {
+			e.logger.ErrorContext(
+				ctx,
+				"failed to load api-key authz grants",
+				attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
+				attr.SlogAuthAPIKeyID(authCtx.APIKeyID),
+				attr.SlogError(err),
+			)
+			return ctx, fmt.Errorf("load api-key authz grants: %w", err)
+		}
+		return GrantsToContext(ctx, grants), nil
+	}
+
 	// Assistant-token auth has no session but should resolve grants against
 	// the owning user stamped as UserID on the context.
 	_, isAssistant := contextvalues.GetAssistantPrincipal(ctx)
@@ -340,9 +369,16 @@ func (e *Engine) ShouldEnforce(ctx context.Context) (bool, error) {
 		return false, oops.C(oops.CodeUnauthorized)
 	}
 
-	// Never enforce RBAC on API key requests — they have their own scoping.
+	// API-key requests enforce iff per-key grants were loaded for the
+	// api_key principal (rfc-plugin-scoped-keys.md). User-managed keys
+	// (CLI / producer / hooks-download / dashboard-created consumer keys)
+	// have no grants on their api_key principal and bypass — preserving
+	// the historic behavior. No enterprise / feature-flag gating: plugin
+	// scoping is a security primitive, not a tier feature. Scope
+	// overrides do not apply to api-key auth flows.
 	if authCtx.APIKeyID != "" {
-		return false, nil
+		grants, ok := GrantsFromContext(ctx)
+		return ok && len(grants) > 0, nil
 	}
 
 	// When the caller has active scope overrides, enforce so the override scopes

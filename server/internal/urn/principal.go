@@ -11,13 +11,15 @@ import (
 type PrincipalType string
 
 const (
-	PrincipalTypeUser PrincipalType = "user"
-	PrincipalTypeRole PrincipalType = "role"
+	PrincipalTypeUser   PrincipalType = "user"
+	PrincipalTypeRole   PrincipalType = "role"
+	PrincipalTypeAPIKey PrincipalType = "api_key"
 )
 
 var principalTypes = map[PrincipalType]struct{}{
-	PrincipalTypeUser: {},
-	PrincipalTypeRole: {},
+	PrincipalTypeUser:   {},
+	PrincipalTypeRole:   {},
+	PrincipalTypeAPIKey: {},
 }
 
 // Principal is a 2-segment URN that identifies a principal in the RBAC system.

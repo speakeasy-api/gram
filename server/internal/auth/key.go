@@ -159,6 +159,7 @@ func (k *ByKey) KeyBasedAuth(ctx context.Context, key string, requiredScopes []s
 		UserID:                apiKey.CreatedByUserID,
 		Email:                 &apiKey.Email,
 		APIKeyID:              apiKey.ID.String(),
+		APIKeySystemManaged:   apiKey.SystemManaged,
 		ProjectID:             projectID,
 		OrganizationSlug:      org.Slug,
 		AccountType:           org.GramAccountType,

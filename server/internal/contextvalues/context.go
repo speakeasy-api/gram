@@ -9,10 +9,15 @@ import (
 type contextKey string
 
 type AuthContext struct {
-	ActiveOrganizationID  string
-	UserID                string
-	ExternalUserID        string // Customer-provided user identifier (e.g., from chat session JWTs)
-	APIKeyID              string
+	ActiveOrganizationID string
+	UserID               string
+	ExternalUserID       string // Customer-provided user identifier (e.g., from chat session JWTs)
+	APIKeyID             string
+	// APIKeySystemManaged mirrors api_keys.system_managed for the auth'd
+	// key. The RBAC engine uses it as a cheap pre-check to skip api-key
+	// grant loading for keys that can't possibly carry per-key grants
+	// (i.e. user-managed keys). False for non-key auth.
+	APIKeySystemManaged   bool
 	SessionID             *string
 	ProjectID             *uuid.UUID
 	OrganizationSlug      string

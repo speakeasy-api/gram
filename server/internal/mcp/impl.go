@@ -522,6 +522,18 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 			break
 		}
 
+		// A Forbidden from authenticateToken means the credential was valid
+		// but not authorized for this MCP server. Preserve that semantic
+		// rather than masking everything as a generic Unauthorized "expired
+		// or invalid access token", which would mislead clients with a
+		// well-formed credential. The first concrete producer is the
+		// plugin-scoped-key check (rfc-plugin-scoped-keys.md); any future
+		// Forbidden-returning auth strategy will pass through the same way.
+		var oopsErr *oops.ShareableError
+		if errors.As(err, &oopsErr) && oopsErr.Code == oops.CodeForbidden {
+			return err
+		}
+
 		if isOAuthCapable {
 			w.Header().Set(
 				"WWW-Authenticate",

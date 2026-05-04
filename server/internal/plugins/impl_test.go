@@ -542,36 +542,76 @@ func TestPluginsService_PublishPlugins_CreatesAPIKeyWithCorrectScope(t *testing.
 	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
 	require.NoError(t, err)
 
-	// Verify two keys were created — one consumer-scoped (MCP) and one
-	// hooks-scoped (observability plugin).
-	keys, err := keysrepo.New(ti.conn).ListAPIKeysByOrganization(ctx, authCtx.ActiveOrganizationID)
+	// Verify two keys were created: one per-server plugin-scoped MCP key
+	// (system_managed, bound to plugin+toolset) and one hooks-scoped key.
+	// Per-server MCP keys are named `plugin:<slug>:<display>:<id8>`.
+	// ListAPIKeysByOrganization excludes system-managed keys, so we query
+	// directly to see them.
+	keys, err := allOrgKeysIncludingSystemManaged(ctx, t, ti.conn, authCtx.ActiveOrganizationID)
 	require.NoError(t, err)
 
 	var mcpKey, hooksKey *keysrepo.ApiKey
 	for i := range keys {
 		switch {
-		case strings.HasPrefix(keys[i].Name, "plugins-mcp-"):
+		case strings.HasPrefix(keys[i].Name, "plugin:key-test:"):
 			mcpKey = &keys[i]
 		case strings.HasPrefix(keys[i].Name, "plugins-hooks-"):
 			hooksKey = &keys[i]
 		}
 	}
-	require.NotNil(t, mcpKey, "expected a plugins-mcp-* API key")
+	require.NotNil(t, mcpKey, "expected a plugin:key-test:* API key")
 	require.Contains(t, mcpKey.Scopes, "consumer")
 	require.True(t, strings.HasPrefix(mcpKey.KeyPrefix, "gram_local_"))
+	require.True(t, mcpKey.SystemManaged, "per-server plugin keys must be system_managed")
+
+	// Toolset binding lives in principal_grants on the api_key principal.
+	// Verify exactly one mcp:connect grant for this key, bound to the
+	// published toolset.
+	var grantSelectorJSON []byte
+	err = ti.conn.QueryRow(ctx, `
+		SELECT selectors FROM principal_grants
+		WHERE organization_id = $1 AND principal_urn = $2 AND scope = $3
+	`,
+		authCtx.ActiveOrganizationID,
+		"api_key:"+mcpKey.ID.String(),
+		"mcp:connect",
+	).Scan(&grantSelectorJSON)
+	require.NoError(t, err, "expected an mcp:connect grant for the per-server key's api_key principal")
+	require.JSONEq(t,
+		`{"resource_kind":"mcp","resource_id":"`+toolset.ID.String()+`"}`,
+		string(grantSelectorJSON),
+		"grant selector must bind this key to the published toolset",
+	)
 
 	require.NotNil(t, hooksKey, "expected a plugins-hooks-* API key")
 	require.Contains(t, hooksKey.Scopes, "hooks")
 	require.True(t, strings.HasPrefix(hooksKey.KeyPrefix, "gram_local_"))
+	require.True(t, hooksKey.SystemManaged, "hooks plugin keys must be system_managed")
 
-	// Verify the MCP key is injected into the pushed MCP config.
+	// The hooks key is org-wide; no principal_grants rows expected.
+	var hooksGrantCount int
+	err = ti.conn.QueryRow(ctx, `
+		SELECT count(*) FROM principal_grants
+		WHERE principal_urn = $1
+	`, "api_key:"+hooksKey.ID.String()).Scan(&hooksGrantCount)
+	require.NoError(t, err)
+	require.Equal(t, 0, hooksGrantCount, "hooks key is org-wide; should not carry per-key grants")
+
+	// Verify the per-server MCP key is injected into the pushed MCP config.
 	mcpJSON := mock.lastPushedFiles["key-test/.mcp.json"]
 	require.NotNil(t, mcpJSON)
-	require.Contains(t, string(mcpJSON), "gram_local_")
+	require.Contains(t, string(mcpJSON), mcpKey.KeyPrefix, "manifest must embed the minted key")
 	require.NotContains(t, string(mcpJSON), "user_config")
+
+	// And linked back from plugin_servers.
+	var linkedKeyID uuid.NullUUID
+	err = ti.conn.QueryRow(ctx, "SELECT api_key_id FROM plugin_servers WHERE plugin_id = $1 AND deleted IS FALSE", uuid.MustParse(plugin.ID)).Scan(&linkedKeyID)
+	require.NoError(t, err)
+	require.True(t, linkedKeyID.Valid)
+	require.Equal(t, mcpKey.ID, linkedKeyID.UUID, "plugin_servers.api_key_id must point at the minted key")
 }
 
-func TestPluginsService_PublishPlugins_RePublishCreatesAdditionalKey(t *testing.T) {
+func TestPluginsService_PublishPlugins_RePublishAccumulatesPerServerKeys(t *testing.T) {
 	t.Parallel()
 
 	mock := &mockGitHubPublisher{}
@@ -592,29 +632,120 @@ func TestPluginsService_PublishPlugins_RePublishCreatesAdditionalKey(t *testing.
 	})
 	require.NoError(t, err)
 
-	// Publish twice.
+	// Publish twice. The minted key name carries a token-derived random
+	// suffix on top of the publish timestamp so back-to-back publishes
+	// (same second) don't collide on the partial unique index on
+	// (organization_id, name) WHERE deleted IS FALSE.
 	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
 	require.NoError(t, err)
 	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
 	require.NoError(t, err)
 
-	// Count plugin keys — each publish creates two keys (mcp + hooks).
-	keys, err := keysrepo.New(ti.conn).ListAPIKeysByOrganization(ctx, authCtx.ActiveOrganizationID)
+	// Republish accumulates rather than rotates: prior generations stay
+	// active so installs in the wild keep working. A future reaper / explicit
+	// admin rotation handles eventual cleanup. ListAPIKeysByOrganization
+	// excludes system-managed keys, so query directly.
+	activeKeys, err := allOrgKeysIncludingSystemManaged(ctx, t, ti.conn, authCtx.ActiveOrganizationID)
 	require.NoError(t, err)
 
-	var mcpCount, hooksCount int
-	for _, k := range keys {
+	var activeMCPCount, activeHooksCount int
+	for _, k := range activeKeys {
 		switch {
-		case strings.HasPrefix(k.Name, "plugins-mcp-"):
-			mcpCount++
+		case strings.HasPrefix(k.Name, "plugin:republish-test:"):
+			activeMCPCount++
 		case strings.HasPrefix(k.Name, "plugins-hooks-"):
-			hooksCount++
+			activeHooksCount++
 		}
 	}
-	// Documents the current behavior: each publish mints fresh keys without
-	// revoking prior ones. A future improvement should revoke first.
-	require.Equal(t, 2, mcpCount, "expected 2 mcp keys after 2 publishes")
-	require.Equal(t, 2, hooksCount, "expected 2 hooks keys after 2 publishes")
+	require.Equal(t, 2, activeMCPCount, "republish must keep prior per-server keys active")
+	require.Equal(t, 2, activeHooksCount, "hooks key also accumulates per publish")
+
+	// Nothing should have been soft-deleted as a side effect of republish.
+	var deletedMCPCount int
+	err = ti.conn.QueryRow(ctx,
+		"SELECT count(*) FROM api_keys WHERE name LIKE 'plugin:republish-test:%' AND deleted IS TRUE",
+	).Scan(&deletedMCPCount)
+	require.NoError(t, err)
+	require.Equal(t, 0, deletedMCPCount, "republish must not soft-delete prior keys")
+
+	// plugin_servers.api_key_id must point at the *latest* generation's key,
+	// not the first one — the dashboard's "current credential" surface relies
+	// on this. The first publish's key remains valid in api_keys but is no
+	// longer linked from plugin_servers.
+	var linkedKeyID uuid.UUID
+	err = ti.conn.QueryRow(ctx,
+		"SELECT api_key_id FROM plugin_servers WHERE plugin_id = $1 AND deleted IS FALSE",
+		uuid.MustParse(plugin.ID),
+	).Scan(&linkedKeyID)
+	require.NoError(t, err)
+
+	// Find the most recently created plugin-scoped key by created_at; the
+	// link should point at it.
+	var newestKeyID uuid.UUID
+	err = ti.conn.QueryRow(ctx,
+		"SELECT id FROM api_keys WHERE name LIKE 'plugin:republish-test:%' ORDER BY created_at DESC LIMIT 1",
+	).Scan(&newestKeyID)
+	require.NoError(t, err)
+	require.Equal(t, newestKeyID, linkedKeyID, "plugin_servers.api_key_id must be re-linked to the latest generation")
+}
+
+// PublishPlugins on a plugin containing both a public and a private server
+// must mint a key only for the private one. The public server's manifest
+// entry uses env-config auth and gets no Gram-issued key.
+func TestPluginsService_PublishPlugins_MixedPublicAndPrivateServers(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockGitHubPublisher{}
+	ctx, ti := newTestPluginsServiceWithGitHub(t, mock)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Mixed Plugin"})
+	require.NoError(t, err)
+
+	privateToolset := createTestToolset(t, ctx, ti.conn, "mixed-private")
+	publicToolset := createTestToolset(t, ctx, ti.conn, "mixed-public")
+	_, err = ti.conn.Exec(ctx, "UPDATE toolsets SET mcp_is_public = TRUE WHERE id = $1", publicToolset.ID)
+	require.NoError(t, err)
+
+	for i, ts := range []toolsetsrepo.Toolset{privateToolset, publicToolset} {
+		_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
+			PluginID:    plugin.ID,
+			ToolsetID:   ts.ID.String(),
+			DisplayName: "S" + ts.Slug,
+			Policy:      "required",
+			SortOrder:   int32(i),
+		})
+		require.NoError(t, err)
+	}
+
+	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
+	require.NoError(t, err)
+
+	// Exactly one mcp:connect grant should have been written, bound to the
+	// private toolset. The public server is skipped in the mint loop, so
+	// no api_key principal exists for it and no grant either.
+	var grantCount int
+	var boundToolsetID uuid.UUID
+	err = ti.conn.QueryRow(ctx, `
+		SELECT count(*),
+		       coalesce(min(selectors->>'resource_id'), '`+uuid.Nil.String()+`')::uuid
+		FROM principal_grants
+		WHERE organization_id = $1 AND scope = 'mcp:connect' AND principal_type = 'api_key'
+	`, authCtx.ActiveOrganizationID).Scan(&grantCount, &boundToolsetID)
+	require.NoError(t, err)
+	require.Equal(t, 1, grantCount, "public server must not get a plugin-scoped grant")
+	require.Equal(t, privateToolset.ID, boundToolsetID, "the only mcp:connect grant must bind to the private toolset")
+	_ = authCtx // referenced above; silences linters if shape changes
+
+	// Confirm the public server's plugin_servers row has no api_key_id link.
+	var publicLinkedKeyID uuid.NullUUID
+	err = ti.conn.QueryRow(ctx,
+		"SELECT api_key_id FROM plugin_servers WHERE toolset_id = $1 AND deleted IS FALSE",
+		publicToolset.ID,
+	).Scan(&publicLinkedKeyID)
+	require.NoError(t, err)
+	require.False(t, publicLinkedKeyID.Valid, "public server must not be linked to an api_key")
 }
 
 // PublishPlugins must not persist the API key (or audit log entry, or
@@ -646,11 +777,12 @@ func TestPluginsService_PublishPlugins_NoOrphanedKeyOnGitHubFailure(t *testing.T
 	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
 	require.Error(t, err, "publish must fail when GitHub does")
 
-	// No plugins-* API key should have been persisted.
-	keys, err := keysrepo.New(ti.conn).ListAPIKeysByOrganization(ctx, authCtx.ActiveOrganizationID)
+	// No plugin-minted key should have been persisted (system-managed keys
+	// included — they're hidden from ListAPIKeysByOrganization).
+	keys, err := allOrgKeysIncludingSystemManaged(ctx, t, ti.conn, authCtx.ActiveOrganizationID)
 	require.NoError(t, err)
 	for _, k := range keys {
-		require.False(t, strings.HasPrefix(k.Name, "plugins-"),
+		require.False(t, strings.HasPrefix(k.Name, "plugins-") || strings.HasPrefix(k.Name, "plugin:"),
 			"orphaned plugin api key %q persisted despite github failure", k.Name)
 	}
 }
@@ -952,7 +1084,7 @@ func TestPluginsService_PublishPlugins_ObservabilityHookScriptContainsAPIKey(t *
 	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
 	require.NoError(t, err)
 
-	keys, err := keysrepo.New(ti.conn).ListAPIKeysByOrganization(ctx, authCtx.ActiveOrganizationID)
+	keys, err := allOrgKeysIncludingSystemManaged(ctx, t, ti.conn, authCtx.ActiveOrganizationID)
 	require.NoError(t, err)
 	var hooksKeyPrefix string
 	for _, k := range keys {

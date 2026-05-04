@@ -1,12 +1,16 @@
 package keys_test
 
 import (
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/keys"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
@@ -115,6 +119,47 @@ func TestKeysService_ListKeys(t *testing.T) {
 		var oopsErr *oops.ShareableError
 		require.ErrorAs(t, err, &oopsErr)
 		require.Equal(t, oops.CodeUnauthorized, oopsErr.Code)
+	})
+
+	t.Run("system-managed keys are hidden from ListKeys", func(t *testing.T) {
+		t.Parallel()
+
+		ctx, ti := newTestKeysService(t)
+		authCtx, ok := contextvalues.GetAuthContext(ctx)
+		require.True(t, ok)
+
+		// Insert a system-managed key directly — these are minted by plugin
+		// publish (rfc-plugin-scoped-keys.md) and must not surface in the
+		// user-facing keys list.
+		tokenBytes := make([]byte, 32)
+		_, err := rand.Read(tokenBytes)
+		require.NoError(t, err)
+		token := hex.EncodeToString(tokenBytes)
+		hash := sha256.Sum256([]byte("gram_local_" + token))
+		_, err = ti.conn.Exec(ctx, `
+			INSERT INTO api_keys (
+				organization_id, project_id, created_by_user_id,
+				name, key_prefix, key_hash, scopes, system_managed
+			) VALUES ($1, $2, $3, $4, $5, $6, $7, true)
+		`,
+			authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID,
+			"plugin:hidden:test", "gram_local_"+token[:5], hex.EncodeToString(hash[:]),
+			[]string{"consumer"},
+		)
+		require.NoError(t, err)
+
+		// Also create a normal user key to make sure non-system keys still appear.
+		userKey, err := ti.service.CreateKey(ctx, &gen.CreateKeyPayload{
+			SessionToken: nil,
+			Name:         "user-visible-key",
+			Scopes:       []string{"consumer"},
+		})
+		require.NoError(t, err)
+
+		result, err := ti.service.ListKeys(ctx, &gen.ListKeysPayload{SessionToken: nil})
+		require.NoError(t, err)
+		require.Len(t, result.Keys, 1, "system-managed key must be hidden from ListKeys")
+		require.Equal(t, userKey.ID, result.Keys[0].ID)
 	})
 
 	t.Run("LastAccessedAt is populated after key authentication", func(t *testing.T) {

@@ -28,14 +28,28 @@ type LogKeyCreateEvent struct {
 	KeyName string
 
 	Scopes []string
+
+	// Set when the key is plugin-scoped (rfc-plugin-scoped-keys.md); zero
+	// values for org-wide keys. Surfaces in audit metadata as plugin_id /
+	// toolset_id so admins can answer "which plugin/server was this
+	// credential tied to?" from the audit history alone.
+	PluginID   uuid.UUID //nolint:glint // TODO(AGE-1954): introduce urn.Plugin and migrate to PluginURN; pending team discussion
+	ToolsetURN urn.Toolset
 }
 
 func LogKeyCreate(ctx context.Context, dbtx repo.DBTX, event LogKeyCreateEvent) error {
 	action := ActionKeyCreate
 
-	metadata, err := marshalAuditPayload(map[string]any{
+	payload := map[string]any{
 		"scopes": event.Scopes,
-	})
+	}
+	if event.PluginID != uuid.Nil {
+		payload["plugin_id"] = event.PluginID.String()
+	}
+	if !event.ToolsetURN.IsZero() {
+		payload["toolset_id"] = event.ToolsetURN.ID.String()
+	}
+	metadata, err := marshalAuditPayload(payload)
 	if err != nil {
 		return fmt.Errorf("marshal %s metadata: %w", action, err)
 	}

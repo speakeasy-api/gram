@@ -28,6 +28,7 @@ import (
 
 	srv "github.com/speakeasy-api/gram/server/gen/http/plugins/server"
 	gen "github.com/speakeasy-api/gram/server/gen/plugins"
+	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
@@ -840,6 +841,7 @@ func (s *Service) DownloadPluginPackage(ctx context.Context, payload *gen.Downlo
 	if pluginInfo == nil {
 		// Plugin exists but has no servers — generate an empty plugin.
 		pluginInfo = &PluginInfo{
+			ID:          dbPlugin.ID,
 			Name:        dbPlugin.Name,
 			Slug:        dbPlugin.Slug,
 			Description: conv.FromPGTextOrEmpty[string](dbPlugin.Description),
@@ -997,6 +999,7 @@ func (s *Service) persistDownloadAPIKey(ctx context.Context, ac *contextvalues.A
 		Scopes:          scopes,
 		CreatedByUserID: ac.UserID,
 		ProjectID:       projectID,
+		SystemManaged:   true,
 	})
 	if err != nil {
 		return fmt.Errorf("create api key: %w", err)
@@ -1011,6 +1014,8 @@ func (s *Service) persistDownloadAPIKey(ctx context.Context, ac *contextvalues.A
 		KeyURN:           urn.NewAPIKey(createdKey.ID),
 		KeyName:          candidate.keyName,
 		Scopes:           scopes,
+		PluginID:         uuid.Nil,
+		ToolsetURN:       urn.Toolset{ID: uuid.Nil},
 	}); err != nil {
 		return fmt.Errorf("audit log key creation: %w", err)
 	}
@@ -1096,17 +1101,34 @@ func (s *Service) PublishPlugins(ctx context.Context, payload *gen.PublishPlugin
 		return nil, oops.E(oops.CodeUnauthorized, nil, "publish requires a session-authenticated context")
 	}
 
-	mcpCandidate, err := s.buildPluginAPIKeyCandidate(auth.APIKeyScopeConsumer, "mcp")
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "build plugin mcp api key").Log(ctx, s.logger)
+	// Per rfc-plugin-scoped-keys.md: mint one MCP key per private
+	// plugin_server, bound to (plugin, toolset, server). Public servers use
+	// user-provided env-config auth and need no Gram-issued key.
+	mcpCandidates := make([]pluginAPIKeyCandidate, 0)
+	for i := range pluginInfos {
+		p := pluginInfos[i]
+		for j := range p.Servers {
+			srv := p.Servers[j]
+			if srv.IsPublic {
+				continue
+			}
+			cand, err := s.buildPluginScopedKeyCandidate(p, srv)
+			if err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "build plugin-scoped mcp api key").Log(ctx, s.logger)
+			}
+			mcpCandidates = append(mcpCandidates, cand)
+			pluginInfos[i].Servers[j].APIKey = cand.fullKey
+		}
 	}
+
 	hooksCandidate, err := s.buildPluginAPIKeyCandidate(auth.APIKeyScopeHooks, "hooks")
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "build plugin hooks api key").Log(ctx, s.logger)
 	}
 
 	cfg := s.generateConfig(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug, *ac.ProjectSlug)
-	cfg.APIKey = mcpCandidate.fullKey
+	// cfg.APIKey is intentionally left empty: per-server keys live on each
+	// PluginServerInfo.APIKey (see serverBearerToken in generate.go).
 	cfg.HooksAPIKey = hooksCandidate.fullKey
 
 	files, err := GeneratePluginPackages(pluginInfos, cfg)
@@ -1156,7 +1178,8 @@ func (s *Service) PublishPlugins(ctx context.Context, payload *gen.PublishPlugin
 	// credentials when GitHub fails. If this transaction itself fails, the
 	// published repo contains key strings with no DB records — re-publish
 	// overwrites them with fresh valid keys.
-	if err := s.persistPluginAPIKeys(ctx, ac, []pluginAPIKeyCandidate{mcpCandidate, hooksCandidate}, project.Name, repoOwner, repoName, pluginSlugs); err != nil {
+	candidates := append(append([]pluginAPIKeyCandidate{}, mcpCandidates...), hooksCandidate)
+	if err := s.persistPluginAPIKeys(ctx, ac, candidates, project.Name, repoOwner, repoName, pluginSlugs); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "persist plugin api keys").Log(ctx, s.logger)
 	}
 
@@ -1168,18 +1191,26 @@ func (s *Service) PublishPlugins(ctx context.Context, payload *gen.PublishPlugin
 // that has not yet been persisted to the database. It is built before GitHub
 // publishing so the key can be embedded in the published files, and only
 // persisted if the GitHub side succeeds.
+//
+// The optional pluginID/toolsetID/pluginServerID fields scope the key to a
+// single MCP server in a specific plugin (system_managed=true). When all
+// three are zero, the key is org-wide (e.g. the hooks-scoped publish key).
 type pluginAPIKeyCandidate struct {
-	fullKey   string
-	keyHash   string
-	keyPrefix string
-	keyName   string
-	scope     auth.APIKeyScope
+	fullKey        string
+	keyHash        string
+	keyPrefix      string
+	keyName        string
+	scope          auth.APIKeyScope
+	pluginID       uuid.NullUUID
+	toolsetID      uuid.NullUUID
+	pluginServerID uuid.NullUUID
 }
 
-// buildPluginAPIKeyCandidate generates an API key in memory without writing
-// to the database. The caller must subsequently call persistPluginAPIKeys to
-// commit the key. `purpose` is embedded in the key name so admins can tell
-// distinct keys apart in the dashboard (e.g., "mcp" vs "hooks").
+// buildPluginAPIKeyCandidate generates an org-wide API key in memory without
+// writing to the database. The caller must subsequently call
+// persistPluginAPIKeys to commit the key. `purpose` is embedded in the key
+// name so admins can tell distinct keys apart in the dashboard
+// (e.g., "mcp" vs "hooks").
 func (s *Service) buildPluginAPIKeyCandidate(scope auth.APIKeyScope, purpose string) (pluginAPIKeyCandidate, error) {
 	tokenBytes := make([]byte, 32)
 	if _, err := rand.Read(tokenBytes); err != nil {
@@ -1194,11 +1225,80 @@ func (s *Service) buildPluginAPIKeyCandidate(scope auth.APIKeyScope, purpose str
 	}
 
 	return pluginAPIKeyCandidate{
-		fullKey:   fullKey,
-		keyHash:   keyHash,
-		keyPrefix: s.keyPrefix + token[:5],
-		keyName:   fmt.Sprintf("plugins-%s-%s-%s", purpose, time.Now().UTC().Format("20060102-150405"), token[:6]),
-		scope:     scope,
+		fullKey:        fullKey,
+		keyHash:        keyHash,
+		keyPrefix:      s.keyPrefix + token[:5],
+		keyName:        fmt.Sprintf("plugins-%s-%s-%s", purpose, time.Now().UTC().Format("20060102-150405"), token[:6]),
+		scope:          scope,
+		pluginID:       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		toolsetID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		pluginServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+	}, nil
+}
+
+// sanitizeKeyNameSegment makes a free-form string safe to embed in a
+// colon-delimited api_keys.name. plugin_servers.display_name has no schema
+// constraints beyond non-empty, so it can contain colons, whitespace, or
+// unicode that would render the name ambiguous in audit logs. Maps anything
+// outside [A-Za-z0-9_-] to '_' and caps at 60 runes; an empty result falls
+// back to "_" so we never end up with adjacent colons.
+func sanitizeKeyNameSegment(s string) string {
+	const maxLen = 60
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		switch {
+		case (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' || r == '-':
+			b.WriteRune(r)
+		default:
+			b.WriteByte('_')
+		}
+		if b.Len() >= maxLen {
+			break
+		}
+	}
+	if b.Len() == 0 {
+		return "_"
+	}
+	return b.String()
+}
+
+// buildPluginScopedKeyCandidate generates a per-server MCP API key in memory.
+// The key is bound to a specific (plugin, toolset, plugin_server) and will
+// be rejected at the MCP entrypoint for any other toolset. Naming format:
+// plugin:<plugin_slug>:<sanitized_display_name>:<server_id_first8>:<yyyymmddHHMMSS>:<rand6>.
+// The timestamp + random suffix distinguish successive generations of the
+// same server's key — republish does not revoke prior keys (a separate
+// reaper / explicit-rotation flow handles that), so the partial unique
+// index on (organization_id, name) needs both pieces to allow rapid-fire
+// republishes (same second) to coexist.
+func (s *Service) buildPluginScopedKeyCandidate(p PluginInfo, srv PluginServerInfo) (pluginAPIKeyCandidate, error) {
+	tokenBytes := make([]byte, 32)
+	if _, err := rand.Read(tokenBytes); err != nil {
+		return pluginAPIKeyCandidate{}, fmt.Errorf("generate token: %w", err)
+	}
+	token := hex.EncodeToString(tokenBytes)
+	fullKey := s.keyPrefix + token
+
+	keyHash, err := auth.GetAPIKeyHash(fullKey)
+	if err != nil {
+		return pluginAPIKeyCandidate{}, fmt.Errorf("hash key: %w", err)
+	}
+
+	keyName := fmt.Sprintf("plugin:%s:%s:%s:%s:%s",
+		p.Slug, sanitizeKeyNameSegment(srv.DisplayName), srv.ID.String()[:8],
+		time.Now().UTC().Format("20060102150405"),
+		token[:6])
+
+	return pluginAPIKeyCandidate{
+		fullKey:        fullKey,
+		keyHash:        keyHash,
+		keyPrefix:      s.keyPrefix + token[:5],
+		keyName:        keyName,
+		scope:          auth.APIKeyScopeConsumer,
+		pluginID:       uuid.NullUUID{UUID: p.ID, Valid: true},
+		toolsetID:      uuid.NullUUID{UUID: srv.ToolsetID, Valid: true},
+		pluginServerID: uuid.NullUUID{UUID: srv.ID, Valid: true},
 	}, nil
 }
 
@@ -1206,6 +1306,23 @@ func (s *Service) buildPluginAPIKeyCandidate(scope auth.APIKeyScope, purpose str
 // log entries, the plugin publish audit log entry, and the GitHub
 // connection record in a single transaction. All-or-nothing: if any
 // candidate fails to insert, none are persisted.
+//
+// Republishing accumulates keys: prior generations remain valid in the
+// api_keys table until a separate reaper or explicit admin rotation
+// removes them. This avoids the operational footgun where an admin
+// republishing for a benign reason (renaming a server, fixing a
+// description) silently breaks every install in the wild before each
+// user's plugin runtime pulls the new manifest. The
+// SoftDeletePluginScopedKeys query exists for the future reaper /
+// explicit-rotation paths.
+//
+// plugin_servers.api_key_id is updated to point at the newest row so the
+// dashboard can surface the current credential per server.
+//
+// Plugin-scoped candidates (those carrying pluginID/toolsetID/pluginServerID)
+// are inserted with system_managed=true and have plugin_servers.api_key_id
+// updated to point at the new row. Org-wide candidates (e.g. the hooks key)
+// are inserted with system_managed=true but no back-references.
 func (s *Service) persistPluginAPIKeys(
 	ctx context.Context,
 	ac *contextvalues.AuthContext,
@@ -1223,6 +1340,9 @@ func (s *Service) persistPluginAPIKeys(
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
 	keysQ := keysrepo.New(tx)
+	pluginsQ := s.repo.WithTx(tx)
+	accessQ := accessrepo.New(tx)
+
 	for _, candidate := range candidates {
 		scopes := []string{candidate.scope.String()}
 		createdKey, err := keysQ.CreateAPIKey(ctx, keysrepo.CreateAPIKeyParams{
@@ -1233,11 +1353,51 @@ func (s *Service) persistPluginAPIKeys(
 			Scopes:          scopes,
 			CreatedByUserID: ac.UserID,
 			ProjectID:       projectID,
+			SystemManaged:   true,
 		})
 		if err != nil {
 			return fmt.Errorf("create api key %s: %w", candidate.keyName, err)
 		}
 
+		// For per-server scoped candidates, write a principal_grants row
+		// binding the api_key principal to this toolset via mcp:connect.
+		// The MCP entrypoint's existing s.authz.Require(ScopeMCPConnect,
+		// toolset.ID) check (mcp/impl.go) is what enforces it at runtime.
+		// Org-wide candidates (e.g. the hooks key) get no grant rows and
+		// fall under the "api_key with zero grants → bypass RBAC" policy
+		// in authz.Engine.ShouldEnforce.
+		if candidate.pluginServerID.Valid {
+			if err := pluginsQ.SetPluginServerAPIKey(ctx, repo.SetPluginServerAPIKeyParams{
+				ID:       candidate.pluginServerID.UUID,
+				PluginID: candidate.pluginID.UUID,
+				ApiKeyID: uuid.NullUUID{UUID: createdKey.ID, Valid: true},
+			}); err != nil {
+				return fmt.Errorf("link plugin_server %s to api_key %s: %w", candidate.pluginServerID.UUID, createdKey.ID, err)
+			}
+
+			selector := authz.NewSelector(authz.ScopeMCPConnect, candidate.toolsetID.UUID.String())
+			selectorJSON, err := selector.MarshalJSON()
+			if err != nil {
+				return fmt.Errorf("marshal mcp:connect selector for api_key %s: %w", createdKey.ID, err)
+			}
+			if _, err := accessQ.UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{
+				OrganizationID: ac.ActiveOrganizationID,
+				PrincipalUrn:   urn.NewPrincipal(urn.PrincipalTypeAPIKey, createdKey.ID.String()),
+				Scope:          string(authz.ScopeMCPConnect),
+				Selectors:      selectorJSON,
+			}); err != nil {
+				return fmt.Errorf("write mcp:connect grant for api_key %s: %w", createdKey.ID, err)
+			}
+		}
+
+		auditPluginID := uuid.Nil
+		if candidate.pluginID.Valid {
+			auditPluginID = candidate.pluginID.UUID
+		}
+		auditToolsetURN := urn.Toolset{ID: uuid.Nil}
+		if candidate.toolsetID.Valid {
+			auditToolsetURN = urn.NewToolset(candidate.toolsetID.UUID)
+		}
 		if err := audit.LogKeyCreate(ctx, tx, audit.LogKeyCreateEvent{
 			OrganizationID:   ac.ActiveOrganizationID,
 			ProjectID:        projectID,
@@ -1247,6 +1407,8 @@ func (s *Service) persistPluginAPIKeys(
 			KeyURN:           urn.NewAPIKey(createdKey.ID),
 			KeyName:          candidate.keyName,
 			Scopes:           scopes,
+			PluginID:         auditPluginID,
+			ToolsetURN:       auditToolsetURN,
 		}); err != nil {
 			return fmt.Errorf("audit log key creation %s: %w", candidate.keyName, err)
 		}
@@ -1307,6 +1469,7 @@ func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID) (
 		if !ok {
 			pb = &pluginBuild{
 				info: PluginInfo{
+					ID:          r.PluginID,
 					Name:        r.PluginName,
 					Slug:        r.PluginSlug,
 					Description: conv.FromPGTextOrEmpty[string](r.PluginDescription),
@@ -1319,11 +1482,14 @@ func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID) (
 
 		if mcpSlug := conv.FromPGText[string](r.ToolsetMcpSlug); mcpSlug != nil {
 			serverInfo := PluginServerInfo{
+				ID:          r.ServerID,
+				ToolsetID:   r.ToolsetID,
 				DisplayName: r.ServerDisplayName,
 				Policy:      r.ServerPolicy,
 				MCPURL:      fmt.Sprintf("%s/mcp/%s", s.serverURL, *mcpSlug),
 				IsPublic:    r.ToolsetIsPublic,
 				EnvConfigs:  nil,
+				APIKey:      "",
 			}
 
 			// For public servers, load user-facing environment configs. A public

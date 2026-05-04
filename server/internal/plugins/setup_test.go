@@ -22,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -204,4 +205,42 @@ func withauthzGrants(t *testing.T, ctx context.Context, conn *pgxpool.Pool, gran
 	require.NoError(t, err)
 
 	return authz.GrantsToContext(ctx, loadedGrants)
+}
+
+// allOrgKeysIncludingSystemManaged returns every API key (active + system-managed)
+// for an organization. The production ListAPIKeysByOrganization query
+// excludes system-managed keys so they don't pollute the dashboard's keys
+// page; tests need to see them to verify plugin publish behavior.
+func allOrgKeysIncludingSystemManaged(ctx context.Context, t *testing.T, conn *pgxpool.Pool, organizationID string) ([]keysrepo.ApiKey, error) {
+	t.Helper()
+
+	rows, err := conn.Query(ctx, `
+		SELECT id, organization_id, project_id, created_by_user_id, name,
+		       key_prefix, key_hash, scopes, system_managed,
+		       created_at, updated_at, deleted_at, deleted, last_accessed_at
+		FROM api_keys
+		WHERE organization_id = $1 AND deleted IS FALSE
+		ORDER BY created_at DESC
+	`, organizationID)
+	if err != nil {
+		return nil, fmt.Errorf("query api_keys: %w", err)
+	}
+	defer rows.Close()
+
+	var keys []keysrepo.ApiKey
+	for rows.Next() {
+		var k keysrepo.ApiKey
+		if err := rows.Scan(
+			&k.ID, &k.OrganizationID, &k.ProjectID, &k.CreatedByUserID, &k.Name,
+			&k.KeyPrefix, &k.KeyHash, &k.Scopes, &k.SystemManaged,
+			&k.CreatedAt, &k.UpdatedAt, &k.DeletedAt, &k.Deleted, &k.LastAccessedAt,
+		); err != nil {
+			return nil, fmt.Errorf("scan api_keys: %w", err)
+		}
+		keys = append(keys, k)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate api_keys rows: %w", err)
+	}
+	return keys, nil
 }

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 )
 
@@ -18,6 +19,12 @@ type ServerEnvConfig struct {
 
 // PluginServerInfo contains the resolved information for a single MCP server.
 type PluginServerInfo struct {
+	// ID and ToolsetID are populated by the publish path so it can mint an
+	// api_keys row scoped to this exact server. Zero values are accepted by
+	// the generators (tests construct PluginServerInfo without them).
+	ID        uuid.UUID
+	ToolsetID uuid.UUID
+
 	DisplayName string
 	Policy      string
 	// Resolved MCP URL (e.g. https://app.getgram.ai/mcp/{slug}).
@@ -26,14 +33,30 @@ type PluginServerInfo struct {
 	IsPublic bool
 	// EnvConfigs are user-facing environment variables for public servers.
 	EnvConfigs []ServerEnvConfig
+	// APIKey is the per-server bearer token embedded in the published
+	// manifest. When set, takes precedence over GenerateConfig.APIKey.
+	APIKey string
 }
 
 // PluginInfo contains the data needed to generate packages for a single plugin.
 type PluginInfo struct {
+	// ID is populated by the publish path for back-referencing keys to this
+	// plugin. Zero value is accepted by the generators.
+	ID          uuid.UUID
 	Name        string
 	Slug        string
 	Description string
 	Servers     []PluginServerInfo
+}
+
+// serverBearerToken returns the bearer token to embed for a given server,
+// preferring the per-server APIKey set by the publish path and falling back
+// to the package-wide GenerateConfig.APIKey. Returns "" when neither is set.
+func serverBearerToken(s PluginServerInfo, cfg GenerateConfig) string {
+	if s.APIKey != "" {
+		return s.APIKey
+	}
+	return cfg.APIKey
 }
 
 // GenerateConfig holds org-level configuration for package generation.
@@ -319,7 +342,8 @@ func generateCodexPlugin(files map[string][]byte, p PluginInfo, cfg GenerateConf
 // codexAuthPolicy picks ON_INSTALL when the user will be prompted for a
 // secret (public server env vars or a Gram API key the published config
 // can't bake in) and ON_USE when nothing needs to be collected. A baked-in
-// APIKey plus all-public-no-env servers means the plugin is install-silent.
+// API key (per-server or config-wide) plus all-public-no-env servers means
+// the plugin is install-silent.
 func codexAuthPolicy(p PluginInfo, cfg GenerateConfig) string {
 	for _, s := range p.Servers {
 		if s.IsPublic {
@@ -328,7 +352,7 @@ func codexAuthPolicy(p PluginInfo, cfg GenerateConfig) string {
 			}
 			continue
 		}
-		if cfg.APIKey == "" {
+		if serverBearerToken(s, cfg) == "" {
 			return "ON_INSTALL"
 		}
 	}
@@ -369,10 +393,10 @@ func generateCodexPluginInDir(files map[string][]byte, subdir, name string, p Pl
 					entry.EnvHTTPHeaders[ec.DisplayName] = ec.VariableName
 				}
 			}
-		} else if cfg.APIKey != "" {
+		} else if token := serverBearerToken(s, cfg); token != "" {
 			// Private server: bake the Gram-issued key directly into the
 			// published config. Repo is private, so this matches the Cursor/Claude pattern.
-			entry.HTTPHeaders = map[string]string{"Authorization": "Bearer " + cfg.APIKey}
+			entry.HTTPHeaders = map[string]string{"Authorization": "Bearer " + token}
 		} else {
 			// Private server, no key available: ask Codex to read GRAM_API_KEY
 			// from the user's environment at startup.
@@ -551,10 +575,11 @@ func generateClaudePluginInDir(files map[string][]byte, subdir string, p PluginI
 	// Collect userConfig entries across all servers that need user-provided values.
 	userConfig := make(map[string]userConfigEntry)
 
-	// Determine if any private server needs a Gram API key prompt.
+	// Determine if any private server needs a Gram API key prompt — i.e. has
+	// neither a per-server bearer token nor a config-wide one to fall back on.
 	needsGramKeyPrompt := false
 	for _, s := range p.Servers {
-		if !s.IsPublic && cfg.APIKey == "" {
+		if !s.IsPublic && serverBearerToken(s, cfg) == "" {
 			needsGramKeyPrompt = true
 		}
 		// Public servers may need user-provided env vars.
@@ -600,9 +625,9 @@ func generateClaudePluginInDir(files map[string][]byte, subdir string, p PluginI
 			for _, ec := range s.EnvConfigs {
 				headers[ec.DisplayName] = "${user_config." + ec.VariableName + "}"
 			}
-		} else if cfg.APIKey != "" {
-			// Private server with injected key.
-			headers["Authorization"] = "Bearer " + cfg.APIKey
+		} else if token := serverBearerToken(s, cfg); token != "" {
+			// Private server with injected key (per-server preferred).
+			headers["Authorization"] = "Bearer " + token
 		} else {
 			// Private server without key — prompt user.
 			headers["Authorization"] = "Bearer ${user_config.GRAM_API_KEY}"
@@ -650,8 +675,8 @@ func generateCursorPluginInDir(files map[string][]byte, subdir, name string, p P
 			for _, ec := range s.EnvConfigs {
 				headers[ec.DisplayName] = "${env:" + ec.VariableName + "}"
 			}
-		} else if cfg.APIKey != "" {
-			headers["Authorization"] = "Bearer " + cfg.APIKey
+		} else if token := serverBearerToken(s, cfg); token != "" {
+			headers["Authorization"] = "Bearer " + token
 		} else {
 			headers["Authorization"] = "Bearer ${env:GRAM_API_KEY}"
 		}

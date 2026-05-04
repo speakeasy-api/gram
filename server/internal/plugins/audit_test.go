@@ -293,3 +293,80 @@ func TestPluginsService_PublishPlugins_RecordsAuditEvent(t *testing.T) {
 	require.Len(t, slugs, 1)
 	require.Equal(t, plugin.Slug, slugs[0])
 }
+
+func TestPluginsService_PublishPlugins_RecordsPluginScopedKeyCreate(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockGitHubPublisher{}
+	ctx, ti := newTestPluginsServiceWithGitHub(t, mock)
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Audit Key Create"})
+	require.NoError(t, err)
+	toolset := createTestToolset(t, ctx, ti.conn, "audit-key-create-toolset")
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
+		PluginID:    plugin.ID,
+		ToolsetID:   toolset.ID.String(),
+		DisplayName: "S",
+		Policy:      "required",
+		SortOrder:   0,
+	})
+	require.NoError(t, err)
+
+	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
+	require.NoError(t, err)
+
+	// LatestAuditLogByAction returns the most recent record, which is the
+	// org-wide hooks key (no plugin_id) — not what we want to verify here.
+	// Query directly for the per-server key by its plugin_id metadata key.
+	var subjectType, subjectDisplay string
+	var pluginScopedMeta []byte
+	err = ti.conn.QueryRow(ctx, `
+		SELECT subject_type, subject_display_name, metadata FROM audit_logs
+		WHERE action = $1 AND metadata->>'plugin_id' IS NOT NULL
+		ORDER BY created_at DESC LIMIT 1
+	`, string(audit.ActionKeyCreate)).Scan(&subjectType, &subjectDisplay, &pluginScopedMeta)
+	require.NoError(t, err)
+
+	require.Equal(t, "api_key", subjectType)
+	require.Contains(t, subjectDisplay, "plugin:audit-key-create:")
+
+	pluginMeta, err := audittest.DecodeAuditData(pluginScopedMeta)
+	require.NoError(t, err)
+	require.Equal(t, plugin.ID, pluginMeta["plugin_id"], "plugin_id must surface in audit metadata")
+	require.Equal(t, toolset.ID.String(), pluginMeta["toolset_id"], "toolset_id must surface in audit metadata")
+	require.Contains(t, pluginMeta, "scopes")
+}
+
+func TestPluginsService_PublishPlugins_RepublishEmitsNoKeyRevoke(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockGitHubPublisher{}
+	ctx, ti := newTestPluginsServiceWithGitHub(t, mock)
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "No Auto Revoke"})
+	require.NoError(t, err)
+	toolset := createTestToolset(t, ctx, ti.conn, "no-auto-revoke-toolset")
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
+		PluginID:    plugin.ID,
+		ToolsetID:   toolset.ID.String(),
+		DisplayName: "S",
+		Policy:      "required",
+		SortOrder:   0,
+	})
+	require.NoError(t, err)
+
+	// First publish.
+	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
+	require.NoError(t, err)
+	revokesBefore, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionKeyRevoke)
+	require.NoError(t, err)
+
+	// Second publish must not auto-revoke prior keys (a separate reaper /
+	// explicit admin rotation handles cleanup; auto-revoke would silently
+	// break every install in the wild on benign republishes).
+	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
+	require.NoError(t, err)
+	revokesAfter, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionKeyRevoke)
+	require.NoError(t, err)
+	require.Equal(t, revokesBefore, revokesAfter, "republish must not emit revoke audit events")
+}

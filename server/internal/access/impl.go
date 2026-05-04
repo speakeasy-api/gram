@@ -681,6 +681,16 @@ func (s *Service) ListGrants(ctx context.Context, _ *gen.ListGrantsPayload) (*ge
 		return &gen.ListUserGrantsResult{Grants: allScopesGrants()}, nil
 	}
 
+	// API-key requests: return the grants attached to the api_key principal
+	// directly, not the publisher's effective user/role grants. PrepareContext
+	// loaded them onto the context (rfc-plugin-scoped-keys.md); falling
+	// through would otherwise look up the publisher's WorkOS membership and
+	// return their permissions, which is misleading for a plugin-scoped key.
+	if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil && authCtx.APIKeyID != "" {
+		grants, _ := authz.GrantsFromContext(ctx)
+		return &gen.ListUserGrantsResult{Grants: listRoleGrantsFromGrants(grants)}, nil
+	}
+
 	ac, workosOrgID, err := s.roleOrgContext(ctx)
 	if err != nil {
 		return nil, err

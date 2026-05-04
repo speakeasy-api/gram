@@ -224,7 +224,11 @@ func TestEngineRequire_requiresChecks(t *testing.T) {
 	require.ErrorIs(t, err, ErrNoChecks)
 }
 
-func TestEngineRequire_skipsForAPIKeyAuth(t *testing.T) {
+// API-key requests bypass RBAC when no per-key grants are loaded onto the
+// context. This is the historic behavior for CLI / producer / hooks-download
+// / dashboard-created consumer keys; rfc-plugin-scoped-keys.md flips it on
+// for plugin-scoped keys (covered by TestAPIKeyPrincipal_PrepareAndEnforce).
+func TestEngineRequire_skipsForAPIKeyAuthWithoutGrants(t *testing.T) {
 	t.Parallel()
 
 	engine := NewEngine(testenv.NewLogger(t), nil, staticRBAC(true), workos.NewStubClient(), cache.NoopCache)

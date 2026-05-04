@@ -34,6 +34,7 @@ type ApiKey struct {
 	KeyPrefix       string
 	KeyHash         string
 	Scopes          []string
+	SystemManaged   bool
 	CreatedAt       pgtype.Timestamptz
 	UpdatedAt       pgtype.Timestamptz
 	DeletedAt       pgtype.Timestamptz
@@ -878,6 +879,7 @@ type PluginServer struct {
 	DisplayName string
 	Policy      string
 	SortOrder   int32
+	ApiKeyID    uuid.NullUUID
 	CreatedAt   pgtype.Timestamptz
 	UpdatedAt   pgtype.Timestamptz
 	DeletedAt   pgtype.Timestamptz

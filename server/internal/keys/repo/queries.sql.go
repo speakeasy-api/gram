@@ -21,6 +21,7 @@ INSERT INTO api_keys (
   , key_prefix
   , key_hash
   , scopes
+  , system_managed
 ) VALUES (
     $1
   , $2
@@ -29,8 +30,9 @@ INSERT INTO api_keys (
   , $5
   , $6
   , $7::text[]
+  , $8
 )
-RETURNING id, organization_id, project_id, created_by_user_id, name, key_prefix, key_hash, scopes, created_at, updated_at, deleted_at, deleted, last_accessed_at
+RETURNING id, organization_id, project_id, created_by_user_id, name, key_prefix, key_hash, scopes, system_managed, created_at, updated_at, deleted_at, deleted, last_accessed_at
 `
 
 type CreateAPIKeyParams struct {
@@ -41,6 +43,7 @@ type CreateAPIKeyParams struct {
 	KeyPrefix       string
 	KeyHash         string
 	Scopes          []string
+	SystemManaged   bool
 }
 
 func (q *Queries) CreateAPIKey(ctx context.Context, arg CreateAPIKeyParams) (ApiKey, error) {
@@ -52,6 +55,7 @@ func (q *Queries) CreateAPIKey(ctx context.Context, arg CreateAPIKeyParams) (Api
 		arg.KeyPrefix,
 		arg.KeyHash,
 		arg.Scopes,
+		arg.SystemManaged,
 	)
 	var i ApiKey
 	err := row.Scan(
@@ -63,6 +67,7 @@ func (q *Queries) CreateAPIKey(ctx context.Context, arg CreateAPIKeyParams) (Api
 		&i.KeyPrefix,
 		&i.KeyHash,
 		&i.Scopes,
+		&i.SystemManaged,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -108,7 +113,7 @@ func (q *Queries) DeleteAPIKey(ctx context.Context, arg DeleteAPIKeyParams) (Del
 }
 
 const getAPIKeyByKeyHash = `-- name: GetAPIKeyByKeyHash :one
-SELECT api_keys.id, api_keys.organization_id, api_keys.project_id, api_keys.created_by_user_id, api_keys.name, api_keys.key_prefix, api_keys.key_hash, api_keys.scopes, api_keys.created_at, api_keys.updated_at, api_keys.deleted_at, api_keys.deleted, api_keys.last_accessed_at, users.email
+SELECT api_keys.id, api_keys.organization_id, api_keys.project_id, api_keys.created_by_user_id, api_keys.name, api_keys.key_prefix, api_keys.key_hash, api_keys.scopes, api_keys.system_managed, api_keys.created_at, api_keys.updated_at, api_keys.deleted_at, api_keys.deleted, api_keys.last_accessed_at, users.email
 FROM api_keys
 JOIN users ON users.id = api_keys.created_by_user_id
 WHERE key_hash = $1
@@ -124,6 +129,7 @@ type GetAPIKeyByKeyHashRow struct {
 	KeyPrefix       string
 	KeyHash         string
 	Scopes          []string
+	SystemManaged   bool
 	CreatedAt       pgtype.Timestamptz
 	UpdatedAt       pgtype.Timestamptz
 	DeletedAt       pgtype.Timestamptz
@@ -144,6 +150,7 @@ func (q *Queries) GetAPIKeyByKeyHash(ctx context.Context, keyHash string) (GetAP
 		&i.KeyPrefix,
 		&i.KeyHash,
 		&i.Scopes,
+		&i.SystemManaged,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -155,13 +162,18 @@ func (q *Queries) GetAPIKeyByKeyHash(ctx context.Context, keyHash string) (GetAP
 }
 
 const listAPIKeysByOrganization = `-- name: ListAPIKeysByOrganization :many
-SELECT id, organization_id, project_id, created_by_user_id, name, key_prefix, key_hash, scopes, created_at, updated_at, deleted_at, deleted, last_accessed_at
+SELECT id, organization_id, project_id, created_by_user_id, name, key_prefix, key_hash, scopes, system_managed, created_at, updated_at, deleted_at, deleted, last_accessed_at
 FROM api_keys
 WHERE organization_id = $1
   AND deleted IS FALSE
+  AND system_managed IS FALSE
 ORDER BY created_at DESC
 `
 
+// Returns user-managed keys only. System-managed keys (e.g. those minted
+// by plugin publish — rfc-plugin-scoped-keys.md) are filtered out so they
+// don't clutter the dashboard's keys page or count against user quotas.
+// Use a different query if you need to see system-managed keys.
 func (q *Queries) ListAPIKeysByOrganization(ctx context.Context, organizationID string) ([]ApiKey, error) {
 	rows, err := q.db.Query(ctx, listAPIKeysByOrganization, organizationID)
 	if err != nil {
@@ -180,6 +192,7 @@ func (q *Queries) ListAPIKeysByOrganization(ctx context.Context, organizationID 
 			&i.KeyPrefix,
 			&i.KeyHash,
 			&i.Scopes,
+			&i.SystemManaged,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
