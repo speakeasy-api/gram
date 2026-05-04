@@ -219,7 +219,7 @@ func (q *Queries) CreateInvitation(ctx context.Context, arg CreateInvitationPara
 const createMembership = `-- name: CreateMembership :one
 
 INSERT INTO memberships (id, user_id, organization_id, role)
-VALUES (?1, ?2, ?3, COALESCE(?4, 'member'))
+VALUES (?1, ?2, ?3, COALESCE(?4, 'admin'))
 ON CONFLICT (user_id, organization_id) DO UPDATE SET
   user_id = excluded.user_id
 RETURNING id, user_id, organization_id, role, created_at, updated_at

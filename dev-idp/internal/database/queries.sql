@@ -284,7 +284,7 @@ DELETE FROM users WHERE id = @id;
 -- should call UpdateMembership.
 -- name: CreateMembership :one
 INSERT INTO memberships (id, user_id, organization_id, role)
-VALUES (@id, @user_id, @organization_id, COALESCE(sqlc.narg('role'), 'member'))
+VALUES (@id, @user_id, @organization_id, COALESCE(sqlc.narg('role'), 'admin'))
 ON CONFLICT (user_id, organization_id) DO UPDATE SET
   user_id = excluded.user_id
 RETURNING *;
