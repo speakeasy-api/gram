@@ -1,7 +1,13 @@
 import { useState } from "react";
 import { match } from "ts-pattern";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import {
   Select,
   SelectContent,
@@ -11,6 +17,7 @@ import {
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import {
+  useClearCurrentUser,
   useCurrentUser,
   useSetCurrentUser,
   useUsers,
@@ -24,6 +31,7 @@ export function LocalModePane({ mode }: { mode: LocalMode }) {
   const cur = useCurrentUser(mode);
   const usersQ = useUsers();
   const set = useSetCurrentUser();
+  const clear = useClearCurrentUser();
   const [picked, setPicked] = useState<string>("");
 
   const users = usersQ.data?.items ?? [];
@@ -34,6 +42,19 @@ export function LocalModePane({ mode }: { mode: LocalMode }) {
       <Card size="sm">
         <CardHeader>
           <CardTitle>Current user</CardTitle>
+          {current?.user && (
+            <CardAction>
+              <Button
+                type="button"
+                variant="ghost"
+                size="xs"
+                disabled={clear.isPending}
+                onClick={() => clear.mutate({ mode })}
+              >
+                {clear.isPending ? "Clearing…" : "Clear"}
+              </Button>
+            </CardAction>
+          )}
         </CardHeader>
         <CardContent className="space-y-4">
           {cur.isLoading ? (
@@ -90,29 +111,10 @@ export function LocalModePane({ mode }: { mode: LocalMode }) {
       </Card>
 
       {match(mode)
-        .with("mock-speakeasy", () => <MockSpeakeasyHints />)
+        .with("local-speakeasy", () => null)
         .with("oauth2-1", () => <DiscoveryPane prefix="/oauth2-1" />)
         .with("oauth2", () => <DiscoveryPane prefix="/oauth2" />)
         .exhaustive()}
     </div>
-  );
-}
-
-function MockSpeakeasyHints() {
-  return (
-    <Card size="sm">
-      <CardHeader>
-        <CardTitle>Bootstrap</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-2 text-sm">
-        <p className="text-muted-foreground">
-          If <code>currentUser</code> is unset, hit the login URL once to
-          trigger the default-user bootstrap from your git committer:
-        </p>
-        <pre className="text-xs bg-muted rounded-2xl p-3 overflow-x-auto">
-          <code>{`/mock-speakeasy/v1/speakeasy_provider/login?return_url=http://x`}</code>
-        </pre>
-      </CardContent>
-    </Card>
   );
 }

@@ -1,7 +1,7 @@
-export type Mode = "mock-speakeasy" | "oauth2-1" | "oauth2" | "workos";
+export type Mode = "local-speakeasy" | "oauth2-1" | "oauth2" | "workos";
 
 export const MODES: readonly Mode[] = [
-  "mock-speakeasy",
+  "local-speakeasy",
   "oauth2-1",
   "oauth2",
   "workos",
@@ -152,5 +152,7 @@ export const api = {
       user_id?: string;
       workos_sub?: string;
     }) => rpc<typeof p, CurrentUser>("devIdp.setCurrentUser", p),
+    clearCurrentUser: (p: { mode: Mode }) =>
+      rpc<typeof p, void>("devIdp.clearCurrentUser", p),
   },
 };

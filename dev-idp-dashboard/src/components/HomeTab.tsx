@@ -55,12 +55,7 @@ export function HomeTab() {
   );
 
   return (
-    <div className="grid grid-rows-[auto_1fr] gap-4 max-w-6xl mx-auto">
-      <p className="text-sm text-muted-foreground">
-        Click a card to highlight its memberships. Lines animate between
-        organizations and users; each pill marks the role.
-      </p>
-
+    <div className="grid grid-rows-[auto_1fr] gap-4">
       <div ref={containerRef} className="relative flex justify-between gap-16">
         <MembershipGraph
           width={layout.width}

@@ -1,10 +1,24 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useCurrentUser, useSetCurrentUser } from "@/hooks/use-devidp";
+import {
+  useClearCurrentUser,
+  useCurrentUser,
+  useSetCurrentUser,
+} from "@/hooks/use-devidp";
+
+const WORKOS_USERS_DASHBOARD_URL =
+  "https://dashboard.workos.com/environment_01J5C09A9KMAHSZ0T9WBK3TXHJ/users";
 
 async function fetchWorkos(suffix: string): Promise<unknown> {
   const res = await fetch(`/devidp/workos/${suffix}`);
@@ -15,6 +29,7 @@ async function fetchWorkos(suffix: string): Promise<unknown> {
 export function WorkosModePane() {
   const cur = useCurrentUser("workos");
   const set = useSetCurrentUser();
+  const clear = useClearCurrentUser();
   const [input, setInput] = useState("");
 
   const preview = useQuery({
@@ -30,6 +45,19 @@ export function WorkosModePane() {
       <Card size="sm">
         <CardHeader>
           <CardTitle>Current user (WorkOS)</CardTitle>
+          {current && (
+            <CardAction>
+              <Button
+                type="button"
+                variant="ghost"
+                size="xs"
+                disabled={clear.isPending}
+                onClick={() => clear.mutate({ mode: "workos" })}
+              >
+                {clear.isPending ? "Clearing…" : "Clear"}
+              </Button>
+            </CardAction>
+          )}
         </CardHeader>
         <CardContent className="space-y-4">
           {cur.isLoading ? (
@@ -57,7 +85,18 @@ export function WorkosModePane() {
           )}
 
           <div className="border-t border-border pt-4 space-y-2">
-            <Label htmlFor="workos-sub">Set workos_sub or email</Label>
+            <div className="flex items-baseline justify-between gap-3">
+              <Label htmlFor="workos-sub">Set workos_sub or email</Label>
+              <a
+                href={WORKOS_USERS_DASHBOARD_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-[var(--retro-orange)] underline underline-offset-2"
+              >
+                Browse users in WorkOS
+                <ExternalLink className="size-3" />
+              </a>
+            </div>
             <div className="flex gap-2">
               <Input
                 id="workos-sub"

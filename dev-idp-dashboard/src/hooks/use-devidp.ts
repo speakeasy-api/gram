@@ -129,6 +129,18 @@ export function useSetCurrentUser() {
     mutationFn: api.devIdp.setCurrentUser,
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: queryKeys.currentUser(data.mode) });
+      qc.invalidateQueries({ queryKey: ["gram-mode"] });
+    },
+  });
+}
+
+export function useClearCurrentUser() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: api.devIdp.clearCurrentUser,
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: queryKeys.currentUser(vars.mode) });
+      qc.invalidateQueries({ queryKey: ["gram-mode"] });
     },
   });
 }

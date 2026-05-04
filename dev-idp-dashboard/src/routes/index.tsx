@@ -1,16 +1,7 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { QueryClientProvider } from "@tanstack/react-query";
-import { App } from "@/components/App";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/")({
-  component: Root,
+  beforeLoad: () => {
+    throw redirect({ to: "/home" });
+  },
 });
-
-function Root() {
-  const { queryClient } = Route.useRouteContext();
-  return (
-    <QueryClientProvider client={queryClient}>
-      <App />
-    </QueryClientProvider>
-  );
-}

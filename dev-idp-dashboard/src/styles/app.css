@@ -15,6 +15,7 @@
 :root {
   --retro-yellow: oklch(0.825 0.165 87);
   --retro-orange: oklch(0.745 0.19 50);
+  --retro-green: oklch(0.795 0.165 117); /* #b8bb26 gruvbox bright green */
 
   --background: oklch(0.957 0.045 92); /* #fbf1c7 gruvbox-light bg0 */
   --foreground: oklch(0.31 0.011 65); /* #3c3836 gruvbox-light fg */
