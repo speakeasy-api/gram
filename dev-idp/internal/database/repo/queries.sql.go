@@ -269,6 +269,7 @@ VALUES (
   COALESCE(?4, 'enterprise'),
   ?5
 )
+ON CONFLICT (slug) DO UPDATE SET slug = excluded.slug
 RETURNING id, name, slug, account_type, workos_id, created_at, updated_at
 `
 
@@ -283,6 +284,10 @@ type CreateOrganizationParams struct {
 // =============================================================================
 // organizations
 // =============================================================================
+// CreateOrganization is find-or-create on slug. If a row with the given
+// slug exists, the no-op DO UPDATE makes RETURNING fire on it so the
+// caller gets the existing organization back (with its existing id);
+// otherwise the new row lands with the supplied @id.
 func (q *Queries) CreateOrganization(ctx context.Context, arg CreateOrganizationParams) (Organization, error) {
 	row := q.db.QueryRowContext(ctx, createOrganization,
 		arg.ID,
@@ -308,6 +313,7 @@ const createOrganizationRole = `-- name: CreateOrganizationRole :one
 
 INSERT INTO organization_roles (id, organization_id, slug, name, description)
 VALUES (?1, ?2, ?3, ?4, COALESCE(?5, ''))
+ON CONFLICT (organization_id, slug) DO UPDATE SET slug = excluded.slug
 RETURNING id, organization_id, slug, name, description, created_at, updated_at
 `
 
@@ -322,6 +328,7 @@ type CreateOrganizationRoleParams struct {
 // =============================================================================
 // WorkOS emulation: organization roles
 // =============================================================================
+// CreateOrganizationRole is find-or-create on (organization_id, slug).
 func (q *Queries) CreateOrganizationRole(ctx context.Context, arg CreateOrganizationRoleParams) (OrganizationRole, error) {
 	row := q.db.QueryRowContext(ctx, createOrganizationRole,
 		arg.ID,
@@ -400,6 +407,7 @@ VALUES (
   ?6,
   ?7
 )
+ON CONFLICT (email) DO UPDATE SET email = excluded.email
 RETURNING id, email, display_name, photo_url, github_handle, admin, whitelisted, created_at, updated_at
 `
 
@@ -416,6 +424,10 @@ type CreateUserParams struct {
 // =============================================================================
 // users
 // =============================================================================
+// CreateUser is find-or-create on email. If a row with the given email
+// exists, the no-op DO UPDATE makes RETURNING fire on it so the caller
+// gets the existing user back (with its existing id); otherwise the
+// new row lands with the supplied @id.
 func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, error) {
 	row := q.db.QueryRowContext(ctx, createUser,
 		arg.ID,

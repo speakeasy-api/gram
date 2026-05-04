@@ -2,6 +2,10 @@
 -- organizations
 -- =============================================================================
 
+-- CreateOrganization is find-or-create on slug. If a row with the given
+-- slug exists, the no-op DO UPDATE makes RETURNING fire on it so the
+-- caller gets the existing organization back (with its existing id);
+-- otherwise the new row lands with the supplied @id.
 -- name: CreateOrganization :one
 INSERT INTO organizations (id, name, slug, account_type, workos_id)
 VALUES (
@@ -11,6 +15,7 @@ VALUES (
   COALESCE(sqlc.narg('account_type'), 'enterprise'),
   sqlc.narg('workos_id')
 )
+ON CONFLICT (slug) DO UPDATE SET slug = excluded.slug
 RETURNING *;
 
 -- name: UpdateOrganization :one
@@ -173,9 +178,11 @@ RETURNING *;
 -- WorkOS emulation: organization roles
 -- =============================================================================
 
+-- CreateOrganizationRole is find-or-create on (organization_id, slug).
 -- name: CreateOrganizationRole :one
 INSERT INTO organization_roles (id, organization_id, slug, name, description)
 VALUES (@id, @organization_id, @slug, @name, COALESCE(sqlc.narg('description'), ''))
+ON CONFLICT (organization_id, slug) DO UPDATE SET slug = excluded.slug
 RETURNING *;
 
 -- UpsertOrganizationRole is the seed path used by the default-user
@@ -212,6 +219,10 @@ WHERE organization_id = @organization_id AND slug = @slug;
 -- users
 -- =============================================================================
 
+-- CreateUser is find-or-create on email. If a row with the given email
+-- exists, the no-op DO UPDATE makes RETURNING fire on it so the caller
+-- gets the existing user back (with its existing id); otherwise the
+-- new row lands with the supplied @id.
 -- name: CreateUser :one
 INSERT INTO users (id, email, display_name, photo_url, github_handle, admin, whitelisted)
 VALUES (
@@ -223,6 +234,7 @@ VALUES (
   @admin,
   @whitelisted
 )
+ON CONFLICT (email) DO UPDATE SET email = excluded.email
 RETURNING *;
 
 -- UpdateUser is a partial patch on the text fields: every COALESCE leaves
