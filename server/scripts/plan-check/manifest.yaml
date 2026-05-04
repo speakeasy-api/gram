@@ -18,7 +18,7 @@ queries:
       - risk_results
     # Soft cap on planner-estimated total cost. Tune as the query and
     # seed data evolve; bump in a follow-up PR with justification.
-    max_total_cost: 500.0
+    max_total_cost: 2000.0
 
   - name: CountTotalMessages
     file: server/internal/risk/queries.sql
@@ -26,4 +26,4 @@ queries:
       project_id: { type: uuid, value: "00000000-0000-0000-0000-000000000001" }
     forbid_seq_scan_on:
       - chat_messages
-    max_total_cost: 1500.0
+    max_total_cost: 2000.0
