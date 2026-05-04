@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strings"
 	"time"
 
@@ -179,6 +180,9 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 		sources = []string{"gitleaks"}
 	}
 	if err := validateSources(sources); err != nil {
+		return nil, err
+	}
+	if err := validateSourceAction(sources, action); err != nil {
 		return nil, err
 	}
 
@@ -366,6 +370,9 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 			return nil, err
 		}
 		action = *payload.Action
+	}
+	if err := validateSourceAction(sources, action); err != nil {
+		return nil, err
 	}
 
 	autoName := current.AutoName
@@ -905,6 +912,8 @@ func (s *Service) fallbackPolicyName(sources []string, action string) string {
 			parts = append(parts, "PII")
 		case shadowmcp.SourceShadowMCP:
 			parts = append(parts, "Shadow MCP")
+		case shadowmcp.SourceDestructiveTool:
+			parts = append(parts, "Destructive Tool")
 		}
 	}
 	if len(parts) == 0 {
@@ -931,10 +940,17 @@ func validateAction(action string) error {
 func validateSources(sources []string) error {
 	for _, src := range sources {
 		switch src {
-		case "gitleaks", "presidio", shadowmcp.SourceShadowMCP:
+		case "gitleaks", "presidio", shadowmcp.SourceShadowMCP, shadowmcp.SourceDestructiveTool:
 		default:
 			return oops.E(oops.CodeInvalid, nil, "source %q is not a recognized policy source", src)
 		}
+	}
+	return nil
+}
+
+func validateSourceAction(sources []string, action string) error {
+	if action == "block" && slices.Contains(sources, shadowmcp.SourceDestructiveTool) {
+		return oops.E(oops.CodeInvalid, nil, "source %q supports flagging only", shadowmcp.SourceDestructiveTool)
 	}
 	return nil
 }
