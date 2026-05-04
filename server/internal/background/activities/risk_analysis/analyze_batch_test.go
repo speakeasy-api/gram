@@ -336,3 +336,53 @@ func insertAssistantToolCall(t *testing.T, conn *pgxpool.Pool, td testData, call
 	require.FailNow(t, "inserted tool-call message not found")
 	return uuid.Nil
 }
+
+func TestAnalyzeBatch_SkipsWhenPolicyDisabled(t *testing.T) {
+	t.Parallel()
+	conn := cloneDB(t)
+	td := seedTestData(t, conn, false)
+
+	msgID, err := testrepo.New(conn).InsertChatMessage(t.Context(), testrepo.InsertChatMessageParams{
+		ChatID:    td.chatID,
+		ProjectID: uuid.NullUUID{UUID: td.projectID, Valid: true},
+		Role:      "user",
+		Content:   "AWS key AKIAIOSFODNN7REALKEY",
+	})
+	require.NoError(t, err)
+
+	result := executeAnalyzeBatch(t, conn, td, []uuid.UUID{msgID}, []string{"gitleaks"})
+	assert.Equal(t, 0, result.Processed)
+	assert.Equal(t, 0, result.Findings)
+
+	rows, err := riskrepo.New(conn).ListRiskResultsByProjectAndPolicy(t.Context(), riskrepo.ListRiskResultsByProjectAndPolicyParams{
+		ProjectID:    td.projectID,
+		RiskPolicyID: td.policyID,
+		Cursor:       uuid.NullUUID{},
+		PageLimit:    10,
+	})
+	require.NoError(t, err)
+	assert.Empty(t, rows, "no risk_results should be written for a disabled policy")
+}
+
+func TestAnalyzeBatch_SkipsWhenPolicyDeleted(t *testing.T) {
+	t.Parallel()
+	conn := cloneDB(t)
+	td := seedTestData(t, conn, true)
+
+	msgID, err := testrepo.New(conn).InsertChatMessage(t.Context(), testrepo.InsertChatMessageParams{
+		ChatID:    td.chatID,
+		ProjectID: uuid.NullUUID{UUID: td.projectID, Valid: true},
+		Role:      "user",
+		Content:   "AWS key AKIAIOSFODNN7REALKEY",
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, riskrepo.New(conn).DeleteRiskPolicy(t.Context(), riskrepo.DeleteRiskPolicyParams{
+		ID:        td.policyID,
+		ProjectID: td.projectID,
+	}))
+
+	result := executeAnalyzeBatch(t, conn, td, []uuid.UUID{msgID}, []string{"gitleaks"})
+	assert.Equal(t, 0, result.Processed)
+	assert.Equal(t, 0, result.Findings)
+}

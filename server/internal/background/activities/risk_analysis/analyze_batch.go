@@ -3,6 +3,7 @@ package risk_analysis
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"slices"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -75,8 +77,9 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 	}
 
 	start := time.Now()
+	scannedCount := 0
 	defer func() {
-		a.metrics.RecordScan(ctx, args.OrganizationID, o11y.OutcomeFromError(err), len(args.MessageIDs), time.Since(start))
+		a.metrics.RecordScan(ctx, args.OrganizationID, o11y.OutcomeFromError(err), scannedCount, time.Since(start))
 	}()
 
 	ctx, span := a.tracer.Start(ctx, "risk.analyzeBatch", trace.WithAttributes(
@@ -92,10 +95,41 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 		span.End()
 	}()
 
+	policy, err := repo.New(a.db).GetRiskPolicy(ctx, repo.GetRiskPolicyParams{
+		ID:        args.RiskPolicyID,
+		ProjectID: args.ProjectID,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		// Policy was deleted (soft or hard) between FetchUnanalyzedMessages
+		// returning IDs and this activity running. FetchUnanalyzed errors out
+		// on the next drain cycle, so there is no infinite loop and no need
+		// to write Found=false rows; the FK to risk_policies might also be
+		// gone on hard-delete.
+		span.SetAttributes(attribute.Bool("risk.policy_deleted", true))
+		a.logger.InfoContext(ctx, "risk policy deleted, skipping batch",
+			attr.SlogRiskPolicyID(args.RiskPolicyID.String()),
+		)
+		return &AnalyzeBatchResult{Processed: 0, Findings: 0}, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get risk policy: %w", err)
+	}
+	if !policy.Enabled {
+		// Policy was disabled mid-flight. FetchUnanalyzed returns no IDs while
+		// disabled (no infinite loop), and a re-enable bumps the policy
+		// version so FetchUnanalyzedMessageIDs picks these messages up again.
+		span.SetAttributes(attribute.Bool("risk.policy_disabled", true))
+		a.logger.InfoContext(ctx, "risk policy disabled, skipping batch",
+			attr.SlogRiskPolicyID(args.RiskPolicyID.String()),
+		)
+		return &AnalyzeBatchResult{Processed: 0, Findings: 0}, nil
+	}
+
 	messages, err := a.fetchContent(ctx, args)
 	if err != nil {
 		return nil, err
 	}
+	scannedCount = len(messages)
 
 	findings, err := a.scan(ctx, args, messages)
 	if err != nil {
