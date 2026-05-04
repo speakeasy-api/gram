@@ -210,6 +210,11 @@ func (h *Handler) handleAuthorize(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	q := r.URL.Query()
 
+	h.logger.InfoContext(ctx, "auth flow initiated",
+		attr.SlogEvent("devidp.mode.used"),
+		attr.SlogHTTPRoute(r.URL.Path),
+	)
+
 	responseType := q.Get("response_type")
 	clientID := q.Get("client_id")
 	redirectURI := q.Get("redirect_uri")

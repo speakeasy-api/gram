@@ -102,6 +102,11 @@ func (h *Handler) handleGetUser(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	idOrEmail := r.PathValue("id_or_email")
 
+	h.logger.InfoContext(ctx, "auth flow initiated",
+		attr.SlogEvent("devidp.mode.used"),
+		attr.SlogHTTPRoute(r.URL.Path),
+	)
+
 	user, err := h.lookupUser(ctx, idOrEmail)
 	if err != nil {
 		h.respondError(ctx, w, "lookup user", err)

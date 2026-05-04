@@ -158,6 +158,11 @@ func (h *Handler) handleLogin(w http.ResponseWriter, r *http.Request) {
 	returnURL := r.URL.Query().Get("return_url")
 	state := r.URL.Query().Get("state")
 
+	h.logger.InfoContext(ctx, "auth flow initiated",
+		attr.SlogEvent("devidp.mode.used"),
+		attr.SlogHTTPRoute(r.URL.Path),
+	)
+
 	if returnURL == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{
 			"error": "Missing return_url parameter",
