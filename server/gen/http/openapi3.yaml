@@ -20399,6 +20399,1367 @@ paths:
             x-speakeasy-name-override: getUsageTiers
             x-speakeasy-react-hook:
                 name: getUsageTiers
+    /rpc/userSessionClients.get:
+        get:
+            description: Get a user_session_client by id.
+            operationId: getUserSessionClient
+            parameters:
+                - allowEmptyValue: true
+                  description: The user_session_client id.
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The user_session_client id.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/UserSessionClient'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: getUserSessionClient userSessionClients
+            tags:
+                - userSessionClients
+            x-speakeasy-name-override: get
+            x-speakeasy-react-hook:
+                name: UserSessionClient
+    /rpc/userSessionClients.list:
+        get:
+            description: List user_session_clients in the caller's project.
+            operationId: listUserSessionClients
+            parameters:
+                - allowEmptyValue: true
+                  description: Filter to clients registered with this issuer.
+                  in: query
+                  name: user_session_issuer_id
+                  schema:
+                    description: Filter to clients registered with this issuer.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Pagination cursor.
+                  in: query
+                  name: cursor
+                  schema:
+                    description: Pagination cursor.
+                    type: string
+                - allowEmptyValue: true
+                  description: Page size (default 50, max 100).
+                  in: query
+                  name: limit
+                  schema:
+                    description: Page size (default 50, max 100).
+                    format: int64
+                    type: integer
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListUserSessionClientsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: listUserSessionClients userSessionClients
+            tags:
+                - userSessionClients
+            x-speakeasy-name-override: list
+            x-speakeasy-pagination:
+                inputs:
+                    - in: parameters
+                      name: cursor
+                      type: cursor
+                outputs:
+                    nextCursor: $.next_cursor
+                type: cursor
+            x-speakeasy-react-hook:
+                name: UserSessionClients
+    /rpc/userSessionClients.revoke:
+        post:
+            description: Soft-delete a user_session_client. Future tokens minted for this client_id are rejected; existing live user_sessions keep working until they hit expires_at.
+            operationId: revokeUserSessionClient
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/TriggerRiskAnalysisRequestBody'
+                required: true
+            responses:
+                "200":
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: revokeUserSessionClient userSessionClients
+            tags:
+                - userSessionClients
+            x-speakeasy-name-override: revoke
+            x-speakeasy-react-hook:
+                name: RevokeUserSessionClient
+    /rpc/userSessionConsents.list:
+        get:
+            description: List consent records for the caller's project.
+            operationId: listUserSessionConsents
+            parameters:
+                - allowEmptyValue: true
+                  description: Filter by principal URN.
+                  in: query
+                  name: principal_urn
+                  schema:
+                    description: Filter by principal URN.
+                    type: string
+                - allowEmptyValue: true
+                  description: Filter by user_session_client id.
+                  in: query
+                  name: user_session_client_id
+                  schema:
+                    description: Filter by user_session_client id.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Filter by user_session_issuer id (joins through user_session_clients).
+                  in: query
+                  name: user_session_issuer_id
+                  schema:
+                    description: Filter by user_session_issuer id (joins through user_session_clients).
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Pagination cursor.
+                  in: query
+                  name: cursor
+                  schema:
+                    description: Pagination cursor.
+                    type: string
+                - allowEmptyValue: true
+                  description: Page size (default 50, max 100).
+                  in: query
+                  name: limit
+                  schema:
+                    description: Page size (default 50, max 100).
+                    format: int64
+                    type: integer
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListUserSessionConsentsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: listUserSessionConsents userSessionConsents
+            tags:
+                - userSessionConsents
+            x-speakeasy-name-override: list
+            x-speakeasy-pagination:
+                inputs:
+                    - in: parameters
+                      name: cursor
+                      type: cursor
+                outputs:
+                    nextCursor: $.next_cursor
+                type: cursor
+            x-speakeasy-react-hook:
+                name: UserSessionConsents
+    /rpc/userSessionConsents.revoke:
+        post:
+            description: Withdraw consent. The next /mcp/{slug}/authorize from any session matching (principal_urn, user_session_client_id) re-prompts.
+            operationId: revokeUserSessionConsent
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/TriggerRiskAnalysisRequestBody'
+                required: true
+            responses:
+                "200":
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: revokeUserSessionConsent userSessionConsents
+            tags:
+                - userSessionConsents
+            x-speakeasy-name-override: revoke
+            x-speakeasy-react-hook:
+                name: RevokeUserSessionConsent
+    /rpc/userSessionIssuers.create:
+        post:
+            description: Create a new user_session_issuer.
+            operationId: createUserSessionIssuer
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateUserSessionIssuerForm'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/UserSessionIssuer'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: createUserSessionIssuer userSessionIssuers
+            tags:
+                - userSessionIssuers
+            x-speakeasy-name-override: create
+            x-speakeasy-react-hook:
+                name: CreateUserSessionIssuer
+    /rpc/userSessionIssuers.delete:
+        delete:
+            description: Soft-delete a user_session_issuer. Cascades to dependent user_sessions, user_session_consents, and remote_session_clients.
+            operationId: deleteUserSessionIssuer
+            parameters:
+                - allowEmptyValue: true
+                  description: The user_session_issuer id.
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The user_session_issuer id.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: deleteUserSessionIssuer userSessionIssuers
+            tags:
+                - userSessionIssuers
+            x-speakeasy-name-override: delete
+            x-speakeasy-react-hook:
+                name: DeleteUserSessionIssuer
+    /rpc/userSessionIssuers.get:
+        get:
+            description: Get a user_session_issuer by id or by slug. Provide exactly one.
+            operationId: getUserSessionIssuer
+            parameters:
+                - allowEmptyValue: true
+                  description: The user_session_issuer id.
+                  in: query
+                  name: id
+                  schema:
+                    description: The user_session_issuer id.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: The user_session_issuer slug.
+                  in: query
+                  name: slug
+                  schema:
+                    description: The user_session_issuer slug.
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/UserSessionIssuer'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: getUserSessionIssuer userSessionIssuers
+            tags:
+                - userSessionIssuers
+            x-speakeasy-name-override: get
+            x-speakeasy-react-hook:
+                name: UserSessionIssuer
+    /rpc/userSessionIssuers.list:
+        get:
+            description: List user_session_issuers in the caller's project.
+            operationId: listUserSessionIssuers
+            parameters:
+                - allowEmptyValue: true
+                  description: Pagination cursor.
+                  in: query
+                  name: cursor
+                  schema:
+                    description: Pagination cursor.
+                    type: string
+                - allowEmptyValue: true
+                  description: Page size (default 50, max 100).
+                  in: query
+                  name: limit
+                  schema:
+                    description: Page size (default 50, max 100).
+                    format: int64
+                    type: integer
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListUserSessionIssuersResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: listUserSessionIssuers userSessionIssuers
+            tags:
+                - userSessionIssuers
+            x-speakeasy-name-override: list
+            x-speakeasy-pagination:
+                inputs:
+                    - in: parameters
+                      name: cursor
+                      type: cursor
+                outputs:
+                    nextCursor: $.next_cursor
+                type: cursor
+            x-speakeasy-react-hook:
+                name: UserSessionIssuers
+    /rpc/userSessionIssuers.update:
+        post:
+            description: Update fields on an existing user_session_issuer.
+            operationId: updateUserSessionIssuer
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateUserSessionIssuerForm'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/UserSessionIssuer'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: updateUserSessionIssuer userSessionIssuers
+            tags:
+                - userSessionIssuers
+            x-speakeasy-name-override: update
+            x-speakeasy-react-hook:
+                name: UpdateUserSessionIssuer
+    /rpc/userSessions.list:
+        get:
+            description: List issued user_sessions in the caller's project. refresh_token_hash is never returned.
+            operationId: listUserSessions
+            parameters:
+                - allowEmptyValue: true
+                  description: Exact-match filter on principal URN.
+                  in: query
+                  name: principal_urn
+                  schema:
+                    description: Exact-match filter on principal URN.
+                    type: string
+                - allowEmptyValue: true
+                  description: Filter by user_session_issuer id.
+                  in: query
+                  name: user_session_issuer_id
+                  schema:
+                    description: Filter by user_session_issuer id.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Pagination cursor.
+                  in: query
+                  name: cursor
+                  schema:
+                    description: Pagination cursor.
+                    type: string
+                - allowEmptyValue: true
+                  description: Page size (default 50, max 100).
+                  in: query
+                  name: limit
+                  schema:
+                    description: Page size (default 50, max 100).
+                    format: int64
+                    type: integer
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListUserSessionsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: listUserSessions userSessions
+            tags:
+                - userSessions
+            x-speakeasy-name-override: list
+            x-speakeasy-pagination:
+                inputs:
+                    - in: parameters
+                      name: cursor
+                      type: cursor
+                outputs:
+                    nextCursor: $.next_cursor
+                type: cursor
+            x-speakeasy-react-hook:
+                name: UserSessions
+    /rpc/userSessions.revoke:
+        post:
+            description: Push the session's jti into the revocation cache and soft-delete the row.
+            operationId: revokeUserSession
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/TriggerRiskAnalysisRequestBody'
+                required: true
+            responses:
+                "200":
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: revokeUserSession userSessions
+            tags:
+                - userSessions
+            x-speakeasy-name-override: revoke
+            x-speakeasy-react-hook:
+                name: RevokeUserSession
     /rpc/variations.deleteGlobal:
         delete:
             description: Create or update a globally defined tool variation.
@@ -22484,6 +23845,26 @@ components:
                 - target_ref
                 - target_display
                 - config
+        CreateUserSessionIssuerForm:
+            type: object
+            properties:
+                authn_challenge_mode:
+                    type: string
+                    description: 'How multi-remote authn challenges are presented: chain | interactive.'
+                    enum:
+                        - chain
+                        - interactive
+                session_duration:
+                    type: string
+                    description: ISO 8601 duration (e.g. PT24H) bounding the issued user session lifetime.
+                slug:
+                    type: string
+                    description: Project-unique slug.
+            description: Form for creating a user_session_issuer.
+            required:
+                - slug
+                - authn_challenge_mode
+                - session_duration
         CreditUsageResponseBody:
             type: object
             properties:
@@ -25289,6 +26670,58 @@ components:
                     description: The user's effective grants in this organization.
             required:
                 - grants
+        ListUserSessionClientsResult:
+            type: object
+            properties:
+                items:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/UserSessionClient'
+                next_cursor:
+                    type: string
+                    description: Cursor for the next page; empty when exhausted.
+            description: Result type for listing user_session_clients.
+            required:
+                - items
+        ListUserSessionConsentsResult:
+            type: object
+            properties:
+                items:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/UserSessionConsent'
+                next_cursor:
+                    type: string
+                    description: Cursor for the next page; empty when exhausted.
+            description: Result type for listing user_session_consents.
+            required:
+                - items
+        ListUserSessionIssuersResult:
+            type: object
+            properties:
+                items:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/UserSessionIssuer'
+                next_cursor:
+                    type: string
+                    description: Cursor for the next page; empty when exhausted.
+            description: Result type for listing user_session_issuers.
+            required:
+                - items
+        ListUserSessionsResult:
+            type: object
+            properties:
+                items:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/UserSession'
+                next_cursor:
+                    type: string
+                    description: Cursor for the next page; empty when exhausted.
+            description: Result type for listing user_sessions.
+            required:
+                - items
         ListUsersResult:
             type: object
             properties:
@@ -29949,6 +31382,28 @@ components:
                     description: The opaque target reference.
             required:
                 - id
+        UpdateUserSessionIssuerForm:
+            type: object
+            properties:
+                authn_challenge_mode:
+                    type: string
+                    description: chain | interactive.
+                    enum:
+                        - chain
+                        - interactive
+                id:
+                    type: string
+                    description: The user_session_issuer id.
+                    format: uuid
+                session_duration:
+                    type: string
+                    description: ISO 8601 duration.
+                slug:
+                    type: string
+                    description: Rename the slug.
+            description: Form for updating a user_session_issuer. All non-id fields are optional patches.
+            required:
+                - id
         UploadChatAttachmentForm:
             type: object
             properties:
@@ -30161,6 +31616,162 @@ components:
                 - free
                 - pro
                 - enterprise
+        UserSession:
+            type: object
+            properties:
+                created_at:
+                    type: string
+                    format: date-time
+                expires_at:
+                    type: string
+                    description: Terminal session expiry; ceiling on refresh_expires_at.
+                    format: date-time
+                id:
+                    type: string
+                    description: The user_session id.
+                    format: uuid
+                jti:
+                    type: string
+                    description: Current access-token JTI; used by the revocation path.
+                principal_urn:
+                    type: string
+                    description: The session's principal URN (user:<id> | apikey:<uuid> | anonymous:<mcp-session-id>).
+                refresh_expires_at:
+                    type: string
+                    description: Next refresh deadline.
+                    format: date-time
+                updated_at:
+                    type: string
+                    format: date-time
+                user_session_issuer_id:
+                    type: string
+                    description: The issuing user_session_issuer id.
+                    format: uuid
+            description: An issued user_session record. refresh_token_hash is never returned.
+            required:
+                - id
+                - user_session_issuer_id
+                - principal_urn
+                - jti
+                - refresh_expires_at
+                - expires_at
+                - created_at
+                - updated_at
+        UserSessionClient:
+            type: object
+            properties:
+                client_id:
+                    type: string
+                    description: DCR-issued client_id.
+                client_id_issued_at:
+                    type: string
+                    format: date-time
+                client_name:
+                    type: string
+                    description: Display name from the registration request.
+                client_secret_expires_at:
+                    type: string
+                    description: Null when the secret does not expire.
+                    format: date-time
+                created_at:
+                    type: string
+                    format: date-time
+                id:
+                    type: string
+                    description: The user_session_client id.
+                    format: uuid
+                redirect_uris:
+                    type: array
+                    items:
+                        type: string
+                    description: Validated on every /authorize.
+                updated_at:
+                    type: string
+                    format: date-time
+                user_session_issuer_id:
+                    type: string
+                    description: The owning user_session_issuer id.
+                    format: uuid
+            description: A user_session_client (DCR'd MCP client). client_secret_hash is never returned.
+            required:
+                - id
+                - user_session_issuer_id
+                - client_id
+                - client_name
+                - redirect_uris
+                - client_id_issued_at
+                - created_at
+                - updated_at
+        UserSessionConsent:
+            type: object
+            properties:
+                consented_at:
+                    type: string
+                    format: date-time
+                created_at:
+                    type: string
+                    format: date-time
+                id:
+                    type: string
+                    description: The user_session_consent id.
+                    format: uuid
+                principal_urn:
+                    type: string
+                    description: The consenting principal URN (user:<id> | apikey:<uuid> | anonymous:<mcp-session-id>).
+                remote_set_hash:
+                    type: string
+                    description: SHA-256 of the sorted list of remote_session_issuer ids on the client's owning issuer at consent time.
+                updated_at:
+                    type: string
+                    format: date-time
+                user_session_client_id:
+                    type: string
+                    description: The user_session_client this consent binds to.
+                    format: uuid
+            description: A user_session_consent record. Per-client (not per-issuer) consent.
+            required:
+                - id
+                - principal_urn
+                - user_session_client_id
+                - remote_set_hash
+                - consented_at
+                - created_at
+                - updated_at
+        UserSessionIssuer:
+            type: object
+            properties:
+                authn_challenge_mode:
+                    type: string
+                    description: chain | interactive.
+                created_at:
+                    type: string
+                    format: date-time
+                id:
+                    type: string
+                    description: The user_session_issuer id.
+                    format: uuid
+                project_id:
+                    type: string
+                    description: The owning project id.
+                    format: uuid
+                session_duration:
+                    type: string
+                    description: ISO 8601 duration (e.g. PT24H).
+                slug:
+                    type: string
+                    description: Project-unique slug.
+                updated_at:
+                    type: string
+                    format: date-time
+            description: A user_session_issuer record.
+            required:
+                - id
+                - project_id
+                - slug
+                - authn_challenge_mode
+                - session_duration
+                - created_at
+                - updated_at
         UserSummary:
             type: object
             properties:
@@ -30399,5 +32010,13 @@ tags:
       description: Manage project trigger instances and static trigger definitions.
     - name: usage
       description: Read usage for gram.
+    - name: userSessionClients
+      description: Operator visibility into DCR'd MCP clients (user_session_clients). Read + revoke; registrations are written by /mcp/{slug}/register.
+    - name: userSessionConsents
+      description: Operator visibility into user_session_consents — persistent consent records per (principal, user_session_client). List + revoke.
+    - name: userSessionIssuers
+      description: Manage user_session_issuer records — Gram-side authorization-server configuration that issues user sessions for an MCP server.
+    - name: userSessions
+      description: Operator visibility into issued user_sessions. List + revoke; sessions are written by /mcp/{slug}/token.
     - name: variations
       description: Manage variations of tools.
