@@ -120,12 +120,12 @@ func (s *Service) HandlePolarWebhook(w http.ResponseWriter, r *http.Request) err
 		return nil
 	}
 
-	// Top-up orders never change subscription tier; skip the tier-refresh path
-	// and emit a distinct event so analytics don't conflate them with subscription changes.
-	if webhookPayload.Type == "order.paid" &&
-		webhookPayload.Data.Product != nil &&
-		s.billingRepo.IsTopUpProductID(webhookPayload.Data.Product.ID) {
-		return s.handleTopUpOrder(ctx, logger, webhookPayload)
+	if webhookPayload.Type == "order.paid" {
+		if webhookPayload.Data.Product != nil && s.billingRepo.IsTopUpProductID(webhookPayload.Data.Product.ID) {
+			return s.handleTopUpOrder(ctx, logger, webhookPayload)
+		}
+		logger.InfoContext(ctx, "skipping non-top-up order.paid; covered by subscription.* events")
+		return nil
 	}
 
 	existingOrgMetadata, err := s.orgRepo.GetOrganizationMetadata(ctx, webhookPayload.Data.Customer.ExternalID)
