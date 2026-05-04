@@ -1,28 +1,49 @@
-// Package workos implements the dev-idp's workos mode — a thin proxy over
-// the live WorkOS REST API used to resolve user/org metadata for tests and
-// for the dashboard (idp-design.md §7.2).
+// Package workos implements the dev-idp's workos mode — emulates the
+// Speakeasy IDP shape (the same /v1/speakeasy_provider/* surface served
+// by /local-speakeasy/) but resolves user and organization data from the
+// live WorkOS REST API instead of the dev-idp's local Postgres tables.
 //
-// Unlike the local modes, this mode does NOT read from the dev-idp's
-// users / organizations / memberships tables. Its only dev-idp DB
-// interaction is reading the current_users[mode='workos'] row to discover
-// the WorkOS sub the operator/test pinned via /rpc/devIdp.setCurrentUser.
+// Architecture:
 //
-// The mode is unmounted entirely when WORKOS_API_KEY is unset (see
-// idp-design.md §8). When mounted, every request hits the live WorkOS
-// API (or whatever WORKOS_HOST points at — useful for sandbox / fixtures)
-// using the configured API key.
+//   - The Speakeasy provider exchange itself is local: auth_codes and
+//     tokens are persisted to the dev-idp DB with mode='workos' so /login
+//     → /exchange → /validate work without round-tripping WorkOS for the
+//     code/token lifecycle.
+//   - User identity comes from real WorkOS. The currentUser for this mode
+//     is a WorkOS sub (e.g. `user_01H...`); /validate fetches the live
+//     WorkOS user + memberships at request time.
+//   - To keep the auth_codes/tokens FK to users(id) workable, every
+//     workos-resolved identity is shadowed into the local users table
+//     (find-or-create by email). The local row is just a stable UUID;
+//     the source of truth for the user's profile is always WorkOS.
+//
+// Three additional GET endpoints (`/users/{id_or_email}`,
+// `/organizations/{id}`, `/currentUser`) live on this mode for direct
+// dashboard inspection of WorkOS state.
+//
+// The mode is unmounted entirely when WORKOS_API_KEY is unset
+// (idp-design.md §8). When mounted, every request hits the live WorkOS
+// API (or whatever WORKOS_HOST points at — useful for sandbox /
+// fixtures) using the configured API key.
 package workos
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
+	"regexp"
 	"strings"
+	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 
@@ -32,24 +53,43 @@ import (
 	gramworkos "github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
 
-// Mode is the discriminator persisted on the current_users row owned by
-// this handler.
-const Mode = "workos"
+const (
+	// Mode is the discriminator persisted on every auth_codes / tokens /
+	// current_users row owned by this handler.
+	Mode = "workos"
 
-// Prefix is the URL prefix the dev-idp listener mounts the workos handler
-// under. Compose it with http.StripPrefix when wiring.
-const Prefix = "/workos"
+	// Prefix is the URL prefix the dev-idp listener mounts the workos
+	// handler under. Compose with http.StripPrefix when wiring.
+	Prefix = "/workos"
+
+	// clientIDSentinel is recorded on auth_codes / tokens so the dashboard
+	// can show which mode minted the row. The Speakeasy exchange has no
+	// real client concept.
+	clientIDSentinel = "workos"
+
+	authCodeLifetime = 5 * time.Minute
+	tokenLifetime    = 24 * time.Hour
+)
+
+// Config carries the static configuration for the workos mode. Mirrors
+// localspeakeasy.Config so dev-idp.go can wire both handlers from the
+// same SPEAKEASY_SECRET_KEY env var.
+type Config struct {
+	SecretKey string
+}
 
 // Handler serves the workos mode's HTTP routes.
 type Handler struct {
+	cfg    Config
 	tracer trace.Tracer
 	logger *slog.Logger
 	db     *pgxpool.Pool
 	client *gramworkos.Client
 }
 
-func NewHandler(client *gramworkos.Client, logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool) *Handler {
+func NewHandler(cfg Config, client *gramworkos.Client, logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool) *Handler {
 	return &Handler{
+		cfg:    cfg,
 		tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/devidp/modes/workos"),
 		logger: logger.With(attr.SlogComponent("devidp." + Mode)),
 		db:     db,
@@ -57,10 +97,19 @@ func NewHandler(client *gramworkos.Client, logger *slog.Logger, tracerProvider t
 	}
 }
 
-// Handler returns the http.Handler that should be mounted under `Prefix`.
-// All registered paths are relative to that prefix.
+// Handler returns the http.Handler that should be mounted under `Prefix`
+// (use http.StripPrefix). All registered paths are relative to that
+// prefix.
 func (h *Handler) Handler() http.Handler {
 	mux := http.NewServeMux()
+	// Speakeasy provider exchange — same shape as local-speakeasy, but
+	// identity backed by WorkOS instead of local Postgres.
+	mux.HandleFunc("GET /v1/speakeasy_provider/login", h.handleLogin)
+	mux.HandleFunc("POST /v1/speakeasy_provider/exchange", h.withSecretKey(h.handleExchange))
+	mux.HandleFunc("GET /v1/speakeasy_provider/validate", h.withSecretKey(h.handleValidate))
+	mux.HandleFunc("POST /v1/speakeasy_provider/revoke", h.withSecretKey(h.handleRevoke))
+	mux.HandleFunc("POST /v1/speakeasy_provider/register", h.withSecretKey(h.handleRegister))
+	// Direct WorkOS inspection — used by the dashboard.
 	mux.HandleFunc("GET /users/{id_or_email}", h.handleGetUser)
 	mux.HandleFunc("GET /organizations/{id}", h.handleGetOrganization)
 	mux.HandleFunc("GET /currentUser", h.handleGetCurrentUser)
@@ -68,7 +117,251 @@ func (h *Handler) Handler() http.Handler {
 }
 
 // =============================================================================
-// JSON wire types
+// JSON wire types — mirror local-speakeasy exactly so Gram-side decoders
+// don't care which mode answered.
+// =============================================================================
+
+type speakeasyUserJSON struct {
+	ID           string  `json:"id"`
+	Email        string  `json:"email"`
+	DisplayName  string  `json:"display_name"`
+	PhotoURL     *string `json:"photo_url"`
+	GithubHandle *string `json:"github_handle"`
+	Admin        bool    `json:"admin"`
+	CreatedAt    string  `json:"created_at"`
+	UpdatedAt    string  `json:"updated_at"`
+	Whitelisted  bool    `json:"whitelisted"`
+}
+
+type speakeasyOrgJSON struct {
+	ID                 string   `json:"id"`
+	Name               string   `json:"name"`
+	Slug               string   `json:"slug"`
+	CreatedAt          string   `json:"created_at"`
+	UpdatedAt          string   `json:"updated_at"`
+	AccountType        string   `json:"account_type"`
+	SSOConnectionID    *string  `json:"sso_connection_id"`
+	WorkOSID           *string  `json:"workos_id,omitempty"`
+	UserWorkspaceSlugs []string `json:"user_workspaces_slugs"` // typo preserved — wire compat with Gram-side
+}
+
+type speakeasyValidateResponse struct {
+	User          speakeasyUserJSON  `json:"user"`
+	Organizations []speakeasyOrgJSON `json:"organizations"`
+}
+
+// =============================================================================
+// Middleware
+// =============================================================================
+
+func (h *Handler) withSecretKey(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		key := r.Header.Get("speakeasy-auth-provider-key")
+		if key != h.cfg.SecretKey {
+			h.logger.WarnContext(r.Context(), "rejected: invalid provider key", attr.SlogHTTPRoute(r.URL.Path))
+			writeJSON(w, http.StatusUnauthorized, map[string]string{
+				"error": "Unauthorized: invalid or missing provider key",
+			})
+			return
+		}
+		next(w, r)
+	}
+}
+
+// =============================================================================
+// Speakeasy provider — backed by real WorkOS
+// =============================================================================
+
+func (h *Handler) handleLogin(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	returnURL := r.URL.Query().Get("return_url")
+	state := r.URL.Query().Get("state")
+
+	h.logger.InfoContext(ctx, "auth flow initiated",
+		attr.SlogEvent("devidp.mode.used"),
+		attr.SlogHTTPRoute(r.URL.Path),
+	)
+
+	if returnURL == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Missing return_url parameter"})
+		return
+	}
+	target, err := url.Parse(returnURL)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid return_url"})
+		return
+	}
+
+	shadowID, err := h.resolveShadowUserID(ctx)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	code, err := h.issueAuthCode(ctx, shadowID, returnURL)
+	if err != nil {
+		h.logger.ErrorContext(ctx, "issue auth code", attr.SlogError(err))
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to issue auth code"})
+		return
+	}
+
+	q := target.Query()
+	q.Set("code", code)
+	if state != "" {
+		q.Set("state", state)
+	}
+	target.RawQuery = q.Encode()
+	http.Redirect(w, r, target.String(), http.StatusFound)
+}
+
+func (h *Handler) handleExchange(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	var body struct {
+		Code string `json:"code"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
+		return
+	}
+	if body.Code == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Missing code in request body"})
+		return
+	}
+
+	queries := repo.New(h.db)
+	codeRow, err := queries.ConsumeAuthCode(ctx, repo.ConsumeAuthCodeParams{Code: body.Code, Mode: Mode})
+	if err != nil {
+		// Tolerance: tests sometimes /exchange without /login. Fall back to
+		// the configured currentUser shadow.
+		uid, ferr := h.resolveShadowUserID(ctx)
+		if ferr != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid or expired code"})
+			return
+		}
+		token, terr := h.issueIDToken(ctx, uid)
+		if terr != nil {
+			h.logger.ErrorContext(ctx, "issue id_token (fallback)", attr.SlogError(terr))
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to issue token"})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]string{"id_token": token})
+		return
+	}
+
+	token, err := h.issueIDToken(ctx, codeRow.UserID)
+	if err != nil {
+		h.logger.ErrorContext(ctx, "issue id_token", attr.SlogError(err))
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to issue token"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"id_token": token})
+}
+
+func (h *Handler) handleValidate(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	idToken := r.Header.Get("speakeasy-auth-provider-id-token")
+	if idToken == "" {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Missing token header"})
+		return
+	}
+
+	queries := repo.New(h.db)
+	tokenRow, err := queries.GetActiveToken(ctx, repo.GetActiveTokenParams{Token: idToken, Mode: Mode})
+	if err != nil {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Invalid or expired token"})
+		return
+	}
+
+	resp, err := h.validateResponseFor(ctx, queries, tokenRow.UserID)
+	if err != nil {
+		h.logger.ErrorContext(ctx, "build validate response", attr.SlogError(err))
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to load user from WorkOS"})
+		return
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+func (h *Handler) handleRevoke(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	idToken := r.Header.Get("speakeasy-auth-provider-id-token")
+	if idToken != "" {
+		if err := repo.New(h.db).RevokeToken(ctx, repo.RevokeTokenParams{Token: idToken, Mode: Mode}); err != nil {
+			h.logger.WarnContext(ctx, "revoke token", attr.SlogError(err))
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+// handleRegister mirrors the local-speakeasy register flow — creates a
+// new organization for the authenticated user. The org is created
+// LOCALLY (in the dev-idp's organizations table) rather than in WorkOS
+// because the workos-go wrapper doesn't currently expose an org-create
+// surface and round-tripping WorkOS for org creation is rarely what local
+// dev wants. The shadow user gets a local membership; subsequent
+// /validate calls union the WorkOS-sourced orgs with these locally-
+// created ones.
+func (h *Handler) handleRegister(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	idToken := r.Header.Get("speakeasy-auth-provider-id-token")
+	if idToken == "" {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Missing token header"})
+		return
+	}
+
+	var body struct {
+		OrganizationName string `json:"organization_name"`
+		AccountType      string `json:"account_type"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
+		return
+	}
+	if body.OrganizationName == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Missing organization_name"})
+		return
+	}
+
+	queries := repo.New(h.db)
+	tokenRow, err := queries.GetActiveToken(ctx, repo.GetActiveTokenParams{Token: idToken, Mode: Mode})
+	if err != nil {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Invalid or expired token"})
+		return
+	}
+
+	accountType := body.AccountType
+
+	org, err := queries.CreateOrganization(ctx, repo.CreateOrganizationParams{
+		Name:        body.OrganizationName,
+		Slug:        slugify(body.OrganizationName),
+		AccountType: pgtype.Text{String: accountType, Valid: accountType != ""},
+		WorkosID:    pgtype.Text{String: "", Valid: false},
+	})
+	if err != nil {
+		h.logger.ErrorContext(ctx, "create organization", attr.SlogError(err))
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to create organization"})
+		return
+	}
+	if _, err := queries.CreateMembership(ctx, repo.CreateMembershipParams{
+		UserID:         tokenRow.UserID,
+		OrganizationID: org.ID,
+		Role:           pgtype.Text{String: "member", Valid: true},
+	}); err != nil {
+		h.logger.ErrorContext(ctx, "create membership", attr.SlogError(err))
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to attach membership"})
+		return
+	}
+
+	resp, err := h.validateResponseFor(ctx, queries, tokenRow.UserID)
+	if err != nil {
+		h.logger.ErrorContext(ctx, "build register response", attr.SlogError(err))
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to load user"})
+		return
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+// =============================================================================
+// Direct WorkOS inspection (used by the dashboard)
 // =============================================================================
 
 type userJSON struct {
@@ -94,29 +387,19 @@ type currentUserJSON struct {
 	ProfilePictureURL *string `json:"profile_picture_url,omitempty"`
 }
 
-// =============================================================================
-// Handlers
-// =============================================================================
-
 func (h *Handler) handleGetUser(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	idOrEmail := r.PathValue("id_or_email")
 
-	h.logger.InfoContext(ctx, "auth flow initiated",
-		attr.SlogEvent("devidp.mode.used"),
-		attr.SlogHTTPRoute(r.URL.Path),
-	)
-
-	user, err := h.lookupUser(ctx, idOrEmail)
+	user, err := h.lookupWorkosUser(ctx, idOrEmail)
 	if err != nil {
-		h.respondError(ctx, w, "lookup user", err)
+		h.respondWorkosError(ctx, w, "lookup user", err)
 		return
 	}
 	if user == nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "user not found in WorkOS"})
 		return
 	}
-
 	writeJSON(w, http.StatusOK, userJSON{
 		WorkosSub:         user.ID,
 		Email:             user.Email,
@@ -132,10 +415,9 @@ func (h *Handler) handleGetOrganization(w http.ResponseWriter, r *http.Request) 
 
 	org, err := h.client.GetOrganization(ctx, orgID)
 	if err != nil {
-		h.respondError(ctx, w, "get organization", err)
+		h.respondWorkosError(ctx, w, "get organization", err)
 		return
 	}
-
 	writeJSON(w, http.StatusOK, orgJSON{
 		ID:        org.ID,
 		Name:      org.Name,
@@ -149,9 +431,7 @@ func (h *Handler) handleGetCurrentUser(w http.ResponseWriter, r *http.Request) {
 
 	row, err := repo.New(h.db).GetCurrentUser(ctx, Mode)
 	if errors.Is(err, pgx.ErrNoRows) {
-		// First touch on this mode: bootstrap from git committer email by
-		// looking it up in WorkOS.
-		bootstrapped, berr := h.bootstrapDefaultUser(ctx)
+		bootstrapped, berr := h.bootstrapWorkosCurrentUser(ctx)
 		if berr != nil {
 			h.logger.WarnContext(ctx, "bootstrap default workos currentUser", attr.SlogError(berr))
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": berr.Error()})
@@ -171,13 +451,9 @@ func (h *Handler) handleGetCurrentUser(w http.ResponseWriter, r *http.Request) {
 		LastName:          nil,
 		ProfilePictureURL: nil,
 	}
-
 	user, err := h.client.GetUser(ctx, row.SubjectRef)
 	switch {
 	case err != nil && gramworkos.IsNotFound(err):
-		// currentUser set to a non-existent WorkOS sub. Return what we have
-		// so the operator can see the broken state in the dashboard rather
-		// than getting a 5xx.
 		h.logger.WarnContext(ctx, "currentUser not found in WorkOS", attr.SlogError(err))
 	case err != nil:
 		h.logger.ErrorContext(ctx, "fetch live workos user", attr.SlogError(err))
@@ -187,17 +463,60 @@ func (h *Handler) handleGetCurrentUser(w http.ResponseWriter, r *http.Request) {
 		resp.LastName = strPtr(user.LastName)
 		resp.ProfilePictureURL = strPtr(user.ProfilePictureURL)
 	}
-
 	writeJSON(w, http.StatusOK, resp)
 }
 
-// bootstrapDefaultUser is the workos-mode bootstrap path (idp-design.md §3):
-// resolve the local git committer's email, look it up in WorkOS, and
-// persist the resulting WorkOS sub as current_users[mode='workos']. Errors
-// out of this path surface to /workos/currentUser as a 404 — the operator
-// can't log in without either fixing the git config, registering the
-// committer in WorkOS, or calling /rpc/devIdp.setCurrentUser explicitly.
-func (h *Handler) bootstrapDefaultUser(ctx context.Context) (repo.CurrentUser, error) {
+// =============================================================================
+// Identity resolution (workos sub → live WorkOS user → local shadow)
+// =============================================================================
+
+// resolveShadowUserID walks the workos-mode currentUser through to a
+// local users.id. The currentUser stores a WorkOS sub; we fetch the live
+// WorkOS user and find-or-create a local users row by email so the
+// auth_codes/tokens FKs have something to point at. The local row is
+// just a stable handle — the source of truth for the user's profile is
+// always WorkOS, and /validate re-fetches it on every request.
+//
+// When no current_users row exists yet, the same git-committer →
+// WorkOS-lookup bootstrap that powers /currentUser fires here too so
+// the IDP is usable from the first request.
+func (h *Handler) resolveShadowUserID(ctx context.Context) (uuid.UUID, error) {
+	queries := repo.New(h.db)
+	row, err := queries.GetCurrentUser(ctx, Mode)
+	if errors.Is(err, pgx.ErrNoRows) {
+		bootstrapped, berr := h.bootstrapWorkosCurrentUser(ctx)
+		if berr != nil {
+			return uuid.Nil, fmt.Errorf("bootstrap default currentUser: %w", berr)
+		}
+		row = bootstrapped
+	} else if err != nil {
+		return uuid.Nil, fmt.Errorf("read currentUser: %w", err)
+	}
+
+	user, err := h.client.GetUser(ctx, row.SubjectRef)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("fetch workos user %s: %w", row.SubjectRef, err)
+	}
+	if user == nil {
+		return uuid.Nil, fmt.Errorf("workos user %s not found", row.SubjectRef)
+	}
+
+	shadow, err := queries.UpsertUserByEmail(ctx, repo.UpsertUserByEmailParams{
+		Email:       user.Email,
+		DisplayName: strings.TrimSpace(user.FirstName + " " + user.LastName),
+	})
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("upsert local shadow for workos user: %w", err)
+	}
+	return shadow.ID, nil
+}
+
+// bootstrapWorkosCurrentUser is the workos-mode bootstrap path
+// (idp-design.md §3): resolve the local git committer's email, look it
+// up in WorkOS, and persist the resulting WorkOS sub as
+// current_users[mode='workos']. Errors carry "the default user relies on
+// committer email" so the operator knows what to fix.
+func (h *Handler) bootstrapWorkosCurrentUser(ctx context.Context) (repo.CurrentUser, error) {
 	committer, err := defaultuser.GitCommitter(ctx)
 	if err != nil {
 		return repo.CurrentUser{}, fmt.Errorf("resolve git committer: %w", err)
@@ -220,14 +539,134 @@ func (h *Handler) bootstrapDefaultUser(ctx context.Context) (repo.CurrentUser, e
 }
 
 // =============================================================================
+// Speakeasy validate response — built from live WorkOS data
+// =============================================================================
+
+func (h *Handler) validateResponseFor(ctx context.Context, queries *repo.Queries, shadowID uuid.UUID) (speakeasyValidateResponse, error) {
+	shadow, err := queries.GetUser(ctx, shadowID)
+	if err != nil {
+		return speakeasyValidateResponse{}, fmt.Errorf("look up shadow user: %w", err)
+	}
+
+	currentUser, err := queries.GetCurrentUser(ctx, Mode)
+	if err != nil {
+		return speakeasyValidateResponse{}, fmt.Errorf("look up current workos sub: %w", err)
+	}
+	wosUser, err := h.client.GetUser(ctx, currentUser.SubjectRef)
+	if err != nil {
+		return speakeasyValidateResponse{}, fmt.Errorf("fetch workos user %s: %w", currentUser.SubjectRef, err)
+	}
+	if wosUser == nil {
+		return speakeasyValidateResponse{}, fmt.Errorf("workos user %s not found", currentUser.SubjectRef)
+	}
+
+	displayName := strings.TrimSpace(wosUser.FirstName + " " + wosUser.LastName)
+	if displayName == "" {
+		displayName = wosUser.Email
+	}
+
+	out := speakeasyValidateResponse{
+		User: speakeasyUserJSON{
+			ID:           shadow.ID.String(),
+			Email:        wosUser.Email,
+			DisplayName:  displayName,
+			PhotoURL:     strPtr(wosUser.ProfilePictureURL),
+			GithubHandle: nil,
+			Admin:        shadow.Admin,
+			CreatedAt:    shadow.CreatedAt.Time.UTC().Format(time.RFC3339),
+			UpdatedAt:    shadow.UpdatedAt.Time.UTC().Format(time.RFC3339),
+			Whitelisted:  shadow.Whitelisted,
+		},
+		Organizations: []speakeasyOrgJSON{},
+	}
+
+	// Live WorkOS orgs the user is a member of.
+	memberships, err := h.client.ListUserMemberships(ctx, currentUser.SubjectRef)
+	if err != nil {
+		return speakeasyValidateResponse{}, fmt.Errorf("list workos memberships for %s: %w", currentUser.SubjectRef, err)
+	}
+	for _, m := range memberships {
+		out.Organizations = append(out.Organizations, speakeasyOrgJSON{
+			ID:                 m.OrganizationID,
+			Name:               m.Organization,
+			Slug:               slugify(m.Organization),
+			CreatedAt:          m.CreatedAt,
+			UpdatedAt:          m.UpdatedAt,
+			AccountType:        "",
+			SSOConnectionID:    nil,
+			WorkOSID:           strPtr(m.OrganizationID),
+			UserWorkspaceSlugs: []string{slugify(m.Organization)},
+		})
+	}
+
+	// Locally-created orgs (from /register on this mode). Unioned in so
+	// the Speakeasy IDP shape behaves consistently across modes.
+	localOrgs, err := queries.ListOrganizationsForUser(ctx, shadowID)
+	if err != nil {
+		return speakeasyValidateResponse{}, fmt.Errorf("list local orgs for shadow %s: %w", shadowID, err)
+	}
+	for _, o := range localOrgs {
+		out.Organizations = append(out.Organizations, speakeasyOrgJSON{
+			ID:                 o.ID.String(),
+			Name:               o.Name,
+			Slug:               o.Slug,
+			CreatedAt:          o.CreatedAt.Time.UTC().Format(time.RFC3339),
+			UpdatedAt:          o.UpdatedAt.Time.UTC().Format(time.RFC3339),
+			AccountType:        o.AccountType,
+			SSOConnectionID:    nil,
+			WorkOSID:           pgTextPtr(o.WorkosID),
+			UserWorkspaceSlugs: []string{o.Slug},
+		})
+	}
+
+	return out, nil
+}
+
+// =============================================================================
+// Token issuance (writes to the dev-idp's local auth_codes/tokens tables)
+// =============================================================================
+
+func (h *Handler) issueAuthCode(ctx context.Context, userID uuid.UUID, returnURL string) (string, error) {
+	code := randomToken()
+	_, err := repo.New(h.db).CreateAuthCode(ctx, repo.CreateAuthCodeParams{
+		Code:                code,
+		Mode:                Mode,
+		UserID:              userID,
+		ClientID:            clientIDSentinel,
+		RedirectUri:         returnURL,
+		CodeChallenge:       pgtype.Text{String: "", Valid: false},
+		CodeChallengeMethod: pgtype.Text{String: "", Valid: false},
+		Scope:               pgtype.Text{String: "", Valid: false},
+		ExpiresAt:           pgtype.Timestamptz{Time: time.Now().Add(authCodeLifetime), Valid: true, InfinityModifier: pgtype.Finite},
+	})
+	if err != nil {
+		return "", fmt.Errorf("insert auth_code: %w", err)
+	}
+	return code, nil
+}
+
+func (h *Handler) issueIDToken(ctx context.Context, userID uuid.UUID) (string, error) {
+	token := randomToken()
+	_, err := repo.New(h.db).CreateToken(ctx, repo.CreateTokenParams{
+		Token:     token,
+		Mode:      Mode,
+		UserID:    userID,
+		ClientID:  clientIDSentinel,
+		Kind:      "id_token",
+		Scope:     pgtype.Text{String: "", Valid: false},
+		ExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(tokenLifetime), Valid: true, InfinityModifier: pgtype.Finite},
+	})
+	if err != nil {
+		return "", fmt.Errorf("insert id_token: %w", err)
+	}
+	return token, nil
+}
+
+// =============================================================================
 // Helpers
 // =============================================================================
 
-// lookupUser dispatches to GetUser or GetUserByEmail based on whether the
-// segment looks like an email (contains '@'). WorkOS user ids start with
-// `user_` but we use the simpler email-vs-not heuristic so the path also
-// accepts external-id-shaped strings.
-func (h *Handler) lookupUser(ctx context.Context, idOrEmail string) (*gramworkos.User, error) {
+func (h *Handler) lookupWorkosUser(ctx context.Context, idOrEmail string) (*gramworkos.User, error) {
 	if strings.Contains(idOrEmail, "@") {
 		user, err := h.client.GetUserByEmail(ctx, idOrEmail)
 		if err != nil {
@@ -242,10 +681,7 @@ func (h *Handler) lookupUser(ctx context.Context, idOrEmail string) (*gramworkos
 	return user, nil
 }
 
-// respondError translates a WorkOS API error into the matching HTTP status.
-// Unknown errors become 502 (gateway) so the operator knows the failure
-// originated upstream of the dev-idp.
-func (h *Handler) respondError(ctx context.Context, w http.ResponseWriter, op string, err error) {
+func (h *Handler) respondWorkosError(ctx context.Context, w http.ResponseWriter, op string, err error) {
 	if gramworkos.IsNotFound(err) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found in WorkOS"})
 		return
@@ -260,9 +696,35 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	_ = json.NewEncoder(w).Encode(v)
 }
 
+func randomToken() string {
+	b := make([]byte, 16)
+	_, _ = rand.Read(b)
+	return hex.EncodeToString(b)
+}
+
 func strPtr(s string) *string {
 	if s == "" {
 		return nil
 	}
 	return &s
+}
+
+func pgTextPtr(t pgtype.Text) *string {
+	if !t.Valid {
+		return nil
+	}
+	v := t.String
+	return &v
+}
+
+var (
+	nonAlphanumeric     = regexp.MustCompile(`[^a-z0-9]+`)
+	leadingTrailingDash = regexp.MustCompile(`^-+|-+$`)
+)
+
+func slugify(name string) string {
+	s := strings.ToLower(name)
+	s = nonAlphanumeric.ReplaceAllString(s, "-")
+	s = leadingTrailingDash.ReplaceAllString(s, "")
+	return s
 }

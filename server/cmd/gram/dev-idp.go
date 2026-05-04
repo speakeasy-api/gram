@@ -228,7 +228,10 @@ func newDevIdpCommand() *cli.Command {
 					Endpoint:   c.String("workos-host"),
 					HTTPClient: nil,
 				})
-				wsHandler := devidpworkos.NewHandler(wsClient, logger, tracerProvider, db)
+				wsHandler := devidpworkos.NewHandler(
+					devidpworkos.Config{SecretKey: c.String("speakeasy-secret-key")},
+					wsClient, logger, tracerProvider, db,
+				)
 				outer.Handle(devidpworkos.Prefix+"/", http.StripPrefix(devidpworkos.Prefix, wsHandler.Handler()))
 				logger.InfoContext(ctx, "dev-idp /workos/ mode mounted")
 			}
