@@ -9,7 +9,6 @@ import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { UpdatedAt } from "@/components/updated-at";
 import { useProductTier } from "@/hooks/useProductTier";
-import { getServerURL } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import { Assistant } from "@gram/client/models/components/assistant.js";
 import {
@@ -117,9 +116,13 @@ export default function AssistantsIndex() {
 
 function UsageSection() {
   const productTier = useProductTier();
-  const { data: periodUsage } = useGetPeriodUsage(undefined, undefined, {
-    throwOnError: !getServerURL().includes("localhost"),
-  });
+  const { data: periodUsage, isError } = useGetPeriodUsage(
+    undefined,
+    undefined,
+    { throwOnError: false },
+  );
+
+  if (isError) return null;
 
   return (
     <Page.Section>
