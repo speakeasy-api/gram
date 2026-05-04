@@ -344,6 +344,80 @@ func TestGenerateSinglePluginPackageCodex(t *testing.T) {
 	require.Equal(t, "test", meta.Name, "flat package should use the raw slug, not slug-codex")
 }
 
+func TestGenerateSinglePluginPackageVSCode(t *testing.T) {
+	t.Parallel()
+	plugin := PluginInfo{
+		Name:    "Test",
+		Slug:    "test",
+		Servers: []PluginServerInfo{{DisplayName: "gram-server", MCPURL: "https://app.getgram.ai/mcp/test"}},
+	}
+
+	files, err := GenerateSinglePluginPackage(plugin, GenerateConfig{OrgName: "Test Org", ServerURL: "https://app.getgram.ai"}, "vscode")
+	require.NoError(t, err)
+
+	for p := range files {
+		require.False(t, strings.HasPrefix(p, "test/"), "flat package must not include the marketplace subdir prefix: %s", p)
+	}
+
+	// VSCode auto-detect order favors .plugin/plugin.json over .claude-plugin/.
+	var meta claudePluginMeta
+	err = json.Unmarshal(files[".plugin/plugin.json"], &meta)
+	require.NoError(t, err)
+	require.Equal(t, "test", meta.Name)
+
+	require.Contains(t, files, ".mcp.json", "VSCode plugin should emit .mcp.json")
+}
+
+func TestGenerateObservabilityPluginPackageVSCode(t *testing.T) {
+	t.Parallel()
+	files, err := GenerateObservabilityPluginPackage(GenerateConfig{
+		OrgName:     "Acme",
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_test_abc123def456",
+		ProjectSlug: "core",
+	}, "vscode")
+	require.NoError(t, err)
+
+	require.Contains(t, files, ".plugin/plugin.json", "VSCode observability plugin should emit .plugin/plugin.json")
+	require.Contains(t, files, "hooks.json")
+	require.Contains(t, files, "hook.sh")
+
+	var hooks claudeHooksConfig
+	require.NoError(t, json.Unmarshal(files["hooks.json"], &hooks))
+	for _, event := range VSCodeObservabilityHookEvents {
+		_, ok := hooks.Hooks[event]
+		require.True(t, ok, "hooks.json should register %q", event)
+	}
+
+	script := string(files["hook.sh"])
+	require.Contains(t, script, "/rpc/hooks.vscode")
+	require.Contains(t, script, "Gram-Key: gram_test_abc123def456")
+	require.Contains(t, script, "Gram-Project: core")
+	require.Contains(t, script, "Gram-User-Email: ${email}")
+	require.Contains(t, script, "Gram-User-Email-Source: ${source}")
+	// Cascade markers — env first, then gh, then git.
+	require.Contains(t, script, "GRAM_USER_EMAIL")
+	require.Contains(t, script, "gh api user/emails")
+	require.Contains(t, script, "git config user.email")
+	require.Contains(t, script, "users.noreply.github.com")
+}
+
+func TestGeneratePluginPackagesDoesNotIncludeVSCode(t *testing.T) {
+	t.Parallel()
+	plugins := []PluginInfo{{Name: "A", Slug: "a", Description: "First plugin"}}
+
+	files, err := GeneratePluginPackages(plugins, GenerateConfig{
+		OrgName:   "Acme",
+		ServerURL: "https://app.getgram.ai",
+	})
+	require.NoError(t, err)
+
+	for p := range files {
+		require.NotContains(t, p, "-vscode", "publish bundle should not ship VSCode plugins (private repo creds problem)")
+		require.NotContains(t, p, ".vscode-plugin", "publish bundle should not include vscode marketplace")
+	}
+}
+
 func TestGenerateReadmeEscapesMarkdownInTableCells(t *testing.T) {
 	t.Parallel()
 	plugins := []PluginInfo{

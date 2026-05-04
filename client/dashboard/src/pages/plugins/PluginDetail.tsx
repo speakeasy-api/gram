@@ -121,7 +121,9 @@ export default function PluginDetail() {
     });
   };
 
-  const handleDownload = async (platform: "claude" | "cursor" | "codex") => {
+  const handleDownload = async (
+    platform: "claude" | "cursor" | "codex" | "vscode",
+  ) => {
     setIsDownloadMenuOpen(false);
     try {
       const { headers, result } = await client.plugins.downloadPluginPackage({
@@ -259,6 +261,9 @@ export default function PluginDetail() {
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => handleDownload("codex")}>
                 Codex
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleDownload("vscode")}>
+                VSCode Copilot
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

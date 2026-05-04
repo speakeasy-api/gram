@@ -250,6 +250,7 @@ run();
 * [hooksNumberCursor](docs/sdks/hooks/README.md#hooksnumbercursor) - cursor hooks
 * [hooksNumberLogs](docs/sdks/hooks/README.md#hooksnumberlogs) - logs hooks
 * [hooksNumberMetrics](docs/sdks/hooks/README.md#hooksnumbermetrics) - metrics hooks
+* [hooksNumberVscodeCopilot](docs/sdks/hooks/README.md#hooksnumbervscodecopilot) - vscodeCopilot hooks
 
 ### [HooksServerNames](docs/sdks/hooksservernames/README.md)
 
@@ -549,6 +550,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`hooksHooksNumberCursor`](docs/sdks/hooks/README.md#hooksnumbercursor) - cursor hooks
 - [`hooksHooksNumberLogs`](docs/sdks/hooks/README.md#hooksnumberlogs) - logs hooks
 - [`hooksHooksNumberMetrics`](docs/sdks/hooks/README.md#hooksnumbermetrics) - metrics hooks
+- [`hooksHooksNumberVscodeCopilot`](docs/sdks/hooks/README.md#hooksnumbervscodecopilot) - vscodeCopilot hooks
 - [`hooksServerNamesDeleteServerNameOverride`](docs/sdks/hooksservernames/README.md#deleteservernameoverride) - delete hooksServerNames
 - [`hooksServerNamesListServerNameOverrides`](docs/sdks/hooksservernames/README.md#listservernameoverrides) - list hooksServerNames
 - [`hooksServerNamesUpsertServerNameOverride`](docs/sdks/hooksservernames/README.md#upsertservernameoverride) - upsert hooksServerNames
@@ -792,6 +794,7 @@ To learn about this feature and how to get started, check
 - [`useHooksHooksNumberCursorMutation`](docs/sdks/hooks/README.md#hooksnumbercursor) - cursor hooks
 - [`useHooksHooksNumberLogsMutation`](docs/sdks/hooks/README.md#hooksnumberlogs) - logs hooks
 - [`useHooksHooksNumberMetricsMutation`](docs/sdks/hooks/README.md#hooksnumbermetrics) - metrics hooks
+- [`useHooksHooksNumberVscodeCopilotMutation`](docs/sdks/hooks/README.md#hooksnumbervscodecopilot) - vscodeCopilot hooks
 - [`useHooksServerNamesDeleteServerNameOverrideMutation`](docs/sdks/hooksservernames/README.md#deleteservernameoverride) - delete hooksServerNames
 - [`useHooksServerNamesListServerNameOverrides`](docs/sdks/hooksservernames/README.md#listservernameoverrides) - list hooksServerNames
 - [`useHooksServerNamesUpsertServerNameOverrideMutation`](docs/sdks/hooksservernames/README.md#upsertservernameoverride) - upsert hooksServerNames

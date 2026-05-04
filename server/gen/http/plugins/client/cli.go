@@ -389,8 +389,8 @@ func BuildDownloadPluginPackagePayload(pluginsDownloadPluginPackagePluginID stri
 	var platform string
 	{
 		platform = pluginsDownloadPluginPackagePlatform
-		if !(platform == "claude" || platform == "cursor" || platform == "codex") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("platform", platform, []any{"claude", "cursor", "codex"}))
+		if !(platform == "claude" || platform == "cursor" || platform == "codex" || platform == "vscode") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("platform", platform, []any{"claude", "cursor", "codex", "vscode"}))
 		}
 		if err != nil {
 			return nil, err
@@ -424,8 +424,8 @@ func BuildDownloadObservabilityPluginPayload(pluginsDownloadObservabilityPluginP
 	var platform string
 	{
 		platform = pluginsDownloadObservabilityPluginPlatform
-		if !(platform == "claude" || platform == "cursor") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("platform", platform, []any{"claude", "cursor"}))
+		if !(platform == "claude" || platform == "cursor" || platform == "vscode") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("platform", platform, []any{"claude", "cursor", "vscode"}))
 		}
 		if err != nil {
 			return nil, err

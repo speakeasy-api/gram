@@ -335,3 +335,5 @@ export * from "./usersummary.js";
 export * from "./validatekeyorganization.js";
 export * from "./validatekeyproject.js";
 export * from "./validatekeyresult.js";
+export * from "./vscodecopilothookpayload.js";
+export * from "./vscodecopilothookresult.js";

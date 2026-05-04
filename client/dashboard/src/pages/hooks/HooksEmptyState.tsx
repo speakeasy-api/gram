@@ -114,10 +114,10 @@ export function HooksEmptyState() {
                 onInstall={() => handleProviderClick("codex", "coming-soon")}
               />
               <ProviderCard
-                name="Copilot"
+                name="VSCode Copilot"
                 icon={CopilotIcon}
-                status="coming-soon"
-                onInstall={() => handleProviderClick("copilot", "coming-soon")}
+                status="available"
+                onInstall={() => handleProviderClick("copilot", "available")}
               />
               <ProviderCard
                 name="Gemini"

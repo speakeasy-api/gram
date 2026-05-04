@@ -23,6 +23,10 @@ type Service interface {
 	// afterAgentResponse, afterAgentThought, preToolUse, postToolUse,
 	// postToolUseFailure, beforeMCPExecution, and afterMCPExecution.
 	Cursor(context.Context, *CursorPayload) (res *CursorHookResult, err error)
+	// Endpoint for VSCode Copilot agent hook events. Handles SessionStart,
+	// UserPromptSubmit, PreToolUse, PostToolUse, PreCompact, SubagentStart,
+	// SubagentStop, and Stop.
+	VscodeCopilot(context.Context, *VscodeCopilotPayload) (res *VSCodeCopilotHookResult, err error)
 	// Endpoint to receive OTEL logs data from Claude Code. Requires API key
 	// authentication.
 	Logs(context.Context, *LogsPayload) (err error)
@@ -51,7 +55,7 @@ const ServiceName = "hooks"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [4]string{"claude", "cursor", "logs", "metrics"}
+var MethodNames = [5]string{"claude", "cursor", "vscodeCopilot", "logs", "metrics"}
 
 // ClaudeHookResult is the result type of the hooks service claude method.
 type ClaudeHookResult struct {
@@ -340,6 +344,62 @@ type OTELSum struct {
 	IsMonotonic *bool
 	// Data points
 	DataPoints []*OTELNumberDataPoint
+}
+
+// VSCodeCopilotHookResult is the result type of the hooks service
+// vscodeCopilot method.
+type VSCodeCopilotHookResult struct {
+	// Whether to continue processing
+	Continue *bool
+	// Reason if blocked
+	StopReason *string
+	// Whether to suppress the hook's output
+	SuppressOutput *bool
+	// Warning message shown to the user in the terminal
+	SystemMessage *string
+	// Hook-specific output as JSON object
+	HookSpecificOutput any
+}
+
+// VscodeCopilotPayload is the payload type of the hooks service vscodeCopilot
+// method.
+type VscodeCopilotPayload struct {
+	ApikeyToken      *string
+	ProjectSlugInput *string
+	// Self-attested user email forwarded by the hook script.
+	UserEmailInput *string
+	// Source of the user email value: env, gh, git, or none.
+	UserEmailSourceInput *string
+	// The type of hook event
+	HookEventName string
+	// The VSCode Copilot session ID
+	SessionID *string
+	// The working directory when the event fired
+	Cwd *string
+	// Path to the conversation transcript file
+	TranscriptPath *string
+	// The name of the tool
+	ToolName *string
+	// The unique ID for this tool use
+	ToolUseID *string
+	// The input to the tool
+	ToolInput any
+	// The response from the tool (PostToolUse only)
+	ToolResponse any
+	// The user's prompt text (UserPromptSubmit only)
+	Prompt *string
+	// How the session started (SessionStart only)
+	Source *string
+	// Whether a stop hook continuation is active
+	StopHookActive *bool
+	// What triggered the compaction (PreCompact only)
+	Trigger *string
+	// Subagent identifier (SubagentStart / SubagentStop)
+	AgentID *string
+	// Subagent type (SubagentStart / SubagentStop)
+	AgentType *string
+	// Additional hook-specific data
+	AdditionalData map[string]any
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.
