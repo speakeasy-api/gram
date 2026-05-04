@@ -78,6 +78,10 @@ overrides:
         go_type:
           import: github.com/speakeasy-api/gram/server/internal/urn
           type: SessionSubject
+      - column: remote_sessions.principal_urn
+        go_type:
+          import: github.com/speakeasy-api/gram/server/internal/urn
+          type: SessionSubject
 
 sql:
   - schema: schema.sql
@@ -383,6 +387,16 @@ sql:
       go:
         package: "repo"
         out: "../internal/usersessions/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: schema.sql
+    queries: ../internal/remotesessions/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/remotesessions/repo"
         sql_package: "pgx/v5"
         omit_unused_structs: true
 

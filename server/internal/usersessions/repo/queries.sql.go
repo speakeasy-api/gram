@@ -766,7 +766,7 @@ SET deleted_at = clock_timestamp()
 WHERE user_session_issuer_id = $1
   AND refresh_token_hash = $2
   AND deleted IS FALSE
-RETURNING id, user_session_issuer_id, principal_urn, jti, refresh_token_hash, refresh_expires_at, expires_at, created_at, updated_at, deleted_at, deleted
+RETURNING id, user_session_issuer_id, user_session_client_id, subject_urn, jti, refresh_token_hash, refresh_expires_at, expires_at, created_at, updated_at, deleted_at, deleted
 `
 
 type RevokeUserSessionByRefreshTokenHashParams struct {
@@ -785,7 +785,8 @@ func (q *Queries) RevokeUserSessionByRefreshTokenHash(ctx context.Context, arg R
 	err := row.Scan(
 		&i.ID,
 		&i.UserSessionIssuerID,
-		&i.PrincipalUrn,
+		&i.UserSessionClientID,
+		&i.SubjectUrn,
 		&i.Jti,
 		&i.RefreshTokenHash,
 		&i.RefreshExpiresAt,

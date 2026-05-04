@@ -2,8 +2,16 @@ speakeasyVersion: 1.761.5
 sources:
     Gram-Internal:
         sourceNamespace: gram-api-description
+<<<<<<< HEAD
         sourceRevisionDigest: sha256:ccf314e9017829213645e8652f8b539b7023a75d6bbcc0048692ebb0cd17134e
         sourceBlobDigest: sha256:b56b831c12aaea00e575300413ffb293b0bfd390f206824d949fa1da6ea1dd7d
+||||||| parent of 05e32df3c (feat(remotesessions): package skeleton (3 stub services))
+        sourceRevisionDigest: sha256:7e924682a2d98995b2ad3270ad35710060ee11621c36fcbb25e16d9e191e20f3
+        sourceBlobDigest: sha256:84808b87459021bcadaa9ec24be654abf6f79a1c7241ab7c415f2b306cddd17e
+=======
+        sourceRevisionDigest: sha256:b5bfef06d8e6effa83a21f3488e164a2b86bf535d3a7dc042439d022a7cdec4c
+        sourceBlobDigest: sha256:1f27bf7679c1b15a7cf306c57357063a198a891a4b48c8d2e1c9373a1bb7f5f6
+>>>>>>> 05e32df3c (feat(remotesessions): package skeleton (3 stub services))
         tags:
             - latest
             - 0.0.1
@@ -11,10 +19,24 @@ targets:
     gram-internal:
         source: Gram-Internal
         sourceNamespace: gram-api-description
+<<<<<<< HEAD
         sourceRevisionDigest: sha256:ccf314e9017829213645e8652f8b539b7023a75d6bbcc0048692ebb0cd17134e
         sourceBlobDigest: sha256:b56b831c12aaea00e575300413ffb293b0bfd390f206824d949fa1da6ea1dd7d
+||||||| parent of 05e32df3c (feat(remotesessions): package skeleton (3 stub services))
+        sourceRevisionDigest: sha256:7e924682a2d98995b2ad3270ad35710060ee11621c36fcbb25e16d9e191e20f3
+        sourceBlobDigest: sha256:84808b87459021bcadaa9ec24be654abf6f79a1c7241ab7c415f2b306cddd17e
+=======
+        sourceRevisionDigest: sha256:b5bfef06d8e6effa83a21f3488e164a2b86bf535d3a7dc042439d022a7cdec4c
+        sourceBlobDigest: sha256:1f27bf7679c1b15a7cf306c57357063a198a891a4b48c8d2e1c9373a1bb7f5f6
+>>>>>>> 05e32df3c (feat(remotesessions): package skeleton (3 stub services))
         codeSamplesNamespace: gram-api-description-typescript-code-samples
+<<<<<<< HEAD
         codeSamplesRevisionDigest: sha256:7744828e561a1cc315cd8da8ec1a5fae52e00e3401e64d6e6d83b4f3b7ede3f0
+||||||| parent of 05e32df3c (feat(remotesessions): package skeleton (3 stub services))
+        codeSamplesRevisionDigest: sha256:a60e777f712d65356130cd348fb33d9d1f176154d54eb38c0bfb0f68873afa95
+=======
+        codeSamplesRevisionDigest: sha256:16baa4ef5fd3594a081191bc45fe0bf83ca8e6459aa6ad201ef9e976adc0a28d
+>>>>>>> 05e32df3c (feat(remotesessions): package skeleton (3 stub services))
 workflow:
     workflowVersion: 1.0.0
     speakeasyVersion: pinned
