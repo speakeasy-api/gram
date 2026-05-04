@@ -9,34 +9,37 @@ import (
 type Scope string
 
 const (
-	ScopeRoot            Scope = "root"
-	ScopeOrgRead         Scope = "org:read"
-	ScopeOrgAdmin        Scope = "org:admin"
-	ScopeProjectRead     Scope = "project:read"
-	ScopeProjectWrite    Scope = "project:write"
-	ScopeMCPRead         Scope = "mcp:read"
-	ScopeMCPWrite        Scope = "mcp:write"
-	ScopeMCPConnect      Scope = "mcp:connect"
-	ScopeEnvironmentRead Scope = "environment:read"
+	ScopeRoot             Scope = "root"
+	ScopeOrgRead          Scope = "org:read"
+	ScopeOrgAdmin         Scope = "org:admin"
+	ScopeProjectRead      Scope = "project:read"
+	ScopeProjectWrite     Scope = "project:write"
+	ScopeMCPRead          Scope = "mcp:read"
+	ScopeMCPWrite         Scope = "mcp:write"
+	ScopeMCPConnect       Scope = "mcp:connect"
+	ScopeEnvironmentRead  Scope = "environment:read"
+	ScopeEnvironmentWrite Scope = "environment:write"
 )
 
 // scopeExpansions maps a required scope to the higher-privilege scopes that also satisfy it.
 // Scopes with no higher-privilege implication (admin tiers) map to nil.
 //
-// environment:read intentionally expands to project:{read,write} so that callers with
-// project-wide grants keep working without an explicit environment:read grant. Per-resource
-// environment:read grants give RBAC the option to scope reads at the individual environment
-// level (e.g. for fine-grained roles that should not be able to clone a specific environment).
+// environment:{read,write} intentionally expand to project:{read,write} so callers
+// with project-wide grants keep working without explicit environment grants. Per-resource
+// environment grants give RBAC the option to scope reads/writes at the individual
+// environment level (e.g. fine-grained roles that should not clone a specific environment,
+// or that should be able to add environments without other project-write authority).
 var scopeExpansions = map[Scope][]Scope{
-	ScopeRoot:            nil,
-	ScopeOrgRead:         {ScopeOrgAdmin},
-	ScopeOrgAdmin:        nil,
-	ScopeProjectRead:     {ScopeProjectWrite},
-	ScopeProjectWrite:    nil,
-	ScopeMCPRead:         {ScopeMCPWrite},
-	ScopeMCPWrite:        nil,
-	ScopeMCPConnect:      {ScopeMCPRead, ScopeMCPWrite},
-	ScopeEnvironmentRead: {ScopeProjectRead, ScopeProjectWrite},
+	ScopeRoot:             nil,
+	ScopeOrgRead:          {ScopeOrgAdmin},
+	ScopeOrgAdmin:         nil,
+	ScopeProjectRead:      {ScopeProjectWrite},
+	ScopeProjectWrite:     nil,
+	ScopeMCPRead:          {ScopeMCPWrite},
+	ScopeMCPWrite:         nil,
+	ScopeMCPConnect:       {ScopeMCPRead, ScopeMCPWrite},
+	ScopeEnvironmentRead:  {ScopeEnvironmentWrite, ScopeProjectRead, ScopeProjectWrite},
+	ScopeEnvironmentWrite: {ScopeProjectWrite},
 }
 
 // scopeSubScopes is the inverse of scopeExpansions: for each higher-privilege
