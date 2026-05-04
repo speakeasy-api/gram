@@ -3,6 +3,7 @@ package risk_analysis
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"slices"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -91,6 +93,28 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 		}
 		span.End()
 	}()
+
+	policy, err := repo.New(a.db).GetRiskPolicy(ctx, repo.GetRiskPolicyParams{
+		ID:        args.RiskPolicyID,
+		ProjectID: args.ProjectID,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		span.SetAttributes(attribute.Bool("risk.policy_deleted", true))
+		a.logger.InfoContext(ctx, "risk policy deleted, skipping batch",
+			attr.SlogRiskPolicyID(args.RiskPolicyID.String()),
+		)
+		return &AnalyzeBatchResult{Processed: 0, Findings: 0}, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get risk policy: %w", err)
+	}
+	if !policy.Enabled {
+		span.SetAttributes(attribute.Bool("risk.policy_disabled", true))
+		a.logger.InfoContext(ctx, "risk policy disabled, skipping batch",
+			attr.SlogRiskPolicyID(args.RiskPolicyID.String()),
+		)
+		return &AnalyzeBatchResult{Processed: 0, Findings: 0}, nil
+	}
 
 	messages, err := a.fetchContent(ctx, args)
 	if err != nil {
