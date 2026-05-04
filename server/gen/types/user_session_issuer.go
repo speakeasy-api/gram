@@ -18,8 +18,8 @@ type UserSessionIssuer struct {
 	Slug string
 	// chain | interactive.
 	AuthnChallengeMode string
-	// ISO 8601 duration (e.g. PT24H).
-	SessionDuration string
-	CreatedAt       string
-	UpdatedAt       string
+	// Issued user session lifetime, in hours.
+	SessionDurationHours int
+	CreatedAt            string
+	UpdatedAt            string
 }

@@ -69,7 +69,9 @@ var _ = Service("userSessionIssuers", func() {
 		Description("List user_session_issuers in the caller's project.")
 
 		Payload(func() {
-			Attribute("cursor", String, "Pagination cursor.")
+			Attribute("cursor", String, "Pagination cursor: id of the last item from the previous page.", func() {
+				Format(FormatUUID)
+			})
 			Attribute("limit", Int, "Page size (default 50, max 100).")
 			security.SessionPayload()
 			security.ByKeyPayload()
@@ -159,9 +161,9 @@ var CreateUserSessionIssuerForm = Type("CreateUserSessionIssuerForm", func() {
 	Attribute("authn_challenge_mode", String, "How multi-remote authn challenges are presented: chain | interactive.", func() {
 		Enum("chain", "interactive")
 	})
-	Attribute("session_duration", String, "ISO 8601 duration (e.g. PT24H) bounding the issued user session lifetime.")
+	Attribute("session_duration_hours", Int, "Issued user session lifetime, in hours.")
 
-	Required("slug", "authn_challenge_mode", "session_duration")
+	Required("slug", "authn_challenge_mode", "session_duration_hours")
 })
 
 var UpdateUserSessionIssuerForm = Type("UpdateUserSessionIssuerForm", func() {
@@ -174,7 +176,7 @@ var UpdateUserSessionIssuerForm = Type("UpdateUserSessionIssuerForm", func() {
 	Attribute("authn_challenge_mode", String, "chain | interactive.", func() {
 		Enum("chain", "interactive")
 	})
-	Attribute("session_duration", String, "ISO 8601 duration.")
+	Attribute("session_duration_hours", Int, "Issued user session lifetime, in hours.")
 
 	Required("id")
 })
@@ -192,7 +194,7 @@ var UserSessionIssuer = Type("UserSessionIssuer", func() {
 	})
 	Attribute("slug", String, "Project-unique slug.")
 	Attribute("authn_challenge_mode", String, "chain | interactive.")
-	Attribute("session_duration", String, "ISO 8601 duration (e.g. PT24H).")
+	Attribute("session_duration_hours", Int, "Issued user session lifetime, in hours.")
 	Attribute("created_at", String, func() {
 		Format(FormatDateTime)
 	})
@@ -200,7 +202,7 @@ var UserSessionIssuer = Type("UserSessionIssuer", func() {
 		Format(FormatDateTime)
 	})
 
-	Required("id", "project_id", "slug", "authn_challenge_mode", "session_duration", "created_at", "updated_at")
+	Required("id", "project_id", "slug", "authn_challenge_mode", "session_duration_hours", "created_at", "updated_at")
 })
 
 var ListUserSessionIssuersResult = Type("ListUserSessionIssuersResult", func() {

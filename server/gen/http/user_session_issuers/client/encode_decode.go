@@ -1238,13 +1238,13 @@ func DecodeDeleteUserSessionIssuerResponse(decoder func(*http.Response) goahttp.
 // *UserSessionIssuerResponseBody.
 func unmarshalUserSessionIssuerResponseBodyToTypesUserSessionIssuer(v *UserSessionIssuerResponseBody) *types.UserSessionIssuer {
 	res := &types.UserSessionIssuer{
-		ID:                 *v.ID,
-		ProjectID:          *v.ProjectID,
-		Slug:               *v.Slug,
-		AuthnChallengeMode: *v.AuthnChallengeMode,
-		SessionDuration:    *v.SessionDuration,
-		CreatedAt:          *v.CreatedAt,
-		UpdatedAt:          *v.UpdatedAt,
+		ID:                   *v.ID,
+		ProjectID:            *v.ProjectID,
+		Slug:                 *v.Slug,
+		AuthnChallengeMode:   *v.AuthnChallengeMode,
+		SessionDurationHours: *v.SessionDurationHours,
+		CreatedAt:            *v.CreatedAt,
+		UpdatedAt:            *v.UpdatedAt,
 	}
 
 	return res

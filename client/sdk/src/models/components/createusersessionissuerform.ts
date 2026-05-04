@@ -27,7 +27,7 @@ export type CreateUserSessionIssuerForm = {
    */
   authnChallengeMode: AuthnChallengeMode;
   /**
-   * ISO 8601 duration (e.g. PT24H) bounding the issued user session lifetime.
+   * Go duration string (e.g. "24h") bounding the issued user session lifetime.
    */
   sessionDuration: string;
   /**

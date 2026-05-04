@@ -20,8 +20,8 @@ type CreateUserSessionIssuerRequestBody struct {
 	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// How multi-remote authn challenges are presented: chain | interactive.
 	AuthnChallengeMode string `form:"authn_challenge_mode" json:"authn_challenge_mode" xml:"authn_challenge_mode"`
-	// ISO 8601 duration (e.g. PT24H) bounding the issued user session lifetime.
-	SessionDuration string `form:"session_duration" json:"session_duration" xml:"session_duration"`
+	// Issued user session lifetime, in hours.
+	SessionDurationHours int `form:"session_duration_hours" json:"session_duration_hours" xml:"session_duration_hours"`
 }
 
 // UpdateUserSessionIssuerRequestBody is the type of the "userSessionIssuers"
@@ -33,8 +33,8 @@ type UpdateUserSessionIssuerRequestBody struct {
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// chain | interactive.
 	AuthnChallengeMode *string `form:"authn_challenge_mode,omitempty" json:"authn_challenge_mode,omitempty" xml:"authn_challenge_mode,omitempty"`
-	// ISO 8601 duration.
-	SessionDuration *string `form:"session_duration,omitempty" json:"session_duration,omitempty" xml:"session_duration,omitempty"`
+	// Issued user session lifetime, in hours.
+	SessionDurationHours *int `form:"session_duration_hours,omitempty" json:"session_duration_hours,omitempty" xml:"session_duration_hours,omitempty"`
 }
 
 // CreateUserSessionIssuerResponseBody is the type of the "userSessionIssuers"
@@ -48,10 +48,10 @@ type CreateUserSessionIssuerResponseBody struct {
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// chain | interactive.
 	AuthnChallengeMode *string `form:"authn_challenge_mode,omitempty" json:"authn_challenge_mode,omitempty" xml:"authn_challenge_mode,omitempty"`
-	// ISO 8601 duration (e.g. PT24H).
-	SessionDuration *string `form:"session_duration,omitempty" json:"session_duration,omitempty" xml:"session_duration,omitempty"`
-	CreatedAt       *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt       *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	// Issued user session lifetime, in hours.
+	SessionDurationHours *int    `form:"session_duration_hours,omitempty" json:"session_duration_hours,omitempty" xml:"session_duration_hours,omitempty"`
+	CreatedAt            *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt            *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // UpdateUserSessionIssuerResponseBody is the type of the "userSessionIssuers"
@@ -65,10 +65,10 @@ type UpdateUserSessionIssuerResponseBody struct {
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// chain | interactive.
 	AuthnChallengeMode *string `form:"authn_challenge_mode,omitempty" json:"authn_challenge_mode,omitempty" xml:"authn_challenge_mode,omitempty"`
-	// ISO 8601 duration (e.g. PT24H).
-	SessionDuration *string `form:"session_duration,omitempty" json:"session_duration,omitempty" xml:"session_duration,omitempty"`
-	CreatedAt       *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt       *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	// Issued user session lifetime, in hours.
+	SessionDurationHours *int    `form:"session_duration_hours,omitempty" json:"session_duration_hours,omitempty" xml:"session_duration_hours,omitempty"`
+	CreatedAt            *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt            *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // ListUserSessionIssuersResponseBody is the type of the "userSessionIssuers"
@@ -90,10 +90,10 @@ type GetUserSessionIssuerResponseBody struct {
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// chain | interactive.
 	AuthnChallengeMode *string `form:"authn_challenge_mode,omitempty" json:"authn_challenge_mode,omitempty" xml:"authn_challenge_mode,omitempty"`
-	// ISO 8601 duration (e.g. PT24H).
-	SessionDuration *string `form:"session_duration,omitempty" json:"session_duration,omitempty" xml:"session_duration,omitempty"`
-	CreatedAt       *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt       *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	// Issued user session lifetime, in hours.
+	SessionDurationHours *int    `form:"session_duration_hours,omitempty" json:"session_duration_hours,omitempty" xml:"session_duration_hours,omitempty"`
+	CreatedAt            *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt            *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // CreateUserSessionIssuerUnauthorizedResponseBody is the type of the
@@ -1057,10 +1057,10 @@ type UserSessionIssuerResponseBody struct {
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// chain | interactive.
 	AuthnChallengeMode *string `form:"authn_challenge_mode,omitempty" json:"authn_challenge_mode,omitempty" xml:"authn_challenge_mode,omitempty"`
-	// ISO 8601 duration (e.g. PT24H).
-	SessionDuration *string `form:"session_duration,omitempty" json:"session_duration,omitempty" xml:"session_duration,omitempty"`
-	CreatedAt       *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt       *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	// Issued user session lifetime, in hours.
+	SessionDurationHours *int    `form:"session_duration_hours,omitempty" json:"session_duration_hours,omitempty" xml:"session_duration_hours,omitempty"`
+	CreatedAt            *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt            *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // NewCreateUserSessionIssuerRequestBody builds the HTTP request body from the
@@ -1068,9 +1068,9 @@ type UserSessionIssuerResponseBody struct {
 // "userSessionIssuers" service.
 func NewCreateUserSessionIssuerRequestBody(p *usersessionissuers.CreateUserSessionIssuerPayload) *CreateUserSessionIssuerRequestBody {
 	body := &CreateUserSessionIssuerRequestBody{
-		Slug:               p.Slug,
-		AuthnChallengeMode: p.AuthnChallengeMode,
-		SessionDuration:    p.SessionDuration,
+		Slug:                 p.Slug,
+		AuthnChallengeMode:   p.AuthnChallengeMode,
+		SessionDurationHours: p.SessionDurationHours,
 	}
 	return body
 }
@@ -1080,10 +1080,10 @@ func NewCreateUserSessionIssuerRequestBody(p *usersessionissuers.CreateUserSessi
 // "userSessionIssuers" service.
 func NewUpdateUserSessionIssuerRequestBody(p *usersessionissuers.UpdateUserSessionIssuerPayload) *UpdateUserSessionIssuerRequestBody {
 	body := &UpdateUserSessionIssuerRequestBody{
-		ID:                 p.ID,
-		Slug:               p.Slug,
-		AuthnChallengeMode: p.AuthnChallengeMode,
-		SessionDuration:    p.SessionDuration,
+		ID:                   p.ID,
+		Slug:                 p.Slug,
+		AuthnChallengeMode:   p.AuthnChallengeMode,
+		SessionDurationHours: p.SessionDurationHours,
 	}
 	return body
 }
@@ -1092,13 +1092,13 @@ func NewUpdateUserSessionIssuerRequestBody(p *usersessionissuers.UpdateUserSessi
 // service "createUserSessionIssuer" endpoint result from a HTTP "OK" response.
 func NewCreateUserSessionIssuerUserSessionIssuerOK(body *CreateUserSessionIssuerResponseBody) *types.UserSessionIssuer {
 	v := &types.UserSessionIssuer{
-		ID:                 *body.ID,
-		ProjectID:          *body.ProjectID,
-		Slug:               *body.Slug,
-		AuthnChallengeMode: *body.AuthnChallengeMode,
-		SessionDuration:    *body.SessionDuration,
-		CreatedAt:          *body.CreatedAt,
-		UpdatedAt:          *body.UpdatedAt,
+		ID:                   *body.ID,
+		ProjectID:            *body.ProjectID,
+		Slug:                 *body.Slug,
+		AuthnChallengeMode:   *body.AuthnChallengeMode,
+		SessionDurationHours: *body.SessionDurationHours,
+		CreatedAt:            *body.CreatedAt,
+		UpdatedAt:            *body.UpdatedAt,
 	}
 
 	return v
@@ -1258,13 +1258,13 @@ func NewCreateUserSessionIssuerGatewayError(body *CreateUserSessionIssuerGateway
 // service "updateUserSessionIssuer" endpoint result from a HTTP "OK" response.
 func NewUpdateUserSessionIssuerUserSessionIssuerOK(body *UpdateUserSessionIssuerResponseBody) *types.UserSessionIssuer {
 	v := &types.UserSessionIssuer{
-		ID:                 *body.ID,
-		ProjectID:          *body.ProjectID,
-		Slug:               *body.Slug,
-		AuthnChallengeMode: *body.AuthnChallengeMode,
-		SessionDuration:    *body.SessionDuration,
-		CreatedAt:          *body.CreatedAt,
-		UpdatedAt:          *body.UpdatedAt,
+		ID:                   *body.ID,
+		ProjectID:            *body.ProjectID,
+		Slug:                 *body.Slug,
+		AuthnChallengeMode:   *body.AuthnChallengeMode,
+		SessionDurationHours: *body.SessionDurationHours,
+		CreatedAt:            *body.CreatedAt,
+		UpdatedAt:            *body.UpdatedAt,
 	}
 
 	return v
@@ -1592,13 +1592,13 @@ func NewListUserSessionIssuersGatewayError(body *ListUserSessionIssuersGatewayEr
 // service "getUserSessionIssuer" endpoint result from a HTTP "OK" response.
 func NewGetUserSessionIssuerUserSessionIssuerOK(body *GetUserSessionIssuerResponseBody) *types.UserSessionIssuer {
 	v := &types.UserSessionIssuer{
-		ID:                 *body.ID,
-		ProjectID:          *body.ProjectID,
-		Slug:               *body.Slug,
-		AuthnChallengeMode: *body.AuthnChallengeMode,
-		SessionDuration:    *body.SessionDuration,
-		CreatedAt:          *body.CreatedAt,
-		UpdatedAt:          *body.UpdatedAt,
+		ID:                   *body.ID,
+		ProjectID:            *body.ProjectID,
+		Slug:                 *body.Slug,
+		AuthnChallengeMode:   *body.AuthnChallengeMode,
+		SessionDurationHours: *body.SessionDurationHours,
+		CreatedAt:            *body.CreatedAt,
+		UpdatedAt:            *body.UpdatedAt,
 	}
 
 	return v
@@ -1919,8 +1919,8 @@ func ValidateCreateUserSessionIssuerResponseBody(body *CreateUserSessionIssuerRe
 	if body.AuthnChallengeMode == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("authn_challenge_mode", "body"))
 	}
-	if body.SessionDuration == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("session_duration", "body"))
+	if body.SessionDurationHours == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("session_duration_hours", "body"))
 	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
@@ -1958,8 +1958,8 @@ func ValidateUpdateUserSessionIssuerResponseBody(body *UpdateUserSessionIssuerRe
 	if body.AuthnChallengeMode == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("authn_challenge_mode", "body"))
 	}
-	if body.SessionDuration == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("session_duration", "body"))
+	if body.SessionDurationHours == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("session_duration_hours", "body"))
 	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
@@ -2013,8 +2013,8 @@ func ValidateGetUserSessionIssuerResponseBody(body *GetUserSessionIssuerResponse
 	if body.AuthnChallengeMode == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("authn_challenge_mode", "body"))
 	}
-	if body.SessionDuration == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("session_duration", "body"))
+	if body.SessionDurationHours == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("session_duration_hours", "body"))
 	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
@@ -3259,8 +3259,8 @@ func ValidateUserSessionIssuerResponseBody(body *UserSessionIssuerResponseBody) 
 	if body.AuthnChallengeMode == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("authn_challenge_mode", "body"))
 	}
-	if body.SessionDuration == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("session_duration", "body"))
+	if body.SessionDurationHours == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("session_duration_hours", "body"))
 	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))

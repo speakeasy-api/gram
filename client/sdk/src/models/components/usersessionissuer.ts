@@ -26,7 +26,7 @@ export type UserSessionIssuer = {
    */
   projectId: string;
   /**
-   * ISO 8601 duration (e.g. PT24H).
+   * Go duration string (e.g. "24h").
    */
   sessionDuration: string;
   /**

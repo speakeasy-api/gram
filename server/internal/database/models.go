@@ -1250,7 +1250,7 @@ type UserSession struct {
 	ID                  uuid.UUID
 	UserSessionIssuerID uuid.UUID
 	UserSessionClientID uuid.NullUUID
-	SubjectUrn          string
+	SubjectUrn          urn.SessionSubject
 	Jti                 string
 	RefreshTokenHash    string
 	RefreshExpiresAt    pgtype.Timestamptz
@@ -1278,7 +1278,7 @@ type UserSessionClient struct {
 
 type UserSessionConsent struct {
 	ID                  uuid.UUID
-	SubjectUrn          string
+	SubjectUrn          urn.SessionSubject
 	UserSessionClientID uuid.UUID
 	RemoteSetHash       string
 	ConsentedAt         pgtype.Timestamptz

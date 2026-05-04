@@ -24023,7 +24023,7 @@ components:
             - interactive
         session_duration:
           type: string
-          description: ISO 8601 duration (e.g. PT24H) bounding the issued user session lifetime.
+          description: Go duration string (e.g. "24h") bounding the issued user session lifetime.
         slug:
           type: string
           description: Project-unique slug.
@@ -31565,7 +31565,7 @@ components:
           format: uuid
         session_duration:
           type: string
-          description: ISO 8601 duration.
+          description: Go duration string (e.g. "24h").
         slug:
           type: string
           description: Rename the slug.
@@ -31924,7 +31924,7 @@ components:
           format: uuid
         session_duration:
           type: string
-          description: ISO 8601 duration (e.g. PT24H).
+          description: Go duration string (e.g. "24h").
         slug:
           type: string
           description: Project-unique slug.

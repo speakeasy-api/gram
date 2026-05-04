@@ -35,7 +35,7 @@ export type UpdateUserSessionIssuerForm = {
    */
   id: string;
   /**
-   * ISO 8601 duration.
+   * Go duration string (e.g. "24h").
    */
   sessionDuration?: string | undefined;
   /**
