@@ -120,7 +120,7 @@ GRAM_DEVIDP_DASHBOARD_PORT = "35293"
 GRAM_DEVIDP_ADDRESS = ":{{env.GRAM_DEVIDP_PORT}}"
 GRAM_DEVIDP_CONTROL_ADDRESS = ":{{env.GRAM_DEVIDP_CONTROL_PORT}}"
 GRAM_DEVIDP_EXTERNAL_URL = "http://{{env.GRAM_DEVIDP_HOST}}:{{env.GRAM_DEVIDP_PORT}}"
-GRAM_DEVIDP_DB = "file:local/devidp/devidp.db"
+GRAM_DEVIDP_DB = "file:{{ config_root }}/local/devidp/devidp.db"
 SPEAKEASY_SERVER_ADDRESS = "{{env.GRAM_DEVIDP_EXTERNAL_URL}}/local-speakeasy"
 SPEAKEASY_SECRET_KEY = "test-secret"
 ## Override base URL for Gram's WorkOS client (defaults to api.workos.com).
