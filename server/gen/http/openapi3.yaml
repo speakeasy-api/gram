@@ -25287,6 +25287,8 @@ components:
                         - mcp:read
                         - mcp:write
                         - mcp:connect
+                        - environment:read
+                        - environment:write
                 selectors:
                     type: array
                     items:
@@ -25304,6 +25306,8 @@ components:
                             - mcp:read
                             - mcp:write
                             - mcp:connect
+                            - environment:read
+                            - environment:write
                     description: The inherited scopes the primary scope grants.
             required:
                 - scope
@@ -27649,6 +27653,8 @@ components:
                         - mcp:read
                         - mcp:write
                         - mcp:connect
+                        - environment:read
+                        - environment:write
                 selectors:
                     type: array
                     items:
@@ -27669,6 +27675,7 @@ components:
                         - org
                         - project
                         - mcp
+                        - environment
                 slug:
                     type: string
                     description: Unique scope identifier.
@@ -27680,6 +27687,8 @@ components:
                         - mcp:read
                         - mcp:write
                         - mcp:connect
+                        - environment:read
+                        - environment:write
             required:
                 - slug
                 - description
@@ -28073,6 +28082,7 @@ components:
                         - project
                         - mcp
                         - org
+                        - environment
                         - '*'
                 tool:
                     type: string
