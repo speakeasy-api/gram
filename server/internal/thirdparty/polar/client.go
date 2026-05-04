@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"math"
 	"net/http"
 	"net/url"
 	"slices"
@@ -47,13 +46,6 @@ type Catalog struct {
 // one-time credit top-up product.
 func (c *Catalog) IsTopUpProductID(id string) bool {
 	return slices.Contains(c.ProductIDsTopUp, id)
-}
-
-// costToCredits converts a per-turn dollar cost from OpenRouter into the
-// integer credit unit aggregated by the Polar credits meter. 1 credit =
-// $0.001; partial credits round up so any non-zero cost debits at least 1.
-func costToCredits(costDollars float64) float64 {
-	return math.Ceil(costDollars * 1000)
 }
 
 func (c *Catalog) Validate() error {
@@ -246,10 +238,6 @@ func (p *Client) TrackModelUsage(ctx context.Context, event billing.ModelUsageEv
 	if event.Cost != nil {
 		metadata["cost"] = polarComponents.EventMetadataInput{
 			Number: event.Cost,
-		}
-		credits := costToCredits(*event.Cost)
-		metadata["credits"] = polarComponents.EventMetadataInput{
-			Number: &credits,
 		}
 	}
 
@@ -866,6 +854,10 @@ func (p *Client) CreateTopUpCheckout(ctx context.Context, orgID, serverURL, succ
 		return "", errors.New("no top-up products configured")
 	}
 	return p.createCheckoutForProducts(ctx, "polar_client.create_topup_checkout", orgID, serverURL, successURL, []string{p.catalog.ProductIDsTopUp[0]})
+}
+
+func (p *Client) IsTopUpProductID(productID string) bool {
+	return p.catalog.IsTopUpProductID(productID)
 }
 
 func (p *Client) CreateCustomerSession(ctx context.Context, orgID string) (cpu string, err error) {
