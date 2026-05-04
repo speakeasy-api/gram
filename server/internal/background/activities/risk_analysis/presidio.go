@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"math/rand/v2"
 	"net/http"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -56,6 +57,14 @@ const presidioHTTPBatchSize = 50
 const presidioRetryBackoff = 100 * time.Millisecond
 
 const presidioRetryBackoffCap = 1 * time.Second
+
+// presidioMaxTextBytes caps per-text size before we skip a message. Presidio's
+// underlying spaCy model defaults to nlp.max_length=1,000,000 chars and OOMs
+// past that (~1GB temp memory per 100k chars). The infra Helm chart gives the
+// analyzer 1.5Gi, so leaving the default in place is what the deployment
+// expects. We measure bytes (not runes) and keep a 10% margin since UTF-8
+// multi-byte chars would let len(text) overshoot the rune count.
+const presidioMaxTextBytes = 900_000
 
 // PresidioClient calls the Presidio Analyzer HTTP API.
 // Presidio is a trusted cluster-internal service, so the client uses an
@@ -160,6 +169,28 @@ func (p *PresidioClient) AnalyzeBatch(ctx context.Context, texts []string, entit
 		return make([][]Finding, n), nil
 	}
 	entities = filtered
+
+	// Skip texts above presidio's max length to avoid OOMing the analyzer.
+	// Replace each oversize entry with an empty string so result indices stay
+	// aligned; the empty slot returns no findings to the caller.
+	var clipped []string
+	for i, t := range texts {
+		if len(t) <= presidioMaxTextBytes {
+			continue
+		}
+		if clipped == nil {
+			clipped = slices.Clone(texts)
+		}
+		clipped[i] = ""
+		p.logger.WarnContext(ctx, "presidio analyze: text exceeds max size, skipping",
+			attr.SlogRiskPresidioTextIndex(i),
+			attr.SlogRiskPresidioTextBytes(len(t)),
+			attr.SlogRiskPresidioMaxBytes(presidioMaxTextBytes),
+		)
+	}
+	if clipped != nil {
+		texts = clipped
+	}
 
 	ctx, span := p.tracer.Start(ctx, "presidio.analyzeBatch", trace.WithAttributes(
 		attribute.Int("presidio.batch_size", n),

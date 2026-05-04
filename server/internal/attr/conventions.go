@@ -207,6 +207,9 @@ const (
 	ProjectSlugKey                 = attribute.Key("gram.project.slug")
 	RiskPolicyCountKey             = attribute.Key("gram.risk.policy_count")
 	RiskPolicyIDKey                = attribute.Key("gram.risk.policy_id")
+	RiskPresidioMaxBytesKey        = attribute.Key("gram.risk.presidio.max_bytes")
+	RiskPresidioTextBytesKey       = attribute.Key("gram.risk.presidio.text_bytes")
+	RiskPresidioTextIndexKey       = attribute.Key("gram.risk.presidio.text_index")
 	RiskRuleIDKey                  = attribute.Key("gram.risk.rule_id")
 	SecretNameKey                  = attribute.Key("gram.secret.name")
 	SecurityPlacementKey           = attribute.Key("gram.security.placement")
@@ -924,6 +927,15 @@ func SlogRiskPolicyCount(v int) slog.Attr      { return slog.Int(string(RiskPoli
 
 func RiskPolicyID(v string) attribute.KeyValue { return RiskPolicyIDKey.String(v) }
 func SlogRiskPolicyID(v string) slog.Attr      { return slog.String(string(RiskPolicyIDKey), v) }
+
+func RiskPresidioMaxBytes(v int) attribute.KeyValue { return RiskPresidioMaxBytesKey.Int(v) }
+func SlogRiskPresidioMaxBytes(v int) slog.Attr      { return slog.Int(string(RiskPresidioMaxBytesKey), v) }
+
+func RiskPresidioTextBytes(v int) attribute.KeyValue { return RiskPresidioTextBytesKey.Int(v) }
+func SlogRiskPresidioTextBytes(v int) slog.Attr      { return slog.Int(string(RiskPresidioTextBytesKey), v) }
+
+func RiskPresidioTextIndex(v int) attribute.KeyValue { return RiskPresidioTextIndexKey.Int(v) }
+func SlogRiskPresidioTextIndex(v int) slog.Attr      { return slog.Int(string(RiskPresidioTextIndexKey), v) }
 
 func RiskRuleID(v string) attribute.KeyValue { return RiskRuleIDKey.String(v) }
 func SlogRiskRuleID(v string) slog.Attr      { return slog.String(string(RiskRuleIDKey), v) }
