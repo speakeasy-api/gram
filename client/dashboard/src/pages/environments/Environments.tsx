@@ -180,7 +180,10 @@ function EnvironmentCard({
           >
             {environment.name}
           </Type>
-          <RequireScope scope="project:write" level="component">
+          <RequireScope
+            scope={["environment:write", "project:write"]}
+            level="component"
+          >
             <div onClick={(e) => e.stopPropagation()}>
               <MoreActions
                 actions={[
