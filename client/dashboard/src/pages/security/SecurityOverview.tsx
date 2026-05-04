@@ -37,6 +37,14 @@ function getCategoryForRule(ruleId: string | undefined): RuleCategory | null {
   return RULE_ID_TO_CATEGORY.get(ruleId) ?? null;
 }
 
+function CategoryBadge({ ruleId }: { ruleId: string | undefined }) {
+  const category = getCategoryForRule(ruleId);
+  if (!category) return null;
+  return (
+    <Badge variant="secondary">{RULE_CATEGORY_META[category].label}</Badge>
+  );
+}
+
 export default function SecurityOverview() {
   return (
     <RequireScope scope="org:admin" level="page">
@@ -314,17 +322,7 @@ function SecurityOverviewContent() {
                           }}
                         >
                           <TableCell>
-                            {(() => {
-                              const category = getCategoryForRule(
-                                result.ruleId,
-                              );
-                              if (!category) return null;
-                              return (
-                                <Badge variant="secondary">
-                                  {RULE_CATEGORY_META[category].label}
-                                </Badge>
-                              );
-                            })()}
+                            <CategoryBadge ruleId={result.ruleId} />
                           </TableCell>
                           <TableCell className="font-mono text-xs">
                             {result.ruleId ?? "-"}
