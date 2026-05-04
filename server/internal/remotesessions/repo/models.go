@@ -3,3 +3,29 @@
 //   sqlc v1.29.0
 
 package repo
+
+import (
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
+)
+
+type RemoteSessionIssuer struct {
+	ID                                uuid.UUID
+	ProjectID                         uuid.UUID
+	Slug                              string
+	Issuer                            string
+	AuthorizationEndpoint             pgtype.Text
+	TokenEndpoint                     pgtype.Text
+	RegistrationEndpoint              pgtype.Text
+	JwksUri                           pgtype.Text
+	ScopesSupported                   []string
+	GrantTypesSupported               []string
+	ResponseTypesSupported            []string
+	TokenEndpointAuthMethodsSupported []string
+	Oidc                              bool
+	Passthrough                       bool
+	CreatedAt                         pgtype.Timestamptz
+	UpdatedAt                         pgtype.Timestamptz
+	DeletedAt                         pgtype.Timestamptz
+	Deleted                           bool
+}
