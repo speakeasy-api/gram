@@ -20,6 +20,14 @@ import {
 const WORKOS_USERS_DASHBOARD_URL =
   "https://dashboard.workos.com/environment_01J5C09A9KMAHSZ0T9WBK3TXHJ/users";
 
+interface WorkosUser {
+  id?: string;
+  email?: string;
+  first_name?: string;
+  last_name?: string;
+  profile_picture_url?: string;
+}
+
 async function fetchWorkos(suffix: string): Promise<unknown> {
   const res = await fetch(`/devidp/workos/${suffix}`);
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
@@ -39,6 +47,30 @@ export function WorkosModePane() {
   });
 
   const current = cur.data?.workos;
+  const sub = current?.workos_sub;
+
+  // The dev-idp's getCurrentUser only persists the workos_sub; first_name /
+  // last_name / email come back empty unless the live WorkOS lookup happens
+  // to be populated. Re-resolve via the proxy here so we can show a real
+  // human-readable name on the card.
+  const lookupQ = useQuery<WorkosUser>({
+    queryKey: ["workos", "current-lookup", sub],
+    queryFn: () =>
+      fetchWorkos(`users/${encodeURIComponent(sub!)}`) as Promise<WorkosUser>,
+    enabled: !!sub,
+  });
+
+  const merged: WorkosUser & { workos_sub?: string } = {
+    workos_sub: sub,
+    first_name: lookupQ.data?.first_name ?? current?.first_name,
+    last_name: lookupQ.data?.last_name ?? current?.last_name,
+    email: lookupQ.data?.email ?? current?.email,
+    profile_picture_url:
+      lookupQ.data?.profile_picture_url ?? current?.profile_picture_url,
+  };
+  const fullName = [merged.first_name, merged.last_name]
+    .filter(Boolean)
+    .join(" ");
 
   return (
     <div className="space-y-6">
@@ -63,20 +95,24 @@ export function WorkosModePane() {
           {cur.isLoading ? (
             <div className="text-sm text-muted-foreground">Loading…</div>
           ) : current ? (
-            <div className="text-sm space-y-1">
-              <div className="font-medium">
-                {[current.first_name, current.last_name]
-                  .filter(Boolean)
-                  .join(" ") ||
-                  current.email ||
-                  current.workos_sub}
+            <div className="space-y-1">
+              <div className="text-base font-semibold">
+                {fullName || merged.email || "Unknown user"}
               </div>
-              {current.email && (
-                <div className="text-muted-foreground">{current.email}</div>
+              {fullName && merged.email && (
+                <div className="text-sm text-muted-foreground">
+                  {merged.email}
+                </div>
               )}
               <div className="text-xs text-muted-foreground">
-                workos_sub: <code>{current.workos_sub}</code>
+                workos_sub: <code>{merged.workos_sub}</code>
               </div>
+              {lookupQ.error && (
+                <div className="text-xs text-destructive">
+                  Couldn't resolve full profile:{" "}
+                  {(lookupQ.error as Error).message}
+                </div>
+              )}
             </div>
           ) : (
             <div className="text-sm text-muted-foreground italic">

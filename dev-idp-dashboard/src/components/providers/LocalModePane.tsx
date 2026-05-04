@@ -78,7 +78,14 @@ export function LocalModePane({ mode }: { mode: LocalMode }) {
             <div className="flex gap-2">
               <Select value={picked} onValueChange={(v) => setPicked(v ?? "")}>
                 <SelectTrigger className="w-full flex-1">
-                  <SelectValue placeholder="Select user…" />
+                  <SelectValue placeholder="Select user…">
+                    {(value: string | null) => {
+                      const u = value
+                        ? users.find((u) => u.id === value)
+                        : null;
+                      return u ? `${u.display_name} (${u.email})` : value;
+                    }}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {users.map((u) => (

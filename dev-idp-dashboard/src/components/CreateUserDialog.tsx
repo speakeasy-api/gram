@@ -83,7 +83,14 @@ export function CreateUserDialog({
                 <Label>Initial membership (optional)</Label>
                 <Select value={orgId} onValueChange={(v) => setOrgId(v ?? "")}>
                   <SelectTrigger className="w-full">
-                    <SelectValue placeholder="None" />
+                    <SelectValue placeholder="None">
+                      {(value: string | null) => {
+                        const o = value
+                          ? orgs.find((o) => o.id === value)
+                          : null;
+                        return o ? o.name : value;
+                      }}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     {orgs.map((o) => (
