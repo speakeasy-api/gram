@@ -193,6 +193,8 @@ func newDevIdpCommand() *cli.Command {
 			service.AttachOrganizations(goaMux, service.NewOrganizationsService(logger, tracerProvider, db))
 			service.AttachUsers(goaMux, service.NewUsersService(logger, tracerProvider, db))
 			service.AttachMemberships(goaMux, service.NewMembershipsService(logger, tracerProvider, db))
+			service.AttachOrganizationRoles(goaMux, service.NewOrganizationRolesService(logger, tracerProvider, db))
+			service.AttachInvitations(goaMux, service.NewInvitationsService(logger, tracerProvider, db))
 			service.AttachDevIdp(goaMux, service.NewDevIdpService(logger, tracerProvider, db))
 
 			outer := http.NewServeMux()

@@ -47,6 +47,146 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/CurrentUser'
+    /rpc/invitations.accept:
+        post:
+            tags:
+                - invitations
+            summary: accept invitations
+            description: 'Accept an invitation: flip state to `accepted`, find-or-create the user for the invited email, and idempotently attach a membership. Returns the updated invitation.'
+            operationId: invitations#accept
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/DeleteRequestBody'
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Invitation'
+    /rpc/invitations.create:
+        post:
+            tags:
+                - invitations
+            summary: create invitations
+            description: Create a pending invitation. The token is generated server-side; the dev-idp doesn't actually send email.
+            operationId: invitations#create
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateRequestBody3'
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Invitation'
+    /rpc/invitations.findByToken:
+        post:
+            tags:
+                - invitations
+            summary: findByToken invitations
+            description: Resolve an invitation by its token. Used by the dashboard accept-flow URL.
+            operationId: invitations#findByToken
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/FindByTokenRequestBody'
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Invitation'
+    /rpc/invitations.get:
+        post:
+            tags:
+                - invitations
+            summary: get invitations
+            description: Fetch a single invitation by id.
+            operationId: invitations#get
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/DeleteRequestBody'
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Invitation'
+    /rpc/invitations.list:
+        post:
+            tags:
+                - invitations
+            summary: list invitations
+            description: List invitations for an organization, keyset-paginated by id.
+            operationId: invitations#list
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ListRequestBody3'
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListInvitationsResult'
+    /rpc/invitations.resend:
+        post:
+            tags:
+                - invitations
+            summary: resend invitations
+            description: Touch the invitation's updated_at as if a fresh email were sent. The dev-idp doesn't actually send email.
+            operationId: invitations#resend
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/DeleteRequestBody'
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Invitation'
+    /rpc/invitations.revoke:
+        post:
+            tags:
+                - invitations
+            summary: revoke invitations
+            description: Revoke a pending invitation. Idempotent — repeated revokes return the same row.
+            operationId: invitations#revoke
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/DeleteRequestBody'
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Invitation'
     /rpc/memberships.create:
         post:
             tags:
@@ -59,7 +199,7 @@ paths:
                 content:
                     application/json:
                         schema:
-                            $ref: '#/components/schemas/CreateRequestBody2'
+                            $ref: '#/components/schemas/CreateRequestBody4'
             responses:
                 "200":
                     description: OK response.
@@ -95,7 +235,7 @@ paths:
                 content:
                     application/json:
                         schema:
-                            $ref: '#/components/schemas/ListRequestBody2'
+                            $ref: '#/components/schemas/ListRequestBody4'
             responses:
                 "200":
                     description: OK response.
@@ -115,7 +255,7 @@ paths:
                 content:
                     application/json:
                         schema:
-                            $ref: '#/components/schemas/UpdateRequestBody2'
+                            $ref: '#/components/schemas/UpdateRequestBody3'
             responses:
                 "200":
                     description: OK response.
@@ -123,6 +263,82 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Membership'
+    /rpc/organizationRoles.create:
+        post:
+            tags:
+                - organizationRoles
+            summary: create organizationRoles
+            description: Create a role on an organization.
+            operationId: organizationRoles#create
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateRequestBody2'
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/OrganizationRole'
+    /rpc/organizationRoles.delete:
+        post:
+            tags:
+                - organizationRoles
+            summary: delete organizationRoles
+            description: Delete a role from an organization by (organization_id, slug).
+            operationId: organizationRoles#delete
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/DeleteRequestBody2'
+            responses:
+                "204":
+                    description: No Content response.
+    /rpc/organizationRoles.list:
+        post:
+            tags:
+                - organizationRoles
+            summary: list organizationRoles
+            description: List every role on an organization. No pagination — roles are a small per-org set.
+            operationId: organizationRoles#list
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ListRequestBody2'
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListOrganizationRolesResult'
+    /rpc/organizationRoles.update:
+        post:
+            tags:
+                - organizationRoles
+            summary: update organizationRoles
+            description: Patch a role's name and/or description by (organization_id, slug).
+            operationId: organizationRoles#update
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateRequestBody2'
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/OrganizationRole'
     /rpc/organizations.create:
         post:
             tags:
@@ -211,7 +427,7 @@ paths:
                 content:
                     application/json:
                         schema:
-                            $ref: '#/components/schemas/CreateRequestBody3'
+                            $ref: '#/components/schemas/CreateRequestBody5'
             responses:
                 "200":
                     description: OK response.
@@ -267,7 +483,7 @@ paths:
                 content:
                     application/json:
                         schema:
-                            $ref: '#/components/schemas/UpdateRequestBody3'
+                            $ref: '#/components/schemas/UpdateRequestBody4'
             responses:
                 "200":
                     description: OK response.
@@ -298,6 +514,43 @@ components:
         CreateRequestBody2:
             type: object
             properties:
+                description:
+                    type: string
+                    description: Free-form description.
+                name:
+                    type: string
+                    description: Display name.
+                organization_id:
+                    type: string
+                    description: Organization UUID.
+                    format: uuid
+                slug:
+                    type: string
+                    description: Role slug — unique within the org.
+            required:
+                - organization_id
+                - slug
+                - name
+        CreateRequestBody3:
+            type: object
+            properties:
+                email:
+                    type: string
+                    description: Invitee email.
+                inviter_user_id:
+                    type: string
+                    description: Inviter UUID (optional).
+                    format: uuid
+                organization_id:
+                    type: string
+                    description: Organization UUID the invitee will be added to on accept.
+                    format: uuid
+            required:
+                - email
+                - organization_id
+        CreateRequestBody4:
+            type: object
+            properties:
                 organization_id:
                     type: string
                     description: Organization UUID.
@@ -312,7 +565,7 @@ components:
             required:
                 - user_id
                 - organization_id
-        CreateRequestBody3:
+        CreateRequestBody5:
             type: object
             properties:
                 admin:
@@ -362,6 +615,27 @@ components:
                     format: uuid
             required:
                 - id
+        DeleteRequestBody2:
+            type: object
+            properties:
+                organization_id:
+                    type: string
+                    description: Organization UUID.
+                    format: uuid
+                slug:
+                    type: string
+                    description: Role slug.
+            required:
+                - organization_id
+                - slug
+        FindByTokenRequestBody:
+            type: object
+            properties:
+                token:
+                    type: string
+                    description: Opaque invitation token.
+            required:
+                - token
         GetCurrentUserRequestBody:
             type: object
             properties:
@@ -375,6 +649,76 @@ components:
                         - workos
             required:
                 - mode
+        Invitation:
+            type: object
+            properties:
+                accepted_at:
+                    type: string
+                    description: Timestamp when the invitation was accepted; empty for pending.
+                    format: date-time
+                created_at:
+                    type: string
+                    format: date-time
+                email:
+                    type: string
+                    description: Invitee email address.
+                expires_at:
+                    type: string
+                    description: Timestamp when the invitation expires.
+                    format: date-time
+                id:
+                    type: string
+                    description: Invitation UUID.
+                    format: uuid
+                inviter_user_id:
+                    type: string
+                    description: User UUID of the inviter, when known.
+                    format: uuid
+                organization_id:
+                    type: string
+                    description: Organization UUID.
+                    format: uuid
+                revoked_at:
+                    type: string
+                    description: Timestamp when the invitation was revoked; empty for pending.
+                    format: date-time
+                state:
+                    type: string
+                    description: Invitation lifecycle state.
+                    enum:
+                        - pending
+                        - accepted
+                        - revoked
+                        - expired
+                token:
+                    type: string
+                    description: Opaque token used by /findByToken and the accept-flow URL.
+                updated_at:
+                    type: string
+                    format: date-time
+            required:
+                - id
+                - email
+                - organization_id
+                - state
+                - token
+                - expires_at
+                - created_at
+                - updated_at
+        ListInvitationsResult:
+            type: object
+            properties:
+                items:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/Invitation'
+                    description: Invitations on this page.
+                next_cursor:
+                    type: string
+                    description: Cursor for the next page, empty when exhausted.
+            required:
+                - next_cursor
+                - items
         ListMembershipsResult:
             type: object
             properties:
@@ -388,6 +732,16 @@ components:
                     description: Cursor for the next page, empty when exhausted.
             required:
                 - next_cursor
+                - items
+        ListOrganizationRolesResult:
+            type: object
+            properties:
+                items:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/OrganizationRole'
+                    description: Roles for the organization.
+            required:
                 - items
         ListOrganizationsResult:
             type: object
@@ -417,6 +771,34 @@ components:
                     minimum: 1
                     maximum: 100
         ListRequestBody2:
+            type: object
+            properties:
+                organization_id:
+                    type: string
+                    description: Organization UUID.
+                    format: uuid
+            required:
+                - organization_id
+        ListRequestBody3:
+            type: object
+            properties:
+                cursor:
+                    type: string
+                    description: Opaque cursor returned by a previous list call.
+                limit:
+                    type: integer
+                    description: Maximum items to return.
+                    default: 50
+                    format: int64
+                    minimum: 1
+                    maximum: 100
+                organization_id:
+                    type: string
+                    description: Organization UUID.
+                    format: uuid
+            required:
+                - organization_id
+        ListRequestBody4:
             type: object
             properties:
                 cursor:
@@ -514,6 +896,40 @@ components:
                 - account_type
                 - created_at
                 - updated_at
+        OrganizationRole:
+            type: object
+            properties:
+                created_at:
+                    type: string
+                    format: date-time
+                description:
+                    type: string
+                    description: Free-form description; empty string when unset.
+                id:
+                    type: string
+                    description: Role UUID.
+                    format: uuid
+                name:
+                    type: string
+                    description: Display name.
+                organization_id:
+                    type: string
+                    description: Organization UUID.
+                    format: uuid
+                slug:
+                    type: string
+                    description: Role slug — unique within the organization.
+                updated_at:
+                    type: string
+                    format: date-time
+            required:
+                - id
+                - organization_id
+                - slug
+                - name
+                - description
+                - created_at
+                - updated_at
         SetCurrentUserRequestBody:
             type: object
             properties:
@@ -558,6 +974,23 @@ components:
         UpdateRequestBody2:
             type: object
             properties:
+                description:
+                    type: string
+                name:
+                    type: string
+                organization_id:
+                    type: string
+                    description: Organization UUID.
+                    format: uuid
+                slug:
+                    type: string
+                    description: Role slug.
+            required:
+                - organization_id
+                - slug
+        UpdateRequestBody3:
+            type: object
+            properties:
                 id:
                     type: string
                     description: Membership UUID.
@@ -568,7 +1001,7 @@ components:
             required:
                 - id
                 - role
-        UpdateRequestBody3:
+        UpdateRequestBody4:
             type: object
             properties:
                 admin:
@@ -653,6 +1086,10 @@ tags:
       description: Dev-only RPCs for the dev-idp itself. Per-mode currentUser get/set (idp-design.md §3, §6.2). Permanently unauthenticated.
     - name: organizations
       description: Dev-idp organizations CRUD. Backs both local-speakeasy and oauth2 modes' org metadata. Permanently unauthenticated (idp-design.md §6).
+    - name: organizationRoles
+      description: Dev-idp organization-role CRUD. Mirrors the WorkOS authorization-role surface (idp-design.md §7.1, /authorization/organizations/{id}/roles[/{slug}]). Keyed on `(organization_id, slug)` since slug is the natural identifier; the underlying row's UUID is also returned for completeness. Permanently unauthenticated.
+    - name: invitations
+      description: 'Dev-idp invitations: create, list, get, find-by-token, revoke, resend, accept. Mirrors the WorkOS user_management invitation lifecycle. The accept-flow is dev-idp-specific — clicking ''accept'' in the dashboard hits `invitations.accept`, which flips state and find-or-creates the corresponding user + membership. Permanently unauthenticated.'
     - name: memberships
       description: Dev-idp memberships CRUD. Idempotent on (user_id, organization_id) for create. Permanently unauthenticated.
     - name: users

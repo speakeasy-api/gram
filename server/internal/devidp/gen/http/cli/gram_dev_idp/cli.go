@@ -15,7 +15,9 @@ import (
 	"os"
 
 	devidpc "github.com/speakeasy-api/gram/server/internal/devidp/gen/http/dev_idp/client"
+	invitationsc "github.com/speakeasy-api/gram/server/internal/devidp/gen/http/invitations/client"
 	membershipsc "github.com/speakeasy-api/gram/server/internal/devidp/gen/http/memberships/client"
+	organizationrolesc "github.com/speakeasy-api/gram/server/internal/devidp/gen/http/organization_roles/client"
 	organizationsc "github.com/speakeasy-api/gram/server/internal/devidp/gen/http/organizations/client"
 	usersc "github.com/speakeasy-api/gram/server/internal/devidp/gen/http/users/client"
 	goahttp "goa.design/goa/v3/http"
@@ -29,6 +31,8 @@ func UsageCommands() []string {
 	return []string{
 		"dev-idp (get-current-user|set-current-user)",
 		"organizations (create|update|list|delete)",
+		"organization-roles (create|update|list|delete)",
+		"invitations (create|list|get|find-by-token|revoke|resend|accept)",
 		"memberships (create|update|list|delete)",
 		"users (create|update|list|delete)",
 	}
@@ -38,8 +42,9 @@ func UsageCommands() []string {
 func UsageExamples() string {
 	return os.Args[0] + " " + "dev-idp get-current-user --body '{\n      \"mode\": \"oauth2-1\"\n   }'" + "\n" +
 		os.Args[0] + " " + "organizations create --body '{\n      \"account_type\": \"abc123\",\n      \"name\": \"abc123\",\n      \"slug\": \"abc123\",\n      \"workos_id\": \"abc123\"\n   }'" + "\n" +
+		os.Args[0] + " " + "organization-roles create --body '{\n      \"description\": \"abc123\",\n      \"name\": \"abc123\",\n      \"organization_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"slug\": \"abc123\"\n   }'" + "\n" +
+		os.Args[0] + " " + "invitations create --body '{\n      \"email\": \"abc123\",\n      \"inviter_user_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"organization_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'" + "\n" +
 		os.Args[0] + " " + "memberships create --body '{\n      \"organization_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"role\": \"abc123\",\n      \"user_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'" + "\n" +
-		os.Args[0] + " " + "users create --body '{\n      \"admin\": false,\n      \"display_name\": \"abc123\",\n      \"email\": \"abc123\",\n      \"github_handle\": \"abc123\",\n      \"photo_url\": \"abc123\",\n      \"whitelisted\": false\n   }'" + "\n" +
 		""
 }
 
@@ -74,6 +79,43 @@ func ParseEndpoint(
 
 		organizationsDeleteFlags    = flag.NewFlagSet("delete", flag.ExitOnError)
 		organizationsDeleteBodyFlag = organizationsDeleteFlags.String("body", "REQUIRED", "")
+
+		organizationRolesFlags = flag.NewFlagSet("organization-roles", flag.ContinueOnError)
+
+		organizationRolesCreateFlags    = flag.NewFlagSet("create", flag.ExitOnError)
+		organizationRolesCreateBodyFlag = organizationRolesCreateFlags.String("body", "REQUIRED", "")
+
+		organizationRolesUpdateFlags    = flag.NewFlagSet("update", flag.ExitOnError)
+		organizationRolesUpdateBodyFlag = organizationRolesUpdateFlags.String("body", "REQUIRED", "")
+
+		organizationRolesListFlags    = flag.NewFlagSet("list", flag.ExitOnError)
+		organizationRolesListBodyFlag = organizationRolesListFlags.String("body", "REQUIRED", "")
+
+		organizationRolesDeleteFlags    = flag.NewFlagSet("delete", flag.ExitOnError)
+		organizationRolesDeleteBodyFlag = organizationRolesDeleteFlags.String("body", "REQUIRED", "")
+
+		invitationsFlags = flag.NewFlagSet("invitations", flag.ContinueOnError)
+
+		invitationsCreateFlags    = flag.NewFlagSet("create", flag.ExitOnError)
+		invitationsCreateBodyFlag = invitationsCreateFlags.String("body", "REQUIRED", "")
+
+		invitationsListFlags    = flag.NewFlagSet("list", flag.ExitOnError)
+		invitationsListBodyFlag = invitationsListFlags.String("body", "REQUIRED", "")
+
+		invitationsGetFlags    = flag.NewFlagSet("get", flag.ExitOnError)
+		invitationsGetBodyFlag = invitationsGetFlags.String("body", "REQUIRED", "")
+
+		invitationsFindByTokenFlags    = flag.NewFlagSet("find-by-token", flag.ExitOnError)
+		invitationsFindByTokenBodyFlag = invitationsFindByTokenFlags.String("body", "REQUIRED", "")
+
+		invitationsRevokeFlags    = flag.NewFlagSet("revoke", flag.ExitOnError)
+		invitationsRevokeBodyFlag = invitationsRevokeFlags.String("body", "REQUIRED", "")
+
+		invitationsResendFlags    = flag.NewFlagSet("resend", flag.ExitOnError)
+		invitationsResendBodyFlag = invitationsResendFlags.String("body", "REQUIRED", "")
+
+		invitationsAcceptFlags    = flag.NewFlagSet("accept", flag.ExitOnError)
+		invitationsAcceptBodyFlag = invitationsAcceptFlags.String("body", "REQUIRED", "")
 
 		membershipsFlags = flag.NewFlagSet("memberships", flag.ContinueOnError)
 
@@ -113,6 +155,21 @@ func ParseEndpoint(
 	organizationsListFlags.Usage = organizationsListUsage
 	organizationsDeleteFlags.Usage = organizationsDeleteUsage
 
+	organizationRolesFlags.Usage = organizationRolesUsage
+	organizationRolesCreateFlags.Usage = organizationRolesCreateUsage
+	organizationRolesUpdateFlags.Usage = organizationRolesUpdateUsage
+	organizationRolesListFlags.Usage = organizationRolesListUsage
+	organizationRolesDeleteFlags.Usage = organizationRolesDeleteUsage
+
+	invitationsFlags.Usage = invitationsUsage
+	invitationsCreateFlags.Usage = invitationsCreateUsage
+	invitationsListFlags.Usage = invitationsListUsage
+	invitationsGetFlags.Usage = invitationsGetUsage
+	invitationsFindByTokenFlags.Usage = invitationsFindByTokenUsage
+	invitationsRevokeFlags.Usage = invitationsRevokeUsage
+	invitationsResendFlags.Usage = invitationsResendUsage
+	invitationsAcceptFlags.Usage = invitationsAcceptUsage
+
 	membershipsFlags.Usage = membershipsUsage
 	membershipsCreateFlags.Usage = membershipsCreateUsage
 	membershipsUpdateFlags.Usage = membershipsUpdateUsage
@@ -144,6 +201,10 @@ func ParseEndpoint(
 			svcf = devIdpFlags
 		case "organizations":
 			svcf = organizationsFlags
+		case "organization-roles":
+			svcf = organizationRolesFlags
+		case "invitations":
+			svcf = invitationsFlags
 		case "memberships":
 			svcf = membershipsFlags
 		case "users":
@@ -186,6 +247,47 @@ func ParseEndpoint(
 
 			case "delete":
 				epf = organizationsDeleteFlags
+
+			}
+
+		case "organization-roles":
+			switch epn {
+			case "create":
+				epf = organizationRolesCreateFlags
+
+			case "update":
+				epf = organizationRolesUpdateFlags
+
+			case "list":
+				epf = organizationRolesListFlags
+
+			case "delete":
+				epf = organizationRolesDeleteFlags
+
+			}
+
+		case "invitations":
+			switch epn {
+			case "create":
+				epf = invitationsCreateFlags
+
+			case "list":
+				epf = invitationsListFlags
+
+			case "get":
+				epf = invitationsGetFlags
+
+			case "find-by-token":
+				epf = invitationsFindByTokenFlags
+
+			case "revoke":
+				epf = invitationsRevokeFlags
+
+			case "resend":
+				epf = invitationsResendFlags
+
+			case "accept":
+				epf = invitationsAcceptFlags
 
 			}
 
@@ -266,6 +368,47 @@ func ParseEndpoint(
 			case "delete":
 				endpoint = c.Delete()
 				data, err = organizationsc.BuildDeletePayload(*organizationsDeleteBodyFlag)
+			}
+		case "organization-roles":
+			c := organizationrolesc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "create":
+				endpoint = c.Create()
+				data, err = organizationrolesc.BuildCreatePayload(*organizationRolesCreateBodyFlag)
+			case "update":
+				endpoint = c.Update()
+				data, err = organizationrolesc.BuildUpdatePayload(*organizationRolesUpdateBodyFlag)
+			case "list":
+				endpoint = c.List()
+				data, err = organizationrolesc.BuildListPayload(*organizationRolesListBodyFlag)
+			case "delete":
+				endpoint = c.Delete()
+				data, err = organizationrolesc.BuildDeletePayload(*organizationRolesDeleteBodyFlag)
+			}
+		case "invitations":
+			c := invitationsc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "create":
+				endpoint = c.Create()
+				data, err = invitationsc.BuildCreatePayload(*invitationsCreateBodyFlag)
+			case "list":
+				endpoint = c.List()
+				data, err = invitationsc.BuildListPayload(*invitationsListBodyFlag)
+			case "get":
+				endpoint = c.Get()
+				data, err = invitationsc.BuildGetPayload(*invitationsGetBodyFlag)
+			case "find-by-token":
+				endpoint = c.FindByToken()
+				data, err = invitationsc.BuildFindByTokenPayload(*invitationsFindByTokenBodyFlag)
+			case "revoke":
+				endpoint = c.Revoke()
+				data, err = invitationsc.BuildRevokePayload(*invitationsRevokeBodyFlag)
+			case "resend":
+				endpoint = c.Resend()
+				data, err = invitationsc.BuildResendPayload(*invitationsResendBodyFlag)
+			case "accept":
+				endpoint = c.Accept()
+				data, err = invitationsc.BuildAcceptPayload(*invitationsAcceptBodyFlag)
 			}
 		case "memberships":
 			c := membershipsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -439,6 +582,235 @@ func organizationsDeleteUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organizations delete --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+}
+
+// organizationRolesUsage displays the usage of the organization-roles command
+// and its subcommands.
+func organizationRolesUsage() {
+	fmt.Fprintln(os.Stderr, `Dev-idp organization-role CRUD. Mirrors the WorkOS authorization-role surface (idp-design.md §7.1, /authorization/organizations/{id}/roles[/{slug}]). Keyed on `+"`"+`(organization_id, slug)`+"`"+` since slug is the natural identifier; the underlying row's UUID is also returned for completeness. Permanently unauthenticated.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] organization-roles COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    create: Create a role on an organization.`)
+	fmt.Fprintln(os.Stderr, `    update: Patch a role's name and/or description by (organization_id, slug).`)
+	fmt.Fprintln(os.Stderr, `    list: List every role on an organization. No pagination — roles are a small per-org set.`)
+	fmt.Fprintln(os.Stderr, `    delete: Delete a role from an organization by (organization_id, slug).`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s organization-roles COMMAND --help\n", os.Args[0])
+}
+func organizationRolesCreateUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] organization-roles create", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Create a role on an organization.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-roles create --body '{\n      \"description\": \"abc123\",\n      \"name\": \"abc123\",\n      \"organization_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"slug\": \"abc123\"\n   }'")
+}
+
+func organizationRolesUpdateUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] organization-roles update", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Patch a role's name and/or description by (organization_id, slug).`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-roles update --body '{\n      \"description\": \"abc123\",\n      \"name\": \"abc123\",\n      \"organization_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"slug\": \"abc123\"\n   }'")
+}
+
+func organizationRolesListUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] organization-roles list", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List every role on an organization. No pagination — roles are a small per-org set.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-roles list --body '{\n      \"organization_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+}
+
+func organizationRolesDeleteUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] organization-roles delete", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Delete a role from an organization by (organization_id, slug).`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-roles delete --body '{\n      \"organization_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"slug\": \"abc123\"\n   }'")
+}
+
+// invitationsUsage displays the usage of the invitations command and its
+// subcommands.
+func invitationsUsage() {
+	fmt.Fprintln(os.Stderr, `Dev-idp invitations: create, list, get, find-by-token, revoke, resend, accept. Mirrors the WorkOS user_management invitation lifecycle. The accept-flow is dev-idp-specific — clicking 'accept' in the dashboard hits `+"`"+`invitations.accept`+"`"+`, which flips state and find-or-creates the corresponding user + membership. Permanently unauthenticated.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] invitations COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    create: Create a pending invitation. The token is generated server-side; the dev-idp doesn't actually send email.`)
+	fmt.Fprintln(os.Stderr, `    list: List invitations for an organization, keyset-paginated by id.`)
+	fmt.Fprintln(os.Stderr, `    get: Fetch a single invitation by id.`)
+	fmt.Fprintln(os.Stderr, `    find-by-token: Resolve an invitation by its token. Used by the dashboard accept-flow URL.`)
+	fmt.Fprintln(os.Stderr, `    revoke: Revoke a pending invitation. Idempotent — repeated revokes return the same row.`)
+	fmt.Fprintln(os.Stderr, `    resend: Touch the invitation's updated_at as if a fresh email were sent. The dev-idp doesn't actually send email.`)
+	fmt.Fprintln(os.Stderr, `    accept: Accept an invitation: flip state to `+"`"+`accepted`+"`"+`, find-or-create the user for the invited email, and idempotently attach a membership. Returns the updated invitation.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s invitations COMMAND --help\n", os.Args[0])
+}
+func invitationsCreateUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] invitations create", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Create a pending invitation. The token is generated server-side; the dev-idp doesn't actually send email.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "invitations create --body '{\n      \"email\": \"abc123\",\n      \"inviter_user_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"organization_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+}
+
+func invitationsListUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] invitations list", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List invitations for an organization, keyset-paginated by id.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "invitations list --body '{\n      \"cursor\": \"abc123\",\n      \"limit\": 2,\n      \"organization_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+}
+
+func invitationsGetUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] invitations get", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Fetch a single invitation by id.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "invitations get --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+}
+
+func invitationsFindByTokenUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] invitations find-by-token", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Resolve an invitation by its token. Used by the dashboard accept-flow URL.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "invitations find-by-token --body '{\n      \"token\": \"abc123\"\n   }'")
+}
+
+func invitationsRevokeUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] invitations revoke", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Revoke a pending invitation. Idempotent — repeated revokes return the same row.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "invitations revoke --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+}
+
+func invitationsResendUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] invitations resend", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Touch the invitation's updated_at as if a fresh email were sent. The dev-idp doesn't actually send email.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "invitations resend --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+}
+
+func invitationsAcceptUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] invitations accept", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Accept an invitation: flip state to `+"`"+`accepted`+"`"+`, find-or-create the user for the invited email, and idempotently attach a membership. Returns the updated invitation.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "invitations accept --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
 }
 
 // membershipsUsage displays the usage of the memberships command and its
