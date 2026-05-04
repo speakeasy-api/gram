@@ -451,12 +451,23 @@ func newBillingProvider(
 	}
 }
 
+// workosClientOpts builds the ClientOpts threaded into every workos.NewClient
+// call site below. Pulls the optional --workos-endpoint override (env:
+// WORKOS_API_BASE_URL) so local dev can point both real-WorkOS callers at
+// the dev-idp's local-speakeasy emulator without changing any wiring.
+func workosClientOpts(c *cli.Context) workos.ClientOpts {
+	return workos.ClientOpts{
+		Endpoint:   c.String("workos-endpoint"),
+		HTTPClient: nil,
+	}
+}
+
 func newAccessRoleProvider(ctx context.Context, logger *slog.Logger, guardianPolicy *guardian.Policy, c *cli.Context) (access.RoleProvider, error) {
 	apiKey := c.String("workos-api-key")
 
 	switch {
 	case apiKey != "" && apiKey != "unset":
-		return workos.NewClient(guardianPolicy, apiKey), nil
+		return workos.NewClient(guardianPolicy, apiKey, workosClientOpts(c)), nil
 	case c.String("environment") == "local":
 		logger.WarnContext(ctx, "using stub access role provider: WorkOS not configured")
 		return workos.NewStubClient(), nil
@@ -474,7 +485,7 @@ func newWorkOSClient(guardianPolicy *guardian.Policy, c *cli.Context) (client *w
 		return nil, false, errors.New("WorkOS API key not provided")
 	}
 
-	return workos.NewClient(guardianPolicy, apiKey), haveAPIKey, nil
+	return workos.NewClient(guardianPolicy, apiKey, workosClientOpts(c)), haveAPIKey, nil
 }
 
 func newTigrisStore(ctx context.Context, c *cli.Context, logger *slog.Logger) (*assets.TigrisStore, func(context.Context) error, error) {
