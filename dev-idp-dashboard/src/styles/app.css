@@ -210,17 +210,40 @@ body {
 
 /* Radial-gradient outline for selection states.
  * Pseudo-element sits behind the host (z-index: -1, isolated stacking context)
- * and extends a few px past it on every side, leaving a glowing yellow→orange
- * ring around the host's rounded edges. Host must define its own border-radius;
- * the pseudo inherits it. The host (or a child) needs an opaque background so
- * the gradient is only visible at the offset perimeter. corner-shape doesn't
- * inherit, so set it on both the host and the pseudo. */
+ * and extends a few px past it on every side, leaving a glowing ring around
+ * the host's rounded edges. Host must define its own border-radius; the pseudo
+ * inherits it. The host (or a child) needs an opaque background so the gradient
+ * is only visible at the offset perimeter. corner-shape doesn't inherit, so set
+ * it on both the host and the pseudo.
+ *
+ * The two stops oscillate slowly through gruvbox's warm hue arc (red↔green)
+ * via an @property-animated hue, so the outline stays gruvbox-y throughout. */
+@property --grad-hue {
+  syntax: "<number>";
+  initial-value: 50;
+  inherits: false;
+}
+
+@keyframes gradient-outline-tour {
+  from {
+    --grad-hue: 28;
+  }
+  to {
+    --grad-hue: 140;
+  }
+}
+
 @layer utilities {
   .gradient-outline {
     position: relative;
     isolation: isolate;
     corner-shape: squircle;
   }
+  /* Outer (dominant) hue oscillates through gruvbox's warm arc — red (28°) ↔
+   * green (140°), passing through orange and yellow. Inner accent rides 35°
+   * ahead so both stops stay inside the warm arc and the top-left highlight
+   * is one gruvbox notch hotter than the perimeter. The -35s delay shifts
+   * the first paint to ~hue 50 (orange) so the initial frame reads gruvbox. */
   .gradient-outline::before {
     content: "";
     position: absolute;
@@ -229,10 +252,16 @@ body {
     corner-shape: squircle;
     background: radial-gradient(
       circle at 30% 20%,
-      var(--retro-yellow),
-      var(--retro-orange) 70%
+      oklch(0.825 0.165 calc(var(--grad-hue) + 35)),
+      oklch(0.745 0.19 var(--grad-hue)) 70%
     );
     z-index: -1;
     pointer-events: none;
+    animation: gradient-outline-tour 180s linear -35s infinite alternate;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .gradient-outline::before {
+      animation: none;
+    }
   }
 }
