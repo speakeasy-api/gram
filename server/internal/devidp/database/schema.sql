@@ -110,3 +110,58 @@ CREATE TABLE IF NOT EXISTS tokens (
 
 CREATE INDEX IF NOT EXISTS tokens_user_id_idx ON tokens (user_id);
 CREATE INDEX IF NOT EXISTS tokens_expires_at_idx ON tokens (expires_at);
+
+-- =============================================================================
+-- WorkOS-emulation tables (consumed by the local-speakeasy mode's
+-- /user_management/* and /authorization/organizations/* endpoints; see
+-- idp-design.md §7.1).
+-- =============================================================================
+
+-- Invitations mirror the WorkOS user_management invitation lifecycle:
+-- pending / accepted / revoked / expired. Local dev never actually delivers
+-- the invite email; tests progress invitations by hitting the dashboard's
+-- accept-flow UI which calls the same endpoints WorkOS would expose.
+CREATE TABLE IF NOT EXISTS invitations (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  email TEXT NOT NULL,
+  organization_id uuid NOT NULL,
+  state TEXT NOT NULL DEFAULT 'pending',
+  token TEXT NOT NULL,
+  inviter_user_id uuid,
+
+  accepted_at timestamptz,
+  revoked_at timestamptz,
+  expires_at timestamptz NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT invitations_pkey PRIMARY KEY (id),
+  CONSTRAINT invitations_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organizations (id) ON DELETE CASCADE,
+  CONSTRAINT invitations_inviter_user_id_fkey FOREIGN KEY (inviter_user_id) REFERENCES users (id) ON DELETE SET NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS invitations_token_key ON invitations (token);
+CREATE INDEX IF NOT EXISTS invitations_organization_id_idx ON invitations (organization_id);
+CREATE INDEX IF NOT EXISTS invitations_email_idx ON invitations (email);
+
+-- Per-org roles. Mirrors WorkOS's authorization role surface:
+-- /authorization/organizations/{id}/roles. (admin, member) are the two
+-- roles the dev-idp seeds by default; tests can add more via the
+-- /user_management/.../roles endpoints.
+CREATE TABLE IF NOT EXISTS organization_roles (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  organization_id uuid NOT NULL,
+  slug TEXT NOT NULL,
+  name TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT organization_roles_pkey PRIMARY KEY (id),
+  CONSTRAINT organization_roles_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organizations (id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS organization_roles_organization_id_slug_key
+  ON organization_roles (organization_id, slug);
