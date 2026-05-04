@@ -181,15 +181,17 @@ function EnvironmentCard({
             {environment.name}
           </Type>
           <RequireScope scope="project:write" level="component">
-            <MoreActions
-              actions={[
-                {
-                  label: "Clone",
-                  onClick: () => onClone(environment),
-                  icon: "copy",
-                },
-              ]}
-            />
+            <div onClick={(e) => e.stopPropagation()}>
+              <MoreActions
+                actions={[
+                  {
+                    label: "Clone",
+                    onClick: () => onClone(environment),
+                    icon: "copy",
+                  },
+                ]}
+              />
+            </div>
           </RequireScope>
         </div>
         <Type small muted className="truncate">
