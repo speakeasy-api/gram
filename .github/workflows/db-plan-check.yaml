@@ -1,0 +1,65 @@
+name: DB Plan Check
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+  merge_group:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  plan-check:
+    name: Plan-check hot SQL queries
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_DB: gram
+          POSTGRES_PASSWORD: pass
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-start-period 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DSN: postgres://postgres:pass@localhost:5432/gram?sslmode=disable
+    steps:
+      - name: Checkout
+        uses: actions/checkout@ff7abcd0c3c05ccf6adc123a8cd1fd4fb30fb493 # v5.0.0
+
+      - name: Setup Go
+        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Setup Atlas
+        uses: ariga/setup-atlas@2f3c785c89a15e1c0d07bcae3900fb5feb969eea # v0
+        with:
+          cloud-token: ${{ secrets.ATLAS_TOKEN }}
+
+      - name: Apply migrations
+        working-directory: server
+        env:
+          GRAM_DATABASE_URL: ${{ env.DSN }}
+        run: atlas migrate apply --config file://atlas.hcl -u "$GRAM_DATABASE_URL"
+
+      - name: Seed planner stats
+        run: psql "$DSN" -v ON_ERROR_STOP=1 -f server/scripts/plan-check/seed.sql
+
+      - name: Run plan-check
+        env:
+          PLAN_CHECK_DSN: ${{ env.DSN }}
+        run: |
+          go run ./server/scripts/plan-check \
+            -manifest server/scripts/plan-check/manifest.yaml \
+            -repo-root .
