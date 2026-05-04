@@ -1048,7 +1048,9 @@ CREATE TABLE IF NOT EXISTS chat_messages (
 
 CREATE INDEX IF NOT EXISTS chat_messages_chat_id_idx ON chat_messages (chat_id);
 CREATE INDEX IF NOT EXISTS chat_messages_chat_id_generation_seq_idx ON chat_messages (chat_id, generation, seq);
-CREATE INDEX IF NOT EXISTS chat_messages_project_id_id_idx ON chat_messages (project_id, id);
+CREATE INDEX IF NOT EXISTS chat_messages_project_id_id_idx
+ON chat_messages (project_id, id)
+WHERE project_id IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS chat_resolutions (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
