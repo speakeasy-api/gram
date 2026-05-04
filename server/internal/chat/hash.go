@@ -54,6 +54,15 @@ func buildSlot(role, content, toolCallID string, toolCallIDs []string) messageSl
 	}
 }
 
+// isBlankAssistant reports whether the slot is a no-op assistant turn:
+// role=assistant with no text, no tool_call_id, no tool_calls. The server
+// can persist such a row (model returns an empty stop) while clients drop
+// it from subsequent wire requests, so the matcher steps over it on either
+// side rather than treating the asymmetry as divergence.
+func (s messageSlot) isBlankAssistant() bool {
+	return s == messageSlot{role: "assistant", content: "", toolCallID: "", toolCallIDs: ""}
+}
+
 func toolCallIDsFromIncoming(msg or.ChatMessages) []string {
 	if msg.Type != or.ChatMessagesTypeAssistant {
 		return nil
