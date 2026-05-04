@@ -49,7 +49,7 @@ VALUES (
   $4,
   $5
 )
-RETURNING id, plugin_id, toolset_id, display_name, policy, sort_order, created_at, updated_at, deleted_at, deleted
+RETURNING id, plugin_id, toolset_id, display_name, policy, sort_order, api_key_id, created_at, updated_at, deleted_at, deleted
 `
 
 type AddPluginServerParams struct {
@@ -76,6 +76,7 @@ func (q *Queries) AddPluginServer(ctx context.Context, arg AddPluginServerParams
 		&i.DisplayName,
 		&i.Policy,
 		&i.SortOrder,
+		&i.ApiKeyID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -245,7 +246,7 @@ func (q *Queries) ListPluginAssignments(ctx context.Context, pluginID uuid.UUID)
 }
 
 const listPluginServers = `-- name: ListPluginServers :many
-SELECT id, plugin_id, toolset_id, display_name, policy, sort_order, created_at, updated_at, deleted_at, deleted
+SELECT id, plugin_id, toolset_id, display_name, policy, sort_order, api_key_id, created_at, updated_at, deleted_at, deleted
 FROM plugin_servers
 WHERE plugin_id = $1
   AND deleted IS FALSE
@@ -268,6 +269,7 @@ func (q *Queries) ListPluginServers(ctx context.Context, pluginID uuid.UUID) ([]
 			&i.DisplayName,
 			&i.Policy,
 			&i.SortOrder,
+			&i.ApiKeyID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -519,7 +521,7 @@ SET display_name = $1,
 WHERE id = $4
   AND plugin_id = $5
   AND deleted IS FALSE
-RETURNING id, plugin_id, toolset_id, display_name, policy, sort_order, created_at, updated_at, deleted_at, deleted
+RETURNING id, plugin_id, toolset_id, display_name, policy, sort_order, api_key_id, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdatePluginServerParams struct {
@@ -546,6 +548,7 @@ func (q *Queries) UpdatePluginServer(ctx context.Context, arg UpdatePluginServer
 		&i.DisplayName,
 		&i.Policy,
 		&i.SortOrder,
+		&i.ApiKeyID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,

@@ -255,6 +255,13 @@ CREATE TABLE IF NOT EXISTS api_keys (
   key_hash TEXT NOT NULL,
   scopes TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
 
+  -- Marks keys minted by Gram itself (e.g. plugin publishing) so they are
+  -- hidden from the user-managed keys UI and excluded from user-key quotas.
+  -- Per-key authorization scoping (e.g. binding a plugin-published key to
+  -- a single MCP server) lives in principal_grants on the api_key
+  -- principal — see rfc-plugin-scoped-keys.md.
+  system_managed BOOLEAN NOT NULL DEFAULT FALSE,
+
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
@@ -2112,6 +2119,12 @@ CREATE TABLE IF NOT EXISTS plugin_servers (
   policy TEXT NOT NULL DEFAULT 'required',
   sort_order INT NOT NULL DEFAULT 0,
 
+  -- The plugin-minted, toolset-scoped api_keys row whose secret is embedded
+  -- in the published manifest entry for this server. NULL for public servers
+  -- (which use user-provided env-config auth) and for any server whose
+  -- plugin has never been published. Cleared on hard-delete of the api_key.
+  api_key_id uuid,
+
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
@@ -2124,6 +2137,7 @@ CREATE TABLE IF NOT EXISTS plugin_servers (
   -- If a hard-delete path is added later, it must purge soft-deleted
   -- plugin_servers referencing the target first.
   CONSTRAINT plugin_servers_toolset_id_fkey FOREIGN KEY (toolset_id) REFERENCES toolsets (id) ON DELETE RESTRICT,
+  CONSTRAINT plugin_servers_api_key_id_fkey FOREIGN KEY (api_key_id) REFERENCES api_keys (id) ON DELETE SET NULL,
   CONSTRAINT plugin_servers_policy_check CHECK (policy IN ('required', 'optional'))
 );
 
