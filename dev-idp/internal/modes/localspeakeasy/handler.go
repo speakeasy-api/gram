@@ -11,8 +11,8 @@ package localspeakeasy
 
 import (
 	"context"
-	"database/sql"
 	"crypto/rand"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -27,7 +27,6 @@ import (
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/trace"
 
-	
 	"github.com/speakeasy-api/gram/dev-idp/internal/database/repo"
 	"github.com/speakeasy-api/gram/dev-idp/internal/defaultuser"
 )
@@ -71,7 +70,7 @@ func NewHandler(cfg Config, logger *slog.Logger, tracerProvider trace.TracerProv
 	return &Handler{
 		cfg:    cfg,
 		tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/dev-idp/internal/modes/localspeakeasy"),
-		logger: logger.With(slog.String("component", "devidp." + Mode)),
+		logger: logger.With(slog.String("component", "devidp."+Mode)),
 		db:     db,
 	}
 }
@@ -317,6 +316,7 @@ func (h *Handler) handleRegister(w http.ResponseWriter, r *http.Request) {
 
 	q := repo.New(dbtx)
 	org, err := q.CreateOrganization(ctx, repo.CreateOrganizationParams{
+		ID:          uuid.New(),
 		Name:        body.OrganizationName,
 		Slug:        slugify(body.OrganizationName),
 		AccountType: sql.NullString{String: accountType, Valid: true},
@@ -328,6 +328,7 @@ func (h *Handler) handleRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if _, err := q.CreateMembership(ctx, repo.CreateMembershipParams{
+		ID:             uuid.New(),
 		UserID:         tokenRow.UserID,
 		OrganizationID: org.ID,
 		Role:           sql.NullString{String: "member", Valid: true},
@@ -495,4 +496,3 @@ func slugify(name string) string {
 	s = leadingTrailingDash.ReplaceAllString(s, "")
 	return s
 }
-

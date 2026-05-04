@@ -29,8 +29,8 @@ package workos
 
 import (
 	"context"
-	"database/sql"
 	"crypto/rand"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -45,7 +45,6 @@ import (
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/trace"
 
-	
 	"github.com/speakeasy-api/gram/dev-idp/internal/database/repo"
 	"github.com/speakeasy-api/gram/dev-idp/internal/defaultuser"
 	gramworkos "github.com/speakeasy-api/gram/dev-idp/internal/workos"
@@ -89,7 +88,7 @@ func NewHandler(cfg Config, client *gramworkos.Client, logger *slog.Logger, trac
 	return &Handler{
 		cfg:    cfg,
 		tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/dev-idp/internal/modes/workos"),
-		logger: logger.With(slog.String("component", "devidp." + Mode)),
+		logger: logger.With(slog.String("component", "devidp."+Mode)),
 		db:     db,
 		client: client,
 	}
@@ -329,6 +328,7 @@ func (h *Handler) handleRegister(w http.ResponseWriter, r *http.Request) {
 	accountType := body.AccountType
 
 	org, err := queries.CreateOrganization(ctx, repo.CreateOrganizationParams{
+		ID:          uuid.New(),
 		Name:        body.OrganizationName,
 		Slug:        slugify(body.OrganizationName),
 		AccountType: sql.NullString{String: accountType, Valid: accountType != ""},
@@ -340,6 +340,7 @@ func (h *Handler) handleRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if _, err := queries.CreateMembership(ctx, repo.CreateMembershipParams{
+		ID:             uuid.New(),
 		UserID:         tokenRow.UserID,
 		OrganizationID: org.ID,
 		Role:           sql.NullString{String: "member", Valid: true},
@@ -726,4 +727,3 @@ func slugify(name string) string {
 	s = leadingTrailingDash.ReplaceAllString(s, "")
 	return s
 }
-

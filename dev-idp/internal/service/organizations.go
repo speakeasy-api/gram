@@ -11,11 +11,10 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
 
-	
-	"github.com/speakeasy-api/gram/dev-idp/internal/conv"
-	"github.com/speakeasy-api/gram/dev-idp/internal/database/repo"
 	srv "github.com/speakeasy-api/gram/dev-idp/gen/http/organizations/server"
 	gen "github.com/speakeasy-api/gram/dev-idp/gen/organizations"
+	"github.com/speakeasy-api/gram/dev-idp/internal/conv"
+	"github.com/speakeasy-api/gram/dev-idp/internal/database/repo"
 	"github.com/speakeasy-api/gram/dev-idp/internal/middleware"
 	"github.com/speakeasy-api/gram/dev-idp/internal/oops"
 )
@@ -51,6 +50,7 @@ func (s *OrganizationsService) Create(ctx context.Context, p *gen.CreatePayload)
 	queries := repo.New(s.db)
 
 	row, err := queries.CreateOrganization(ctx, repo.CreateOrganizationParams{
+		ID:          uuid.New(),
 		Name:        p.Name,
 		Slug:        p.Slug,
 		AccountType: conv.PtrToNullString(p.AccountType),
@@ -157,4 +157,3 @@ func organizationView(r repo.Organization) *gen.Organization {
 		UpdatedAt:   r.UpdatedAt.UTC().Format(timeFormat),
 	}
 }
-

@@ -10,11 +10,10 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
 
-	
-	"github.com/speakeasy-api/gram/dev-idp/internal/conv"
-	"github.com/speakeasy-api/gram/dev-idp/internal/database/repo"
 	srv "github.com/speakeasy-api/gram/dev-idp/gen/http/organization_roles/server"
 	gen "github.com/speakeasy-api/gram/dev-idp/gen/organization_roles"
+	"github.com/speakeasy-api/gram/dev-idp/internal/conv"
+	"github.com/speakeasy-api/gram/dev-idp/internal/database/repo"
 	"github.com/speakeasy-api/gram/dev-idp/internal/middleware"
 	"github.com/speakeasy-api/gram/dev-idp/internal/oops"
 )
@@ -54,6 +53,7 @@ func (s *OrganizationRolesService) Create(ctx context.Context, p *gen.CreatePayl
 	}
 
 	row, err := repo.New(s.db).CreateOrganizationRole(ctx, repo.CreateOrganizationRoleParams{
+		ID:             uuid.New(),
 		OrganizationID: orgID,
 		Slug:           p.Slug,
 		Name:           p.Name,
@@ -132,4 +132,3 @@ func organizationRoleView(r repo.OrganizationRole) *gen.OrganizationRole {
 		UpdatedAt:      r.UpdatedAt.UTC().Format(timeFormat),
 	}
 }
-

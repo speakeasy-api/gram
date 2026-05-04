@@ -2,8 +2,8 @@ package service
 
 import (
 	"context"
-	"database/sql"
 	"crypto/rand"
+	"database/sql"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -14,10 +14,9 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
 
-	
-	"github.com/speakeasy-api/gram/dev-idp/internal/database/repo"
 	srv "github.com/speakeasy-api/gram/dev-idp/gen/http/invitations/server"
 	gen "github.com/speakeasy-api/gram/dev-idp/gen/invitations"
+	"github.com/speakeasy-api/gram/dev-idp/internal/database/repo"
 	"github.com/speakeasy-api/gram/dev-idp/internal/middleware"
 	"github.com/speakeasy-api/gram/dev-idp/internal/oops"
 )
@@ -73,6 +72,7 @@ func (s *InvitationsService) Create(ctx context.Context, p *gen.CreatePayload) (
 	}
 
 	row, err := repo.New(s.db).CreateInvitation(ctx, repo.CreateInvitationParams{
+		ID:             uuid.New(),
 		Email:          p.Email,
 		OrganizationID: orgID,
 		Token:          newInvitationToken(),
@@ -199,6 +199,7 @@ func (s *InvitationsService) Accept(ctx context.Context, p *gen.AcceptPayload) (
 	}
 
 	user, err := queries.UpsertUserByEmail(ctx, repo.UpsertUserByEmailParams{
+		ID:          uuid.New(),
 		Email:       inv.Email,
 		DisplayName: emailLocalPart(inv.Email),
 	})
@@ -206,6 +207,7 @@ func (s *InvitationsService) Accept(ctx context.Context, p *gen.AcceptPayload) (
 		return nil, oops.E(oops.CodeUnexpected, err, "provision invited user").Log(ctx, s.logger)
 	}
 	if _, err := queries.CreateMembership(ctx, repo.CreateMembershipParams{
+		ID:             uuid.New(),
 		UserID:         user.ID,
 		OrganizationID: inv.OrganizationID,
 		Role:           sql.NullString{String: "member", Valid: true},
@@ -271,4 +273,3 @@ func emailLocalPart(email string) string {
 	}
 	return email
 }
-

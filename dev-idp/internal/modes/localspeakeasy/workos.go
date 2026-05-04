@@ -310,6 +310,7 @@ func (h *Handler) handleWorkosSendInvitation(w http.ResponseWriter, r *http.Requ
 	}
 
 	row, err := repo.New(h.db).CreateInvitation(ctx, repo.CreateInvitationParams{
+		ID:             uuid.New(),
 		Email:          body.Email,
 		OrganizationID: orgID,
 		Token:          randomToken(),
@@ -473,6 +474,7 @@ func (h *Handler) handleWorkosAcceptInvitation(w http.ResponseWriter, r *http.Re
 	// Find or create the user by the invited email; the display_name
 	// defaults to the email local-part since we don't have a name yet.
 	user, err := queries.UpsertUserByEmail(ctx, repo.UpsertUserByEmailParams{
+		ID:          uuid.New(),
 		Email:       inv.Email,
 		DisplayName: emailLocalPart(inv.Email),
 	})
@@ -482,6 +484,7 @@ func (h *Handler) handleWorkosAcceptInvitation(w http.ResponseWriter, r *http.Re
 		return
 	}
 	if _, err := queries.CreateMembership(ctx, repo.CreateMembershipParams{
+		ID:             uuid.New(),
 		UserID:         user.ID,
 		OrganizationID: inv.OrganizationID,
 		Role:           sql.NullString{String: "member", Valid: true},
@@ -548,6 +551,7 @@ func (h *Handler) handleWorkosCreateRole(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	row, err := repo.New(h.db).CreateOrganizationRole(ctx, repo.CreateOrganizationRoleParams{
+		ID:             uuid.New(),
 		OrganizationID: orgID,
 		Slug:           body.Slug,
 		Name:           body.Name,
@@ -821,4 +825,3 @@ func statusCodeForJSON(status int) string {
 		return "server_error"
 	}
 }
-

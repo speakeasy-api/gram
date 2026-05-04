@@ -10,11 +10,10 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
 
-	
-	"github.com/speakeasy-api/gram/dev-idp/internal/conv"
-	"github.com/speakeasy-api/gram/dev-idp/internal/database/repo"
 	srv "github.com/speakeasy-api/gram/dev-idp/gen/http/users/server"
 	gen "github.com/speakeasy-api/gram/dev-idp/gen/users"
+	"github.com/speakeasy-api/gram/dev-idp/internal/conv"
+	"github.com/speakeasy-api/gram/dev-idp/internal/database/repo"
 	"github.com/speakeasy-api/gram/dev-idp/internal/middleware"
 	"github.com/speakeasy-api/gram/dev-idp/internal/oops"
 )
@@ -48,6 +47,7 @@ func AttachUsers(mux goahttp.Muxer, service *UsersService) {
 
 func (s *UsersService) Create(ctx context.Context, p *gen.CreatePayload) (*gen.User, error) {
 	row, err := repo.New(s.db).CreateUser(ctx, repo.CreateUserParams{
+		ID:           uuid.New(),
 		Email:        p.Email,
 		DisplayName:  p.DisplayName,
 		PhotoUrl:     conv.PtrToNullString(p.PhotoURL),
@@ -159,4 +159,3 @@ func userView(r repo.User) *gen.User {
 		UpdatedAt:    r.UpdatedAt.UTC().Format(timeFormat),
 	}
 }
-
