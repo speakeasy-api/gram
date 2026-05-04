@@ -37,11 +37,22 @@ export function ActiveModeCard() {
   }
 
   const { mode, currentUser } = data;
-  const userLabel = currentUser?.user
-    ? `${currentUser.user.display_name} <${currentUser.user.email}>`
-    : currentUser?.workos
-      ? `${currentUser.workos.email ?? currentUser.workos.workos_sub}`
-      : "no current user yet";
+  let nameLabel = "no current user yet";
+  let idLabel: string | null = null;
+  if (currentUser?.user) {
+    nameLabel = currentUser.user.display_name;
+    idLabel = currentUser.user.id;
+  } else if (currentUser?.workos) {
+    const fullName = [
+      currentUser.workos.first_name,
+      currentUser.workos.last_name,
+    ]
+      .filter(Boolean)
+      .join(" ");
+    nameLabel =
+      fullName || currentUser.workos.email || currentUser.workos.workos_sub;
+    idLabel = currentUser.workos.workos_sub;
+  }
 
   return (
     <motion.div layout>
@@ -65,9 +76,14 @@ export function ActiveModeCard() {
                 <div className="text-xs text-muted-foreground mt-0.5 truncate">
                   {MODE_SUBTITLES[mode]}
                 </div>
-                <div className="mt-2 text-sm">
-                  <span className="text-muted-foreground">Current user:</span>{" "}
-                  <span className="font-medium">{userLabel}</span>
+                <div className="mt-2 text-sm flex items-center gap-2 flex-wrap">
+                  <span className="text-muted-foreground">Current user:</span>
+                  <span className="font-medium">{nameLabel}</span>
+                  {idLabel && (
+                    <code className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
+                      {idLabel}
+                    </code>
+                  )}
                 </div>
               </div>
               <ArrowRight className="text-muted-foreground group-hover:text-[var(--retro-orange)] transition-colors size-5 shrink-0" />
