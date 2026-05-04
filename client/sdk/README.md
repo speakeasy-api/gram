@@ -448,6 +448,30 @@ run();
 * [getPeriodUsage](docs/sdks/usage/README.md#getperiodusage) - getPeriodUsage usage
 * [getUsageTiers](docs/sdks/usage/README.md#getusagetiers) - getUsageTiers usage
 
+### [UserSessionClients](docs/sdks/usersessionclients/README.md)
+
+* [get](docs/sdks/usersessionclients/README.md#get) - getUserSessionClient userSessionClients
+* [list](docs/sdks/usersessionclients/README.md#list) - listUserSessionClients userSessionClients
+* [revoke](docs/sdks/usersessionclients/README.md#revoke) - revokeUserSessionClient userSessionClients
+
+### [UserSessionConsents](docs/sdks/usersessionconsents/README.md)
+
+* [list](docs/sdks/usersessionconsents/README.md#list) - listUserSessionConsents userSessionConsents
+* [revoke](docs/sdks/usersessionconsents/README.md#revoke) - revokeUserSessionConsent userSessionConsents
+
+### [UserSessionIssuers](docs/sdks/usersessionissuers/README.md)
+
+* [create](docs/sdks/usersessionissuers/README.md#create) - createUserSessionIssuer userSessionIssuers
+* [delete](docs/sdks/usersessionissuers/README.md#delete) - deleteUserSessionIssuer userSessionIssuers
+* [get](docs/sdks/usersessionissuers/README.md#get) - getUserSessionIssuer userSessionIssuers
+* [list](docs/sdks/usersessionissuers/README.md#list) - listUserSessionIssuers userSessionIssuers
+* [update](docs/sdks/usersessionissuers/README.md#update) - updateUserSessionIssuer userSessionIssuers
+
+### [UserSessions](docs/sdks/usersessions/README.md)
+
+* [list](docs/sdks/usersessions/README.md#list) - listUserSessions userSessions
+* [revoke](docs/sdks/usersessions/README.md#revoke) - revokeUserSession userSessions
+
 ### [Variations](docs/sdks/variations/README.md)
 
 * [deleteGlobal](docs/sdks/variations/README.md#deleteglobal) - deleteGlobal variations
@@ -680,6 +704,18 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`usageCreateTopUpCheckout`](docs/sdks/usage/README.md#createtopupcheckout) - createTopUpCheckout usage
 - [`usageGetPeriodUsage`](docs/sdks/usage/README.md#getperiodusage) - getPeriodUsage usage
 - [`usageGetUsageTiers`](docs/sdks/usage/README.md#getusagetiers) - getUsageTiers usage
+- [`userSessionClientsGet`](docs/sdks/usersessionclients/README.md#get) - getUserSessionClient userSessionClients
+- [`userSessionClientsList`](docs/sdks/usersessionclients/README.md#list) - listUserSessionClients userSessionClients
+- [`userSessionClientsRevoke`](docs/sdks/usersessionclients/README.md#revoke) - revokeUserSessionClient userSessionClients
+- [`userSessionConsentsList`](docs/sdks/usersessionconsents/README.md#list) - listUserSessionConsents userSessionConsents
+- [`userSessionConsentsRevoke`](docs/sdks/usersessionconsents/README.md#revoke) - revokeUserSessionConsent userSessionConsents
+- [`userSessionIssuersCreate`](docs/sdks/usersessionissuers/README.md#create) - createUserSessionIssuer userSessionIssuers
+- [`userSessionIssuersDelete`](docs/sdks/usersessionissuers/README.md#delete) - deleteUserSessionIssuer userSessionIssuers
+- [`userSessionIssuersGet`](docs/sdks/usersessionissuers/README.md#get) - getUserSessionIssuer userSessionIssuers
+- [`userSessionIssuersList`](docs/sdks/usersessionissuers/README.md#list) - listUserSessionIssuers userSessionIssuers
+- [`userSessionIssuersUpdate`](docs/sdks/usersessionissuers/README.md#update) - updateUserSessionIssuer userSessionIssuers
+- [`userSessionsList`](docs/sdks/usersessions/README.md#list) - listUserSessions userSessions
+- [`userSessionsRevoke`](docs/sdks/usersessions/README.md#revoke) - revokeUserSession userSessions
 - [`variationsDeleteGlobal`](docs/sdks/variations/README.md#deleteglobal) - deleteGlobal variations
 - [`variationsListGlobal`](docs/sdks/variations/README.md#listglobal) - listGlobal variations
 - [`variationsUpsertGlobal`](docs/sdks/variations/README.md#upsertglobal) - upsertGlobal variations
@@ -753,6 +789,7 @@ To learn about this feature and how to get started, check
 - [`useCreateToolsetMutation`](docs/sdks/toolsets/README.md#create) - createToolset toolsets
 - [`useCreateTopUpCheckoutMutation`](docs/sdks/usage/README.md#createtopupcheckout) - createTopUpCheckout usage
 - [`useCreateTriggerMutation`](docs/sdks/triggers/README.md#create) - createTriggerInstance triggers
+- [`useCreateUserSessionIssuerMutation`](docs/sdks/usersessionissuers/README.md#create) - createUserSessionIssuer userSessionIssuers
 - [`useDeleteDomainMutation`](docs/sdks/domains/README.md#deletedomain) - deleteDomain domains
 - [`useDeleteEnvironmentMutation`](docs/sdks/environments/README.md#deletebyslug) - deleteEnvironment environments
 - [`useDeleteGlobalVariationMutation`](docs/sdks/variations/README.md#deleteglobal) - deleteGlobal variations
@@ -768,6 +805,7 @@ To learn about this feature and how to get started, check
 - [`useDeleteToolsetEnvironmentLinkMutation`](docs/sdks/environments/README.md#deletetoolsetlink) - deleteToolsetEnvironmentLink environments
 - [`useDeleteToolsetMutation`](docs/sdks/toolsets/README.md#deletebyslug) - deleteToolset toolsets
 - [`useDeleteTriggerMutation`](docs/sdks/triggers/README.md#delete) - deleteTriggerInstance triggers
+- [`useDeleteUserSessionIssuerMutation`](docs/sdks/usersessionissuers/README.md#delete) - deleteUserSessionIssuer userSessionIssuers
 - [`useDeployment`](docs/sdks/deployments/README.md#getbyid) - getDeployment deployments
 - [`useDeploymentLogs`](docs/sdks/deployments/README.md#logs) - getDeploymentLogs deployments
 - [`useDisableRBACMutation`](docs/sdks/access/README.md#disablerbac) - disableRBAC access
@@ -863,6 +901,9 @@ To learn about this feature and how to get started, check
 - [`useResumeTriggerMutation`](docs/sdks/triggers/README.md#resume) - resumeTriggerInstance triggers
 - [`useRevokeAPIKeyMutation`](docs/sdks/keys/README.md#revokebyid) - revokeKey keys
 - [`useRevokeInviteMutation`](docs/sdks/organizations/README.md#revokeinvite) - revokeInvite organizations
+- [`useRevokeUserSessionClientMutation`](docs/sdks/usersessionclients/README.md#revoke) - revokeUserSessionClient userSessionClients
+- [`useRevokeUserSessionConsentMutation`](docs/sdks/usersessionconsents/README.md#revoke) - revokeUserSessionConsent userSessionConsents
+- [`useRevokeUserSessionMutation`](docs/sdks/usersessions/README.md#revoke) - revokeUserSession userSessions
 - [`useRiskCreatePolicyMutation`](docs/sdks/policies/README.md#create) - createRiskPolicy risk
 - [`useRiskListPolicies`](docs/sdks/policies/README.md#list) - listRiskPolicies risk
 - [`useRiskListResults`](docs/sdks/results/README.md#list) - listRiskResults risk
@@ -911,12 +952,19 @@ To learn about this feature and how to get started, check
 - [`useUpdateTemplateMutation`](docs/sdks/templates/README.md#update) - updateTemplate templates
 - [`useUpdateToolsetMutation`](docs/sdks/toolsets/README.md#updatebyslug) - updateToolset toolsets
 - [`useUpdateTriggerMutation`](docs/sdks/triggers/README.md#update) - updateTriggerInstance triggers
+- [`useUpdateUserSessionIssuerMutation`](docs/sdks/usersessionissuers/README.md#update) - updateUserSessionIssuer userSessionIssuers
 - [`useUploadChatAttachmentMutation`](docs/sdks/assets/README.md#uploadchatattachment) - uploadChatAttachment assets
 - [`useUploadFunctionsMutation`](docs/sdks/assets/README.md#uploadfunctions) - uploadFunctions assets
 - [`useUploadImageMutation`](docs/sdks/assets/README.md#uploadimage) - uploadImage assets
 - [`useUploadOpenAPIv3Mutation`](docs/sdks/assets/README.md#uploadopenapiv3) - uploadOpenAPIv3 assets
 - [`useUpsertAllowedOriginMutation`](docs/sdks/projects/README.md#upsertallowedorigin) - upsertAllowedOrigin projects
 - [`useUpsertGlobalVariationMutation`](docs/sdks/variations/README.md#upsertglobal) - upsertGlobal variations
+- [`useUserSessionClient`](docs/sdks/usersessionclients/README.md#get) - getUserSessionClient userSessionClients
+- [`useUserSessionClients`](docs/sdks/usersessionclients/README.md#list) - listUserSessionClients userSessionClients
+- [`useUserSessionConsents`](docs/sdks/usersessionconsents/README.md#list) - listUserSessionConsents userSessionConsents
+- [`useUserSessionIssuer`](docs/sdks/usersessionissuers/README.md#get) - getUserSessionIssuer userSessionIssuers
+- [`useUserSessionIssuers`](docs/sdks/usersessionissuers/README.md#list) - listUserSessionIssuers userSessionIssuers
+- [`useUserSessions`](docs/sdks/usersessions/README.md#list) - listUserSessions userSessions
 - [`useValidateAPIKey`](docs/sdks/keys/README.md#validate) - verifyKey keys
 
 </details>
