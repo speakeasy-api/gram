@@ -120,8 +120,10 @@ WHERE cm.project_id = @project_id
     SELECT 1
     FROM risk_results rr
     WHERE rr.chat_message_id = cm.id
+      AND rr.project_id = @project_id
       AND rr.risk_policy_id = @risk_policy_id
       AND rr.risk_policy_version = @risk_policy_version
+    LIMIT 1
   )
 LIMIT @batch_limit;
 
