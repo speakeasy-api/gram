@@ -14,19 +14,19 @@ import (
 	risk_repo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 )
 
-// policyEnabledCacheTTL bounds the staleness window for the
-// "shadow_mcp enabled?" lookup. Risk-policy writes invalidate the entry
-// directly, so this only matters when an invalidation is missed (e.g. a
-// cross-process race or a Redis outage during the write path).
+// policyEnabledCacheTTL bounds the staleness window for the "tool identity
+// capture enabled?" lookup. Risk-policy writes invalidate the entry directly,
+// so this only matters when an invalidation is missed (e.g. a cross-process
+// race or a Redis outage during the write path).
 const policyEnabledCacheTTL = 15 * time.Minute
 
 func policyEnabledCacheKey(projectID uuid.UUID) string {
 	return "shadow_mcp_policy_enabled:" + projectID.String()
 }
 
-// PolicyEnabledCache is the cached "does this project have any enabled
-// shadow_mcp risk policy?" answer keyed by project ID. Both true and
-// false answers are cached so the common "no shadow_mcp policy" case
+// PolicyEnabledCache is the cached "does this project need MCP tool identity
+// capture?" answer keyed by project ID. Both true and false answers are
+// cached so the common "no identity-dependent policy" case
 // avoids the per-tools/list DB query.
 type PolicyEnabledCache struct {
 	ProjectID string `json:"project_id"`
@@ -43,9 +43,9 @@ func (p PolicyEnabledCache) AdditionalCacheKeys() []string { return nil }
 
 func (p PolicyEnabledCache) TTL() time.Duration { return policyEnabledCacheTTL }
 
-// Client serves "is shadow-MCP enabled for this project?" reads from Redis,
-// falling back to the risk_policies table on a miss, and exposes the
-// invalidation entry-point used by the risk service after policy writes.
+// Client serves "is MCP tool identity capture enabled for this project?" reads
+// from Redis, falling back to the risk_policies table on a miss, and exposes
+// the invalidation entry-point used by the risk service after policy writes.
 //
 // It also owns the toolset cache used by ValidateToolsetCall so every
 // shadow_mcp call site (tools/list hot path, hook handlers, batch scanner)
@@ -79,9 +79,9 @@ func NewClient(logger *slog.Logger, db *pgxpool.Pool, cacheImpl cache.Cache) *Cl
 }
 
 // IsEnabledForProject reports whether the project has at least one enabled
-// shadow_mcp risk policy. Lookup failures (cache or DB) return false so
-// schema injection stays off rather than breaking otherwise-valid tool
-// calls.
+// risk policy that needs recorded MCP calls to carry x-gram-toolset-id. Lookup
+// failures (cache or DB) return false so schema injection stays off rather
+// than breaking otherwise-valid tool calls.
 func (c *Client) IsEnabledForProject(ctx context.Context, projectID uuid.UUID) bool {
 	if projectID == uuid.Nil {
 		return false
@@ -91,7 +91,7 @@ func (c *Client) IsEnabledForProject(ctx context.Context, projectID uuid.UUID) b
 		return cached.Enabled
 	}
 
-	policies, err := c.repo.ListEnabledShadowMCPPoliciesByProject(ctx, projectID)
+	policies, err := c.repo.ListEnabledToolIdentityPoliciesByProject(ctx, projectID)
 	if err != nil {
 		c.logger.WarnContext(ctx, "failed to list shadow_mcp policies; defaulting to off",
 			attr.SlogError(err),
@@ -114,9 +114,9 @@ func (c *Client) IsEnabledForProject(ctx context.Context, projectID uuid.UUID) b
 	return enabled
 }
 
-// Invalidate drops the cached shadow_mcp enabled state for the project so
-// the next IsEnabledForProject re-reads from the DB. Failures are logged
-// but not returned — the entry will expire via TTL.
+// Invalidate drops the cached tool identity capture enabled state for the
+// project so the next IsEnabledForProject re-reads from the DB. Failures are
+// logged but not returned — the entry will expire via TTL.
 func (c *Client) Invalidate(ctx context.Context, projectID uuid.UUID) {
 	if projectID == uuid.Nil {
 		return

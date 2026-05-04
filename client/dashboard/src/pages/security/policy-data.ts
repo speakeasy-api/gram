@@ -17,6 +17,7 @@ export type RuleCategory =
   | "prompt_injection"
   | "off_policy"
   | "shadow_mcp"
+  | "destructive_tool"
   | "custom";
 
 export type DetectionRule = {
@@ -98,6 +99,12 @@ export const RULE_CATEGORY_META: Record<
     description:
       "Tool calls in Cursor and Claude Code that don't come from a Speakeasy-issued MCP server. Requires Speakeasy hooks to be installed on the agent.",
     icon: "shield-off",
+  },
+  destructive_tool: {
+    label: "Destructive Tools",
+    description:
+      "MCP tool calls whose Gram tool definition is annotated as destructive. Requires Speakeasy hooks and Gram-issued MCP tool metadata.",
+    icon: "shield-alert",
   },
   custom: {
     label: "Custom Patterns",
@@ -1411,6 +1418,7 @@ export const DETECTION_RULES: Record<RuleCategory, DetectionRule[]> = {
     },
   ],
   shadow_mcp: [],
+  destructive_tool: [],
   custom: [],
 };
 

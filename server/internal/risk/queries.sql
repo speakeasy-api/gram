@@ -245,3 +245,15 @@ WHERE project_id = @project_id
   AND deleted IS FALSE
   AND 'shadow_mcp' = ANY(sources)
 ORDER BY id;
+
+-- name: ListEnabledToolIdentityPoliciesByProject :many
+SELECT *
+FROM risk_policies
+WHERE project_id = @project_id
+  AND enabled IS TRUE
+  AND deleted IS FALSE
+  AND (
+    'shadow_mcp' = ANY(sources)
+    OR 'destructive_tool' = ANY(sources)
+  )
+ORDER BY id;

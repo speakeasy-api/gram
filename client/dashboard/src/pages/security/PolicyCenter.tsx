@@ -76,6 +76,7 @@ const AVAILABLE_CATEGORIES: Set<RuleCategory> = new Set([
   "secrets",
   ...PRESIDIO_CATEGORIES,
   "shadow_mcp",
+  "destructive_tool",
 ]);
 
 /** All rule categories in display order */
@@ -83,6 +84,7 @@ const ALL_CATEGORIES: RuleCategory[] = [
   "secrets",
   ...PRESIDIO_CATEGORIES,
   "shadow_mcp",
+  "destructive_tool",
   "prompt_attacks",
   "prompt_injection",
   "off_policy",
@@ -96,6 +98,7 @@ function policyToCategories(
   const cats = new Set<RuleCategory>();
   if (sources.includes("gitleaks")) cats.add("secrets");
   if (sources.includes("shadow_mcp")) cats.add("shadow_mcp");
+  if (sources.includes("destructive_tool")) cats.add("destructive_tool");
   for (const cat of PRESIDIO_CATEGORIES) {
     const catEntityIds = DETECTION_RULES[cat].map((r) => r.id);
     if (catEntityIds.some((id) => presidioEntities?.includes(id))) {
@@ -111,6 +114,7 @@ function categoriesToPayload(cats: Set<RuleCategory>) {
   const presidioEntities: string[] = [];
   if (cats.has("secrets")) sources.push("gitleaks");
   if (cats.has("shadow_mcp")) sources.push("shadow_mcp");
+  if (cats.has("destructive_tool")) sources.push("destructive_tool");
   for (const cat of PRESIDIO_CATEGORIES) {
     if (cats.has(cat)) {
       for (const rule of DETECTION_RULES[cat]) {
@@ -207,6 +211,10 @@ function PolicyCenterContent() {
   const handleSave = () => {
     const { sources, presidioEntities } =
       categoriesToPayload(selectedCategories);
+    const action =
+      sources.includes("destructive_tool") && formAction === "block"
+        ? "flag"
+        : formAction;
     if (editingPolicy) {
       updateMutation.mutate({
         request: {
@@ -216,7 +224,7 @@ function PolicyCenterContent() {
             enabled: formEnabled,
             sources,
             presidioEntities,
-            action: formAction,
+            action,
             autoName: formAutoName,
           },
         },
@@ -229,7 +237,7 @@ function PolicyCenterContent() {
             enabled: formEnabled,
             sources,
             presidioEntities,
-            action: formAction,
+            action,
             autoName: formAutoName,
           },
         },
@@ -539,6 +547,9 @@ function PolicySheetBody({
   const [expandedCategory, setExpandedCategory] = useState<RuleCategory | null>(
     null,
   );
+  const destructiveToolsSelected = selectedCategories.has("destructive_tool");
+  const actionValue =
+    destructiveToolsSelected && formAction === "block" ? "flag" : formAction;
 
   return (
     <div className="space-y-6 py-4">
@@ -635,6 +646,13 @@ function PolicySheetBody({
                         next.delete(cat);
                       }
                       setSelectedCategories(next);
+                      if (
+                        checked &&
+                        cat === "destructive_tool" &&
+                        formAction === "block"
+                      ) {
+                        setFormAction("flag");
+                      }
                     }}
                     onClick={(e) => e.stopPropagation()}
                   />
@@ -675,31 +693,52 @@ function PolicySheetBody({
       <div className="space-y-2">
         <Label className="text-sm font-medium">Action</Label>
         <RadioGroup
-          value={formAction}
-          onValueChange={(v) => setFormAction(v as PolicyAction)}
+          value={actionValue}
+          onValueChange={(v) => {
+            if (destructiveToolsSelected && v === "block") {
+              return;
+            }
+            setFormAction(v as PolicyAction);
+          }}
         >
           <div className="border-border divide-border divide-y rounded-lg border">
-            {ACTION_OPTIONS.map((opt) => (
-              <label
-                key={opt.value}
-                htmlFor={`action-${opt.value}`}
-                className="hover:bg-muted/50 flex cursor-pointer items-start gap-3 p-3"
-              >
-                <RadioGroupItem
-                  value={opt.value}
-                  id={`action-${opt.value}`}
-                  className="mt-0.5"
-                />
-                <div className="flex-1">
-                  <div className="flex items-center gap-2">
-                    <ActionBadge action={opt.value} />
+            {ACTION_OPTIONS.map((opt) => {
+              const disabled =
+                destructiveToolsSelected && opt.value === "block";
+
+              return (
+                <label
+                  key={opt.value}
+                  htmlFor={`action-${opt.value}`}
+                  className={cn(
+                    "flex items-start gap-3 p-3",
+                    disabled
+                      ? "cursor-not-allowed opacity-60"
+                      : "hover:bg-muted/50 cursor-pointer",
+                  )}
+                >
+                  <RadioGroupItem
+                    value={opt.value}
+                    id={`action-${opt.value}`}
+                    className="mt-0.5"
+                    disabled={disabled}
+                  />
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <ActionBadge action={opt.value} />
+                    </div>
+                    <div className="text-muted-foreground mt-1 text-xs">
+                      {opt.description}
+                    </div>
+                    {disabled && (
+                      <div className="text-destructive mt-1 text-xs font-medium">
+                        Destructive Tools supports flagging only.
+                      </div>
+                    )}
                   </div>
-                  <div className="text-muted-foreground mt-1 text-xs">
-                    {opt.description}
-                  </div>
-                </div>
-              </label>
-            ))}
+                </label>
+              );
+            })}
           </div>
         </RadioGroup>
       </div>

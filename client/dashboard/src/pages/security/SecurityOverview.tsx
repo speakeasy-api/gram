@@ -32,13 +32,24 @@ for (const [category, rules] of Object.entries(DETECTION_RULES)) {
   }
 }
 
-function getCategoryForRule(ruleId: string | undefined): RuleCategory | null {
+function getCategoryForFinding(
+  source: string | undefined,
+  ruleId: string | undefined,
+): RuleCategory | null {
+  if (source === "destructive_tool") return "destructive_tool";
+  if (source === "shadow_mcp") return "shadow_mcp";
   if (!ruleId) return null;
   return RULE_ID_TO_CATEGORY.get(ruleId) ?? null;
 }
 
-function CategoryBadge({ ruleId }: { ruleId: string | undefined }) {
-  const category = getCategoryForRule(ruleId);
+function CategoryBadge({
+  source,
+  ruleId,
+}: {
+  source: string | undefined;
+  ruleId: string | undefined;
+}) {
+  const category = getCategoryForFinding(source, ruleId);
   if (!category) return null;
   return (
     <Badge variant="secondary">{RULE_CATEGORY_META[category].label}</Badge>
@@ -322,7 +333,10 @@ function SecurityOverviewContent() {
                           }}
                         >
                           <TableCell>
-                            <CategoryBadge ruleId={result.ruleId} />
+                            <CategoryBadge
+                              source={result.source}
+                              ruleId={result.ruleId}
+                            />
                           </TableCell>
                           <TableCell className="font-mono text-xs">
                             {result.ruleId ?? "-"}

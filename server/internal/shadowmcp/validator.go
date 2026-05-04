@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	tsr "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -19,11 +20,23 @@ import (
 // policies surface as findings via the batch scanner.
 const SourceShadowMCP = "shadow_mcp"
 
+// SourceDestructiveTool is the policy source value that flags Gram MCP tool
+// calls whose resolved tool definition has a destructive annotation.
+const SourceDestructiveTool = "destructive_tool"
+
 // XGramToolsetIDField is the JSON-schema property the MCP server injects
 // into every Gram-hosted tool's input schema. Tool callers must echo this
 // UUID back so the shadow-MCP validator can verify the call against its
 // toolset.
 const XGramToolsetIDField = "x-gram-toolset-id"
+
+// ResolvedToolCall is a recorded MCP tool call resolved back to the Gram
+// toolset and tool definition that produced it.
+type ResolvedToolCall struct {
+	ToolsetID string
+	ToolName  string
+	Tool      types.BaseToolAttributes
+}
 
 // ValidateToolsetCall enforces that a Gram-hosted tool call carries the
 // required x-gram-toolset-id property, that the referenced toolset exists in
@@ -41,21 +54,47 @@ func (c *Client) ValidateToolsetCall(
 	toolName string,
 	orgID string,
 ) (string, bool) {
+	_, detail, failed := c.resolveToolsetCall(ctx, toolInput, toolName, orgID)
+	return detail, failed
+}
+
+// ResolveToolsetCall resolves a recorded Gram MCP tool call to its underlying
+// tool definition. It returns ok=false for missing provenance, unknown
+// toolsets, and names that are not present in the resolved toolset.
+func (c *Client) ResolveToolsetCall(
+	ctx context.Context,
+	toolInput any,
+	toolName string,
+	orgID string,
+) (*ResolvedToolCall, bool) {
+	resolved, _, failed := c.resolveToolsetCall(ctx, toolInput, toolName, orgID)
+	return resolved, !failed
+}
+
+func (c *Client) resolveToolsetCall(
+	ctx context.Context,
+	toolInput any,
+	toolName string,
+	orgID string,
+) (*ResolvedToolCall, string, bool) {
 	fail := func(detail string) (string, bool) {
 		return detail, true
 	}
 
 	inputMap, ok := toolInput.(map[string]any)
 	if !ok {
-		return fail(fmt.Sprintf("missing required %q property in tool input", XGramToolsetIDField))
+		detail, failed := fail(fmt.Sprintf("missing required %q property in tool input", XGramToolsetIDField))
+		return nil, detail, failed
 	}
 	rawID, ok := inputMap[XGramToolsetIDField].(string)
 	if !ok || rawID == "" {
-		return fail(fmt.Sprintf("missing required %q property in tool input", XGramToolsetIDField))
+		detail, failed := fail(fmt.Sprintf("missing required %q property in tool input", XGramToolsetIDField))
+		return nil, detail, failed
 	}
 	toolsetID, err := uuid.Parse(rawID)
 	if err != nil {
-		return fail(fmt.Sprintf("invalid %q value: not a UUID", XGramToolsetIDField))
+		detail, failed := fail(fmt.Sprintf("invalid %q value: not a UUID", XGramToolsetIDField))
+		return nil, detail, failed
 	}
 
 	toolsetRow, err := tsr.New(c.db).GetToolsetByIDAndOrganization(ctx, tsr.GetToolsetByIDAndOrganizationParams{
@@ -63,11 +102,13 @@ func (c *Client) ValidateToolsetCall(
 		OrganizationID: orgID,
 	})
 	if err != nil {
-		return fail(fmt.Sprintf("toolset %s not found in this organization", toolsetID))
+		detail, failed := fail(fmt.Sprintf("toolset %s not found in this organization", toolsetID))
+		return nil, detail, failed
 	}
 
 	if toolName == "" {
-		return fail("tool call missing tool name")
+		detail, failed := fail("tool call missing tool name")
+		return nil, detail, failed
 	}
 
 	described, err := mv.DescribeToolset(
@@ -79,7 +120,8 @@ func (c *Client) ValidateToolsetCall(
 		&c.toolsetCache,
 	)
 	if err != nil {
-		return fail(fmt.Sprintf("failed to load toolset %s", toolsetID))
+		detail, failed := fail(fmt.Sprintf("failed to load toolset %s", toolsetID))
+		return nil, detail, failed
 	}
 
 	for _, tool := range described.Tools {
@@ -88,9 +130,14 @@ func (c *Client) ValidateToolsetCall(
 			continue
 		}
 		if base.Name == toolName {
-			return "", false
+			return &ResolvedToolCall{
+				ToolsetID: toolsetID.String(),
+				ToolName:  toolName,
+				Tool:      base,
+			}, "", false
 		}
 	}
 
-	return fail(fmt.Sprintf("tool %q is not part of toolset %s", toolName, toolsetID))
+	detail, failed := fail(fmt.Sprintf("tool %q is not part of toolset %s", toolName, toolsetID))
+	return nil, detail, failed
 }

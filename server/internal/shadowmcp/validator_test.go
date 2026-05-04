@@ -5,6 +5,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 )
@@ -121,4 +122,47 @@ func TestValidateToolsetCall_ToolNotInToolset(t *testing.T) {
 	assert.True(t, denied)
 	assert.Contains(t, detail, "unknown-tool")
 	assert.Contains(t, detail, "not part of toolset")
+}
+
+func TestResolveToolsetCall_ReturnsToolAnnotations(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+
+	destructive := true
+	toolsetID := f.createToolsetWithHTTPTool(t, "ts-"+uuid.NewString()[:8], "delete_records", &destructive)
+	detail, denied := f.client.ValidateToolsetCall(
+		t.Context(),
+		map[string]any{shadowmcp.XGramToolsetIDField: toolsetID.String()},
+		"delete_records",
+		f.orgID,
+	)
+	require.False(t, denied, detail)
+
+	resolved, ok := f.client.ResolveToolsetCall(
+		t.Context(),
+		map[string]any{shadowmcp.XGramToolsetIDField: toolsetID.String()},
+		"delete_records",
+		f.orgID,
+	)
+	require.True(t, ok)
+	require.NotNil(t, resolved)
+	require.Equal(t, toolsetID.String(), resolved.ToolsetID)
+	require.Equal(t, "delete_records", resolved.ToolName)
+	require.NotNil(t, resolved.Tool.Annotations)
+	require.NotNil(t, resolved.Tool.Annotations.DestructiveHint)
+	require.True(t, *resolved.Tool.Annotations.DestructiveHint)
+}
+
+func TestResolveToolsetCall_MissingToolsetIDReturnsNoResult(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+
+	resolved, ok := f.client.ResolveToolsetCall(
+		t.Context(),
+		map[string]any{"foo": "bar"},
+		"delete_records",
+		f.orgID,
+	)
+	require.False(t, ok)
+	require.Nil(t, resolved)
 }
