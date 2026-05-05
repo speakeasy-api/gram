@@ -362,14 +362,10 @@ func (s *Service) CloneEnvironment(ctx context.Context, payload *gen.CloneEnviro
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to fetch source environment").Log(ctx, logger)
 	}
 
-	// Source-read authz: either a fine-grained environment:read grant on this specific
-	// env, or a project:read (or higher) grant on the project. RequireAny is used because
-	// scope expansion preserves resource_id, so an env:read check at the env's UUID cannot
-	// expand to a project:read variant that matches a project-pinned grant — the IDs differ.
-	if err := s.authz.RequireAny(ctx,
-		authz.Check{Scope: authz.ScopeEnvironmentRead, ResourceKind: "", ResourceID: sourceEnv.ID.String(), Dimensions: nil},
-		authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil},
-	); err != nil {
+	// Source-read authz: environment scopes are project-bounded (no per-env granularity
+	// in the UI), so the check happens at the project_id. Role hierarchy in the authz
+	// engine is responsible for letting project:read satisfy environment:read.
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeEnvironmentRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
 		return nil, err
 	}
 

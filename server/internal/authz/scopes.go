@@ -22,18 +22,13 @@ const (
 )
 
 // scopeExpansions maps a required scope to the higher-privilege scopes that also satisfy it.
-// Scopes with no higher-privilege implication (admin tiers) map to nil.
+// Scopes with no higher-privilege implication (admin tiers) map to nil. Expansion is
+// non-transitive: list every satisfying scope directly, since Check.expand only walks
+// scopeExpansions[c.Scope] one step.
 //
-// environment:write expands to project:write because both target the project as the
-// resource (env:write at projectID is satisfied by project:write at projectID — same kind,
-// same ID — so the cross-scope check resolves correctly via selector matching).
-//
-// environment:read does NOT expand to project:read/project:write because the resource IDs
-// differ across kinds: env:read is checked at the environment's UUID, but expansion would
-// produce a project:read variant still bound to that env UUID, which can never match a
-// fine-grained project:read grant pinned to the project UUID. Callers that need to honor
-// project-level read grants for environment reads must use Engine.RequireAny with explicit
-// {env:read at envID} and {project:read at projectID} alternatives.
+// environment:* scopes are checked at the project_id (no per-env granularity in the UI),
+// so they share a resource kind and ID with project:* checks — this lets project-level
+// grants cleanly satisfy environment-level checks via the standard selector matching.
 var scopeExpansions = map[Scope][]Scope{
 	ScopeRoot:             nil,
 	ScopeOrgRead:          {ScopeOrgAdmin},
@@ -43,7 +38,7 @@ var scopeExpansions = map[Scope][]Scope{
 	ScopeMCPRead:          {ScopeMCPWrite},
 	ScopeMCPWrite:         nil,
 	ScopeMCPConnect:       {ScopeMCPRead, ScopeMCPWrite},
-	ScopeEnvironmentRead:  {ScopeEnvironmentWrite},
+	ScopeEnvironmentRead:  {ScopeEnvironmentWrite, ScopeProjectRead, ScopeProjectWrite},
 	ScopeEnvironmentWrite: {ScopeProjectWrite},
 }
 

@@ -303,8 +303,8 @@ func TestEnvironments_RBAC_Clone_AllowedWithProjectWriteGrant(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	// project:write expands to satisfy both environment:write at project (for create)
-	// and environment:read at the source env (for read).
+	// project:write satisfies both environment:write (destination) and environment:read
+	// (source), since environment:* are now project-bounded and resolve via scope expansion.
 	ctx = authztest.WithExactGrants(t, ctx,
 		authz.Grant{
 			Scope:    authz.ScopeProjectWrite,
@@ -322,7 +322,7 @@ func TestEnvironments_RBAC_Clone_AllowedWithProjectWriteGrant(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestEnvironments_RBAC_Clone_AllowedWithFineGrainedEnvironmentScopes(t *testing.T) {
+func TestEnvironments_RBAC_Clone_AllowedWithEnvironmentWrite(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestEnvironmentService(t)
@@ -341,16 +341,13 @@ func TestEnvironments_RBAC_Clone_AllowedWithFineGrainedEnvironmentScopes(t *test
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	// Fine-grained: environment:write at the project (authority to add envs in the project)
-	// AND environment:read at the specific source env (authority to read this one).
+	// environment:write at the project satisfies both the destination write check and,
+	// via scope expansion (environment:read is satisfied by environment:write at the same
+	// project_id), the source-read check.
 	ctx = authztest.WithExactGrants(t, ctx,
 		authz.Grant{
 			Scope:    authz.ScopeEnvironmentWrite,
 			Selector: authz.NewSelector(authz.ScopeEnvironmentWrite, authCtx.ProjectID.String()),
-		},
-		authz.Grant{
-			Scope:    authz.ScopeEnvironmentRead,
-			Selector: authz.NewSelector(authz.ScopeEnvironmentRead, source.ID),
 		},
 	)
 
@@ -364,7 +361,7 @@ func TestEnvironments_RBAC_Clone_AllowedWithFineGrainedEnvironmentScopes(t *test
 	require.NoError(t, err)
 }
 
-func TestEnvironments_RBAC_Clone_DeniedWithEnvironmentWriteOnly(t *testing.T) {
+func TestEnvironments_RBAC_Clone_DeniedWithEnvironmentReadOnly(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestEnvironmentService(t)
@@ -373,7 +370,7 @@ func TestEnvironments_RBAC_Clone_DeniedWithEnvironmentWriteOnly(t *testing.T) {
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
 		OrganizationID:   "",
-		Name:             "rbac-clone-ew-only-source",
+		Name:             "rbac-clone-er-only-source",
 		Description:      nil,
 		Entries:          []*gen.EnvironmentEntryInput{},
 	})
@@ -383,13 +380,12 @@ func TestEnvironments_RBAC_Clone_DeniedWithEnvironmentWriteOnly(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	// environment:write at project lets the user create new envs but does NOT
-	// imply environment:read at any specific source env. The source-read check
-	// must reject this.
+	// environment:read at the project lets the user view envs but does NOT
+	// satisfy the environment:write destination check, so clone must be rejected.
 	ctx = authztest.WithExactGrants(t, ctx,
 		authz.Grant{
-			Scope:    authz.ScopeEnvironmentWrite,
-			Selector: authz.NewSelector(authz.ScopeEnvironmentWrite, authCtx.ProjectID.String()),
+			Scope:    authz.ScopeEnvironmentRead,
+			Selector: authz.NewSelector(authz.ScopeEnvironmentRead, authCtx.ProjectID.String()),
 		},
 	)
 
@@ -397,7 +393,7 @@ func TestEnvironments_RBAC_Clone_DeniedWithEnvironmentWriteOnly(t *testing.T) {
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
 		Slug:             source.Slug,
-		NewName:          "rbac-clone-ew-only-target",
+		NewName:          "rbac-clone-er-only-target",
 		CopyValues:       nil,
 	})
 	var oopsErr *oops.ShareableError
