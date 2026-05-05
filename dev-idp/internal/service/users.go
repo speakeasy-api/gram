@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"time"
 	"database/sql"
 	"errors"
 	"log/slog"
@@ -68,14 +69,29 @@ func (s *UsersService) Update(ctx context.Context, p *gen.UpdatePayload) (*gen.U
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid user id")
 	}
 
-	row, err := repo.New(s.db).UpdateUser(ctx, repo.UpdateUserParams{
+	queries := repo.New(s.db)
+
+	// admin/whitelisted are non-COALESCE columns in UpdateUser, so a
+	// partial PATCH would clobber them with the request's defaults.
+	// Fetch the existing row first and only override when the caller
+	// supplied a value.
+	existing, err := queries.GetUser(ctx, id)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return nil, oops.E(oops.CodeNotFound, nil, "user not found")
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "fetch user for update").Log(ctx, s.logger)
+	}
+
+	row, err := queries.UpdateUser(ctx, repo.UpdateUserParams{
 		ID:           id,
 		Email:        conv.PtrToNullString(p.Email),
 		DisplayName:  conv.PtrToNullString(p.DisplayName),
 		PhotoUrl:     conv.PtrToNullString(p.PhotoURL),
 		GithubHandle: conv.PtrToNullString(p.GithubHandle),
-		Admin:        conv.PtrBool(p.Admin, false),
-		Whitelisted:  conv.PtrBool(p.Whitelisted, true),
+		Admin:        conv.PtrBool(p.Admin, existing.Admin),
+		Whitelisted:  conv.PtrBool(p.Whitelisted, existing.Whitelisted),
+		Ts:           time.Now(),
 	})
 	switch {
 	case errors.Is(err, sql.ErrNoRows):

@@ -266,7 +266,11 @@ func (h *Handler) handleRevoke(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	idToken := r.Header.Get("speakeasy-auth-provider-id-token")
 	if idToken != "" {
-		if err := repo.New(h.db).RevokeToken(ctx, repo.RevokeTokenParams{Token: idToken, Mode: Mode}); err != nil {
+		if err := repo.New(h.db).RevokeToken(ctx, repo.RevokeTokenParams{
+			Ts:    sql.NullTime{Time: time.Now(), Valid: true},
+			Token: idToken,
+			Mode:  Mode,
+		}); err != nil {
 			h.logger.WarnContext(ctx, "revoke token", slog.Any("error", err))
 		}
 	}

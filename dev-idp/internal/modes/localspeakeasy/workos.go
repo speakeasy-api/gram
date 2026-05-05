@@ -240,7 +240,7 @@ func (h *Handler) handleWorkosUpdateMembership(w http.ResponseWriter, r *http.Re
 	}
 
 	queries := repo.New(h.db)
-	if _, err := queries.UpdateMembership(ctx, repo.UpdateMembershipParams{ID: id, Role: body.RoleSlug}); err != nil {
+	if _, err := queries.UpdateMembership(ctx, repo.UpdateMembershipParams{ID: id, Role: body.RoleSlug, Ts: time.Now()}); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			writeWorkosError(w, http.StatusNotFound, "membership not found")
 			return
@@ -586,6 +586,7 @@ func (h *Handler) handleWorkosUpdateRole(w http.ResponseWriter, r *http.Request)
 		Slug:           slug,
 		Name:           ptrToNullString(body.Name),
 		Description:    ptrToNullString(body.Description),
+		Ts:             time.Now(),
 	})
 	if errors.Is(err, sql.ErrNoRows) {
 		writeWorkosError(w, http.StatusNotFound, "role not found")

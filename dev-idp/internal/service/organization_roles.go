@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"time"
 	"database/sql"
 	"errors"
 	"log/slog"
@@ -77,6 +78,7 @@ func (s *OrganizationRolesService) Update(ctx context.Context, p *gen.UpdatePayl
 		Slug:           p.Slug,
 		Name:           conv.PtrToNullString(p.Name),
 		Description:    conv.PtrToNullString(p.Description),
+		Ts:             time.Now(),
 	})
 	switch {
 	case errors.Is(err, sql.ErrNoRows):

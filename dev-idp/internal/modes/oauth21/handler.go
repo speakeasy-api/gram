@@ -372,7 +372,11 @@ func (h *Handler) handleRefreshTokenGrant(ctx context.Context, w http.ResponseWr
 
 	// OAuth 2.1 recommends rotating refresh tokens on use. Revoke the
 	// presented token; issueTokenSet mints a fresh pair.
-	if err := queries.RevokeToken(ctx, repo.RevokeTokenParams{Token: refreshToken, Mode: Mode}); err != nil {
+	if err := queries.RevokeToken(ctx, repo.RevokeTokenParams{
+		Ts:    sql.NullTime{Time: time.Now(), Valid: true},
+		Token: refreshToken,
+		Mode:  Mode,
+	}); err != nil {
 		h.logger.ErrorContext(ctx, "revoke rotated refresh token", slog.Any("error", err))
 		oauthError(w, http.StatusInternalServerError, "server_error", "failed to rotate refresh token")
 		return
@@ -549,7 +553,11 @@ func (h *Handler) handleRevoke(w http.ResponseWriter, r *http.Request) {
 	}
 	token := r.Form.Get("token")
 	if token != "" {
-		if err := repo.New(h.db).RevokeToken(ctx, repo.RevokeTokenParams{Token: token, Mode: Mode}); err != nil {
+		if err := repo.New(h.db).RevokeToken(ctx, repo.RevokeTokenParams{
+			Ts:    sql.NullTime{Time: time.Now(), Valid: true},
+			Token: token,
+			Mode:  Mode,
+		}); err != nil {
 			h.logger.WarnContext(ctx, "revoke token", slog.Any("error", err))
 		}
 	}

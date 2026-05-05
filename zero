@@ -158,12 +158,6 @@ mise db:migrate
 mise clickhouse:migrate
 
 interactive_only mise run zero:devidp
-devidp_db_url="$(mise env GRAM_DEVIDP_DATABASE_URL 2>/dev/null | sed -n 's/^export GRAM_DEVIDP_DATABASE_URL=//p')"
-if [ -n "$devidp_db_url" ]; then
-    mise run db:devidp:apply
-else
-    echo "ℹ️  Skipping dev-idp schema apply: GRAM_DEVIDP_DATABASE_URL not set."
-fi
 
 interactive_only mise zero:summary
 

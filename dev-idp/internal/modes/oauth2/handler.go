@@ -521,7 +521,11 @@ func (h *Handler) handleRevoke(w http.ResponseWriter, r *http.Request) {
 	}
 	token := r.Form.Get("token")
 	if token != "" {
-		if err := repo.New(h.db).RevokeToken(ctx, repo.RevokeTokenParams{Token: token, Mode: Mode}); err != nil {
+		if err := repo.New(h.db).RevokeToken(ctx, repo.RevokeTokenParams{
+			Ts:    sql.NullTime{Time: time.Now(), Valid: true},
+			Token: token,
+			Mode:  Mode,
+		}); err != nil {
 			h.logger.WarnContext(ctx, "revoke token", slog.Any("error", err))
 		}
 	}

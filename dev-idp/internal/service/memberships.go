@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"time"
 	"database/sql"
 	"errors"
 	"log/slog"
@@ -77,6 +78,7 @@ func (s *MembershipsService) Update(ctx context.Context, p *gen.UpdatePayload) (
 	row, err := repo.New(s.db).UpdateMembership(ctx, repo.UpdateMembershipParams{
 		ID:   id,
 		Role: p.Role,
+		Ts:   time.Now(),
 	})
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
