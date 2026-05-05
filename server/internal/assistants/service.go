@@ -43,6 +43,7 @@ const (
 	runtimeStateActive   = "active"
 	runtimeStateStopped  = "stopped"
 	runtimeStateFailed   = "failed"
+	runtimeStateReaped   = "reaped"
 
 	eventStatusPending    = "pending"
 	eventStatusProcessing = "processing"
@@ -845,7 +846,154 @@ func (s *ServiceCore) DeleteAssistant(ctx context.Context, projectID uuid.UUID, 
 	if err != nil {
 		return fmt.Errorf("delete assistant: %w", err)
 	}
+
+	// Best-effort: tear down per-assistant backend resources (e.g. Fly app)
+	// inline so the common case does not wait for the janitor. Failures here
+	// must not roll back the soft-delete; the long-inactivity janitor is the
+	// safety net.
+	if reapResult, reapErr := s.ReapAssistantRuntimes(ctx, projectID, assistantID); reapErr != nil {
+		s.logger.WarnContext(ctx, "reap assistant runtimes on delete failed",
+			attr.SlogAssistantID(assistantID.String()),
+			attr.SlogProjectID(projectID.String()),
+			attr.SlogError(reapErr),
+		)
+	} else if reapResult.Reaped > 0 || reapResult.Errors > 0 {
+		s.logger.InfoContext(ctx, "reaped assistant runtimes on delete",
+			attr.SlogAssistantID(assistantID.String()),
+			attr.SlogProjectID(projectID.String()),
+			attr.SlogVisibilityInternal(),
+		)
+	}
+
 	return nil
+}
+
+// ReapAssistantRuntimesResult summarises the outcome of one reap pass —
+// counted at the runtime-row level, not the backend-app level. A row whose
+// backend resource was already gone (404 from the Fly API, no in-memory
+// state for local) still counts as Reaped.
+type ReapAssistantRuntimesResult struct {
+	Reaped int
+	Errors int
+}
+
+// ReapAssistantRuntimes tears down backend resources for every runtime row
+// belonging to the given assistant that still carries metadata. Used by the
+// assistant-delete handler so a deletion cleans up the corresponding Fly app
+// without waiting for the janitor.
+func (s *ServiceCore) ReapAssistantRuntimes(ctx context.Context, projectID, assistantID uuid.UUID) (ReapAssistantRuntimesResult, error) {
+	rows, err := assistantrepo.New(s.db).ListAssistantRuntimesForReap(ctx, assistantrepo.ListAssistantRuntimesForReapParams{
+		AssistantID: assistantID,
+		ProjectID:   projectID,
+	})
+	if err != nil {
+		return ReapAssistantRuntimesResult{}, fmt.Errorf("list assistant runtimes for reap: %w", err)
+	}
+
+	result := ReapAssistantRuntimesResult{Reaped: 0, Errors: 0}
+	for _, row := range rows {
+		if s.reapRuntimeRow(ctx, assistantRuntimeRecord{
+			ID:                  row.ID,
+			AssistantThreadID:   row.AssistantThreadID,
+			AssistantID:         row.AssistantID,
+			ProjectID:           row.ProjectID,
+			Backend:             row.Backend,
+			BackendMetadataJSON: row.BackendMetadataJson,
+			State:               row.State,
+			WarmUntil:           row.WarmUntil,
+		}) {
+			result.Reaped++
+		} else {
+			result.Errors++
+		}
+	}
+	return result, nil
+}
+
+// ReapInactiveAssistantRuntimesParams configures one janitor sweep.
+type ReapInactiveAssistantRuntimesParams struct {
+	// InactivityThreshold is the minimum quiet period before an assistant's
+	// runtime rows become candidates for collection. The query compares
+	// against r.updated_at across all of an assistant's rows so a normal
+	// cold-warm-cold cycle keeps the assistant out of the candidate set.
+	InactivityThreshold time.Duration
+	// BatchSize caps how many runtime rows one sweep will reap. Keeps the
+	// activity duration bounded under Temporal's StartToCloseTimeout.
+	BatchSize int32
+}
+
+// ReapInactiveAssistantRuntimes drives the long-inactivity janitor. It picks
+// runtime rows whose owning assistant has had no recorded activity within
+// InactivityThreshold and tears down the corresponding backend resources.
+// Active and starting rows are filtered out at the SQL layer so an in-flight
+// admit is never collected mid-flight.
+func (s *ServiceCore) ReapInactiveAssistantRuntimes(ctx context.Context, params ReapInactiveAssistantRuntimesParams) (ReapAssistantRuntimesResult, error) {
+	if params.InactivityThreshold <= 0 {
+		return ReapAssistantRuntimesResult{}, fmt.Errorf("inactivity threshold must be positive")
+	}
+	if params.BatchSize <= 0 {
+		return ReapAssistantRuntimesResult{}, fmt.Errorf("batch size must be positive")
+	}
+
+	rows, err := assistantrepo.New(s.db).ListInactiveAssistantRuntimesForReap(ctx, assistantrepo.ListInactiveAssistantRuntimesForReapParams{
+		StartingState:  runtimeStateStarting,
+		ActiveState:    runtimeStateActive,
+		InactiveBefore: conv.ToPGTimestamptz(time.Now().UTC().Add(-params.InactivityThreshold)),
+		LimitCount:     params.BatchSize,
+	})
+	if err != nil {
+		return ReapAssistantRuntimesResult{}, fmt.Errorf("list inactive assistant runtimes for reap: %w", err)
+	}
+
+	result := ReapAssistantRuntimesResult{Reaped: 0, Errors: 0}
+	for _, row := range rows {
+		if s.reapRuntimeRow(ctx, assistantRuntimeRecord{
+			ID:                  row.ID,
+			AssistantThreadID:   row.AssistantThreadID,
+			AssistantID:         row.AssistantID,
+			ProjectID:           row.ProjectID,
+			Backend:             row.Backend,
+			BackendMetadataJSON: row.BackendMetadataJson,
+			State:               row.State,
+			WarmUntil:           row.WarmUntil,
+		}) {
+			result.Reaped++
+		} else {
+			result.Errors++
+		}
+	}
+	return result, nil
+}
+
+// reapRuntimeRow tears down the backend resource for one row and records the
+// outcome in DB. Returns true on success (including idempotent no-op when
+// the resource was already gone). Errors are logged here so callers can
+// keep the loop simple.
+func (s *ServiceCore) reapRuntimeRow(ctx context.Context, record assistantRuntimeRecord) bool {
+	if err := s.runtime.Reap(ctx, record); err != nil {
+		s.logger.WarnContext(ctx, "reap runtime backend failed",
+			attr.SlogAssistantID(record.AssistantID.String()),
+			attr.SlogAssistantThreadID(record.AssistantThreadID.String()),
+			attr.SlogAssistantRuntimeID(record.ID.String()),
+			attr.SlogAssistantRuntimeBackend(record.Backend),
+			attr.SlogError(err),
+		)
+		return false
+	}
+
+	if err := assistantrepo.New(s.db).MarkAssistantRuntimeReaped(ctx, assistantrepo.MarkAssistantRuntimeReapedParams{
+		ReapedState: runtimeStateReaped,
+		RuntimeID:   record.ID,
+		ProjectID:   record.ProjectID,
+	}); err != nil {
+		s.logger.WarnContext(ctx, "mark assistant runtime reaped failed",
+			attr.SlogAssistantID(record.AssistantID.String()),
+			attr.SlogAssistantRuntimeID(record.ID.String()),
+			attr.SlogError(err),
+		)
+		return false
+	}
+	return true
 }
 
 func (s *ServiceCore) EnqueueTriggerTask(ctx context.Context, task bgtriggers.Task) (EnqueueResult, error) {

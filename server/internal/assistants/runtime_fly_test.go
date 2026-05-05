@@ -399,6 +399,70 @@ func TestFlyRuntimeBackendStopToleratesMissingMachine(t *testing.T) {
 	require.Equal(t, 0, apiClient.deleteCalls, "stop must not fall back to delete-app when flaps reports missing")
 }
 
+func TestFlyRuntimeBackendReapDeletesAppByMetadataName(t *testing.T) {
+	t.Parallel()
+
+	server := newTestAssistantRuntimeServer(t, true)
+	backend, apiClient, _ := newTestFlyRuntimeBackend(t, server)
+
+	rawMetadata, err := json.Marshal(flyRuntimeMetadata{
+		AppName:    "gram-asst-orphan",
+		AppID:      "",
+		AppURL:     "",
+		AppIP:      "",
+		MachineID:  "",
+		Region:     "",
+		LastBootID: "",
+	})
+	require.NoError(t, err)
+
+	err = backend.Reap(context.Background(), assistantRuntimeRecord{
+		Backend:             runtimeBackendFlyIO,
+		BackendMetadataJSON: rawMetadata,
+	})
+	require.NoError(t, err)
+	require.Equal(t, 1, apiClient.deleteCalls)
+}
+
+func TestFlyRuntimeBackendReapWithoutMetadataIsNoop(t *testing.T) {
+	t.Parallel()
+
+	server := newTestAssistantRuntimeServer(t, true)
+	backend, apiClient, _ := newTestFlyRuntimeBackend(t, server)
+
+	err := backend.Reap(context.Background(), assistantRuntimeRecord{
+		Backend:             runtimeBackendFlyIO,
+		BackendMetadataJSON: nil,
+	})
+	require.NoError(t, err)
+	require.Equal(t, 0, apiClient.deleteCalls)
+}
+
+func TestFlyRuntimeBackendReapTreatsAppNotFoundAsSuccess(t *testing.T) {
+	t.Parallel()
+
+	server := newTestAssistantRuntimeServer(t, true)
+	backend, apiClient, _ := newTestFlyRuntimeBackend(t, server)
+
+	apiClient.deleteErr = errors.New("not found")
+	rawMetadata, err := json.Marshal(flyRuntimeMetadata{
+		AppName:    "gram-asst-already-gone",
+		AppID:      "",
+		AppURL:     "",
+		AppIP:      "",
+		MachineID:  "",
+		Region:     "",
+		LastBootID: "",
+	})
+	require.NoError(t, err)
+
+	err = backend.Reap(context.Background(), assistantRuntimeRecord{
+		Backend:             runtimeBackendFlyIO,
+		BackendMetadataJSON: rawMetadata,
+	})
+	require.NoError(t, err)
+}
+
 func TestFlyRuntimeBackendServerURLRejectsLoopback(t *testing.T) {
 	t.Parallel()
 

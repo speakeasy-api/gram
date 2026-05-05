@@ -716,6 +716,20 @@ func (f *FlyRuntimeBackend) Stop(ctx context.Context, runtime assistantRuntimeRe
 	return nil
 }
 
+func (f *FlyRuntimeBackend) Reap(ctx context.Context, runtime assistantRuntimeRecord) error {
+	if err := validateRuntimeBackend(f, runtime.Backend); err != nil {
+		return err
+	}
+	metadata, err := decodeFlyRuntimeMetadata(runtime.BackendMetadataJSON)
+	if err != nil {
+		return err
+	}
+	if metadata.AppName == "" {
+		return nil
+	}
+	return f.deleteApp(ctx, metadata.AppName)
+}
+
 func (f *FlyRuntimeBackend) deleteApp(ctx context.Context, appName string) error {
 	if err := f.client.DeleteApp(ctx, appName); err != nil && !isFlyNotFound(err) {
 		return fmt.Errorf("delete assistant fly runtime app: %w", err)

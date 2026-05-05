@@ -68,6 +68,7 @@ type Activities struct {
 	processAssistantThread        *activities.ProcessAssistantThread
 	expireAssistantThreadRuntime  *activities.ExpireAssistantThreadRuntime
 	reapStuckAssistantRuntimes    *activities.ReapStuckAssistantRuntimes
+	reapInactiveAssistantRuntimes *activities.ReapInactiveAssistantRuntimes
 	signalAssistantCoordinator    *activities.SignalAssistantCoordinator
 	signalAssistantThread         *activities.SignalAssistantThread
 }
@@ -136,6 +137,7 @@ func NewActivities(
 		processAssistantThread:        activities.NewProcessAssistantThread(assistantsCore),
 		expireAssistantThreadRuntime:  activities.NewExpireAssistantThreadRuntime(assistantsCore),
 		reapStuckAssistantRuntimes:    activities.NewReapStuckAssistantRuntimes(assistantsCore),
+		reapInactiveAssistantRuntimes: activities.NewReapInactiveAssistantRuntimes(logger, assistantsCore),
 		signalAssistantCoordinator:    activities.NewSignalAssistantCoordinator(&AssistantWorkflowSignaler{TemporalEnv: temporalEnv}),
 		signalAssistantThread:         activities.NewSignalAssistantThread(&AssistantWorkflowSignaler{TemporalEnv: temporalEnv}),
 	}
@@ -292,6 +294,10 @@ func (a *Activities) ExpireAssistantThreadRuntime(ctx context.Context, input act
 
 func (a *Activities) ReapStuckAssistantRuntimes(ctx context.Context) (*activities.ReapStuckAssistantRuntimesResult, error) {
 	return a.reapStuckAssistantRuntimes.Do(ctx)
+}
+
+func (a *Activities) ReapInactiveAssistantRuntimes(ctx context.Context, req activities.ReapInactiveAssistantRuntimesRequest) (*activities.ReapInactiveAssistantRuntimesResult, error) {
+	return a.reapInactiveAssistantRuntimes.Do(ctx, req)
 }
 
 func (a *Activities) SignalAssistantCoordinator(ctx context.Context, input activities.SignalAssistantCoordinatorInput) error {

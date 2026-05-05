@@ -436,6 +436,63 @@ func (q *Queries) InsertAssistantThreadEvent(ctx context.Context, arg InsertAssi
 	return id, err
 }
 
+const listAssistantRuntimesForReap = `-- name: ListAssistantRuntimesForReap :many
+SELECT id, assistant_thread_id, assistant_id, project_id, backend, backend_metadata_json, state, warm_until
+FROM assistant_runtimes
+WHERE assistant_id = $1
+  AND project_id = $2
+  AND backend_metadata_json <> '{}'::jsonb
+`
+
+type ListAssistantRuntimesForReapParams struct {
+	AssistantID uuid.UUID
+	ProjectID   uuid.UUID
+}
+
+type ListAssistantRuntimesForReapRow struct {
+	ID                  uuid.UUID
+	AssistantThreadID   uuid.UUID
+	AssistantID         uuid.UUID
+	ProjectID           uuid.UUID
+	Backend             string
+	BackendMetadataJson []byte
+	State               string
+	WarmUntil           pgtype.Timestamptz
+}
+
+// Returns every runtime row for an assistant that still carries backend
+// metadata, regardless of soft-delete state. A stopped row whose Fly app
+// was not collected leaves its app_name in metadata and would otherwise
+// be invisible to deleted-aware queries.
+func (q *Queries) ListAssistantRuntimesForReap(ctx context.Context, arg ListAssistantRuntimesForReapParams) ([]ListAssistantRuntimesForReapRow, error) {
+	rows, err := q.db.Query(ctx, listAssistantRuntimesForReap, arg.AssistantID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAssistantRuntimesForReapRow
+	for rows.Next() {
+		var i ListAssistantRuntimesForReapRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.AssistantThreadID,
+			&i.AssistantID,
+			&i.ProjectID,
+			&i.Backend,
+			&i.BackendMetadataJson,
+			&i.State,
+			&i.WarmUntil,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listAssistants = `-- name: ListAssistants :many
 SELECT id, project_id, organization_id, created_by_user_id, name, model, instructions, warm_ttl_seconds, max_concurrency, status, created_at, updated_at, deleted_at
 FROM assistants
@@ -581,6 +638,78 @@ func (q *Queries) ListColdPendingThreadsForAdmit(ctx context.Context, arg ListCo
 	for rows.Next() {
 		var i ListColdPendingThreadsForAdmitRow
 		if err := rows.Scan(&i.ID, &i.ProjectID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listInactiveAssistantRuntimesForReap = `-- name: ListInactiveAssistantRuntimesForReap :many
+SELECT r.id, r.assistant_thread_id, r.assistant_id, r.project_id, r.backend, r.backend_metadata_json, r.state, r.warm_until
+FROM assistant_runtimes r
+WHERE r.backend_metadata_json <> '{}'::jsonb
+  AND r.state NOT IN ($1, $2)
+  AND NOT EXISTS (
+    SELECT 1
+    FROM assistant_runtimes r2
+    WHERE r2.assistant_id = r.assistant_id
+      AND r2.updated_at >= $3
+      AND r2.backend_metadata_json <> '{}'::jsonb
+  )
+ORDER BY r.updated_at ASC
+LIMIT $4
+`
+
+type ListInactiveAssistantRuntimesForReapParams struct {
+	StartingState  string
+	ActiveState    string
+	InactiveBefore pgtype.Timestamptz
+	LimitCount     int32
+}
+
+type ListInactiveAssistantRuntimesForReapRow struct {
+	ID                  uuid.UUID
+	AssistantThreadID   uuid.UUID
+	AssistantID         uuid.UUID
+	ProjectID           uuid.UUID
+	Backend             string
+	BackendMetadataJson []byte
+	State               string
+	WarmUntil           pgtype.Timestamptz
+}
+
+// Returns runtime rows that still carry backend metadata and whose owning
+// assistant has had no runtime activity since @inactive_before. Active and
+// starting rows are excluded so a long-running session that updated_at
+// recently is never collected mid-flight.
+func (q *Queries) ListInactiveAssistantRuntimesForReap(ctx context.Context, arg ListInactiveAssistantRuntimesForReapParams) ([]ListInactiveAssistantRuntimesForReapRow, error) {
+	rows, err := q.db.Query(ctx, listInactiveAssistantRuntimesForReap,
+		arg.StartingState,
+		arg.ActiveState,
+		arg.InactiveBefore,
+		arg.LimitCount,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListInactiveAssistantRuntimesForReapRow
+	for rows.Next() {
+		var i ListInactiveAssistantRuntimesForReapRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.AssistantThreadID,
+			&i.AssistantID,
+			&i.ProjectID,
+			&i.Backend,
+			&i.BackendMetadataJson,
+			&i.State,
+			&i.WarmUntil,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -884,6 +1013,31 @@ func (q *Queries) LoadThreadContext(ctx context.Context, arg LoadThreadContextPa
 		&i.WarmUntil,
 	)
 	return i, err
+}
+
+const markAssistantRuntimeReaped = `-- name: MarkAssistantRuntimeReaped :exec
+UPDATE assistant_runtimes
+SET state = $1,
+    backend_metadata_json = '{}'::jsonb,
+    updated_at = clock_timestamp(),
+    ended_at = COALESCE(ended_at, clock_timestamp()),
+    deleted_at = COALESCE(deleted_at, clock_timestamp())
+WHERE id = $2
+  AND project_id = $3
+`
+
+type MarkAssistantRuntimeReapedParams struct {
+	ReapedState string
+	RuntimeID   uuid.UUID
+	ProjectID   uuid.UUID
+}
+
+// Records that the backend resource (e.g. Fly app) for this runtime has
+// been torn down. Clearing backend_metadata_json removes it from the reap
+// candidate set so the janitor stops re-scanning it.
+func (q *Queries) MarkAssistantRuntimeReaped(ctx context.Context, arg MarkAssistantRuntimeReapedParams) error {
+	_, err := q.db.Exec(ctx, markAssistantRuntimeReaped, arg.ReapedState, arg.RuntimeID, arg.ProjectID)
+	return err
 }
 
 const reapStuckAssistantRuntimes = `-- name: ReapStuckAssistantRuntimes :many
