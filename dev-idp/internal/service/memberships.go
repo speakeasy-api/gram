@@ -2,10 +2,10 @@ package service
 
 import (
 	"context"
-	"time"
 	"database/sql"
 	"errors"
 	"log/slog"
+	"time"
 
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/trace"
@@ -113,7 +113,7 @@ func (s *MembershipsService) List(ctx context.Context, p *gen.ListPayload) (*gen
 		After:          after,
 		UserID:         userFilter,
 		OrganizationID: orgFilter,
-		MaxRows:        int64(p.Limit) + 1, //nolint:gosec // Goa validates Limit ∈ [1, 100]
+		MaxRows:        int64(p.Limit) + 1,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list memberships").Log(ctx, s.logger)

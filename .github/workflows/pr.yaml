@@ -32,6 +32,7 @@ jobs:
       functions: ${{ steps.gates.outputs.functions }}
       tsframework: ${{ steps.gates.outputs.tsframework }}
       elements: ${{ steps.gates.outputs.elements }}
+      dev-idp: ${{ steps.gates.outputs.dev-idp }}
       migrations: ${{ steps.gates.outputs.migrations }}
       plog: ${{ steps.gates.outputs.plog }}
       sdk: ${{ steps.gates.outputs.sdk }}
@@ -91,6 +92,13 @@ jobs:
             echo "Elements jobs will run."
           else
             echo "Elements jobs will be skipped."
+          fi
+
+          if [[ "${{ steps.filter.outputs.dev-idp }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "${{ github.event_name }}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
+            echo "dev-idp=true" >> $GITHUB_OUTPUT
+            echo "Dev IDP jobs will run."
+          else
+            echo "Dev IDP jobs will be skipped."
           fi
 
           if [[ "${{ steps.filter.outputs.migrations }}" == "true" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
@@ -1243,6 +1251,55 @@ jobs:
         if: success()
         run: pnpm store prune
 
+  dev-idp-build-lint:
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    needs: changes
+    if: needs.changes.outputs.dev-idp == 'true'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@ff7abcd0c3c05ccf6adc123a8cd1fd4fb30fb493 # v5.0.0
+
+      - name: Setup Mise
+        uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
+        with:
+          install: true
+          cache: true
+          env: false
+
+      - name: Prepare GitHub Actions environment
+        run: mise run github
+
+      - name: Cache PNPM
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          key: ${{ env.GH_CACHE_PNPM_KEY }}
+          restore-keys: |
+            ${{ env.GH_CACHE_PNPM_KEY }}
+            ${{ env.GH_CACHE_PNPM_KEY_PARTIAL }}
+          path: |
+            ${{ env.PNPM_STORE_PATH }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint with golangci-lint
+        uses: golangci/golangci-lint-action@1e7e51e771db61008b38414a730f564565cf7c20 # v9.2.0
+        with:
+          install-mode: none
+          working-directory: dev-idp
+
+      - name: Build dashboard
+        run: pnpm build
+        working-directory: dev-idp-dashboard
+
+      - name: Lint dashboard
+        run: pnpm lint
+        working-directory: dev-idp-dashboard
+
+      - name: Prune PNPM store
+        if: success()
+        run: pnpm store prune
+
   elements-test:
     runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: changes
@@ -1360,6 +1417,7 @@ jobs:
       - elements-build-lint
       - elements-test
       - elements-examples
+      - dev-idp-build-lint
       - atlas-lint
       - atlas-push
     steps:
