@@ -70,7 +70,7 @@ func NewClient(apiKey string, opts ...Opts) *Client {
 	}
 
 	um := usermanagement.NewClient(apiKey)
-	orgs := &organizations.Client{APIKey: apiKey}
+	orgs := &organizations.Client{APIKey: apiKey, HTTPClient: nil, Endpoint: "", JSONEncode: nil}
 	if opt.HTTPClient != nil {
 		um.HTTPClient = opt.HTTPClient
 		orgs.HTTPClient = opt.HTTPClient
@@ -106,9 +106,13 @@ func (c *Client) ListUserMemberships(ctx context.Context, userID string) ([]Memb
 	after := ""
 	for {
 		resp, err := c.um.ListOrganizationMemberships(ctx, usermanagement.ListOrganizationMembershipsOpts{
-			UserID: userID,
-			Limit:  100,
-			After:  after,
+			OrganizationID: "",
+			UserID:         userID,
+			Statuses:       nil,
+			Limit:          100,
+			Order:          "",
+			Before:         "",
+			After:          after,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("workos list user memberships: %w", err)
@@ -150,8 +154,12 @@ func (c *Client) GetUserByEmail(ctx context.Context, email string) (*User, error
 		return nil, ErrNotFound
 	}
 	resp, err := c.um.ListUsers(ctx, usermanagement.ListUsersOpts{
-		Email: email,
-		Limit: 1,
+		Email:          email,
+		OrganizationID: "",
+		Limit:          1,
+		Order:          "",
+		Before:         "",
+		After:          "",
 	})
 	if err != nil {
 		return nil, fmt.Errorf("workos list users by email: %w", err)

@@ -35,7 +35,7 @@ func ParseDB(spec string) (DB, error) {
 		spec = DefaultDBSpec
 	}
 	if spec == "memory" || spec == ":memory:" {
-		return DB{Mode: DBModeMemory}, nil
+		return DB{Mode: DBModeMemory, Path: ""}, nil
 	}
 	rest, ok := strings.CutPrefix(spec, "file:")
 	if !ok {

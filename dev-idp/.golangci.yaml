@@ -47,6 +47,13 @@ linters:
     - usetesting
     - wrapcheck
 
+  exclusions:
+    rules:
+      - path: design/
+        linters:
+          - staticcheck
+        text: ST1001
+
   settings:
     wrapcheck:
       ignore-sigs:

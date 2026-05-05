@@ -40,7 +40,7 @@ func TestNewLoadsPKCS8PEM(t *testing.T) {
 	require.NoError(t, err)
 	der, err := x509.MarshalPKCS8PrivateKey(priv)
 	require.NoError(t, err)
-	pemBytes := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: der})
+	pemBytes := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: der, Headers: nil})
 
 	ks, err := keystore.New(pemBytes, newLogger(t))
 	require.NoError(t, err)
@@ -53,7 +53,7 @@ func TestNewLoadsPKCS1PEM(t *testing.T) {
 	priv, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
 	der := x509.MarshalPKCS1PrivateKey(priv)
-	pemBytes := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: der})
+	pemBytes := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: der, Headers: nil})
 
 	ks, err := keystore.New(pemBytes, newLogger(t))
 	require.NoError(t, err)
@@ -67,7 +67,7 @@ func TestKIDIsStableAcrossInstances(t *testing.T) {
 	require.NoError(t, err)
 	der, err := x509.MarshalPKCS8PrivateKey(priv)
 	require.NoError(t, err)
-	pemBytes := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: der})
+	pemBytes := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: der, Headers: nil})
 
 	a, err := keystore.New(pemBytes, newLogger(t))
 	require.NoError(t, err)

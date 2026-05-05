@@ -128,7 +128,7 @@ func (h *Handler) handleWorkosListUsers(w http.ResponseWriter, r *http.Request) 
 		After:          after,
 		Email:          emailNarg,
 		OrganizationID: orgFilter,
-		MaxRows:        int64(limit) + 1, //nolint:gosec // limit is clamped above
+		MaxRows:        int64(limit) + 1,
 	})
 	if err != nil {
 		h.logger.ErrorContext(ctx, "workos list users", slog.Any("error", err))
@@ -200,7 +200,7 @@ func (h *Handler) handleWorkosListMemberships(w http.ResponseWriter, r *http.Req
 		After:          after,
 		UserID:         userFilter,
 		OrganizationID: orgFilter,
-		MaxRows:        int64(limit) + 1, //nolint:gosec // clamped
+		MaxRows:        int64(limit) + 1,
 	})
 	if err != nil {
 		h.logger.ErrorContext(ctx, "workos list memberships", slog.Any("error", err))
@@ -347,7 +347,7 @@ func (h *Handler) handleWorkosListInvitations(w http.ResponseWriter, r *http.Req
 	rows, err := repo.New(h.db).ListInvitationsByOrg(ctx, repo.ListInvitationsByOrgParams{
 		OrganizationID: orgID,
 		After:          after,
-		MaxRows:        int64(limit) + 1, //nolint:gosec // clamped
+		MaxRows:        int64(limit) + 1,
 	})
 	if err != nil {
 		h.logger.ErrorContext(ctx, "workos list invitations", slog.Any("error", err))
@@ -474,7 +474,6 @@ func (h *Handler) handleWorkosAcceptInvitation(w http.ResponseWriter, r *http.Re
 	// Find or create the user by the invited email; the display_name
 	// defaults to the email local-part since we don't have a name yet.
 	user, err := queries.UpsertUserByEmail(ctx, repo.UpsertUserByEmailParams{
-		ID:          uuid.New(),
 		Email:       inv.Email,
 		DisplayName: emailLocalPart(inv.Email),
 	})
@@ -798,7 +797,7 @@ func nullUUIDOrEmpty(u uuid.NullUUID) string {
 
 func ptrToNullString(p *string) sql.NullString {
 	if p == nil {
-		return sql.NullString{}
+		return sql.NullString{String: "", Valid: false}
 	}
 	return sql.NullString{String: *p, Valid: true}
 }

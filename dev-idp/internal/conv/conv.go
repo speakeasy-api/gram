@@ -8,7 +8,7 @@ import "database/sql"
 // PtrToNullString converts a nullable *string to sql.NullString. nil -> Valid=false.
 func PtrToNullString(p *string) sql.NullString {
 	if p == nil {
-		return sql.NullString{}
+		return sql.NullString{String: "", Valid: false}
 	}
 	return sql.NullString{String: *p, Valid: true}
 }

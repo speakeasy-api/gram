@@ -534,6 +534,7 @@ func (h *Handler) bootstrapWorkosCurrentUser(ctx context.Context) (repo.CurrentU
 	row, err := repo.New(h.db).UpsertCurrentUser(ctx, repo.UpsertCurrentUserParams{
 		Mode:       Mode,
 		SubjectRef: user.ID,
+		Ts:         time.Now(),
 	})
 	if err != nil {
 		return repo.CurrentUser{}, fmt.Errorf("persist default workos currentUser: %w", err)

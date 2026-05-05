@@ -17,10 +17,10 @@ package oauth2
 
 import (
 	"context"
-	"database/sql"
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
+	"database/sql"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -29,6 +29,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -36,7 +37,6 @@ import (
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/trace"
 
-	
 	"github.com/speakeasy-api/gram/dev-idp/internal/database/repo"
 	"github.com/speakeasy-api/gram/dev-idp/internal/defaultuser"
 	"github.com/speakeasy-api/gram/dev-idp/internal/keystore"
@@ -81,7 +81,7 @@ func NewHandler(cfg Config, ks *keystore.Keystore, logger *slog.Logger, tracerPr
 	return &Handler{
 		cfg:      cfg,
 		tracer:   tracerProvider.Tracer("github.com/speakeasy-api/gram/dev-idp/internal/modes/oauth2"),
-		logger:   logger.With(slog.String("component", "devidp." + Mode)),
+		logger:   logger.With(slog.String("component", "devidp."+Mode)),
 		db:       db,
 		keystore: ks,
 	}
@@ -572,12 +572,7 @@ func validatePKCES256(verifier, challenge string) bool {
 }
 
 func scopeContains(scope, want string) bool {
-	for _, s := range strings.Fields(scope) {
-		if s == want {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(strings.Fields(scope), want)
 }
 
 func bearerToken(r *http.Request) string {
@@ -613,4 +608,3 @@ func oauthError(w http.ResponseWriter, status int, code, description string) {
 		"error_description": description,
 	})
 }
-
