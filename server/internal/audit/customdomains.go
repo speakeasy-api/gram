@@ -69,7 +69,7 @@ type LogCustomDomainDeleteEvent struct {
 	DomainName      string
 }
 
-func LogCustomDomainDelete(ctx context.Context, dbtx repo.DBTX, event LogCustomDomainDeleteEvent) error {
+func (l *Logger) LogCustomDomainDelete(ctx context.Context, dbtx repo.DBTX, event LogCustomDomainDeleteEvent) error {
 	action := ActionCustomDomainsDelete
 
 	entry := repo.InsertAuditLogParams{

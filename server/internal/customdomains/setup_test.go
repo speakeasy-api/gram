@@ -9,6 +9,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
 
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
@@ -84,7 +85,8 @@ func newTestCustomDomainsService(t *testing.T) (context.Context, *serviceTestIns
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
 	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
-	svc := customdomains.NewService(logger, tracerProvider, conn, sessionManager, temporal, authzEngine)
+	auditLogger := audit.NewLogger()
+	svc := customdomains.NewService(logger, tracerProvider, conn, sessionManager, temporal, authzEngine, auditLogger)
 
 	return ctx, &serviceTestInstance{service: svc, conn: conn, sessionManager: sessionManager, temporal: temporal, repo: cdrepo.New(conn)}
 }

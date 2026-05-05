@@ -72,7 +72,7 @@ func NewService(
 		authz:       authzEngine,
 		projectRepo: project_repo.New(db),
 		orgsRepo:    organizations_repo.New(db),
-		audit:       audit.NewLogger(),
+		audit:       auditLogger,
 		keyPrefix:   fullKeyPrefix,
 	}
 }
