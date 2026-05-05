@@ -11,17 +11,20 @@ import { useTelemetry } from "@/contexts/Telemetry";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useRoles } from "@gram/client/react-query/roles.js";
 import { Navigate, useLocation, useNavigate } from "react-router";
+import { ChallengesTab } from "./ChallengesTab";
 import { MembersTab } from "./MembersTab";
 import { RolesTab } from "./RolesTab";
 
 const tabFromPath: Record<string, string> = {
   roles: "roles",
   members: "members",
+  challenges: "challenges",
 };
 
 const tabDisplayNames: Record<string, string> = {
   roles: "Roles & Permissions",
   members: "Roles & Permissions",
+  challenges: "Roles & Permissions",
 };
 
 export default function Access() {
@@ -96,6 +99,9 @@ export function AccessInner() {
             <PageTabsTrigger value="members">
               Members{memberCount != null ? ` (${memberCount})` : ""}
             </PageTabsTrigger>
+            <PageTabsTrigger value="challenges">
+              Authorization Challenges
+            </PageTabsTrigger>
           </TabsList>
         </div>
 
@@ -105,6 +111,10 @@ export function AccessInner() {
 
         <TabsContent value="members" className="mt-6">
           <MembersTab />
+        </TabsContent>
+
+        <TabsContent value="challenges" className="mt-6">
+          <ChallengesTab />
         </TabsContent>
       </Tabs>
     </>

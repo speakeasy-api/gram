@@ -711,6 +711,11 @@ const ORG_ROUTE_STRUCTURE = {
         url: "members",
         component: Access,
       },
+      challenges: {
+        title: "Roles & Permissions",
+        url: "challenges",
+        component: Access,
+      },
     },
   },
   collections: {
