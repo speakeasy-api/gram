@@ -120,6 +120,7 @@ export function CreateRoleDialog({
       { label: "Organization", resourceType: "org" },
       { label: "Build & Deploy", resourceType: "project" },
       { label: "MCP Servers", resourceType: "mcp" },
+      { label: "Tools", resourceType: "tools" },
     ];
     return groupOrder.map((g) => ({
       ...g,

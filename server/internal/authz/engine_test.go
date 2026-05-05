@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 func staticRBAC(enabled bool) IsRBACEnabled {
@@ -247,6 +248,144 @@ func TestEngineRequire_skipsForAPIKeyAuth(t *testing.T) {
 
 	err := engine.Require(ctx, Check{Scope: ScopeProjectRead, ResourceID: "proj_123"})
 	require.NoError(t, err)
+}
+
+func apiKeySessionCtx(t *testing.T, accountType string) context.Context {
+	t.Helper()
+	return contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{
+		ActiveOrganizationID:  "org_test",
+		UserID:                "user_apikey_creator",
+		ExternalUserID:        "",
+		APIKeyID:              "key_123",
+		SessionID:             nil,
+		ProjectID:             nil,
+		OrganizationSlug:      "",
+		Email:                 nil,
+		AccountType:           accountType,
+		HasActiveSubscription: false,
+		Whitelisted:           false,
+		ProjectSlug:           nil,
+		APIKeyScopes:          nil,
+	})
+}
+
+func TestRequireForHookPrincipal_requiresChecks(t *testing.T) {
+	t.Parallel()
+
+	engine := NewEngine(testenv.NewLogger(t), nil, staticRBAC(true), workos.NewStubClient(), cache.NoopCache)
+
+	err := engine.RequireForHookPrincipal(apiKeySessionCtx(t, "enterprise"), "user_test", "org_test")
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeUnexpected, oopsErr.Code)
+	require.ErrorIs(t, err, ErrNoChecks)
+}
+
+func TestRequireForHookPrincipal_skipsWithoutAuthContext(t *testing.T) {
+	t.Parallel()
+
+	engine := NewEngine(testenv.NewLogger(t), nil, staticRBAC(true), workos.NewStubClient(), cache.NoopCache)
+
+	err := engine.RequireForHookPrincipal(t.Context(), "user_test", "org_test", Check{Scope: ScopeToolsExecuteDestructive, ResourceID: "org_test"})
+	require.NoError(t, err)
+}
+
+func TestRequireForHookPrincipal_skipsForNonEnterpriseAccount(t *testing.T) {
+	t.Parallel()
+
+	engine := NewEngine(testenv.NewLogger(t), nil, staticRBAC(true), workos.NewStubClient(), cache.NoopCache)
+
+	err := engine.RequireForHookPrincipal(apiKeySessionCtx(t, "pro"), "user_test", "org_test", Check{Scope: ScopeToolsExecuteDestructive, ResourceID: "org_test"})
+	require.NoError(t, err)
+}
+
+func TestRequireForHookPrincipal_skipsWhenRBACFeatureDisabled(t *testing.T) {
+	t.Parallel()
+
+	engine := NewEngine(testenv.NewLogger(t), nil, staticRBAC(false), workos.NewStubClient(), cache.NoopCache)
+
+	err := engine.RequireForHookPrincipal(apiKeySessionCtx(t, "enterprise"), "user_test", "org_test", Check{Scope: ScopeToolsExecuteDestructive, ResourceID: "org_test"})
+	require.NoError(t, err)
+}
+
+func TestRequireForHookPrincipal_skipsWhenOrgIDEmpty(t *testing.T) {
+	t.Parallel()
+
+	engine := NewEngine(testenv.NewLogger(t), nil, staticRBAC(true), workos.NewStubClient(), cache.NoopCache)
+
+	err := engine.RequireForHookPrincipal(apiKeySessionCtx(t, "enterprise"), "user_test", "", Check{Scope: ScopeToolsExecuteDestructive, ResourceID: "org_test"})
+	require.NoError(t, err)
+}
+
+func TestRequireForHookPrincipal_returnsForbiddenForEmptyUserID(t *testing.T) {
+	t.Parallel()
+
+	engine := NewEngine(testenv.NewLogger(t), nil, staticRBAC(true), workos.NewStubClient(), cache.NoopCache)
+
+	err := engine.RequireForHookPrincipal(apiKeySessionCtx(t, "enterprise"), "", "org_test", Check{Scope: ScopeToolsExecuteDestructive, ResourceID: "org_test"})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+}
+
+func TestRequireForHookPrincipal_rejectsInvalidCheck(t *testing.T) {
+	t.Parallel()
+
+	engine := NewEngine(testenv.NewLogger(t), nil, staticRBAC(true), workos.NewStubClient(), cache.NoopCache)
+
+	err := engine.RequireForHookPrincipal(apiKeySessionCtx(t, "enterprise"), "user_test", "org_test", Check{Scope: ScopeToolsExecuteDestructive, ResourceID: ""})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeUnexpected, oopsErr.Code)
+	require.ErrorIs(t, err, ErrInvalidCheck)
+}
+
+func TestRequireForHookPrincipal_returnsUnexpectedWhenFeatureCheckFails(t *testing.T) {
+	t.Parallel()
+
+	engine := NewEngine(testenv.NewLogger(t), nil, failingRBAC(errors.New("boom")), workos.NewStubClient(), cache.NoopCache)
+
+	err := engine.RequireForHookPrincipal(apiKeySessionCtx(t, "enterprise"), "user_test", "org_test", Check{Scope: ScopeToolsExecuteDestructive, ResourceID: "org_test"})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeUnexpected, oopsErr.Code)
+}
+
+func TestRequireForHookPrincipal_allowsWithMatchingGrant(t *testing.T) {
+	t.Parallel()
+
+	ctx := apiKeySessionCtx(t, "enterprise")
+	conn := newTestDB(t)
+	const orgID = "org_test"
+	const userID = "user_test"
+
+	seedOrganization(t, ctx, conn, orgID)
+	seedConnectedUser(t, ctx, conn, orgID, userID, "test@example.com", "Test User", "user_workos_test", "membership_test")
+	seedGrant(t, ctx, conn, orgID, urn.NewPrincipal(urn.PrincipalTypeUser, userID), ScopeToolsExecuteDestructive, orgID)
+
+	engine := NewEngine(testenv.NewLogger(t), conn, staticRBAC(true), workos.NewStubClient(), newMapCache())
+
+	err := engine.RequireForHookPrincipal(ctx, userID, orgID, Check{Scope: ScopeToolsExecuteDestructive, ResourceID: orgID})
+	require.NoError(t, err)
+}
+
+func TestRequireForHookPrincipal_deniesWithoutGrant(t *testing.T) {
+	t.Parallel()
+
+	ctx := apiKeySessionCtx(t, "enterprise")
+	conn := newTestDB(t)
+	const orgID = "org_test"
+	const userID = "user_test"
+
+	seedOrganization(t, ctx, conn, orgID)
+	seedConnectedUser(t, ctx, conn, orgID, userID, "test@example.com", "Test User", "user_workos_test", "membership_test")
+
+	engine := NewEngine(testenv.NewLogger(t), conn, staticRBAC(true), workos.NewStubClient(), newMapCache())
+
+	err := engine.RequireForHookPrincipal(ctx, userID, orgID, Check{Scope: ScopeToolsExecuteDestructive, ResourceID: orgID})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }
 
 func TestEngineFilter_skipsForNonEnterpriseAccount(t *testing.T) {

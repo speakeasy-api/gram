@@ -578,6 +578,7 @@ func (s *Service) ListScopes(ctx context.Context, _ *gen.ListScopesPayload) (*ge
 		{Slug: string(authz.ScopeMCPRead), Description: "View MCP servers and configuration.", ResourceType: "mcp"},
 		{Slug: string(authz.ScopeMCPWrite), Description: "Create and modify MCP servers and configuration.", ResourceType: "mcp"},
 		{Slug: string(authz.ScopeMCPConnect), Description: "Connect to and use MCP servers.", ResourceType: "mcp"},
+		{Slug: string(authz.ScopeToolsExecuteDestructive), Description: "Allow agents to run tool calls whose input matches a curated destructive-command pattern.", ResourceType: "tools"},
 	}}, nil
 }
 

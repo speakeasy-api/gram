@@ -16,6 +16,7 @@ export const ResourceType = {
   Org: "org",
   Project: "project",
   Mcp: "mcp",
+  Tools: "tools",
 } as const;
 /**
  * The type of resource this scope applies to.
@@ -33,6 +34,7 @@ export const Slug = {
   McpRead: "mcp:read",
   McpWrite: "mcp:write",
   McpConnect: "mcp:connect",
+  ToolsExecuteDestructive: "tools:execute_destructive",
 } as const;
 /**
  * Unique scope identifier.

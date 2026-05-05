@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: efffcdcad58d7b8d616bdcf0d2132315
+  docChecksum: 3709bc14ed8b99fc0dc2e3f77c2b5878
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -619,7 +619,7 @@ trackedFiles:
   docs/models/components/resourcekind.md:
     last_write_checksum: sha1:75eca1edcb6f2f328aef0dceba6d152c9df7927e
   docs/models/components/resourcetype.md:
-    last_write_checksum: sha1:e51f6391a253740b0891d0c289ea1578ee55c77d
+    last_write_checksum: sha1:d58103d1f8bf9c150091cdbad5412dacf15830c6
   docs/models/components/responsefilter.md:
     last_write_checksum: sha1:0c3d3b8bffe28ce8638776c1291b8b322baea905
   docs/models/components/riskchatsummary.md:
@@ -639,7 +639,7 @@ trackedFiles:
   docs/models/components/scope.md:
     last_write_checksum: sha1:7a48140d97052a0aa3dd6f528bb9ebea59fc3798
   docs/models/components/scopedefinition.md:
-    last_write_checksum: sha1:909023c86027ef6bec6fc6583ca04653064f4b76
+    last_write_checksum: sha1:0e4ed0bdd5f85b4b56b60cdf5e6b152826f48df9
   docs/models/components/searchchatsfilter.md:
     last_write_checksum: sha1:6030d1eef228e96402dce043397ceb548383a655
   docs/models/components/searchchatspayload.md:
@@ -715,7 +715,7 @@ trackedFiles:
   docs/models/components/slackappresult.md:
     last_write_checksum: sha1:62f9ec605a9bb2193261e13b1790eb9cf957c7c1
   docs/models/components/slug.md:
-    last_write_checksum: sha1:3989f7245fe22559911bcaa6222ce9e5e64725fa
+    last_write_checksum: sha1:add2748cb00d421a77c1726f1f0efc4f6a601c3b
   docs/models/components/sort.md:
     last_write_checksum: sha1:2f0a7e8e1494777fc9390e1ed8affca76b06ebca
   docs/models/components/sourceenvironmentlink.md:
@@ -3665,7 +3665,7 @@ trackedFiles:
   src/models/components/rolegrant.ts:
     last_write_checksum: sha1:e383873fe8a97d50a4aa15efc39d15d1bd68bdae
   src/models/components/scopedefinition.ts:
-    last_write_checksum: sha1:3875f0a64b92fe8ffde06782a1a9e4fedf54920e
+    last_write_checksum: sha1:7ae81a85b0bd160bf47177390734203653cf51ad
   src/models/components/searchchatsfilter.ts:
     last_write_checksum: sha1:d32819c682e8b5987f9f1f1513c4d31392e03dc9
   src/models/components/searchchatspayload.ts:

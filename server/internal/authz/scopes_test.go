@@ -31,6 +31,38 @@ func TestCheckExpand_mcpConnect(t *testing.T) {
 	require.NotContains(t, checks, Check{Scope: ScopeMCPConnect, ResourceID: WildcardResource})
 }
 
+func TestCheckExpand_toolsExecuteDestructive(t *testing.T) {
+	t.Parallel()
+
+	checks := Check{Scope: ScopeToolsExecuteDestructive, ResourceID: "org_123"}.expand()
+
+	require.Contains(t, checks, Check{Scope: ScopeRoot, ResourceID: "org_123"})
+	require.Contains(t, checks, Check{Scope: ScopeToolsExecuteDestructive, ResourceID: "org_123"})
+	require.NotContains(t, checks, Check{Scope: ScopeOrgAdmin, ResourceID: "org_123"})
+	require.NotContains(t, checks, Check{Scope: ScopeProjectWrite, ResourceID: "org_123"})
+}
+
+func TestGrantsHasAccess_projectWriteDoesNotSatisfyToolsExecuteDestructive(t *testing.T) {
+	t.Parallel()
+
+	g := []Grant{NewGrant(ScopeProjectWrite, "org_123")}
+	require.False(t, grantsSatisfy(g, Check{Scope: ScopeToolsExecuteDestructive, ResourceID: "org_123"}.expand()))
+}
+
+func TestGrantsHasAccess_orgAdminDoesNotSatisfyToolsExecuteDestructive(t *testing.T) {
+	t.Parallel()
+
+	g := []Grant{NewGrant(ScopeOrgAdmin, "org_123")}
+	require.False(t, grantsSatisfy(g, Check{Scope: ScopeToolsExecuteDestructive, ResourceID: "org_123"}.expand()))
+}
+
+func TestGrantsHasAccess_toolsExecuteDestructiveSatisfiesItself(t *testing.T) {
+	t.Parallel()
+
+	g := []Grant{NewGrant(ScopeToolsExecuteDestructive, "org_123")}
+	require.True(t, grantsSatisfy(g, Check{Scope: ScopeToolsExecuteDestructive, ResourceID: "org_123"}.expand()))
+}
+
 func TestGrantsHasAccess_orgAdminSatisfiesOrgRead(t *testing.T) {
 	t.Parallel()
 
@@ -151,6 +183,7 @@ func TestCalculateSubScopes(t *testing.T) {
 		{scope: string(ScopeProjectRead), want: []string{}},
 		{scope: string(ScopeRoot), want: []string{}},
 		{scope: string(ScopeMCPConnect), want: []string{}},
+		{scope: string(ScopeToolsExecuteDestructive), want: []string{}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.scope, func(t *testing.T) {

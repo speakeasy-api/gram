@@ -270,6 +270,82 @@ func (e *Engine) Require(ctx context.Context, checks ...Check) error {
 	return nil
 }
 
+// RequireForHookPrincipal performs a scope check for a caller identified by a
+// resolved Gram user ID and organization, bypassing the standard ShouldEnforce
+// API-key short-circuit so the hook layer can enforce user-bound authorization
+// on top of API-key auth (plugin-authenticated hook requests).
+//
+// Gating mirrors ShouldEnforce: skip (allow) when the request has no auth
+// context, when the org is not enterprise, or when the RBAC feature flag is
+// off. Past those gates, an empty userID is treated as Forbidden — the caller
+// is expected to have resolved a Gram user (e.g. via users.GetUserByEmail) and
+// a missing match means the destructive check fails closed.
+func (e *Engine) RequireForHookPrincipal(ctx context.Context, userID, orgID string, checks ...Check) error {
+	if len(checks) == 0 {
+		return e.mapError(ctx, ErrNoChecks)
+	}
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil {
+		return nil
+	}
+	if authCtx.AccountType != "enterprise" {
+		return nil
+	}
+	if orgID == "" {
+		return nil
+	}
+	enabled, err := e.isEnabled(ctx, orgID)
+	if err != nil {
+		return e.mapError(ctx, fmt.Errorf("check RBAC feature for hook authz: %w", err))
+	}
+	if !enabled {
+		return nil
+	}
+
+	for _, check := range checks {
+		if err := validateInput(check); err != nil {
+			return e.mapError(ctx, err)
+		}
+	}
+
+	if userID == "" {
+		return e.mapError(ctx, Denied(checks[0].Scope, checks[0].selector()))
+	}
+
+	principals := []urn.Principal{urn.NewPrincipal(urn.PrincipalTypeUser, userID)}
+	roleSlug, err := e.resolveRoleSlug(ctx, userID, orgID)
+	if err != nil {
+		e.logger.ErrorContext(ctx, "failed to resolve role for hook authz",
+			attr.SlogOrganizationID(orgID),
+			attr.SlogUserID(userID),
+			attr.SlogError(err),
+		)
+		return e.mapError(ctx, fmt.Errorf("resolve role slug: %w", err))
+	}
+	if roleSlug != "" {
+		principals = append(principals, urn.NewPrincipal(urn.PrincipalTypeRole, roleSlug))
+	}
+
+	grants, err := LoadGrants(ctx, e.db, orgID, principals)
+	if err != nil {
+		e.logger.ErrorContext(ctx, "failed to load grants for hook authz",
+			attr.SlogOrganizationID(orgID),
+			attr.SlogUserID(userID),
+			attr.SlogError(err),
+		)
+		return e.mapError(ctx, fmt.Errorf("load grants: %w", err))
+	}
+
+	for _, check := range checks {
+		if !grantsSatisfy(grants, check.expand()) {
+			return e.mapError(ctx, Denied(check.Scope, check.selector()))
+		}
+	}
+
+	return nil
+}
+
 func (e *Engine) RequireAny(ctx context.Context, checks ...Check) error {
 	enforce, err := e.ShouldEnforce(ctx)
 	if err != nil {
