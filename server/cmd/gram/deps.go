@@ -195,6 +195,15 @@ func newDBClient(ctx context.Context, logger *slog.Logger, meterProvider metric.
 		consoleLogLevel = tracelog.LogLevelDebug
 	}
 
+	statementTimeout := 60 * time.Second
+	poolcfg.ConnConfig.RuntimeParams["statement_timeout"] = fmt.Sprintf("%d", int(statementTimeout.Milliseconds()))
+
+	lockTimeout := 10 * time.Second
+	poolcfg.ConnConfig.RuntimeParams["lock_timeout"] = fmt.Sprintf("%d", int(lockTimeout.Milliseconds()))
+
+	idleInTxSessionTimeout := 60 * time.Second
+	poolcfg.ConnConfig.RuntimeParams["idle_in_transaction_session_timeout"] = fmt.Sprintf("%d", int(idleInTxSessionTimeout.Milliseconds()))
+
 	poolcfg.ConnConfig.Tracer = multitracer.New(
 		&pgxotel.QueryTracer{
 			Name:    "pgx",
