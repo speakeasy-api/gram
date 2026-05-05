@@ -39,10 +39,13 @@ func NewAnalyzeSegment(logger *slog.Logger, db *pgxpool.Pool, chatClient openrou
 }
 
 type AnalyzeSegmentArgs struct {
-	ChatID       uuid.UUID
-	ProjectID    uuid.UUID
-	OrgID        string
-	APIKeyID     string
+	ChatID    uuid.UUID
+	ProjectID uuid.UUID
+	OrgID     string
+	APIKeyID  string
+	// Generation pins the chat snapshot; must match the generation used to
+	// compute StartIndex and EndIndex.
+	Generation   int32
 	StartIndex   int
 	EndIndex     int
 	UserFeedback []UserFeedback
@@ -63,12 +66,9 @@ type segmentAnalysisResult struct {
 }
 
 func (a *AnalyzeSegment) Do(ctx context.Context, args AnalyzeSegmentArgs) error {
-	allMessages, err := a.repo.ListLatestGenerationChatMessages(ctx, repo.ListLatestGenerationChatMessagesParams{
-		ChatID:    args.ChatID,
-		ProjectID: args.ProjectID,
-	})
+	allMessages, err := loadMessagesAtPinnedGeneration(ctx, a.repo, args.ChatID, args.ProjectID, args.Generation)
 	if err != nil {
-		return fmt.Errorf("failed to list chat messages: %w", err)
+		return err
 	}
 
 	// Extract the segment
