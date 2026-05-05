@@ -27,8 +27,14 @@ const (
 // scopeExpansions[c.Scope] one step.
 //
 // environment:* scopes are checked at the project_id (no per-env granularity in the UI),
-// so they share a resource kind and ID with project:* checks — this lets project-level
-// grants cleanly satisfy environment-level checks via the standard selector matching.
+// so they share a resource kind and ID with project:* checks — admin-tier grants like
+// project:write can therefore cleanly satisfy environment-level checks via the standard
+// selector matching path.
+//
+// Deliberately, environment:read does NOT include project:read in its expansion: a generic
+// project-viewer should not gain access to environment values (which include secrets). To
+// read or clone an environment, a role must hold environment:read, environment:write, or
+// the project:write admin tier explicitly.
 var scopeExpansions = map[Scope][]Scope{
 	ScopeRoot:             nil,
 	ScopeOrgRead:          {ScopeOrgAdmin},
@@ -38,7 +44,7 @@ var scopeExpansions = map[Scope][]Scope{
 	ScopeMCPRead:          {ScopeMCPWrite},
 	ScopeMCPWrite:         nil,
 	ScopeMCPConnect:       {ScopeMCPRead, ScopeMCPWrite},
-	ScopeEnvironmentRead:  {ScopeEnvironmentWrite, ScopeProjectRead, ScopeProjectWrite},
+	ScopeEnvironmentRead:  {ScopeEnvironmentWrite, ScopeProjectWrite},
 	ScopeEnvironmentWrite: {ScopeProjectWrite},
 }
 

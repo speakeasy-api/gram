@@ -400,3 +400,45 @@ func TestEnvironments_RBAC_Clone_DeniedWithEnvironmentReadOnly(t *testing.T) {
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }
+
+// project:read alone must NOT grant environment:read or environment:write.
+// This guards against a generic project-viewer escalating into reading or
+// cloning environment values (which include secrets) — qstearns' explicit
+// constraint when the environment scopes were introduced.
+func TestEnvironments_RBAC_Clone_DeniedWithProjectReadOnly(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestEnvironmentService(t)
+
+	source, err := ti.service.CreateEnvironment(ctx, &gen.CreateEnvironmentPayload{
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		OrganizationID:   "",
+		Name:             "rbac-clone-pr-only-source",
+		Description:      nil,
+		Entries:          []*gen.EnvironmentEntryInput{},
+	})
+	require.NoError(t, err)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+
+	ctx = authztest.WithExactGrants(t, ctx,
+		authz.Grant{
+			Scope:    authz.ScopeProjectRead,
+			Selector: authz.NewSelector(authz.ScopeProjectRead, authCtx.ProjectID.String()),
+		},
+	)
+
+	_, err = ti.service.CloneEnvironment(ctx, &gen.CloneEnvironmentPayload{
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		Slug:             source.Slug,
+		NewName:          "rbac-clone-pr-only-target",
+		CopyValues:       nil,
+	})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+}
