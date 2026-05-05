@@ -5,19 +5,21 @@
  * The only non-trivial mapping is "openapi" ↔ "http".
  */
 
-export type SourceType = "openapi" | "function" | "externalmcp";
-export type UrnKind = "http" | "function" | "externalmcp";
+export type SourceType = "openapi" | "function" | "externalmcp" | "remotemcp";
+export type UrnKind = "http" | "function" | "externalmcp" | "remotemcp";
 
 const sourceTypeToUrn: Record<SourceType, UrnKind> = {
   openapi: "http",
   function: "function",
   externalmcp: "externalmcp",
+  remotemcp: "remotemcp",
 };
 
 const urnToSourceType: Record<UrnKind, SourceType> = {
   http: "openapi",
   function: "function",
   externalmcp: "externalmcp",
+  remotemcp: "remotemcp",
 };
 
 export function sourceTypeToUrnKind(type: SourceType): UrnKind {

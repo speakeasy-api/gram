@@ -30,6 +30,13 @@ export type NamedAsset =
       type: "externalmcp";
       registryId?: string;
       iconUrl?: string;
+    }
+  | {
+      id: string;
+      deploymentAssetId: string;
+      slug: string;
+      url: string;
+      type: "remotemcp";
     };
 
 const sourceTypeConfig = {
@@ -41,6 +48,9 @@ const sourceTypeConfig = {
   },
   externalmcp: {
     label: "Catalog",
+  },
+  remotemcp: {
+    label: "Remote MCP",
   },
 };
 
@@ -66,41 +76,48 @@ export function SourceCard({
 
   const sourceKind = sourceTypeToUrnKind(asset.type);
 
-  const actions = [
-    ...(asset.type === "openapi"
-      ? [
+  // Remote MCP cards delegate management actions (delete, edit) to the detail
+  // page's Settings tab — the delete confirmation needs to enumerate related
+  // mcp_servers and mcp_endpoints, which doesn't fit a card-level dialog.
+  const actions =
+    asset.type === "remotemcp"
+      ? []
+      : [
+          ...(asset.type === "openapi"
+            ? [
+                {
+                  label: "View",
+                  onClick: () => handleViewAsset(asset.id),
+                  icon: "eye" as const,
+                },
+                {
+                  label: "Update",
+                  onClick: () => setChangeDocumentTargetSlug(asset.slug),
+                  icon: "upload" as const,
+                  disabled: !canWrite,
+                },
+              ]
+            : []),
+          ...(deploymentId
+            ? [
+                {
+                  label: "Deployment",
+                  onClick: () =>
+                    routes.deployments.deployment.goTo(deploymentId),
+                  icon: "history" as const,
+                },
+              ]
+            : []),
           {
-            label: "View",
-            onClick: () => handleViewAsset(asset.id),
-            icon: "eye" as const,
-          },
-          {
-            label: "Update",
-            onClick: () => setChangeDocumentTargetSlug(asset.slug),
-            icon: "upload" as const,
+            label: "Delete",
+            onClick: () => handleRemove(asset.id),
+            icon: "trash" as const,
+            destructive: true,
             disabled: !canWrite,
           },
-        ]
-      : []),
-    ...(deploymentId
-      ? [
-          {
-            label: "Deployment",
-            onClick: () => routes.deployments.deployment.goTo(deploymentId),
-            icon: "history" as const,
-          },
-        ]
-      : []),
-    {
-      label: "Delete",
-      onClick: () => handleRemove(asset.id),
-      icon: "trash" as const,
-      destructive: true,
-      disabled: !canWrite,
-    },
-  ];
+        ];
 
-  const displayName = asset.name;
+  const displayName = asset.type === "remotemcp" ? asset.url : asset.name;
 
   const iconContent = (() => {
     if (asset.type === "externalmcp" && asset.iconUrl) {
@@ -112,7 +129,7 @@ export function SourceCard({
         />
       );
     }
-    if (asset.type === "externalmcp") {
+    if (asset.type === "externalmcp" || asset.type === "remotemcp") {
       return <Network className="text-muted-foreground h-8 w-8" />;
     }
     return <FileCode className="text-muted-foreground h-8 w-8" />;
@@ -137,9 +154,11 @@ export function SourceCard({
           </Type>
           <div className="flex shrink-0 items-center gap-1">
             {causingFailure && <AssetIsCausingFailureNotice />}
-            <div onClick={(e) => e.stopPropagation()}>
-              <MoreActions actions={actions} />
-            </div>
+            {actions.length > 0 && (
+              <div onClick={(e) => e.stopPropagation()}>
+                <MoreActions actions={actions} />
+              </div>
+            )}
           </div>
         </div>
 

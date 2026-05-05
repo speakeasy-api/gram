@@ -5,12 +5,13 @@ import { ViewToggle } from "@/components/ui/view-toggle";
 import { useViewMode } from "@/components/ui/use-view-mode";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
-import { useCatalogIconMap, useDeploymentIsEmpty } from "./sources-hooks";
+import { useCatalogIconMap } from "./sources-hooks";
 import { useRoutes } from "@/routes";
 import {
   useLatestDeployment,
   useListAssets,
   useListTools,
+  useRemoteMcpServers,
 } from "@gram/client/react-query/index.js";
 import {
   Button,
@@ -26,6 +27,7 @@ import {
   CircleAlert,
   Code,
   FileCode,
+  Network,
   Plus,
   Server,
 } from "lucide-react";
@@ -70,11 +72,25 @@ export default function Sources() {
   const telemetry = useTelemetry();
   const isFunctionsEnabled =
     telemetry.isFeatureEnabled("gram-functions") ?? false;
+  const isRemoteMcpEnabled =
+    telemetry.isFeatureEnabled("gram-remote-mcp") ?? false;
 
-  const { data: deploymentResult, refetch, isLoading } = useLatestDeployment();
+  const {
+    data: deploymentResult,
+    refetch,
+    isLoading: isLoadingDeployment,
+  } = useLatestDeployment();
   const { data: assets, refetch: refetchAssets } = useListAssets();
+  const { data: remoteMcpServersResult, isLoading: isLoadingRemoteMcp } =
+    useRemoteMcpServers(undefined, undefined, {
+      enabled: isRemoteMcpEnabled,
+    });
   const catalogIconMap = useCatalogIconMap();
   const deployment = deploymentResult?.deployment;
+  // Remote MCP sources aren't deployment-bound, so the page isn't ready until
+  // both queries have resolved.
+  const isLoading =
+    isLoadingDeployment || (isRemoteMcpEnabled && isLoadingRemoteMcp);
 
   const [viewMode, setViewMode] = useViewMode();
   const toolCountsBySource = useToolCountsBySource();
@@ -86,58 +102,55 @@ export default function Sources() {
     openViewAsset,
     closeDialog,
   } = useDialogStore();
-  const deploymentIsEmpty = useDeploymentIsEmpty();
 
   const allSources: NamedAsset[] = useMemo(() => {
-    if (!deployment) {
-      return [];
-    }
-
     // OpenAPI and Function sources need assets data
-    const openApiSources = assets
-      ? deployment.openapiv3Assets
-          .map((deploymentAsset) => {
-            const asset = assets.assets.find(
-              (a) => a.id === deploymentAsset.assetId,
-            );
-            if (!asset) {
-              console.error(`Asset ${deploymentAsset.assetId} not found`);
-              return null;
-            }
-            return {
-              ...asset,
-              deploymentAssetId: deploymentAsset.id,
-              name: deploymentAsset.name,
-              slug: deploymentAsset.slug,
-              type: "openapi" as const,
-            };
-          })
-          .filter((source) => source !== null)
-      : [];
+    const openApiSources =
+      deployment && assets
+        ? deployment.openapiv3Assets
+            .map((deploymentAsset) => {
+              const asset = assets.assets.find(
+                (a) => a.id === deploymentAsset.assetId,
+              );
+              if (!asset) {
+                console.error(`Asset ${deploymentAsset.assetId} not found`);
+                return null;
+              }
+              return {
+                ...asset,
+                deploymentAssetId: deploymentAsset.id,
+                name: deploymentAsset.name,
+                slug: deploymentAsset.slug,
+                type: "openapi" as const,
+              };
+            })
+            .filter((source) => source !== null)
+        : [];
 
-    const functionSources = assets
-      ? (deployment.functionsAssets ?? [])
-          .map((deploymentAsset) => {
-            const asset = assets.assets.find(
-              (a) => a.id === deploymentAsset.assetId,
-            );
-            if (!asset) {
-              console.error(`Asset ${deploymentAsset.assetId} not found`);
-              return null;
-            }
-            return {
-              ...asset,
-              deploymentAssetId: deploymentAsset.id,
-              name: deploymentAsset.name,
-              slug: deploymentAsset.slug,
-              type: "function" as const,
-            };
-          })
-          .filter((source) => source !== null)
-      : [];
+    const functionSources =
+      deployment && assets
+        ? (deployment.functionsAssets ?? [])
+            .map((deploymentAsset) => {
+              const asset = assets.assets.find(
+                (a) => a.id === deploymentAsset.assetId,
+              );
+              if (!asset) {
+                console.error(`Asset ${deploymentAsset.assetId} not found`);
+                return null;
+              }
+              return {
+                ...asset,
+                deploymentAssetId: deploymentAsset.id,
+                name: deploymentAsset.name,
+                slug: deploymentAsset.slug,
+                type: "function" as const,
+              };
+            })
+            .filter((source) => source !== null)
+        : [];
 
     // External MCP sources don't need assets data - they come directly from deployment
-    const externalMcpSources = (deployment.externalMcps ?? []).map(
+    const externalMcpSources = (deployment?.externalMcps ?? []).map(
       (externalMcp) => ({
         id: externalMcp.id,
         deploymentAssetId: externalMcp.id,
@@ -149,8 +162,26 @@ export default function Sources() {
       }),
     );
 
-    return [...openApiSources, ...functionSources, ...externalMcpSources];
-  }, [deployment, assets, catalogIconMap]);
+    // Remote MCP servers are project-scoped, not deployment-bound, so they're
+    // fetched independently. The id doubles as the route slug since there's no
+    // user-defined name to derive one from.
+    const remoteMcpSources: NamedAsset[] = (
+      remoteMcpServersResult?.remoteMcpServers ?? []
+    ).map((server) => ({
+      id: server.id,
+      deploymentAssetId: server.id,
+      slug: server.id,
+      url: server.url,
+      type: "remotemcp" as const,
+    }));
+
+    return [
+      ...openApiSources,
+      ...functionSources,
+      ...externalMcpSources,
+      ...remoteMcpSources,
+    ];
+  }, [deployment, assets, catalogIconMap, remoteMcpServersResult]);
 
   const removeSource = async (
     assetId: string,
@@ -190,7 +221,10 @@ export default function Sources() {
     }
   };
 
-  if (!isLoading && deploymentIsEmpty) {
+  // Empty state covers all source types — a project can be deployment-empty
+  // but still have remote MCP sources, in which case we want to show the
+  // regular index, not the onboarding empty state.
+  if (!isLoading && allSources.length === 0) {
     return (
       <>
         <SourcesEmptyState />
@@ -200,13 +234,14 @@ export default function Sources() {
           onOpenChange={(open) => !open && closeDialog()}
         >
           <Dialog.Content className="max-w-2xl!">
-            {dialogState.type === "remove-source" && (
-              <RemoveSourceDialogContent
-                asset={dialogState.asset}
-                onConfirmRemoval={removeSource}
-                onClose={closeDialog}
-              />
-            )}
+            {dialogState.type === "remove-source" &&
+              dialogState.asset.type !== "remotemcp" && (
+                <RemoveSourceDialogContent
+                  asset={dialogState.asset}
+                  onConfirmRemoval={removeSource}
+                  onClose={closeDialog}
+                />
+              )}
           </Dialog.Content>
         </Dialog>
       </>
@@ -289,12 +324,30 @@ export default function Sources() {
                         <Server className="h-5 w-5 text-violet-600 dark:text-violet-400" />
                       </div>
                       <div className="flex flex-col gap-0.5">
-                        <span className="font-medium">Third party server</span>
+                        <span className="font-medium">Registry server</span>
                         <span className="text-muted-foreground text-xs">
                           Add pre-built servers from the catalog
                         </span>
                       </div>
                     </DropdownMenuItem>
+                    {isRemoteMcpEnabled && (
+                      <DropdownMenuItem
+                        onSelect={() => routes.sources.addRemoteMcp.goTo()}
+                        className="flex cursor-pointer items-start gap-3 rounded-md p-2"
+                      >
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-violet-500/10 dark:bg-violet-500/20">
+                          <Network className="h-5 w-5 text-violet-600 dark:text-violet-400" />
+                        </div>
+                        <div className="flex flex-col gap-0.5">
+                          <span className="font-medium">
+                            Custom remote server
+                          </span>
+                          <span className="text-muted-foreground text-xs">
+                            Add existing remote servers by URL
+                          </span>
+                        </div>
+                      </DropdownMenuItem>
+                    )}
                   </DropdownMenuContent>
                 )}
               </DropdownMenu>
@@ -365,13 +418,14 @@ export default function Sources() {
                   : "max-w-2xl!"
               }
             >
-              {dialogState.type === "remove-source" && (
-                <RemoveSourceDialogContent
-                  asset={dialogState.asset}
-                  onConfirmRemoval={removeSource}
-                  onClose={closeDialog}
-                />
-              )}
+              {dialogState.type === "remove-source" &&
+                dialogState.asset.type !== "remotemcp" && (
+                  <RemoveSourceDialogContent
+                    asset={dialogState.asset}
+                    onConfirmRemoval={removeSource}
+                    onClose={closeDialog}
+                  />
+                )}
               {dialogState.type === "upload-openapi" && (
                 <UploadOpenApiDialogContent
                   documentSlug={dialogState.documentSlug}
@@ -379,9 +433,10 @@ export default function Sources() {
                   onSuccess={handleDialogSuccess}
                 />
               )}
-              {dialogState.type === "view-asset" && (
-                <ViewAssetDialogContent asset={dialogState.asset} />
-              )}
+              {dialogState.type === "view-asset" &&
+                dialogState.asset.type !== "remotemcp" && (
+                  <ViewAssetDialogContent asset={dialogState.asset} />
+                )}
             </Dialog.Content>
           </Dialog>
         </Page.Section.Body>

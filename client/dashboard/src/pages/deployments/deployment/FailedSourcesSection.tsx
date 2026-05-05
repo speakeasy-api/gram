@@ -15,6 +15,7 @@ import {
   Code,
   FileCode,
   Loader2,
+  Network,
   Server,
   Wrench,
 } from "lucide-react";
@@ -33,6 +34,10 @@ const SOURCE_ICONS = {
   openapi: FileCode,
   function: Code,
   externalmcp: Server,
+  // Remote MCP servers are project-scoped, not deployment-bound, so they cannot
+  // appear in failed deployment sources — but the icon map must cover the full
+  // SourceType union for the indexed lookup at the call site to typecheck.
+  remotemcp: Network,
 } as const;
 
 export function FailedSourcesSection({
