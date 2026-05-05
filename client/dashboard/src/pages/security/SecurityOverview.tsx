@@ -25,7 +25,6 @@ import {
 import { ChatDetailPanel } from "@/pages/chatLogs/ChatDetailPanel";
 import { Drawer, DrawerContent } from "@/components/ui/drawer";
 
-// Build a ruleId -> category lookup from the detection rules registry.
 const RULE_ID_TO_CATEGORY = new Map<string, RuleCategory>();
 for (const [category, rules] of Object.entries(DETECTION_RULES)) {
   for (const rule of rules) {
@@ -33,9 +32,28 @@ for (const [category, rules] of Object.entries(DETECTION_RULES)) {
   }
 }
 
-function getCategoryForRule(ruleId: string | undefined): RuleCategory {
-  if (!ruleId) return "secrets";
-  return RULE_ID_TO_CATEGORY.get(ruleId) ?? "secrets";
+function getCategoryForFinding(
+  source: string | undefined,
+  ruleId: string | undefined,
+): RuleCategory | null {
+  if (source === "destructive_tool") return "destructive_tool";
+  if (source === "shadow_mcp") return "shadow_mcp";
+  if (!ruleId) return null;
+  return RULE_ID_TO_CATEGORY.get(ruleId) ?? null;
+}
+
+function CategoryBadge({
+  source,
+  ruleId,
+}: {
+  source: string | undefined;
+  ruleId: string | undefined;
+}) {
+  const category = getCategoryForFinding(source, ruleId);
+  if (!category) return null;
+  return (
+    <Badge variant="secondary">{RULE_CATEGORY_META[category].label}</Badge>
+  );
 }
 
 export default function SecurityOverview() {
@@ -315,13 +333,10 @@ function SecurityOverviewContent() {
                           }}
                         >
                           <TableCell>
-                            <Badge variant="secondary">
-                              {
-                                RULE_CATEGORY_META[
-                                  getCategoryForRule(result.ruleId)
-                                ].label
-                              }
-                            </Badge>
+                            <CategoryBadge
+                              source={result.source}
+                              ruleId={result.ruleId}
+                            />
                           </TableCell>
                           <TableCell className="font-mono text-xs">
                             {result.ruleId ?? "-"}

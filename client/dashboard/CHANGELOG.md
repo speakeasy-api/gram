@@ -1,5 +1,22 @@
 # dashboard
 
+## 0.45.2
+
+### Patch Changes
+
+- 485e9fa: Tag chat sessions started from the Assistants page with `X-Gram-Source: assistant` (was `assistant-onboarding`). Agent session logs now show `assistant` as the source for these sessions instead of conflating ongoing assistant chats with the onboarding flow.
+- abf9f59: fix certain agent session side panel failing to load conversation history
+- 07819a8: Show function memory and instances on source overview
+- 8701c12: Redesign the MCP servers list on the plugin detail page so each entry
+  matches the card pattern from the MCP list page: the Network icon in
+  the dot-pattern sidebar, name plus tool-count badge in the header, and
+  the Public / Private / Disabled status indicator on the footer left.
+  The footer right has a trash icon button that removes the server from
+  the plugin, and servers whose toolset has been deleted are flagged
+  inline. Also extracts the shared status indicator from MCPCard,
+  MCPTableRow, and the new card into a reusable
+  `MCPStatusIndicator` component.
+
 ## 0.45.1
 
 ### Patch Changes

@@ -141,6 +141,9 @@ const (
 	AssistantRuntimeIDKey          = attribute.Key("gram.assistant.runtime_id")
 	AssistantRuntimeBackendKey     = attribute.Key("gram.assistant.runtime_backend")
 	AssistantPhaseKey              = attribute.Key("gram.assistant.phase")
+	AssistantColdStartKey          = attribute.Key("gram.assistant.cold_start")
+	AssistantAppCreatedKey         = attribute.Key("gram.assistant.app_created")
+	AssistantSetupFailureClassKey  = attribute.Key("gram.assistant.setup_failure_class")
 	AssistantServerIPKey           = attribute.Key("gram.assistant.server_ip")
 	ChatModelKey                   = attribute.Key("gram.chat.model")
 	ChatToolCountKey               = attribute.Key("gram.chat.tool_count")
@@ -1287,6 +1290,14 @@ func SlogAssistantAttempt(v int) slog.Attr      { return slog.Int(string(Assista
 
 func AssistantServerIP(v string) attribute.KeyValue { return AssistantServerIPKey.String(v) }
 func SlogAssistantServerIP(v string) slog.Attr      { return slog.String(string(AssistantServerIPKey), v) }
+
+func AssistantColdStart(v bool) attribute.KeyValue { return AssistantColdStartKey.Bool(v) }
+
+func AssistantAppCreated(v bool) attribute.KeyValue { return AssistantAppCreatedKey.Bool(v) }
+
+func AssistantSetupFailureClass(v string) attribute.KeyValue {
+	return AssistantSetupFailureClassKey.String(v)
+}
 
 func ChatModel(v string) attribute.KeyValue { return ChatModelKey.String(v) }
 func SlogChatModel(v string) slog.Attr      { return slog.String(string(ChatModelKey), v) }

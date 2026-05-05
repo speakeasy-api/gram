@@ -1,4 +1,4 @@
-h1:xO4VMjiCMfb6ToxaNdG/F4ynN6RrVKFlCrYqY8gkVmI=
+h1:cqPlYrsKL6hBzXezENZP87MOc56DsL6PpZOO8n3FHlU=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -151,4 +151,5 @@ h1:xO4VMjiCMfb6ToxaNdG/F4ynN6RrVKFlCrYqY8gkVmI=
 20260430111449_add-workos-roles-and-sync-tables.sql h1:tIK7+g0gEt27jixmoso4bHI7GYAtxUzfL8l24k2Os8g=
 20260430201533_risk-policies-action-and-auto-name.sql h1:3tvGuQlzBnUX2gvFtad56YpeX1wpE9asgXh74ywEIhE=
 20260430205315_risk-policies-user-message.sql h1:b3myELZy6W5m08Wz7aqPV6pInYP5SB0KKj5uQ5VYBoQ=
-20260502093117_add-organization-invitations.sql h1:jdsRg45xzEXI/VECi2IiSXwvYXUG0qowmEbhuygZJ0E=
+20260504160941_remove-location-from-pii-policies.sql h1:yCzDGT+8E9xuZpxYwJXpEyHYFW0xNEn9VKe2TchfJgs=
+20260504210916_chat_messages_project_id_id_idx.sql h1:kwShq3wLbk1VNIWRsAWDlqJ2apQ5iDnODP81/Vc6VTY=

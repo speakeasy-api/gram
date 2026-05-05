@@ -1,0 +1,1796 @@
+swagger: "2.0"
+info:
+  title: Gram dev-idp
+  description: Management API for the local-development IDP that backs Gram's auth flows in tests and dev. Permanently unauthenticated.
+  version: 0.0.1
+host: localhost:80
+consumes:
+  - application/json
+  - application/xml
+  - application/gob
+produces:
+  - application/json
+  - application/xml
+  - application/gob
+paths:
+  /rpc/devIdp.clearCurrentUser:
+    post:
+      tags:
+        - devIdp
+      summary: clearCurrentUser devIdp
+      description: Clear the per-mode currentUser. The next identity-resolving request on the mode then falls through to the default-user bootstrap (idp-design.md §3) — git committer for local modes, WorkOS lookup for workos. Idempotent — clearing an already-cleared mode is a no-op.
+      operationId: devIdp#clearCurrentUser
+      parameters:
+        - name: ClearCurrentUserRequestBody
+          in: body
+          required: true
+          schema:
+            $ref: "#/definitions/DevIdpClearCurrentUserRequestBody"
+            required:
+              - mode
+      responses:
+        "204":
+          description: No Content response.
+      schemes:
+        - http
+  /rpc/devIdp.getCurrentUser:
+    post:
+      tags:
+        - devIdp
+      summary: getCurrentUser devIdp
+      description: Read the per-mode currentUser. 404s when no row exists yet for that mode.
+      operationId: devIdp#getCurrentUser
+      parameters:
+        - name: GetCurrentUserRequestBody
+          in: body
+          required: true
+          schema:
+            $ref: "#/definitions/DevIdpGetCurrentUserRequestBody"
+            required:
+              - mode
+      responses:
+        "200":
+          description: OK response.
+          schema:
+            $ref: "#/definitions/CurrentUser"
+            required:
+              - mode
+      schemes:
+        - http
+  /rpc/devIdp.setCurrentUser:
+    post:
+      tags:
+        - devIdp
+      summary: setCurrentUser devIdp
+      description: UPSERT the per-mode currentUser. Local modes accept `user_id` (a UUID into the local users table); workos mode accepts `workos_sub` (a literal WorkOS user id; not validated). To clear the currentUser instead, call `clearCurrentUser`.
+      operationId: devIdp#setCurrentUser
+      parameters:
+        - name: SetCurrentUserRequestBody
+          in: body
+          required: true
+          schema:
+            $ref: "#/definitions/DevIdpSetCurrentUserRequestBody"
+            required:
+              - mode
+      responses:
+        "200":
+          description: OK response.
+          schema:
+            $ref: "#/definitions/CurrentUser"
+            required:
+              - mode
+      schemes:
+        - http
+  /rpc/invitations.accept:
+    post:
+      tags:
+        - invitations
+      summary: accept invitations
+      description: "Accept an invitation: flip state to `accepted`, find-or-create the user for the invited email, and idempotently attach a membership. Returns the updated invitation."
+      operationId: invitations#accept
+      parameters:
+        - name: AcceptRequestBody
+          in: body
+          required: true
+          schema:
+            $ref: "#/definitions/InvitationsAcceptRequestBody"
+            required:
+              - id
+      responses:
+        "200":
+          description: OK response.
+          schema:
+            $ref: "#/definitions/Invitation"
+            required:
+              - id
+              - email
+              - organization_id
+              - state
+              - token
+              - expires_at
+              - created_at
+              - updated_at
+      schemes:
+        - http
+  /rpc/invitations.create:
+    post:
+      tags:
+        - invitations
+      summary: create invitations
+      description: Create a pending invitation. The token is generated server-side; the dev-idp doesn't actually send email.
+      operationId: invitations#create
+      parameters:
+        - name: CreateRequestBody
+          in: body
+          required: true
+          schema:
+            $ref: "#/definitions/InvitationsCreateRequestBody"
+            required:
+              - email
+              - organization_id
+      responses:
+        "200":
+          description: OK response.
+          schema:
+            $ref: "#/definitions/Invitation"
+            required:
+              - id
+              - email
+              - organization_id
+              - state
+              - token
+              - expires_at
+              - created_at
+              - updated_at
+      schemes:
+        - http
+  /rpc/invitations.findByToken:
+    post:
+      tags:
+        - invitations
+      summary: findByToken invitations
+      description: Resolve an invitation by its token. Used by the dashboard accept-flow URL.
+      operationId: invitations#findByToken
+      parameters:
+        - name: FindByTokenRequestBody
+          in: body
+          required: true
+          schema:
+            $ref: "#/definitions/InvitationsFindByTokenRequestBody"
+            required:
+              - token
+      responses:
+        "200":
+          description: OK response.
+          schema:
+            $ref: "#/definitions/Invitation"
+            required:
+              - id
+              - email
+              - organization_id
+              - state
+              - token
+              - expires_at
+              - created_at
+              - updated_at
+      schemes:
+        - http
+  /rpc/invitations.get:
+    post:
+      tags:
+        - invitations
+      summary: get invitations
+      description: Fetch a single invitation by id.
+      operationId: invitations#get
+      parameters:
+        - name: GetRequestBody
+          in: body
+          required: true
+          schema:
+            $ref: "#/definitions/InvitationsGetRequestBody"
+            required:
+              - id
+      responses:
+        "200":
+          description: OK response.
+          schema:
+            $ref: "#/definitions/Invitation"
+            required:
+              - id
+              - email
+              - organization_id
+              - state
+              - token
+              - expires_at
+              - created_at
+              - updated_at
+      schemes:
+        - http
+  /rpc/invitations.list:
+    post:
+      tags:
+        - invitations
+      summary: list invitations
+      description: List invitations for an organization, keyset-paginated by id.
+      operationId: invitations#list
+      parameters:
+        - name: ListRequestBody
+          in: body
+          required: true
+          schema:
+            $ref: "#/definitions/InvitationsListRequestBody"
+            required:
+              - organization_id
+      responses:
+        "200":
+          description: OK response.
+          schema:
+            $ref: "#/definitions/ListInvitationsResult"
+            required:
+              - next_cursor
+              - items
+      schemes:
+        - http
+  /rpc/invitations.resend:
+    post:
+      tags:
+        - invitations
+      summary: resend invitations
+      description: Touch the invitation's updated_at as if a fresh email were sent. The dev-idp doesn't actually send email.
+      operationId: invitations#resend
+      parameters:
+        - name: ResendRequestBody
+          in: body
+          required: true
+          schema:
+            $ref: "#/definitions/InvitationsResendRequestBody"
+            required:
+              - id
+      responses:
+        "200":
+          description: OK response.
+          schema:
+            $ref: "#/definitions/Invitation"
+            required:
+              - id
+              - email
+              - organization_id
+              - state
+              - token
+              - expires_at
+              - created_at
+              - updated_at
+      schemes:
+        - http
+  /rpc/invitations.revoke:
+    post:
+      tags:
+        - invitations
+      summary: revoke invitations
+      description: Revoke a pending invitation. Idempotent — repeated revokes return the same row.
+      operationId: invitations#revoke
+      parameters:
+        - name: RevokeRequestBody
+          in: body
+          required: true
+          schema:
+            $ref: "#/definitions/InvitationsRevokeRequestBody"
+            required:
+              - id
+      responses:
+        "200":
+          description: OK response.
+          schema:
+            $ref: "#/definitions/Invitation"
+            required:
+              - id
+              - email
+              - organization_id
+              - state
+              - token
+              - expires_at
+              - created_at
+              - updated_at
+      schemes:
+        - http
+  /rpc/memberships.create:
+    post:
+      tags:
+        - memberships
+      summary: create memberships
+      description: Idempotently create a membership for (user_id, organization_id).
+      operationId: memberships#create
+      parameters:
+        - name: CreateRequestBody
+          in: body
+          required: true
+          schema:
+            $ref: "#/definitions/MembershipsCreateRequestBody"
+            required:
+              - user_id
+              - organization_id
+      responses:
+        "200":
+          description: OK response.
+          schema:
+            $ref: "#/definitions/Membership"
+            required:
+              - id
+              - user_id
+              - organization_id
+              - role
+              - created_at
+              - updated_at
+      schemes:
+        - http
+  /rpc/memberships.delete:
+    post:
+      tags:
+        - memberships
+      summary: delete memberships
+      description: Hard-delete a membership.
+      operationId: memberships#delete
+      parameters:
+        - name: DeleteRequestBody
+          in: body
+          required: true
+          schema:
+            $ref: "#/definitions/MembershipsDeleteRequestBody"
+            required:
+              - id
+      responses:
+        "204":
+          description: No Content response.
+      schemes:
+        - http
+  /rpc/memberships.list:
+    post:
+      tags:
+        - memberships
+      summary: list memberships
+      description: List memberships. Optional `user_id` and/or `organization_id` filters (idp-design.md §6.1).
+      operationId: memberships#list
+      parameters:
+        - name: ListRequestBody
+          in: body
+          required: true
+          schema:
+            $ref: "#/definitions/MembershipsListRequestBody"
+      responses:
+        "200":
+          description: OK response.
+          schema:
+            $ref: "#/definitions/ListMembershipsResult"
+            required:
+              - next_cursor
+              - items
+      schemes:
+        - http
+  /rpc/memberships.update:
+    post:
+      tags:
+        - memberships
+      summary: update memberships
+      description: Patch a membership's role.
+      operationId: memberships#update
+      parameters:
+        - name: UpdateRequestBody
+          in: body
+          required: true
+          schema:
+            $ref: "#/definitions/MembershipsUpdateRequestBody"
+            required:
+              - id
+              - role
+      responses:
+        "200":
+          description: OK response.
+          schema:
+            $ref: "#/definitions/Membership"
+            required:
+              - id
+              - user_id
+              - organization_id
+              - role
+              - created_at
+              - updated_at
+      schemes:
+        - http
+  /rpc/organizationRoles.create:
+    post:
+      tags:
+        - organizationRoles
+      summary: create organizationRoles
+      description: Create a role on an organization.
+      operationId: organizationRoles#create
+      parameters:
+        - name: CreateRequestBody
+          in: body
+          required: true
+          schema:
+            $ref: "#/definitions/OrganizationRolesCreateRequestBody"
+            required:
+              - organization_id
+              - slug
+              - name
+      responses:
+        "200":
+          description: OK response.
+          schema:
+            $ref: "#/definitions/OrganizationRole"
+            required:
+              - id
+              - organization_id
+              - slug
+              - name
+              - description
+              - created_at
+              - updated_at
+      schemes:
+        - http
+  /rpc/organizationRoles.delete:
+    post:
+      tags:
+        - organizationRoles
+      summary: delete organizationRoles
+      description: Delete a role from an organization by (organization_id, slug).
+      operationId: organizationRoles#delete
+      parameters:
+        - name: DeleteRequestBody
+          in: body
+          required: true
+          schema:
+            $ref: "#/definitions/OrganizationRolesDeleteRequestBody"
+            required:
+              - organization_id
+              - slug
+      responses:
+        "204":
+          description: No Content response.
+      schemes:
+        - http
+  /rpc/organizationRoles.list:
+    post:
+      tags:
+        - organizationRoles
+      summary: list organizationRoles
+      description: List every role on an organization. No pagination — roles are a small per-org set.
+      operationId: organizationRoles#list
+      parameters:
+        - name: ListRequestBody
+          in: body
+          required: true
+          schema:
+            $ref: "#/definitions/OrganizationRolesListRequestBody"
+            required:
+              - organization_id
+      responses:
+        "200":
+          description: OK response.
+          schema:
+            $ref: "#/definitions/ListOrganizationRolesResult"
+            required:
+              - items
+      schemes:
+        - http
+  /rpc/organizationRoles.update:
+    post:
+      tags:
+        - organizationRoles
+      summary: update organizationRoles
+      description: Patch a role's name and/or description by (organization_id, slug).
+      operationId: organizationRoles#update
+      parameters:
+        - name: UpdateRequestBody
+          in: body
+          required: true
+          schema:
+            $ref: "#/definitions/OrganizationRolesUpdateRequestBody"
+            required:
+              - organization_id
+              - slug
+      responses:
+        "200":
+          description: OK response.
+          schema:
+            $ref: "#/definitions/OrganizationRole"
+            required:
+              - id
+              - organization_id
+              - slug
+              - name
+              - description
+              - created_at
+              - updated_at
+      schemes:
+        - http
+  /rpc/organizations.create:
+    post:
+      tags:
+        - organizations
+      summary: create organizations
+      description: Create an organization.
+      operationId: organizations#create
+      parameters:
+        - name: CreateRequestBody
+          in: body
+          required: true
+          schema:
+            $ref: "#/definitions/OrganizationsCreateRequestBody"
+            required:
+              - name
+              - slug
+      responses:
+        "200":
+          description: OK response.
+          schema:
+            $ref: "#/definitions/Organization"
+            required:
+              - id
+              - name
+              - slug
+              - account_type
+              - created_at
+              - updated_at
+      schemes:
+        - http
+  /rpc/organizations.delete:
+    post:
+      tags:
+        - organizations
+      summary: delete organizations
+      description: Hard-delete an organization. Cascades to memberships.
+      operationId: organizations#delete
+      parameters:
+        - name: DeleteRequestBody
+          in: body
+          required: true
+          schema:
+            $ref: "#/definitions/OrganizationsDeleteRequestBody"
+            required:
+              - id
+      responses:
+        "204":
+          description: No Content response.
+      schemes:
+        - http
+  /rpc/organizations.list:
+    post:
+      tags:
+        - organizations
+      summary: list organizations
+      description: List organizations.
+      operationId: organizations#list
+      parameters:
+        - name: ListRequestBody
+          in: body
+          required: true
+          schema:
+            $ref: "#/definitions/OrganizationsListRequestBody"
+      responses:
+        "200":
+          description: OK response.
+          schema:
+            $ref: "#/definitions/ListOrganizationsResult"
+            required:
+              - next_cursor
+              - items
+      schemes:
+        - http
+  /rpc/organizations.update:
+    post:
+      tags:
+        - organizations
+      summary: update organizations
+      description: Patch an organization. Empty `workos_id` clears the field.
+      operationId: organizations#update
+      parameters:
+        - name: UpdateRequestBody
+          in: body
+          required: true
+          schema:
+            $ref: "#/definitions/OrganizationsUpdateRequestBody"
+            required:
+              - id
+      responses:
+        "200":
+          description: OK response.
+          schema:
+            $ref: "#/definitions/Organization"
+            required:
+              - id
+              - name
+              - slug
+              - account_type
+              - created_at
+              - updated_at
+      schemes:
+        - http
+  /rpc/users.create:
+    post:
+      tags:
+        - users
+      summary: create users
+      description: Create a user.
+      operationId: users#create
+      parameters:
+        - name: CreateRequestBody
+          in: body
+          required: true
+          schema:
+            $ref: "#/definitions/UsersCreateRequestBody"
+            required:
+              - email
+              - display_name
+      responses:
+        "200":
+          description: OK response.
+          schema:
+            $ref: "#/definitions/User"
+            required:
+              - id
+              - email
+              - display_name
+              - admin
+              - whitelisted
+              - created_at
+              - updated_at
+      schemes:
+        - http
+  /rpc/users.delete:
+    post:
+      tags:
+        - users
+      summary: delete users
+      description: Hard-delete a user. Cascades to memberships, auth_codes, tokens, and any current_users row whose subject_ref matches (idp-design.md §6.1).
+      operationId: users#delete
+      parameters:
+        - name: DeleteRequestBody
+          in: body
+          required: true
+          schema:
+            $ref: "#/definitions/UsersDeleteRequestBody"
+            required:
+              - id
+      responses:
+        "204":
+          description: No Content response.
+      schemes:
+        - http
+  /rpc/users.list:
+    post:
+      tags:
+        - users
+      summary: list users
+      description: List users.
+      operationId: users#list
+      parameters:
+        - name: ListRequestBody
+          in: body
+          required: true
+          schema:
+            $ref: "#/definitions/UsersListRequestBody"
+      responses:
+        "200":
+          description: OK response.
+          schema:
+            $ref: "#/definitions/ListUsersResult"
+            required:
+              - next_cursor
+              - items
+      schemes:
+        - http
+  /rpc/users.update:
+    post:
+      tags:
+        - users
+      summary: update users
+      description: Patch a user.
+      operationId: users#update
+      parameters:
+        - name: UpdateRequestBody
+          in: body
+          required: true
+          schema:
+            $ref: "#/definitions/UsersUpdateRequestBody"
+            required:
+              - id
+      responses:
+        "200":
+          description: OK response.
+          schema:
+            $ref: "#/definitions/User"
+            required:
+              - id
+              - email
+              - display_name
+              - admin
+              - whitelisted
+              - created_at
+              - updated_at
+      schemes:
+        - http
+definitions:
+  CurrentUser:
+    title: CurrentUser
+    type: object
+    properties:
+      mode:
+        type: string
+        description: Mode whose currentUser is being reported.
+        example: oauth2-1
+        enum:
+          - local-speakeasy
+          - oauth2-1
+          - oauth2
+          - workos
+      user:
+        $ref: "#/definitions/User"
+      workos:
+        $ref: "#/definitions/WorkosCurrentUser"
+    example:
+      mode: oauth2-1
+      user:
+        admin: false
+        created_at: "1970-01-01T00:00:01Z"
+        display_name: abc123
+        email: abc123
+        github_handle: abc123
+        id: 550e8400-e29b-41d4-a716-446655440000
+        photo_url: abc123
+        updated_at: "1970-01-01T00:00:01Z"
+        whitelisted: false
+      workos:
+        email: abc123
+        first_name: abc123
+        last_name: abc123
+        organization_id: abc123
+        profile_picture_url: abc123
+        workos_sub: abc123
+    required:
+      - mode
+  DevIdpClearCurrentUserRequestBody:
+    title: DevIdpClearCurrentUserRequestBody
+    type: object
+    properties:
+      mode:
+        type: string
+        description: Which mode's currentUser to clear.
+        example: oauth2-1
+        enum:
+          - local-speakeasy
+          - oauth2-1
+          - oauth2
+          - workos
+    example:
+      mode: oauth2-1
+    required:
+      - mode
+  DevIdpGetCurrentUserRequestBody:
+    title: DevIdpGetCurrentUserRequestBody
+    type: object
+    properties:
+      mode:
+        type: string
+        description: Which mode's currentUser to read.
+        example: oauth2-1
+        enum:
+          - local-speakeasy
+          - oauth2-1
+          - oauth2
+          - workos
+    example:
+      mode: oauth2-1
+    required:
+      - mode
+  DevIdpSetCurrentUserRequestBody:
+    title: DevIdpSetCurrentUserRequestBody
+    type: object
+    properties:
+      mode:
+        type: string
+        description: Which mode's currentUser to write.
+        example: oauth2-1
+        enum:
+          - local-speakeasy
+          - oauth2-1
+          - oauth2
+          - workos
+      user_id:
+        type: string
+        description: Local user UUID. Required for non-workos modes.
+        example: 550e8400-e29b-41d4-a716-446655440000
+        format: uuid
+      workos_sub:
+        type: string
+        description: WorkOS user id. Required for workos mode.
+        example: abc123
+    example:
+      mode: oauth2-1
+      user_id: 550e8400-e29b-41d4-a716-446655440000
+      workos_sub: abc123
+    required:
+      - mode
+  Invitation:
+    title: Invitation
+    type: object
+    properties:
+      accepted_at:
+        type: string
+        description: Timestamp when the invitation was accepted; empty for pending.
+        example: "1970-01-01T00:00:01Z"
+        format: date-time
+      created_at:
+        type: string
+        example: "1970-01-01T00:00:01Z"
+        format: date-time
+      email:
+        type: string
+        description: Invitee email address.
+        example: abc123
+      expires_at:
+        type: string
+        description: Timestamp when the invitation expires.
+        example: "1970-01-01T00:00:01Z"
+        format: date-time
+      id:
+        type: string
+        description: Invitation UUID.
+        example: 550e8400-e29b-41d4-a716-446655440000
+        format: uuid
+      inviter_user_id:
+        type: string
+        description: User UUID of the inviter, when known.
+        example: 550e8400-e29b-41d4-a716-446655440000
+        format: uuid
+      organization_id:
+        type: string
+        description: Organization UUID.
+        example: 550e8400-e29b-41d4-a716-446655440000
+        format: uuid
+      revoked_at:
+        type: string
+        description: Timestamp when the invitation was revoked; empty for pending.
+        example: "1970-01-01T00:00:01Z"
+        format: date-time
+      state:
+        type: string
+        description: Invitation lifecycle state.
+        example: accepted
+        enum:
+          - pending
+          - accepted
+          - revoked
+          - expired
+      token:
+        type: string
+        description: Opaque token used by /findByToken and the accept-flow URL.
+        example: abc123
+      updated_at:
+        type: string
+        example: "1970-01-01T00:00:01Z"
+        format: date-time
+    example:
+      accepted_at: "1970-01-01T00:00:01Z"
+      created_at: "1970-01-01T00:00:01Z"
+      email: abc123
+      expires_at: "1970-01-01T00:00:01Z"
+      id: 550e8400-e29b-41d4-a716-446655440000
+      inviter_user_id: 550e8400-e29b-41d4-a716-446655440000
+      organization_id: 550e8400-e29b-41d4-a716-446655440000
+      revoked_at: "1970-01-01T00:00:01Z"
+      state: accepted
+      token: abc123
+      updated_at: "1970-01-01T00:00:01Z"
+    required:
+      - id
+      - email
+      - organization_id
+      - state
+      - token
+      - expires_at
+      - created_at
+      - updated_at
+  InvitationsAcceptRequestBody:
+    title: InvitationsAcceptRequestBody
+    type: object
+    properties:
+      id:
+        type: string
+        description: Invitation UUID.
+        example: 550e8400-e29b-41d4-a716-446655440000
+        format: uuid
+    example:
+      id: 550e8400-e29b-41d4-a716-446655440000
+    required:
+      - id
+  InvitationsCreateRequestBody:
+    title: InvitationsCreateRequestBody
+    type: object
+    properties:
+      email:
+        type: string
+        description: Invitee email.
+        example: abc123
+      inviter_user_id:
+        type: string
+        description: Inviter UUID (optional).
+        example: 550e8400-e29b-41d4-a716-446655440000
+        format: uuid
+      organization_id:
+        type: string
+        description: Organization UUID the invitee will be added to on accept.
+        example: 550e8400-e29b-41d4-a716-446655440000
+        format: uuid
+    example:
+      email: abc123
+      inviter_user_id: 550e8400-e29b-41d4-a716-446655440000
+      organization_id: 550e8400-e29b-41d4-a716-446655440000
+    required:
+      - email
+      - organization_id
+  InvitationsFindByTokenRequestBody:
+    title: InvitationsFindByTokenRequestBody
+    type: object
+    properties:
+      token:
+        type: string
+        description: Opaque invitation token.
+        example: abc123
+    example:
+      token: abc123
+    required:
+      - token
+  InvitationsGetRequestBody:
+    title: InvitationsGetRequestBody
+    type: object
+    properties:
+      id:
+        type: string
+        description: Invitation UUID.
+        example: 550e8400-e29b-41d4-a716-446655440000
+        format: uuid
+    example:
+      id: 550e8400-e29b-41d4-a716-446655440000
+    required:
+      - id
+  InvitationsListRequestBody:
+    title: InvitationsListRequestBody
+    type: object
+    properties:
+      cursor:
+        type: string
+        description: Opaque cursor returned by a previous list call.
+        example: abc123
+      limit:
+        type: integer
+        description: Maximum items to return.
+        default: 50
+        example: 2
+        format: int64
+        minimum: 1
+        maximum: 100
+      organization_id:
+        type: string
+        description: Organization UUID.
+        example: 550e8400-e29b-41d4-a716-446655440000
+        format: uuid
+    example:
+      cursor: abc123
+      limit: 2
+      organization_id: 550e8400-e29b-41d4-a716-446655440000
+    required:
+      - organization_id
+  InvitationsResendRequestBody:
+    title: InvitationsResendRequestBody
+    type: object
+    properties:
+      id:
+        type: string
+        description: Invitation UUID.
+        example: 550e8400-e29b-41d4-a716-446655440000
+        format: uuid
+    example:
+      id: 550e8400-e29b-41d4-a716-446655440000
+    required:
+      - id
+  InvitationsRevokeRequestBody:
+    title: InvitationsRevokeRequestBody
+    type: object
+    properties:
+      id:
+        type: string
+        description: Invitation UUID.
+        example: 550e8400-e29b-41d4-a716-446655440000
+        format: uuid
+    example:
+      id: 550e8400-e29b-41d4-a716-446655440000
+    required:
+      - id
+  ListInvitationsResult:
+    title: ListInvitationsResult
+    type: object
+    properties:
+      items:
+        type: array
+        items:
+          $ref: "#/definitions/Invitation"
+        description: Invitations on this page.
+        example:
+          - accepted_at: "1970-01-01T00:00:01Z"
+            created_at: "1970-01-01T00:00:01Z"
+            email: abc123
+            expires_at: "1970-01-01T00:00:01Z"
+            id: 550e8400-e29b-41d4-a716-446655440000
+            inviter_user_id: 550e8400-e29b-41d4-a716-446655440000
+            organization_id: 550e8400-e29b-41d4-a716-446655440000
+            revoked_at: "1970-01-01T00:00:01Z"
+            state: accepted
+            token: abc123
+            updated_at: "1970-01-01T00:00:01Z"
+      next_cursor:
+        type: string
+        description: Cursor for the next page, empty when exhausted.
+        example: abc123
+    example:
+      items:
+        - accepted_at: "1970-01-01T00:00:01Z"
+          created_at: "1970-01-01T00:00:01Z"
+          email: abc123
+          expires_at: "1970-01-01T00:00:01Z"
+          id: 550e8400-e29b-41d4-a716-446655440000
+          inviter_user_id: 550e8400-e29b-41d4-a716-446655440000
+          organization_id: 550e8400-e29b-41d4-a716-446655440000
+          revoked_at: "1970-01-01T00:00:01Z"
+          state: accepted
+          token: abc123
+          updated_at: "1970-01-01T00:00:01Z"
+      next_cursor: abc123
+    required:
+      - next_cursor
+      - items
+  ListMembershipsResult:
+    title: ListMembershipsResult
+    type: object
+    properties:
+      items:
+        type: array
+        items:
+          $ref: "#/definitions/Membership"
+        description: Memberships on this page.
+        example:
+          - created_at: "1970-01-01T00:00:01Z"
+            id: 550e8400-e29b-41d4-a716-446655440000
+            organization_id: 550e8400-e29b-41d4-a716-446655440000
+            role: abc123
+            updated_at: "1970-01-01T00:00:01Z"
+            user_id: 550e8400-e29b-41d4-a716-446655440000
+      next_cursor:
+        type: string
+        description: Cursor for the next page, empty when exhausted.
+        example: abc123
+    example:
+      items:
+        - created_at: "1970-01-01T00:00:01Z"
+          id: 550e8400-e29b-41d4-a716-446655440000
+          organization_id: 550e8400-e29b-41d4-a716-446655440000
+          role: abc123
+          updated_at: "1970-01-01T00:00:01Z"
+          user_id: 550e8400-e29b-41d4-a716-446655440000
+      next_cursor: abc123
+    required:
+      - next_cursor
+      - items
+  ListOrganizationRolesResult:
+    title: ListOrganizationRolesResult
+    type: object
+    properties:
+      items:
+        type: array
+        items:
+          $ref: "#/definitions/OrganizationRole"
+        description: Roles for the organization.
+        example:
+          - created_at: "1970-01-01T00:00:01Z"
+            description: abc123
+            id: 550e8400-e29b-41d4-a716-446655440000
+            name: abc123
+            organization_id: 550e8400-e29b-41d4-a716-446655440000
+            slug: abc123
+            updated_at: "1970-01-01T00:00:01Z"
+    example:
+      items:
+        - created_at: "1970-01-01T00:00:01Z"
+          description: abc123
+          id: 550e8400-e29b-41d4-a716-446655440000
+          name: abc123
+          organization_id: 550e8400-e29b-41d4-a716-446655440000
+          slug: abc123
+          updated_at: "1970-01-01T00:00:01Z"
+    required:
+      - items
+  ListOrganizationsResult:
+    title: ListOrganizationsResult
+    type: object
+    properties:
+      items:
+        type: array
+        items:
+          $ref: "#/definitions/Organization"
+        description: Organizations on this page.
+        example:
+          - account_type: abc123
+            created_at: "1970-01-01T00:00:01Z"
+            id: 550e8400-e29b-41d4-a716-446655440000
+            name: abc123
+            slug: abc123
+            updated_at: "1970-01-01T00:00:01Z"
+            workos_id: abc123
+      next_cursor:
+        type: string
+        description: Cursor for the next page, empty when exhausted.
+        example: abc123
+    example:
+      items:
+        - account_type: abc123
+          created_at: "1970-01-01T00:00:01Z"
+          id: 550e8400-e29b-41d4-a716-446655440000
+          name: abc123
+          slug: abc123
+          updated_at: "1970-01-01T00:00:01Z"
+          workos_id: abc123
+      next_cursor: abc123
+    required:
+      - next_cursor
+      - items
+  ListUsersResult:
+    title: ListUsersResult
+    type: object
+    properties:
+      items:
+        type: array
+        items:
+          $ref: "#/definitions/User"
+        description: Users on this page.
+        example:
+          - admin: false
+            created_at: "1970-01-01T00:00:01Z"
+            display_name: abc123
+            email: abc123
+            github_handle: abc123
+            id: 550e8400-e29b-41d4-a716-446655440000
+            photo_url: abc123
+            updated_at: "1970-01-01T00:00:01Z"
+            whitelisted: false
+      next_cursor:
+        type: string
+        description: Cursor for the next page, empty when exhausted.
+        example: abc123
+    example:
+      items:
+        - admin: false
+          created_at: "1970-01-01T00:00:01Z"
+          display_name: abc123
+          email: abc123
+          github_handle: abc123
+          id: 550e8400-e29b-41d4-a716-446655440000
+          photo_url: abc123
+          updated_at: "1970-01-01T00:00:01Z"
+          whitelisted: false
+      next_cursor: abc123
+    required:
+      - next_cursor
+      - items
+  Membership:
+    title: Membership
+    type: object
+    properties:
+      created_at:
+        type: string
+        example: "1970-01-01T00:00:01Z"
+        format: date-time
+      id:
+        type: string
+        description: Membership UUID.
+        example: 550e8400-e29b-41d4-a716-446655440000
+        format: uuid
+      organization_id:
+        type: string
+        description: Organization UUID.
+        example: 550e8400-e29b-41d4-a716-446655440000
+        format: uuid
+      role:
+        type: string
+        description: Role within the organization (default `member`).
+        example: abc123
+      updated_at:
+        type: string
+        example: "1970-01-01T00:00:01Z"
+        format: date-time
+      user_id:
+        type: string
+        description: User UUID.
+        example: 550e8400-e29b-41d4-a716-446655440000
+        format: uuid
+    example:
+      created_at: "1970-01-01T00:00:01Z"
+      id: 550e8400-e29b-41d4-a716-446655440000
+      organization_id: 550e8400-e29b-41d4-a716-446655440000
+      role: abc123
+      updated_at: "1970-01-01T00:00:01Z"
+      user_id: 550e8400-e29b-41d4-a716-446655440000
+    required:
+      - id
+      - user_id
+      - organization_id
+      - role
+      - created_at
+      - updated_at
+  MembershipsCreateRequestBody:
+    title: MembershipsCreateRequestBody
+    type: object
+    properties:
+      organization_id:
+        type: string
+        description: Organization UUID.
+        example: 550e8400-e29b-41d4-a716-446655440000
+        format: uuid
+      role:
+        type: string
+        description: Role within the organization; defaults to `member`.
+        example: abc123
+      user_id:
+        type: string
+        description: User UUID.
+        example: 550e8400-e29b-41d4-a716-446655440000
+        format: uuid
+    example:
+      organization_id: 550e8400-e29b-41d4-a716-446655440000
+      role: abc123
+      user_id: 550e8400-e29b-41d4-a716-446655440000
+    required:
+      - user_id
+      - organization_id
+  MembershipsDeleteRequestBody:
+    title: MembershipsDeleteRequestBody
+    type: object
+    properties:
+      id:
+        type: string
+        description: Membership UUID.
+        example: 550e8400-e29b-41d4-a716-446655440000
+        format: uuid
+    example:
+      id: 550e8400-e29b-41d4-a716-446655440000
+    required:
+      - id
+  MembershipsListRequestBody:
+    title: MembershipsListRequestBody
+    type: object
+    properties:
+      cursor:
+        type: string
+        description: Opaque cursor returned by a previous list call.
+        example: abc123
+      limit:
+        type: integer
+        description: Maximum items to return.
+        default: 50
+        example: 2
+        format: int64
+        minimum: 1
+        maximum: 100
+      organization_id:
+        type: string
+        description: Optional organization filter.
+        example: 550e8400-e29b-41d4-a716-446655440000
+        format: uuid
+      user_id:
+        type: string
+        description: Optional user filter.
+        example: 550e8400-e29b-41d4-a716-446655440000
+        format: uuid
+    example:
+      cursor: abc123
+      limit: 2
+      organization_id: 550e8400-e29b-41d4-a716-446655440000
+      user_id: 550e8400-e29b-41d4-a716-446655440000
+  MembershipsUpdateRequestBody:
+    title: MembershipsUpdateRequestBody
+    type: object
+    properties:
+      id:
+        type: string
+        description: Membership UUID.
+        example: 550e8400-e29b-41d4-a716-446655440000
+        format: uuid
+      role:
+        type: string
+        description: New role.
+        example: abc123
+    example:
+      id: 550e8400-e29b-41d4-a716-446655440000
+      role: abc123
+    required:
+      - id
+      - role
+  Organization:
+    title: Organization
+    type: object
+    properties:
+      account_type:
+        type: string
+        description: Plan tier (`free`, etc.).
+        example: abc123
+      created_at:
+        type: string
+        example: "1970-01-01T00:00:01Z"
+        format: date-time
+      id:
+        type: string
+        description: Organization UUID.
+        example: 550e8400-e29b-41d4-a716-446655440000
+        format: uuid
+      name:
+        type: string
+        description: Display name.
+        example: abc123
+      slug:
+        type: string
+        description: URL slug (unique).
+        example: abc123
+      updated_at:
+        type: string
+        example: "1970-01-01T00:00:01Z"
+        format: date-time
+      workos_id:
+        type: string
+        description: Optional WorkOS organization id echoed by local-speakeasy validate.
+        example: abc123
+    example:
+      account_type: abc123
+      created_at: "1970-01-01T00:00:01Z"
+      id: 550e8400-e29b-41d4-a716-446655440000
+      name: abc123
+      slug: abc123
+      updated_at: "1970-01-01T00:00:01Z"
+      workos_id: abc123
+    required:
+      - id
+      - name
+      - slug
+      - account_type
+      - created_at
+      - updated_at
+  OrganizationRole:
+    title: OrganizationRole
+    type: object
+    properties:
+      created_at:
+        type: string
+        example: "1970-01-01T00:00:01Z"
+        format: date-time
+      description:
+        type: string
+        description: Free-form description; empty string when unset.
+        example: abc123
+      id:
+        type: string
+        description: Role UUID.
+        example: 550e8400-e29b-41d4-a716-446655440000
+        format: uuid
+      name:
+        type: string
+        description: Display name.
+        example: abc123
+      organization_id:
+        type: string
+        description: Organization UUID.
+        example: 550e8400-e29b-41d4-a716-446655440000
+        format: uuid
+      slug:
+        type: string
+        description: Role slug — unique within the organization.
+        example: abc123
+      updated_at:
+        type: string
+        example: "1970-01-01T00:00:01Z"
+        format: date-time
+    example:
+      created_at: "1970-01-01T00:00:01Z"
+      description: abc123
+      id: 550e8400-e29b-41d4-a716-446655440000
+      name: abc123
+      organization_id: 550e8400-e29b-41d4-a716-446655440000
+      slug: abc123
+      updated_at: "1970-01-01T00:00:01Z"
+    required:
+      - id
+      - organization_id
+      - slug
+      - name
+      - description
+      - created_at
+      - updated_at
+  OrganizationRolesCreateRequestBody:
+    title: OrganizationRolesCreateRequestBody
+    type: object
+    properties:
+      description:
+        type: string
+        description: Free-form description.
+        example: abc123
+      name:
+        type: string
+        description: Display name.
+        example: abc123
+      organization_id:
+        type: string
+        description: Organization UUID.
+        example: 550e8400-e29b-41d4-a716-446655440000
+        format: uuid
+      slug:
+        type: string
+        description: Role slug — unique within the org.
+        example: abc123
+    example:
+      description: abc123
+      name: abc123
+      organization_id: 550e8400-e29b-41d4-a716-446655440000
+      slug: abc123
+    required:
+      - organization_id
+      - slug
+      - name
+  OrganizationRolesDeleteRequestBody:
+    title: OrganizationRolesDeleteRequestBody
+    type: object
+    properties:
+      organization_id:
+        type: string
+        description: Organization UUID.
+        example: 550e8400-e29b-41d4-a716-446655440000
+        format: uuid
+      slug:
+        type: string
+        description: Role slug.
+        example: abc123
+    example:
+      organization_id: 550e8400-e29b-41d4-a716-446655440000
+      slug: abc123
+    required:
+      - organization_id
+      - slug
+  OrganizationRolesListRequestBody:
+    title: OrganizationRolesListRequestBody
+    type: object
+    properties:
+      organization_id:
+        type: string
+        description: Organization UUID.
+        example: 550e8400-e29b-41d4-a716-446655440000
+        format: uuid
+    example:
+      organization_id: 550e8400-e29b-41d4-a716-446655440000
+    required:
+      - organization_id
+  OrganizationRolesUpdateRequestBody:
+    title: OrganizationRolesUpdateRequestBody
+    type: object
+    properties:
+      description:
+        type: string
+        example: abc123
+      name:
+        type: string
+        example: abc123
+      organization_id:
+        type: string
+        description: Organization UUID.
+        example: 550e8400-e29b-41d4-a716-446655440000
+        format: uuid
+      slug:
+        type: string
+        description: Role slug.
+        example: abc123
+    example:
+      description: abc123
+      name: abc123
+      organization_id: 550e8400-e29b-41d4-a716-446655440000
+      slug: abc123
+    required:
+      - organization_id
+      - slug
+  OrganizationsCreateRequestBody:
+    title: OrganizationsCreateRequestBody
+    type: object
+    properties:
+      account_type:
+        type: string
+        description: Plan tier; defaults to `free`.
+        example: abc123
+      name:
+        type: string
+        description: Display name.
+        example: abc123
+      slug:
+        type: string
+        description: URL slug. Must be unique.
+        example: abc123
+      workos_id:
+        type: string
+        description: Optional WorkOS organization id echoed by local-speakeasy validate.
+        example: abc123
+    example:
+      account_type: abc123
+      name: abc123
+      slug: abc123
+      workos_id: abc123
+    required:
+      - name
+      - slug
+  OrganizationsDeleteRequestBody:
+    title: OrganizationsDeleteRequestBody
+    type: object
+    properties:
+      id:
+        type: string
+        description: Organization UUID.
+        example: 550e8400-e29b-41d4-a716-446655440000
+        format: uuid
+    example:
+      id: 550e8400-e29b-41d4-a716-446655440000
+    required:
+      - id
+  OrganizationsListRequestBody:
+    title: OrganizationsListRequestBody
+    type: object
+    properties:
+      cursor:
+        type: string
+        description: Opaque cursor returned by a previous list call.
+        example: abc123
+      limit:
+        type: integer
+        description: Maximum items to return.
+        default: 50
+        example: 2
+        format: int64
+        minimum: 1
+        maximum: 100
+    example:
+      cursor: abc123
+      limit: 2
+  OrganizationsUpdateRequestBody:
+    title: OrganizationsUpdateRequestBody
+    type: object
+    properties:
+      account_type:
+        type: string
+        description: Plan tier.
+        example: abc123
+      id:
+        type: string
+        description: Organization UUID.
+        example: 550e8400-e29b-41d4-a716-446655440000
+        format: uuid
+      name:
+        type: string
+        description: Display name.
+        example: abc123
+      slug:
+        type: string
+        description: URL slug.
+        example: abc123
+      workos_id:
+        type: string
+        description: WorkOS organization id; pass empty string to clear.
+        example: abc123
+    example:
+      account_type: abc123
+      id: 550e8400-e29b-41d4-a716-446655440000
+      name: abc123
+      slug: abc123
+      workos_id: abc123
+    required:
+      - id
+  User:
+    title: User
+    type: object
+    properties:
+      admin:
+        type: boolean
+        description: Admin flag echoed by local-speakeasy validate.
+        example: false
+      created_at:
+        type: string
+        example: "1970-01-01T00:00:01Z"
+        format: date-time
+      display_name:
+        type: string
+        description: Display name.
+        example: abc123
+      email:
+        type: string
+        description: Email address (unique).
+        example: abc123
+      github_handle:
+        type: string
+        description: Optional GitHub handle.
+        example: abc123
+      id:
+        type: string
+        description: User UUID.
+        example: 550e8400-e29b-41d4-a716-446655440000
+        format: uuid
+      photo_url:
+        type: string
+        description: Optional photo URL.
+        example: abc123
+      updated_at:
+        type: string
+        example: "1970-01-01T00:00:01Z"
+        format: date-time
+      whitelisted:
+        type: boolean
+        description: Whitelist flag echoed by local-speakeasy validate.
+        example: false
+    example:
+      admin: false
+      created_at: "1970-01-01T00:00:01Z"
+      display_name: abc123
+      email: abc123
+      github_handle: abc123
+      id: 550e8400-e29b-41d4-a716-446655440000
+      photo_url: abc123
+      updated_at: "1970-01-01T00:00:01Z"
+      whitelisted: false
+    required:
+      - id
+      - email
+      - display_name
+      - admin
+      - whitelisted
+      - created_at
+      - updated_at
+  UsersCreateRequestBody:
+    title: UsersCreateRequestBody
+    type: object
+    properties:
+      admin:
+        type: boolean
+        description: Admin flag; defaults false.
+        example: false
+      display_name:
+        type: string
+        description: Display name.
+        example: abc123
+      email:
+        type: string
+        description: Email address. Must be unique.
+        example: abc123
+      github_handle:
+        type: string
+        description: Optional GitHub handle.
+        example: abc123
+      photo_url:
+        type: string
+        description: Optional photo URL.
+        example: abc123
+      whitelisted:
+        type: boolean
+        description: Whitelist flag; defaults true.
+        example: false
+    example:
+      admin: false
+      display_name: abc123
+      email: abc123
+      github_handle: abc123
+      photo_url: abc123
+      whitelisted: false
+    required:
+      - email
+      - display_name
+  UsersDeleteRequestBody:
+    title: UsersDeleteRequestBody
+    type: object
+    properties:
+      id:
+        type: string
+        description: User UUID.
+        example: 550e8400-e29b-41d4-a716-446655440000
+        format: uuid
+    example:
+      id: 550e8400-e29b-41d4-a716-446655440000
+    required:
+      - id
+  UsersListRequestBody:
+    title: UsersListRequestBody
+    type: object
+    properties:
+      cursor:
+        type: string
+        description: Opaque cursor returned by a previous list call.
+        example: abc123
+      limit:
+        type: integer
+        description: Maximum items to return.
+        default: 50
+        example: 2
+        format: int64
+        minimum: 1
+        maximum: 100
+    example:
+      cursor: abc123
+      limit: 2
+  UsersUpdateRequestBody:
+    title: UsersUpdateRequestBody
+    type: object
+    properties:
+      admin:
+        type: boolean
+        example: false
+      display_name:
+        type: string
+        example: abc123
+      email:
+        type: string
+        example: abc123
+      github_handle:
+        type: string
+        example: abc123
+      id:
+        type: string
+        description: User UUID.
+        example: 550e8400-e29b-41d4-a716-446655440000
+        format: uuid
+      photo_url:
+        type: string
+        example: abc123
+      whitelisted:
+        type: boolean
+        example: false
+    example:
+      admin: false
+      display_name: abc123
+      email: abc123
+      github_handle: abc123
+      id: 550e8400-e29b-41d4-a716-446655440000
+      photo_url: abc123
+      whitelisted: false
+    required:
+      - id
+  WorkosCurrentUser:
+    title: WorkosCurrentUser
+    type: object
+    properties:
+      email:
+        type: string
+        description: Email address from the live WorkOS user record.
+        example: abc123
+      first_name:
+        type: string
+        example: abc123
+      last_name:
+        type: string
+        example: abc123
+      organization_id:
+        type: string
+        description: Default WorkOS organization id, when set.
+        example: abc123
+      profile_picture_url:
+        type: string
+        example: abc123
+      workos_sub:
+        type: string
+        description: WorkOS user id (the `sub` stored in current_users).
+        example: abc123
+    example:
+      email: abc123
+      first_name: abc123
+      last_name: abc123
+      organization_id: abc123
+      profile_picture_url: abc123
+      workos_sub: abc123
+    required:
+      - workos_sub

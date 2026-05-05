@@ -3,6 +3,7 @@ package risk_analysis
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"slices"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -75,8 +77,9 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 	}
 
 	start := time.Now()
+	scannedCount := 0
 	defer func() {
-		a.metrics.RecordScan(ctx, args.OrganizationID, o11y.OutcomeFromError(err), len(args.MessageIDs), time.Since(start))
+		a.metrics.RecordScan(ctx, args.OrganizationID, o11y.OutcomeFromError(err), scannedCount, time.Since(start))
 	}()
 
 	ctx, span := a.tracer.Start(ctx, "risk.analyzeBatch", trace.WithAttributes(
@@ -92,10 +95,41 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 		span.End()
 	}()
 
+	policy, err := repo.New(a.db).GetRiskPolicy(ctx, repo.GetRiskPolicyParams{
+		ID:        args.RiskPolicyID,
+		ProjectID: args.ProjectID,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		// Policy was deleted (soft or hard) between FetchUnanalyzedMessages
+		// returning IDs and this activity running. FetchUnanalyzed errors out
+		// on the next drain cycle, so there is no infinite loop and no need
+		// to write Found=false rows; the FK to risk_policies might also be
+		// gone on hard-delete.
+		span.SetAttributes(attribute.Bool("risk.policy_deleted", true))
+		a.logger.InfoContext(ctx, "risk policy deleted, skipping batch",
+			attr.SlogRiskPolicyID(args.RiskPolicyID.String()),
+		)
+		return &AnalyzeBatchResult{Processed: 0, Findings: 0}, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get risk policy: %w", err)
+	}
+	if !policy.Enabled {
+		// Policy was disabled mid-flight. FetchUnanalyzed returns no IDs while
+		// disabled (no infinite loop), and a re-enable bumps the policy
+		// version so FetchUnanalyzedMessageIDs picks these messages up again.
+		span.SetAttributes(attribute.Bool("risk.policy_disabled", true))
+		a.logger.InfoContext(ctx, "risk policy disabled, skipping batch",
+			attr.SlogRiskPolicyID(args.RiskPolicyID.String()),
+		)
+		return &AnalyzeBatchResult{Processed: 0, Findings: 0}, nil
+	}
+
 	messages, err := a.fetchContent(ctx, args)
 	if err != nil {
 		return nil, err
 	}
+	scannedCount = len(messages)
 
 	findings, err := a.scan(ctx, args, messages)
 	if err != nil {
@@ -153,6 +187,7 @@ func (a *AnalyzeBatch) scan(ctx context.Context, args AnalyzeBatchArgs, messages
 	gitleaksFindings := make([][]Finding, n)
 	presidioFindings := make([][]Finding, n)
 	shadowMCPFindings := make([][]Finding, n)
+	destructiveToolFindings := make([][]Finding, n)
 
 	var wg sync.WaitGroup
 	var gitleaksErr error
@@ -196,13 +231,17 @@ func (a *AnalyzeBatch) scan(ctx context.Context, args AnalyzeBatchArgs, messages
 		activity.RecordHeartbeat(ctx, "shadow_mcp")
 	}
 
+	if slices.Contains(args.Sources, shadowmcp.SourceDestructiveTool) {
+		destructiveToolFindings = a.scanDestructiveToolAnnotations(ctx, args.OrganizationID, messages)
+		activity.RecordHeartbeat(ctx, "destructive_tool")
+	}
+
 	merged := make([][]Finding, n)
 	for i := range n {
 		// Gitleaks findings come first so they take priority over presidio
-		// when both scanners match the same text region. shadow_mcp findings
-		// are non-overlapping with content scanners (they apply to tool_calls,
-		// not content), so they always pass through dedup.
-		combined := slices.Concat(gitleaksFindings[i], presidioFindings[i], shadowMCPFindings[i])
+		// when both scanners match the same text region. Tool-call findings are
+		// non-overlapping with content scanners, so they pass through dedup.
+		combined := slices.Concat(gitleaksFindings[i], presidioFindings[i], shadowMCPFindings[i], destructiveToolFindings[i])
 		merged[i] = dedup(combined)
 	}
 	return merged, nil
@@ -222,6 +261,22 @@ func (a *AnalyzeBatch) scanShadowMCP(ctx context.Context, orgID string, messages
 	return out
 }
 
+type recordedToolCall struct {
+	Function struct {
+		Name      string `json:"name"`
+		Arguments string `json:"arguments"`
+	} `json:"function"`
+}
+
+func (a *AnalyzeBatch) parseRecordedToolCalls(ctx context.Context, source string, raw []byte) []recordedToolCall {
+	var calls []recordedToolCall
+	if err := json.Unmarshal(raw, &calls); err != nil {
+		a.logger.WarnContext(ctx, source+" scan: failed to parse tool_calls", attr.SlogError(err))
+		return nil
+	}
+	return calls
+}
+
 // scanMessageToolCalls iterates the tool_calls JSON array stored on a chat
 // message and runs the shadow_mcp validator against each call. The expected
 // payload mirrors what hooks/session_capture.go writes:
@@ -230,16 +285,7 @@ func (a *AnalyzeBatch) scanShadowMCP(ctx context.Context, orgID string, messages
 // Toolset lookups are served by the shared shadowmcp.Client cache so a batch
 // covering many calls from the same toolset only pays one DB round-trip.
 func (a *AnalyzeBatch) scanMessageToolCalls(ctx context.Context, orgID string, raw []byte) []Finding {
-	var calls []struct {
-		Function struct {
-			Name      string `json:"name"`
-			Arguments string `json:"arguments"`
-		} `json:"function"`
-	}
-	if err := json.Unmarshal(raw, &calls); err != nil {
-		a.logger.WarnContext(ctx, "shadow_mcp scan: failed to parse tool_calls", attr.SlogError(err))
-		return nil
-	}
+	calls := a.parseRecordedToolCalls(ctx, shadowmcp.SourceShadowMCP, raw)
 
 	var findings []Finding
 	for _, call := range calls {
@@ -272,6 +318,60 @@ func (a *AnalyzeBatch) scanMessageToolCalls(ctx context.Context, orgID string, r
 			RuleID:      "shadow_mcp.unverified_call",
 			Description: detail,
 			Match:       toolName,
+			StartPos:    0,
+			EndPos:      0,
+			Tags:        nil,
+			Confidence:  1.0,
+		})
+	}
+	return findings
+}
+
+// scanDestructiveToolAnnotations flags recorded Gram MCP tool calls whose
+// resolved tool definition carries a destructive annotation.
+func (a *AnalyzeBatch) scanDestructiveToolAnnotations(ctx context.Context, orgID string, messages []repo.GetMessageContentBatchRow) [][]Finding {
+	out := make([][]Finding, len(messages))
+	for i, msg := range messages {
+		if len(msg.ToolCalls) == 0 {
+			continue
+		}
+		out[i] = a.scanMessageDestructiveToolCalls(ctx, orgID, msg.ToolCalls)
+	}
+	return out
+}
+
+func (a *AnalyzeBatch) scanMessageDestructiveToolCalls(ctx context.Context, orgID string, raw []byte) []Finding {
+	if a.shadowMCPClient == nil {
+		return nil
+	}
+
+	calls := a.parseRecordedToolCalls(ctx, shadowmcp.SourceDestructiveTool, raw)
+
+	var findings []Finding
+	for _, call := range calls {
+		toolName := call.Function.Name
+		if toolName == "" || !isMCPToolName(toolName) {
+			continue
+		}
+
+		var toolInput any
+		if call.Function.Arguments != "" {
+			if err := json.Unmarshal([]byte(call.Function.Arguments), &toolInput); err != nil {
+				continue
+			}
+		}
+
+		bareName := stripMCPToolPrefix(toolName)
+		resolved, ok := a.shadowMCPClient.ResolveToolsetCall(ctx, toolInput, bareName, orgID)
+		if !ok || resolved.Tool.Annotations == nil || resolved.Tool.Annotations.DestructiveHint == nil || !*resolved.Tool.Annotations.DestructiveHint {
+			continue
+		}
+
+		findings = append(findings, Finding{
+			Source:      shadowmcp.SourceDestructiveTool,
+			RuleID:      "destructive_tool.annotation",
+			Description: "Tool is annotated as destructive",
+			Match:       resolved.ToolName,
 			StartPos:    0,
 			EndPos:      0,
 			Tags:        nil,

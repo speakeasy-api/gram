@@ -1,5 +1,11 @@
 # server
 
+## 0.46.1
+
+### Patch Changes
+
+- 8553711: Increase CPUs to 4GiB and lower soft limit to 20% of hard limit.
+
 ## 0.46.0
 
 ### Minor Changes

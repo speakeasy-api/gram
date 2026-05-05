@@ -30,6 +30,22 @@ func TestIsEnabledForProject_NonShadowMCPSourceIgnored(t *testing.T) {
 	assert.False(t, f.client.IsEnabledForProject(t.Context(), f.projectID))
 }
 
+func TestIsEnabledForProject_EnabledDestructiveToolPolicy(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	f.createPolicy(t, "destructive-tool", true, []string{"destructive_tool"})
+
+	require.True(t, f.client.IsEnabledForProject(t.Context(), f.projectID))
+}
+
+func TestIsEnabledForProject_DisabledDestructiveToolPolicyIgnored(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	f.createPolicy(t, "destructive-tool", false, []string{"destructive_tool"})
+
+	assert.False(t, f.client.IsEnabledForProject(t.Context(), f.projectID))
+}
+
 func TestIsEnabledForProject_DisabledShadowMCPPolicyIgnored(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
@@ -43,7 +59,7 @@ func TestIsEnabledForProject_EnabledShadowMCPPolicy(t *testing.T) {
 	f := newFixture(t)
 	f.createPolicy(t, "enabled", true, []string{"shadow_mcp"})
 
-	assert.True(t, f.client.IsEnabledForProject(t.Context(), f.projectID))
+	require.True(t, f.client.IsEnabledForProject(t.Context(), f.projectID))
 }
 
 func TestIsEnabledForProject_CachesResult(t *testing.T) {
@@ -51,7 +67,7 @@ func TestIsEnabledForProject_CachesResult(t *testing.T) {
 	f := newFixture(t)
 	f.createPolicy(t, "enabled", true, []string{"shadow_mcp"})
 
-	require.True(t, f.client.IsEnabledForProject(t.Context(), f.projectID))
+	assert.True(t, f.client.IsEnabledForProject(t.Context(), f.projectID))
 
 	// Wipe risk_policies behind the cache. If the cache is honored the
 	// answer should remain true; otherwise the second lookup would hit
