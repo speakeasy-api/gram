@@ -3,3 +3,47 @@
 //   sqlc v1.29.0
 
 package repo
+
+import (
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
+)
+
+type AssistantRuntime struct {
+	ID                  uuid.UUID
+	AssistantThreadID   uuid.UUID
+	AssistantID         uuid.UUID
+	ProjectID           uuid.UUID
+	Backend             string
+	State               string
+	WarmUntil           pgtype.Timestamptz
+	LeaseOwner          pgtype.Text
+	LastHeartbeatAt     pgtype.Timestamptz
+	BackendMetadataJson []byte
+	EndedAt             pgtype.Timestamptz
+	CreatedAt           pgtype.Timestamptz
+	UpdatedAt           pgtype.Timestamptz
+	DeletedAt           pgtype.Timestamptz
+	Deleted             bool
+	Ended               bool
+}
+
+type AssistantThreadEvent struct {
+	ID                    uuid.UUID
+	AssistantThreadID     uuid.UUID
+	AssistantID           uuid.UUID
+	ProjectID             uuid.UUID
+	TriggerInstanceID     uuid.NullUUID
+	EventID               string
+	CorrelationID         string
+	Status                string
+	NormalizedPayloadJson []byte
+	SourcePayloadJson     []byte
+	Attempts              int64
+	LastError             pgtype.Text
+	ProcessedAt           pgtype.Timestamptz
+	CreatedAt             pgtype.Timestamptz
+	UpdatedAt             pgtype.Timestamptz
+	DeletedAt             pgtype.Timestamptz
+	Deleted               bool
+}

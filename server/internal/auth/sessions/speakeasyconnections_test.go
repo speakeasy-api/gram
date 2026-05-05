@@ -241,7 +241,7 @@ func TestCallbackUpsert_PopulatesWorkOSIDForExistingOrg(t *testing.T) {
 	ctx := t.Context()
 
 	// Simulate an org row that has not yet been linked to WorkOS in Gram.
-	_, err := ts.conn.Exec(ctx, `UPDATE organization_metadata SET workos_id = NULL WHERE id = $1`, workosOrgID)
+	err := orgRepo.New(ts.conn).ClearOrganizationWorkosID(ctx, workosOrgID)
 	require.NoError(t, err)
 
 	idToken := acquireIDToken(t, ctx, ts.mgr)
@@ -286,7 +286,7 @@ func TestSyncWorkOSIDs_SkipsSetOrgWorkosIDWhenValidateOmitsWorkOSID(t *testing.T
 	ts := newManagerWithFakeWorkOSConfig(t, fake, cfg)
 	ctx := t.Context()
 
-	_, err := ts.conn.Exec(ctx, `UPDATE organization_metadata SET workos_id = NULL WHERE id = $1`, mockidp.MockOrgID)
+	err := orgRepo.New(ts.conn).ClearOrganizationWorkosID(ctx, mockidp.MockOrgID)
 	require.NoError(t, err)
 
 	idToken := acquireIDToken(t, ctx, ts.mgr)

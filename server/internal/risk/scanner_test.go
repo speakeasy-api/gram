@@ -9,11 +9,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	risk_analysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/risk"
+	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -79,12 +81,17 @@ func insertPresidioBlockPolicy(t *testing.T, ti *testInstance, ctx context.Conte
 	t.Helper()
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	require.NotNil(t, authCtx.ProjectID)
-	_, err := ti.conn.Exec(ctx, `
-		INSERT INTO risk_policies
-		  (project_id, organization_id, name, sources, presidio_entities, action, version, enabled)
-		VALUES
-		  ($1, $2, $3, ARRAY['presidio']::text[], $4::text[], 'block', 1, TRUE)
-	`, *authCtx.ProjectID, authCtx.ActiveOrganizationID, name, entities)
+	_, err := riskrepo.New(ti.conn).CreateRiskPolicy(ctx, riskrepo.CreateRiskPolicyParams{
+		ID:               uuid.New(),
+		ProjectID:        *authCtx.ProjectID,
+		OrganizationID:   authCtx.ActiveOrganizationID,
+		Name:             name,
+		Sources:          []string{"presidio"},
+		PresidioEntities: entities,
+		Enabled:          true,
+		Action:           "block",
+		AutoName:         false,
+	})
 	require.NoError(t, err)
 }
 

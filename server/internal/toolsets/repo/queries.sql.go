@@ -1212,6 +1212,56 @@ func (q *Queries) ListToolsetsWithVersionsByOrganization(ctx context.Context, or
 	return items, nil
 }
 
+const setToolsetMCPEnabledByID = `-- name: SetToolsetMCPEnabledByID :exec
+UPDATE toolsets
+SET mcp_enabled = $1
+WHERE id = $2 AND project_id = $3
+`
+
+type SetToolsetMCPEnabledByIDParams struct {
+	McpEnabled bool
+	ID         uuid.UUID
+	ProjectID  uuid.UUID
+}
+
+func (q *Queries) SetToolsetMCPEnabledByID(ctx context.Context, arg SetToolsetMCPEnabledByIDParams) error {
+	_, err := q.db.Exec(ctx, setToolsetMCPEnabledByID, arg.McpEnabled, arg.ID, arg.ProjectID)
+	return err
+}
+
+const setToolsetMCPPublicByID = `-- name: SetToolsetMCPPublicByID :exec
+UPDATE toolsets
+SET mcp_is_public = $1
+WHERE id = $2 AND project_id = $3
+`
+
+type SetToolsetMCPPublicByIDParams struct {
+	McpIsPublic bool
+	ID          uuid.UUID
+	ProjectID   uuid.UUID
+}
+
+func (q *Queries) SetToolsetMCPPublicByID(ctx context.Context, arg SetToolsetMCPPublicByIDParams) error {
+	_, err := q.db.Exec(ctx, setToolsetMCPPublicByID, arg.McpIsPublic, arg.ID, arg.ProjectID)
+	return err
+}
+
+const setToolsetMCPPublicBySlug = `-- name: SetToolsetMCPPublicBySlug :exec
+UPDATE toolsets
+SET mcp_is_public = $1
+WHERE mcp_slug = $2
+`
+
+type SetToolsetMCPPublicBySlugParams struct {
+	McpIsPublic bool
+	McpSlug     pgtype.Text
+}
+
+func (q *Queries) SetToolsetMCPPublicBySlug(ctx context.Context, arg SetToolsetMCPPublicBySlugParams) error {
+	_, err := q.db.Exec(ctx, setToolsetMCPPublicBySlug, arg.McpIsPublic, arg.McpSlug)
+	return err
+}
+
 const updateToolset = `-- name: UpdateToolset :one
 UPDATE toolsets
 SET

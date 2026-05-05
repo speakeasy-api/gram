@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
@@ -27,6 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	deployments_repo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments"
 	"github.com/speakeasy-api/gram/server/internal/functions"
@@ -39,6 +41,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
+	tools_repo "github.com/speakeasy-api/gram/server/internal/tools/repo"
+	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 var (
@@ -201,50 +206,69 @@ func (ti *testInstance) addToolWithSecurity(ctx context.Context, t *testing.T, t
 
 	envVarName := "TEST_API_KEY"
 
-	// Create deployment
-	var deploymentID uuid.UUID
-	err := ti.conn.QueryRow(ctx, `
-		INSERT INTO deployments (project_id, organization_id, user_id, idempotency_key)
-		VALUES ($1, $2, $3, $4)
-		RETURNING id
-	`, projectID, orgID, "test-user", uuid.New().String()).Scan(&deploymentID)
+	deploymentID, err := deployments_repo.New(ti.conn).InsertDeployment(ctx, deployments_repo.InsertDeploymentParams{
+		ProjectID:      projectID,
+		OrganizationID: orgID,
+		UserID:         "test-user",
+		IdempotencyKey: uuid.New().String(),
+	})
 	require.NoError(t, err)
 
-	_, err = ti.conn.Exec(ctx, `
-		INSERT INTO deployment_statuses (deployment_id, status)
-		VALUES ($1, 'completed')
-	`, deploymentID)
+	err = deployments_repo.New(ti.conn).CreateDeploymentStatus(ctx, deployments_repo.CreateDeploymentStatusParams{
+		DeploymentID: deploymentID,
+		Status:       "completed",
+	})
 	require.NoError(t, err)
 
-	// Create HTTP tool definition with security referencing "test_api_key" scheme
-	toolURN := "tools:http:test-api:" + uuid.New().String()[:8]
-	_, err = ti.conn.Exec(ctx, `
-		INSERT INTO http_tool_definitions (
-			project_id, deployment_id, tool_urn, name, untruncated_name,
-			summary, description, tags, http_method, path,
-			schema_version, schema, server_env_var, security,
-			header_settings, query_settings, path_settings
-		) VALUES (
-			$1, $2, $3, 'test_tool', '', 'Test tool', 'A test tool with security',
-			'{}', 'GET', '/test', '3.0.0', '{}', 'TEST_SERVER_URL',
-			$4, '{}', '{}', '{}'
-		)
-	`, projectID, deploymentID, toolURN, `[{"test_api_key": []}]`)
+	toolURN := urn.NewTool(urn.ToolKindHTTP, "test-api", uuid.New().String()[:8])
+	err = tools_repo.New(ti.conn).CreateHTTPToolDefinition(ctx, tools_repo.CreateHTTPToolDefinitionParams{
+		ProjectID:       projectID,
+		DeploymentID:    deploymentID,
+		ToolUrn:         toolURN,
+		Name:            "test_tool",
+		UntruncatedName: pgtype.Text{},
+		Summary:         "Test tool",
+		Description:     "A test tool with security",
+		Tags:            []string{},
+		HttpMethod:      "GET",
+		Path:            "/test",
+		SchemaVersion:   "3.0.0",
+		Schema:          []byte(`{}`),
+		ServerEnvVar:    "TEST_SERVER_URL",
+		Security:        []byte(`[{"test_api_key": []}]`),
+		HeaderSettings:  []byte(`{}`),
+		QuerySettings:   []byte(`{}`),
+		PathSettings:    []byte(`{}`),
+		ReadOnlyHint:    pgtype.Bool{},
+		DestructiveHint: pgtype.Bool{},
+		IdempotentHint:  pgtype.Bool{},
+		OpenWorldHint:   pgtype.Bool{},
+	})
 	require.NoError(t, err)
 
-	// Create matching http_security row
-	_, err = ti.conn.Exec(ctx, `
-		INSERT INTO http_security (
-			key, deployment_id, project_id, type, name, in_placement, env_variables
-		) VALUES ($1, $2, $3, 'apiKey', 'X-Api-Key', 'header', $4)
-	`, "test_api_key", deploymentID, projectID, []string{envVarName})
+	_, err = deployments_repo.New(ti.conn).CreateHTTPSecurity(ctx, deployments_repo.CreateHTTPSecurityParams{
+		Key:                 "test_api_key",
+		DeploymentID:        deploymentID,
+		ProjectID:           uuid.NullUUID{UUID: projectID, Valid: true},
+		Openapiv3DocumentID: uuid.NullUUID{},
+		Type:                pgtype.Text{String: "apiKey", Valid: true},
+		Name:                pgtype.Text{String: "X-Api-Key", Valid: true},
+		InPlacement:         pgtype.Text{String: "header", Valid: true},
+		Scheme:              pgtype.Text{},
+		BearerFormat:        pgtype.Text{},
+		EnvVariables:        []string{envVarName},
+		OauthTypes:          nil,
+		OauthFlows:          nil,
+	})
 	require.NoError(t, err)
 
-	// Create toolset_version linking the tool
-	_, err = ti.conn.Exec(ctx, `
-		INSERT INTO toolset_versions (toolset_id, version, tool_urns, resource_urns)
-		VALUES ($1, 1, $2, '{}')
-	`, toolsetID, []string{toolURN})
+	_, err = toolsets_repo.New(ti.conn).CreateToolsetVersion(ctx, toolsets_repo.CreateToolsetVersionParams{
+		ToolsetID:     toolsetID,
+		Version:       1,
+		ToolUrns:      []urn.Tool{toolURN},
+		ResourceUrns:  []urn.Resource{},
+		PredecessorID: uuid.NullUUID{},
+	})
 	require.NoError(t, err)
 
 	return envVarName
@@ -257,57 +281,87 @@ func (ti *testInstance) addToolWithSecurity(ctx context.Context, t *testing.T, t
 func (ti *testInstance) addToolWithDualSecurity(ctx context.Context, t *testing.T, toolsetID uuid.UUID, projectID uuid.UUID, orgID string) uuid.UUID {
 	t.Helper()
 
-	var deploymentID uuid.UUID
-	err := ti.conn.QueryRow(ctx, `
-		INSERT INTO deployments (project_id, organization_id, user_id, idempotency_key)
-		VALUES ($1, $2, $3, $4)
-		RETURNING id
-	`, projectID, orgID, "test-user", uuid.New().String()).Scan(&deploymentID)
+	deploymentID, err := deployments_repo.New(ti.conn).InsertDeployment(ctx, deployments_repo.InsertDeploymentParams{
+		ProjectID:      projectID,
+		OrganizationID: orgID,
+		UserID:         "test-user",
+		IdempotencyKey: uuid.New().String(),
+	})
 	require.NoError(t, err)
 
-	_, err = ti.conn.Exec(ctx, `
-		INSERT INTO deployment_statuses (deployment_id, status)
-		VALUES ($1, 'completed')
-	`, deploymentID)
+	err = deployments_repo.New(ti.conn).CreateDeploymentStatus(ctx, deployments_repo.CreateDeploymentStatusParams{
+		DeploymentID: deploymentID,
+		Status:       "completed",
+	})
 	require.NoError(t, err)
 
 	// Tool security: either "test_api_key" OR "test_oauth" can satisfy.
-	toolURN := "tools:http:dual-sec:" + uuid.New().String()[:8]
-	_, err = ti.conn.Exec(ctx, `
-		INSERT INTO http_tool_definitions (
-			project_id, deployment_id, tool_urn, name, untruncated_name,
-			summary, description, tags, http_method, path,
-			schema_version, schema, server_env_var, security,
-			header_settings, query_settings, path_settings
-		) VALUES (
-			$1, $2, $3, 'dual_sec_tool', '', 'Dual security tool', 'A tool with apiKey and oauth2 security',
-			'{}', 'GET', '/dual', '3.0.0', '{}', 'TEST_SERVER_URL',
-			$4, '{}', '{}', '{}'
-		)
-	`, projectID, deploymentID, toolURN, `[{"test_api_key": []}, {"test_oauth": []}]`)
+	toolURN := urn.NewTool(urn.ToolKindHTTP, "dual-sec", uuid.New().String()[:8])
+	err = tools_repo.New(ti.conn).CreateHTTPToolDefinition(ctx, tools_repo.CreateHTTPToolDefinitionParams{
+		ProjectID:       projectID,
+		DeploymentID:    deploymentID,
+		ToolUrn:         toolURN,
+		Name:            "dual_sec_tool",
+		UntruncatedName: pgtype.Text{},
+		Summary:         "Dual security tool",
+		Description:     "A tool with apiKey and oauth2 security",
+		Tags:            []string{},
+		HttpMethod:      "GET",
+		Path:            "/dual",
+		SchemaVersion:   "3.0.0",
+		Schema:          []byte(`{}`),
+		ServerEnvVar:    "TEST_SERVER_URL",
+		Security:        []byte(`[{"test_api_key": []}, {"test_oauth": []}]`),
+		HeaderSettings:  []byte(`{}`),
+		QuerySettings:   []byte(`{}`),
+		PathSettings:    []byte(`{}`),
+		ReadOnlyHint:    pgtype.Bool{},
+		DestructiveHint: pgtype.Bool{},
+		IdempotentHint:  pgtype.Bool{},
+		OpenWorldHint:   pgtype.Bool{},
+	})
 	require.NoError(t, err)
 
-	// apiKey scheme
-	_, err = ti.conn.Exec(ctx, `
-		INSERT INTO http_security (
-			key, deployment_id, project_id, type, name, in_placement, env_variables
-		) VALUES ($1, $2, $3, 'apiKey', 'X-Api-Key', 'header', $4)
-	`, "test_api_key", deploymentID, projectID, []string{"TEST_API_KEY"})
+	_, err = deployments_repo.New(ti.conn).CreateHTTPSecurity(ctx, deployments_repo.CreateHTTPSecurityParams{
+		Key:                 "test_api_key",
+		DeploymentID:        deploymentID,
+		ProjectID:           uuid.NullUUID{UUID: projectID, Valid: true},
+		Openapiv3DocumentID: uuid.NullUUID{},
+		Type:                pgtype.Text{String: "apiKey", Valid: true},
+		Name:                pgtype.Text{String: "X-Api-Key", Valid: true},
+		InPlacement:         pgtype.Text{String: "header", Valid: true},
+		Scheme:              pgtype.Text{},
+		BearerFormat:        pgtype.Text{},
+		EnvVariables:        []string{"TEST_API_KEY"},
+		OauthTypes:          nil,
+		OauthFlows:          nil,
+	})
 	require.NoError(t, err)
 
-	// oauth2 scheme — name and in_placement are nullable for oauth2 types
-	_, err = ti.conn.Exec(ctx, `
-		INSERT INTO http_security (
-			key, deployment_id, project_id, type, name, in_placement, env_variables
-		) VALUES ($1, $2, $3, 'oauth2', NULL, NULL, $4)
-	`, "test_oauth", deploymentID, projectID, []string{"TEST_OAUTH_ACCESS_TOKEN"})
+	// oauth2: name and in_placement are nullable for this type.
+	_, err = deployments_repo.New(ti.conn).CreateHTTPSecurity(ctx, deployments_repo.CreateHTTPSecurityParams{
+		Key:                 "test_oauth",
+		DeploymentID:        deploymentID,
+		ProjectID:           uuid.NullUUID{UUID: projectID, Valid: true},
+		Openapiv3DocumentID: uuid.NullUUID{},
+		Type:                pgtype.Text{String: "oauth2", Valid: true},
+		Name:                pgtype.Text{},
+		InPlacement:         pgtype.Text{},
+		Scheme:              pgtype.Text{},
+		BearerFormat:        pgtype.Text{},
+		EnvVariables:        []string{"TEST_OAUTH_ACCESS_TOKEN"},
+		OauthTypes:          nil,
+		OauthFlows:          nil,
+	})
 	require.NoError(t, err)
 
-	// Link tool to toolset
-	_, err = ti.conn.Exec(ctx, `
-		INSERT INTO toolset_versions (toolset_id, version, tool_urns, resource_urns)
-		VALUES ($1, 1, $2, '{}')
-	`, toolsetID, []string{toolURN})
+	_, err = toolsets_repo.New(ti.conn).CreateToolsetVersion(ctx, toolsets_repo.CreateToolsetVersionParams{
+		ToolsetID:     toolsetID,
+		Version:       1,
+		ToolUrns:      []urn.Tool{toolURN},
+		ResourceUrns:  []urn.Resource{},
+		PredecessorID: uuid.NullUUID{},
+	})
 	require.NoError(t, err)
 
 	return deploymentID

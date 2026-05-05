@@ -19,6 +19,26 @@ type AddAssistantToolsetsParams struct {
 	ProjectID     uuid.UUID
 }
 
+const backdateAssistantRuntimeUpdatedAt = `-- name: BackdateAssistantRuntimeUpdatedAt :exec
+UPDATE assistant_runtimes
+SET updated_at = $1
+WHERE assistant_thread_id = $2
+  AND state = $3
+`
+
+type BackdateAssistantRuntimeUpdatedAtParams struct {
+	UpdatedAt         pgtype.Timestamptz
+	AssistantThreadID uuid.UUID
+	State             string
+}
+
+// Test-only helper: rewinds updated_at on the active runtime for a thread so
+// backoff windows that key off updated_at can be exercised without sleeping.
+func (q *Queries) BackdateAssistantRuntimeUpdatedAt(ctx context.Context, arg BackdateAssistantRuntimeUpdatedAtParams) error {
+	_, err := q.db.Exec(ctx, backdateAssistantRuntimeUpdatedAt, arg.UpdatedAt, arg.AssistantThreadID, arg.State)
+	return err
+}
+
 const beginExpireAssistantRuntime = `-- name: BeginExpireAssistantRuntime :one
 UPDATE assistant_runtimes
 SET
@@ -298,6 +318,76 @@ func (q *Queries) CreateAssistant(ctx context.Context, arg CreateAssistantParams
 	return i, err
 }
 
+const createAssistantRuntime = `-- name: CreateAssistantRuntime :exec
+INSERT INTO assistant_runtimes (
+  id,
+  assistant_thread_id,
+  assistant_id,
+  project_id,
+  backend,
+  backend_metadata_json,
+  state,
+  warm_until,
+  last_heartbeat_at,
+  updated_at,
+  ended_at,
+  deleted_at
+) VALUES (
+  $1,
+  $2,
+  $3,
+  $4,
+  $5,
+  $6,
+  $7,
+  $8,
+  $9,
+  $10,
+  $11,
+  $12
+)
+`
+
+type CreateAssistantRuntimeParams struct {
+	ID                  uuid.UUID
+	AssistantThreadID   uuid.UUID
+	AssistantID         uuid.UUID
+	ProjectID           uuid.UUID
+	Backend             string
+	BackendMetadataJson []byte
+	State               string
+	WarmUntil           pgtype.Timestamptz
+	LastHeartbeatAt     pgtype.Timestamptz
+	UpdatedAt           pgtype.Timestamptz
+	EndedAt             pgtype.Timestamptz
+	DeletedAt           pgtype.Timestamptz
+}
+
+// Inserts an assistant_runtimes row with caller-controlled id, timestamps,
+// ended_at, and deleted_at so callers can simulate stale, stuck, ended, or
+// soft-deleted runtimes. ReserveAssistantRuntime is the conflict-aware
+// production path that re-derives backend metadata from the most recent
+// runtime; this query accepts the row verbatim. Explicit id + ended_at also
+// let multiple runtime rows coexist on the same thread (the active-runtime
+// unique index ignores ended/deleted rows).
+func (q *Queries) CreateAssistantRuntime(ctx context.Context, arg CreateAssistantRuntimeParams) error {
+	_, err := q.db.Exec(ctx, createAssistantRuntime,
+		arg.ID,
+		arg.AssistantThreadID,
+		arg.AssistantID,
+		arg.ProjectID,
+		arg.Backend,
+		arg.BackendMetadataJson,
+		arg.State,
+		arg.WarmUntil,
+		arg.LastHeartbeatAt,
+		arg.UpdatedAt,
+		arg.EndedAt,
+		arg.DeletedAt,
+	)
+	return err
+}
+
 const deleteAssistant = `-- name: DeleteAssistant :exec
 UPDATE assistants
 SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
@@ -341,6 +431,44 @@ func (q *Queries) FailAssistantThreadEvent(ctx context.Context, arg FailAssistan
 		arg.ProjectID,
 	)
 	return err
+}
+
+const getActiveAssistantRuntimeByThreadID = `-- name: GetActiveAssistantRuntimeByThreadID :one
+SELECT id, assistant_thread_id, assistant_id, project_id, backend, state, warm_until, lease_owner, last_heartbeat_at, backend_metadata_json, ended_at, created_at, updated_at, deleted_at, deleted, ended FROM assistant_runtimes
+WHERE assistant_thread_id = $1
+  AND project_id = $2
+  AND deleted IS FALSE
+ORDER BY created_at DESC
+LIMIT 1
+`
+
+type GetActiveAssistantRuntimeByThreadIDParams struct {
+	AssistantThreadID uuid.UUID
+	ProjectID         uuid.UUID
+}
+
+func (q *Queries) GetActiveAssistantRuntimeByThreadID(ctx context.Context, arg GetActiveAssistantRuntimeByThreadIDParams) (AssistantRuntime, error) {
+	row := q.db.QueryRow(ctx, getActiveAssistantRuntimeByThreadID, arg.AssistantThreadID, arg.ProjectID)
+	var i AssistantRuntime
+	err := row.Scan(
+		&i.ID,
+		&i.AssistantThreadID,
+		&i.AssistantID,
+		&i.ProjectID,
+		&i.Backend,
+		&i.State,
+		&i.WarmUntil,
+		&i.LeaseOwner,
+		&i.LastHeartbeatAt,
+		&i.BackendMetadataJson,
+		&i.EndedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+		&i.Ended,
+	)
+	return i, err
 }
 
 const getAssistant = `-- name: GetAssistant :one
@@ -433,6 +561,167 @@ func (q *Queries) GetAssistantForDispatch(ctx context.Context, assistantID uuid.
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+	)
+	return i, err
+}
+
+const getAssistantIgnoringDeleted = `-- name: GetAssistantIgnoringDeleted :one
+SELECT id, project_id, organization_id, created_by_user_id, name, model, instructions, warm_ttl_seconds, max_concurrency, status, created_at, updated_at, deleted_at
+FROM assistants
+WHERE id = $1
+  AND project_id = $2
+`
+
+type GetAssistantIgnoringDeletedParams struct {
+	AssistantID uuid.UUID
+	ProjectID   uuid.UUID
+}
+
+type GetAssistantIgnoringDeletedRow struct {
+	ID              uuid.UUID
+	ProjectID       uuid.UUID
+	OrganizationID  string
+	CreatedByUserID pgtype.Text
+	Name            string
+	Model           string
+	Instructions    string
+	WarmTtlSeconds  int64
+	MaxConcurrency  int64
+	Status          string
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+}
+
+func (q *Queries) GetAssistantIgnoringDeleted(ctx context.Context, arg GetAssistantIgnoringDeletedParams) (GetAssistantIgnoringDeletedRow, error) {
+	row := q.db.QueryRow(ctx, getAssistantIgnoringDeleted, arg.AssistantID, arg.ProjectID)
+	var i GetAssistantIgnoringDeletedRow
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.CreatedByUserID,
+		&i.Name,
+		&i.Model,
+		&i.Instructions,
+		&i.WarmTtlSeconds,
+		&i.MaxConcurrency,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+	)
+	return i, err
+}
+
+const getAssistantRuntime = `-- name: GetAssistantRuntime :one
+SELECT id, assistant_thread_id, assistant_id, project_id, backend, state, warm_until, lease_owner, last_heartbeat_at, backend_metadata_json, ended_at, created_at, updated_at, deleted_at, deleted, ended FROM assistant_runtimes
+WHERE id = $1
+  AND project_id = $2
+`
+
+type GetAssistantRuntimeParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) GetAssistantRuntime(ctx context.Context, arg GetAssistantRuntimeParams) (AssistantRuntime, error) {
+	row := q.db.QueryRow(ctx, getAssistantRuntime, arg.ID, arg.ProjectID)
+	var i AssistantRuntime
+	err := row.Scan(
+		&i.ID,
+		&i.AssistantThreadID,
+		&i.AssistantID,
+		&i.ProjectID,
+		&i.Backend,
+		&i.State,
+		&i.WarmUntil,
+		&i.LeaseOwner,
+		&i.LastHeartbeatAt,
+		&i.BackendMetadataJson,
+		&i.EndedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+		&i.Ended,
+	)
+	return i, err
+}
+
+const getLatestAssistantRuntimeByThreadID = `-- name: GetLatestAssistantRuntimeByThreadID :one
+SELECT id, assistant_thread_id, assistant_id, project_id, backend, state, warm_until, lease_owner, last_heartbeat_at, backend_metadata_json, ended_at, created_at, updated_at, deleted_at, deleted, ended FROM assistant_runtimes
+WHERE assistant_thread_id = $1
+  AND project_id = $2
+ORDER BY created_at DESC
+LIMIT 1
+`
+
+type GetLatestAssistantRuntimeByThreadIDParams struct {
+	AssistantThreadID uuid.UUID
+	ProjectID         uuid.UUID
+}
+
+// Returns the most recent runtime for a thread regardless of deletion status,
+// so callers can assert on a runtime that was just soft-deleted.
+func (q *Queries) GetLatestAssistantRuntimeByThreadID(ctx context.Context, arg GetLatestAssistantRuntimeByThreadIDParams) (AssistantRuntime, error) {
+	row := q.db.QueryRow(ctx, getLatestAssistantRuntimeByThreadID, arg.AssistantThreadID, arg.ProjectID)
+	var i AssistantRuntime
+	err := row.Scan(
+		&i.ID,
+		&i.AssistantThreadID,
+		&i.AssistantID,
+		&i.ProjectID,
+		&i.Backend,
+		&i.State,
+		&i.WarmUntil,
+		&i.LeaseOwner,
+		&i.LastHeartbeatAt,
+		&i.BackendMetadataJson,
+		&i.EndedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+		&i.Ended,
+	)
+	return i, err
+}
+
+const getLatestAssistantThreadEventByThreadID = `-- name: GetLatestAssistantThreadEventByThreadID :one
+SELECT id, assistant_thread_id, assistant_id, project_id, trigger_instance_id, event_id, correlation_id, status, normalized_payload_json, source_payload_json, attempts, last_error, processed_at, created_at, updated_at, deleted_at, deleted FROM assistant_thread_events
+WHERE assistant_thread_id = $1
+  AND project_id = $2
+ORDER BY created_at DESC
+LIMIT 1
+`
+
+type GetLatestAssistantThreadEventByThreadIDParams struct {
+	AssistantThreadID uuid.UUID
+	ProjectID         uuid.UUID
+}
+
+func (q *Queries) GetLatestAssistantThreadEventByThreadID(ctx context.Context, arg GetLatestAssistantThreadEventByThreadIDParams) (AssistantThreadEvent, error) {
+	row := q.db.QueryRow(ctx, getLatestAssistantThreadEventByThreadID, arg.AssistantThreadID, arg.ProjectID)
+	var i AssistantThreadEvent
+	err := row.Scan(
+		&i.ID,
+		&i.AssistantThreadID,
+		&i.AssistantID,
+		&i.ProjectID,
+		&i.TriggerInstanceID,
+		&i.EventID,
+		&i.CorrelationID,
+		&i.Status,
+		&i.NormalizedPayloadJson,
+		&i.SourcePayloadJson,
+		&i.Attempts,
+		&i.LastError,
+		&i.ProcessedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
 	)
 	return i, err
 }
@@ -1364,6 +1653,58 @@ func (q *Queries) SetAssistantRuntimeActive(ctx context.Context, arg SetAssistan
 		arg.RuntimeID,
 		arg.ProjectID,
 	)
+	return err
+}
+
+const setAssistantStatus = `-- name: SetAssistantStatus :exec
+UPDATE assistants SET status = $1 WHERE id = $2 AND project_id = $3
+`
+
+type SetAssistantStatusParams struct {
+	Status    string
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) SetAssistantStatus(ctx context.Context, arg SetAssistantStatusParams) error {
+	_, err := q.db.Exec(ctx, setAssistantStatus, arg.Status, arg.ID, arg.ProjectID)
+	return err
+}
+
+const setAssistantThreadEventStatus = `-- name: SetAssistantThreadEventStatus :exec
+UPDATE assistant_thread_events
+SET status = $1, updated_at = $2
+WHERE id = $3 AND project_id = $4
+`
+
+type SetAssistantThreadEventStatusParams struct {
+	Status    string
+	UpdatedAt pgtype.Timestamptz
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) SetAssistantThreadEventStatus(ctx context.Context, arg SetAssistantThreadEventStatusParams) error {
+	_, err := q.db.Exec(ctx, setAssistantThreadEventStatus,
+		arg.Status,
+		arg.UpdatedAt,
+		arg.ID,
+		arg.ProjectID,
+	)
+	return err
+}
+
+const softDeleteAssistantThread = `-- name: SoftDeleteAssistantThread :exec
+UPDATE assistant_threads SET deleted_at = clock_timestamp() WHERE id = $1 AND project_id = $2
+`
+
+type SoftDeleteAssistantThreadParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) SoftDeleteAssistantThread(ctx context.Context, arg SoftDeleteAssistantThreadParams) error {
+	_, err := q.db.Exec(ctx, softDeleteAssistantThread, arg.ID, arg.ProjectID)
 	return err
 }
 

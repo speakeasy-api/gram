@@ -126,6 +126,37 @@ type CreateChatMessageParams struct {
 	Generation       int32
 }
 
+const createChatMessageWithToolCalls = `-- name: CreateChatMessageWithToolCalls :exec
+INSERT INTO chat_messages (chat_id, project_id, role, content, tool_calls, tool_call_id, generation)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+`
+
+type CreateChatMessageWithToolCallsParams struct {
+	ChatID     uuid.UUID
+	ProjectID  uuid.NullUUID
+	Role       string
+	Content    string
+	ToolCalls  []byte
+	ToolCallID pgtype.Text
+	Generation int32
+}
+
+// Inserts a single chat_messages row with optional tool_calls JSON,
+// tool_call_id, and generation, for callers seeding tool-turn history without
+// the full CreateChatMessage :copyfrom batch shape.
+func (q *Queries) CreateChatMessageWithToolCalls(ctx context.Context, arg CreateChatMessageWithToolCallsParams) error {
+	_, err := q.db.Exec(ctx, createChatMessageWithToolCalls,
+		arg.ChatID,
+		arg.ProjectID,
+		arg.Role,
+		arg.Content,
+		arg.ToolCalls,
+		arg.ToolCallID,
+		arg.Generation,
+	)
+	return err
+}
+
 const deleteChatResolutions = `-- name: DeleteChatResolutions :exec
 DELETE FROM chat_resolutions WHERE chat_id = $1
 `

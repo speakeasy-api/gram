@@ -262,3 +262,9 @@ WHERE project_id = @project_id
     OR 'destructive_tool' = ANY(sources)
   )
 ORDER BY id;
+
+-- name: HardDeleteRiskPoliciesByProject :exec
+-- Test-only helper: hard-deletes every risk policy for a project so tests can
+-- verify cache behavior without the soft-delete (DeleteRiskPolicy) leaving
+-- ghost rows that production lookups already filter out.
+DELETE FROM risk_policies WHERE project_id = @project_id;

@@ -357,6 +357,18 @@ func (q *Queries) GetRiskPolicy(ctx context.Context, arg GetRiskPolicyParams) (R
 	return i, err
 }
 
+const hardDeleteRiskPoliciesByProject = `-- name: HardDeleteRiskPoliciesByProject :exec
+DELETE FROM risk_policies WHERE project_id = $1
+`
+
+// Test-only helper: hard-deletes every risk policy for a project so tests can
+// verify cache behavior without the soft-delete (DeleteRiskPolicy) leaving
+// ghost rows that production lookups already filter out.
+func (q *Queries) HardDeleteRiskPoliciesByProject(ctx context.Context, projectID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, hardDeleteRiskPoliciesByProject, projectID)
+	return err
+}
+
 type InsertRiskResultsParams struct {
 	ID                uuid.UUID
 	ProjectID         uuid.UUID

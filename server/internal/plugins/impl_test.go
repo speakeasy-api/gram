@@ -653,7 +653,11 @@ func TestPluginsService_PublishPlugins_PublicToolsetEnvConfigs(t *testing.T) {
 
 	// Create a toolset and make it public.
 	toolset := createTestToolset(t, ctx, ti.conn, "public-toolset")
-	_, err = ti.conn.Exec(ctx, "UPDATE toolsets SET mcp_is_public = TRUE WHERE id = $1", toolset.ID)
+	err = toolsetsrepo.New(ti.conn).SetToolsetMCPPublicByID(ctx, toolsetsrepo.SetToolsetMCPPublicByIDParams{
+		McpIsPublic: true,
+		ID:          toolset.ID,
+		ProjectID:   toolset.ProjectID,
+	})
 	require.NoError(t, err)
 
 	// Create MCP metadata + environment config for the public toolset.
@@ -731,7 +735,11 @@ func TestPluginsService_PublishPlugins_SkipsUserEnvConfigsWithoutHeaderName(t *t
 	require.NoError(t, err)
 
 	toolset := createTestToolset(t, ctx, ti.conn, "headerless-toolset")
-	_, err = ti.conn.Exec(ctx, "UPDATE toolsets SET mcp_is_public = TRUE WHERE id = $1", toolset.ID)
+	err = toolsetsrepo.New(ti.conn).SetToolsetMCPPublicByID(ctx, toolsetsrepo.SetToolsetMCPPublicByIDParams{
+		McpIsPublic: true,
+		ID:          toolset.ID,
+		ProjectID:   toolset.ProjectID,
+	})
 	require.NoError(t, err)
 
 	mcpRepo := mcpmetarepo.New(ti.conn)
@@ -827,7 +835,11 @@ func TestPluginsService_PublishPlugins_SkipsDisabledMCPToolsets(t *testing.T) {
 	}
 
 	// Disable MCP after the server was added (slug stays persisted).
-	_, err = ti.conn.Exec(ctx, "UPDATE toolsets SET mcp_enabled = FALSE WHERE id = $1", disabled.ID)
+	err = toolsetsrepo.New(ti.conn).SetToolsetMCPEnabledByID(ctx, toolsetsrepo.SetToolsetMCPEnabledByIDParams{
+		McpEnabled: false,
+		ID:         disabled.ID,
+		ProjectID:  disabled.ProjectID,
+	})
 	require.NoError(t, err)
 
 	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
@@ -858,7 +870,11 @@ func TestPluginsService_PublishPlugins_PublicToolsetWithoutMetadata(t *testing.T
 	require.NoError(t, err)
 
 	toolset := createTestToolset(t, ctx, ti.conn, "public-no-meta")
-	_, err = ti.conn.Exec(ctx, "UPDATE toolsets SET mcp_is_public = TRUE WHERE id = $1", toolset.ID)
+	err = toolsetsrepo.New(ti.conn).SetToolsetMCPPublicByID(ctx, toolsetsrepo.SetToolsetMCPPublicByIDParams{
+		McpIsPublic: true,
+		ID:          toolset.ID,
+		ProjectID:   toolset.ProjectID,
+	})
 	require.NoError(t, err)
 
 	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
@@ -1140,7 +1156,11 @@ func TestPluginsService_PublishPlugins_CodexPublicToolsetEnvHeaders(t *testing.T
 	require.NoError(t, err)
 
 	toolset := createTestToolset(t, ctx, ti.conn, "codex-public-toolset")
-	_, err = ti.conn.Exec(ctx, "UPDATE toolsets SET mcp_is_public = TRUE WHERE id = $1", toolset.ID)
+	err = toolsetsrepo.New(ti.conn).SetToolsetMCPPublicByID(ctx, toolsetsrepo.SetToolsetMCPPublicByIDParams{
+		McpIsPublic: true,
+		ID:          toolset.ID,
+		ProjectID:   toolset.ProjectID,
+	})
 	require.NoError(t, err)
 
 	mcpRepo := mcpmetarepo.New(ti.conn)
@@ -1222,7 +1242,11 @@ func TestPluginsService_PublishPlugins_CodexSkipsDisabledMCPToolsets(t *testing.
 		require.NoError(t, err)
 	}
 
-	_, err = ti.conn.Exec(ctx, "UPDATE toolsets SET mcp_enabled = FALSE WHERE id = $1", disabled.ID)
+	err = toolsetsrepo.New(ti.conn).SetToolsetMCPEnabledByID(ctx, toolsetsrepo.SetToolsetMCPEnabledByIDParams{
+		McpEnabled: false,
+		ID:         disabled.ID,
+		ProjectID:  disabled.ProjectID,
+	})
 	require.NoError(t, err)
 
 	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})

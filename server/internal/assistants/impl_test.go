@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -127,13 +128,14 @@ func newRBACService(t *testing.T) (*Service, context.Context, uuid.UUID) {
 	conn, err := assistantsInfra.CloneTestDatabase(t, "assistants_rbac")
 	require.NoError(t, err)
 
-	projectID := uuid.New()
-	projectSlug := "project-" + projectID.String()[:8]
-	_, err = conn.Exec(t.Context(), `
-INSERT INTO projects (id, name, slug, organization_id)
-VALUES ($1, 'Project', $2, 'org-test')
-`, projectID, projectSlug)
+	proj, err := projectsRepo.New(conn).CreateProject(t.Context(), projectsRepo.CreateProjectParams{
+		Name:           "Project",
+		Slug:           "project-rbac-test",
+		OrganizationID: "org-test",
+	})
 	require.NoError(t, err)
+	projectID := proj.ID
+	projectSlug := proj.Slug
 
 	logger := testenv.NewLogger(t)
 	authzEngine := authz.NewEngine(logger, conn, authztest.RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
