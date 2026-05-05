@@ -148,3 +148,10 @@ SET workos_id = @workos_id,
 WHERE id = @organization_id AND
     workos_id IS NULL
 RETURNING *;
+
+-- name: ClearOrganizationWorkosID :exec
+UPDATE organization_metadata SET workos_id = NULL WHERE id = @organization_id;
+
+-- name: CreateOrganizationMetadata :exec
+INSERT INTO organization_metadata (id, name, slug)
+VALUES (@id, @name, @slug);

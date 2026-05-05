@@ -42,6 +42,31 @@ func (q *Queries) AttachWorkOSUserToOrg(ctx context.Context, arg AttachWorkOSUse
 	return err
 }
 
+const clearOrganizationWorkosID = `-- name: ClearOrganizationWorkosID :exec
+UPDATE organization_metadata SET workos_id = NULL WHERE id = $1
+`
+
+func (q *Queries) ClearOrganizationWorkosID(ctx context.Context, organizationID string) error {
+	_, err := q.db.Exec(ctx, clearOrganizationWorkosID, organizationID)
+	return err
+}
+
+const createOrganizationMetadata = `-- name: CreateOrganizationMetadata :exec
+INSERT INTO organization_metadata (id, name, slug)
+VALUES ($1, $2, $3)
+`
+
+type CreateOrganizationMetadataParams struct {
+	ID   string
+	Name string
+	Slug string
+}
+
+func (q *Queries) CreateOrganizationMetadata(ctx context.Context, arg CreateOrganizationMetadataParams) error {
+	_, err := q.db.Exec(ctx, createOrganizationMetadata, arg.ID, arg.Name, arg.Slug)
+	return err
+}
+
 const deleteOrganizationUserRelationship = `-- name: DeleteOrganizationUserRelationship :exec
 UPDATE organization_user_relationships
 SET deleted_at = clock_timestamp()

@@ -239,3 +239,8 @@ WHERE e.deployment_id = @deployment_id
   AND t.requires_oauth = TRUE
   AND t.deleted IS FALSE
   AND e.deleted IS FALSE;
+
+-- name: CreateMCPRegistry :one
+INSERT INTO mcp_registries (name, url)
+VALUES (@name, @url)
+RETURNING id;

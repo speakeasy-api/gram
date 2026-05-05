@@ -8,10 +8,13 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	assistantsrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -46,39 +49,54 @@ func newFixture(t *testing.T, dbName string) fixture {
 	conn, err := tokensInfra.CloneTestDatabase(t, dbName)
 	require.NoError(t, err)
 
-	f := fixture{
+	ctx := t.Context()
+
+	proj, err := projectsrepo.New(conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
+		Name:           "Project",
+		Slug:           "project",
+		OrganizationID: "org-test",
+	})
+	require.NoError(t, err)
+
+	assistant, err := assistantsrepo.New(conn).CreateAssistant(ctx, assistantsrepo.CreateAssistantParams{
+		ProjectID:       proj.ID,
+		OrganizationID:  "org-test",
+		CreatedByUserID: pgtype.Text{},
+		Name:            "Assistant",
+		Model:           "openai/gpt-4o-mini",
+		Instructions:    "",
+		WarmTtlSeconds:  300,
+		MaxConcurrency:  1,
+		Status:          "active",
+	})
+	require.NoError(t, err)
+
+	chatID := uuid.New()
+	err = assistantsrepo.New(conn).UpsertAssistantChat(ctx, assistantsrepo.UpsertAssistantChatParams{
+		ChatID:         chatID,
+		ProjectID:      proj.ID,
+		OrganizationID: "org-test",
+		Title:          pgtype.Text{},
+	})
+	require.NoError(t, err)
+
+	threadID, err := assistantsrepo.New(conn).UpsertAssistantThread(ctx, assistantsrepo.UpsertAssistantThreadParams{
+		AssistantID:   assistant.ID,
+		ProjectID:     proj.ID,
+		CorrelationID: "corr-1",
+		ChatID:        chatID,
+		SourceKind:    "slack",
+		SourceRefJson: []byte("{}"),
+	})
+	require.NoError(t, err)
+
+	return fixture{
 		conn:        conn,
-		projectID:   uuid.New(),
-		assistantID: uuid.New(),
-		threadID:    uuid.New(),
-		chatID:      uuid.New(),
+		projectID:   proj.ID,
+		assistantID: assistant.ID,
+		threadID:    threadID,
+		chatID:      chatID,
 	}
-
-	_, err = conn.Exec(t.Context(), `
-INSERT INTO projects (id, name, slug, organization_id)
-VALUES ($1, 'Project', 'project', 'org-test')
-`, f.projectID)
-	require.NoError(t, err)
-
-	_, err = conn.Exec(t.Context(), `
-INSERT INTO assistants (id, project_id, organization_id, name, model, instructions, warm_ttl_seconds, max_concurrency, status)
-VALUES ($1, $2, 'org-test', 'Assistant', 'openai/gpt-4o-mini', '', 300, 1, 'active')
-`, f.assistantID, f.projectID)
-	require.NoError(t, err)
-
-	_, err = conn.Exec(t.Context(), `
-INSERT INTO chats (id, project_id, organization_id)
-VALUES ($1, $2, 'org-test')
-`, f.chatID, f.projectID)
-	require.NoError(t, err)
-
-	_, err = conn.Exec(t.Context(), `
-INSERT INTO assistant_threads (id, assistant_id, project_id, correlation_id, chat_id, source_kind, source_ref_json, last_event_at)
-VALUES ($1, $2, $3, 'corr-1', $4, 'slack', '{}'::jsonb, clock_timestamp())
-`, f.threadID, f.assistantID, f.projectID, f.chatID)
-	require.NoError(t, err)
-
-	return f
 }
 
 func TestCheckRevocation_active(t *testing.T) {
@@ -94,7 +112,10 @@ func TestCheckRevocation_threadDeleted(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t, "tokens_thread_deleted")
-	_, err := f.conn.Exec(t.Context(), `UPDATE assistant_threads SET deleted_at = clock_timestamp() WHERE id = $1`, f.threadID)
+	err := assistantsrepo.New(f.conn).SoftDeleteAssistantThread(t.Context(), assistantsrepo.SoftDeleteAssistantThreadParams{
+		ID:        f.threadID,
+		ProjectID: f.projectID,
+	})
 	require.NoError(t, err)
 
 	m := New("test-secret", f.conn, nil)
@@ -107,7 +128,10 @@ func TestCheckRevocation_assistantDeleted(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t, "tokens_assistant_deleted")
-	_, err := f.conn.Exec(t.Context(), `UPDATE assistants SET deleted_at = clock_timestamp() WHERE id = $1`, f.assistantID)
+	err := assistantsrepo.New(f.conn).DeleteAssistant(t.Context(), assistantsrepo.DeleteAssistantParams{
+		AssistantID: f.assistantID,
+		ProjectID:   f.projectID,
+	})
 	require.NoError(t, err)
 
 	m := New("test-secret", f.conn, nil)
@@ -120,7 +144,11 @@ func TestCheckRevocation_assistantPaused(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t, "tokens_assistant_paused")
-	_, err := f.conn.Exec(t.Context(), `UPDATE assistants SET status = 'paused' WHERE id = $1`, f.assistantID)
+	err := assistantsrepo.New(f.conn).SetAssistantStatus(t.Context(), assistantsrepo.SetAssistantStatusParams{
+		Status:    "paused",
+		ID:        f.assistantID,
+		ProjectID: f.projectID,
+	})
 	require.NoError(t, err)
 
 	m := New("test-secret", f.conn, nil)
@@ -150,7 +178,11 @@ func TestCheckRevocation_cacheHitSkipsDB(t *testing.T) {
 
 	// Pause the assistant out from under us; the cached "allowed" answer must
 	// continue to be honoured until revocationCacheTTL expires.
-	_, err := f.conn.Exec(t.Context(), `UPDATE assistants SET status = 'paused' WHERE id = $1`, f.assistantID)
+	err := assistantsrepo.New(f.conn).SetAssistantStatus(t.Context(), assistantsrepo.SetAssistantStatusParams{
+		Status:    "paused",
+		ID:        f.assistantID,
+		ProjectID: f.projectID,
+	})
 	require.NoError(t, err)
 
 	require.NoError(t, m.checkRevocation(t.Context(), f.threadID, f.assistantID))
@@ -167,7 +199,10 @@ func TestCheckRevocation_cacheRespectsTTL(t *testing.T) {
 
 	require.NoError(t, m.checkRevocation(t.Context(), f.threadID, f.assistantID))
 
-	_, err := f.conn.Exec(t.Context(), `UPDATE assistants SET deleted_at = clock_timestamp() WHERE id = $1`, f.assistantID)
+	err := assistantsrepo.New(f.conn).DeleteAssistant(t.Context(), assistantsrepo.DeleteAssistantParams{
+		AssistantID: f.assistantID,
+		ProjectID:   f.projectID,
+	})
 	require.NoError(t, err)
 
 	time.Sleep(75 * time.Millisecond)
