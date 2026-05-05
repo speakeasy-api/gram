@@ -17,10 +17,10 @@ package oauth2
 
 import (
 	"context"
-	"database/sql"
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
+	"database/sql"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -29,6 +29,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -36,7 +37,6 @@ import (
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/trace"
 
-	
 	"github.com/speakeasy-api/gram/dev-idp/internal/database/repo"
 	"github.com/speakeasy-api/gram/dev-idp/internal/defaultuser"
 	"github.com/speakeasy-api/gram/dev-idp/internal/keystore"
@@ -81,7 +81,7 @@ func NewHandler(cfg Config, ks *keystore.Keystore, logger *slog.Logger, tracerPr
 	return &Handler{
 		cfg:      cfg,
 		tracer:   tracerProvider.Tracer("github.com/speakeasy-api/gram/dev-idp/internal/modes/oauth2"),
-		logger:   logger.With(slog.String("component", "devidp." + Mode)),
+		logger:   logger.With(slog.String("component", "devidp."+Mode)),
 		db:       db,
 		keystore: ks,
 	}
@@ -285,7 +285,7 @@ func (h *Handler) handleAuthorizationCodeGrant(ctx context.Context, w http.Respo
 	}
 
 	queries := repo.New(h.db)
-	stored, err := queries.ConsumeAuthCode(ctx, repo.ConsumeAuthCodeParams{Code: code, Mode: Mode})
+	stored, err := queries.ConsumeAuthCode(ctx, repo.ConsumeAuthCodeParams{Code: code, Mode: Mode, Ts: time.Now()})
 	if err != nil {
 		oauthError(w, http.StatusBadRequest, "invalid_grant", "auth code is unknown, consumed, or expired")
 		return
@@ -328,7 +328,7 @@ func (h *Handler) handleRefreshTokenGrant(ctx context.Context, w http.ResponseWr
 	}
 
 	queries := repo.New(h.db)
-	stored, err := queries.GetActiveToken(ctx, repo.GetActiveTokenParams{Token: refreshToken, Mode: Mode})
+	stored, err := queries.GetActiveToken(ctx, repo.GetActiveTokenParams{Token: refreshToken, Mode: Mode, Ts: time.Now()})
 	if err != nil {
 		oauthError(w, http.StatusBadRequest, "invalid_grant", "refresh token is unknown, revoked, or expired")
 		return
@@ -485,7 +485,7 @@ func (h *Handler) handleUserinfo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	queries := repo.New(h.db)
-	stored, err := queries.GetActiveToken(ctx, repo.GetActiveTokenParams{Token: bearer, Mode: Mode})
+	stored, err := queries.GetActiveToken(ctx, repo.GetActiveTokenParams{Token: bearer, Mode: Mode, Ts: time.Now()})
 	if err != nil || stored.Kind != "access_token" {
 		w.Header().Set("WWW-Authenticate", `Bearer realm="oauth2", error="invalid_token"`)
 		oauthError(w, http.StatusUnauthorized, "invalid_token", "bearer is unknown, revoked, expired, or not an access token")
@@ -572,12 +572,7 @@ func validatePKCES256(verifier, challenge string) bool {
 }
 
 func scopeContains(scope, want string) bool {
-	for _, s := range strings.Fields(scope) {
-		if s == want {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(strings.Fields(scope), want)
 }
 
 func bearerToken(r *http.Request) string {
@@ -613,4 +608,3 @@ func oauthError(w http.ResponseWriter, status int, code, description string) {
 		"error_description": description,
 	})
 }
-

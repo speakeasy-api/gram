@@ -7,6 +7,7 @@
     "dev": "vite dev --port ${GRAM_DEVIDP_DASHBOARD_PORT:-35293}",
     "build": "vite build",
     "start": "node .output/server/index.mjs",
+    "lint": "oxfmt --check . && tsc -b --noEmit",
     "type-check": "tsc -b --noEmit"
   },
   "dependencies": {

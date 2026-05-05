@@ -10,7 +10,7 @@ import (
 
 func TestOpen_Memory(t *testing.T) {
 	t.Parallel()
-	db, err := bootstrap.Open(t.Context(), config.DB{Mode: config.DBModeMemory})
+	db, err := bootstrap.Open(t.Context(), config.DB{Mode: config.DBModeMemory, Path: ""})
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}

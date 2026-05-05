@@ -4,4 +4,3 @@ node_modules
 .tanstack
 dist
 *.log
-src/routeTree.gen.ts

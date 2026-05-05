@@ -103,7 +103,7 @@ func (s *InvitationsService) List(ctx context.Context, p *gen.ListPayload) (*gen
 	rows, err := repo.New(s.db).ListInvitationsByOrg(ctx, repo.ListInvitationsByOrgParams{
 		OrganizationID: orgID,
 		After:          after,
-		MaxRows:        int64(p.Limit) + 1, //nolint:gosec // Goa validates Limit ∈ [1, 100]
+		MaxRows:        int64(p.Limit) + 1,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list invitations").Log(ctx, s.logger)

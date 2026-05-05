@@ -5,16 +5,16 @@ import (
 	"database/sql"
 	"errors"
 	"log/slog"
+	"time"
 
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
 
-	
-	"github.com/speakeasy-api/gram/dev-idp/internal/conv"
-	"github.com/speakeasy-api/gram/dev-idp/internal/database/repo"
 	gen "github.com/speakeasy-api/gram/dev-idp/gen/dev_idp"
 	srv "github.com/speakeasy-api/gram/dev-idp/gen/http/dev_idp/server"
+	"github.com/speakeasy-api/gram/dev-idp/internal/conv"
+	"github.com/speakeasy-api/gram/dev-idp/internal/database/repo"
 	"github.com/speakeasy-api/gram/dev-idp/internal/middleware"
 	"github.com/speakeasy-api/gram/dev-idp/internal/oops"
 )
@@ -84,6 +84,7 @@ func (s *DevIdpService) SetCurrentUser(ctx context.Context, p *gen.SetCurrentUse
 	row, err := queries.UpsertCurrentUser(ctx, repo.UpsertCurrentUserParams{
 		Mode:       p.Mode,
 		SubjectRef: subjectRef,
+		Ts:         time.Now(),
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "upsert currentUser").Log(ctx, s.logger)
@@ -186,4 +187,3 @@ func (s *DevIdpService) buildCurrentUserView(ctx context.Context, queries *repo.
 		Workos: nil,
 	}, nil
 }
-

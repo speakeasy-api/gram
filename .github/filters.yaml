@@ -57,3 +57,7 @@ plog:
   - "go.mod"
   - "go.sum"
   - "plog/**"
+
+dev-idp:
+  - "dev-idp/**"
+  - "dev-idp-dashboard/**"

@@ -2,10 +2,10 @@ package service
 
 import (
 	"context"
-	"time"
 	"database/sql"
 	"errors"
 	"log/slog"
+	"time"
 
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/trace"
@@ -115,7 +115,7 @@ func (s *UsersService) List(ctx context.Context, p *gen.ListPayload) (*gen.ListU
 
 	rows, err := repo.New(s.db).ListUsers(ctx, repo.ListUsersParams{
 		After:   after,
-		MaxRows: int64(p.Limit) + 1, //nolint:gosec // Goa validates Limit ∈ [1, 100]
+		MaxRows: int64(p.Limit) + 1,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list users").Log(ctx, s.logger)

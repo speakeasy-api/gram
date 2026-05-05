@@ -11,7 +11,7 @@ package design
 import (
 	"goa.design/goa/v3/expr"
 
-	. "goa.design/goa/v3/dsl"
+	. "goa.design/goa/v3/dsl" //nolint:staticcheck // Goa DSL convention
 )
 
 var _ = API("gram-dev-idp", func() {

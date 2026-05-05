@@ -108,7 +108,7 @@ func BootstrapLocalUser(ctx context.Context, db *sql.DB, mode string) (uuid.UUID
 			OrganizationID: org.ID,
 			Slug:           r.Slug,
 			Name:           r.Name,
-			Description:    sql.NullString{},
+			Description:    sql.NullString{String: "", Valid: false},
 		}); err != nil {
 			return uuid.Nil, fmt.Errorf("seed default org role %q: %w", r.Slug, err)
 		}
@@ -118,7 +118,7 @@ func BootstrapLocalUser(ctx context.Context, db *sql.DB, mode string) (uuid.UUID
 		ID:             uuid.New(),
 		UserID:         user.ID,
 		OrganizationID: org.ID,
-		Role:           sql.NullString{},
+		Role:           sql.NullString{String: "", Valid: false},
 	}); err != nil {
 		return uuid.Nil, fmt.Errorf("upsert default membership: %w", err)
 	}

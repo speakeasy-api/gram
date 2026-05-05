@@ -70,7 +70,7 @@ func run() error {
 
 	dbCfg, err := config.ParseDB(*dbSpec)
 	if err != nil {
-		return err
+		return fmt.Errorf("parse db config: %w", err)
 	}
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -141,7 +141,8 @@ func run() error {
 
 	if *workosKey != "" {
 		wsClient := workos.NewClient(*workosKey, workos.Opts{
-			Endpoint: *workosHost,
+			Endpoint:   *workosHost,
+			HTTPClient: nil,
 		})
 		wsHandler := devidpworkos.NewHandler(
 			devidpworkos.Config{SecretKey: *speakeasySecret},
