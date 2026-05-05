@@ -6,24 +6,17 @@ import { ErrorAlert } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
-import { Checkbox } from "@/components/ui/checkbox";
-import { MultiSearch } from "@/components/ui/multi-search";
 import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+  FilterChip,
+  ObserveFilterBar,
+} from "@/components/observe/ObserveFilterBar";
 import { useSlugs } from "@/contexts/Sdk";
 import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
 import { useServerNameMappings } from "@/hooks/useServerNameMappings";
 import { cn } from "@/lib/utils";
 import { useOrgRoutes } from "@/routes";
-import {
-  getPresetRange,
-  TimeRangePicker,
-  type DateRangePreset,
-} from "@gram-ai/elements";
+import { getPresetRange, type DateRangePreset } from "@gram-ai/elements";
 import { telemetryGetHooksSummary } from "@gram/client/funcs/telemetryGetHooksSummary";
 import { telemetryListHooksTraces } from "@gram/client/funcs/telemetryListHooksTraces";
 import type {
@@ -185,12 +178,6 @@ const validPresets: DateRangePreset[] = [
 
 function isValidPreset(value: string | null): value is DateRangePreset {
   return value !== null && validPresets.includes(value as DateRangePreset);
-}
-
-interface FilterChip {
-  display: string;
-  filters: string[];
-  path: string;
 }
 
 function safeBase64Encode(str: string): string {
@@ -717,47 +704,25 @@ function HooksInnerContent({
             </div>
           </div>
 
-          <div className="flex shrink-0 flex-wrap items-center gap-2">
-            <MultiSearch
-              value={serverInput}
-              onChange={setServerInput}
-              onSubmit={onSubmitServerFilter}
-              placeholder="Filter by server name (press Enter to add)"
-              className="min-w-[200px] flex-1"
-              chips={activeFilters
-                .filter((f) => f.path === "gram.tool_call.source")
-                .map((f) => ({ display: f.display, value: f.display }))}
-              onRemoveChip={(display) =>
-                removeFilter("gram.tool_call.source", display)
-              }
-            />
-            <MultiSearch
-              value={userEmailInput}
-              onChange={setUserEmailInput}
-              onSubmit={onSubmitUserEmailFilter}
-              placeholder="Filter by user email (press Enter to add)"
-              className="min-w-[200px] flex-1"
-              chips={activeFilters
-                .filter((f) => f.path === "user.email")
-                .map((f) => ({ display: f.display, value: f.display }))}
-              onRemoveChip={(display) => removeFilter("user.email", display)}
-            />
-            <HookTypeFilter
-              selectedHookTypes={selectedHookTypes}
-              onHookTypesChange={onHookTypesChange}
-            />
-            <div className="ml-auto">
-              <TimeRangePicker
-                preset={customRange ? null : dateRange}
-                customRange={customRange}
-                customRangeLabel={customRangeLabel}
-                onPresetChange={onDateRangeChange}
-                onCustomRangeChange={onCustomRangeChange}
-                onClearCustomRange={onClearCustomRange}
-                projectSlug={projectSlug}
-              />
-            </div>
-          </div>
+          <ObserveFilterBar
+            serverInput={serverInput}
+            setServerInput={setServerInput}
+            onSubmitServerFilter={onSubmitServerFilter}
+            userEmailInput={userEmailInput}
+            setUserEmailInput={setUserEmailInput}
+            onSubmitUserEmailFilter={onSubmitUserEmailFilter}
+            activeFilters={activeFilters}
+            removeFilter={removeFilter}
+            selectedTypes={selectedHookTypes}
+            onTypesChange={onHookTypesChange}
+            dateRange={dateRange}
+            customRange={customRange}
+            customRangeLabel={customRangeLabel}
+            onDateRangeChange={onDateRangeChange}
+            onCustomRangeChange={onCustomRangeChange}
+            onClearCustomRange={onClearCustomRange}
+            projectSlug={projectSlug}
+          />
 
           <div className="flex min-h-0 flex-1 overflow-hidden">
             <div className="min-h-0 flex-1 overflow-y-auto pb-4">
@@ -817,92 +782,6 @@ function HooksInnerContent({
         onOpenChange={(open) => !open && setSelectedLog(null)}
       />
     </>
-  );
-}
-
-const HOOK_TYPE_OPTIONS = [
-  {
-    label: "MCP Servers",
-    labelShort: "Servers",
-    value: "mcp" as TypesToInclude,
-  },
-  {
-    label: "Local Tools",
-    labelShort: "Local",
-    value: "local" as TypesToInclude,
-  },
-  { label: "Skills", labelShort: "Skills", value: "skill" as TypesToInclude },
-];
-
-function HookTypeFilter({
-  selectedHookTypes,
-  onHookTypesChange,
-}: {
-  selectedHookTypes: TypesToInclude[];
-  onHookTypesChange: (types: TypesToInclude[]) => void;
-}) {
-  const getButtonText = () => {
-    if (selectedHookTypes.length === 3) {
-      return "Showing all types";
-    }
-
-    if (selectedHookTypes.length === 0) {
-      return "No types selected";
-    }
-
-    if (selectedHookTypes.length === 1) {
-      const selected = HOOK_TYPE_OPTIONS.find(
-        (opt) => opt.value === selectedHookTypes[0],
-      );
-      return `Showing ${selected?.labelShort || selectedHookTypes[0]}`;
-    }
-
-    const labels = HOOK_TYPE_OPTIONS.filter((opt) =>
-      selectedHookTypes.includes(opt.value),
-    ).map((opt) => opt.labelShort);
-    return `Showing ${labels.join(" & ")}`;
-  };
-
-  return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-[42px] w-[200px] shrink-0 justify-between"
-        >
-          <span className="text-sm">{getButtonText()}</span>
-          <Icon name="chevron-down" className="ml-2 size-4" />
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent className="w-[200px] p-3" align="start">
-        <div className="space-y-2">
-          {HOOK_TYPE_OPTIONS.map((option) => (
-            <div key={option.value} className="flex items-center space-x-2">
-              <Checkbox
-                id={`hook-type-${option.value}`}
-                checked={selectedHookTypes.includes(option.value)}
-                onCheckedChange={(checked) => {
-                  if (checked) {
-                    onHookTypesChange([...selectedHookTypes, option.value]);
-                  } else {
-                    onHookTypesChange(
-                      selectedHookTypes.filter((t) => t !== option.value),
-                    );
-                  }
-                }}
-              />
-              <label
-                htmlFor={`hook-type-${option.value}`}
-                className="cursor-pointer text-sm leading-none font-medium"
-              >
-                {option.label}
-              </label>
-            </div>
-          ))}
-        </div>
-      </PopoverContent>
-    </Popover>
   );
 }
 
