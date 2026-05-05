@@ -213,6 +213,16 @@ func (q *Queries) DeleteRiskPolicy(ctx context.Context, arg DeleteRiskPolicyPara
 	return err
 }
 
+const deleteRiskPolicyTargetsByPolicy = `-- name: DeleteRiskPolicyTargetsByPolicy :exec
+DELETE FROM risk_policy_targets
+WHERE risk_policy_id = $1
+`
+
+func (q *Queries) DeleteRiskPolicyTargetsByPolicy(ctx context.Context, riskPolicyID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteRiskPolicyTargetsByPolicy, riskPolicyID)
+	return err
+}
+
 const deleteRiskResultsForMessages = `-- name: DeleteRiskResultsForMessages :exec
 DELETE FROM risk_results
 WHERE risk_policy_id = $1
@@ -349,6 +359,13 @@ func (q *Queries) GetRiskPolicy(ctx context.Context, arg GetRiskPolicyParams) (R
 		&i.Deleted,
 	)
 	return i, err
+}
+
+type InsertRiskPolicyTargetsParams struct {
+	RiskPolicyID   uuid.UUID
+	OrganizationID string
+	TargetType     string
+	TargetID       string
 }
 
 type InsertRiskResultsParams struct {
@@ -537,6 +554,40 @@ func (q *Queries) ListRiskPolicies(ctx context.Context, projectID uuid.UUID) ([]
 			&i.UpdatedAt,
 			&i.DeletedAt,
 			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRiskPolicyTargetsByPolicy = `-- name: ListRiskPolicyTargetsByPolicy :many
+SELECT id, risk_policy_id, organization_id, target_type, target_id, created_at
+FROM risk_policy_targets
+WHERE risk_policy_id = $1
+ORDER BY created_at ASC, id ASC
+`
+
+func (q *Queries) ListRiskPolicyTargetsByPolicy(ctx context.Context, riskPolicyID uuid.UUID) ([]RiskPolicyTarget, error) {
+	rows, err := q.db.Query(ctx, listRiskPolicyTargetsByPolicy, riskPolicyID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RiskPolicyTarget
+	for rows.Next() {
+		var i RiskPolicyTarget
+		if err := rows.Scan(
+			&i.ID,
+			&i.RiskPolicyID,
+			&i.OrganizationID,
+			&i.TargetType,
+			&i.TargetID,
+			&i.CreatedAt,
 		); err != nil {
 			return nil, err
 		}

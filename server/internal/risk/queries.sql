@@ -46,6 +46,30 @@ WHERE project_id = @project_id
   AND enabled IS TRUE
   AND deleted IS FALSE;
 
+-- name: ListRiskPolicyTargetsByPolicy :many
+SELECT *
+FROM risk_policy_targets
+WHERE risk_policy_id = @risk_policy_id
+ORDER BY created_at ASC, id ASC;
+
+-- name: DeleteRiskPolicyTargetsByPolicy :exec
+DELETE FROM risk_policy_targets
+WHERE risk_policy_id = @risk_policy_id;
+
+-- name: InsertRiskPolicyTargets :copyfrom
+INSERT INTO risk_policy_targets (
+    risk_policy_id
+  , organization_id
+  , target_type
+  , target_id
+)
+VALUES (
+    @risk_policy_id
+  , @organization_id
+  , @target_type
+  , @target_id
+);
+
 -- name: UpdateRiskPolicy :one
 UPDATE risk_policies
 SET name = @name

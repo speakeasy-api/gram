@@ -9,6 +9,41 @@ import (
 	"context"
 )
 
+// iteratorForInsertRiskPolicyTargets implements pgx.CopyFromSource.
+type iteratorForInsertRiskPolicyTargets struct {
+	rows                 []InsertRiskPolicyTargetsParams
+	skippedFirstNextCall bool
+}
+
+func (r *iteratorForInsertRiskPolicyTargets) Next() bool {
+	if len(r.rows) == 0 {
+		return false
+	}
+	if !r.skippedFirstNextCall {
+		r.skippedFirstNextCall = true
+		return true
+	}
+	r.rows = r.rows[1:]
+	return len(r.rows) > 0
+}
+
+func (r iteratorForInsertRiskPolicyTargets) Values() ([]interface{}, error) {
+	return []interface{}{
+		r.rows[0].RiskPolicyID,
+		r.rows[0].OrganizationID,
+		r.rows[0].TargetType,
+		r.rows[0].TargetID,
+	}, nil
+}
+
+func (r iteratorForInsertRiskPolicyTargets) Err() error {
+	return nil
+}
+
+func (q *Queries) InsertRiskPolicyTargets(ctx context.Context, arg []InsertRiskPolicyTargetsParams) (int64, error) {
+	return q.db.CopyFrom(ctx, []string{"risk_policy_targets"}, []string{"risk_policy_id", "organization_id", "target_type", "target_id"}, &iteratorForInsertRiskPolicyTargets{rows: arg})
+}
+
 // iteratorForInsertRiskResults implements pgx.CopyFromSource.
 type iteratorForInsertRiskResults struct {
 	rows                 []InsertRiskResultsParams
