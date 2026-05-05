@@ -2039,6 +2039,14 @@ CREATE INDEX IF NOT EXISTS mcp_servers_project_id_idx
 ON mcp_servers (project_id)
 WHERE deleted IS FALSE;
 
+CREATE INDEX IF NOT EXISTS mcp_servers_remote_mcp_server_id_idx
+ON mcp_servers (remote_mcp_server_id)
+WHERE remote_mcp_server_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS mcp_servers_toolset_id_idx
+ON mcp_servers (toolset_id)
+WHERE toolset_id IS NOT NULL;
+
 -- MCP Endpoints: addressable slugs for an MCP server. A NULL custom_domain_id
 -- represents a Gram-hosted endpoint (resolved by slug alone); a non-NULL
 -- custom_domain_id represents a custom-domain endpoint (resolved by the
