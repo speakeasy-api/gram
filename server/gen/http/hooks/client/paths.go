@@ -17,6 +17,11 @@ func CursorHooksPath() string {
 	return "/rpc/hooks.cursor"
 }
 
+// VscodeCopilotHooksPath returns the URL path to the hooks service vscodeCopilot HTTP endpoint.
+func VscodeCopilotHooksPath() string {
+	return "/rpc/hooks.vscode"
+}
+
 // LogsHooksPath returns the URL path to the hooks service logs HTTP endpoint.
 func LogsHooksPath() string {
 	return "/rpc/hooks.otel/v1/logs"

@@ -94,6 +94,7 @@ export * from "./hooksHooksNumberClaude.js";
 export * from "./hooksHooksNumberCursor.js";
 export * from "./hooksHooksNumberLogs.js";
 export * from "./hooksHooksNumberMetrics.js";
+export * from "./hooksHooksNumberVscodeCopilot.js";
 export * from "./hooksServerNamesDeleteServerNameOverride.js";
 export * from "./hooksServerNamesListServerNameOverrides.js";
 export * from "./hooksServerNamesUpsertServerNameOverride.js";

@@ -486,6 +486,248 @@ func DecodeCursorResponse(decoder func(*http.Response) goahttp.Decoder, restoreB
 	}
 }
 
+// BuildVscodeCopilotRequest instantiates a HTTP request object with method and
+// path set to call the "hooks" service "vscodeCopilot" endpoint
+func (c *Client) BuildVscodeCopilotRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: VscodeCopilotHooksPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("hooks", "vscodeCopilot", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeVscodeCopilotRequest returns an encoder for requests sent to the hooks
+// vscodeCopilot server.
+func EncodeVscodeCopilotRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*hooks.VscodeCopilotPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("hooks", "vscodeCopilot", "*hooks.VscodeCopilotPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		if p.UserEmailInput != nil {
+			head := *p.UserEmailInput
+			req.Header.Set("Gram-User-Email", head)
+		}
+		if p.UserEmailSourceInput != nil {
+			head := *p.UserEmailSourceInput
+			req.Header.Set("Gram-User-Email-Source", head)
+		}
+		body := NewVscodeCopilotRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("hooks", "vscodeCopilot", err)
+		}
+		return nil
+	}
+}
+
+// DecodeVscodeCopilotResponse returns a decoder for responses returned by the
+// hooks vscodeCopilot endpoint. restoreBody controls whether the response body
+// should be restored after having been read.
+// DecodeVscodeCopilotResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeVscodeCopilotResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body VscodeCopilotResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("hooks", "vscodeCopilot", err)
+			}
+			res := NewVscodeCopilotVSCodeCopilotHookResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body VscodeCopilotUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("hooks", "vscodeCopilot", err)
+			}
+			err = ValidateVscodeCopilotUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("hooks", "vscodeCopilot", err)
+			}
+			return nil, NewVscodeCopilotUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body VscodeCopilotForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("hooks", "vscodeCopilot", err)
+			}
+			err = ValidateVscodeCopilotForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("hooks", "vscodeCopilot", err)
+			}
+			return nil, NewVscodeCopilotForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body VscodeCopilotBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("hooks", "vscodeCopilot", err)
+			}
+			err = ValidateVscodeCopilotBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("hooks", "vscodeCopilot", err)
+			}
+			return nil, NewVscodeCopilotBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body VscodeCopilotNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("hooks", "vscodeCopilot", err)
+			}
+			err = ValidateVscodeCopilotNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("hooks", "vscodeCopilot", err)
+			}
+			return nil, NewVscodeCopilotNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body VscodeCopilotConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("hooks", "vscodeCopilot", err)
+			}
+			err = ValidateVscodeCopilotConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("hooks", "vscodeCopilot", err)
+			}
+			return nil, NewVscodeCopilotConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body VscodeCopilotUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("hooks", "vscodeCopilot", err)
+			}
+			err = ValidateVscodeCopilotUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("hooks", "vscodeCopilot", err)
+			}
+			return nil, NewVscodeCopilotUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body VscodeCopilotInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("hooks", "vscodeCopilot", err)
+			}
+			err = ValidateVscodeCopilotInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("hooks", "vscodeCopilot", err)
+			}
+			return nil, NewVscodeCopilotInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body VscodeCopilotInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("hooks", "vscodeCopilot", err)
+				}
+				err = ValidateVscodeCopilotInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("hooks", "vscodeCopilot", err)
+				}
+				return nil, NewVscodeCopilotInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body VscodeCopilotUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("hooks", "vscodeCopilot", err)
+				}
+				err = ValidateVscodeCopilotUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("hooks", "vscodeCopilot", err)
+				}
+				return nil, NewVscodeCopilotUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("hooks", "vscodeCopilot", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body VscodeCopilotGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("hooks", "vscodeCopilot", err)
+			}
+			err = ValidateVscodeCopilotGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("hooks", "vscodeCopilot", err)
+			}
+			return nil, NewVscodeCopilotGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("hooks", "vscodeCopilot", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildLogsRequest instantiates a HTTP request object with method and path set
 // to call the "hooks" service "logs" endpoint
 func (c *Client) BuildLogsRequest(ctx context.Context, v any) (*http.Request, error) {

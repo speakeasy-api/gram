@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: efffcdcad58d7b8d616bdcf0d2132315
+  docChecksum: 90e8a0561dcb635341202bfb8264ea26
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -878,6 +878,12 @@ trackedFiles:
     last_write_checksum: sha1:6d0d0f6fb80bbd83f1871cd1d41ff730dc977af9
   docs/models/components/visibility.md:
     last_write_checksum: sha1:84b0c38d7854280b473fffd30f592d27801773e4
+  docs/models/components/vscodecopilothookpayload.md:
+    last_write_checksum: sha1:a540427150f7b805b30768336f6236deb9f151e5
+  docs/models/components/vscodecopilothookpayloadhookeventname.md:
+    last_write_checksum: sha1:4c9e28f94e2c876eafd1f72418818ee730b60418
+  docs/models/components/vscodecopilothookresult.md:
+    last_write_checksum: sha1:9041f56e2c5591d977e6dae60f21b122fa58879c
   docs/models/components/workflowstatus.md:
     last_write_checksum: sha1:cf97151bbe73384a8d79ca55961485537464c54a
   docs/models/errors/serviceerror.md:
@@ -1203,13 +1209,13 @@ trackedFiles:
   docs/models/operations/disablerbacsecurity.md:
     last_write_checksum: sha1:008299956482613d350579e2cf1b4077227720d4
   docs/models/operations/downloadobservabilitypluginrequest.md:
-    last_write_checksum: sha1:35ff38b278f7587bd96cbd65cf1de037406dc39c
+    last_write_checksum: sha1:b95c03d0b66646885a0d2f10b16632a2726982b3
   docs/models/operations/downloadobservabilitypluginresponse.md:
     last_write_checksum: sha1:9a26c8308b46bad1d617b339af9ff062aba15c12
   docs/models/operations/downloadobservabilitypluginsecurity.md:
     last_write_checksum: sha1:ae3509b98926f9903950c6cdc8003441c8a467ca
   docs/models/operations/downloadpluginpackagerequest.md:
-    last_write_checksum: sha1:51199b6b18a77ca90948b19b4ec8ac42d69afb66
+    last_write_checksum: sha1:af19e6f958b2ec3d13c02db96422d1a13f8fc346
   docs/models/operations/downloadpluginpackageresponse.md:
     last_write_checksum: sha1:a00b1d59435e267a5fd98494cdeda52b79850e54
   docs/models/operations/downloadpluginpackagesecurity.md:
@@ -1476,6 +1482,10 @@ trackedFiles:
     last_write_checksum: sha1:60e5b8e3afe86ca8e6e07e904acad2fce9094dd7
   docs/models/operations/hooksnumbermetricssecurity.md:
     last_write_checksum: sha1:50652b124270545eed6f48814003a8ec8bc057c7
+  docs/models/operations/hooksnumbervscodecopilotrequest.md:
+    last_write_checksum: sha1:04aee67979249146547fb232455defe3d1334fa2
+  docs/models/operations/hooksnumbervscodecopilotsecurity.md:
+    last_write_checksum: sha1:9c1606889224d9a5a5f0443d088d0dc514449b5a
   docs/models/operations/integrationsnumbergetrequest.md:
     last_write_checksum: sha1:de50d4e9156da656b78521f23055725545f45bf5
   docs/models/operations/integrationsnumbergetsecurity.md:
@@ -1765,7 +1775,7 @@ trackedFiles:
   docs/models/operations/pausetriggerinstancesecurity.md:
     last_write_checksum: sha1:b303abbc876cefd140c36cc1fb7f614a8cfcc343
   docs/models/operations/platform.md:
-    last_write_checksum: sha1:e8895a6ad97e2e8bdc1601b40f9a47d92ebd0f2b
+    last_write_checksum: sha1:b4e86de63720aa15fcc82ccccff25be0f3cb682b
   docs/models/operations/publishpluginsrequest.md:
     last_write_checksum: sha1:9349d4a871784c310cdc46eedc2b2f52ec0f03b4
   docs/models/operations/publishpluginssecurity.md:
@@ -1779,7 +1789,7 @@ trackedFiles:
   docs/models/operations/publishsecurityoption2.md:
     last_write_checksum: sha1:99fc3a632307c5b6bb964e192ce37cbfffd25316
   docs/models/operations/queryparamplatform.md:
-    last_write_checksum: sha1:5ab718dff535b1372fd71139a7ced2f2008c8106
+    last_write_checksum: sha1:1dabab5886ae0622b86b420c027a8a1454bd6cb1
   docs/models/operations/queryparamsourcekind.md:
     last_write_checksum: sha1:943bad3fe8f90d7fad1f3f5dccc44247877fa663
   docs/models/operations/redeploydeploymentrequest.md:
@@ -2175,7 +2185,7 @@ trackedFiles:
   docs/sdks/features/README.md:
     last_write_checksum: sha1:79ab0259791f46a8d2ecd959a4ee69dd4551bea5
   docs/sdks/hooks/README.md:
-    last_write_checksum: sha1:27ec130a5ea9ad7798a7adee2aad91bc2d699a00
+    last_write_checksum: sha1:e6427ddffe7e5d344bbe15068ef8fd09e57f5b5d
   docs/sdks/hooksservernames/README.md:
     last_write_checksum: sha1:45d591f573a20bd161851708bab634f303d27fda
   docs/sdks/instances/README.md:
@@ -2506,6 +2516,8 @@ trackedFiles:
     last_write_checksum: sha1:f3332525a9f55f7594772f83f9c88117ca39e5cb
   src/funcs/hooksHooksNumberMetrics.ts:
     last_write_checksum: sha1:11701ac20572ed97f772baffcbb60de354184643
+  src/funcs/hooksHooksNumberVscodeCopilot.ts:
+    last_write_checksum: sha1:89339374171724b064d7ad60abb5072ad5d0b8b1
   src/funcs/hooksServerNamesDeleteServerNameOverride.ts:
     last_write_checksum: sha1:5dcbf745a32b65a40f209c3346b6bbc09129d5ce
   src/funcs/hooksServerNamesListServerNameOverrides.ts:
@@ -3306,7 +3318,7 @@ trackedFiles:
     pristine_git_object: a6f415c341273d2f679cbaa39ea48eaede35f633
   src/models/components/index.ts:
     id: 0aa842dce54d
-    last_write_checksum: sha1:ce81ae9c6d70fc9cf866b8e502a77facf4fa2cb2
+    last_write_checksum: sha1:5548deb372dc369a14cbcf376ef0dd373db2722c
     pristine_git_object: 4c964f216a07beb3007a26774ce7bdaa48c9f74c
   src/models/components/inforesponsebody.ts:
     id: a1447891c5a4
@@ -3926,6 +3938,10 @@ trackedFiles:
     id: 08b1b5e0acb5
     last_write_checksum: sha1:fcd384eea317c2c452042fd7d108baa1c0686f8d
     pristine_git_object: eeb81f010398b001f87410cb1bea3df21c2f9f57
+  src/models/components/vscodecopilothookpayload.ts:
+    last_write_checksum: sha1:57eae931e9287f817018c2d342f772a6a3f3f01b
+  src/models/components/vscodecopilothookresult.ts:
+    last_write_checksum: sha1:d4a842ed0178beaf0dda726d3644ce2610773804
   src/models/errors/apierror.ts:
     id: e2280e075454
     last_write_checksum: sha1:d70569233e8cec136a16188f902719e485e1eceb
@@ -4119,9 +4135,9 @@ trackedFiles:
   src/models/operations/disablerbac.ts:
     last_write_checksum: sha1:0d557ade2a9e135cf1c14c6f97b1e55a7d0347e5
   src/models/operations/downloadobservabilityplugin.ts:
-    last_write_checksum: sha1:12b3f77fced862e45b4aec85a6899b74a383c2a9
+    last_write_checksum: sha1:66d21484b93695d0bedc1b6a8b20e807e274072d
   src/models/operations/downloadpluginpackage.ts:
-    last_write_checksum: sha1:4e8285cd1ca0b6077f0dbb27ed37f2c9405c3045
+    last_write_checksum: sha1:f11878083c61fcdc49ac87b186fa3a057576bd25
   src/models/operations/enablerbac.ts:
     last_write_checksum: sha1:8ecdbe0fff94b4827671b8f8806feaebe6d9441d
   src/models/operations/evolvedeployment.ts:
@@ -4238,9 +4254,11 @@ trackedFiles:
     last_write_checksum: sha1:4a0ef004b5f7db12dc269786c10dea7f9af79b1d
   src/models/operations/hooksnumbermetrics.ts:
     last_write_checksum: sha1:68a17ba4375c98a861ba8ea4838401238e9caf7e
+  src/models/operations/hooksnumbervscodecopilot.ts:
+    last_write_checksum: sha1:3e044213bc8adf9ffacdf9cce2eb861c46ec8820
   src/models/operations/index.ts:
     id: 0d9ffaf774d2
-    last_write_checksum: sha1:05f8e2b5f8a53cb2f4ec9b7239cdf3df66eb4063
+    last_write_checksum: sha1:330e5447bc05717e6302c13c2f6235e742e25edd
     pristine_git_object: dfbbde8a33b65de59f2ddc44b5a1200061eeacb0
   src/models/operations/integrationsnumberget.ts:
     id: 0417380c9c27
@@ -4910,6 +4928,8 @@ trackedFiles:
     last_write_checksum: sha1:71f93fe368921c0b23f8da768c8d6b424852bb96
   src/react-query/hooksHooksNumberMetrics.ts:
     last_write_checksum: sha1:2b7d5e0896f8fcf90d4e755d7ec40750d6dd3db4
+  src/react-query/hooksHooksNumberVscodeCopilot.ts:
+    last_write_checksum: sha1:a73bac34b14e75b196e3f2492c1840be4f71997f
   src/react-query/hooksServerNamesDeleteServerNameOverride.ts:
     last_write_checksum: sha1:c89f1282ecb009da43be140dda218565f8ccd993
   src/react-query/hooksServerNamesListServerNameOverrides.core.ts:
@@ -4920,7 +4940,7 @@ trackedFiles:
     last_write_checksum: sha1:4aa2ad3f103ef14ea31e605c1d9430e7ec3de3f1
   src/react-query/index.ts:
     id: 9e975471aa65
-    last_write_checksum: sha1:dc54d59b5914aee5414daa0650f95c2386a77253
+    last_write_checksum: sha1:c4f9a72a68aa1b12db067d13ad4973cf02c9cd51
     pristine_git_object: ee9cacb2ccb4e0631e0e1fcf4e467454534d2b35
   src/react-query/instance.core.ts:
     id: b18e0a042b11
@@ -5495,7 +5515,7 @@ trackedFiles:
     last_write_checksum: sha1:f9453df020a022530a0fb97a2e7099343c930b13
     pristine_git_object: 3b4e49a565f809818b5f48673f81835a7d83f884
   src/sdk/hooks.ts:
-    last_write_checksum: sha1:771b4b5089126a0acc240f095b283002628235a7
+    last_write_checksum: sha1:98958083ce2e23f2e65be4b6d9930ea630d2ec8a
   src/sdk/hooksservernames.ts:
     last_write_checksum: sha1:46e1603a1bda6de118b0cfbf7ce1590e01a38c42
   src/sdk/index.ts:
@@ -8231,6 +8251,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  hooks#vscodeCopilot:
+    speakeasy-default-hooks#vscode-copilot:
+      requestBody:
+        application/json: {"hook_event_name": "Stop"}
+      responses:
+        "200":
+          application/json: {}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
 examplesVersion: 1.0.2
 generatedTests: {}
 generatedFiles:

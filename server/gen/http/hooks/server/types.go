@@ -127,6 +127,41 @@ type CursorRequestBody struct {
 	Duration *float64 `form:"duration,omitempty" json:"duration,omitempty" xml:"duration,omitempty"`
 }
 
+// VscodeCopilotRequestBody is the type of the "hooks" service "vscodeCopilot"
+// endpoint HTTP request body.
+type VscodeCopilotRequestBody struct {
+	// The type of hook event
+	HookEventName *string `form:"hook_event_name,omitempty" json:"hook_event_name,omitempty" xml:"hook_event_name,omitempty"`
+	// The VSCode Copilot session ID
+	SessionID *string `form:"session_id,omitempty" json:"session_id,omitempty" xml:"session_id,omitempty"`
+	// The working directory when the event fired
+	Cwd *string `form:"cwd,omitempty" json:"cwd,omitempty" xml:"cwd,omitempty"`
+	// Path to the conversation transcript file
+	TranscriptPath *string `form:"transcript_path,omitempty" json:"transcript_path,omitempty" xml:"transcript_path,omitempty"`
+	// The name of the tool
+	ToolName *string `form:"tool_name,omitempty" json:"tool_name,omitempty" xml:"tool_name,omitempty"`
+	// The unique ID for this tool use
+	ToolUseID *string `form:"tool_use_id,omitempty" json:"tool_use_id,omitempty" xml:"tool_use_id,omitempty"`
+	// The input to the tool
+	ToolInput any `form:"tool_input,omitempty" json:"tool_input,omitempty" xml:"tool_input,omitempty"`
+	// The response from the tool (PostToolUse only)
+	ToolResponse any `form:"tool_response,omitempty" json:"tool_response,omitempty" xml:"tool_response,omitempty"`
+	// The user's prompt text (UserPromptSubmit only)
+	Prompt *string `form:"prompt,omitempty" json:"prompt,omitempty" xml:"prompt,omitempty"`
+	// How the session started (SessionStart only)
+	Source *string `form:"source,omitempty" json:"source,omitempty" xml:"source,omitempty"`
+	// Whether a stop hook continuation is active
+	StopHookActive *bool `form:"stop_hook_active,omitempty" json:"stop_hook_active,omitempty" xml:"stop_hook_active,omitempty"`
+	// What triggered the compaction (PreCompact only)
+	Trigger *string `form:"trigger,omitempty" json:"trigger,omitempty" xml:"trigger,omitempty"`
+	// Subagent identifier (SubagentStart / SubagentStop)
+	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
+	// Subagent type (SubagentStart / SubagentStop)
+	AgentType *string `form:"agent_type,omitempty" json:"agent_type,omitempty" xml:"agent_type,omitempty"`
+	// Additional hook-specific data
+	AdditionalData map[string]any `form:"additional_data,omitempty" json:"additional_data,omitempty" xml:"additional_data,omitempty"`
+}
+
 // LogsRequestBody is the type of the "hooks" service "logs" endpoint HTTP
 // request body.
 type LogsRequestBody struct {
@@ -167,6 +202,21 @@ type CursorResponseBody struct {
 	AdditionalContext *string `form:"additional_context,omitempty" json:"additional_context,omitempty" xml:"additional_context,omitempty"`
 	// Message sent back to the agent (beforeMCPExecution only)
 	AgentMessage *string `form:"agent_message,omitempty" json:"agent_message,omitempty" xml:"agent_message,omitempty"`
+}
+
+// VscodeCopilotResponseBody is the type of the "hooks" service "vscodeCopilot"
+// endpoint HTTP response body.
+type VscodeCopilotResponseBody struct {
+	// Whether to continue processing
+	Continue *bool `form:"continue,omitempty" json:"continue,omitempty" xml:"continue,omitempty"`
+	// Reason if blocked
+	StopReason *string `form:"stopReason,omitempty" json:"stopReason,omitempty" xml:"stopReason,omitempty"`
+	// Whether to suppress the hook's output
+	SuppressOutput *bool `form:"suppressOutput,omitempty" json:"suppressOutput,omitempty" xml:"suppressOutput,omitempty"`
+	// Warning message shown to the user in the terminal
+	SystemMessage *string `form:"systemMessage,omitempty" json:"systemMessage,omitempty" xml:"systemMessage,omitempty"`
+	// Hook-specific output as JSON object
+	HookSpecificOutput any `form:"hookSpecificOutput,omitempty" json:"hookSpecificOutput,omitempty" xml:"hookSpecificOutput,omitempty"`
 }
 
 // ClaudeUnauthorizedResponseBody is the type of the "hooks" service "claude"
@@ -514,6 +564,188 @@ type CursorUnexpectedResponseBody struct {
 // CursorGatewayErrorResponseBody is the type of the "hooks" service "cursor"
 // endpoint HTTP response body for the "gateway_error" error.
 type CursorGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// VscodeCopilotUnauthorizedResponseBody is the type of the "hooks" service
+// "vscodeCopilot" endpoint HTTP response body for the "unauthorized" error.
+type VscodeCopilotUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// VscodeCopilotForbiddenResponseBody is the type of the "hooks" service
+// "vscodeCopilot" endpoint HTTP response body for the "forbidden" error.
+type VscodeCopilotForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// VscodeCopilotBadRequestResponseBody is the type of the "hooks" service
+// "vscodeCopilot" endpoint HTTP response body for the "bad_request" error.
+type VscodeCopilotBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// VscodeCopilotNotFoundResponseBody is the type of the "hooks" service
+// "vscodeCopilot" endpoint HTTP response body for the "not_found" error.
+type VscodeCopilotNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// VscodeCopilotConflictResponseBody is the type of the "hooks" service
+// "vscodeCopilot" endpoint HTTP response body for the "conflict" error.
+type VscodeCopilotConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// VscodeCopilotUnsupportedMediaResponseBody is the type of the "hooks" service
+// "vscodeCopilot" endpoint HTTP response body for the "unsupported_media"
+// error.
+type VscodeCopilotUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// VscodeCopilotInvalidResponseBody is the type of the "hooks" service
+// "vscodeCopilot" endpoint HTTP response body for the "invalid" error.
+type VscodeCopilotInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// VscodeCopilotInvariantViolationResponseBody is the type of the "hooks"
+// service "vscodeCopilot" endpoint HTTP response body for the
+// "invariant_violation" error.
+type VscodeCopilotInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// VscodeCopilotUnexpectedResponseBody is the type of the "hooks" service
+// "vscodeCopilot" endpoint HTTP response body for the "unexpected" error.
+type VscodeCopilotUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// VscodeCopilotGatewayErrorResponseBody is the type of the "hooks" service
+// "vscodeCopilot" endpoint HTTP response body for the "gateway_error" error.
+type VscodeCopilotGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1045,6 +1277,19 @@ func NewCursorResponseBody(res *hooks.CursorHookResult) *CursorResponseBody {
 	return body
 }
 
+// NewVscodeCopilotResponseBody builds the HTTP response body from the result
+// of the "vscodeCopilot" endpoint of the "hooks" service.
+func NewVscodeCopilotResponseBody(res *hooks.VSCodeCopilotHookResult) *VscodeCopilotResponseBody {
+	body := &VscodeCopilotResponseBody{
+		Continue:           res.Continue,
+		StopReason:         res.StopReason,
+		SuppressOutput:     res.SuppressOutput,
+		SystemMessage:      res.SystemMessage,
+		HookSpecificOutput: res.HookSpecificOutput,
+	}
+	return body
+}
+
 // NewClaudeUnauthorizedResponseBody builds the HTTP response body from the
 // result of the "claude" endpoint of the "hooks" service.
 func NewClaudeUnauthorizedResponseBody(res *goa.ServiceError) *ClaudeUnauthorizedResponseBody {
@@ -1315,6 +1560,146 @@ func NewCursorUnexpectedResponseBody(res *goa.ServiceError) *CursorUnexpectedRes
 // result of the "cursor" endpoint of the "hooks" service.
 func NewCursorGatewayErrorResponseBody(res *goa.ServiceError) *CursorGatewayErrorResponseBody {
 	body := &CursorGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewVscodeCopilotUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "vscodeCopilot" endpoint of the "hooks" service.
+func NewVscodeCopilotUnauthorizedResponseBody(res *goa.ServiceError) *VscodeCopilotUnauthorizedResponseBody {
+	body := &VscodeCopilotUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewVscodeCopilotForbiddenResponseBody builds the HTTP response body from the
+// result of the "vscodeCopilot" endpoint of the "hooks" service.
+func NewVscodeCopilotForbiddenResponseBody(res *goa.ServiceError) *VscodeCopilotForbiddenResponseBody {
+	body := &VscodeCopilotForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewVscodeCopilotBadRequestResponseBody builds the HTTP response body from
+// the result of the "vscodeCopilot" endpoint of the "hooks" service.
+func NewVscodeCopilotBadRequestResponseBody(res *goa.ServiceError) *VscodeCopilotBadRequestResponseBody {
+	body := &VscodeCopilotBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewVscodeCopilotNotFoundResponseBody builds the HTTP response body from the
+// result of the "vscodeCopilot" endpoint of the "hooks" service.
+func NewVscodeCopilotNotFoundResponseBody(res *goa.ServiceError) *VscodeCopilotNotFoundResponseBody {
+	body := &VscodeCopilotNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewVscodeCopilotConflictResponseBody builds the HTTP response body from the
+// result of the "vscodeCopilot" endpoint of the "hooks" service.
+func NewVscodeCopilotConflictResponseBody(res *goa.ServiceError) *VscodeCopilotConflictResponseBody {
+	body := &VscodeCopilotConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewVscodeCopilotUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "vscodeCopilot" endpoint of the "hooks" service.
+func NewVscodeCopilotUnsupportedMediaResponseBody(res *goa.ServiceError) *VscodeCopilotUnsupportedMediaResponseBody {
+	body := &VscodeCopilotUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewVscodeCopilotInvalidResponseBody builds the HTTP response body from the
+// result of the "vscodeCopilot" endpoint of the "hooks" service.
+func NewVscodeCopilotInvalidResponseBody(res *goa.ServiceError) *VscodeCopilotInvalidResponseBody {
+	body := &VscodeCopilotInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewVscodeCopilotInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "vscodeCopilot" endpoint of the "hooks" service.
+func NewVscodeCopilotInvariantViolationResponseBody(res *goa.ServiceError) *VscodeCopilotInvariantViolationResponseBody {
+	body := &VscodeCopilotInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewVscodeCopilotUnexpectedResponseBody builds the HTTP response body from
+// the result of the "vscodeCopilot" endpoint of the "hooks" service.
+func NewVscodeCopilotUnexpectedResponseBody(res *goa.ServiceError) *VscodeCopilotUnexpectedResponseBody {
+	body := &VscodeCopilotUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewVscodeCopilotGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "vscodeCopilot" endpoint of the "hooks" service.
+func NewVscodeCopilotGatewayErrorResponseBody(res *goa.ServiceError) *VscodeCopilotGatewayErrorResponseBody {
+	body := &VscodeCopilotGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1688,6 +2073,41 @@ func NewCursorPayload(body *CursorRequestBody, apikeyToken *string, projectSlugI
 	return v
 }
 
+// NewVscodeCopilotPayload builds a hooks service vscodeCopilot endpoint
+// payload.
+func NewVscodeCopilotPayload(body *VscodeCopilotRequestBody, apikeyToken *string, projectSlugInput *string, userEmailInput *string, userEmailSourceInput *string) *hooks.VscodeCopilotPayload {
+	v := &hooks.VscodeCopilotPayload{
+		HookEventName:  *body.HookEventName,
+		SessionID:      body.SessionID,
+		Cwd:            body.Cwd,
+		TranscriptPath: body.TranscriptPath,
+		ToolName:       body.ToolName,
+		ToolUseID:      body.ToolUseID,
+		ToolInput:      body.ToolInput,
+		ToolResponse:   body.ToolResponse,
+		Prompt:         body.Prompt,
+		Source:         body.Source,
+		StopHookActive: body.StopHookActive,
+		Trigger:        body.Trigger,
+		AgentID:        body.AgentID,
+		AgentType:      body.AgentType,
+	}
+	if body.AdditionalData != nil {
+		v.AdditionalData = make(map[string]any, len(body.AdditionalData))
+		for key, val := range body.AdditionalData {
+			tk := key
+			tv := val
+			v.AdditionalData[tk] = tv
+		}
+	}
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+	v.UserEmailInput = userEmailInput
+	v.UserEmailSourceInput = userEmailSourceInput
+
+	return v
+}
+
 // NewLogsPayload builds a hooks service logs endpoint payload.
 func NewLogsPayload(body *LogsRequestBody, apikeyToken *string, projectSlugInput *string) *hooks.LogsPayload {
 	v := &hooks.LogsPayload{}
@@ -1739,6 +2159,20 @@ func ValidateClaudeRequestBody(body *ClaudeRequestBody) (err error) {
 func ValidateCursorRequestBody(body *CursorRequestBody) (err error) {
 	if body.HookEventName == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("hook_event_name", "body"))
+	}
+	return
+}
+
+// ValidateVscodeCopilotRequestBody runs the validations defined on
+// VscodeCopilotRequestBody
+func ValidateVscodeCopilotRequestBody(body *VscodeCopilotRequestBody) (err error) {
+	if body.HookEventName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("hook_event_name", "body"))
+	}
+	if body.HookEventName != nil {
+		if !(*body.HookEventName == "SessionStart" || *body.HookEventName == "UserPromptSubmit" || *body.HookEventName == "PreToolUse" || *body.HookEventName == "PostToolUse" || *body.HookEventName == "PreCompact" || *body.HookEventName == "SubagentStart" || *body.HookEventName == "SubagentStop" || *body.HookEventName == "Stop") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.hook_event_name", *body.HookEventName, []any{"SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "PreCompact", "SubagentStart", "SubagentStop", "Stop"}))
+		}
 	}
 	return
 }

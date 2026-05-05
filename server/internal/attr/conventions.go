@@ -242,6 +242,14 @@ const (
 	// denied the tool call (e.g. shadow-MCP guard). Its presence (non-empty)
 	// signals the trace should render as "blocked" in dashboards.
 	HookBlockReasonKey = attribute.Key("gram.hook.block_reason")
+	// UserEmailSourceKey records which mechanism produced the self-attested
+	// user email on a hook event (env, gh, git, none). Lets us see which
+	// branch of the cascade is dominant without leaking the email itself.
+	UserEmailSourceKey = attribute.Key("gram.hook.user.email.source")
+	// HookAgentIDKey / HookAgentTypeKey identify a subagent that fired the
+	// hook (VSCode Copilot SubagentStart / SubagentStop events).
+	HookAgentIDKey   = attribute.Key("gram.hook.agent.id")
+	HookAgentTypeKey = attribute.Key("gram.hook.agent.type")
 
 	PaginationTsStartKey     = attribute.Key("gram.pagination.ts_start")
 	PaginationTsEndKey       = attribute.Key("gram.pagination.ts_end")

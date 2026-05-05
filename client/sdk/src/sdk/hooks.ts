@@ -6,6 +6,7 @@ import { hooksHooksNumberClaude } from "../funcs/hooksHooksNumberClaude.js";
 import { hooksHooksNumberCursor } from "../funcs/hooksHooksNumberCursor.js";
 import { hooksHooksNumberLogs } from "../funcs/hooksHooksNumberLogs.js";
 import { hooksHooksNumberMetrics } from "../funcs/hooksHooksNumberMetrics.js";
+import { hooksHooksNumberVscodeCopilot } from "../funcs/hooksHooksNumberVscodeCopilot.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
 import * as operations from "../models/operations/index.js";
@@ -79,6 +80,25 @@ export class Hooks extends ClientSDK {
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(hooksHooksNumberMetrics(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * vscodeCopilot hooks
+   *
+   * @remarks
+   * Endpoint for VSCode Copilot agent hook events. Handles SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, PreCompact, SubagentStart, SubagentStop, and Stop.
+   */
+  async hooksNumberVscodeCopilot(
+    request: operations.HooksNumberVscodeCopilotRequest,
+    security?: operations.HooksNumberVscodeCopilotSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.VSCodeCopilotHookResult> {
+    return unwrapAsync(hooksHooksNumberVscodeCopilot(
       this,
       request,
       security,

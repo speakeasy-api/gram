@@ -912,8 +912,11 @@ func (s *Service) DownloadObservabilityPlugin(ctx context.Context, payload *gen.
 	}
 
 	filename := "observability"
-	if payload.Platform == "cursor" {
+	switch payload.Platform {
+	case "cursor":
 		filename = "observability-cursor"
+	case "vscode":
+		filename = "observability-vscode"
 	}
 	return &gen.DownloadObservabilityPluginResult{
 		ContentType:        "application/zip",

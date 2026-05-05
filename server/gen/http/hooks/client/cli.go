@@ -146,6 +146,79 @@ func BuildCursorPayload(hooksCursorBody string, hooksCursorApikeyToken string, h
 	return v, nil
 }
 
+// BuildVscodeCopilotPayload builds the payload for the hooks vscodeCopilot
+// endpoint from CLI flags.
+func BuildVscodeCopilotPayload(hooksVscodeCopilotBody string, hooksVscodeCopilotApikeyToken string, hooksVscodeCopilotProjectSlugInput string, hooksVscodeCopilotUserEmailInput string, hooksVscodeCopilotUserEmailSourceInput string) (*hooks.VscodeCopilotPayload, error) {
+	var err error
+	var body VscodeCopilotRequestBody
+	{
+		err = json.Unmarshal([]byte(hooksVscodeCopilotBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"additional_data\": {\n         \"abc123\": \"abc123\"\n      },\n      \"agent_id\": \"abc123\",\n      \"agent_type\": \"abc123\",\n      \"cwd\": \"abc123\",\n      \"hook_event_name\": \"UserPromptSubmit\",\n      \"prompt\": \"abc123\",\n      \"session_id\": \"abc123\",\n      \"source\": \"abc123\",\n      \"stop_hook_active\": false,\n      \"tool_input\": \"abc123\",\n      \"tool_name\": \"abc123\",\n      \"tool_response\": \"abc123\",\n      \"tool_use_id\": \"abc123\",\n      \"transcript_path\": \"abc123\",\n      \"trigger\": \"abc123\"\n   }'")
+		}
+		if !(body.HookEventName == "SessionStart" || body.HookEventName == "UserPromptSubmit" || body.HookEventName == "PreToolUse" || body.HookEventName == "PostToolUse" || body.HookEventName == "PreCompact" || body.HookEventName == "SubagentStart" || body.HookEventName == "SubagentStop" || body.HookEventName == "Stop") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.hook_event_name", body.HookEventName, []any{"SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "PreCompact", "SubagentStart", "SubagentStop", "Stop"}))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if hooksVscodeCopilotApikeyToken != "" {
+			apikeyToken = &hooksVscodeCopilotApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if hooksVscodeCopilotProjectSlugInput != "" {
+			projectSlugInput = &hooksVscodeCopilotProjectSlugInput
+		}
+	}
+	var userEmailInput *string
+	{
+		if hooksVscodeCopilotUserEmailInput != "" {
+			userEmailInput = &hooksVscodeCopilotUserEmailInput
+		}
+	}
+	var userEmailSourceInput *string
+	{
+		if hooksVscodeCopilotUserEmailSourceInput != "" {
+			userEmailSourceInput = &hooksVscodeCopilotUserEmailSourceInput
+		}
+	}
+	v := &hooks.VscodeCopilotPayload{
+		HookEventName:  body.HookEventName,
+		SessionID:      body.SessionID,
+		Cwd:            body.Cwd,
+		TranscriptPath: body.TranscriptPath,
+		ToolName:       body.ToolName,
+		ToolUseID:      body.ToolUseID,
+		ToolInput:      body.ToolInput,
+		ToolResponse:   body.ToolResponse,
+		Prompt:         body.Prompt,
+		Source:         body.Source,
+		StopHookActive: body.StopHookActive,
+		Trigger:        body.Trigger,
+		AgentID:        body.AgentID,
+		AgentType:      body.AgentType,
+	}
+	if body.AdditionalData != nil {
+		v.AdditionalData = make(map[string]any, len(body.AdditionalData))
+		for key, val := range body.AdditionalData {
+			tk := key
+			tv := val
+			v.AdditionalData[tk] = tv
+		}
+	}
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+	v.UserEmailInput = userEmailInput
+	v.UserEmailSourceInput = userEmailSourceInput
+
+	return v, nil
+}
+
 // BuildLogsPayload builds the payload for the hooks logs endpoint from CLI
 // flags.
 func BuildLogsPayload(hooksLogsBody string, hooksLogsApikeyToken string, hooksLogsProjectSlugInput string) (*hooks.LogsPayload, error) {

@@ -100,6 +100,46 @@ var CursorHookResult = Type("CursorHookResult", func() {
 	Attribute("agent_message", String, "Message sent back to the agent (beforeMCPExecution only)")
 })
 
+// VSCode Copilot hook payload
+var VSCodeCopilotHookPayload = Type("VSCodeCopilotHookPayload", func() {
+	Description("Payload for VSCode Copilot agent hook events")
+	Required("hook_event_name")
+	Attribute("hook_event_name", String, "The type of hook event", func() {
+		Enum("SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse",
+			"PreCompact", "SubagentStart", "SubagentStop", "Stop")
+	})
+	Attribute("session_id", String, "The VSCode Copilot session ID")
+	Attribute("cwd", String, "The working directory when the event fired")
+	Attribute("transcript_path", String, "Path to the conversation transcript file")
+	// Tool fields (PreToolUse, PostToolUse)
+	Attribute("tool_name", String, "The name of the tool")
+	Attribute("tool_use_id", String, "The unique ID for this tool use")
+	Attribute("tool_input", Any, "The input to the tool")
+	Attribute("tool_response", Any, "The response from the tool (PostToolUse only)")
+	// UserPromptSubmit
+	Attribute("prompt", String, "The user's prompt text (UserPromptSubmit only)")
+	// SessionStart
+	Attribute("source", String, "How the session started (SessionStart only)")
+	// Stop / Subagent*
+	Attribute("stop_hook_active", Boolean, "Whether a stop hook continuation is active")
+	// PreCompact
+	Attribute("trigger", String, "What triggered the compaction (PreCompact only)")
+	// Subagent*
+	Attribute("agent_id", String, "Subagent identifier (SubagentStart / SubagentStop)")
+	Attribute("agent_type", String, "Subagent type (SubagentStart / SubagentStop)")
+	Attribute("additional_data", MapOf(String, Any), "Additional hook-specific data")
+})
+
+// VSCode Copilot hook result
+var VSCodeCopilotHookResult = Type("VSCodeCopilotHookResult", func() {
+	Description("Result for VSCode Copilot hook events")
+	Attribute("continue", Boolean, "Whether to continue processing")
+	Attribute("stopReason", String, "Reason if blocked")
+	Attribute("suppressOutput", Boolean, "Whether to suppress the hook's output")
+	Attribute("systemMessage", String, "Warning message shown to the user in the terminal")
+	Attribute("hookSpecificOutput", Any, "Hook-specific output as JSON object")
+})
+
 // Server name override types
 var ServerNameOverride = Type("ServerNameOverride", func() {
 	Description("User-defined display name for a hooks server")
@@ -157,6 +197,32 @@ var _ = Service("hooks", func() {
 			POST("/rpc/hooks.cursor")
 			security.ByKeyHeader()
 			security.ProjectHeader()
+		})
+	})
+
+	Method("vscodeCopilot", func() {
+		Description("Endpoint for VSCode Copilot agent hook events. Handles SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, PreCompact, SubagentStart, SubagentStop, and Stop.")
+
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("hooks")
+		})
+
+		Payload(func() {
+			Extend(VSCodeCopilotHookPayload)
+			security.ByKeyPayload()
+			security.ProjectPayload()
+			Attribute("user_email_input", String, "Self-attested user email forwarded by the hook script.")
+			Attribute("user_email_source_input", String, "Source of the user email value: env, gh, git, or none.")
+		})
+
+		Result(VSCodeCopilotHookResult)
+
+		HTTP(func() {
+			POST("/rpc/hooks.vscode")
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Header("user_email_input:Gram-User-Email")
+			Header("user_email_source_input:Gram-User-Email-Source")
 		})
 	})
 

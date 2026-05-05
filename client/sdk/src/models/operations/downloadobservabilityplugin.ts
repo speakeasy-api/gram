@@ -20,6 +20,7 @@ export type DownloadObservabilityPluginSecurity = {
 export const Platform = {
   Claude: "claude",
   Cursor: "cursor",
+  Vscode: "vscode",
 } as const;
 /**
  * Target platform.

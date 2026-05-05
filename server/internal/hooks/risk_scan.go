@@ -121,3 +121,60 @@ func extractCursorText(payload *gen.CursorPayload) string {
 	}
 	return ""
 }
+
+// scanVSCodeForEnforcement runs the risk scanner for a VSCode Copilot hook
+// payload. Like Cursor, the endpoint is authenticated so the project ID is
+// known up front.
+func (s *Service) scanVSCodeForEnforcement(ctx context.Context, payload *gen.VscodeCopilotPayload, projectID string) *risk.ScanResult {
+	if s.riskScanner == nil {
+		return nil
+	}
+
+	text := extractVSCodeText(payload)
+	if text == "" {
+		return nil
+	}
+
+	pid, err := uuid.Parse(projectID)
+	if err != nil {
+		return nil
+	}
+
+	result, err := s.riskScanner.ScanForEnforcement(ctx, pid, text)
+	if err != nil {
+		s.logger.WarnContext(ctx, "risk scan failed for VSCode Copilot hook",
+			attr.SlogError(err),
+			attr.SlogEvent("risk_scan_error"),
+		)
+		return nil
+	}
+
+	return result
+}
+
+// extractVSCodeText returns the scannable text content from a VSCode Copilot hook payload.
+func extractVSCodeText(payload *gen.VscodeCopilotPayload) string {
+	switch payload.HookEventName {
+	case "UserPromptSubmit":
+		if payload.Prompt != nil {
+			return *payload.Prompt
+		}
+	case "PreToolUse":
+		if payload.ToolInput != nil {
+			b, err := json.Marshal(payload.ToolInput)
+			if err != nil {
+				return ""
+			}
+			return string(b)
+		}
+	case "PostToolUse":
+		if payload.ToolResponse != nil {
+			b, err := json.Marshal(payload.ToolResponse)
+			if err != nil {
+				return ""
+			}
+			return string(b)
+		}
+	}
+	return ""
+}

@@ -8022,6 +8022,113 @@ paths:
         - apikey_header_Gram-Key: []
           project_slug_header_Gram-Project: []
         - {}
+  /rpc/hooks.vscode:
+    post:
+      tags:
+        - hooks
+      summary: vscodeCopilot hooks
+      description: Endpoint for VSCode Copilot agent hook events. Handles SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, PreCompact, SubagentStart, SubagentStop, and Stop.
+      operationId: hooks#vscodeCopilot
+      parameters:
+        - name: Gram-Key
+          in: header
+          description: API Key header
+          allowEmptyValue: true
+          schema:
+            type: string
+            description: API Key header
+        - name: Gram-Project
+          in: header
+          description: project header
+          allowEmptyValue: true
+          schema:
+            type: string
+            description: project header
+        - name: Gram-User-Email
+          in: header
+          description: Self-attested user email forwarded by the hook script.
+          allowEmptyValue: true
+          schema:
+            type: string
+            description: Self-attested user email forwarded by the hook script.
+        - name: Gram-User-Email-Source
+          in: header
+          description: 'Source of the user email value: env, gh, git, or none.'
+          allowEmptyValue: true
+          schema:
+            type: string
+            description: 'Source of the user email value: env, gh, git, or none.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VSCodeCopilotHookPayload'
+      responses:
+        "200":
+          description: OK response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VSCodeCopilotHookResult'
+        "400":
+          description: 'bad_request: request is invalid'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "401":
+          description: 'unauthorized: unauthorized access'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "403":
+          description: 'forbidden: permission denied'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "404":
+          description: 'not_found: resource not found'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "409":
+          description: 'conflict: resource already exists'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "415":
+          description: 'unsupported_media: unsupported media type'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "422":
+          description: 'invalid: request contains one or more invalidation fields'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "500":
+          description: 'unexpected: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "502":
+          description: 'gateway_error: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security:
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
   /rpc/instances.get:
     get:
       description: Load all relevant data for an instance of a toolset and environment
@@ -11830,6 +11937,7 @@ paths:
             enum:
               - claude
               - cursor
+              - vscode
             type: string
         - allowEmptyValue: true
           description: Session header
@@ -11947,6 +12055,7 @@ paths:
               - claude
               - cursor
               - codex
+              - vscode
             type: string
         - allowEmptyValue: true
           description: Session header
@@ -30391,6 +30500,83 @@ components:
         - tool_call_success
         - tool_call_failure
         - tools
+    VSCodeCopilotHookPayload:
+      type: object
+      properties:
+        additional_data:
+          type: object
+          description: Additional hook-specific data
+          additionalProperties: true
+        agent_id:
+          type: string
+          description: Subagent identifier (SubagentStart / SubagentStop)
+        agent_type:
+          type: string
+          description: Subagent type (SubagentStart / SubagentStop)
+        cwd:
+          type: string
+          description: The working directory when the event fired
+        hook_event_name:
+          type: string
+          description: The type of hook event
+          enum:
+            - SessionStart
+            - UserPromptSubmit
+            - PreToolUse
+            - PostToolUse
+            - PreCompact
+            - SubagentStart
+            - SubagentStop
+            - Stop
+        prompt:
+          type: string
+          description: The user's prompt text (UserPromptSubmit only)
+        session_id:
+          type: string
+          description: The VSCode Copilot session ID
+        source:
+          type: string
+          description: How the session started (SessionStart only)
+        stop_hook_active:
+          type: boolean
+          description: Whether a stop hook continuation is active
+        tool_input:
+          description: The input to the tool
+        tool_name:
+          type: string
+          description: The name of the tool
+        tool_response:
+          description: The response from the tool (PostToolUse only)
+        tool_use_id:
+          type: string
+          description: The unique ID for this tool use
+        transcript_path:
+          type: string
+          description: Path to the conversation transcript file
+        trigger:
+          type: string
+          description: What triggered the compaction (PreCompact only)
+      description: Payload for VSCode Copilot agent hook events
+      required:
+        - hook_event_name
+    VSCodeCopilotHookResult:
+      type: object
+      properties:
+        continue:
+          type: boolean
+          description: Whether to continue processing
+        hookSpecificOutput:
+          description: Hook-specific output as JSON object
+        stopReason:
+          type: string
+          description: Reason if blocked
+        suppressOutput:
+          type: boolean
+          description: Whether to suppress the hook's output
+        systemMessage:
+          type: string
+          description: Warning message shown to the user in the terminal
+      description: Result for VSCode Copilot hook events
     ValidateKeyOrganization:
       type: object
       properties:
