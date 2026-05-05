@@ -22,6 +22,7 @@ type Server struct {
 	CreateEnvironment            http.Handler
 	ListEnvironments             http.Handler
 	UpdateEnvironment            http.Handler
+	CloneEnvironment             http.Handler
 	DeleteEnvironment            http.Handler
 	SetSourceEnvironmentLink     http.Handler
 	DeleteSourceEnvironmentLink  http.Handler
@@ -61,6 +62,7 @@ func New(
 			{"CreateEnvironment", "POST", "/rpc/environments.create"},
 			{"ListEnvironments", "GET", "/rpc/environments.list"},
 			{"UpdateEnvironment", "POST", "/rpc/environments.update"},
+			{"CloneEnvironment", "POST", "/rpc/environments.clone"},
 			{"DeleteEnvironment", "DELETE", "/rpc/environments.delete"},
 			{"SetSourceEnvironmentLink", "PUT", "/rpc/environments.setSourceLink"},
 			{"DeleteSourceEnvironmentLink", "DELETE", "/rpc/environments.deleteSourceLink"},
@@ -72,6 +74,7 @@ func New(
 		CreateEnvironment:            NewCreateEnvironmentHandler(e.CreateEnvironment, mux, decoder, encoder, errhandler, formatter),
 		ListEnvironments:             NewListEnvironmentsHandler(e.ListEnvironments, mux, decoder, encoder, errhandler, formatter),
 		UpdateEnvironment:            NewUpdateEnvironmentHandler(e.UpdateEnvironment, mux, decoder, encoder, errhandler, formatter),
+		CloneEnvironment:             NewCloneEnvironmentHandler(e.CloneEnvironment, mux, decoder, encoder, errhandler, formatter),
 		DeleteEnvironment:            NewDeleteEnvironmentHandler(e.DeleteEnvironment, mux, decoder, encoder, errhandler, formatter),
 		SetSourceEnvironmentLink:     NewSetSourceEnvironmentLinkHandler(e.SetSourceEnvironmentLink, mux, decoder, encoder, errhandler, formatter),
 		DeleteSourceEnvironmentLink:  NewDeleteSourceEnvironmentLinkHandler(e.DeleteSourceEnvironmentLink, mux, decoder, encoder, errhandler, formatter),
@@ -90,6 +93,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.CreateEnvironment = m(s.CreateEnvironment)
 	s.ListEnvironments = m(s.ListEnvironments)
 	s.UpdateEnvironment = m(s.UpdateEnvironment)
+	s.CloneEnvironment = m(s.CloneEnvironment)
 	s.DeleteEnvironment = m(s.DeleteEnvironment)
 	s.SetSourceEnvironmentLink = m(s.SetSourceEnvironmentLink)
 	s.DeleteSourceEnvironmentLink = m(s.DeleteSourceEnvironmentLink)
@@ -107,6 +111,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountCreateEnvironmentHandler(mux, h.CreateEnvironment)
 	MountListEnvironmentsHandler(mux, h.ListEnvironments)
 	MountUpdateEnvironmentHandler(mux, h.UpdateEnvironment)
+	MountCloneEnvironmentHandler(mux, h.CloneEnvironment)
 	MountDeleteEnvironmentHandler(mux, h.DeleteEnvironment)
 	MountSetSourceEnvironmentLinkHandler(mux, h.SetSourceEnvironmentLink)
 	MountDeleteSourceEnvironmentLinkHandler(mux, h.DeleteSourceEnvironmentLink)
@@ -257,6 +262,59 @@ func NewUpdateEnvironmentHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "updateEnvironment")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "environments")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountCloneEnvironmentHandler configures the mux to serve the "environments"
+// service "cloneEnvironment" endpoint.
+func MountCloneEnvironmentHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/environments.clone", f)
+}
+
+// NewCloneEnvironmentHandler creates a HTTP handler which loads the HTTP
+// request and calls the "environments" service "cloneEnvironment" endpoint.
+func NewCloneEnvironmentHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeCloneEnvironmentRequest(mux, decoder)
+		encodeResponse = EncodeCloneEnvironmentResponse(encoder)
+		encodeError    = EncodeCloneEnvironmentError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "cloneEnvironment")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "environments")
 		payload, err := decodeRequest(r)
 		if err != nil {

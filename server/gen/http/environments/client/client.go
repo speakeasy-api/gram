@@ -29,6 +29,10 @@ type Client struct {
 	// updateEnvironment endpoint.
 	UpdateEnvironmentDoer goahttp.Doer
 
+	// CloneEnvironment Doer is the HTTP client used to make requests to the
+	// cloneEnvironment endpoint.
+	CloneEnvironmentDoer goahttp.Doer
+
 	// DeleteEnvironment Doer is the HTTP client used to make requests to the
 	// deleteEnvironment endpoint.
 	DeleteEnvironmentDoer goahttp.Doer
@@ -80,6 +84,7 @@ func NewClient(
 		CreateEnvironmentDoer:            doer,
 		ListEnvironmentsDoer:             doer,
 		UpdateEnvironmentDoer:            doer,
+		CloneEnvironmentDoer:             doer,
 		DeleteEnvironmentDoer:            doer,
 		SetSourceEnvironmentLinkDoer:     doer,
 		DeleteSourceEnvironmentLinkDoer:  doer,
@@ -162,6 +167,30 @@ func (c *Client) UpdateEnvironment() goa.Endpoint {
 		resp, err := c.UpdateEnvironmentDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("environments", "updateEnvironment", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// CloneEnvironment returns an endpoint that makes HTTP requests to the
+// environments service cloneEnvironment server.
+func (c *Client) CloneEnvironment() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeCloneEnvironmentRequest(c.encoder)
+		decodeResponse = DecodeCloneEnvironmentResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildCloneEnvironmentRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.CloneEnvironmentDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("environments", "cloneEnvironment", err)
 		}
 		return decodeResponse(resp)
 	}

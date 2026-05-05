@@ -6376,6 +6376,112 @@ paths:
       x-speakeasy-name-override: registerDomain
       x-speakeasy-react-hook:
         name: registerDomain
+  /rpc/environments.clone:
+    post:
+      description: Clone an environment into a new one. Either copies only the variable names with empty placeholder values, or copies the encrypted values verbatim. Encrypted secret values are never decrypted by the application during the clone operation.
+      operationId: cloneEnvironment
+      parameters:
+        - allowEmptyValue: true
+          description: The slug of the source environment to clone
+          in: query
+          name: slug
+          required: true
+          schema:
+            description: A short url-friendly label that uniquely identifies a resource.
+            maxLength: 40
+            pattern: ^[a-z0-9_-]{1,128}$
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CloneEnvironmentRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Environment'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: cloneEnvironment environments
+      tags:
+        - environments
+      x-speakeasy-name-override: clone
+      x-speakeasy-react-hook:
+        name: CloneEnvironment
   /rpc/environments.create:
     post:
       description: Create a new environment
@@ -21902,6 +22008,35 @@ components:
           type: string
           description: Warning message shown to the user in the terminal
       description: Unified result for all Claude Code hook events with proper response structure
+    CloneEnvironmentForm:
+      type: object
+      properties:
+        copy_values:
+          type: boolean
+          description: If true, copy the encrypted secret values from the source. If false (default), copy only variable names with empty placeholder values.
+        new_name:
+          type: string
+          description: The name for the new cloned environment
+        slug:
+          type: string
+          description: A short url-friendly label that uniquely identifies a resource.
+          pattern: ^[a-z0-9_-]{1,128}$
+          maxLength: 40
+      description: Form for cloning an existing environment into a new one
+      required:
+        - slug
+        - new_name
+    CloneEnvironmentRequestBody:
+      type: object
+      properties:
+        copy_values:
+          type: boolean
+          description: If true, copy the encrypted secret values from the source. If false (default), copy only variable names with empty placeholder values.
+        new_name:
+          type: string
+          description: The name for the new cloned environment
+      required:
+        - new_name
     ConfigureSlackAppRequestBody:
       type: object
       properties:
@@ -25309,6 +25444,8 @@ components:
             - mcp:read
             - mcp:write
             - mcp:connect
+            - environment:read
+            - environment:write
         selectors:
           type: array
           items:
@@ -25326,6 +25463,8 @@ components:
               - mcp:read
               - mcp:write
               - mcp:connect
+              - environment:read
+              - environment:write
           description: The inherited scopes the primary scope grants.
       required:
         - scope
@@ -27671,6 +27810,8 @@ components:
             - mcp:read
             - mcp:write
             - mcp:connect
+            - environment:read
+            - environment:write
         selectors:
           type: array
           items:
@@ -27691,6 +27832,7 @@ components:
             - org
             - project
             - mcp
+            - environment
         slug:
           type: string
           description: Unique scope identifier.
@@ -27702,6 +27844,8 @@ components:
             - mcp:read
             - mcp:write
             - mcp:connect
+            - environment:read
+            - environment:write
       required:
         - slug
         - description
@@ -28095,6 +28239,7 @@ components:
             - project
             - mcp
             - org
+            - environment
             - '*'
         tool:
           type: string

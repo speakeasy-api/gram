@@ -30,6 +30,7 @@ export const ResourceKind = {
   Project: "project",
   Mcp: "mcp",
   Org: "org",
+  Environment: "environment",
   Wildcard: "*",
 } as const;
 /**

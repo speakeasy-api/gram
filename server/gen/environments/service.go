@@ -23,6 +23,11 @@ type Service interface {
 	ListEnvironments(context.Context, *ListEnvironmentsPayload) (res *ListEnvironmentsResult, err error)
 	// Update an environment
 	UpdateEnvironment(context.Context, *UpdateEnvironmentPayload) (res *types.Environment, err error)
+	// Clone an environment into a new one. Either copies only the variable names
+	// with empty placeholder values, or copies the encrypted values verbatim.
+	// Encrypted secret values are never decrypted by the application during the
+	// clone operation.
+	CloneEnvironment(context.Context, *CloneEnvironmentPayload) (res *types.Environment, err error)
 	// Delete an environment
 	DeleteEnvironment(context.Context, *DeleteEnvironmentPayload) (err error)
 	// Set (upsert) a link between a source and an environment
@@ -59,7 +64,21 @@ const ServiceName = "environments"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [10]string{"createEnvironment", "listEnvironments", "updateEnvironment", "deleteEnvironment", "setSourceEnvironmentLink", "deleteSourceEnvironmentLink", "getSourceEnvironment", "setToolsetEnvironmentLink", "deleteToolsetEnvironmentLink", "getToolsetEnvironment"}
+var MethodNames = [11]string{"createEnvironment", "listEnvironments", "updateEnvironment", "cloneEnvironment", "deleteEnvironment", "setSourceEnvironmentLink", "deleteSourceEnvironmentLink", "getSourceEnvironment", "setToolsetEnvironmentLink", "deleteToolsetEnvironmentLink", "getToolsetEnvironment"}
+
+// CloneEnvironmentPayload is the payload type of the environments service
+// cloneEnvironment method.
+type CloneEnvironmentPayload struct {
+	SessionToken     *string
+	ProjectSlugInput *string
+	// The slug of the source environment to clone
+	Slug types.Slug
+	// The name for the new cloned environment
+	NewName string
+	// If true, copy the encrypted secret values from the source. If false
+	// (default), copy only variable names with empty placeholder values.
+	CopyValues *bool
+}
 
 // CreateEnvironmentPayload is the payload type of the environments service
 // createEnvironment method.

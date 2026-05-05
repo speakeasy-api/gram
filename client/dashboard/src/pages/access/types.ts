@@ -9,7 +9,7 @@ export { Scope };
 export type { Selector, Disposition, ResourceKind };
 
 /** What kind of resource a scope protects. */
-export type ResourceType = "org" | "project" | "mcp";
+export type ResourceType = "org" | "project" | "mcp" | "environment";
 
 /** The 4 MCP tool annotation hint keys. */
 export type AnnotationHint =

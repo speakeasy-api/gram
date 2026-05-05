@@ -732,6 +732,247 @@ func DecodeUpdateEnvironmentResponse(decoder func(*http.Response) goahttp.Decode
 	}
 }
 
+// BuildCloneEnvironmentRequest instantiates a HTTP request object with method
+// and path set to call the "environments" service "cloneEnvironment" endpoint
+func (c *Client) BuildCloneEnvironmentRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: CloneEnvironmentEnvironmentsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("environments", "cloneEnvironment", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeCloneEnvironmentRequest returns an encoder for requests sent to the
+// environments cloneEnvironment server.
+func EncodeCloneEnvironmentRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*environments.CloneEnvironmentPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("environments", "cloneEnvironment", "*environments.CloneEnvironmentPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		values.Add("slug", string(p.Slug))
+		req.URL.RawQuery = values.Encode()
+		body := NewCloneEnvironmentRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("environments", "cloneEnvironment", err)
+		}
+		return nil
+	}
+}
+
+// DecodeCloneEnvironmentResponse returns a decoder for responses returned by
+// the environments cloneEnvironment endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeCloneEnvironmentResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeCloneEnvironmentResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body CloneEnvironmentResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("environments", "cloneEnvironment", err)
+			}
+			err = ValidateCloneEnvironmentResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("environments", "cloneEnvironment", err)
+			}
+			res := NewCloneEnvironmentEnvironmentOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body CloneEnvironmentUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("environments", "cloneEnvironment", err)
+			}
+			err = ValidateCloneEnvironmentUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("environments", "cloneEnvironment", err)
+			}
+			return nil, NewCloneEnvironmentUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body CloneEnvironmentForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("environments", "cloneEnvironment", err)
+			}
+			err = ValidateCloneEnvironmentForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("environments", "cloneEnvironment", err)
+			}
+			return nil, NewCloneEnvironmentForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body CloneEnvironmentBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("environments", "cloneEnvironment", err)
+			}
+			err = ValidateCloneEnvironmentBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("environments", "cloneEnvironment", err)
+			}
+			return nil, NewCloneEnvironmentBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body CloneEnvironmentNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("environments", "cloneEnvironment", err)
+			}
+			err = ValidateCloneEnvironmentNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("environments", "cloneEnvironment", err)
+			}
+			return nil, NewCloneEnvironmentNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body CloneEnvironmentConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("environments", "cloneEnvironment", err)
+			}
+			err = ValidateCloneEnvironmentConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("environments", "cloneEnvironment", err)
+			}
+			return nil, NewCloneEnvironmentConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body CloneEnvironmentUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("environments", "cloneEnvironment", err)
+			}
+			err = ValidateCloneEnvironmentUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("environments", "cloneEnvironment", err)
+			}
+			return nil, NewCloneEnvironmentUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body CloneEnvironmentInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("environments", "cloneEnvironment", err)
+			}
+			err = ValidateCloneEnvironmentInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("environments", "cloneEnvironment", err)
+			}
+			return nil, NewCloneEnvironmentInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body CloneEnvironmentInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("environments", "cloneEnvironment", err)
+				}
+				err = ValidateCloneEnvironmentInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("environments", "cloneEnvironment", err)
+				}
+				return nil, NewCloneEnvironmentInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body CloneEnvironmentUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("environments", "cloneEnvironment", err)
+				}
+				err = ValidateCloneEnvironmentUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("environments", "cloneEnvironment", err)
+				}
+				return nil, NewCloneEnvironmentUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("environments", "cloneEnvironment", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body CloneEnvironmentGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("environments", "cloneEnvironment", err)
+			}
+			err = ValidateCloneEnvironmentGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("environments", "cloneEnvironment", err)
+			}
+			return nil, NewCloneEnvironmentGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("environments", "cloneEnvironment", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildDeleteEnvironmentRequest instantiates a HTTP request object with method
 // and path set to call the "environments" service "deleteEnvironment" endpoint
 func (c *Client) BuildDeleteEnvironmentRequest(ctx context.Context, v any) (*http.Request, error) {

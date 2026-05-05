@@ -81,6 +81,30 @@ var _ = Service("environments", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpdateEnvironment"}`)
 	})
 
+	Method("cloneEnvironment", func() {
+		Description("Clone an environment into a new one. Either copies only the variable names with empty placeholder values, or copies the encrypted values verbatim. Encrypted secret values are never decrypted by the application during the clone operation.")
+
+		Payload(func() {
+			Extend(CloneEnvironmentForm)
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(shared.Environment)
+
+		HTTP(func() {
+			POST("/rpc/environments.clone")
+			Param("slug")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "cloneEnvironment")
+		Meta("openapi:extension:x-speakeasy-name-override", "clone")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CloneEnvironment"}`)
+	})
+
 	Method("deleteEnvironment", func() {
 		Description("Delete an environment")
 
@@ -296,6 +320,16 @@ var UpdateEnvironmentForm = Type("UpdateEnvironmentForm", func() {
 	Attribute("entries_to_remove", ArrayOf(String), "List of environment entry names to remove")
 
 	Required("slug", "entries_to_update", "entries_to_remove")
+})
+
+var CloneEnvironmentForm = Type("CloneEnvironmentForm", func() {
+	Description("Form for cloning an existing environment into a new one")
+
+	Attribute("slug", shared.Slug, "The slug of the source environment to clone")
+	Attribute("new_name", String, "The name for the new cloned environment")
+	Attribute("copy_values", Boolean, "If true, copy the encrypted secret values from the source. If false (default), copy only variable names with empty placeholder values.")
+
+	Required("slug", "new_name")
 })
 
 var ListEnvironmentsResult = Type("ListEnvironmentsResult", func() {

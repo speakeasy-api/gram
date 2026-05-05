@@ -21,6 +21,8 @@ export const ListRoleGrantScope = {
   McpRead: "mcp:read",
   McpWrite: "mcp:write",
   McpConnect: "mcp:connect",
+  EnvironmentRead: "environment:read",
+  EnvironmentWrite: "environment:write",
 } as const;
 /**
  * The scope slug this grant applies to.
@@ -35,6 +37,8 @@ export const SubScopes = {
   McpRead: "mcp:read",
   McpWrite: "mcp:write",
   McpConnect: "mcp:connect",
+  EnvironmentRead: "environment:read",
+  EnvironmentWrite: "environment:write",
 } as const;
 export type SubScopes = ClosedEnum<typeof SubScopes>;
 
