@@ -28,7 +28,7 @@ func TestLoadGrants_loadsUserAndRoleGrants(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx = GrantsToContext(ctx, grants)
-	engine := NewEngine(testinfra.NewLogger(t), conn, rbacAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
+	engine := NewEngine(testinfra.NewLogger(t), conn, testinfra.NewClickhouseStub(), rbacAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
 	require.NoError(t, engine.Require(ctx, Check{Scope: ScopeProjectRead, ResourceID: "proj:123"}))
 	require.NoError(t, engine.Require(ctx, Check{Scope: ScopeMCPConnect, ResourceID: "toolA"}))
 }
@@ -89,7 +89,7 @@ func TestLoadGrants_returnsEmptyGrantSetWhenNoRowsMatch(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx = GrantsToContext(ctx, grants)
-	engine := NewEngine(testinfra.NewLogger(t), conn, rbacAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
+	engine := NewEngine(testinfra.NewLogger(t), conn, testinfra.NewClickhouseStub(), rbacAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
 	projectIDs, err := engine.Filter(ctx, []Check{
 		{Scope: ScopeProjectRead, ResourceID: "proj:123"},
 	})

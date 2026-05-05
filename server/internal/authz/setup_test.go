@@ -21,16 +21,26 @@ import (
 var cloneTestDatabase func(t *testing.T, name string) (*pgxpool.Pool, error)
 
 func TestMain(m *testing.M) {
-	container, cloneFunc, err := testinfra.NewTestPostgres(context.Background())
+	ctx := context.Background()
+
+	pgContainer, cloneFunc, err := testinfra.NewTestPostgres(ctx)
 	if err != nil {
-		log.Fatalf("Failed to launch test infrastructure: %v", err)
+		log.Fatalf("Failed to launch test postgres: %v", err)
 	}
 	cloneTestDatabase = cloneFunc
 
+	chCleanup, err := testinfra.LaunchSharedClickhouse(ctx)
+	if err != nil {
+		log.Fatalf("Failed to launch test clickhouse: %v", err)
+	}
+
 	code := m.Run()
 
-	if err := container.Terminate(context.Background()); err != nil {
-		log.Fatalf("Failed to cleanup test infrastructure: %v", err)
+	if err := chCleanup(); err != nil {
+		log.Fatalf("Failed to cleanup clickhouse: %v", err)
+	}
+	if err := pgContainer.Terminate(ctx); err != nil {
+		log.Fatalf("Failed to cleanup postgres container: %v", err)
 	}
 
 	os.Exit(code)

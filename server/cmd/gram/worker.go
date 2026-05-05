@@ -450,6 +450,7 @@ func newWorkerCommand() *cli.Command {
 			authzEngine := authz.NewEngine(
 				logger,
 				db,
+				chDB,
 				rbacEnabled,
 				workos.NewStubClient(),
 				cache.NewRedisCacheAdapter(redisClient),

@@ -137,7 +137,9 @@ VALUES ($1, 'Project', $2, 'org-test')
 	require.NoError(t, err)
 
 	logger := testenv.NewLogger(t)
-	authzEngine := authz.NewEngine(logger, conn, authztest.RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
+	chConn, err := assistantsInfra.NewClickhouseClient(t)
+	require.NoError(t, err)
+	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
 	service := &Service{
 		tracer:   noop.NewTracerProvider().Tracer("test"),
 		logger:   logger,

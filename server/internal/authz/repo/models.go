@@ -29,7 +29,7 @@ const (
 	ReasonNoGrants          Reason = "no_grants"
 	ReasonScopeUnsatisfied  Reason = "scope_unsatisfied"
 	ReasonInvalidCheck      Reason = "invalid_check"
-	ReasonRBACSkippedAPIKey Reason = "rbac_skipped_apikey"
+	ReasonRBACSkippedAPIKey Reason = "rbac_skipped_apikey" //nolint:gosec // not a credential
 	ReasonDevOverride       Reason = "dev_override"
 )
 
