@@ -365,8 +365,14 @@ func newStartCommand() *cli.Command {
 		},
 		&cli.StringFlag{
 			Name:     "workos-client-id",
-			Usage:    "WorkOS client ID for SSO code exchange (invite magic-link callback)",
+			Usage:    "WorkOS application client ID",
 			EnvVars:  []string{"WORKOS_CLIENT_ID"},
+			Required: false,
+		},
+		&cli.StringFlag{
+			Name:     "registry-client-id",
+			Usage:    "Registry (environment-level) WorkOS client ID for SSO code exchange in invite magic-link callback",
+			EnvVars:  []string{"REGISTRY_CLIENT_ID"},
 			Required: false,
 		},
 		&cli.StringFlag{
@@ -775,7 +781,7 @@ func newStartCommand() *cli.Command {
 				},
 				authzEngine,
 			))
-			organizations.Attach(mux, organizations.NewService(logger, tracerProvider, db, sessionManager, workosClient, authzEngine, loopsClient, siteURL.String()))
+			organizations.Attach(mux, organizations.NewService(logger, tracerProvider, db, sessionManager, workosClient, authzEngine, loopsClient, siteURL.String(), c.String("speakeasy-server-address")))
 			projects.Attach(mux, projects.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
 			packages.Attach(mux, packages.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
 

@@ -72,7 +72,7 @@ var _ = Service("organizations", func() {
 
 		Payload(func() {
 			Attribute("email", String, "Email address to invite.")
-			Attribute("role_slug", String, "Optional WorkOS role slug for the invitee.")
+			Attribute("role_id", String, "Optional role ID for the invitee.")
 			Required("email")
 			security.SessionPayload()
 		})

@@ -39,12 +39,12 @@ func TestService_SendInvite(t *testing.T) {
 	require.NotEmpty(t, invite.CreatedAt)
 }
 
-func TestService_SendInvite_WithRoleSlug(t *testing.T) {
+func TestService_SendInvite_WithRoleID(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestOrganizationsService(t)
 
-	roleSlug := "test-role"
+	roleID := "test-role"
 
 	ti.orgs.On("CreatePasswordlessSession", mock.Anything, mock.Anything).Return(&thirdpartyworkos.PasswordlessSession{
 		ID:   "pwl_456",
@@ -52,8 +52,8 @@ func TestService_SendInvite_WithRoleSlug(t *testing.T) {
 	}, nil).Once()
 
 	invite, err := ti.service.SendInvite(ctx, &gen.SendInvitePayload{
-		Email:    "test@example.com",
-		RoleSlug: &roleSlug,
+		Email:  "test@example.com",
+		RoleID: &roleID,
 	})
 	require.NoError(t, err)
 	require.NotNil(t, invite)

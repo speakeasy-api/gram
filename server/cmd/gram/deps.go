@@ -454,10 +454,11 @@ func newBillingProvider(
 func newAccessRoleProvider(ctx context.Context, logger *slog.Logger, guardianPolicy *guardian.Policy, c *cli.Context) (access.RoleProvider, error) {
 	apiKey := c.String("workos-api-key")
 	clientID := c.String("workos-client-id")
+	registryClientID := c.String("registry-client-id")
 
 	switch {
 	case apiKey != "" && apiKey != "unset":
-		return workos.NewClient(guardianPolicy, apiKey, clientID), nil
+		return workos.NewClient(guardianPolicy, apiKey, clientID, registryClientID), nil
 	case c.String("environment") == "local":
 		logger.WarnContext(ctx, "using stub access role provider: WorkOS not configured")
 		return workos.NewStubClient(), nil
@@ -470,13 +471,14 @@ func newWorkOSClient(guardianPolicy *guardian.Policy, c *cli.Context) (client *w
 	env := c.String("environment")
 	apiKey := c.String("workos-api-key")
 	clientID := c.String("workos-client-id")
+	registryClientID := c.String("registry-client-id")
 
 	haveAPIKey := apiKey != "" && apiKey != "unset"
 	if env != "local" && !haveAPIKey {
 		return nil, false, errors.New("WorkOS API key not provided")
 	}
 
-	return workos.NewClient(guardianPolicy, apiKey, clientID), haveAPIKey, nil
+	return workos.NewClient(guardianPolicy, apiKey, clientID, registryClientID), haveAPIKey, nil
 }
 
 func newTigrisStore(ctx context.Context, c *cli.Context, logger *slog.Logger) (*assets.TigrisStore, func(context.Context) error, error) {

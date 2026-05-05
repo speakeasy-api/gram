@@ -140,8 +140,8 @@ type RevokeInvitePayload struct {
 type SendInvitePayload struct {
 	// Email address to invite.
 	Email string
-	// Optional WorkOS role slug for the invitee.
-	RoleSlug     *string
+	// Optional role ID for the invitee.
+	RoleID       *string
 	SessionToken *string
 }
 

@@ -26,7 +26,7 @@ type InviteLinkProfile struct {
 func (wc *Client) AuthenticateWithInviteLink(ctx context.Context, code string) (*InviteLinkProfile, error) {
 	ssoClient := &sso.Client{
 		APIKey:     wc.apiKey,
-		ClientID:   wc.clientID,
+		ClientID:   wc.registryClientID,
 		HTTPClient: wc.httpClient,
 		Endpoint:   wc.endpoint,
 	}

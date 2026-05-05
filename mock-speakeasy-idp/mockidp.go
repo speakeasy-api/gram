@@ -126,6 +126,18 @@ func DefaultConfig() Config {
 	return cfg
 }
 
+// sessionClearPage is served when we need to clear an old WorkOS AuthKit
+// session before starting a new login. A hidden iframe hits the WorkOS logout
+// endpoint (clearing the cookie) while JS continues the OIDC authorize flow
+// after a short delay. Two %s placeholders: logout URL, authorize URL.
+const sessionClearPage = `<!DOCTYPE html>
+<html><head><title>Signing in…</title></head>
+<body>
+<p>Signing in…</p>
+<iframe src="%s" style="display:none"></iframe>
+<script>setTimeout(function(){ window.location.href = "%s"; }, 600);</script>
+</body></html>`
+
 // Handler returns an http.Handler implementing all /v1/speakeasy_provider/*
 // endpoints. In OIDC mode, login redirects to the real OIDC provider and an
 // additional /oidc/callback endpoint is registered.
@@ -311,28 +323,6 @@ func (s *server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	s.lastWorkosSessionID = ""
 	s.mu.Unlock()
 
-	if prevSessionID != "" {
-		// Redirect through WorkOS session logout to clear the AuthKit cookie.
-		// WorkOS strips query parameters from the return_to URL, so we store
-		// the original login params server-side and retrieve them when we
-		// come back via the /logout/callback endpoint.
-		s.mu.Lock()
-		s.pendingLogouts["latest"] = pendingLogout{
-			returnURL: returnURL,
-			state:     state,
-		}
-		s.mu.Unlock()
-
-		continueURL := s.cfg.Oidc.ExternalURL + "/v1/speakeasy_provider/logout/callback"
-		logoutURL := fmt.Sprintf("https://api.workos.com/user_management/sessions/logout?session_id=%s&return_to=%s",
-			prevSessionID,
-			url.QueryEscape(continueURL),
-		)
-		log.Printf("[login] [oidc] clearing previous WorkOS session %s", prevSessionID)
-		http.Redirect(w, r, logoutURL, http.StatusFound)
-		return
-	}
-
 	// Proceed to WorkOS authorize.
 	oidcState := randomID()
 	codeVerifier := generateCodeVerifier()
@@ -349,6 +339,20 @@ func (s *server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Printf("[login] [oidc] failed to build authorize URL: %v", err)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to build OIDC authorize URL"})
+		return
+	}
+
+	if prevSessionID != "" {
+		// Clear the old AuthKit cookie via a hidden iframe so WorkOS shows a
+		// fresh login screen. We can't redirect to WorkOS logout because the
+		// return_to URL isn't a registered sign-out redirect URI — WorkOS
+		// falls back to the app homepage (dev.speakeasy.com). Instead, the
+		// iframe silently hits logout and JS continues the login flow.
+		logoutURL := fmt.Sprintf("https://api.workos.com/user_management/sessions/logout?session_id=%s",
+			prevSessionID)
+		log.Printf("[login] [oidc] clearing previous WorkOS session %s via iframe", prevSessionID)
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		fmt.Fprintf(w, sessionClearPage, logoutURL, authorizeURL)
 		return
 	}
 

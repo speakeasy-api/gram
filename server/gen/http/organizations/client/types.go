@@ -17,8 +17,8 @@ import (
 type SendInviteRequestBody struct {
 	// Email address to invite.
 	Email string `form:"email" json:"email" xml:"email"`
-	// Optional WorkOS role slug for the invitee.
-	RoleSlug *string `form:"role_slug,omitempty" json:"role_slug,omitempty" xml:"role_slug,omitempty"`
+	// Optional role ID for the invitee.
+	RoleID *string `form:"role_id,omitempty" json:"role_id,omitempty" xml:"role_id,omitempty"`
 }
 
 // SendInviteResponseBody is the type of the "organizations" service
@@ -1022,8 +1022,8 @@ type OrganizationUserResponseBody struct {
 // the "sendInvite" endpoint of the "organizations" service.
 func NewSendInviteRequestBody(p *organizations.SendInvitePayload) *SendInviteRequestBody {
 	body := &SendInviteRequestBody{
-		Email:    p.Email,
-		RoleSlug: p.RoleSlug,
+		Email:  p.Email,
+		RoleID: p.RoleID,
 	}
 	return body
 }

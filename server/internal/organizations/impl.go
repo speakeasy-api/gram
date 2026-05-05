@@ -54,32 +54,34 @@ type OrganizationProvider interface {
 var _ OrganizationProvider = (*workos.Client)(nil)
 
 type Service struct {
-	logger  *slog.Logger
-	tracer  trace.Tracer
-	db      *pgxpool.Pool
-	auth    *auth.Auth
-	authz   *authz.Engine
-	orgs    OrganizationProvider
-	loops   *loops.Client
-	siteURL string // dashboard URL; used for invite callback RedirectURI and post-callback redirect
+	logger      *slog.Logger
+	tracer      trace.Tracer
+	db          *pgxpool.Pool
+	auth        *auth.Auth
+	authz       *authz.Engine
+	orgs        OrganizationProvider
+	loops       *loops.Client
+	siteURL     string // dashboard URL; used for invite callback RedirectURI and post-callback redirect
+	registryURL string // registry (speakeasy server) URL; used to redirect invitees through OIDC login after accepting
 }
 
 var _ gen.Service = (*Service)(nil)
 
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, orgs OrganizationProvider, authzEngine *authz.Engine, loopsClient *loops.Client, siteURL string) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, orgs OrganizationProvider, authzEngine *authz.Engine, loopsClient *loops.Client, siteURL string, registryURL string) *Service {
 	logger = logger.With(attr.SlogComponent("organizations"))
 
 	return &Service{
-		logger:  logger,
-		tracer:  tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/organizations"),
-		db:      db,
-		auth:    auth.New(logger, db, sessions, authzEngine),
-		authz:   authzEngine,
-		orgs:    orgs,
-		loops:   loopsClient,
-		siteURL: siteURL,
+		logger:      logger,
+		tracer:      tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/organizations"),
+		db:          db,
+		auth:        auth.New(logger, db, sessions, authzEngine),
+		authz:       authzEngine,
+		orgs:        orgs,
+		loops:       loopsClient,
+		siteURL:     siteURL,
+		registryURL: registryURL,
 	}
 }
 
@@ -128,8 +130,8 @@ func (s *Service) SendInvite(ctx context.Context, payload *gen.SendInvitePayload
 	}
 
 	roleSlug := pgtype.Text{}
-	if payload.RoleSlug != nil && *payload.RoleSlug != "" {
-		roleSlug = conv.ToPGText(*payload.RoleSlug)
+	if payload.RoleID != nil && *payload.RoleID != "" {
+		roleSlug = conv.ToPGText(*payload.RoleID)
 	}
 
 	row, err := orgrepo.New(s.db).CreateInvitation(ctx, orgrepo.CreateInvitationParams{
@@ -527,10 +529,13 @@ func (s *Service) handleInviteCallback(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Redirect through the OIDC login flow so the invitee gets a Gram session
-	// automatically. /rpc/auth.login is a 307 that starts the OIDC round-trip
-	// through the registry IDP, which creates a session and lands at the dashboard.
-	http.Redirect(w, r, s.siteURL+"/rpc/auth.login", http.StatusTemporaryRedirect)
+	// Redirect through the registry's OIDC login so the invitee gets a Gram
+	// session in one step. The return_url tells the registry to redirect back
+	// to Gram's auth callback after authentication. If the user already has a
+	// WorkOS session (from the magic link click), this completes instantly.
+	loginParams := url.Values{}
+	loginParams.Set("return_url", strings.TrimRight(s.siteURL, "/")+"/rpc/auth.callback")
+	http.Redirect(w, r, s.registryURL+"/v1/speakeasy_provider/login?"+loginParams.Encode(), http.StatusTemporaryRedirect)
 }
 
 func organizationUserToGen(row *orgrepo.ListOrganizationUsersRow) *gen.OrganizationUser {

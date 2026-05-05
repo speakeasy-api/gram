@@ -17,8 +17,8 @@ import (
 type SendInviteRequestBody struct {
 	// Email address to invite.
 	Email *string `form:"email,omitempty" json:"email,omitempty" xml:"email,omitempty"`
-	// Optional WorkOS role slug for the invitee.
-	RoleSlug *string `form:"role_slug,omitempty" json:"role_slug,omitempty" xml:"role_slug,omitempty"`
+	// Optional role ID for the invitee.
+	RoleID *string `form:"role_id,omitempty" json:"role_id,omitempty" xml:"role_id,omitempty"`
 }
 
 // SendInviteResponseBody is the type of the "organizations" service
@@ -1779,8 +1779,8 @@ func NewRemoveUserGatewayErrorResponseBody(res *goa.ServiceError) *RemoveUserGat
 // payload.
 func NewSendInvitePayload(body *SendInviteRequestBody, sessionToken *string) *organizations.SendInvitePayload {
 	v := &organizations.SendInvitePayload{
-		Email:    *body.Email,
-		RoleSlug: body.RoleSlug,
+		Email:  *body.Email,
+		RoleID: body.RoleID,
 	}
 	v.SessionToken = sessionToken
 

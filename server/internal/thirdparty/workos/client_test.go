@@ -316,7 +316,7 @@ func newTestClient(t *testing.T, fake *fakeWorkOS) (*workos.Client, *fakeWorkOS)
 	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 
-	client := workos.NewClient(guardianPolicy, "test-api-key", "test-client-id", workos.ClientOpts{
+	client := workos.NewClient(guardianPolicy, "test-api-key", "test-client-id", "test-registry-client-id", workos.ClientOpts{
 		Endpoint:   srv.URL,
 		HTTPClient: &http.Client{Timeout: 10 * time.Second},
 	})

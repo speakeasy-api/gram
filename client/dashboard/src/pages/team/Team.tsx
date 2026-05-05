@@ -1,7 +1,15 @@
+import { AnyField } from "@/components/moon/any-field";
 import { InputField } from "@/components/moon/input-field";
 import { Page } from "@/components/page-layout";
 import { Dialog } from "@/components/ui/dialog";
 import { Heading } from "@/components/ui/heading";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Type } from "@/components/ui/type";
 import { useOrganization, useUser } from "@/contexts/Auth";
 import { HumanizeDateTime } from "@/lib/dates";
@@ -15,13 +23,15 @@ import {
   useRevokeInviteMutation,
   useRemoveOrganizationUserMutation,
 } from "@gram/client/react-query";
+import { useRoles } from "@gram/client/react-query/roles.js";
 import {
   OrganizationUser,
   OrganizationInvitation,
 } from "@gram/client/models/components";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Button, Column, Stack, Table } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
-import { Trash2, UserPlus, Users, X } from "lucide-react";
+import { RefreshCw, Trash2, UserPlus, Users, X } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { RequireScope } from "@/components/require-scope";
@@ -67,6 +77,9 @@ export function TeamInner() {
 
   const [isInviteDialogOpen, setIsInviteDialogOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteRoleId, setInviteRoleId] = useState<string | undefined>(
+    undefined,
+  );
   const [memberToRemove, setMemberToRemove] = useState<OrganizationUser | null>(
     null,
   );
@@ -75,9 +88,11 @@ export function TeamInner() {
 
   const { data: membersData } = useListOrganizationUsersSuspense();
   const { data: invitesData } = useListInvitesSuspense();
+  const { data: rolesData } = useRoles();
 
   const members = membersData?.users ?? [];
   const invites = invitesData?.invitations ?? [];
+  const roles = rolesData?.roles ?? [];
 
   const invalidateTeamData = async () => {
     await Promise.all([
@@ -114,6 +129,7 @@ export function TeamInner() {
         request: {
           sendInviteRequestBody: {
             email: submittedEmail,
+            roleSlug: inviteRoleId || undefined,
           },
         },
       },
@@ -122,6 +138,7 @@ export function TeamInner() {
           await invalidateTeamData();
           toast.success(`Invite sent to ${submittedEmail}`);
           setInviteEmail("");
+          setInviteRoleId(undefined);
           setIsInviteDialogOpen(false);
         },
       },
@@ -167,6 +184,27 @@ export function TeamInner() {
       },
     );
   };
+
+  const handleResendInvite = (invite: OrganizationInvitation) => {
+    revokeInviteMutation.mutate(
+      { request: { invitationId: invite.id } },
+      {
+        onSuccess: () => {
+          inviteMutation.mutate(
+            { request: { sendInviteRequestBody: { email: invite.email } } },
+            {
+              onSuccess: async () => {
+                await invalidateTeamData();
+                toast.success(`Invite resent to ${invite.email}`);
+              },
+            },
+          );
+        },
+      },
+    );
+  };
+
+  const membersByUserId = new Map(members.map((m) => [m.userId, m]));
 
   const memberColumns: Column<OrganizationUser>[] = [
     {
@@ -251,7 +289,7 @@ export function TeamInner() {
     {
       key: "email",
       header: "Email",
-      width: "1fr",
+      width: "2fr",
       render: (invite) => {
         const isExpired = invite.state === "expired";
         return (
@@ -279,9 +317,45 @@ export function TeamInner() {
       },
     },
     {
+      key: "invitedBy",
+      header: "Invited by",
+      width: "100px",
+      render: (invite) => {
+        const inviter = invite.inviterUserId
+          ? membersByUserId.get(invite.inviterUserId)
+          : undefined;
+        if (!inviter) return <span className="text-muted-foreground">—</span>;
+        return (
+          <SimpleTooltip tooltip={inviter.email}>
+            {inviter.photoUrl ? (
+              <img
+                src={inviter.photoUrl}
+                alt={inviter.name}
+                className="h-7 w-7 rounded-full"
+              />
+            ) : (
+              <div
+                className="flex h-7 w-7 items-center justify-center rounded-full text-xs font-medium text-white"
+                style={{
+                  backgroundImage: `linear-gradient(${getMemberColors(inviter.id).angle}deg, ${getMemberColors(inviter.id).from}, ${getMemberColors(inviter.id).to})`,
+                }}
+              >
+                {inviter.name
+                  .split(" ")
+                  .map((n) => n[0])
+                  .join("")
+                  .toUpperCase()
+                  .slice(0, 2)}
+              </div>
+            )}
+          </SimpleTooltip>
+        );
+      },
+    },
+    {
       key: "createdAt",
       header: "Sent",
-      width: "200px",
+      width: "1fr",
       render: (invite) => (
         <Type
           variant="body"
@@ -294,7 +368,7 @@ export function TeamInner() {
     {
       key: "expiresAt",
       header: "Expires",
-      width: "150px",
+      width: "1fr",
       render: (invite) => {
         const isExpired =
           invite.state === "expired" ||
@@ -316,20 +390,39 @@ export function TeamInner() {
     {
       key: "actions",
       header: "",
-      width: "80px",
+      width: "120px",
       render: (invite) => (
         <RequireScope scope="org:admin" level="component">
-          <Button
-            variant="tertiary"
-            size="sm"
-            onClick={() => setInviteToCancel(invite)}
-            className="hover:text-destructive"
-          >
-            <Button.LeftIcon>
-              <X className="h-4 w-4" />
-            </Button.LeftIcon>
-            <Button.Text className="sr-only">Revoke invite</Button.Text>
-          </Button>
+          <Stack direction="horizontal" gap={1}>
+            <SimpleTooltip tooltip="Resend invite">
+              <Button
+                variant="tertiary"
+                size="sm"
+                onClick={() => handleResendInvite(invite)}
+                disabled={
+                  revokeInviteMutation.isPending || inviteMutation.isPending
+                }
+              >
+                <Button.LeftIcon>
+                  <RefreshCw className="h-4 w-4" />
+                </Button.LeftIcon>
+                <Button.Text className="sr-only">Resend invite</Button.Text>
+              </Button>
+            </SimpleTooltip>
+            <SimpleTooltip tooltip="Revoke invite">
+              <Button
+                variant="tertiary"
+                size="sm"
+                onClick={() => setInviteToCancel(invite)}
+                className="hover:text-destructive"
+              >
+                <Button.LeftIcon>
+                  <X className="h-4 w-4" />
+                </Button.LeftIcon>
+                <Button.Text className="sr-only">Revoke invite</Button.Text>
+              </Button>
+            </SimpleTooltip>
+          </Stack>
         </RequireScope>
       ),
     },
@@ -430,6 +523,26 @@ export function TeamInner() {
               autoComplete="off"
               autoCorrect="off"
             />
+            {roles.length > 0 && (
+              <AnyField
+                label="Role"
+                optionality="optional"
+                render={() => (
+                  <Select value={inviteRoleId} onValueChange={setInviteRoleId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a role" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {roles.map((role) => (
+                        <SelectItem key={role.id} value={role.id}>
+                          {role.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              />
+            )}
             <div className="flex justify-end space-x-2">
               <Button
                 type="button"

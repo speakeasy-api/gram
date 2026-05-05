@@ -27848,9 +27848,9 @@ components:
                 email:
                     type: string
                     description: Email address to invite.
-                role_slug:
+                role_id:
                     type: string
-                    description: Optional WorkOS role slug for the invitee.
+                    description: Optional role ID for the invitee.
             required:
                 - email
         ServeChatAttachmentForm:

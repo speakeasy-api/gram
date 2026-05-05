@@ -258,7 +258,7 @@ func TestOidcMode_LoginRedirectsToWorkOS(t *testing.T) {
 	assert.Contains(t, loc, "redirect_uri="+url.QueryEscape("http://localhost:35291/v1/speakeasy_provider/oidc/callback"))
 }
 
-func TestOidcMode_LoginWithPreviousSessionRedirectsToLogout(t *testing.T) {
+func TestOidcMode_LoginWithPreviousSessionClearsViaIframe(t *testing.T) {
 	srv, s := newOidcServer(t)
 
 	s.mu.Lock()
@@ -269,19 +269,21 @@ func TestOidcMode_LoginWithPreviousSessionRedirectsToLogout(t *testing.T) {
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
-	assert.Equal(t, http.StatusFound, resp.StatusCode)
-	loc := resp.Header.Get("Location")
-	assert.Contains(t, loc, "https://api.workos.com/user_management/sessions/logout")
-	assert.Contains(t, loc, "session_id=sess_prev123")
-	assert.Contains(t, loc, url.QueryEscape("http://localhost:35291/v1/speakeasy_provider/logout/callback"))
+	// Should return an HTML page (not a redirect) with an iframe for logout
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Contains(t, resp.Header.Get("Content-Type"), "text/html")
 
-	// Verify pending logout was stored
-	s.mu.Lock()
-	pending, ok := s.pendingLogouts["latest"]
-	s.mu.Unlock()
-	assert.True(t, ok)
-	assert.Equal(t, "https://example.com/cb", pending.returnURL)
-	assert.Equal(t, "s1", pending.state)
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	bodyStr := string(body)
+
+	// Iframe hits WorkOS logout to clear the AuthKit cookie
+	assert.Contains(t, bodyStr, "api.workos.com/user_management/sessions/logout")
+	assert.Contains(t, bodyStr, "session_id=sess_prev123")
+
+	// JS redirect continues the OIDC authorize flow
+	assert.Contains(t, bodyStr, "setTimeout")
+	assert.Contains(t, bodyStr, "window.location.href")
 }
 
 func TestOidcMode_LogoutCallbackRestoresParams(t *testing.T) {

@@ -70,7 +70,7 @@ func newTestOrganizationsService(t *testing.T) (context.Context, *testInstance) 
 	orgs := newMockOrganizationProvider(t)
 
 	authzEngine := authz.NewEngine(logger, conn, authztest.RBACAlwaysEnabled, thirdpartyworkos.NewStubClient(), cache.NoopCache)
-	svc := organizations.NewService(logger, tracerProvider, conn, sessionManager, orgs, authzEngine, nil, "http://localhost:5173")
+	svc := organizations.NewService(logger, tracerProvider, conn, sessionManager, orgs, authzEngine, nil, "http://localhost:5173", "http://localhost:35291")
 
 	return ctx, &testInstance{
 		service: svc,

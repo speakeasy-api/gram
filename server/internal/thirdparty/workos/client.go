@@ -53,12 +53,13 @@ func wrapSDKError(err error, context string) error {
 // Client wraps WorkOS API calls for role and membership management.
 // It is designed to have a caching layer added later.
 type Client struct {
-	apiKey     string
-	clientID   string // WorkOS client ID, needed for SSO code exchange
-	endpoint   string // base URL for raw HTTP calls; defaults to workosBaseURL
-	httpClient *guardian.HTTPClient
-	orgs       *organizations.Client
-	um         *usermanagement.Client
+	apiKey           string
+	clientID         string // WorkOS application client ID
+	registryClientID string // Registry (environment-level) WorkOS client ID, needed for SSO code exchange
+	endpoint         string // base URL for raw HTTP calls; defaults to workosBaseURL
+	httpClient       *guardian.HTTPClient
+	orgs             *organizations.Client
+	um               *usermanagement.Client
 }
 
 // ClientOpts configures optional overrides for New.
@@ -70,7 +71,7 @@ type ClientOpts struct {
 	HTTPClient *guardian.HTTPClient
 }
 
-func NewClient(guardianPolicy *guardian.Policy, apiKey string, clientID string, opts ...ClientOpts) *Client {
+func NewClient(guardianPolicy *guardian.Policy, apiKey string, clientID string, registryClientID string, opts ...ClientOpts) *Client {
 	var opt ClientOpts
 	if len(opts) > 0 {
 		opt = opts[0]
@@ -95,12 +96,13 @@ func NewClient(guardianPolicy *guardian.Policy, apiKey string, clientID string, 
 	}
 
 	return &Client{
-		apiKey:     apiKey,
-		clientID:   clientID,
-		endpoint:   endpoint,
-		httpClient: httpClient,
-		orgs:       &organizations.Client{APIKey: apiKey, HTTPClient: httpClient, Endpoint: opt.Endpoint, JSONEncode: nil},
-		um:         um,
+		apiKey:           apiKey,
+		clientID:         clientID,
+		registryClientID: registryClientID,
+		endpoint:         endpoint,
+		httpClient:       httpClient,
+		orgs:             &organizations.Client{APIKey: apiKey, HTTPClient: httpClient, Endpoint: opt.Endpoint, JSONEncode: nil},
+		um:               um,
 	}
 }
 
