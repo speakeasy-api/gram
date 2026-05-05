@@ -1,5 +1,11 @@
 # dashboard
 
+## 0.45.3
+
+### Patch Changes
+
+- afe9121: resolve intermittent 504 in dev by Vite lazy dep optimization of @assistant-ui packages
+
 ## 0.45.2
 
 ### Patch Changes
