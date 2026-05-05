@@ -51,7 +51,7 @@ const PREFERRED_PROJECT_KEY = "preferredProject";
 
 const UNAUTHENTICATED_PATHS = ["/login", "/register", "/invite", "/book-demo"];
 
-const SLUG_EXEMPT_PATHS = ["/slack/register"];
+const SLUG_EXEMPT_PATHS = ["/slack/register", "/assistants-onboarding"];
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   return (
@@ -146,8 +146,12 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
     return <Navigate to={newPath + location.search + location.hash} replace />;
   }
 
-  // Handle initial navigation
-  const redirectParam = searchParams.get("redirect");
+  // Handle initial navigation. Honor `returnTo` first, fall back to the legacy
+  // `redirect` query param, so existing internal callers (CLI callback, Slack
+  // register) keep working while the assistants growth-hack flow can use the
+  // new `returnTo` name documented in its design diagram.
+  const redirectParam =
+    searchParams.get("returnTo") ?? searchParams.get("redirect");
   if (redirectParam) {
     return <Navigate to={redirectParam} replace />;
   } else if (isSlugExempt) {
@@ -156,20 +160,36 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
     // On an org-level page or bare URL with no project context — that's fine,
     // unless we're at the root "/" with no org slug either
     if (!orgSlug || orgSlug !== session.organization.slug) {
-      // If the user has a preferred project, redirect to it instead of org home
+      // Promotable bare paths: marketing URLs like /onboarding?disposition=assistants
+      // elide the org/project slugs. When a logged-in user lands on these paths,
+      // prepend the org+project slugs and preserve the path/query/hash so the
+      // project-scoped route can mount.
+      const PROMOTABLE_BARE_PATHS = new Set<string>(["/onboarding"]);
+      const isPromotable = PROMOTABLE_BARE_PATHS.has(location.pathname);
+      const promotedSuffix = isPromotable
+        ? location.pathname + location.search + location.hash
+        : "";
+
       const preferredSlug = localStorage.getItem(PREFERRED_PROJECT_KEY);
       const preferredProject = preferredSlug
         ? session.organization.projects.find((p) => p.slug === preferredSlug)
         : undefined;
-      if (preferredProject) {
+      // For promotable paths, fall back to projects[0] when there is no preferred
+      // project. Covers the post-register case where the user just got their
+      // first project and has no localStorage preference yet.
+      const targetProject =
+        preferredProject ??
+        (isPromotable ? session.organization.projects[0] : undefined);
+
+      if (targetProject) {
         return (
           <Navigate
-            to={`/${session.organization.slug}/projects/${preferredProject.slug}`}
+            to={`/${session.organization.slug}/projects/${targetProject.slug}${promotedSuffix}`}
             replace
           />
         );
       }
-      // Redirect to org home
+      // Redirect to org home (no project context — a promoted suffix would be unmountable)
       return <Navigate to={`/${session.organization.slug}`} replace />;
     }
     // Otherwise we're on a valid org-level path, fall through

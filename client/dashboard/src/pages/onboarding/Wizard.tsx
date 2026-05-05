@@ -85,6 +85,19 @@ export function OnboardingWizard() {
 
   const startStep = searchParams.get(START_STEP_PARAM);
   const startPath = searchParams.get(START_PATH_PARAM);
+  const disposition = searchParams.get("disposition");
+  const navigate = useNavigate();
+
+  // If marketing sent us here with disposition=assistants, hand off to
+  // the dedicated assistants onboarding flow.
+  useEffect(() => {
+    if (disposition === "assistants") {
+      telemetry.capture("assistants_onboarding_entry", {
+        disposition: "assistants",
+      });
+      navigate(routes.assistantsOnboarding.href(), { replace: true });
+    }
+  }, [disposition, navigate, routes.assistantsOnboarding, telemetry]);
 
   // If we have a start path and step, set the selected path and step
   useEffect(() => {

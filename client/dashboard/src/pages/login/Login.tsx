@@ -11,7 +11,8 @@ export default function Login() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
 
-  const redirectTo = searchParams.get("redirect");
+  const redirectTo =
+    searchParams.get("returnTo") ?? searchParams.get("redirect");
   useEffect(() => {
     if (session.session !== "") {
       if (redirectTo) {

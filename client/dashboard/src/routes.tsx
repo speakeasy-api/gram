@@ -42,6 +42,7 @@ import {
 import FunctionsOnboarding from "./pages/onboarding/FunctionsOnboarding";
 import UploadOpenAPI from "./pages/onboarding/UploadOpenAPI";
 import { OnboardingWizard } from "./pages/onboarding/Wizard";
+import { AssistantsOnboardingPage } from "./pages/assistants/onboarding/AssistantsOnboardingPage";
 import Collections, { CollectionsRoot } from "./pages/collections/Collections";
 import CollectionDetail from "./pages/collections/CollectionDetail";
 import CreateCollection from "./pages/collections/CreateCollection";
@@ -163,6 +164,13 @@ const ROUTE_STRUCTURE = {
     url: "onboarding",
     component: OnboardingWizard,
     outsideMainLayout: true, // Break out of normal page structure
+  },
+  assistantsOnboarding: {
+    title: "Assistants Onboarding",
+    url: "assistants-onboarding",
+    component: AssistantsOnboardingPage,
+    outsideMainLayout: true,
+    unauthenticated: true,
   },
   home: {
     title: "Home",

@@ -7,7 +7,7 @@ import { Chat, GramElementsProvider, type Model } from "@gram-ai/elements";
 import { useChatSessionsCreateMutation } from "@gram/client/react-query/chatSessionsCreate.js";
 import { ResizablePanel, useMoonshineConfig } from "@speakeasy-api/moonshine";
 import { Loader2 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { AssistantDraftProvider } from "./AssistantDraftContext";
@@ -20,9 +20,16 @@ import {
 } from "./systemPrompt";
 import { useOnboardingTools } from "./tools/useOnboardingTools";
 
-export function NewAssistantOnboarding() {
+export function NewAssistantOnboarding({
+  onAssistantSaved,
+  chromeless,
+}: {
+  onAssistantSaved?: (assistantId: string) => void;
+  chromeless?: boolean;
+} = {}) {
   const [searchParams, setSearchParams] = useSearchParams();
   const initialId = searchParams.get("id");
+  const hasFiredSavedRef = useRef(false);
 
   const handleAssistantCreated = useCallback(
     (id: string) => {
@@ -34,8 +41,12 @@ export function NewAssistantOnboarding() {
         },
         { replace: true },
       );
+      if (!hasFiredSavedRef.current) {
+        hasFiredSavedRef.current = true;
+        onAssistantSaved?.(id);
+      }
     },
-    [setSearchParams],
+    [setSearchParams, onAssistantSaved],
   );
 
   return (
@@ -43,7 +54,7 @@ export function NewAssistantOnboarding() {
       initialAssistantId={initialId}
       onAssistantCreated={handleAssistantCreated}
     >
-      <OnboardingShell />
+      {chromeless ? <OnboardingChromelessShell /> : <OnboardingShell />}
     </AssistantDraftProvider>
   );
 }
@@ -54,6 +65,22 @@ export function EditAssistantOnboarding() {
     <AssistantDraftProvider initialAssistantId={assistantId}>
       <OnboardingShell />
     </AssistantDraftProvider>
+  );
+}
+
+function OnboardingBody({ mode }: { mode: "create" | "edit" }) {
+  return (
+    <ResizablePanel
+      direction="horizontal"
+      className="[&>[role='separator']]:bg-neutral-softest [&>[role='separator']]:hover:bg-primary h-full [&>[role='separator']]:relative [&>[role='separator']]:w-px [&>[role='separator']]:border-0 [&>[role='separator']]:before:absolute [&>[role='separator']]:before:inset-y-0 [&>[role='separator']]:before:-right-1 [&>[role='separator']]:before:-left-1 [&>[role='separator']]:before:cursor-col-resize"
+    >
+      <ResizablePanel.Pane minSize={35} order={0}>
+        <ChatPane mode={mode} />
+      </ResizablePanel.Pane>
+      <ResizablePanel.Pane minSize={20} defaultSize={28}>
+        <AssistantDraftPanel />
+      </ResizablePanel.Pane>
+    </ResizablePanel>
   );
 }
 
@@ -74,20 +101,17 @@ function OnboardingShell() {
         <Page.Header.Breadcrumbs fullWidth substitutions={substitutions} />
       </Page.Header>
       <Page.Body fullWidth fullHeight className="p-0">
-        <ResizablePanel
-          direction="horizontal"
-          className="[&>[role='separator']]:bg-neutral-softest [&>[role='separator']]:hover:bg-primary h-full [&>[role='separator']]:relative [&>[role='separator']]:w-px [&>[role='separator']]:border-0 [&>[role='separator']]:before:absolute [&>[role='separator']]:before:inset-y-0 [&>[role='separator']]:before:-right-1 [&>[role='separator']]:before:-left-1 [&>[role='separator']]:before:cursor-col-resize"
-        >
-          <ResizablePanel.Pane minSize={35} order={0}>
-            <ChatPane mode={mode} />
-          </ResizablePanel.Pane>
-          <ResizablePanel.Pane minSize={20} defaultSize={28}>
-            <AssistantDraftPanel />
-          </ResizablePanel.Pane>
-        </ResizablePanel>
+        <OnboardingBody mode={mode} />
       </Page.Body>
     </Page>
   );
+}
+
+function OnboardingChromelessShell() {
+  const draft = useAssistantDraft();
+  const mode: "create" | "edit" = draft.assistantId ? "edit" : "create";
+
+  return <OnboardingBody mode={mode} />;
 }
 
 function ChatPane({ mode }: { mode: "create" | "edit" }) {
