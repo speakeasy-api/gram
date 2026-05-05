@@ -397,19 +397,13 @@ func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePaylo
 
 	policy := s.lookupShadowMCPBlockingPolicy(ctx, metadata.ProjectID)
 	if policy == nil {
-		// Annotation trigger still runs even when no shadow-MCP policy is
-		// active: a destructive MCP tool with DestructiveHint=true requires
-		// the scope regardless of toolset signing.
-		if denied := s.maybeEnforceMCPAnnotation(ctx, payload, &metadata, rawToolName, mcpToolName, result, output, deny); denied {
-			return result, nil
-		}
 		if output != nil {
 			output.PermissionDecision = &allow
 		}
 		return result, nil
 	}
 
-	detail, denied, tool := s.shadowMCPClient.LookupToolsetCall(ctx, payload.ToolInput, mcpToolName, metadata.GramOrgID)
+	detail, denied := s.shadowMCPClient.ValidateToolsetCall(ctx, payload.ToolInput, mcpToolName, metadata.GramOrgID)
 	if denied {
 		s.logger.InfoContext(ctx, "denying claude tool call: failed gram toolset validation",
 			attr.SlogEvent("claude_hook_denied"),
@@ -437,14 +431,6 @@ func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePaylo
 			output.PermissionDecisionReason = &reason
 		}
 		return result, nil
-	}
-
-	// Annotation trigger: if shadow-MCP allowed but the tool is annotated
-	// destructive, the destructive scope is still required.
-	if tool != nil && tool.Annotations != nil && tool.Annotations.DestructiveHint != nil && *tool.Annotations.DestructiveHint {
-		if denied := s.applyDestructiveScopeDeny(ctx, payload, &metadata, rawToolName, "tool annotated DestructiveHint=true", "", result, output, deny); denied {
-			return result, nil
-		}
 	}
 
 	if output != nil {
@@ -496,18 +482,6 @@ func (s *Service) resolveClaudePreToolUseMetadata(ctx context.Context, payload *
 		return SessionMetadata{}, false //nolint:exhaustruct // sentinel zero value; second return signals absence
 	}
 	return metadata, true
-}
-
-// maybeEnforceMCPAnnotation runs the annotation trigger for an MCP tool
-// reachable via the shadow-MCP toolset cache when there's no active blocking
-// policy. Returns true when the call has been denied (and the result struct
-// has been populated for return).
-func (s *Service) maybeEnforceMCPAnnotation(ctx context.Context, payload *gen.ClaudePayload, metadata *SessionMetadata, rawToolName, mcpToolName string, result *gen.ClaudeHookResult, output *HookSpecificOutput, deny string) bool {
-	_, lookupDenied, tool := s.shadowMCPClient.LookupToolsetCall(ctx, payload.ToolInput, mcpToolName, metadata.GramOrgID)
-	if lookupDenied || tool == nil || tool.Annotations == nil || tool.Annotations.DestructiveHint == nil || !*tool.Annotations.DestructiveHint {
-		return false
-	}
-	return s.applyDestructiveScopeDeny(ctx, payload, metadata, rawToolName, "tool annotated DestructiveHint=true", "", result, output, deny)
 }
 
 // applyDestructiveScopeDeny evaluates the destructive scope check and, when

@@ -6,7 +6,6 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	tsr "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -26,27 +25,24 @@ const SourceShadowMCP = "shadow_mcp"
 // toolset.
 const XGramToolsetIDField = "x-gram-toolset-id"
 
-// LookupToolsetCall enforces that a Gram-hosted tool call carries the
+// ValidateToolsetCall enforces that a Gram-hosted tool call carries the
 // required x-gram-toolset-id property, that the referenced toolset exists in
 // the calling organization, and that the toolset contains a tool whose
-// post-variation name matches toolName. Returns (detail, true, nil) when the
-// call fails validation; the detail is suitable for surfacing alongside a
-// policy name in deny / flag messages. On success, returns ("", false, tool)
-// where tool is the matched BaseTool — callers that need annotation metadata
-// (DestructiveHint, ReadOnlyHint, etc.) can read it without a second describe
-// round-trip.
+// post-variation name matches toolName. Returns (reason, true) when the call
+// fails validation; the reason is suitable for surfacing alongside a policy
+// name in deny / flag messages.
 //
 // Toolset lookups go through the Client's bundled toolset cache so callers
 // on hot paths (tools/list hooks, batch scanner) share a single Redis-backed
 // cache instance.
-func (c *Client) LookupToolsetCall(
+func (c *Client) ValidateToolsetCall(
 	ctx context.Context,
 	toolInput any,
 	toolName string,
 	orgID string,
-) (string, bool, *types.BaseToolAttributes) {
-	fail := func(detail string) (string, bool, *types.BaseToolAttributes) {
-		return detail, true, nil
+) (string, bool) {
+	fail := func(detail string) (string, bool) {
+		return detail, true
 	}
 
 	inputMap, ok := toolInput.(map[string]any)
@@ -92,21 +88,9 @@ func (c *Client) LookupToolsetCall(
 			continue
 		}
 		if base.Name == toolName {
-			return "", false, &base
+			return "", false
 		}
 	}
 
 	return fail(fmt.Sprintf("tool %q is not part of toolset %s", toolName, toolsetID))
-}
-
-// ValidateToolsetCall preserves the deny-only signature for callers that don't
-// need the matched BaseTool. New code should prefer LookupToolsetCall.
-func (c *Client) ValidateToolsetCall(
-	ctx context.Context,
-	toolInput any,
-	toolName string,
-	orgID string,
-) (string, bool) {
-	detail, denied, _ := c.LookupToolsetCall(ctx, toolInput, toolName, orgID)
-	return detail, denied
 }

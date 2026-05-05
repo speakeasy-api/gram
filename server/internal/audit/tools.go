@@ -27,12 +27,10 @@ type LogToolExecuteDestructiveDenyEvent struct {
 	// calls this is "mcp__<server>__<tool>"; for native Claude Code tools it is
 	// "Bash", "Edit", etc.
 	ToolName string
-	// Reason is a human-readable summary of why the call was denied — either
-	// "tool annotated DestructiveHint=true" or "matched destructive pattern:
-	// <category>/<name>".
+	// Reason is a human-readable summary of the matched destructive pattern.
 	Reason string
 	// MatchedPattern, if non-empty, is the curated pattern slug ("category/name")
-	// that fired the content trigger. Empty for annotation-trigger denials.
+	// that fired the content trigger.
 	MatchedPattern string
 }
 
