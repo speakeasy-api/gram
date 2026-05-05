@@ -28,8 +28,12 @@ type EventsLister interface {
 }
 
 type ProcessWorkOSOrganizationEventsParams struct {
-	WorkOSOrganizationID string  `json:"workos_organization_id,omitempty"`
-	SinceEventID         *string `json:"since_event_id,omitempty"`
+	WorkOSOrganizationID string `json:"workos_organization_id,omitempty"`
+	// SinceEventID lets a caller override the DB cursor for this run. Workflow
+	// triggers always pass nil and let the activity load the cursor from
+	// `workos_organization_syncs`. The override exists for manual reconcile /
+	// backfill paths (future PRs) that want to replay from a specific event.
+	SinceEventID *string `json:"since_event_id,omitempty"`
 }
 
 type ProcessWorkOSOrganizationEventsResult struct {
@@ -104,7 +108,12 @@ func (p *ProcessWorkOSOrganizationEvents) Do(ctx context.Context, params Process
 	return &ProcessWorkOSOrganizationEventsResult{
 		SinceEventID: sinceEventID,
 		LastEventID:  lastEventID,
-		HasMore:      len(resp.Data) == workosOrgEventsPageSize,
+		// The WorkOS SDK's ListEventsResponse does not surface a "has more"
+		// flag, so a full page is the only signal we have. Trade-off: when the
+		// final page is exactly workosOrgEventsPageSize items, we'll trigger
+		// one extra run that returns an empty page. The empty-page path is a
+		// no-op so this is harmless beyond an extra trace.
+		HasMore: len(resp.Data) == workosOrgEventsPageSize,
 	}, nil
 }
 
@@ -146,7 +155,14 @@ func (p *ProcessWorkOSOrganizationEvents) handlePage(ctx context.Context, logger
 	return lastEventID, nil
 }
 
-// handleEvent will be implemented in a subsequent PR
+// handleEvent will be implemented in a subsequent PR.
+//
+// Note: the cursor advances as soon as this returns nil, even though the
+// dispatched handler is currently a no-op. If the workflow runs before the
+// real handlers land, all in-flight WorkOS events will be consumed and the
+// cursor will move past them — real handlers will only see events going
+// forward. That is the intended design (sync handles forward, not history;
+// historical state is reconciled by the future backfill workflow).
 func (p *ProcessWorkOSOrganizationEvents) handleEvent(ctx context.Context, logger *slog.Logger, workosOrgID string, event events.Event) (string, error) {
 	dbtx, err := p.db.Begin(ctx)
 	if err != nil {
@@ -172,6 +188,9 @@ func (p *ProcessWorkOSOrganizationEvents) handleEvent(ctx context.Context, logge
 	return event.ID, nil
 }
 
+// handleOrganizationEvent applies an organization.* WorkOS event to local
+// state. The implementation lands in a follow-up PR — see [handleEvent] for
+// the consequence of leaving this as a no-op while the workflow is live.
 func handleOrganizationEvent(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, event events.Event) error {
 	// TODO: implement this method
 	return nil

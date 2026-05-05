@@ -49,7 +49,11 @@ func ExecuteProcessWorkOSOrganizationEventsWorkflowDebounced(ctx context.Context
 			WorkflowIDReusePolicy:    enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 			WorkflowIDConflictPolicy: enums.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
 			WorkflowRunTimeout:       15 * time.Minute,
-			StartDelay:               10 * time.Second,
+			// StartDelay is the debounce coalescing window: concurrent
+			// SignalWithStartWorkflow calls within this window land on the same
+			// pending execution rather than spawning serial runs. Tune this to
+			// trade webhook latency against batching efficiency.
+			StartDelay: 10 * time.Second,
 		},
 		ProcessWorkOSOrganizationEventsWorkflowDebounced,
 		params,

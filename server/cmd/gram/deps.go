@@ -496,6 +496,10 @@ func newWorkOSEventsClient(c *cli.Context, guardianPolicy *guardian.Policy) (*ev
 		if c.String("environment") != "local" {
 			return nil, errors.New("WorkOS API key not provided")
 		}
+		// Local dev without a configured key: return nil so the activity can
+		// surface a clear "not configured" error rather than calling WorkOS
+		// with an empty key and getting an opaque API failure.
+		return nil, nil
 	}
 
 	return &events.Client{

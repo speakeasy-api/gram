@@ -109,6 +109,14 @@ func NewActivities(
 ) *Activities {
 	usageTrackingStrategy := chat.NewDefaultUsageTrackingStrategy(db, logger, openrouterProvisioner, billingTracker, nil)
 
+	// Only construct the WorkOS sync activity when the events client is
+	// configured. Local dev without a key passes nil; the wrapper method below
+	// returns a clear error if the activity is invoked unconfigured.
+	var processWorkOSOrgEvents *activities.ProcessWorkOSOrganizationEvents
+	if workosEventsClient != nil {
+		processWorkOSOrgEvents = activities.NewProcessWorkOSOrganizationEvents(logger, db, workosEventsClient)
+	}
+
 	return &Activities{
 		collectPlatformUsageMetrics:     activities.NewCollectPlatformUsageMetrics(logger, db),
 		customDomainIngress:             activities.NewCustomDomainIngress(logger, db, k8sClient),
@@ -145,11 +153,14 @@ func NewActivities(
 		reapInactiveAssistantRuntimes:   activities.NewReapInactiveAssistantRuntimes(logger, assistantsCore),
 		signalAssistantCoordinator:      activities.NewSignalAssistantCoordinator(&AssistantWorkflowSignaler{TemporalEnv: temporalEnv}),
 		signalAssistantThread:           activities.NewSignalAssistantThread(&AssistantWorkflowSignaler{TemporalEnv: temporalEnv}),
-		processWorkOSOrganizationEvents: activities.NewProcessWorkOSOrganizationEvents(logger, db, workosEventsClient),
+		processWorkOSOrganizationEvents: processWorkOSOrgEvents,
 	}
 }
 
 func (a *Activities) ProcessWorkOSOrganizationEvents(ctx context.Context, params activities.ProcessWorkOSOrganizationEventsParams) (*activities.ProcessWorkOSOrganizationEventsResult, error) {
+	if a.processWorkOSOrganizationEvents == nil {
+		return nil, fmt.Errorf("WorkOS events client is not configured")
+	}
 	return a.processWorkOSOrganizationEvents.Do(ctx, params)
 }
 
