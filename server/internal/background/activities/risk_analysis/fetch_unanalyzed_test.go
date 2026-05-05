@@ -85,6 +85,28 @@ func TestFetchUnanalyzed_DisabledPolicyReturnsEmpty(t *testing.T) {
 	require.Empty(t, result.MessageIDs)
 }
 
+func TestFetchUnanalyzed_DeletedPolicyReturnsEmpty(t *testing.T) {
+	t.Parallel()
+	conn := cloneDB(t)
+	td := seedTestData(t, conn, true)
+	seedMessages(t, conn, td, 1)
+
+	err := riskrepo.New(conn).DeleteRiskPolicy(t.Context(), riskrepo.DeleteRiskPolicyParams{
+		ID:        td.policyID,
+		ProjectID: td.projectID,
+	})
+	require.NoError(t, err)
+
+	activity := risk_analysis.NewFetchUnanalyzed(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn)
+	result, err := activity.Do(t.Context(), risk_analysis.FetchUnanalyzedArgs{
+		ProjectID:    td.projectID,
+		RiskPolicyID: td.policyID,
+		BatchLimit:   100,
+	})
+	require.NoError(t, err)
+	require.Empty(t, result.MessageIDs)
+}
+
 func TestFetchUnanalyzed_RespectsBatchLimit(t *testing.T) {
 	t.Parallel()
 	conn := cloneDB(t)

@@ -2,10 +2,12 @@ package risk_analysis
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -62,6 +64,19 @@ func (a *FetchUnanalyzed) Do(ctx context.Context, args FetchUnanalyzedArgs) (_ *
 		ID:        args.RiskPolicyID,
 		ProjectID: args.ProjectID,
 	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		// Policy was deleted after its drain workflow was signaled. There is
+		// no work left for this workflow, so let it complete instead of
+		// retrying a deterministic miss.
+		span.SetAttributes(attribute.Bool("risk.policy_deleted", true))
+		return &FetchUnanalyzedResult{
+			MessageIDs:       nil,
+			OrganizationID:   "",
+			PolicyVersion:    0,
+			Sources:          nil,
+			PresidioEntities: nil,
+		}, nil
+	}
 	if err != nil {
 		return nil, fmt.Errorf("get risk policy: %w", err)
 	}
