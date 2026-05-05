@@ -7,6 +7,7 @@ import { ShieldAlert } from "lucide-react";
 import { useCallback, useMemo } from "react";
 import { Navigate, Outlet, useLocation } from "react-router";
 import { AppSidebar } from "./app-sidebar.tsx";
+import { BrandGradientLine } from "./brand-gradient-line.tsx";
 import { InsightsProvider } from "./insights-sidebar.tsx";
 import { OrgSidebar } from "./org-sidebar.tsx";
 import { TopHeader } from "./top-header.tsx";
@@ -99,6 +100,7 @@ const AppLayoutContent = ({
     <div className="flex h-screen w-full flex-col">
       {isImpersonating && <ImpersonationBanner />}
       <TopHeader />
+      <BrandGradientLine />
       <div className="flex w-full flex-1 overflow-hidden pt-2">
         <AppSidebar variant="inset" />
         <SidebarInset>
@@ -219,6 +221,7 @@ export const OrgLayout = () => {
         <div className="flex h-screen w-full flex-col">
           {isImpersonating && <ImpersonationBanner />}
           <TopHeader />
+          <BrandGradientLine />
           <div className="flex w-full flex-1 overflow-hidden pt-2">
             <OrgSidebar variant="inset" />
             <SidebarInset>
