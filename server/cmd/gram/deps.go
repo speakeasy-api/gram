@@ -505,7 +505,7 @@ func newWorkOSEventsClient(c *cli.Context, guardianPolicy *guardian.Policy) (*ev
 	return &events.Client{
 		APIKey:     apiKey,
 		HTTPClient: guardianPolicy.PooledClient(),
-		Endpoint:   "",
+		Endpoint:   workosClientOpts(c).Endpoint,
 	}, nil
 }
 
