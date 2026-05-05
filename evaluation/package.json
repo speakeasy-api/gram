@@ -7,7 +7,10 @@
   "scripts": {
     "test": "node src/run-tests.ts",
     "dev": "node --watch src/run-tests.ts",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "calibrate-dedup": "node --experimental-strip-types --env-file-if-exists=.env src/dedup-calibration/calibrate.ts",
+    "bench-contradiction": "node --experimental-strip-types --env-file-if-exists=.env src/contradiction-bench/bench.ts",
+    "bench-recall-embed": "node --experimental-strip-types --env-file-if-exists=.env src/recall-embed-bench/bench.ts"
   },
   "keywords": [],
   "author": "",
