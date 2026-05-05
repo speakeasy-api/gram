@@ -152,7 +152,10 @@ function SecurityOverviewContent() {
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
   });
 
-  const policies = policiesData?.policies ?? [];
+  const policies = useMemo(
+    () => policiesData?.policies ?? [],
+    [policiesData?.policies],
+  );
   const policyMessageById = useMemo(() => {
     const m = new Map<string, string>();
     for (const p of policies) {
