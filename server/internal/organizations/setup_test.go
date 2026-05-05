@@ -47,7 +47,7 @@ var (
 )
 
 func TestMain(m *testing.M) {
-	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Redis: true, ClickHouse: true})
+	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Redis: true})
 	if err != nil {
 		log.Fatalf("Failed to launch test infrastructure: %v", err)
 	}
@@ -103,10 +103,7 @@ func newTestOrganizationsService(t *testing.T) (context.Context, *testInstance) 
 
 	orgs := newMockOrganizationProvider(t)
 
-	chConn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-
-	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, thirdpartyworkos.NewStubClient(), cache.NoopCache)
+	authzEngine := authz.NewEngine(logger, conn, authztest.RBACAlwaysEnabled, thirdpartyworkos.NewStubClient(), cache.NoopCache)
 	svc := organizations.NewService(logger, tracerProvider, conn, sessionManager, orgs, stubOrgFeatures{}, authzEngine)
 
 	return ctx, &testInstance{
@@ -152,10 +149,7 @@ func newTestOrganizationsServiceRBAC(t *testing.T) (context.Context, *testInstan
 
 	orgs := newMockOrganizationProvider(t)
 
-	chConn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-
-	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, thirdpartyworkos.NewStubClient(), cache.NoopCache)
+	authzEngine := authz.NewEngine(logger, conn, authztest.RBACAlwaysEnabled, thirdpartyworkos.NewStubClient(), cache.NoopCache)
 	svc := organizations.NewService(logger, tracerProvider, conn, sessionManager, orgs, stubOrgFeaturesEnabled{}, authzEngine)
 
 	return ctx, &testInstance{

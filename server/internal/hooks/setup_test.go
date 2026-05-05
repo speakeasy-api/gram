@@ -27,7 +27,7 @@ var (
 )
 
 func TestMain(m *testing.M) {
-	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Redis: true, ClickHouse: true})
+	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Redis: true})
 	if err != nil {
 		log.Fatalf("Failed to launch test infrastructure: %v", err)
 		os.Exit(1)
@@ -77,10 +77,7 @@ func newTestHooksService(t *testing.T) (context.Context, *testInstance) {
 	cacheAdapter := cache.NewRedisCacheAdapter(redisClient)
 
 	// Pass nil for telemetry logger, temporalEnv, productFeatures, and chatTitleGenerator in tests
-	chConn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-
-	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
+	authzEngine := authz.NewEngine(logger, conn, authztest.RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
 	chatWriter, chatWriterShutdown := chat.NewChatMessageWriter(logger, conn, nil)
 	t.Cleanup(func() { _ = chatWriterShutdown(t.Context()) })
 	shadowMCPClient := shadowmcp.NewClient(logger, conn, cacheAdapter)

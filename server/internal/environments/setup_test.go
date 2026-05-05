@@ -26,7 +26,7 @@ var (
 )
 
 func TestMain(m *testing.M) {
-	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Redis: true, ClickHouse: true})
+	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Redis: true})
 	if err != nil {
 		log.Fatalf("Failed to launch test infrastructure: %v", err)
 		os.Exit(1)
@@ -73,12 +73,9 @@ func newTestEnvironmentService(t *testing.T) (context.Context, *testInstance) {
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
 
 	enc := testenv.NewEncryptionClient(t)
-
-	chConn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
 	auditLogger := audit.NewLogger()
 
-	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
+	authzEngine := authz.NewEngine(logger, conn, authztest.RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
 	svc := environments.NewService(logger, tracerProvider, conn, sessionManager, enc, authzEngine, auditLogger)
 
 	return ctx, &testInstance{

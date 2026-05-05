@@ -3,6 +3,7 @@ package testinfra
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"runtime"
 	"sync"
@@ -43,7 +44,7 @@ func NewTestPostgres(ctx context.Context) (*postgres.PostgresContainer, Postgres
 		postgres.BasicWaitStrategies(),
 		testcontainers.WithTmpfs(map[string]string{"/var/lib/postgresql/data": "rw"}),
 		testcontainers.WithEnv(map[string]string{"PGDATA": "/var/lib/postgresql/data"}),
-		testcontainers.WithLogger(NewTestcontainersLogger()),
+		testcontainers.WithLogger(NewTestcontainersLogger(os.Getenv("LOG_LEVEL"))),
 	)
 	if err != nil {
 		return nil, nil, fmt.Errorf("start postgres container: %w", err)

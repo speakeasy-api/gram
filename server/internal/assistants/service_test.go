@@ -24,7 +24,7 @@ import (
 var assistantsInfra *testenv.Environment
 
 func TestMain(m *testing.M) {
-	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, ClickHouse: true})
+	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true})
 	if err != nil {
 		log.Fatalf("launch assistants test infrastructure: %v", err)
 	}

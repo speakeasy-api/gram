@@ -29,7 +29,7 @@ var (
 )
 
 func TestMain(m *testing.M) {
-	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Redis: true, ClickHouse: true})
+	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Redis: true})
 	if err != nil {
 		log.Fatalf("Failed to launch test infrastructure: %v", err)
 		os.Exit(1)
@@ -81,10 +81,6 @@ func newTestAssetsService(t *testing.T) (context.Context, *testInstance) {
 	storage := assetstest.NewTestBlobStore(t)
 
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
-
-	chConn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-
 	auditLogger := audit.NewLogger()
 
 	svc := assets.NewService(logger,
@@ -97,7 +93,6 @@ func newTestAssetsService(t *testing.T) (context.Context, *testInstance) {
 		"test-jwt-secret",
 		authz.NewEngine(logger,
 			conn,
-			chConn,
 			authztest.RBACAlwaysEnabled,
 			workos.NewStubClient(),
 			cache.NoopCache,

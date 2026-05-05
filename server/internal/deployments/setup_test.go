@@ -35,7 +35,7 @@ var (
 )
 
 func TestMain(m *testing.M) {
-	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Redis: true, Temporal: true, ClickHouse: true})
+	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Redis: true, Temporal: true})
 	if err != nil {
 		log.Fatalf("Failed to launch test infrastructure: %v", err)
 		os.Exit(1)
@@ -102,11 +102,7 @@ func newTestDeploymentService(t *testing.T, assetStorage assets.BlobStore) (cont
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
 
 	posthog := posthog.New(ctx, logger, "test-posthog-key", "test-posthog-host", "")
-
-	chConn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-
-	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
+	authzEngine := authz.NewEngine(logger, conn, authztest.RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
 	svc := deployments.NewService(logger, tracerProvider, conn, temporalEnv, sessionManager, assetStorage, posthog, testenv.DefaultSiteURL(t), mcpRegistryClient, authzEngine, auditLogger)
 	assetsSvc := assets.NewService(logger, tracerProvider, guardianPolicy, conn, sessionManager, chatSessionsManager, assetStorage, "test-jwt-secret", authzEngine, auditLogger)
 	packagesSvc := packages.NewService(logger, tracerProvider, conn, sessionManager, authzEngine)

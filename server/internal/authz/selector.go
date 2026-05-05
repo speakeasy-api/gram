@@ -133,18 +133,16 @@ func NewSelector(scope Scope, resourceID string) Selector {
 // NewGrant creates a Grant with selector derived from scope and resource ID.
 func NewGrant(scope Scope, resourceID string) Grant {
 	return Grant{
-		PrincipalUrn: "",
-		Scope:        scope,
-		Selector:     NewSelector(scope, resourceID),
+		Scope:    scope,
+		Selector: NewSelector(scope, resourceID),
 	}
 }
 
 // NewGrantWithSelector creates a Grant with an explicit selector.
 func NewGrantWithSelector(scope Scope, selector Selector) Grant {
 	return Grant{
-		PrincipalUrn: "",
-		Scope:        scope,
-		Selector:     selector,
+		Scope:    scope,
+		Selector: selector,
 	}
 }
 

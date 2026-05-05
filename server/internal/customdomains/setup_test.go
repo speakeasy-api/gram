@@ -82,9 +82,7 @@ func newTestCustomDomainsService(t *testing.T) (context.Context, *serviceTestIns
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
 
 	temporal := &stubTemporalClient{}
-	chConn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
+	authzEngine := authz.NewEngine(logger, conn, authztest.RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
 	auditLogger := audit.NewLogger()
 	svc := customdomains.NewService(logger, tracerProvider, conn, sessionManager, temporal, authzEngine, auditLogger)
 

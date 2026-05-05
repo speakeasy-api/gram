@@ -40,7 +40,7 @@ const unresolvableTestHost = "broken.test"
 var infra *testenv.Environment
 
 func TestMain(m *testing.M) {
-	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Redis: true, ClickHouse: true})
+	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Redis: true})
 	if err != nil {
 		log.Fatalf("launch test infrastructure: %v", err)
 		os.Exit(1)
@@ -101,13 +101,9 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
 
 	enc := testenv.NewEncryptionClient(t)
-
-	chConn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-
 	auditLogger := audit.NewLogger()
 
-	svc := remotemcp.NewService(logger, tracerProvider, conn, sessionManager, enc, authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache), servicePolicy, auditLogger)
+	svc := remotemcp.NewService(logger, tracerProvider, conn, sessionManager, enc, authz.NewEngine(logger, conn, authztest.RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache), servicePolicy, auditLogger)
 
 	return ctx, &testInstance{
 		service:        svc,

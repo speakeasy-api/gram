@@ -21,9 +21,6 @@ func TestHandleGetServer_ContentNegotiation(t *testing.T) {
 	t.Parallel()
 	ctx, testInstance := newTestMCPService(t)
 
-	chConn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-
 	// Create metadata service using the same dependencies
 	metadataService := mcpmetadata.NewService(
 		testInstance.logger,
@@ -33,7 +30,7 @@ func TestHandleGetServer_ContentNegotiation(t *testing.T) {
 		testInstance.serverURL,
 		testInstance.siteURL,
 		testInstance.cacheAdapter,
-		authz.NewEngine(testInstance.logger, testInstance.conn, chConn, nil, workos.NewStubClient(), cache.NoopCache),
+		authz.NewEngine(testInstance.logger, testInstance.conn, nil, workos.NewStubClient(), cache.NoopCache),
 		testInstance.audit,
 	)
 

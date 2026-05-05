@@ -35,7 +35,7 @@ var (
 )
 
 func TestMain(m *testing.M) {
-	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Redis: true, ClickHouse: true})
+	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Redis: true})
 	if err != nil {
 		log.Fatalf("Failed to launch test infrastructure: %v", err)
 		os.Exit(1)
@@ -311,10 +311,7 @@ func newTestAuthService(t *testing.T, userInfo *MockUserInfo) (context.Context, 
 		Environment:            "test",
 	}
 
-	chConn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-
-	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
+	authzEngine := authz.NewEngine(logger, conn, authztest.RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
 	svc := auth.NewService(logger, tracerProvider, conn, sessionManager, authConfigs, authzEngine)
 
 	return ctx, newTestAuthServiceResult(t, svc, conn, sessionManager, mockServer, authConfigs)
@@ -354,10 +351,7 @@ func newTestAuthServiceWithAuthz(t *testing.T, userInfo *MockUserInfo) (context.
 		Environment:            "test",
 	}
 
-	chConn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-
-	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
+	authzEngine := authz.NewEngine(logger, conn, authztest.RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
 	svc := auth.NewService(logger, tracerProvider, conn, sessionManager, authConfigs, authzEngine)
 
 	return ctx, newTestAuthServiceResult(t, svc, conn, sessionManager, mockServer, authConfigs)

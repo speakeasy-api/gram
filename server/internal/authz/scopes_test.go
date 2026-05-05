@@ -35,95 +35,79 @@ func TestGrantsHasAccess_orgAdminSatisfiesOrgRead(t *testing.T) {
 	t.Parallel()
 
 	g := []Grant{NewGrant(ScopeOrgAdmin, "org_123")}
-	grant, _ := findMatchingGrant(g, Check{Scope: ScopeOrgRead, ResourceID: "org_123"}.expand())
-	require.NotNil(t, grant)
+	require.True(t, grantsSatisfy(g, Check{Scope: ScopeOrgRead, ResourceID: "org_123"}.expand()))
 }
 
 func TestGrantsHasAccess_orgReadDoesNotSatisfyOrgAdmin(t *testing.T) {
 	t.Parallel()
 
 	g := []Grant{NewGrant(ScopeOrgRead, "org_123")}
-	grant, _ := findMatchingGrant(g, Check{Scope: ScopeOrgAdmin, ResourceID: "org_123"}.expand())
-	require.Nil(t, grant)
+	require.False(t, grantsSatisfy(g, Check{Scope: ScopeOrgAdmin, ResourceID: "org_123"}.expand()))
 }
 
 func TestGrantsHasAccess_buildWriteSatisfiesBuildRead(t *testing.T) {
 	t.Parallel()
 
 	g := []Grant{NewGrant(ScopeProjectWrite, "proj_123")}
-	grant, _ := findMatchingGrant(g, Check{Scope: ScopeProjectRead, ResourceID: "proj_123"}.expand())
-	require.NotNil(t, grant)
+	require.True(t, grantsSatisfy(g, Check{Scope: ScopeProjectRead, ResourceID: "proj_123"}.expand()))
 }
 
 func TestGrantsHasAccess_buildReadDoesNotSatisfyBuildWrite(t *testing.T) {
 	t.Parallel()
 
 	g := []Grant{NewGrant(ScopeProjectRead, "proj_123")}
-	grant, _ := findMatchingGrant(g, Check{Scope: ScopeProjectWrite, ResourceID: "proj_123"}.expand())
-	require.Nil(t, grant)
+	require.False(t, grantsSatisfy(g, Check{Scope: ScopeProjectWrite, ResourceID: "proj_123"}.expand()))
 }
 
 func TestGrantsHasAccess_orgAdminDoesNotSatisfyBuildRead(t *testing.T) {
 	t.Parallel()
 
 	g := []Grant{NewGrant(ScopeOrgAdmin, "org_123")}
-	grant, _ := findMatchingGrant(g, Check{Scope: ScopeProjectRead, ResourceID: "org_123"}.expand())
-	require.Nil(t, grant)
+	require.False(t, grantsSatisfy(g, Check{Scope: ScopeProjectRead, ResourceID: "org_123"}.expand()))
 }
 
 func TestGrantsHasAccess_mcpConnectDoesNotSatisfyMCPRead(t *testing.T) {
 	t.Parallel()
 
 	g := []Grant{NewGrant(ScopeMCPConnect, "tool_a")}
-	grant, _ := findMatchingGrant(g, Check{Scope: ScopeMCPRead, ResourceID: "tool_a"}.expand())
-	require.Nil(t, grant)
+	require.False(t, grantsSatisfy(g, Check{Scope: ScopeMCPRead, ResourceID: "tool_a"}.expand()))
 }
 
 func TestGrantsHasAccess_mcpReadSatisfiesMCPConnect(t *testing.T) {
 	t.Parallel()
 
 	g := []Grant{NewGrant(ScopeMCPRead, "tool_a")}
-	grant, _ := findMatchingGrant(g, Check{Scope: ScopeMCPConnect, ResourceID: "tool_a"}.expand())
-	require.NotNil(t, grant)
+	require.True(t, grantsSatisfy(g, Check{Scope: ScopeMCPConnect, ResourceID: "tool_a"}.expand()))
 }
 
 func TestGrantsHasAccess_mcpWriteSatisfiesMCPConnect(t *testing.T) {
 	t.Parallel()
 
 	g := []Grant{NewGrant(ScopeMCPWrite, "tool_a")}
-	grant, _ := findMatchingGrant(g, Check{Scope: ScopeMCPConnect, ResourceID: "tool_a"}.expand())
-	require.NotNil(t, grant)
+	require.True(t, grantsSatisfy(g, Check{Scope: ScopeMCPConnect, ResourceID: "tool_a"}.expand()))
 }
 
 func TestGrantsHasAccess_mcpWriteSatisfiesMCPRead(t *testing.T) {
 	t.Parallel()
 
 	g := []Grant{NewGrant(ScopeMCPWrite, "tool_a")}
-	grant, _ := findMatchingGrant(g, Check{Scope: ScopeMCPRead, ResourceID: "tool_a"}.expand())
-	require.NotNil(t, grant)
+	require.True(t, grantsSatisfy(g, Check{Scope: ScopeMCPRead, ResourceID: "tool_a"}.expand()))
 }
 
 func TestGrantsHasAccess_rootWildcardSatisfiesAnyScope(t *testing.T) {
 	t.Parallel()
 
 	g := []Grant{NewGrant(ScopeRoot, WildcardResource)}
-
-	grant, _ := findMatchingGrant(g, Check{Scope: ScopeProjectRead, ResourceID: "proj_123"}.expand())
-	require.NotNil(t, grant)
-
-	grant, _ = findMatchingGrant(g, Check{Scope: ScopeOrgAdmin, ResourceID: "org_456"}.expand())
-	require.NotNil(t, grant)
-
-	grant, _ = findMatchingGrant(g, Check{Scope: ScopeMCPConnect, ResourceID: "tool_a"}.expand())
-	require.NotNil(t, grant)
+	require.True(t, grantsSatisfy(g, Check{Scope: ScopeProjectRead, ResourceID: "proj_123"}.expand()))
+	require.True(t, grantsSatisfy(g, Check{Scope: ScopeOrgAdmin, ResourceID: "org_456"}.expand()))
+	require.True(t, grantsSatisfy(g, Check{Scope: ScopeMCPConnect, ResourceID: "tool_a"}.expand()))
 }
 
 func TestGrantsHasAccess_wrongResourceNotSatisfied(t *testing.T) {
 	t.Parallel()
 
 	g := []Grant{NewGrant(ScopeOrgAdmin, "org_123")}
-	grant, _ := findMatchingGrant(g, Check{Scope: ScopeOrgRead, ResourceID: "org_999"}.expand())
-	require.Nil(t, grant)
+	require.False(t, grantsSatisfy(g, Check{Scope: ScopeOrgRead, ResourceID: "org_999"}.expand()))
 }
 
 func TestScopeExpansions_isDAG(t *testing.T) {

@@ -34,9 +34,8 @@ func LoadGrants(ctx context.Context, db accessrepo.DBTX, organizationID string, 
 			return nil, fmt.Errorf("unmarshal grant selector: %w", err)
 		}
 		grantRows = append(grantRows, Grant{
-			PrincipalUrn: row.PrincipalUrn.String(),
-			Scope:        Scope(row.Scope),
-			Selector:     selectors,
+			Scope:    Scope(row.Scope),
+			Selector: selectors,
 		})
 	}
 
