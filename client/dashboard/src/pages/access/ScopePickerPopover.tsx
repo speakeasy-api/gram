@@ -30,7 +30,7 @@ import {
   Wrench,
   X,
 } from "lucide-react";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueries } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type {
@@ -249,32 +249,38 @@ export function ScopePickerPopover({
   const resourceList = activePanel === "servers" && (
     <>
       <div className="bg-border my-1 h-px" />
-      {resourceType === "project"
-        ? projectList.map((resource) => (
-            <ResourceCheckbox
-              key={resource.id}
-              id={resource.id}
-              name={resource.name}
-              checked={isResourceSelected(resource.id)}
-              onToggle={toggleResource}
-            />
-          ))
-        : mcpServers.map((group) => (
-            <div key={group.projectId}>
-              <div className="text-muted-foreground px-3 py-1.5 text-xs font-medium">
-                {group.projectName}
+      <div className="max-h-[250px] overflow-y-auto">
+        {resourceType === "project"
+          ? projectList.map((resource) => (
+              <ResourceCheckbox
+                key={resource.id}
+                id={resource.id}
+                name={resource.name}
+                checked={isResourceSelected(resource.id)}
+                onToggle={toggleResource}
+              />
+            ))
+          : mcpServers.map((group) => (
+              <div key={group.projectId}>
+                {group.servers.map((server) => (
+                  <ResourceCheckbox
+                    key={server.id}
+                    id={server.id}
+                    name={
+                      <>
+                        <span className="text-muted-foreground/60">
+                          {group.projectName}/
+                        </span>
+                        {server.name}
+                      </>
+                    }
+                    checked={isResourceSelected(server.id)}
+                    onToggle={toggleResource}
+                  />
+                ))}
               </div>
-              {group.servers.map((server) => (
-                <ResourceCheckbox
-                  key={server.id}
-                  id={server.id}
-                  name={server.name}
-                  checked={isResourceSelected(server.id)}
-                  onToggle={toggleResource}
-                />
-              ))}
-            </div>
-          ))}
+            ))}
+      </div>
     </>
   );
 
@@ -419,10 +425,10 @@ export function ScopePickerPopover({
           className={cn(
             "p-1.5 transition-[width] duration-500",
             activePanel === "tools"
-              ? "w-[620px]"
+              ? "w-[680px]"
               : activePanel === "collection"
                 ? "w-[360px]"
-                : "max-h-[300px] w-52 overflow-y-auto",
+                : "w-64",
           )}
           style={{
             transitionTimingFunction: "cubic-bezier(0.32, 0.72, 0, 1)",
@@ -508,14 +514,49 @@ function ToolSelectionPanel({
   const allServers = useMemo(
     () =>
       mcpServers
-        .flatMap((g) => g.servers)
-        .sort((a, b) => a.name.localeCompare(b.name)),
+        .flatMap((g) =>
+          g.servers.map((s) => ({ ...s, projectName: g.projectName })),
+        )
+        .sort((a, b) =>
+          `${a.projectName}/${a.name}`.localeCompare(
+            `${b.projectName}/${b.name}`,
+          ),
+        ),
     [mcpServers],
   );
   const [selectedServerId, setSelectedServerId] = useState<string | null>(
     allServers[0]?.id ?? null,
   );
   const [search, setSearch] = useState("");
+  const [serverSearch, setServerSearch] = useState("");
+  const [leftWidth, setLeftWidth] = useState(260);
+  const dragging = useRef(false);
+
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      if (!dragging.current) return;
+      const container = serverScrollRef.current?.parentElement?.parentElement;
+      if (!container) return;
+      const rect = container.getBoundingClientRect();
+      const next = Math.max(
+        140,
+        Math.min(e.clientX - rect.left, rect.width - 180),
+      );
+      setLeftWidth(next);
+    };
+    const onUp = () => {
+      dragging.current = false;
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+  }, []);
+
   const selectedServer = allServers.find((s) => s.id === selectedServerId);
   const tools = useMemo(
     () => selectedServer?.tools ?? [],
@@ -546,8 +587,20 @@ function ToolSelectionPanel({
     }
   }, []);
 
+  const filteredServers = useMemo(
+    () =>
+      serverSearch
+        ? allServers.filter((s) =>
+            `${s.projectName}/${s.name}`
+              .toLowerCase()
+              .includes(serverSearch.toLowerCase()),
+          )
+        : allServers,
+    [allServers, serverSearch],
+  );
+
   const serverVirtualizer = useVirtualizer({
-    count: allServers.length,
+    count: filteredServers.length,
     getScrollElement: () => serverScrollRef.current,
     estimateSize: () => 40,
     overscan: 5,
@@ -563,10 +616,28 @@ function ToolSelectionPanel({
   return (
     <div className={cn("flex min-h-0 flex-1", className)}>
       {/* Left column — server list */}
-      <div className="border-border flex min-h-0 w-[200px] shrink-0 flex-col border-r">
-        <div className="bg-muted/50 text-muted-foreground border-border flex h-10 shrink-0 items-center gap-1.5 border-b px-3 text-[10px] font-medium tracking-wider uppercase">
-          <Globe className="h-3 w-3" />
-          Server List
+      <div
+        className="border-border flex min-h-0 shrink-0 flex-col border-r"
+        style={{ width: leftWidth }}
+      >
+        <div className="border-border flex h-10 shrink-0 items-center gap-2 border-b px-3">
+          <Globe className="text-muted-foreground h-3 w-3 shrink-0" />
+          <input
+            type="text"
+            placeholder="Search servers…"
+            value={serverSearch}
+            onChange={(e) => setServerSearch(e.target.value)}
+            className="placeholder:text-muted-foreground flex-1 bg-transparent text-sm outline-none"
+          />
+          {serverSearch && (
+            <button
+              type="button"
+              onClick={() => setServerSearch("")}
+              className="text-muted-foreground hover:text-foreground shrink-0"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          )}
         </div>
         <div
           ref={serverScrollRef}
@@ -580,7 +651,7 @@ function ToolSelectionPanel({
             }}
           >
             {serverVirtualizer.getVirtualItems().map((virtualItem) => {
-              const server = allServers[virtualItem.index];
+              const server = filteredServers[virtualItem.index];
               const isActive = selectedServerId === server.id;
               return (
                 <button
@@ -603,7 +674,12 @@ function ToolSelectionPanel({
                     isActive && "bg-muted font-medium",
                   )}
                 >
-                  <span className="truncate">{server.name}</span>
+                  <span className="truncate">
+                    <span className="text-muted-foreground/60">
+                      {server.projectName}/
+                    </span>
+                    {server.name}
+                  </span>
                   {isActive && (
                     <ChevronRight className="text-muted-foreground h-3 w-3 shrink-0" />
                   )}
@@ -613,6 +689,17 @@ function ToolSelectionPanel({
           </div>
         </div>
       </div>
+
+      {/* Resize handle */}
+      <div
+        onMouseDown={(e) => {
+          e.preventDefault();
+          dragging.current = true;
+          document.body.style.cursor = "col-resize";
+          document.body.style.userSelect = "none";
+        }}
+        className="hover:bg-border/80 flex w-1 shrink-0 cursor-col-resize items-center justify-center transition-colors"
+      />
 
       {/* Right column — tools for selected server */}
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -1046,7 +1133,7 @@ function ResourceCheckbox({
   compact,
 }: {
   id: string;
-  name: string;
+  name: React.ReactNode;
   checked: boolean;
   onToggle: (id: string) => void;
   compact?: boolean;
