@@ -126,6 +126,9 @@ Activate a skill when your task falls within its scope.
 | `jaeger`                      | Testing backend endpoints locally and inspecting traces via Jaeger API     |
 | `datadog`                     | Investigating errors, performance, incidents, or telemetry via Datadog     |
 | `datadog-insights`            | Running the full Gram production health digest and posting it to Slack     |
+| `madprocs`                    | Controlling local dev processes via mprocs (start, stop, restart, logs)    |
+| `pr`                          | Creating a Pull Request for current changes                                |
+| `spec`                        | Interviewing user in-depth to produce a detailed spec before building      |
 
 # Plan Mode
 
