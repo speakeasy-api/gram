@@ -91,6 +91,7 @@ func (s *Service) HandlePolarWebhook(w http.ResponseWriter, r *http.Request) err
 		"benefit_grant.cycled",
 		"benefit_grant.updated",
 		"benefit_grant.revoked",
+		"order.paid",
 	}
 	ctx := r.Context()
 
@@ -116,6 +117,14 @@ func (s *Service) HandlePolarWebhook(w http.ResponseWriter, r *http.Request) err
 
 	if webhookPayload.Data.Customer == nil || webhookPayload.Data.Customer.ExternalID == "" {
 		logger.WarnContext(ctx, "skipping webhook: missing customer external id in webhook payload")
+		return nil
+	}
+
+	if webhookPayload.Type == "order.paid" {
+		if webhookPayload.Data.Product != nil && s.billingRepo.IsTopUpProductID(webhookPayload.Data.Product.ID) {
+			return s.handleTopUpOrder(ctx, logger, webhookPayload)
+		}
+		logger.InfoContext(ctx, "skipping non-top-up order.paid; covered by subscription.* events")
 		return nil
 	}
 
@@ -161,15 +170,44 @@ func (s *Service) HandlePolarWebhook(w http.ResponseWriter, r *http.Request) err
 		return oops.E(oops.CodeUnexpected, err, "failed to get period usage").Log(ctx, logger)
 	}
 
+	productName, productType := "", ""
+	if webhookPayload.Data.Product != nil {
+		productName = webhookPayload.Data.Product.Name
+		productType = webhookPayload.Data.Product.Type
+	}
 	if err = s.posthogClient.CaptureEvent(ctx, "gram_subscription_changed", webhookPayload.Data.Customer.ExternalID, map[string]any{
 		"org_id":       webhookPayload.Data.Customer.ExternalID,
 		"org_name":     webhookPayload.Data.Customer.Name,
 		"org_slug":     webhookPayload.Data.Customer.ExternalID,
 		"is_gram":      true,
-		"product":      webhookPayload.Data.Product.Name,
-		"product_type": webhookPayload.Data.Product.Type,
+		"product":      productName,
+		"product_type": productType,
 		"event":        webhookPayload.Type,
 		"email":        webhookPayload.Data.Customer.Email,
+	}); err != nil {
+		logger.ErrorContext(ctx, "failed to capture posthog event", attr.SlogError(err))
+	}
+
+	return nil
+}
+
+func (s *Service) handleTopUpOrder(ctx context.Context, logger *slog.Logger, webhookPayload *billing.PolarWebhookPayload) error {
+	orgID := webhookPayload.Data.Customer.ExternalID
+
+	if err := s.billingRepo.InvalidateBillingCustomerCaches(ctx, orgID); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to invalidate customer tier cache").Log(ctx, logger)
+	}
+	if _, err := s.billingRepo.GetPeriodUsage(ctx, orgID); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to get period usage").Log(ctx, logger)
+	}
+
+	if err := s.posthogClient.CaptureEvent(ctx, "gram_topup_purchased", orgID, map[string]any{
+		"org_id":     orgID,
+		"org_name":   webhookPayload.Data.Customer.Name,
+		"org_slug":   orgID,
+		"is_gram":    true,
+		"product_id": webhookPayload.Data.Product.ID,
+		"email":      webhookPayload.Data.Customer.Email,
 	}); err != nil {
 		logger.ErrorContext(ctx, "failed to capture posthog event", attr.SlogError(err))
 	}
@@ -240,6 +278,24 @@ func (s *Service) CreateCheckout(ctx context.Context, payload *gen.CreateCheckou
 	checkoutURL, err := s.billingRepo.CreateCheckout(ctx, authCtx.ActiveOrganizationID, s.serverURL.String(), successURL)
 	if err != nil {
 		return "", oops.E(oops.CodeUnexpected, err, "failed to create checkout").Log(ctx, s.logger)
+	}
+	return checkoutURL, nil
+}
+
+func (s *Service) CreateTopUpCheckout(ctx context.Context, payload *gen.CreateTopUpCheckoutPayload) (res string, err error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
+		return "", oops.C(oops.CodeUnauthorized)
+	}
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return "", err
+	}
+
+	successURL := fmt.Sprintf("%s/%s/billing", s.serverURL.String(), authCtx.OrganizationSlug)
+
+	checkoutURL, err := s.billingRepo.CreateTopUpCheckout(ctx, authCtx.ActiveOrganizationID, s.serverURL.String(), successURL)
+	if err != nil {
+		return "", oops.E(oops.CodeUnexpected, err, "failed to create top-up checkout").Log(ctx, s.logger)
 	}
 	return checkoutURL, nil
 }

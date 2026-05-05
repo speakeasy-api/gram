@@ -22,6 +22,7 @@ import { Button, cn, Stack } from "@speakeasy-api/moonshine";
 import { Info } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { RequireScope } from "@/components/require-scope";
+import { TopUpCTA, UsageProgress } from "@/components/billing/usage-controls";
 
 export default function Billing() {
   return (
@@ -104,6 +105,9 @@ const UsageSection = () => {
         A summary of your organization's usage this period. Please visit the
         billing portal to see complete details or manage your account.
       </Page.Section.Description>
+      <RequireScope scope="org:admin" level="section">
+        <TopUpCTA />
+      </RequireScope>
       <Page.Section.Body>
         <div className="space-y-4">
           {periodUsage ? (
@@ -433,117 +437,5 @@ const UsageTiers = () => {
         </Stack>
       </Page.Section.Body>
     </Page.Section>
-  );
-};
-
-const UsageProgress = ({
-  value,
-  included,
-  overageIncrement,
-  noMax,
-}: {
-  value: number;
-  included: number;
-  overageIncrement: number;
-  noMax?: boolean;
-}) => {
-  if (noMax) {
-    included = Math.max(1, value * 1.5);
-  }
-
-  const anyOverage = value > included;
-  const overageMax = anyOverage
-    ? Math.ceil((value - included + 1) / overageIncrement) * overageIncrement // Compute next increment. +1 because we always want to show the next increment.
-    : 0;
-  const totalMax = included + overageMax;
-
-  // Calculate the proportional width for the included section
-  const includedWidth = (included / totalMax) * 100;
-  const overageWidth = (overageMax / totalMax) * 100;
-
-  const includedProgress = (
-    <div
-      className={cn(
-        "bg-muted relative h-4 overflow-hidden rounded-md dark:bg-neutral-800",
-        anyOverage && "rounded-r-none",
-      )}
-      style={{ width: `${includedWidth}%` }}
-    >
-      <div
-        className="bg-success-default h-full transition-all duration-300"
-        style={{
-          width: `${Math.min((value / included) * 100, 100)}%`,
-        }}
-      />
-    </div>
-  );
-
-  const overageProgress = anyOverage ? (
-    <div
-      className="bg-muted relative h-4 overflow-hidden rounded-r-md dark:bg-neutral-800"
-      style={{ width: `${overageWidth}%` }}
-    >
-      <div
-        className="bg-warning-default h-full transition-all duration-300"
-        style={{
-          width: `${Math.min(((value - included) / overageMax) * 100, 100)}%`,
-        }}
-      />
-    </div>
-  ) : null;
-
-  return (
-    <div className="relative">
-      {/* Progress bars */}
-      <div className="flex w-full">
-        {includedProgress}
-        {overageProgress}
-      </div>
-      {/* Included label underneath, always show */}
-      <div
-        className="text-muted-foreground absolute top-6 text-xs whitespace-nowrap"
-        style={{ right: `${101 - includedWidth}%` }}
-      >
-        {anyOverage
-          ? `Included: ${included.toLocaleString()}`
-          : `${value.toLocaleString()} / ${
-              noMax ? "No limit" : included.toLocaleString()
-            }`}
-      </div>
-
-      {/* Divider line and labels for overage */}
-      {anyOverage && (
-        <>
-          <div
-            className="absolute top-0 h-8 w-[2px] bg-neutral-600"
-            style={{ left: `${includedWidth}%` }}
-          />
-          {/* Overage label underneath */}
-          <div
-            className="text-muted-foreground absolute top-6 text-xs whitespace-nowrap"
-            style={{ left: `${includedWidth + 1}%` }}
-          >
-            Extra: {(value - included).toLocaleString()}
-          </div>
-
-          {/* Additional overage increment dividers */}
-          {Array.from(
-            { length: Math.floor((value - included) / overageIncrement) },
-            (_, index) => {
-              const incrementPosition =
-                includedWidth +
-                (((index + 1) * overageIncrement) / totalMax) * 100;
-              return (
-                <div
-                  key={index}
-                  className="absolute top-0 h-5 w-[2px] bg-neutral-600"
-                  style={{ left: `${incrementPosition}%` }}
-                />
-              );
-            },
-          )}
-        </>
-      )}
-    </div>
   );
 };

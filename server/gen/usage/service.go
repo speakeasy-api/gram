@@ -24,6 +24,8 @@ type Service interface {
 	CreateCustomerSession(context.Context, *CreateCustomerSessionPayload) (res string, err error)
 	// Create a checkout link for upgrading to the business plan
 	CreateCheckout(context.Context, *CreateCheckoutPayload) (res string, err error)
+	// Create a checkout link for a one-time credit top-up purchase
+	CreateTopUpCheckout(context.Context, *CreateTopUpCheckoutPayload) (res string, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -46,7 +48,7 @@ const ServiceName = "usage"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [4]string{"getPeriodUsage", "getUsageTiers", "createCustomerSession", "createCheckout"}
+var MethodNames = [5]string{"getPeriodUsage", "getUsageTiers", "createCustomerSession", "createCheckout", "createTopUpCheckout"}
 
 // CreateCheckoutPayload is the payload type of the usage service
 // createCheckout method.
@@ -57,6 +59,12 @@ type CreateCheckoutPayload struct {
 // CreateCustomerSessionPayload is the payload type of the usage service
 // createCustomerSession method.
 type CreateCustomerSessionPayload struct {
+	SessionToken *string
+}
+
+// CreateTopUpCheckoutPayload is the payload type of the usage service
+// createTopUpCheckout method.
+type CreateTopUpCheckoutPayload struct {
 	SessionToken *string
 }
 

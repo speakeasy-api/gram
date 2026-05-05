@@ -24,6 +24,7 @@ import { HttpRoute } from "@/components/http-route";
 import { useProject, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
+import { extractStreamError } from "@/lib/chat-error";
 import { CustomChatTransport } from "@/lib/CustomChatTransport";
 import {
   asTools,
@@ -418,6 +419,10 @@ function ChatInner({
             displayMessage =
               "You have reached your monthly credit limit. Reach out to the Speakeasy team to upgrade your account.";
           }
+          if (displayMessage.includes("token balance exhausted")) {
+            displayMessage =
+              "Your token balance is exhausted. [Top up credits](/billing) to keep chatting.";
+          }
           appendDisplayOnlyMessage(`**Model Error:** *${displayMessage}*`);
         }
       },
@@ -672,46 +677,3 @@ function CustomMessageRenderer({
     </Message>
   );
 }
-
-const extractStreamError = (event: { error: unknown }) => {
-  let message: string | undefined;
-  if (typeof event.error === "object" && event.error !== null) {
-    const errorObject = event.error as {
-      responseBody?: unknown;
-      message?: unknown;
-      [key: string]: unknown;
-    };
-
-    if (typeof errorObject.responseBody === "string") {
-      try {
-        const parsedBody = JSON.parse(errorObject.responseBody);
-        if (
-          typeof parsedBody === "object" &&
-          parsedBody !== null &&
-          parsedBody.error
-        ) {
-          if (parsedBody.error.metadata?.raw) {
-            try {
-              const rawError = JSON.parse(parsedBody.error.metadata.raw);
-              if (rawError.error?.message) {
-                message = rawError.error.message;
-              }
-            } catch {
-              if (typeof parsedBody.error.message === "string") {
-                message = parsedBody.error.message;
-              }
-            }
-          } else if (typeof parsedBody.error.message === "string") {
-            message = parsedBody.error.message;
-          }
-        }
-      } catch (e) {
-        console.error(`Error parsing model error: ${e}`);
-      }
-    } else if (typeof errorObject.message === "string") {
-      message = errorObject.message;
-    }
-  }
-
-  return message;
-};
