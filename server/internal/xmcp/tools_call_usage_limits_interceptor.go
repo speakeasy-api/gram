@@ -17,7 +17,7 @@ import (
 // by the existing tool usage check in the /mcp endpoint.
 const defaultHardToolCallsLimit = 2000
 
-// ToolUsageLimitsInterceptor enforces the free-tier hard cap on tools/call
+// ToolsCallUsageLimitsInterceptor enforces the free-tier hard cap on tools/call
 // invocations by consulting the billing repository's cached period usage.
 // It is a [proxy.ToolsCallRequestInterceptor]: it runs after the generic
 // user-request chain and before the request is forwarded upstream. Non-free
@@ -27,32 +27,32 @@ const defaultHardToolCallsLimit = 2000
 // (the billing cache should always be warm, but a transient miss must not
 // take down tool invocation). Failures are logged with the originating org ID
 // so operators can spot them in dashboards.
-type ToolUsageLimitsInterceptor struct {
+type ToolsCallUsageLimitsInterceptor struct {
 	billing billing.Repository
 	logger  *slog.Logger
 }
 
-var _ proxy.ToolsCallRequestInterceptor = (*ToolUsageLimitsInterceptor)(nil)
+var _ proxy.ToolsCallRequestInterceptor = (*ToolsCallUsageLimitsInterceptor)(nil)
 
-// NewToolUsageLimitsInterceptor constructs an interceptor bound to the given
+// NewToolsCallUsageLimitsInterceptor constructs an interceptor bound to the given
 // billing repository. The same instance can be reused across requests.
-func NewToolUsageLimitsInterceptor(billingRepo billing.Repository, logger *slog.Logger) *ToolUsageLimitsInterceptor {
-	return &ToolUsageLimitsInterceptor{
+func NewToolsCallUsageLimitsInterceptor(billingRepo billing.Repository, logger *slog.Logger) *ToolsCallUsageLimitsInterceptor {
+	return &ToolsCallUsageLimitsInterceptor{
 		billing: billingRepo,
 		logger:  logger,
 	}
 }
 
 // Name implements [proxy.ToolsCallRequestInterceptor].
-func (i *ToolUsageLimitsInterceptor) Name() string {
-	return "tool-usage-limits"
+func (i *ToolsCallUsageLimitsInterceptor) Name() string {
+	return "tools-call-usage-limits"
 }
 
 // InterceptToolsCallRequest implements [proxy.ToolsCallRequestInterceptor].
 // It reads the organization and account type from the request's auth
 // context, consults cached billing usage, and returns a forbidden error when
 // the org has exceeded its hard cap.
-func (i *ToolUsageLimitsInterceptor) InterceptToolsCallRequest(ctx context.Context, _ *proxy.ToolsCallRequest) error {
+func (i *ToolsCallUsageLimitsInterceptor) InterceptToolsCallRequest(ctx context.Context, _ *proxy.ToolsCallRequest) error {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
 		// No auth context means the runtime handler did not install one —

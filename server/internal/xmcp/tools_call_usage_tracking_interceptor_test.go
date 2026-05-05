@@ -100,18 +100,18 @@ func newToolsCallResponseForInterceptor(t *testing.T, sessionID string) *proxy.T
 	}
 }
 
-func TestToolUsageTrackingInterceptor_Name(t *testing.T) {
+func TestToolsCallUsageTrackingInterceptor_Name(t *testing.T) {
 	t.Parallel()
 
-	interceptor := xmcp.NewToolUsageTrackingInterceptor(newFakeBillingTracker(), testenv.NewLogger(t))
-	require.Equal(t, "tool-usage-tracking", interceptor.Name())
+	interceptor := xmcp.NewToolsCallUsageTrackingInterceptor(newFakeBillingTracker(), testenv.NewLogger(t))
+	require.Equal(t, "tools-call-usage-tracking", interceptor.Name())
 }
 
-func TestToolUsageTrackingInterceptor_NoAuthContextSkips(t *testing.T) {
+func TestToolsCallUsageTrackingInterceptor_NoAuthContextSkips(t *testing.T) {
 	t.Parallel()
 
 	tracker := newFakeBillingTracker()
-	interceptor := xmcp.NewToolUsageTrackingInterceptor(tracker, testenv.NewLogger(t))
+	interceptor := xmcp.NewToolsCallUsageTrackingInterceptor(tracker, testenv.NewLogger(t))
 
 	call := newToolsCallResponseForInterceptor(t, "")
 
@@ -122,11 +122,11 @@ func TestToolUsageTrackingInterceptor_NoAuthContextSkips(t *testing.T) {
 	require.Empty(t, tracker.events, "missing auth context must short-circuit before tracking")
 }
 
-func TestToolUsageTrackingInterceptor_EmitsEventForBaseTier(t *testing.T) {
+func TestToolsCallUsageTrackingInterceptor_EmitsEventForBaseTier(t *testing.T) {
 	t.Parallel()
 
 	tracker := newFakeBillingTracker()
-	interceptor := xmcp.NewToolUsageTrackingInterceptor(tracker, testenv.NewLogger(t))
+	interceptor := xmcp.NewToolsCallUsageTrackingInterceptor(tracker, testenv.NewLogger(t))
 
 	projectID := uuid.New()
 	projectSlug := "demo-project"
@@ -158,14 +158,14 @@ func TestToolUsageTrackingInterceptor_EmitsEventForBaseTier(t *testing.T) {
 	require.Positive(t, event.OutputBytes)
 }
 
-func TestToolUsageTrackingInterceptor_EmitsEventForPaidTier(t *testing.T) {
+func TestToolsCallUsageTrackingInterceptor_EmitsEventForPaidTier(t *testing.T) {
 	t.Parallel()
 
 	// Tracking must fire regardless of tier so Polar metering matches /mcp.
 	// Limits gating is a separate concern handled by the request-side
 	// interceptor.
 	tracker := newFakeBillingTracker()
-	interceptor := xmcp.NewToolUsageTrackingInterceptor(tracker, testenv.NewLogger(t))
+	interceptor := xmcp.NewToolsCallUsageTrackingInterceptor(tracker, testenv.NewLogger(t))
 
 	projectID := uuid.New()
 	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{

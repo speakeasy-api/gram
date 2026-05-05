@@ -30,6 +30,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/xmcp"
 )
@@ -88,8 +89,11 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 
 	enc := testenv.NewEncryptionClient(t)
 	authzEngine := authz.NewEngine(logger, conn, authztest.RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
+	// Pass a disabled PostHog client so analytics interceptors no-op cleanly
+	// in tests without requiring an external endpoint.
+	posthogClient := posthog.New(ctx, logger, "", "", "")
 
-	svc := xmcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, enc, authzEngine, guardianPolicy, billingClient, billingClient)
+	svc := xmcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, enc, authzEngine, guardianPolicy, posthogClient, billingClient, billingClient)
 
 	return ctx, &testInstance{
 		service:        svc,
