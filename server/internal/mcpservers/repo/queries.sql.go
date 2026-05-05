@@ -143,12 +143,21 @@ func (q *Queries) GetMCPServerByID(ctx context.Context, arg GetMCPServerByIDPara
 const listMCPServersByProjectID = `-- name: ListMCPServersByProjectID :many
 SELECT id, project_id, name, slug, environment_id, external_oauth_server_id, oauth_proxy_server_id, remote_mcp_server_id, toolset_id, visibility, created_at, updated_at, deleted_at, deleted
 FROM mcp_servers
-WHERE project_id = $1 AND deleted IS FALSE
+WHERE project_id = $1
+  AND deleted IS FALSE
+  AND ($2::uuid IS NULL OR remote_mcp_server_id = $2::uuid)
+  AND ($3::uuid IS NULL OR toolset_id = $3::uuid)
 ORDER BY created_at DESC
 `
 
-func (q *Queries) ListMCPServersByProjectID(ctx context.Context, projectID uuid.UUID) ([]McpServer, error) {
-	rows, err := q.db.Query(ctx, listMCPServersByProjectID, projectID)
+type ListMCPServersByProjectIDParams struct {
+	ProjectID         uuid.UUID
+	RemoteMcpServerID uuid.NullUUID
+	ToolsetID         uuid.NullUUID
+}
+
+func (q *Queries) ListMCPServersByProjectID(ctx context.Context, arg ListMCPServersByProjectIDParams) ([]McpServer, error) {
+	rows, err := q.db.Query(ctx, listMCPServersByProjectID, arg.ProjectID, arg.RemoteMcpServerID, arg.ToolsetID)
 	if err != nil {
 		return nil, err
 	}
