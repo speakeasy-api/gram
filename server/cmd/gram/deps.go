@@ -28,6 +28,7 @@ import (
 	"github.com/superfly/fly-go/tokens"
 	"github.com/urfave/cli/v2"
 	"github.com/urfave/cli/v2/altsrc"
+	"github.com/workos/workos-go/v6/pkg/events"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/metric"
 	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
@@ -486,6 +487,21 @@ func newWorkOSClient(guardianPolicy *guardian.Policy, c *cli.Context) (client *w
 	}
 
 	return workos.NewClient(guardianPolicy, apiKey, workosClientOpts(c)), haveAPIKey, nil
+}
+
+func newWorkOSEventsClient(c *cli.Context, guardianPolicy *guardian.Policy) (*events.Client, error) {
+	apiKey := c.String("workos-api-key")
+	if apiKey == "" || apiKey == "unset" {
+		if c.String("environment") != "local" {
+			return nil, errors.New("WorkOS API key not provided")
+		}
+	}
+
+	return &events.Client{
+		APIKey:     apiKey,
+		HTTPClient: guardianPolicy.PooledClient(),
+		Endpoint:   "",
+	}, nil
 }
 
 func newTigrisStore(ctx context.Context, c *cli.Context, logger *slog.Logger) (*assets.TigrisStore, func(context.Context) error, error) {
