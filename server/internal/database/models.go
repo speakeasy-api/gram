@@ -1017,6 +1017,15 @@ type RiskPolicy struct {
 	Deleted          bool
 }
 
+type RiskPolicyTarget struct {
+	ID             uuid.UUID
+	RiskPolicyID   uuid.UUID
+	OrganizationID string
+	TargetType     string
+	TargetID       string
+	CreatedAt      pgtype.Timestamptz
+}
+
 type RiskResult struct {
 	ID                uuid.UUID
 	ProjectID         uuid.UUID

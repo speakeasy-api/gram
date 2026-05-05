@@ -2221,6 +2221,30 @@ CREATE INDEX IF NOT EXISTS risk_policies_project_id_idx
 ON risk_policies (project_id)
 WHERE deleted IS FALSE;
 
+CREATE TABLE IF NOT EXISTS risk_policy_targets (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  risk_policy_id uuid NOT NULL,
+  organization_id TEXT NOT NULL,
+  target_type TEXT NOT NULL,
+  target_id TEXT NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT risk_policy_targets_pkey PRIMARY KEY (id),
+  CONSTRAINT risk_policy_targets_risk_policy_id_fkey FOREIGN KEY (risk_policy_id) REFERENCES risk_policies(id) ON DELETE CASCADE,
+  CONSTRAINT risk_policy_targets_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata(id) ON DELETE CASCADE,
+  CONSTRAINT risk_policy_targets_type_check CHECK (target_type IN ('user', 'role'))
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS risk_policy_targets_policy_target_key
+ON risk_policy_targets (risk_policy_id, target_type, target_id);
+
+CREATE INDEX IF NOT EXISTS risk_policy_targets_org_target_idx
+ON risk_policy_targets (organization_id, target_type, target_id);
+
+CREATE INDEX IF NOT EXISTS risk_policy_targets_policy_idx
+ON risk_policy_targets (risk_policy_id);
+
 -- Individual findings produced by scanning a chat message against a risk policy.
 -- No soft delete: results are regenerated when the policy version changes.
 CREATE TABLE IF NOT EXISTS risk_results (
