@@ -188,6 +188,7 @@ func (a *AnalyzeBatch) scan(ctx context.Context, args AnalyzeBatchArgs, messages
 	presidioFindings := make([][]Finding, n)
 	shadowMCPFindings := make([][]Finding, n)
 	destructiveToolFindings := make([][]Finding, n)
+	promptInjectionFindings := make([][]Finding, n)
 
 	var wg sync.WaitGroup
 	var gitleaksErr error
@@ -236,12 +237,19 @@ func (a *AnalyzeBatch) scan(ctx context.Context, args AnalyzeBatchArgs, messages
 		activity.RecordHeartbeat(ctx, "destructive_tool")
 	}
 
+	if slices.Contains(args.Sources, SourcePromptInjection) {
+		for i, content := range contents {
+			promptInjectionFindings[i] = DetectPromptInjection(content)
+		}
+		activity.RecordHeartbeat(ctx, "prompt_injection")
+	}
+
 	merged := make([][]Finding, n)
 	for i := range n {
 		// Gitleaks findings come first so they take priority over presidio
 		// when both scanners match the same text region. Tool-call findings are
 		// non-overlapping with content scanners, so they pass through dedup.
-		combined := slices.Concat(gitleaksFindings[i], presidioFindings[i], shadowMCPFindings[i], destructiveToolFindings[i])
+		combined := slices.Concat(gitleaksFindings[i], presidioFindings[i], shadowMCPFindings[i], destructiveToolFindings[i], promptInjectionFindings[i])
 		merged[i] = dedup(combined)
 	}
 	return merged, nil

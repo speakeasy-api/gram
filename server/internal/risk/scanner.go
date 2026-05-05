@@ -271,6 +271,18 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text s
 					Description: f.Description,
 				}, nil
 			}
+		case ra.SourcePromptInjection:
+			findings := ra.DetectPromptInjection(text)
+			if len(findings) > 0 {
+				return &ScanResult{
+					Action:      policy.Action,
+					PolicyID:    policy.ID.String(),
+					PolicyName:  policy.Name,
+					Source:      ra.SourcePromptInjection,
+					RuleID:      findings[0].RuleID,
+					Description: findings[0].Description,
+				}, nil
+			}
 		}
 	}
 	return nil, nil
