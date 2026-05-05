@@ -29,11 +29,7 @@ const (
 	// drainBatchSize is how many messages each AnalyzeBatch activity processes.
 	drainBatchSize = 1_000
 
-	// Per-drain (per-policy) cap on AnalyzeBatch activities in flight. NOT
-	// fleet-wide — N drain workflows can each have this many in flight, so
-	// fleet load = N × perDrainBatchConcurrency × perBatchRequestConcurrency.
-	// The fleet-wide ceiling lives on the risk-analysis worker
-	// (perPodAnalyzeBatchConcurrency in worker.go). Tuned to demand 2026-05-01.
+	// Tuned 2026-05-01. Fleet-wide cap is perPodAnalyzeBatchConcurrency.
 	perDrainBatchConcurrency = 1
 )
 
@@ -64,10 +60,8 @@ func DrainRiskAnalysisWorkflow(ctx workflow.Context, params DrainRiskAnalysisPar
 	}
 	ctx = workflow.WithActivityOptions(ctx, activityOpts)
 
-	// AnalyzeBatch is dispatched to a dedicated worker pool so its concurrency
-	// against external scanners can be capped independently. The queue name is
-	// derived from the workflow's own task queue so every environment stays
-	// isolated.
+	// AnalyzeBatch runs on a dedicated, capped queue derived from the
+	// workflow's own queue so each environment stays isolated.
 	analyzeBatchOpts := activityOpts
 	analyzeBatchOpts.TaskQueue = RiskAnalysisTaskQueue(tenv.TaskQueueName(workflow.GetInfo(ctx).TaskQueueName))
 	analyzeBatchCtx := workflow.WithActivityOptions(ctx, analyzeBatchOpts)

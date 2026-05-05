@@ -180,9 +180,6 @@ func NewTemporalWorker(
 		Interceptors: workerInterceptors,
 	})
 
-	// Risk analysis runs on its own task queue so we can bound concurrency
-	// independently of the main worker — AnalyzeBatch hits Presidio + LLM
-	// providers that we must not overwhelm.
 	riskWorker := worker.New(env.Client(), RiskAnalysisTaskQueue(env.Queue()), worker.Options{
 		Interceptors:                       workerInterceptors,
 		MaxConcurrentActivityExecutionSize: perPodAnalyzeBatchConcurrency,
@@ -245,9 +242,7 @@ func NewTemporalWorker(
 	// Trigger related activities
 	temporalWorker.RegisterActivity(activities.DispatchTrigger)
 	temporalWorker.RegisterActivity(activities.ProcessScheduledTrigger)
-	// Risk analysis activities. AnalyzeBatch runs on a dedicated worker so
-	// concurrency against external scanners (Presidio, LLM providers) is
-	// capped independently of the main worker.
+	// Risk analysis activities — AnalyzeBatch on the dedicated worker.
 	temporalWorker.RegisterActivity(activities.FetchUnanalyzedMessages)
 	riskWorker.RegisterActivity(activities.AnalyzeBatch)
 	// Assistant activities
@@ -305,31 +300,22 @@ func NewTemporalWorker(
 	return &Workers{main: temporalWorker, riskAnalysis: riskWorker}
 }
 
-// perPodAnalyzeBatchConcurrency caps in-flight AnalyzeBatch activities per
-// worker pod. The only fleet-wide ceiling in the chain — perDrainBatchConcurrency
-// (drain_risk_analysis.go) and perBatchRequestConcurrency (presidio.go) are
-// scope-local and multiply with N policies / N batches, so they cannot bound
-// fleet load. Fleet ceiling = pod_count × perPodAnalyzeBatchConcurrency.
-// Bound to protect downstream scanners (Presidio, LLM providers) from overload.
+// Fleet-wide cap on in-flight AnalyzeBatch per worker pod — the only knob
+// in the chain that doesn't multiply with N policies or N batches.
 const perPodAnalyzeBatchConcurrency = 20
 
-// RiskAnalysisTaskQueue returns the dedicated task queue for risk analysis
-// activities, derived from the main worker's queue so each environment
-// (test, dev, prod) stays isolated.
 func RiskAnalysisTaskQueue(mainQueue tenv.TaskQueueName) string {
 	return string(mainQueue) + "-risk-analysis"
 }
 
-// Workers bundles the Temporal workers managed by the background package.
-// Risk analysis runs on its own queue + worker so its concurrency can be
-// capped without throttling the rest of the system.
+// Workers bundles the main and risk-analysis Temporal workers.
 type Workers struct {
 	main         worker.Worker
 	riskAnalysis worker.Worker
 }
 
-// Run starts the auxiliary risk-analysis worker, then runs the main worker,
-// blocking until interruptCh receives. Returns the first error encountered.
+// Run starts the risk-analysis worker, then blocks running the main worker
+// until interruptCh receives.
 func (w *Workers) Run(interruptCh <-chan any) error {
 	if err := w.riskAnalysis.Start(); err != nil {
 		return fmt.Errorf("start risk analysis worker: %w", err)
@@ -342,8 +328,7 @@ func (w *Workers) Run(interruptCh <-chan any) error {
 	return nil
 }
 
-// Start starts both workers without blocking. Pair with Stop. Used by tests
-// that drive workflows directly rather than waiting on an interrupt signal.
+// Start starts both workers without blocking. Pair with Stop (used by tests).
 func (w *Workers) Start() error {
 	if err := w.main.Start(); err != nil {
 		return fmt.Errorf("start main worker: %w", err)
@@ -355,7 +340,6 @@ func (w *Workers) Start() error {
 	return nil
 }
 
-// Stop stops both workers. Safe to call after a partial Start failure.
 func (w *Workers) Stop() {
 	w.riskAnalysis.Stop()
 	w.main.Stop()

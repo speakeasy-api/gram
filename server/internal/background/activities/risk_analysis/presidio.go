@@ -46,11 +46,7 @@ type presidioResult struct {
 	Score      float64 `json:"score"`
 }
 
-// perBatchRequestConcurrency caps in-flight Presidio HTTP requests per
-// AnalyzeBatch invocation. NOT fleet-wide — N concurrent batches multiply
-// this. Fleet-wide load = N batches × perBatchRequestConcurrency, so the
-// real ceiling is set on the worker (perPodAnalyzeBatchConcurrency in
-// background/worker.go). Tuned to Presidio capacity as-of 2026-05-01.
+// Tuned to Presidio capacity 2026-05-01. Fleet-wide cap is perPodAnalyzeBatchConcurrency.
 const perBatchRequestConcurrency = 4
 
 // /analyze accepts a string or array; array returns ordered nested list. Bounds blast radius on retry-bisect.
