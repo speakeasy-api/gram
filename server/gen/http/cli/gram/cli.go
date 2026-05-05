@@ -1357,7 +1357,7 @@ func ParseEndpoint(
 		userSessionConsentsFlags = flag.NewFlagSet("user-session-consents", flag.ContinueOnError)
 
 		userSessionConsentsListUserSessionConsentsFlags                   = flag.NewFlagSet("list-user-session-consents", flag.ExitOnError)
-		userSessionConsentsListUserSessionConsentsPrincipalUrnFlag        = userSessionConsentsListUserSessionConsentsFlags.String("principal-urn", "", "")
+		userSessionConsentsListUserSessionConsentsSubjectUrnFlag          = userSessionConsentsListUserSessionConsentsFlags.String("subject-urn", "", "")
 		userSessionConsentsListUserSessionConsentsUserSessionClientIDFlag = userSessionConsentsListUserSessionConsentsFlags.String("user-session-client-id", "", "")
 		userSessionConsentsListUserSessionConsentsUserSessionIssuerIDFlag = userSessionConsentsListUserSessionConsentsFlags.String("user-session-issuer-id", "", "")
 		userSessionConsentsListUserSessionConsentsCursorFlag              = userSessionConsentsListUserSessionConsentsFlags.String("cursor", "", "")
@@ -3552,7 +3552,7 @@ func ParseEndpoint(
 			switch epn {
 			case "list-user-session-consents":
 				endpoint = c.ListUserSessionConsents()
-				data, err = usersessionconsentsc.BuildListUserSessionConsentsPayload(*userSessionConsentsListUserSessionConsentsPrincipalUrnFlag, *userSessionConsentsListUserSessionConsentsUserSessionClientIDFlag, *userSessionConsentsListUserSessionConsentsUserSessionIssuerIDFlag, *userSessionConsentsListUserSessionConsentsCursorFlag, *userSessionConsentsListUserSessionConsentsLimitFlag, *userSessionConsentsListUserSessionConsentsSessionTokenFlag, *userSessionConsentsListUserSessionConsentsApikeyTokenFlag, *userSessionConsentsListUserSessionConsentsProjectSlugInputFlag)
+				data, err = usersessionconsentsc.BuildListUserSessionConsentsPayload(*userSessionConsentsListUserSessionConsentsSubjectUrnFlag, *userSessionConsentsListUserSessionConsentsUserSessionClientIDFlag, *userSessionConsentsListUserSessionConsentsUserSessionIssuerIDFlag, *userSessionConsentsListUserSessionConsentsCursorFlag, *userSessionConsentsListUserSessionConsentsLimitFlag, *userSessionConsentsListUserSessionConsentsSessionTokenFlag, *userSessionConsentsListUserSessionConsentsApikeyTokenFlag, *userSessionConsentsListUserSessionConsentsProjectSlugInputFlag)
 			case "revoke-user-session-consent":
 				endpoint = c.RevokeUserSessionConsent()
 				data, err = usersessionconsentsc.BuildRevokeUserSessionConsentPayload(*userSessionConsentsRevokeUserSessionConsentBodyFlag, *userSessionConsentsRevokeUserSessionConsentSessionTokenFlag, *userSessionConsentsRevokeUserSessionConsentApikeyTokenFlag, *userSessionConsentsRevokeUserSessionConsentProjectSlugInputFlag)
@@ -9054,11 +9054,11 @@ func userSessionClientsRevokeUserSessionClientUsage() {
 // userSessionConsentsUsage displays the usage of the user-session-consents
 // command and its subcommands.
 func userSessionConsentsUsage() {
-	fmt.Fprintln(os.Stderr, `Operator visibility into user_session_consents — persistent consent records per (principal, user_session_client). List + revoke.`)
+	fmt.Fprintln(os.Stderr, `Operator visibility into user_session_consents — persistent consent records per (subject, user_session_client). List + revoke.`)
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] user-session-consents COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    list-user-session-consents: List consent records for the caller's project.`)
-	fmt.Fprintln(os.Stderr, `    revoke-user-session-consent: Withdraw consent. The next /mcp/{slug}/authorize from any session matching (principal_urn, user_session_client_id) re-prompts.`)
+	fmt.Fprintln(os.Stderr, `    revoke-user-session-consent: Withdraw consent. Subsequent authorization requests for matching (subject, user_session_client) pairs re-prompt.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s user-session-consents COMMAND --help\n", os.Args[0])
@@ -9066,7 +9066,7 @@ func userSessionConsentsUsage() {
 func userSessionConsentsListUserSessionConsentsUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] user-session-consents list-user-session-consents", os.Args[0])
-	fmt.Fprint(os.Stderr, " -principal-urn STRING")
+	fmt.Fprint(os.Stderr, " -subject-urn STRING")
 	fmt.Fprint(os.Stderr, " -user-session-client-id STRING")
 	fmt.Fprint(os.Stderr, " -user-session-issuer-id STRING")
 	fmt.Fprint(os.Stderr, " -cursor STRING")
@@ -9081,7 +9081,7 @@ func userSessionConsentsListUserSessionConsentsUsage() {
 	fmt.Fprintln(os.Stderr, `List consent records for the caller's project.`)
 
 	// Flags list
-	fmt.Fprintln(os.Stderr, `    -principal-urn STRING: `)
+	fmt.Fprintln(os.Stderr, `    -subject-urn STRING: `)
 	fmt.Fprintln(os.Stderr, `    -user-session-client-id STRING: `)
 	fmt.Fprintln(os.Stderr, `    -user-session-issuer-id STRING: `)
 	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
@@ -9092,7 +9092,7 @@ func userSessionConsentsListUserSessionConsentsUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "user-session-consents list-user-session-consents --principal-urn \"abc123\" --user-session-client-id \"550e8400-e29b-41d4-a716-446655440000\" --user-session-issuer-id \"550e8400-e29b-41d4-a716-446655440000\" --cursor \"abc123\" --limit 1 --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "user-session-consents list-user-session-consents --subject-urn \"abc123\" --user-session-client-id \"550e8400-e29b-41d4-a716-446655440000\" --user-session-issuer-id \"550e8400-e29b-41d4-a716-446655440000\" --cursor \"550e8400-e29b-41d4-a716-446655440000\" --limit 1 --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func userSessionConsentsRevokeUserSessionConsentUsage() {
@@ -9106,7 +9106,7 @@ func userSessionConsentsRevokeUserSessionConsentUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Withdraw consent. The next /mcp/{slug}/authorize from any session matching (principal_urn, user_session_client_id) re-prompts.`)
+	fmt.Fprintln(os.Stderr, `Withdraw consent. Subsequent authorization requests for matching (subject, user_session_client) pairs re-prompt.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)

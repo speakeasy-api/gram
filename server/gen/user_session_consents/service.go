@@ -16,12 +16,12 @@ import (
 )
 
 // Operator visibility into user_session_consents — persistent consent records
-// per (principal, user_session_client). List + revoke.
+// per (subject, user_session_client). List + revoke.
 type Service interface {
 	// List consent records for the caller's project.
 	ListUserSessionConsents(context.Context, *ListUserSessionConsentsPayload) (res *ListUserSessionConsentsResult, err error)
-	// Withdraw consent. The next /mcp/{slug}/authorize from any session matching
-	// (principal_urn, user_session_client_id) re-prompts.
+	// Withdraw consent. Subsequent authorization requests for matching (subject,
+	// user_session_client) pairs re-prompt.
 	RevokeUserSessionConsent(context.Context, *RevokeUserSessionConsentPayload) (err error)
 }
 
@@ -50,13 +50,13 @@ var MethodNames = [2]string{"listUserSessionConsents", "revokeUserSessionConsent
 // ListUserSessionConsentsPayload is the payload type of the
 // userSessionConsents service listUserSessionConsents method.
 type ListUserSessionConsentsPayload struct {
-	// Filter by principal URN.
-	PrincipalUrn *string
+	// Filter by subject URN.
+	SubjectUrn *string
 	// Filter by user_session_client id.
 	UserSessionClientID *string
 	// Filter by user_session_issuer id (joins through user_session_clients).
 	UserSessionIssuerID *string
-	// Pagination cursor.
+	// Pagination cursor: id of the last item from the previous page.
 	Cursor *string
 	// Page size (default 50, max 100).
 	Limit            *int

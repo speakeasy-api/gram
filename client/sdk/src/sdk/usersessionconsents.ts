@@ -35,7 +35,7 @@ export class UserSessionConsents extends ClientSDK {
    * revokeUserSessionConsent userSessionConsents
    *
    * @remarks
-   * Withdraw consent. The next /mcp/{slug}/authorize from any session matching (principal_urn, user_session_client_id) re-prompts.
+   * Withdraw consent. Subsequent authorization requests for matching (subject, user_session_client) pairs re-prompt.
    */
   async revoke(
     request: operations.RevokeUserSessionConsentRequest,

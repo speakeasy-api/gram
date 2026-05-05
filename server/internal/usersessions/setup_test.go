@@ -32,7 +32,7 @@ import (
 var infra *testenv.Environment
 
 func TestMain(m *testing.M) {
-	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Redis: true})
+	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Redis: true, ClickHouse: true})
 	if err != nil {
 		log.Fatalf("launch test infrastructure: %v", err)
 		os.Exit(1)
@@ -72,6 +72,9 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	redisClient, err := infra.NewRedisClient(t, 0)
 	require.NoError(t, err)
 
+	chConn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, guardianPolicy, conn, redisClient, cache.Suffix("gram-local"), billingClient)
 
@@ -82,7 +85,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 		tracerProvider,
 		conn,
 		sessionManager,
-		authz.NewEngine(logger, conn, authztest.RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache),
+		authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), cache.NoopCache),
 	)
 
 	return ctx, &testInstance{
