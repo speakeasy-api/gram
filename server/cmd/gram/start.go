@@ -382,6 +382,11 @@ func newStartCommand() *cli.Command {
 			Usage:   "Base URL of the Presidio Analyzer service (e.g. http://presidio-analyzer:3000). Empty disables PII scanning.",
 			EnvVars: []string{"PRESIDIO_ANALYZER_URL"},
 		},
+		&cli.StringFlag{
+			Name:    "prompt-injection-classifier-url",
+			Usage:   "Base URL of the prompt-injection classifier service (e.g. http://prompt-injection:8000). Empty disables the model classifier; policies that opt in will surface a configuration error.",
+			EnvVars: []string{"PROMPT_INJECTION_CLASSIFIER_URL"},
+		},
 	}
 
 	flags = append(flags, redisFlags...)
@@ -826,7 +831,12 @@ func newStartCommand() *cli.Command {
 				hookPIIScanner = risk_analysis.NewPresidioClient(presidioURL, tracerProvider, meterProvider, logger)
 			}
 
-			riskScanner, err := risk.NewScanner(logger, db, hookPIIScanner, meterProvider)
+			var hookPromptInjectionClassifier risk_analysis.PromptInjectionClassifier = risk_analysis.NoopClassifier{}
+			if classifierURL := c.String("prompt-injection-classifier-url"); classifierURL != "" {
+				hookPromptInjectionClassifier = risk_analysis.NewDebertaClassifier(classifierURL, tracerProvider, meterProvider, logger)
+			}
+
+			riskScanner, err := risk.NewScanner(logger, db, hookPIIScanner, hookPromptInjectionClassifier, meterProvider)
 			if err != nil {
 				return fmt.Errorf("create risk scanner: %w", err)
 			}
@@ -939,34 +949,40 @@ func newStartCommand() *cli.Command {
 						piiScanner = risk_analysis.NewPresidioClient(presidioURL, tracerProvider, meterProvider, logger)
 					}
 
+					var devPromptInjectionClassifier risk_analysis.PromptInjectionClassifier = risk_analysis.NoopClassifier{}
+					if classifierURL := c.String("prompt-injection-classifier-url"); classifierURL != "" {
+						devPromptInjectionClassifier = risk_analysis.NewDebertaClassifier(classifierURL, tracerProvider, meterProvider, logger)
+					}
+
 					temporalWorker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, &background.WorkerOptions{
-						GuardianPolicy:      guardianPolicy,
-						DB:                  db,
-						EncryptionClient:    encryptionClient,
-						FeatureProvider:     featureFlags,
-						AssetStorage:        assetStorage,
-						SlackClient:         slackClient,
-						ChatClient:          chatClient,
-						OpenRouter:          openRouter,
-						K8sClient:           k8sClient,
-						ExpectedTargetCNAME: c.String("custom-domain-cname"),
-						BillingTracker:      billingTracker,
-						BillingRepository:   billingRepo,
-						RedisClient:         redisClient,
-						PosthogClient:       posthogClient,
-						FunctionsDeployer:   functionsOrchestrator,
-						FunctionsVersion:    runnerVersion,
-						RagService:          ragService,
-						MCPRegistryClient:   mcpRegistryClient,
-						TelemetryLogger:     telemLogger,
-						TriggersApp:         triggerApp,
-						CacheAdapter:        cache.NewRedisCacheAdapter(redisClient),
-						AssistantsCore:      assistantsCore,
-						TemporalEnv:         temporalEnv,
-						PIIScanner:          piiScanner,
-						ShadowMCPClient:     shadowMCPClient,
-						AuditLogger:         auditLogger,
-						WorkOSEventsClient:  workosEventsClient,
+						GuardianPolicy:            guardianPolicy,
+						DB:                        db,
+						EncryptionClient:          encryptionClient,
+						FeatureProvider:           featureFlags,
+						AssetStorage:              assetStorage,
+						SlackClient:               slackClient,
+						ChatClient:                chatClient,
+						OpenRouter:                openRouter,
+						K8sClient:                 k8sClient,
+						ExpectedTargetCNAME:       c.String("custom-domain-cname"),
+						BillingTracker:            billingTracker,
+						BillingRepository:         billingRepo,
+						RedisClient:               redisClient,
+						PosthogClient:             posthogClient,
+						FunctionsDeployer:         functionsOrchestrator,
+						FunctionsVersion:          runnerVersion,
+						RagService:                ragService,
+						MCPRegistryClient:         mcpRegistryClient,
+						TelemetryLogger:           telemLogger,
+						TriggersApp:               triggerApp,
+						CacheAdapter:              cache.NewRedisCacheAdapter(redisClient),
+						AssistantsCore:            assistantsCore,
+						TemporalEnv:               temporalEnv,
+						PIIScanner:                piiScanner,
+						PromptInjectionClassifier: devPromptInjectionClassifier,
+						ShadowMCPClient:           shadowMCPClient,
+						AuditLogger:               auditLogger,
+						WorkOSEventsClient:        workosEventsClient,
 					})
 					if err := temporalWorker.Run(workerInterruptCh); err != nil {
 						logger.ErrorContext(ctx, "temporal worker failed", attr.SlogError(err))

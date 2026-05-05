@@ -114,6 +114,7 @@ func TestScanner_FanOutAcrossPoliciesIsConcurrent(t *testing.T) {
 		testenv.NewLogger(t),
 		ti.conn,
 		pii,
+		risk_analysis.NoopClassifier{},
 		testenv.NewMeterProvider(t),
 	)
 	require.NoError(t, err)
@@ -157,6 +158,7 @@ func TestScanner_FirstMatchCancelsSiblings(t *testing.T) {
 		testenv.NewLogger(t),
 		ti.conn,
 		pii,
+		risk_analysis.NoopClassifier{},
 		testenv.NewMeterProvider(t),
 	)
 	require.NoError(t, err)
