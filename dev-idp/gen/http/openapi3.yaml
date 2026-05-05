@@ -1,1112 +1,1112 @@
 openapi: 3.0.3
 info:
-  title: Gram dev-idp
-  description: Management API for the local-development IDP that backs Gram's auth flows in tests and dev. Permanently unauthenticated.
-  version: 0.0.1
+    title: Gram dev-idp
+    description: Management API for the local-development IDP that backs Gram's auth flows in tests and dev. Permanently unauthenticated.
+    version: 0.0.1
 servers:
-  - url: http://localhost:80
-    description: Default server for gram-dev-idp
+    - url: http://localhost:80
+      description: Default server for gram-dev-idp
 paths:
-  /rpc/devIdp.clearCurrentUser:
-    post:
-      tags:
-        - devIdp
-      summary: clearCurrentUser devIdp
-      description: Clear the per-mode currentUser. The next identity-resolving request on the mode then falls through to the default-user bootstrap (idp-design.md §3) — git committer for local modes, WorkOS lookup for workos. Idempotent — clearing an already-cleared mode is a no-op.
-      operationId: devIdp#clearCurrentUser
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/GetCurrentUserRequestBody"
-      responses:
-        "204":
-          description: No Content response.
-  /rpc/devIdp.getCurrentUser:
-    post:
-      tags:
-        - devIdp
-      summary: getCurrentUser devIdp
-      description: Read the per-mode currentUser. 404s when no row exists yet for that mode.
-      operationId: devIdp#getCurrentUser
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/GetCurrentUserRequestBody"
-      responses:
-        "200":
-          description: OK response.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/CurrentUser"
-  /rpc/devIdp.setCurrentUser:
-    post:
-      tags:
-        - devIdp
-      summary: setCurrentUser devIdp
-      description: UPSERT the per-mode currentUser. Local modes accept `user_id` (a UUID into the local users table); workos mode accepts `workos_sub` (a literal WorkOS user id; not validated). To clear the currentUser instead, call `clearCurrentUser`.
-      operationId: devIdp#setCurrentUser
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/SetCurrentUserRequestBody"
-      responses:
-        "200":
-          description: OK response.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/CurrentUser"
-  /rpc/invitations.accept:
-    post:
-      tags:
-        - invitations
-      summary: accept invitations
-      description: "Accept an invitation: flip state to `accepted`, find-or-create the user for the invited email, and idempotently attach a membership. Returns the updated invitation."
-      operationId: invitations#accept
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/DeleteRequestBody"
-      responses:
-        "200":
-          description: OK response.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Invitation"
-  /rpc/invitations.create:
-    post:
-      tags:
-        - invitations
-      summary: create invitations
-      description: Create a pending invitation. The token is generated server-side; the dev-idp doesn't actually send email.
-      operationId: invitations#create
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/CreateRequestBody3"
-      responses:
-        "200":
-          description: OK response.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Invitation"
-  /rpc/invitations.findByToken:
-    post:
-      tags:
-        - invitations
-      summary: findByToken invitations
-      description: Resolve an invitation by its token. Used by the dashboard accept-flow URL.
-      operationId: invitations#findByToken
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/FindByTokenRequestBody"
-      responses:
-        "200":
-          description: OK response.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Invitation"
-  /rpc/invitations.get:
-    post:
-      tags:
-        - invitations
-      summary: get invitations
-      description: Fetch a single invitation by id.
-      operationId: invitations#get
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/DeleteRequestBody"
-      responses:
-        "200":
-          description: OK response.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Invitation"
-  /rpc/invitations.list:
-    post:
-      tags:
-        - invitations
-      summary: list invitations
-      description: List invitations for an organization, keyset-paginated by id.
-      operationId: invitations#list
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/ListRequestBody3"
-      responses:
-        "200":
-          description: OK response.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ListInvitationsResult"
-  /rpc/invitations.resend:
-    post:
-      tags:
-        - invitations
-      summary: resend invitations
-      description: Touch the invitation's updated_at as if a fresh email were sent. The dev-idp doesn't actually send email.
-      operationId: invitations#resend
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/DeleteRequestBody"
-      responses:
-        "200":
-          description: OK response.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Invitation"
-  /rpc/invitations.revoke:
-    post:
-      tags:
-        - invitations
-      summary: revoke invitations
-      description: Revoke a pending invitation. Idempotent — repeated revokes return the same row.
-      operationId: invitations#revoke
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/DeleteRequestBody"
-      responses:
-        "200":
-          description: OK response.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Invitation"
-  /rpc/memberships.create:
-    post:
-      tags:
-        - memberships
-      summary: create memberships
-      description: Idempotently create a membership for (user_id, organization_id).
-      operationId: memberships#create
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/CreateRequestBody4"
-      responses:
-        "200":
-          description: OK response.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Membership"
-  /rpc/memberships.delete:
-    post:
-      tags:
-        - memberships
-      summary: delete memberships
-      description: Hard-delete a membership.
-      operationId: memberships#delete
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/DeleteRequestBody"
-      responses:
-        "204":
-          description: No Content response.
-  /rpc/memberships.list:
-    post:
-      tags:
-        - memberships
-      summary: list memberships
-      description: List memberships. Optional `user_id` and/or `organization_id` filters (idp-design.md §6.1).
-      operationId: memberships#list
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/ListRequestBody4"
-      responses:
-        "200":
-          description: OK response.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ListMembershipsResult"
-  /rpc/memberships.update:
-    post:
-      tags:
-        - memberships
-      summary: update memberships
-      description: Patch a membership's role.
-      operationId: memberships#update
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/UpdateRequestBody3"
-      responses:
-        "200":
-          description: OK response.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Membership"
-  /rpc/organizationRoles.create:
-    post:
-      tags:
-        - organizationRoles
-      summary: create organizationRoles
-      description: Create a role on an organization.
-      operationId: organizationRoles#create
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/CreateRequestBody2"
-      responses:
-        "200":
-          description: OK response.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/OrganizationRole"
-  /rpc/organizationRoles.delete:
-    post:
-      tags:
-        - organizationRoles
-      summary: delete organizationRoles
-      description: Delete a role from an organization by (organization_id, slug).
-      operationId: organizationRoles#delete
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/DeleteRequestBody2"
-      responses:
-        "204":
-          description: No Content response.
-  /rpc/organizationRoles.list:
-    post:
-      tags:
-        - organizationRoles
-      summary: list organizationRoles
-      description: List every role on an organization. No pagination — roles are a small per-org set.
-      operationId: organizationRoles#list
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/ListRequestBody2"
-      responses:
-        "200":
-          description: OK response.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ListOrganizationRolesResult"
-  /rpc/organizationRoles.update:
-    post:
-      tags:
-        - organizationRoles
-      summary: update organizationRoles
-      description: Patch a role's name and/or description by (organization_id, slug).
-      operationId: organizationRoles#update
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/UpdateRequestBody2"
-      responses:
-        "200":
-          description: OK response.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/OrganizationRole"
-  /rpc/organizations.create:
-    post:
-      tags:
-        - organizations
-      summary: create organizations
-      description: Create an organization.
-      operationId: organizations#create
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/CreateRequestBody"
-      responses:
-        "200":
-          description: OK response.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Organization"
-  /rpc/organizations.delete:
-    post:
-      tags:
-        - organizations
-      summary: delete organizations
-      description: Hard-delete an organization. Cascades to memberships.
-      operationId: organizations#delete
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/DeleteRequestBody"
-      responses:
-        "204":
-          description: No Content response.
-  /rpc/organizations.list:
-    post:
-      tags:
-        - organizations
-      summary: list organizations
-      description: List organizations.
-      operationId: organizations#list
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/ListRequestBody"
-      responses:
-        "200":
-          description: OK response.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ListOrganizationsResult"
-  /rpc/organizations.update:
-    post:
-      tags:
-        - organizations
-      summary: update organizations
-      description: Patch an organization. Empty `workos_id` clears the field.
-      operationId: organizations#update
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/UpdateRequestBody"
-      responses:
-        "200":
-          description: OK response.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Organization"
-  /rpc/users.create:
-    post:
-      tags:
-        - users
-      summary: create users
-      description: Create a user.
-      operationId: users#create
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/CreateRequestBody5"
-      responses:
-        "200":
-          description: OK response.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/User"
-  /rpc/users.delete:
-    post:
-      tags:
-        - users
-      summary: delete users
-      description: Hard-delete a user. Cascades to memberships, auth_codes, tokens, and any current_users row whose subject_ref matches (idp-design.md §6.1).
-      operationId: users#delete
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/DeleteRequestBody"
-      responses:
-        "204":
-          description: No Content response.
-  /rpc/users.list:
-    post:
-      tags:
-        - users
-      summary: list users
-      description: List users.
-      operationId: users#list
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/ListRequestBody"
-      responses:
-        "200":
-          description: OK response.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ListUsersResult"
-  /rpc/users.update:
-    post:
-      tags:
-        - users
-      summary: update users
-      description: Patch a user.
-      operationId: users#update
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/UpdateRequestBody4"
-      responses:
-        "200":
-          description: OK response.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/User"
+    /rpc/devIdp.clearCurrentUser:
+        post:
+            tags:
+                - devIdp
+            summary: clearCurrentUser devIdp
+            description: Clear the per-mode currentUser. The next identity-resolving request on the mode then falls through to the default-user bootstrap (idp-design.md §3) — git committer for local modes, WorkOS lookup for workos. Idempotent — clearing an already-cleared mode is a no-op.
+            operationId: devIdp#clearCurrentUser
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/GetCurrentUserRequestBody'
+            responses:
+                "204":
+                    description: No Content response.
+    /rpc/devIdp.getCurrentUser:
+        post:
+            tags:
+                - devIdp
+            summary: getCurrentUser devIdp
+            description: Read the per-mode currentUser. 404s when no row exists yet for that mode.
+            operationId: devIdp#getCurrentUser
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/GetCurrentUserRequestBody'
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/CurrentUser'
+    /rpc/devIdp.setCurrentUser:
+        post:
+            tags:
+                - devIdp
+            summary: setCurrentUser devIdp
+            description: UPSERT the per-mode currentUser. Local modes accept `user_id` (a UUID into the local users table); workos mode accepts `workos_sub` (a literal WorkOS user id; not validated). To clear the currentUser instead, call `clearCurrentUser`.
+            operationId: devIdp#setCurrentUser
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SetCurrentUserRequestBody'
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/CurrentUser'
+    /rpc/invitations.accept:
+        post:
+            tags:
+                - invitations
+            summary: accept invitations
+            description: 'Accept an invitation: flip state to `accepted`, find-or-create the user for the invited email, and idempotently attach a membership. Returns the updated invitation.'
+            operationId: invitations#accept
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/DeleteRequestBody'
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Invitation'
+    /rpc/invitations.create:
+        post:
+            tags:
+                - invitations
+            summary: create invitations
+            description: Create a pending invitation. The token is generated server-side; the dev-idp doesn't actually send email.
+            operationId: invitations#create
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateRequestBody3'
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Invitation'
+    /rpc/invitations.findByToken:
+        post:
+            tags:
+                - invitations
+            summary: findByToken invitations
+            description: Resolve an invitation by its token. Used by the dashboard accept-flow URL.
+            operationId: invitations#findByToken
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/FindByTokenRequestBody'
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Invitation'
+    /rpc/invitations.get:
+        post:
+            tags:
+                - invitations
+            summary: get invitations
+            description: Fetch a single invitation by id.
+            operationId: invitations#get
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/DeleteRequestBody'
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Invitation'
+    /rpc/invitations.list:
+        post:
+            tags:
+                - invitations
+            summary: list invitations
+            description: List invitations for an organization, keyset-paginated by id.
+            operationId: invitations#list
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ListRequestBody3'
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListInvitationsResult'
+    /rpc/invitations.resend:
+        post:
+            tags:
+                - invitations
+            summary: resend invitations
+            description: Touch the invitation's updated_at as if a fresh email were sent. The dev-idp doesn't actually send email.
+            operationId: invitations#resend
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/DeleteRequestBody'
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Invitation'
+    /rpc/invitations.revoke:
+        post:
+            tags:
+                - invitations
+            summary: revoke invitations
+            description: Revoke a pending invitation. Idempotent — repeated revokes return the same row.
+            operationId: invitations#revoke
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/DeleteRequestBody'
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Invitation'
+    /rpc/memberships.create:
+        post:
+            tags:
+                - memberships
+            summary: create memberships
+            description: Idempotently create a membership for (user_id, organization_id).
+            operationId: memberships#create
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateRequestBody4'
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Membership'
+    /rpc/memberships.delete:
+        post:
+            tags:
+                - memberships
+            summary: delete memberships
+            description: Hard-delete a membership.
+            operationId: memberships#delete
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/DeleteRequestBody'
+            responses:
+                "204":
+                    description: No Content response.
+    /rpc/memberships.list:
+        post:
+            tags:
+                - memberships
+            summary: list memberships
+            description: List memberships. Optional `user_id` and/or `organization_id` filters (idp-design.md §6.1).
+            operationId: memberships#list
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ListRequestBody4'
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListMembershipsResult'
+    /rpc/memberships.update:
+        post:
+            tags:
+                - memberships
+            summary: update memberships
+            description: Patch a membership's role.
+            operationId: memberships#update
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateRequestBody3'
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Membership'
+    /rpc/organizationRoles.create:
+        post:
+            tags:
+                - organizationRoles
+            summary: create organizationRoles
+            description: Create a role on an organization.
+            operationId: organizationRoles#create
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateRequestBody2'
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/OrganizationRole'
+    /rpc/organizationRoles.delete:
+        post:
+            tags:
+                - organizationRoles
+            summary: delete organizationRoles
+            description: Delete a role from an organization by (organization_id, slug).
+            operationId: organizationRoles#delete
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/DeleteRequestBody2'
+            responses:
+                "204":
+                    description: No Content response.
+    /rpc/organizationRoles.list:
+        post:
+            tags:
+                - organizationRoles
+            summary: list organizationRoles
+            description: List every role on an organization. No pagination — roles are a small per-org set.
+            operationId: organizationRoles#list
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ListRequestBody2'
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListOrganizationRolesResult'
+    /rpc/organizationRoles.update:
+        post:
+            tags:
+                - organizationRoles
+            summary: update organizationRoles
+            description: Patch a role's name and/or description by (organization_id, slug).
+            operationId: organizationRoles#update
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateRequestBody2'
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/OrganizationRole'
+    /rpc/organizations.create:
+        post:
+            tags:
+                - organizations
+            summary: create organizations
+            description: Create an organization.
+            operationId: organizations#create
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateRequestBody'
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Organization'
+    /rpc/organizations.delete:
+        post:
+            tags:
+                - organizations
+            summary: delete organizations
+            description: Hard-delete an organization. Cascades to memberships.
+            operationId: organizations#delete
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/DeleteRequestBody'
+            responses:
+                "204":
+                    description: No Content response.
+    /rpc/organizations.list:
+        post:
+            tags:
+                - organizations
+            summary: list organizations
+            description: List organizations.
+            operationId: organizations#list
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ListRequestBody'
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListOrganizationsResult'
+    /rpc/organizations.update:
+        post:
+            tags:
+                - organizations
+            summary: update organizations
+            description: Patch an organization. Empty `workos_id` clears the field.
+            operationId: organizations#update
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateRequestBody'
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Organization'
+    /rpc/users.create:
+        post:
+            tags:
+                - users
+            summary: create users
+            description: Create a user.
+            operationId: users#create
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateRequestBody5'
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/User'
+    /rpc/users.delete:
+        post:
+            tags:
+                - users
+            summary: delete users
+            description: Hard-delete a user. Cascades to memberships, auth_codes, tokens, and any current_users row whose subject_ref matches (idp-design.md §6.1).
+            operationId: users#delete
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/DeleteRequestBody'
+            responses:
+                "204":
+                    description: No Content response.
+    /rpc/users.list:
+        post:
+            tags:
+                - users
+            summary: list users
+            description: List users.
+            operationId: users#list
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ListRequestBody'
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListUsersResult'
+    /rpc/users.update:
+        post:
+            tags:
+                - users
+            summary: update users
+            description: Patch a user.
+            operationId: users#update
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateRequestBody4'
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/User'
 components:
-  schemas:
-    CreateRequestBody:
-      type: object
-      properties:
-        account_type:
-          type: string
-          description: Plan tier; defaults to `free`.
-        name:
-          type: string
-          description: Display name.
-        slug:
-          type: string
-          description: URL slug. Must be unique.
-        workos_id:
-          type: string
-          description: Optional WorkOS organization id echoed by local-speakeasy validate.
-      required:
-        - name
-        - slug
-    CreateRequestBody2:
-      type: object
-      properties:
-        description:
-          type: string
-          description: Free-form description.
-        name:
-          type: string
-          description: Display name.
-        organization_id:
-          type: string
-          description: Organization UUID.
-          format: uuid
-        slug:
-          type: string
-          description: Role slug — unique within the org.
-      required:
-        - organization_id
-        - slug
-        - name
-    CreateRequestBody3:
-      type: object
-      properties:
-        email:
-          type: string
-          description: Invitee email.
-        inviter_user_id:
-          type: string
-          description: Inviter UUID (optional).
-          format: uuid
-        organization_id:
-          type: string
-          description: Organization UUID the invitee will be added to on accept.
-          format: uuid
-      required:
-        - email
-        - organization_id
-    CreateRequestBody4:
-      type: object
-      properties:
-        organization_id:
-          type: string
-          description: Organization UUID.
-          format: uuid
-        role:
-          type: string
-          description: Role within the organization; defaults to `member`.
-        user_id:
-          type: string
-          description: User UUID.
-          format: uuid
-      required:
-        - user_id
-        - organization_id
-    CreateRequestBody5:
-      type: object
-      properties:
-        admin:
-          type: boolean
-          description: Admin flag; defaults false.
-        display_name:
-          type: string
-          description: Display name.
-        email:
-          type: string
-          description: Email address. Must be unique.
-        github_handle:
-          type: string
-          description: Optional GitHub handle.
-        photo_url:
-          type: string
-          description: Optional photo URL.
-        whitelisted:
-          type: boolean
-          description: Whitelist flag; defaults true.
-      required:
-        - email
-        - display_name
-    CurrentUser:
-      type: object
-      properties:
-        mode:
-          type: string
-          description: Mode whose currentUser is being reported.
-          enum:
-            - local-speakeasy
-            - oauth2-1
-            - oauth2
-            - workos
-        user:
-          $ref: "#/components/schemas/User"
-        workos:
-          $ref: "#/components/schemas/WorkosCurrentUser"
-      required:
-        - mode
-    DeleteRequestBody:
-      type: object
-      properties:
-        id:
-          type: string
-          description: Organization UUID.
-          format: uuid
-      required:
-        - id
-    DeleteRequestBody2:
-      type: object
-      properties:
-        organization_id:
-          type: string
-          description: Organization UUID.
-          format: uuid
-        slug:
-          type: string
-          description: Role slug.
-      required:
-        - organization_id
-        - slug
-    FindByTokenRequestBody:
-      type: object
-      properties:
-        token:
-          type: string
-          description: Opaque invitation token.
-      required:
-        - token
-    GetCurrentUserRequestBody:
-      type: object
-      properties:
-        mode:
-          type: string
-          description: Which mode's currentUser to read.
-          enum:
-            - local-speakeasy
-            - oauth2-1
-            - oauth2
-            - workos
-      required:
-        - mode
-    Invitation:
-      type: object
-      properties:
-        accepted_at:
-          type: string
-          description: Timestamp when the invitation was accepted; empty for pending.
-          format: date-time
-        created_at:
-          type: string
-          format: date-time
-        email:
-          type: string
-          description: Invitee email address.
-        expires_at:
-          type: string
-          description: Timestamp when the invitation expires.
-          format: date-time
-        id:
-          type: string
-          description: Invitation UUID.
-          format: uuid
-        inviter_user_id:
-          type: string
-          description: User UUID of the inviter, when known.
-          format: uuid
-        organization_id:
-          type: string
-          description: Organization UUID.
-          format: uuid
-        revoked_at:
-          type: string
-          description: Timestamp when the invitation was revoked; empty for pending.
-          format: date-time
-        state:
-          type: string
-          description: Invitation lifecycle state.
-          enum:
-            - pending
-            - accepted
-            - revoked
-            - expired
-        token:
-          type: string
-          description: Opaque token used by /findByToken and the accept-flow URL.
-        updated_at:
-          type: string
-          format: date-time
-      required:
-        - id
-        - email
-        - organization_id
-        - state
-        - token
-        - expires_at
-        - created_at
-        - updated_at
-    ListInvitationsResult:
-      type: object
-      properties:
-        items:
-          type: array
-          items:
-            $ref: "#/components/schemas/Invitation"
-          description: Invitations on this page.
-        next_cursor:
-          type: string
-          description: Cursor for the next page, empty when exhausted.
-      required:
-        - next_cursor
-        - items
-    ListMembershipsResult:
-      type: object
-      properties:
-        items:
-          type: array
-          items:
-            $ref: "#/components/schemas/Membership"
-          description: Memberships on this page.
-        next_cursor:
-          type: string
-          description: Cursor for the next page, empty when exhausted.
-      required:
-        - next_cursor
-        - items
-    ListOrganizationRolesResult:
-      type: object
-      properties:
-        items:
-          type: array
-          items:
-            $ref: "#/components/schemas/OrganizationRole"
-          description: Roles for the organization.
-      required:
-        - items
-    ListOrganizationsResult:
-      type: object
-      properties:
-        items:
-          type: array
-          items:
-            $ref: "#/components/schemas/Organization"
-          description: Organizations on this page.
-        next_cursor:
-          type: string
-          description: Cursor for the next page, empty when exhausted.
-      required:
-        - next_cursor
-        - items
-    ListRequestBody:
-      type: object
-      properties:
-        cursor:
-          type: string
-          description: Opaque cursor returned by a previous list call.
-        limit:
-          type: integer
-          description: Maximum items to return.
-          default: 50
-          format: int64
-          minimum: 1
-          maximum: 100
-    ListRequestBody2:
-      type: object
-      properties:
-        organization_id:
-          type: string
-          description: Organization UUID.
-          format: uuid
-      required:
-        - organization_id
-    ListRequestBody3:
-      type: object
-      properties:
-        cursor:
-          type: string
-          description: Opaque cursor returned by a previous list call.
-        limit:
-          type: integer
-          description: Maximum items to return.
-          default: 50
-          format: int64
-          minimum: 1
-          maximum: 100
-        organization_id:
-          type: string
-          description: Organization UUID.
-          format: uuid
-      required:
-        - organization_id
-    ListRequestBody4:
-      type: object
-      properties:
-        cursor:
-          type: string
-          description: Opaque cursor returned by a previous list call.
-        limit:
-          type: integer
-          description: Maximum items to return.
-          default: 50
-          format: int64
-          minimum: 1
-          maximum: 100
-        organization_id:
-          type: string
-          description: Optional organization filter.
-          format: uuid
-        user_id:
-          type: string
-          description: Optional user filter.
-          format: uuid
-    ListUsersResult:
-      type: object
-      properties:
-        items:
-          type: array
-          items:
-            $ref: "#/components/schemas/User"
-          description: Users on this page.
-        next_cursor:
-          type: string
-          description: Cursor for the next page, empty when exhausted.
-      required:
-        - next_cursor
-        - items
-    Membership:
-      type: object
-      properties:
-        created_at:
-          type: string
-          format: date-time
-        id:
-          type: string
-          description: Membership UUID.
-          format: uuid
-        organization_id:
-          type: string
-          description: Organization UUID.
-          format: uuid
-        role:
-          type: string
-          description: Role within the organization (default `member`).
-        updated_at:
-          type: string
-          format: date-time
-        user_id:
-          type: string
-          description: User UUID.
-          format: uuid
-      required:
-        - id
-        - user_id
-        - organization_id
-        - role
-        - created_at
-        - updated_at
-    Organization:
-      type: object
-      properties:
-        account_type:
-          type: string
-          description: Plan tier (`free`, etc.).
-        created_at:
-          type: string
-          format: date-time
-        id:
-          type: string
-          description: Organization UUID.
-          format: uuid
-        name:
-          type: string
-          description: Display name.
-        slug:
-          type: string
-          description: URL slug (unique).
-        updated_at:
-          type: string
-          format: date-time
-        workos_id:
-          type: string
-          description: Optional WorkOS organization id echoed by local-speakeasy validate.
-      required:
-        - id
-        - name
-        - slug
-        - account_type
-        - created_at
-        - updated_at
-    OrganizationRole:
-      type: object
-      properties:
-        created_at:
-          type: string
-          format: date-time
-        description:
-          type: string
-          description: Free-form description; empty string when unset.
-        id:
-          type: string
-          description: Role UUID.
-          format: uuid
-        name:
-          type: string
-          description: Display name.
-        organization_id:
-          type: string
-          description: Organization UUID.
-          format: uuid
-        slug:
-          type: string
-          description: Role slug — unique within the organization.
-        updated_at:
-          type: string
-          format: date-time
-      required:
-        - id
-        - organization_id
-        - slug
-        - name
-        - description
-        - created_at
-        - updated_at
-    SetCurrentUserRequestBody:
-      type: object
-      properties:
-        mode:
-          type: string
-          description: Which mode's currentUser to write.
-          enum:
-            - local-speakeasy
-            - oauth2-1
-            - oauth2
-            - workos
-        user_id:
-          type: string
-          description: Local user UUID. Required for non-workos modes.
-          format: uuid
-        workos_sub:
-          type: string
-          description: WorkOS user id. Required for workos mode.
-      required:
-        - mode
-    UpdateRequestBody:
-      type: object
-      properties:
-        account_type:
-          type: string
-          description: Plan tier.
-        id:
-          type: string
-          description: Organization UUID.
-          format: uuid
-        name:
-          type: string
-          description: Display name.
-        slug:
-          type: string
-          description: URL slug.
-        workos_id:
-          type: string
-          description: WorkOS organization id; pass empty string to clear.
-      required:
-        - id
-    UpdateRequestBody2:
-      type: object
-      properties:
-        description:
-          type: string
-        name:
-          type: string
-        organization_id:
-          type: string
-          description: Organization UUID.
-          format: uuid
-        slug:
-          type: string
-          description: Role slug.
-      required:
-        - organization_id
-        - slug
-    UpdateRequestBody3:
-      type: object
-      properties:
-        id:
-          type: string
-          description: Membership UUID.
-          format: uuid
-        role:
-          type: string
-          description: New role.
-      required:
-        - id
-        - role
-    UpdateRequestBody4:
-      type: object
-      properties:
-        admin:
-          type: boolean
-        display_name:
-          type: string
-        email:
-          type: string
-        github_handle:
-          type: string
-        id:
-          type: string
-          description: User UUID.
-          format: uuid
-        photo_url:
-          type: string
-        whitelisted:
-          type: boolean
-      required:
-        - id
-    User:
-      type: object
-      properties:
-        admin:
-          type: boolean
-          description: Admin flag echoed by local-speakeasy validate.
-        created_at:
-          type: string
-          format: date-time
-        display_name:
-          type: string
-          description: Display name.
-        email:
-          type: string
-          description: Email address (unique).
-        github_handle:
-          type: string
-          description: Optional GitHub handle.
-        id:
-          type: string
-          description: User UUID.
-          format: uuid
-        photo_url:
-          type: string
-          description: Optional photo URL.
-        updated_at:
-          type: string
-          format: date-time
-        whitelisted:
-          type: boolean
-          description: Whitelist flag echoed by local-speakeasy validate.
-      required:
-        - id
-        - email
-        - display_name
-        - admin
-        - whitelisted
-        - created_at
-        - updated_at
-    WorkosCurrentUser:
-      type: object
-      properties:
-        email:
-          type: string
-          description: Email address from the live WorkOS user record.
-        first_name:
-          type: string
-        last_name:
-          type: string
-        organization_id:
-          type: string
-          description: Default WorkOS organization id, when set.
-        profile_picture_url:
-          type: string
-        workos_sub:
-          type: string
-          description: WorkOS user id (the `sub` stored in current_users).
-      required:
-        - workos_sub
+    schemas:
+        CreateRequestBody:
+            type: object
+            properties:
+                account_type:
+                    type: string
+                    description: Plan tier; defaults to `free`.
+                name:
+                    type: string
+                    description: Display name.
+                slug:
+                    type: string
+                    description: URL slug. Must be unique.
+                workos_id:
+                    type: string
+                    description: Optional WorkOS organization id echoed by local-speakeasy validate.
+            required:
+                - name
+                - slug
+        CreateRequestBody2:
+            type: object
+            properties:
+                description:
+                    type: string
+                    description: Free-form description.
+                name:
+                    type: string
+                    description: Display name.
+                organization_id:
+                    type: string
+                    description: Organization UUID.
+                    format: uuid
+                slug:
+                    type: string
+                    description: Role slug — unique within the org.
+            required:
+                - organization_id
+                - slug
+                - name
+        CreateRequestBody3:
+            type: object
+            properties:
+                email:
+                    type: string
+                    description: Invitee email.
+                inviter_user_id:
+                    type: string
+                    description: Inviter UUID (optional).
+                    format: uuid
+                organization_id:
+                    type: string
+                    description: Organization UUID the invitee will be added to on accept.
+                    format: uuid
+            required:
+                - email
+                - organization_id
+        CreateRequestBody4:
+            type: object
+            properties:
+                organization_id:
+                    type: string
+                    description: Organization UUID.
+                    format: uuid
+                role:
+                    type: string
+                    description: Role within the organization; defaults to `member`.
+                user_id:
+                    type: string
+                    description: User UUID.
+                    format: uuid
+            required:
+                - user_id
+                - organization_id
+        CreateRequestBody5:
+            type: object
+            properties:
+                admin:
+                    type: boolean
+                    description: Admin flag; defaults false.
+                display_name:
+                    type: string
+                    description: Display name.
+                email:
+                    type: string
+                    description: Email address. Must be unique.
+                github_handle:
+                    type: string
+                    description: Optional GitHub handle.
+                photo_url:
+                    type: string
+                    description: Optional photo URL.
+                whitelisted:
+                    type: boolean
+                    description: Whitelist flag; defaults true.
+            required:
+                - email
+                - display_name
+        CurrentUser:
+            type: object
+            properties:
+                mode:
+                    type: string
+                    description: Mode whose currentUser is being reported.
+                    enum:
+                        - local-speakeasy
+                        - oauth2-1
+                        - oauth2
+                        - workos
+                user:
+                    $ref: '#/components/schemas/User'
+                workos:
+                    $ref: '#/components/schemas/WorkosCurrentUser'
+            required:
+                - mode
+        DeleteRequestBody:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: Organization UUID.
+                    format: uuid
+            required:
+                - id
+        DeleteRequestBody2:
+            type: object
+            properties:
+                organization_id:
+                    type: string
+                    description: Organization UUID.
+                    format: uuid
+                slug:
+                    type: string
+                    description: Role slug.
+            required:
+                - organization_id
+                - slug
+        FindByTokenRequestBody:
+            type: object
+            properties:
+                token:
+                    type: string
+                    description: Opaque invitation token.
+            required:
+                - token
+        GetCurrentUserRequestBody:
+            type: object
+            properties:
+                mode:
+                    type: string
+                    description: Which mode's currentUser to read.
+                    enum:
+                        - local-speakeasy
+                        - oauth2-1
+                        - oauth2
+                        - workos
+            required:
+                - mode
+        Invitation:
+            type: object
+            properties:
+                accepted_at:
+                    type: string
+                    description: Timestamp when the invitation was accepted; empty for pending.
+                    format: date-time
+                created_at:
+                    type: string
+                    format: date-time
+                email:
+                    type: string
+                    description: Invitee email address.
+                expires_at:
+                    type: string
+                    description: Timestamp when the invitation expires.
+                    format: date-time
+                id:
+                    type: string
+                    description: Invitation UUID.
+                    format: uuid
+                inviter_user_id:
+                    type: string
+                    description: User UUID of the inviter, when known.
+                    format: uuid
+                organization_id:
+                    type: string
+                    description: Organization UUID.
+                    format: uuid
+                revoked_at:
+                    type: string
+                    description: Timestamp when the invitation was revoked; empty for pending.
+                    format: date-time
+                state:
+                    type: string
+                    description: Invitation lifecycle state.
+                    enum:
+                        - pending
+                        - accepted
+                        - revoked
+                        - expired
+                token:
+                    type: string
+                    description: Opaque token used by /findByToken and the accept-flow URL.
+                updated_at:
+                    type: string
+                    format: date-time
+            required:
+                - id
+                - email
+                - organization_id
+                - state
+                - token
+                - expires_at
+                - created_at
+                - updated_at
+        ListInvitationsResult:
+            type: object
+            properties:
+                items:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/Invitation'
+                    description: Invitations on this page.
+                next_cursor:
+                    type: string
+                    description: Cursor for the next page, empty when exhausted.
+            required:
+                - next_cursor
+                - items
+        ListMembershipsResult:
+            type: object
+            properties:
+                items:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/Membership'
+                    description: Memberships on this page.
+                next_cursor:
+                    type: string
+                    description: Cursor for the next page, empty when exhausted.
+            required:
+                - next_cursor
+                - items
+        ListOrganizationRolesResult:
+            type: object
+            properties:
+                items:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/OrganizationRole'
+                    description: Roles for the organization.
+            required:
+                - items
+        ListOrganizationsResult:
+            type: object
+            properties:
+                items:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/Organization'
+                    description: Organizations on this page.
+                next_cursor:
+                    type: string
+                    description: Cursor for the next page, empty when exhausted.
+            required:
+                - next_cursor
+                - items
+        ListRequestBody:
+            type: object
+            properties:
+                cursor:
+                    type: string
+                    description: Opaque cursor returned by a previous list call.
+                limit:
+                    type: integer
+                    description: Maximum items to return.
+                    default: 50
+                    format: int64
+                    minimum: 1
+                    maximum: 100
+        ListRequestBody2:
+            type: object
+            properties:
+                organization_id:
+                    type: string
+                    description: Organization UUID.
+                    format: uuid
+            required:
+                - organization_id
+        ListRequestBody3:
+            type: object
+            properties:
+                cursor:
+                    type: string
+                    description: Opaque cursor returned by a previous list call.
+                limit:
+                    type: integer
+                    description: Maximum items to return.
+                    default: 50
+                    format: int64
+                    minimum: 1
+                    maximum: 100
+                organization_id:
+                    type: string
+                    description: Organization UUID.
+                    format: uuid
+            required:
+                - organization_id
+        ListRequestBody4:
+            type: object
+            properties:
+                cursor:
+                    type: string
+                    description: Opaque cursor returned by a previous list call.
+                limit:
+                    type: integer
+                    description: Maximum items to return.
+                    default: 50
+                    format: int64
+                    minimum: 1
+                    maximum: 100
+                organization_id:
+                    type: string
+                    description: Optional organization filter.
+                    format: uuid
+                user_id:
+                    type: string
+                    description: Optional user filter.
+                    format: uuid
+        ListUsersResult:
+            type: object
+            properties:
+                items:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/User'
+                    description: Users on this page.
+                next_cursor:
+                    type: string
+                    description: Cursor for the next page, empty when exhausted.
+            required:
+                - next_cursor
+                - items
+        Membership:
+            type: object
+            properties:
+                created_at:
+                    type: string
+                    format: date-time
+                id:
+                    type: string
+                    description: Membership UUID.
+                    format: uuid
+                organization_id:
+                    type: string
+                    description: Organization UUID.
+                    format: uuid
+                role:
+                    type: string
+                    description: Role within the organization (default `member`).
+                updated_at:
+                    type: string
+                    format: date-time
+                user_id:
+                    type: string
+                    description: User UUID.
+                    format: uuid
+            required:
+                - id
+                - user_id
+                - organization_id
+                - role
+                - created_at
+                - updated_at
+        Organization:
+            type: object
+            properties:
+                account_type:
+                    type: string
+                    description: Plan tier (`free`, etc.).
+                created_at:
+                    type: string
+                    format: date-time
+                id:
+                    type: string
+                    description: Organization UUID.
+                    format: uuid
+                name:
+                    type: string
+                    description: Display name.
+                slug:
+                    type: string
+                    description: URL slug (unique).
+                updated_at:
+                    type: string
+                    format: date-time
+                workos_id:
+                    type: string
+                    description: Optional WorkOS organization id echoed by local-speakeasy validate.
+            required:
+                - id
+                - name
+                - slug
+                - account_type
+                - created_at
+                - updated_at
+        OrganizationRole:
+            type: object
+            properties:
+                created_at:
+                    type: string
+                    format: date-time
+                description:
+                    type: string
+                    description: Free-form description; empty string when unset.
+                id:
+                    type: string
+                    description: Role UUID.
+                    format: uuid
+                name:
+                    type: string
+                    description: Display name.
+                organization_id:
+                    type: string
+                    description: Organization UUID.
+                    format: uuid
+                slug:
+                    type: string
+                    description: Role slug — unique within the organization.
+                updated_at:
+                    type: string
+                    format: date-time
+            required:
+                - id
+                - organization_id
+                - slug
+                - name
+                - description
+                - created_at
+                - updated_at
+        SetCurrentUserRequestBody:
+            type: object
+            properties:
+                mode:
+                    type: string
+                    description: Which mode's currentUser to write.
+                    enum:
+                        - local-speakeasy
+                        - oauth2-1
+                        - oauth2
+                        - workos
+                user_id:
+                    type: string
+                    description: Local user UUID. Required for non-workos modes.
+                    format: uuid
+                workos_sub:
+                    type: string
+                    description: WorkOS user id. Required for workos mode.
+            required:
+                - mode
+        UpdateRequestBody:
+            type: object
+            properties:
+                account_type:
+                    type: string
+                    description: Plan tier.
+                id:
+                    type: string
+                    description: Organization UUID.
+                    format: uuid
+                name:
+                    type: string
+                    description: Display name.
+                slug:
+                    type: string
+                    description: URL slug.
+                workos_id:
+                    type: string
+                    description: WorkOS organization id; pass empty string to clear.
+            required:
+                - id
+        UpdateRequestBody2:
+            type: object
+            properties:
+                description:
+                    type: string
+                name:
+                    type: string
+                organization_id:
+                    type: string
+                    description: Organization UUID.
+                    format: uuid
+                slug:
+                    type: string
+                    description: Role slug.
+            required:
+                - organization_id
+                - slug
+        UpdateRequestBody3:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: Membership UUID.
+                    format: uuid
+                role:
+                    type: string
+                    description: New role.
+            required:
+                - id
+                - role
+        UpdateRequestBody4:
+            type: object
+            properties:
+                admin:
+                    type: boolean
+                display_name:
+                    type: string
+                email:
+                    type: string
+                github_handle:
+                    type: string
+                id:
+                    type: string
+                    description: User UUID.
+                    format: uuid
+                photo_url:
+                    type: string
+                whitelisted:
+                    type: boolean
+            required:
+                - id
+        User:
+            type: object
+            properties:
+                admin:
+                    type: boolean
+                    description: Admin flag echoed by local-speakeasy validate.
+                created_at:
+                    type: string
+                    format: date-time
+                display_name:
+                    type: string
+                    description: Display name.
+                email:
+                    type: string
+                    description: Email address (unique).
+                github_handle:
+                    type: string
+                    description: Optional GitHub handle.
+                id:
+                    type: string
+                    description: User UUID.
+                    format: uuid
+                photo_url:
+                    type: string
+                    description: Optional photo URL.
+                updated_at:
+                    type: string
+                    format: date-time
+                whitelisted:
+                    type: boolean
+                    description: Whitelist flag echoed by local-speakeasy validate.
+            required:
+                - id
+                - email
+                - display_name
+                - admin
+                - whitelisted
+                - created_at
+                - updated_at
+        WorkosCurrentUser:
+            type: object
+            properties:
+                email:
+                    type: string
+                    description: Email address from the live WorkOS user record.
+                first_name:
+                    type: string
+                last_name:
+                    type: string
+                organization_id:
+                    type: string
+                    description: Default WorkOS organization id, when set.
+                profile_picture_url:
+                    type: string
+                workos_sub:
+                    type: string
+                    description: WorkOS user id (the `sub` stored in current_users).
+            required:
+                - workos_sub
 tags:
-  - name: devIdp
-    description: Dev-only RPCs for the dev-idp itself. Per-mode currentUser get/set (idp-design.md §3, §6.2). Permanently unauthenticated.
-  - name: organizations
-    description: Dev-idp organizations CRUD. Backs both local-speakeasy and oauth2 modes' org metadata. Permanently unauthenticated (idp-design.md §6).
-  - name: organizationRoles
-    description: Dev-idp organization-role CRUD. Mirrors the WorkOS authorization-role surface (idp-design.md §7.1, /authorization/organizations/{id}/roles[/{slug}]). Keyed on `(organization_id, slug)` since slug is the natural identifier; the underlying row's UUID is also returned for completeness. Permanently unauthenticated.
-  - name: invitations
-    description: "Dev-idp invitations: create, list, get, find-by-token, revoke, resend, accept. Mirrors the WorkOS user_management invitation lifecycle. The accept-flow is dev-idp-specific — clicking 'accept' in the dashboard hits `invitations.accept`, which flips state and find-or-creates the corresponding user + membership. Permanently unauthenticated."
-  - name: memberships
-    description: Dev-idp memberships CRUD. Idempotent on (user_id, organization_id) for create. Permanently unauthenticated.
-  - name: users
-    description: Dev-idp users CRUD. The local-mode currentUser (local-speakeasy / oauth2-1 / oauth2) references rows in this table by id (idp-design.md §3, §5). Permanently unauthenticated.
+    - name: devIdp
+      description: Dev-only RPCs for the dev-idp itself. Per-mode currentUser get/set (idp-design.md §3, §6.2). Permanently unauthenticated.
+    - name: organizations
+      description: Dev-idp organizations CRUD. Backs both local-speakeasy and oauth2 modes' org metadata. Permanently unauthenticated (idp-design.md §6).
+    - name: organizationRoles
+      description: Dev-idp organization-role CRUD. Mirrors the WorkOS authorization-role surface (idp-design.md §7.1, /authorization/organizations/{id}/roles[/{slug}]). Keyed on `(organization_id, slug)` since slug is the natural identifier; the underlying row's UUID is also returned for completeness. Permanently unauthenticated.
+    - name: invitations
+      description: 'Dev-idp invitations: create, list, get, find-by-token, revoke, resend, accept. Mirrors the WorkOS user_management invitation lifecycle. The accept-flow is dev-idp-specific — clicking ''accept'' in the dashboard hits `invitations.accept`, which flips state and find-or-creates the corresponding user + membership. Permanently unauthenticated.'
+    - name: memberships
+      description: Dev-idp memberships CRUD. Idempotent on (user_id, organization_id) for create. Permanently unauthenticated.
+    - name: users
+      description: Dev-idp users CRUD. The local-mode currentUser (local-speakeasy / oauth2-1 / oauth2) references rows in this table by id (idp-design.md §3, §5). Permanently unauthenticated.
