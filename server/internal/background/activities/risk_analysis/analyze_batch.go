@@ -101,10 +101,10 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		// Policy was deleted (soft or hard) between FetchUnanalyzedMessages
-		// returning IDs and this activity running. FetchUnanalyzed errors out
-		// on the next drain cycle, so there is no infinite loop and no need
-		// to write Found=false rows; the FK to risk_policies might also be
-		// gone on hard-delete.
+		// returning IDs and this activity running. FetchUnanalyzed also
+		// returns an empty batch on the next drain cycle, so there is no
+		// infinite loop and no need to write Found=false rows; the FK to
+		// risk_policies might also be gone on hard-delete.
 		span.SetAttributes(attribute.Bool("risk.policy_deleted", true))
 		a.logger.InfoContext(ctx, "risk policy deleted, skipping batch",
 			attr.SlogRiskPolicyID(args.RiskPolicyID.String()),
