@@ -1620,7 +1620,6 @@ func (s *ServiceCore) buildRuntimeStartupConfig(
 		ChatID:         thread.ChatID.String(),
 		MCPServers:     mcpServers,
 		History:        history,
-		WarmTTLSeconds: assistant.WarmTTLSeconds,
 	}, nil
 }
 

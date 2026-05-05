@@ -73,7 +73,6 @@ type runtimeStartupConfig struct {
 	ChatID         string             `json:"chat_id"`
 	MCPServers     []runtimeMCPServer `json:"mcp_servers"`
 	History        []runtimeMessage   `json:"history,omitempty"`
-	WarmTTLSeconds int                `json:"warm_ttl_seconds"`
 }
 
 type runtimeMCPServer struct {
