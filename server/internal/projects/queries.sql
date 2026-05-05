@@ -106,3 +106,4 @@ UPDATE organization_metadata
 SET whitelisted = @whitelisted,
     updated_at = clock_timestamp()
 WHERE id = @organization_id;
+

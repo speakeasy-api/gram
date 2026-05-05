@@ -99,6 +99,21 @@ WHERE slug = @slug
   AND project_id = @project_id AND deleted IS FALSE
 RETURNING id, name, slug;
 
+-- name: SetToolsetMCPPublicByID :exec
+UPDATE toolsets
+SET mcp_is_public = @mcp_is_public
+WHERE id = @id AND project_id = @project_id;
+
+-- name: SetToolsetMCPPublicBySlug :exec
+UPDATE toolsets
+SET mcp_is_public = @mcp_is_public
+WHERE mcp_slug = @mcp_slug;
+
+-- name: SetToolsetMCPEnabledByID :exec
+UPDATE toolsets
+SET mcp_enabled = @mcp_enabled
+WHERE id = @id AND project_id = @project_id;
+
 -- name: GetHTTPSecurityDefinitions :many
 SELECT *
 FROM http_security

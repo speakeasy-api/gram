@@ -211,6 +211,24 @@ func (q *Queries) CreateExternalMCPToolDefinition(ctx context.Context, arg Creat
 	return i, err
 }
 
+const createMCPRegistry = `-- name: CreateMCPRegistry :one
+INSERT INTO mcp_registries (name, url)
+VALUES ($1, $2)
+RETURNING id
+`
+
+type CreateMCPRegistryParams struct {
+	Name string
+	Url  string
+}
+
+func (q *Queries) CreateMCPRegistry(ctx context.Context, arg CreateMCPRegistryParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, createMCPRegistry, arg.Name, arg.Url)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const findExternalMCPToolEntriesForProjects = `-- name: FindExternalMCPToolEntriesForProjects :many
 WITH project_deployments AS (
     SELECT DISTINCT ON (d.project_id) d.project_id, d.id as deployment_id

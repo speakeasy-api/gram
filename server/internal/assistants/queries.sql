@@ -465,3 +465,66 @@ WHERE project_id = @project_id
   AND deleted IS FALSE
   AND ended IS FALSE
   AND state IN (@starting_state, @active_state);
+
+-- name: CreateAssistantRuntime :exec
+-- Inserts an assistant_runtimes row with caller-controlled warm_until,
+-- last_heartbeat_at, and updated_at so callers can simulate stale or stuck
+-- runtimes. ReserveAssistantRuntime is the conflict-aware production path
+-- that re-derives backend metadata from the most recent runtime; this query
+-- accepts the row verbatim.
+INSERT INTO assistant_runtimes (
+  assistant_thread_id,
+  assistant_id,
+  project_id,
+  backend,
+  backend_metadata_json,
+  state,
+  warm_until,
+  last_heartbeat_at,
+  updated_at
+) VALUES (
+  @assistant_thread_id,
+  @assistant_id,
+  @project_id,
+  @backend,
+  @backend_metadata_json,
+  @state,
+  @warm_until,
+  @last_heartbeat_at,
+  @updated_at
+);
+
+-- name: SetAssistantStatus :exec
+UPDATE assistants SET status = @status WHERE id = @id AND project_id = @project_id;
+
+-- name: SoftDeleteAssistantThread :exec
+UPDATE assistant_threads SET deleted_at = clock_timestamp() WHERE id = @id AND project_id = @project_id;
+
+-- name: SetAssistantThreadEventStatus :exec
+UPDATE assistant_thread_events
+SET status = @status, updated_at = @updated_at
+WHERE id = @id AND project_id = @project_id;
+
+-- name: GetActiveAssistantRuntimeByThreadID :one
+SELECT * FROM assistant_runtimes
+WHERE assistant_thread_id = @assistant_thread_id
+  AND project_id = @project_id
+  AND deleted IS FALSE
+ORDER BY created_at DESC
+LIMIT 1;
+
+-- name: GetLatestAssistantRuntimeByThreadID :one
+-- Returns the most recent runtime for a thread regardless of deletion status,
+-- so callers can assert on a runtime that was just soft-deleted.
+SELECT * FROM assistant_runtimes
+WHERE assistant_thread_id = @assistant_thread_id
+  AND project_id = @project_id
+ORDER BY created_at DESC
+LIMIT 1;
+
+-- name: GetLatestAssistantThreadEventByThreadID :one
+SELECT * FROM assistant_thread_events
+WHERE assistant_thread_id = @assistant_thread_id
+  AND project_id = @project_id
+ORDER BY created_at DESC
+LIMIT 1;

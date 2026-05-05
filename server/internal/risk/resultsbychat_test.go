@@ -11,6 +11,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
 func seedChatWithUser(t *testing.T, ti *testInstance, projectID uuid.UUID, orgID, externalUserID string) (uuid.UUID, uuid.UUID) {
@@ -30,13 +31,12 @@ func seedChatWithUser(t *testing.T, ti *testInstance, projectID uuid.UUID, orgID
 	})
 	require.NoError(t, err)
 
-	msgID, err := uuid.NewV7()
-	require.NoError(t, err)
-
-	_, err = ti.conn.Exec(ctx,
-		`INSERT INTO chat_messages (id, chat_id, project_id, role, content) VALUES ($1, $2, $3, $4, $5)`,
-		msgID, chatID, projectID, "user", "test message",
-	)
+	msgID, err := testrepo.New(ti.conn).InsertChatMessage(ctx, testrepo.InsertChatMessageParams{
+		ChatID:    chatID,
+		ProjectID: uuid.NullUUID{UUID: projectID, Valid: true},
+		Role:      "user",
+		Content:   "test message",
+	})
 	require.NoError(t, err)
 
 	return chatID, msgID
