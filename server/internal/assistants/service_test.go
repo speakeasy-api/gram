@@ -69,6 +69,219 @@ WHERE assistant_thread_id = $1
 	require.Equal(t, runtimeBackendFlyIO, backend)
 }
 
+func TestWarmRemainingSecondsKeepsBusyRunnerAlive(t *testing.T) {
+	t.Parallel()
+
+	// The runner sends idle_seconds=0 while a turn is in flight (see
+	// agents/runner/src/wire.rs::RunnerStateResponse) and omits the field
+	// entirely only when never /configured. ExpireThreadRuntime must treat
+	// both shapes as "do not stop": the &0 case covers the production race,
+	// and the nil case is a defensive guard against an unconfigured backend
+	// row sneaking past the CAS.
+	zero := uint64(0)
+	require.Positive(t, warmRemainingSeconds(&zero, 300), "busy runner (idle=&0) must keep a positive warm window")
+	require.Positive(t, warmRemainingSeconds(nil, 300), "missing idle (never configured) must not collapse to a Stop decision")
+}
+
+func TestServiceCoreExpireThreadRuntimeRevertsWhenTurnInFlight(t *testing.T) {
+	t.Parallel()
+
+	conn, err := assistantsInfra.CloneTestDatabase(t, "assistants_expire_busy")
+	require.NoError(t, err)
+
+	projectID := uuid.New()
+	assistantID := uuid.New()
+	chatID := uuid.New()
+	threadID := uuid.New()
+	insertAssistantFixture(t, conn, projectID, assistantID, chatID, threadID)
+
+	runtimeID := uuid.New()
+	warmUntil := time.Now().UTC().Add(-1 * time.Second)
+	_, err = conn.Exec(t.Context(), `
+INSERT INTO assistant_runtimes (
+  id, assistant_thread_id, assistant_id, project_id, backend, backend_metadata_json, state, warm_until, last_heartbeat_at, updated_at
+) VALUES (
+  $1, $2, $3, $4, $5, '{}'::jsonb, $6, $7, clock_timestamp(), clock_timestamp()
+)
+`, runtimeID, threadID, assistantID, projectID, runtimeBackendFlyIO, runtimeStateActive, warmUntil)
+	require.NoError(t, err)
+
+	var stopCalls atomic.Int64
+	logger := testenv.NewLogger(t)
+	busyIdle := uint64(0)
+	backend := testRuntimeBackend{
+		backend:      runtimeBackendFlyIO,
+		statusResult: RuntimeBackendStatus{Configured: true, IdleSeconds: &busyIdle},
+		stopCalls:    &stopCalls,
+	}
+	core := NewServiceCore(logger, testenv.NewTracerProvider(t), conn, backend, nil, nil, nil, telemetry.NewStub(logger))
+
+	result, err := core.ExpireThreadRuntime(t.Context(), projectID, threadID, DefaultWarmTTLSeconds)
+	require.NoError(t, err)
+	require.False(t, result.Stopped, "runner reports turn in flight (idle=&0); expiry must revert, not tear down")
+	require.Positive(t, result.RemainingSeconds, "revert path must hand back a positive warm window for the workflow to re-arm")
+	require.Equal(t, int64(0), stopCalls.Load(), "Stop must not be invoked while a turn is executing")
+
+	var state string
+	var deleted bool
+	err = conn.QueryRow(t.Context(), `
+SELECT state, deleted
+FROM assistant_runtimes
+WHERE id = $1
+`, runtimeID).Scan(&state, &deleted)
+	require.NoError(t, err)
+	require.Equal(t, runtimeStateActive, state, "runtime row must be reverted from expiring back to active")
+	require.False(t, deleted)
+}
+
+// TestServiceCoreExpireThreadRuntimeRetryAfterStopFailureIsIdempotent guards
+// the Temporal-retry path: if the first ExpireThreadRuntime attempt CAS'd the
+// row from active->expiring but then Stop() failed, the activity returns an
+// error and Temporal retries. The retry must reuse the existing expiring row
+// and complete the teardown rather than treating the CAS miss as "another
+// actor handled it" (which would leak the backend VM and wedge the thread on
+// the partial unique index).
+func TestServiceCoreExpireThreadRuntimeRetryAfterStopFailureIsIdempotent(t *testing.T) {
+	t.Parallel()
+
+	conn, err := assistantsInfra.CloneTestDatabase(t, "assistants_expire_retry")
+	require.NoError(t, err)
+
+	projectID := uuid.New()
+	assistantID := uuid.New()
+	chatID := uuid.New()
+	threadID := uuid.New()
+	insertAssistantFixture(t, conn, projectID, assistantID, chatID, threadID)
+
+	runtimeID := uuid.New()
+	warmUntil := time.Now().UTC().Add(-1 * time.Second)
+	_, err = conn.Exec(t.Context(), `
+INSERT INTO assistant_runtimes (
+  id, assistant_thread_id, assistant_id, project_id, backend, backend_metadata_json, state, warm_until, last_heartbeat_at, updated_at
+) VALUES (
+  $1, $2, $3, $4, $5, '{}'::jsonb, $6, $7, clock_timestamp(), clock_timestamp()
+)
+`, runtimeID, threadID, assistantID, projectID, runtimeBackendFlyIO, runtimeStateActive, warmUntil)
+	require.NoError(t, err)
+
+	var stopCalls atomic.Int64
+	logger := testenv.NewLogger(t)
+	failingBackend := testRuntimeBackend{
+		backend:      runtimeBackendFlyIO,
+		statusResult: RuntimeBackendStatus{Configured: true, IdleSeconds: new(uint64(DefaultWarmTTLSeconds + 60))},
+		stopErr:      errors.New("fly delete app blew up"),
+		stopCalls:    &stopCalls,
+	}
+	core := NewServiceCore(logger, testenv.NewTracerProvider(t), conn, failingBackend, nil, nil, nil, telemetry.NewStub(logger))
+
+	_, err = core.ExpireThreadRuntime(t.Context(), projectID, threadID, DefaultWarmTTLSeconds)
+	require.Error(t, err, "first attempt with failing Stop must surface the error so Temporal retries")
+	require.Equal(t, int64(1), stopCalls.Load())
+
+	var state string
+	err = conn.QueryRow(t.Context(), `SELECT state FROM assistant_runtimes WHERE id = $1`, runtimeID).Scan(&state)
+	require.NoError(t, err)
+	require.Equal(t, runtimeStateExpiring, state, "row must remain in expiring after Stop failure")
+
+	healingBackend := testRuntimeBackend{
+		backend:      runtimeBackendFlyIO,
+		statusResult: RuntimeBackendStatus{Configured: true, IdleSeconds: new(uint64(DefaultWarmTTLSeconds + 60))},
+		stopCalls:    &stopCalls,
+	}
+	core = NewServiceCore(logger, testenv.NewTracerProvider(t), conn, healingBackend, nil, nil, nil, telemetry.NewStub(logger))
+
+	result, err := core.ExpireThreadRuntime(t.Context(), projectID, threadID, DefaultWarmTTLSeconds)
+	require.NoError(t, err, "retry must drive the existing expiring row to a terminal state")
+	require.True(t, result.Stopped, "retry must report stopped only after Stop actually succeeded")
+	require.Equal(t, int64(2), stopCalls.Load(), "retry must invoke Stop a second time, not fall through ErrNoRows")
+
+	var deleted bool
+	err = conn.QueryRow(t.Context(), `SELECT state, deleted FROM assistant_runtimes WHERE id = $1`, runtimeID).Scan(&state, &deleted)
+	require.NoError(t, err)
+	require.Equal(t, runtimeStateStopped, state)
+	require.True(t, deleted)
+}
+
+// TestServiceCoreReapStuckRuntimesCleansUpStuckExpiring covers the safety net
+// for ExpireThreadRuntime activities that exhaust Temporal's retry budget
+// after CAS active->expiring. Without reaper coverage the row stays in
+// `expiring` indefinitely and blocks the partial unique index
+// ReserveAssistantRuntime relies on.
+func TestServiceCoreReapStuckRuntimesCleansUpStuckExpiring(t *testing.T) {
+	t.Parallel()
+
+	conn, err := assistantsInfra.CloneTestDatabase(t, "assistants_reap_expiring")
+	require.NoError(t, err)
+
+	projectID := uuid.New()
+	assistantID := uuid.New()
+	chatID := uuid.New()
+	threadID := uuid.New()
+	insertAssistantFixture(t, conn, projectID, assistantID, chatID, threadID)
+
+	runtimeID := uuid.New()
+	staleUpdatedAt := time.Now().UTC().Add(-(runtimeExpiringReapGrace + time.Minute))
+	_, err = conn.Exec(t.Context(), `
+INSERT INTO assistant_runtimes (
+  id, assistant_thread_id, assistant_id, project_id, backend, backend_metadata_json, state, warm_until, last_heartbeat_at, updated_at
+) VALUES (
+  $1, $2, $3, $4, $5, '{}'::jsonb, $6, NULL, clock_timestamp(), $7
+)
+`, runtimeID, threadID, assistantID, projectID, runtimeBackendFlyIO, runtimeStateExpiring, staleUpdatedAt)
+	require.NoError(t, err)
+
+	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn, testRuntimeBackend{backend: runtimeBackendFlyIO, runTurnErr: nil}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)))
+
+	result, err := core.ReapStuckRuntimes(t.Context())
+	require.NoError(t, err)
+	require.EqualValues(t, 1, result.StaleRuntimesStopped)
+
+	var state string
+	var deletedAt sql.NullTime
+	err = conn.QueryRow(t.Context(), `SELECT state, deleted_at FROM assistant_runtimes WHERE id = $1`, runtimeID).Scan(&state, &deletedAt)
+	require.NoError(t, err)
+	require.Equal(t, runtimeStateStopped, state, "stuck expiring row must be reclaimed by the reaper")
+	require.True(t, deletedAt.Valid)
+}
+
+// TestServiceCoreReapStuckRuntimesLeavesFreshExpiring verifies the grace
+// window: an expiring row that is still within the activity's retry budget
+// must NOT be touched by the reaper, otherwise an in-flight retry would race
+// the reaper for the same row.
+func TestServiceCoreReapStuckRuntimesLeavesFreshExpiring(t *testing.T) {
+	t.Parallel()
+
+	conn, err := assistantsInfra.CloneTestDatabase(t, "assistants_reap_expiring_fresh")
+	require.NoError(t, err)
+
+	projectID := uuid.New()
+	assistantID := uuid.New()
+	chatID := uuid.New()
+	threadID := uuid.New()
+	insertAssistantFixture(t, conn, projectID, assistantID, chatID, threadID)
+
+	runtimeID := uuid.New()
+	_, err = conn.Exec(t.Context(), `
+INSERT INTO assistant_runtimes (
+  id, assistant_thread_id, assistant_id, project_id, backend, backend_metadata_json, state, warm_until, last_heartbeat_at, updated_at
+) VALUES (
+  $1, $2, $3, $4, $5, '{}'::jsonb, $6, NULL, clock_timestamp(), clock_timestamp()
+)
+`, runtimeID, threadID, assistantID, projectID, runtimeBackendFlyIO, runtimeStateExpiring)
+	require.NoError(t, err)
+
+	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn, testRuntimeBackend{backend: runtimeBackendFlyIO}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)))
+
+	result, err := core.ReapStuckRuntimes(t.Context())
+	require.NoError(t, err)
+	require.EqualValues(t, 0, result.StaleRuntimesStopped, "fresh expiring row must remain so an in-flight retry can complete")
+
+	var state string
+	err = conn.QueryRow(t.Context(), `SELECT state FROM assistant_runtimes WHERE id = $1`, runtimeID).Scan(&state)
+	require.NoError(t, err)
+	require.Equal(t, runtimeStateExpiring, state)
+}
+
 func TestServiceCoreReapStuckRuntimesSkipsLiveProcessingLease(t *testing.T) {
 	t.Parallel()
 
@@ -630,6 +843,9 @@ type testRuntimeBackend struct {
 	ensureErr    error
 	configureErr error
 	runTurnErr   error
+	statusResult RuntimeBackendStatus
+	statusErr    error
+	stopErr      error
 	stopCalls    *atomic.Int64
 }
 
@@ -664,11 +880,18 @@ func (t testRuntimeBackend) ServerURL(context.Context, assistantRuntimeRecord, *
 	return parsed, nil
 }
 
+func (t testRuntimeBackend) Status(context.Context, assistantRuntimeRecord) (RuntimeBackendStatus, error) {
+	if t.statusErr != nil {
+		return RuntimeBackendStatus{}, t.statusErr
+	}
+	return t.statusResult, nil
+}
+
 func (t testRuntimeBackend) Stop(context.Context, assistantRuntimeRecord) error {
 	if t.stopCalls != nil {
 		t.stopCalls.Add(1)
 	}
-	return nil
+	return t.stopErr
 }
 
 func mustParseURLForServiceTest(t *testing.T, raw string) *url.URL {

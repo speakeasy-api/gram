@@ -171,27 +171,48 @@ func AssistantThreadWorkflow(ctx workflow.Context, input AssistantThreadWorkflow
 			waitFor = max(warmUntil.Sub(workflow.Now(ctx).UTC()), 0)
 		}
 
-		expired := false
-		selector := workflow.NewSelector(ctx)
-		selector.AddFuture(workflow.NewTimer(ctx, waitFor), func(workflow.Future) {
-			expired = true
-		})
-		selector.AddReceive(signalCh, func(c workflow.ReceiveChannel, more bool) {
-			var ignored struct{}
-			c.Receive(ctx, &ignored)
-		})
-		selector.Select(ctx)
+		// Wait for the warm window to elapse, then ask the manager to expire
+		// the runtime. The manager guards a TOCTOU between this timer firing
+		// and a new turn being dispatched: if it observes a turn slipped in,
+		// it returns Stopped=false + RemainingSeconds and we re-arm here.
+		runtimeStopped := false
+		for {
+			timerFired := false
+			selector := workflow.NewSelector(ctx)
+			selector.AddFuture(workflow.NewTimer(ctx, waitFor), func(workflow.Future) {
+				timerFired = true
+			})
+			selector.AddReceive(signalCh, func(c workflow.ReceiveChannel, more bool) {
+				var ignored struct{}
+				c.Receive(ctx, &ignored)
+			})
+			selector.Select(ctx)
 
-		if !expired {
+			if !timerFired {
+				// Signal arrived first — drop back to ProcessAssistantThread
+				// to drain any queued events. Runtime stays active.
+				break
+			}
+
+			var expireResult activities.ExpireAssistantThreadRuntimeResult
+			if err := workflow.ExecuteActivity(ctx, a.ExpireAssistantThreadRuntime, activities.ExpireAssistantThreadRuntimeInput{
+				ThreadID:       input.ThreadID,
+				ProjectID:      input.ProjectID,
+				WarmTTLSeconds: result.WarmTTLSeconds,
+			}).Get(ctx, &expireResult); err != nil {
+				return err
+			}
+			if expireResult.Stopped {
+				runtimeStopped = true
+				break
+			}
+			waitFor = time.Duration(expireResult.RemainingSeconds) * time.Second
+		}
+
+		if !runtimeStopped {
 			continue
 		}
 
-		if err := workflow.ExecuteActivity(ctx, a.ExpireAssistantThreadRuntime, activities.ExpireAssistantThreadRuntimeInput{
-			ThreadID:  input.ThreadID,
-			ProjectID: input.ProjectID,
-		}).Get(ctx, nil); err != nil {
-			return err
-		}
 		if err := workflow.ExecuteActivity(ctx, a.SignalAssistantCoordinator, activities.SignalAssistantCoordinatorInput{
 			AssistantID: result.AssistantID,
 		}).Get(ctx, nil); err != nil {

@@ -46,10 +46,10 @@ async fn state_handler(State(state): State<AppState>) -> Json<RunnerStateRespons
     let guard = state.lock().await;
     Json(RunnerStateResponse {
         configured: guard.runtime.is_some(),
-        last_active_seconds_ago: guard
+        idle_seconds: guard
             .runtime
             .as_ref()
-            .and_then(|rt| rt.last_active_ago())
+            .and_then(|rt| rt.idle_for())
             .map(|d| d.as_secs()),
     })
 }
@@ -143,6 +143,6 @@ mod tests {
         let Json(response) = state_handler(State(state_value)).await;
 
         assert!(!response.configured);
-        assert!(response.last_active_seconds_ago.is_none());
+        assert!(response.idle_seconds.is_none());
     }
 }

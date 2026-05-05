@@ -5,6 +5,7 @@ mod runtime;
 mod server;
 mod tools;
 mod wire;
+mod workdir;
 
 use std::net::SocketAddr;
 use std::process::ExitCode;
@@ -51,8 +52,11 @@ fn init_tracing() {
     // `assistant-runtime` log. RUST_LOG tunes the filter; default shows info+.
     tracing_subscriber::fmt()
         .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info,agentkit=trace")),
+            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+                tracing_subscriber::EnvFilter::new(
+                    "info,agentkit=trace,agentkit_loop=trace,agentkit_reporting=trace,agentkit_mcp=trace",
+                )
+            }),
         )
         .with_writer(std::io::stderr)
         .with_target(true)

@@ -4,30 +4,47 @@ use std::time::{Duration, Instant};
 use agentkit_adapter_completions::CompletionsAdapter;
 use agentkit_core::{Item, ItemKind, Part, TextPart, ToolCallPart, ToolOutput, ToolResultPart};
 use agentkit_loop::{
-    Agent, LoopDriver, LoopInterrupt, LoopStep, PromptCacheRequest, PromptCacheRetention,
-    SessionConfig,
+    Agent, LoopDriver, LoopInterrupt, LoopStep, ModelSession, PromptCacheRequest,
+    PromptCacheRetention, SessionConfig,
 };
 use agentkit_mcp::{
-    McpServerConfig, McpServerManager, McpTransportBinding, StreamableHttpTransportConfig,
+    McpServerConfig, McpServerId, McpServerManager, McpTransportBinding,
+    StreamableHttpTransportConfig,
 };
 use agentkit_provider_openrouter::{OpenRouterConfig, OpenRouterProvider};
 use agentkit_reporting::TracingReporter;
-use agentkit_tools_core::PermissionChecker;
+use agentkit_tool_fs::{FileSystemToolPolicy, FileSystemToolResources};
+use agentkit_tools_core::{
+    CompositePermissionChecker, PathPolicy, PermissionDecision, ToolRegistry,
+};
 use serde_json::Value;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
-use tokio::sync::{Mutex as AsyncMutex, Notify};
+use tokio::sync::{Mutex as AsyncMutex, Notify, oneshot};
 
 use crate::errors::RunnerError;
-use crate::http_layer::{TokenRegistry, build_http, build_http_with_static};
+use crate::http_layer::{McpRotatingClient, TokenRegistry, build_http};
 use crate::idempotency::IdempotencyCache;
 use crate::tools;
 use crate::wire::{McpServer, RunnerConfig, RunnerMessage, RunnerRequest};
+use crate::workdir::ASSISTANT_WORKDIR;
 
-const MCP_CONNECT_TIMEOUT: Duration = Duration::from_secs(30);
-const AGENT_START_TIMEOUT: Duration = Duration::from_secs(30);
-const SHUTDOWN_GRACE: Duration = Duration::from_secs(60);
+const MCP_CMD_CAPACITY: usize = 32;
 
 pub type AppState = Arc<AsyncMutex<RuntimeHost>>;
+
+/// Commands routed to the MCP manager actor task. Instead of sharing the
+/// `McpServerManager` behind a mutex, we keep it private to a single task and
+/// drive it through this channel; the parent only ever sees the read-side
+/// [`agentkit_tools_core::CatalogReader`] returned by `manager.source()`.
+pub enum McpCmd {
+    /// Force a server to disconnect and reconnect from scratch. Surfaced to
+    /// the assistant via the `mcp_force_reconnect` tool so the model can
+    /// recover from transport-level errors without operator intervention.
+    ForceReconnect {
+        server_id: McpServerId,
+        reply: oneshot::Sender<Result<(), String>>,
+    },
+}
 
 pub struct RuntimeHost {
     pub runtime: Option<ConfiguredRuntime>,
@@ -41,24 +58,25 @@ pub struct RuntimeHost {
 pub struct ConfiguredRuntime {
     tokens: TokenRegistry,
     inbox_tx: UnboundedSender<String>,
-    last_active: Arc<Mutex<Instant>>,
+    /// `None` while a turn is in flight; `Some(t)` when idle since `t`. The two
+    /// signals are inherently exclusive — a single optional instant prevents
+    /// representing "in-flight AND idle since X" by construction.
+    idle_since: Arc<Mutex<Option<Instant>>>,
     // Non-rotating fields of the RunnerConfig this runtime was built from.
     // `auth_token` is excluded — it rolls on every /turn — so a caller retrying
     // /configure with a refreshed token is still treated as an identical config.
     fingerprint: u64,
-    // Held so MCP transports outlive the session; dropping the manager would
-    // disconnect the streamable-http transports the tool registry references.
-    _mcp_manager: McpServerManager,
-    // Loop task handle; dropping aborts the task on runtime drop.
+    _mcp_actor: tokio::task::JoinHandle<()>,
     _loop_handle: tokio::task::JoinHandle<()>,
 }
 
 impl ConfiguredRuntime {
-    pub fn last_active_ago(&self) -> Option<Duration> {
-        self.last_active
-            .lock()
-            .ok()
-            .map(|last| Instant::now().saturating_duration_since(*last))
+    pub fn idle_for(&self) -> Option<Duration> {
+        let guard = self.idle_since.lock().ok()?;
+        Some(match *guard {
+            None => Duration::ZERO,
+            Some(t) => Instant::now().saturating_duration_since(t),
+        })
     }
 
     pub fn rotate_token(&self, token: &str) -> Result<(), RunnerError> {
@@ -72,7 +90,11 @@ impl ConfiguredRuntime {
     pub fn enqueue(&self, request: RunnerRequest) -> Result<(), RunnerError> {
         self.inbox_tx
             .send(request.input)
-            .map_err(|_| RunnerError::SubmitInput("loop inbox closed".into()))
+            .map_err(|_| RunnerError::SubmitInput("loop inbox closed".into()))?;
+        // Mark busy synchronously so /state can't report a stale idle window
+        // between enqueue and the loop's mark_busy on AwaitingInput.
+        mark_busy(&self.idle_since);
+        Ok(())
     }
 }
 
@@ -85,19 +107,7 @@ fn fingerprint(config: &RunnerConfig) -> u64 {
     config.chat_id.hash(&mut hasher);
     config.mcp_servers.hash(&mut hasher);
     config.history.hash(&mut hasher);
-    config.warm_ttl_seconds.hash(&mut hasher);
     hasher.finish()
-}
-
-struct AllowAll;
-
-impl PermissionChecker for AllowAll {
-    fn evaluate(
-        &self,
-        _request: &dyn agentkit_tools_core::PermissionRequest,
-    ) -> agentkit_tools_core::PermissionDecision {
-        agentkit_tools_core::PermissionDecision::Allow
-    }
 }
 
 pub async fn build_runtime(
@@ -125,8 +135,31 @@ pub async fn build_runtime(
         .default_headers(default_headers)
         .build()?;
 
-    let manager =
-        connect_mcp_servers(&config.mcp_servers, http_client.clone(), tokens.clone()).await?;
+    let mut manager = McpServerManager::new();
+    for server in &config.mcp_servers {
+        manager.register_server(build_mcp_server_config(server, &http_client, &tokens)?);
+    }
+    let mcp_source = manager.source();
+
+    let (mcp_cmd_tx, mcp_cmd_rx) = mpsc::channel(MCP_CMD_CAPACITY);
+    let mcp_actor = tokio::spawn(run_mcp_actor(manager, mcp_cmd_rx));
+
+    let native_tools = ToolRegistry::new().with(tools::bun_run::bun_run).with(
+        tools::mcp_force_reconnect::McpForceReconnectTool::new(mcp_cmd_tx.clone()),
+    );
+
+    // Sandbox helpers stay readable so user code can `import` them, but writes
+    // to those paths must fail so an assistant can't shadow `browser.ts` etc.
+    let permissions = CompositePermissionChecker::new(PermissionDecision::Allow).with_policy(
+        PathPolicy::new()
+            .allow_root(ASSISTANT_WORKDIR)
+            .read_only_root(format!("{ASSISTANT_WORKDIR}/node_modules"))
+            .read_only_root(format!("{ASSISTANT_WORKDIR}/browser.ts"))
+            .read_only_root(format!("{ASSISTANT_WORKDIR}/package.json")),
+    );
+
+    let fs_resources = FileSystemToolResources::new()
+        .with_policy(FileSystemToolPolicy::new().require_read_before_write(true));
 
     let base_url = config
         .completions_url
@@ -137,54 +170,42 @@ pub async fn build_runtime(
     let openrouter_config =
         OpenRouterConfig::new(String::new(), config.model.clone()).with_base_url(base_url);
     let provider = OpenRouterProvider::from(openrouter_config);
-    let completions_http = build_http(http_client, tokens.clone());
+    let completions_http = build_http(http_client.clone(), tokens.clone());
     let adapter = CompletionsAdapter::with_client(provider, completions_http);
 
-    let combined = tools::bun_run::registry().merge(manager.tool_registry());
+    let mut transcript = Vec::new();
+    if let Some(instructions) = &config.instructions {
+        transcript.push(Item::text(ItemKind::System, instructions));
+    }
+    transcript.extend(normalize_history(&config.history)?);
+
     let agent = Agent::builder()
         .model(adapter)
-        .tools(combined)
-        .permissions(AllowAll)
+        .add_tool_source(native_tools)
+        .add_tool_source(agentkit_tool_fs::registry())
+        .add_tool_source(mcp_source)
+        .permissions(permissions)
+        .resources(fs_resources)
         .observer(TracingReporter::new())
+        .transcript(transcript)
         .build()
         .map_err(|e| RunnerError::AgentBuild(e.to_string()))?;
 
     let session = SessionConfig::new(config.chat_id.clone())
         .with_cache(PromptCacheRequest::automatic().with_retention(PromptCacheRetention::Short));
-    let mut driver = match tokio::time::timeout(AGENT_START_TIMEOUT, agent.start(session)).await {
-        Ok(Ok(driver)) => driver,
-        Ok(Err(e)) => return Err(RunnerError::AgentStart(e.to_string())),
-        Err(_) => return Err(RunnerError::AgentStartTimeout(AGENT_START_TIMEOUT)),
-    };
 
-    // Prime the driver with instructions + persisted transcript once, here.
-    // submit_input only stages items — the model isn't called until the loop
-    // calls next(), which happens after the first /turn arrives. So the loop
-    // comes up already hydrated; /turn carries only new user input.
-    let mut priming = Vec::new();
-    if let Some(instructions) = &config.instructions {
-        priming.push(Item::text(ItemKind::System, instructions));
-    }
-    priming.extend(normalize_history(&config.history)?);
-    if !priming.is_empty() {
-        driver
-            .submit_input(priming)
-            .map_err(|e| RunnerError::SubmitInput(e.to_string()))?;
-    }
+    let driver = agent
+        .start(session)
+        .await
+        .map_err(|e| RunnerError::AgentStart(e.to_string()))?;
 
-    let warm_ttl = config
-        .warm_ttl_seconds
-        .map(Duration::from_secs)
-        .ok_or_else(|| RunnerError::ConfigError {
-            key: "warm_ttl".to_string(),
-        })?;
-    let last_active = Arc::new(Mutex::new(Instant::now()));
+    let idle_since = Arc::new(Mutex::new(Some(Instant::now())));
 
     let (inbox_tx, inbox_rx) = mpsc::unbounded_channel::<String>();
 
-    let loop_last_active = Arc::clone(&last_active);
+    let loop_idle_since = Arc::clone(&idle_since);
     let loop_handle = tokio::spawn(async move {
-        let outcome = run_loop(driver, inbox_rx, loop_last_active, warm_ttl).await;
+        let outcome = run_loop(driver, inbox_rx, loop_idle_since).await;
         match outcome {
             Ok(reason) => tracing::info!(reason = %reason, "loop exited"),
             Err(err) => tracing::error!(error = %err, "loop exited with error"),
@@ -197,156 +218,152 @@ pub async fn build_runtime(
     Ok(ConfiguredRuntime {
         tokens,
         inbox_tx,
-        last_active,
+        idle_since,
         fingerprint: fingerprint(config),
-        _mcp_manager: manager,
+        _mcp_actor: mcp_actor,
         _loop_handle: loop_handle,
     })
 }
 
-async fn connect_mcp_servers(
-    servers: &[McpServer],
-    http_client: reqwest::Client,
-    tokens: TokenRegistry,
-) -> Result<McpServerManager, RunnerError> {
-    let mut manager = McpServerManager::new();
-    for server in servers {
-        let static_headers = server
-            .headers
-            .iter()
-            .map(|(k, v)| {
-                let name = http::HeaderName::from_bytes(k.as_bytes()).map_err(|source| {
-                    RunnerError::McpHeaderName {
-                        server: server.id.clone(),
-                        name: k.clone(),
-                        source,
-                    }
-                })?;
-                let value = http::HeaderValue::from_str(v).map_err(|source| {
-                    RunnerError::McpHeaderValue {
-                        server: server.id.clone(),
-                        name: k.clone(),
-                        source,
-                    }
-                })?;
-                Ok::<_, RunnerError>((name, value))
-            })
-            .collect::<Result<Vec<_>, _>>()?;
+fn build_mcp_server_config(
+    server: &McpServer,
+    http_client: &reqwest::Client,
+    tokens: &TokenRegistry,
+) -> Result<McpServerConfig, RunnerError> {
+    let mut server_headers = http::HeaderMap::new();
+    for (k, v) in &server.headers {
+        let name = http::HeaderName::from_bytes(k.as_bytes()).map_err(|source| {
+            RunnerError::McpHeaderName {
+                server: server.id.clone(),
+                name: k.clone(),
+                source,
+            }
+        })?;
+        let value =
+            http::HeaderValue::from_str(v).map_err(|source| RunnerError::McpHeaderValue {
+                server: server.id.clone(),
+                name: k.clone(),
+                source,
+            })?;
+        server_headers.insert(name, value);
+    }
+    let mcp_http = Arc::new(McpRotatingClient::new(
+        http_client.clone(),
+        tokens.clone(),
+        server_headers,
+    ));
+    let transport = StreamableHttpTransportConfig::new(&server.url).with_http_client(mcp_http);
+    Ok(McpServerConfig::new(
+        &server.id,
+        McpTransportBinding::StreamableHttp(transport),
+    ))
+}
 
-        let mut server_headers = http::HeaderMap::new();
-        for (name, value) in static_headers {
-            server_headers.insert(name, value);
-        }
-        let http = build_http_with_static(http_client.clone(), tokens.clone(), server_headers);
-        let transport = StreamableHttpTransportConfig::new(&server.url).with_client(http);
-        manager = manager.with_server(McpServerConfig::new(
-            &server.id,
-            McpTransportBinding::StreamableHttp(transport),
-        ));
+/// Owns the [`McpServerManager`] for the lifetime of a runtime. Connects every
+/// registered server in the background — `/configure` does not wait — and
+/// processes [`McpCmd`]s serially so the manager never needs to be shared.
+async fn run_mcp_actor(mut manager: McpServerManager, mut cmd_rx: mpsc::Receiver<McpCmd>) {
+    match manager.connect_all().await {
+        Ok(handles) => tracing::info!(servers = handles.len(), "mcp connect_all ok"),
+        Err(e) => tracing::warn!(
+            error = %e,
+            "mcp connect_all failed; affected tools will surface errors and the model can call mcp_force_reconnect"
+        ),
     }
 
-    match tokio::time::timeout(MCP_CONNECT_TIMEOUT, manager.connect_all()).await {
-        Ok(Ok(handles)) => {
-            tracing::info!(servers = handles.len(), "mcp connect_all ok");
-            Ok(manager)
+    while let Some(cmd) = cmd_rx.recv().await {
+        match cmd {
+            McpCmd::ForceReconnect { server_id, reply } => {
+                if let Err(e) = manager.disconnect_server(&server_id).await {
+                    tracing::debug!(server_id = %server_id, error = %e, "disconnect during force reconnect");
+                }
+                let result = match manager.connect_server(&server_id).await {
+                    Ok(handle) => {
+                        tracing::info!(
+                            server_id = %server_id,
+                            tools = handle.snapshot().tools.len(),
+                            "mcp force reconnect ok"
+                        );
+                        Ok(())
+                    }
+                    Err(e) => {
+                        tracing::warn!(server_id = %server_id, error = %e, "mcp force reconnect failed");
+                        Err(e.to_string())
+                    }
+                };
+                let _ = reply.send(result);
+            }
         }
-        Ok(Err(e)) => Err(RunnerError::McpConnect(e.to_string())),
-        Err(_) => Err(RunnerError::McpConnectTimeout(MCP_CONNECT_TIMEOUT)),
     }
 }
 
-/// Runs the agent loop continuously until warm TTL + grace elapse idle, or
-/// a fatal error occurs. Input arrives via `inbox`; `/turn` pushes there and
-/// returns immediately. The driver is already primed with instructions and
-/// history from `build_runtime`, so the loop just wraps each String as a user
-/// Item and submits.
+/// Drives the agent loop until the inbox closes or a fatal error occurs.
+/// Lifecycle (warm-window eviction, shutdown) is owned by the backend, which
+/// polls `/state` for `idle_seconds` and stops the runner externally.
+///
+/// Input arrives via `inbox`; `/turn` pushes there and returns immediately.
+/// The driver's transcript is preloaded with instructions + history, so the
+/// very first `next()` yields `AwaitingInput` and the first `/turn` supplies
+/// the first user message — same code path as every later turn.
 ///
 /// Agent loop events the runner cares about:
-/// - `LoopStep::Finished`: turn ended. Drain any queued inputs and submit; if
-///   the queue was empty, race a timer (warm_ttl + 60s grace) against the next
-///   inbox arrival. Timer wins -> exit.
-/// - `LoopInterrupt::AfterToolResult`: cooperative mid-turn yield (agentkit
-///   0.4+). Drain any queued inputs and submit before the next model call.
-/// - `LoopInterrupt::AuthRequest`: backend token rotation is the correct fix
-///   for expired MCP auth; we cannot resolve it here. Warn and bail.
+/// - `LoopStep::Finished`: turn ended. Mark idle and loop back into `next()`.
+/// - `LoopInterrupt::AwaitingInput`: drain queued inputs and submit, or block
+///   on the inbox until the next message (or close).
+/// - `LoopInterrupt::AfterToolResult`: cooperative mid-turn yield. Drain any
+///   queued inputs and submit before the next model call.
 /// - `LoopInterrupt::ApprovalRequest`: tools in this environment should not
 ///   require approval. Warn and auto-approve so we don't deadlock.
 async fn run_loop<S>(
     mut driver: LoopDriver<S>,
     mut inbox: UnboundedReceiver<String>,
-    last_active: Arc<Mutex<Instant>>,
-    warm_ttl: Duration,
+    idle_since: Arc<Mutex<Option<Instant>>>,
 ) -> Result<&'static str, RunnerError>
 where
-    S: agentkit_loop::ModelSession,
+    S: ModelSession,
 {
-    let Some(first) = inbox.recv().await else {
-        return Ok("inbox closed before first input");
-    };
-    submit_user(&mut driver, first)?;
-    bump(&last_active);
-
     loop {
         match driver.next().await? {
             LoopStep::Finished(_turn) => {
-                bump(&last_active);
+                mark_idle(&idle_since);
+            }
+            LoopStep::Interrupt(LoopInterrupt::AwaitingInput(req)) => {
                 let drained = drain(&mut inbox);
                 if !drained.is_empty() {
-                    for msg in drained {
-                        submit_user(&mut driver, msg)?;
-                    }
+                    mark_busy(&idle_since);
+                    req.submit(&mut driver, drained_into_items(drained))?;
                     continue;
                 }
-                let wait_budget = warm_ttl + SHUTDOWN_GRACE;
-                // Race: new input vs shutdown timer.
-                tokio::select! {
-                    maybe = inbox.recv() => {
-                        match maybe {
-                            Some(msg) => {
-                                submit_user(&mut driver, msg)?;
-                                bump(&last_active);
-                            }
-                            None => return Ok("inbox closed"),
-                        }
+                match inbox.recv().await {
+                    Some(msg) => {
+                        mark_busy(&idle_since);
+                        req.submit(&mut driver, vec![Item::text(ItemKind::User, &msg)])?;
                     }
-                    _ = tokio::time::sleep(wait_budget) => {
-                        return Ok("warm ttl elapsed");
-                    }
+                    None => return Ok("inbox closed"),
                 }
             }
-            LoopStep::Interrupt(LoopInterrupt::AfterToolResult(_info)) => {
-                bump(&last_active);
+            LoopStep::Interrupt(LoopInterrupt::AfterToolResult(info)) => {
                 let drained = drain(&mut inbox);
-                for msg in drained {
-                    submit_user(&mut driver, msg)?;
+                if !drained.is_empty() {
+                    info.submit(&mut driver, drained_into_items(drained))?;
                 }
             }
-            LoopStep::Interrupt(LoopInterrupt::ApprovalRequest(_req)) => {
+            LoopStep::Interrupt(LoopInterrupt::ApprovalRequest(pending)) => {
                 tracing::warn!(
                     "unexpected approval request — runner auto-approves; tools should \
                      not require approval in this environment"
                 );
-                driver.resolve_approval(agentkit_tools_core::ApprovalDecision::Approve)?;
+                pending.approve(&mut driver)?;
             }
-            LoopStep::Interrupt(LoopInterrupt::AuthRequest(req)) => {
-                tracing::warn!(
-                    "unexpected mcp auth interrupt — token likely expired or backend returned 403"
-                );
-                driver.resolve_auth(agentkit_tools_core::AuthResolution::cancelled(req.request))?;
-                return Err(RunnerError::McpAuthInterrupt);
-            }
-            LoopStep::Interrupt(LoopInterrupt::AwaitingInput(_)) => {}
         }
     }
 }
 
-fn submit_user<S>(driver: &mut LoopDriver<S>, input: String) -> Result<(), RunnerError>
-where
-    S: agentkit_loop::ModelSession,
-{
-    driver
-        .submit_input(vec![Item::text(ItemKind::User, &input)])
-        .map_err(|e| RunnerError::SubmitInput(e.to_string()))
+fn drained_into_items(drained: Vec<String>) -> Vec<Item> {
+    drained
+        .into_iter()
+        .map(|s| Item::text(ItemKind::User, &s))
+        .collect()
 }
 
 fn drain(inbox: &mut UnboundedReceiver<String>) -> Vec<String> {
@@ -357,9 +374,15 @@ fn drain(inbox: &mut UnboundedReceiver<String>) -> Vec<String> {
     out
 }
 
-fn bump(last_active: &Arc<Mutex<Instant>>) {
-    if let Ok(mut slot) = last_active.lock() {
-        *slot = Instant::now();
+fn mark_busy(idle_since: &Arc<Mutex<Option<Instant>>>) {
+    if let Ok(mut slot) = idle_since.lock() {
+        *slot = None;
+    }
+}
+
+fn mark_idle(idle_since: &Arc<Mutex<Option<Instant>>>) {
+    if let Ok(mut slot) = idle_since.lock() {
+        *slot = Some(Instant::now());
     }
 }
 

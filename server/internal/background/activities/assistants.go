@@ -28,14 +28,24 @@ type ProcessAssistantThreadInput struct {
 type ProcessAssistantThreadResult struct {
 	AssistantID       string
 	WarmUntil         string
+	WarmTTLSeconds    int
 	RuntimeActive     bool
 	RetryAdmission    bool
 	ProcessedAnyEvent bool
 }
 
 type ExpireAssistantThreadRuntimeInput struct {
-	ThreadID  string
-	ProjectID string
+	ThreadID       string
+	ProjectID      string
+	WarmTTLSeconds int
+}
+
+// ExpireAssistantThreadRuntimeResult reports the outcome of an expire attempt.
+// Stopped=false + RemainingSeconds means a turn slipped in past the warm
+// timer; the workflow should re-arm with that window and try again.
+type ExpireAssistantThreadRuntimeResult struct {
+	Stopped          bool
+	RemainingSeconds int
 }
 
 type SignalAssistantCoordinatorInput struct {
@@ -154,6 +164,7 @@ func (a *ProcessAssistantThread) Do(ctx context.Context, input ProcessAssistantT
 	out := &ProcessAssistantThreadResult{
 		AssistantID:       result.AssistantID.String(),
 		WarmUntil:         "",
+		WarmTTLSeconds:    result.WarmTTLSeconds,
 		RuntimeActive:     result.RuntimeActive,
 		RetryAdmission:    result.RetryAdmission,
 		ProcessedAnyEvent: result.ProcessedAnyEvent,
@@ -180,19 +191,23 @@ func (a *ReapStuckAssistantRuntimes) Do(ctx context.Context) (*ReapStuckAssistan
 	}, nil
 }
 
-func (a *ExpireAssistantThreadRuntime) Do(ctx context.Context, input ExpireAssistantThreadRuntimeInput) error {
+func (a *ExpireAssistantThreadRuntime) Do(ctx context.Context, input ExpireAssistantThreadRuntimeInput) (*ExpireAssistantThreadRuntimeResult, error) {
 	threadID, err := uuid.Parse(input.ThreadID)
 	if err != nil {
-		return fmt.Errorf("parse thread id: %w", err)
+		return nil, fmt.Errorf("parse thread id: %w", err)
 	}
 	projectID, err := uuid.Parse(input.ProjectID)
 	if err != nil {
-		return fmt.Errorf("parse project id: %w", err)
+		return nil, fmt.Errorf("parse project id: %w", err)
 	}
-	if err := a.core.ExpireThreadRuntime(ctx, projectID, threadID); err != nil {
-		return fmt.Errorf("expire assistant thread runtime: %w", err)
+	result, err := a.core.ExpireThreadRuntime(ctx, projectID, threadID, input.WarmTTLSeconds)
+	if err != nil {
+		return nil, fmt.Errorf("expire assistant thread runtime: %w", err)
 	}
-	return nil
+	return &ExpireAssistantThreadRuntimeResult{
+		Stopped:          result.Stopped,
+		RemainingSeconds: result.RemainingSeconds,
+	}, nil
 }
 
 func (a *SignalAssistantCoordinator) Do(ctx context.Context, input SignalAssistantCoordinatorInput) error {
