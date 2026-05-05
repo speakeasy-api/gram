@@ -171,10 +171,42 @@ func AssistantThreadWorkflow(ctx workflow.Context, input AssistantThreadWorkflow
 			waitFor = max(warmUntil.Sub(workflow.Now(ctx).UTC()), 0)
 		}
 
-		// Wait for the warm window to elapse, then ask the manager to expire
-		// the runtime. The manager guards a TOCTOU between this timer firing
-		// and a new turn being dispatched: if it observes a turn slipped in,
-		// it returns Stopped=false + RemainingSeconds and we re-arm here.
+		// Workflows that started on the previous code (single-shot timer +
+		// expire + signal) replay through DefaultVersion to keep history
+		// deterministic. New starts use v1, which adds a re-arm loop so the
+		// expire activity can revert to active when its post-CAS status poll
+		// finds a turn slipped in past the warm timer.
+		v := workflow.GetVersion(ctx, "expire-toctou-revert", workflow.DefaultVersion, 1)
+		if v == workflow.DefaultVersion {
+			expired := false
+			selector := workflow.NewSelector(ctx)
+			selector.AddFuture(workflow.NewTimer(ctx, waitFor), func(workflow.Future) {
+				expired = true
+			})
+			selector.AddReceive(signalCh, func(c workflow.ReceiveChannel, more bool) {
+				var ignored struct{}
+				c.Receive(ctx, &ignored)
+			})
+			selector.Select(ctx)
+
+			if !expired {
+				continue
+			}
+
+			if err := workflow.ExecuteActivity(ctx, a.ExpireAssistantThreadRuntime, activities.ExpireAssistantThreadRuntimeInput{
+				ThreadID:  input.ThreadID,
+				ProjectID: input.ProjectID,
+			}).Get(ctx, nil); err != nil {
+				return err
+			}
+			if err := workflow.ExecuteActivity(ctx, a.SignalAssistantCoordinator, activities.SignalAssistantCoordinatorInput{
+				AssistantID: result.AssistantID,
+			}).Get(ctx, nil); err != nil {
+				return err
+			}
+			return nil
+		}
+
 		runtimeStopped := false
 		for {
 			timerFired := false
@@ -189,8 +221,6 @@ func AssistantThreadWorkflow(ctx workflow.Context, input AssistantThreadWorkflow
 			selector.Select(ctx)
 
 			if !timerFired {
-				// Signal arrived first — drop back to ProcessAssistantThread
-				// to drain any queued events. Runtime stays active.
 				break
 			}
 
