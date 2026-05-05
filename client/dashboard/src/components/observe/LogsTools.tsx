@@ -41,7 +41,7 @@ import {
   Chart as ChartJS,
 } from "chart.js";
 import { Settings } from "lucide-react";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import { LogDetailSheet } from "@/pages/logs/LogDetailSheet";
 import { TraceLogsList } from "@/pages/logs/TraceLogsList";
@@ -159,7 +159,6 @@ export function LogsTools() {
     return filters;
   });
 
-  const [serverInput, setServerInput] = useState("");
   const [userEmailInput, setUserEmailInput] = useState("");
   const [selectedHookTypes, setSelectedHookTypes] =
     useState<TypesToInclude[]>(parsedHookTypes);
@@ -293,6 +292,56 @@ export function LogsTools() {
     return tracesData?.pages.flatMap((page) => page.traces) ?? [];
   }, [tracesData]);
 
+  const [knownServers, setKnownServers] = useState<string[]>([]);
+
+  useEffect(() => {
+    const names = groupedTraces
+      .map((t) => t.toolSource)
+      .filter((s): s is string => Boolean(s));
+    if (names.length === 0) return;
+    setKnownServers((prev) => {
+      const merged = [...new Set([...prev, ...names])];
+      return merged.length === prev.length ? prev : merged;
+    });
+  }, [groupedTraces]);
+
+  const serverOptions = useMemo(() => {
+    const selected = activeFilters
+      .filter((f) => f.path === "gram.tool_call.source")
+      .map((f) => f.filters[0])
+      .filter((v): v is string => Boolean(v));
+    return [...new Set([...knownServers, ...selected])];
+  }, [knownServers, activeFilters]);
+
+  const handleServerSelectionChange = useCallback(
+    (values: string[]) => {
+      setActiveFilters((prev) => {
+        const nonServer = prev.filter(
+          (f) => f.path !== "gram.tool_call.source",
+        );
+        const serverFilters: FilterChip[] = values.map((v) => ({
+          display: v,
+          filters: [v],
+          path: "gram.tool_call.source",
+        }));
+        return [...nonServer, ...serverFilters];
+      });
+      setSearchParams(
+        (urlPrev) => {
+          const next = new URLSearchParams(urlPrev);
+          if (values.length > 0) {
+            next.set("server", values.join(","));
+          } else {
+            next.delete("server");
+          }
+          return next;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
+
   const addFilter = useCallback(
     (chip: FilterChip) => {
       setActiveFilters((prev) => {
@@ -367,17 +416,6 @@ export function LogsTools() {
     },
     [setSearchParams],
   );
-
-  const submitServerFilter = useCallback(() => {
-    const trimmed = serverInput.trim();
-    if (!trimmed) return;
-    addFilter({
-      display: trimmed,
-      filters: [trimmed],
-      path: "gram.tool_call.source",
-    });
-    setServerInput("");
-  }, [serverInput, addFilter]);
 
   const submitUserEmailFilter = useCallback(() => {
     const trimmed = userEmailInput.trim();
@@ -483,9 +521,8 @@ export function LogsTools() {
             isFetching={isFetching}
             error={error}
             groupedTraces={groupedTraces}
-            serverInput={serverInput}
-            setServerInput={setServerInput}
-            onSubmitServerFilter={submitServerFilter}
+            serverOptions={serverOptions}
+            onServerSelectionChange={handleServerSelectionChange}
             userEmailInput={userEmailInput}
             setUserEmailInput={setUserEmailInput}
             onSubmitUserEmailFilter={submitUserEmailFilter}
@@ -523,9 +560,8 @@ function HooksInnerContent({
   isFetching,
   error,
   groupedTraces,
-  serverInput,
-  setServerInput,
-  onSubmitServerFilter,
+  serverOptions,
+  onServerSelectionChange,
   userEmailInput,
   setUserEmailInput,
   onSubmitUserEmailFilter,
@@ -556,9 +592,8 @@ function HooksInnerContent({
   isFetching: boolean;
   error: Error | null;
   groupedTraces: HookTrace[];
-  serverInput: string;
-  setServerInput: (value: string) => void;
-  onSubmitServerFilter: () => void;
+  serverOptions: string[];
+  onServerSelectionChange: (values: string[]) => void;
   userEmailInput: string;
   setUserEmailInput: (value: string) => void;
   onSubmitUserEmailFilter: () => void;
@@ -609,9 +644,8 @@ function HooksInnerContent({
           </div>
 
           <ObserveFilterBar
-            serverInput={serverInput}
-            setServerInput={setServerInput}
-            onSubmitServerFilter={onSubmitServerFilter}
+            serverOptions={serverOptions}
+            onServerSelectionChange={onServerSelectionChange}
             userEmailInput={userEmailInput}
             setUserEmailInput={setUserEmailInput}
             onSubmitUserEmailFilter={onSubmitUserEmailFilter}

@@ -1,6 +1,6 @@
 import { TimeRangePicker, type DateRangePreset } from "@gram-ai/elements";
 import type { TypesToInclude } from "@gram/client/models/components";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { ChevronDown, Check } from "lucide-react";
 import {
   Command,
@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { McpIcon } from "@/components/ui/mcp-icon";
 import { MultiSearch } from "@/components/ui/multi-search";
+import { MultiSelect } from "@/components/ui/multi-select";
 import {
   Popover,
   PopoverContent,
@@ -119,9 +120,8 @@ export function ObserveTypeFilter({
 }
 
 export function ObserveFilterBar({
-  serverInput,
-  setServerInput,
-  onSubmitServerFilter,
+  serverOptions,
+  onServerSelectionChange,
   userEmailInput,
   setUserEmailInput,
   onSubmitUserEmailFilter,
@@ -138,9 +138,8 @@ export function ObserveFilterBar({
   projectSlug,
   className,
 }: {
-  serverInput: string;
-  setServerInput: (value: string) => void;
-  onSubmitServerFilter: () => void;
+  serverOptions: string[];
+  onServerSelectionChange: (values: string[]) => void;
   userEmailInput: string;
   setUserEmailInput: (value: string) => void;
   onSubmitUserEmailFilter: () => void;
@@ -157,22 +156,26 @@ export function ObserveFilterBar({
   projectSlug?: string;
   className?: string;
 }) {
+  const selectedServers = useMemo(
+    () =>
+      activeFilters
+        .filter((f) => f.path === "gram.tool_call.source")
+        .map((f) => f.filters[0])
+        .filter((v): v is string => Boolean(v)),
+    [activeFilters],
+  );
+
   return (
     <div
       className={cn("flex shrink-0 flex-wrap items-center gap-2", className)}
     >
-      <MultiSearch
-        value={serverInput}
-        onChange={setServerInput}
-        onSubmit={onSubmitServerFilter}
-        placeholder="Filter by server name (press Enter to add)"
+      <MultiSelect
+        options={serverOptions.map((s) => ({ label: s, value: s }))}
+        defaultValue={selectedServers}
+        onValueChange={onServerSelectionChange}
+        placeholder="Filter by server name"
+        hideSelectAll
         className="min-w-[200px] flex-1"
-        chips={activeFilters
-          .filter((f) => f.path === "gram.tool_call.source")
-          .map((f) => ({ display: f.display, value: f.display }))}
-        onRemoveChip={(display) =>
-          removeFilter("gram.tool_call.source", display)
-        }
       />
       <MultiSearch
         value={userEmailInput}

@@ -261,7 +261,6 @@ export function InsightsToolsContent() {
     return filters;
   });
 
-  const [serverInput, setServerInput] = useState("");
   const [userEmailInput, setUserEmailInput] = useState("");
   const [selectedHookTypes, setSelectedHookTypes] =
     useState<TypesToInclude[]>(parsedHookTypes);
@@ -417,6 +416,54 @@ export function InsightsToolsContent() {
     throwOnError: false,
   });
 
+  const [knownServers, setKnownServers] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (!summaryData) return;
+    const names = summaryData.breakdown.map((r) => r.serverName);
+    setKnownServers((prev) => {
+      const merged = [...new Set([...prev, ...names])];
+      return merged.length === prev.length ? prev : merged;
+    });
+  }, [summaryData]);
+
+  const serverOptions = useMemo(() => {
+    const selected = activeFilters
+      .filter((f) => f.path === "gram.tool_call.source")
+      .map((f) => f.filters[0])
+      .filter((v): v is string => Boolean(v));
+    return [...new Set([...knownServers, ...selected])];
+  }, [knownServers, activeFilters]);
+
+  const handleServerSelectionChange = useCallback(
+    (values: string[]) => {
+      setActiveFilters((prev) => {
+        const nonServer = prev.filter(
+          (f) => f.path !== "gram.tool_call.source",
+        );
+        const serverFilters: FilterChip[] = values.map((v) => ({
+          display: v,
+          filters: [v],
+          path: "gram.tool_call.source",
+        }));
+        return [...nonServer, ...serverFilters];
+      });
+      setSearchParams(
+        (urlPrev) => {
+          const next = new URLSearchParams(urlPrev);
+          if (values.length > 0) {
+            next.set("server", values.join(","));
+          } else {
+            next.delete("server");
+          }
+          return next;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
+
   const addFilter = useCallback(
     (chip: FilterChip) => {
       setActiveFilters((prev) => {
@@ -491,17 +538,6 @@ export function InsightsToolsContent() {
     },
     [setSearchParams],
   );
-
-  const submitServerFilter = useCallback(() => {
-    const trimmed = serverInput.trim();
-    if (!trimmed) return;
-    addFilter({
-      display: trimmed,
-      filters: [trimmed],
-      path: "gram.tool_call.source",
-    });
-    setServerInput("");
-  }, [serverInput, addFilter]);
 
   const submitUserEmailFilter = useCallback(() => {
     const trimmed = userEmailInput.trim();
@@ -583,9 +619,8 @@ export function InsightsToolsContent() {
             isLoading={isLoading}
             error={error}
             groupedTraces={groupedTraces}
-            serverInput={serverInput}
-            setServerInput={setServerInput}
-            onSubmitServerFilter={submitServerFilter}
+            serverOptions={serverOptions}
+            onServerSelectionChange={handleServerSelectionChange}
             userEmailInput={userEmailInput}
             setUserEmailInput={setUserEmailInput}
             onSubmitUserEmailFilter={submitUserEmailFilter}
@@ -618,9 +653,8 @@ function HooksInnerContent({
   isLoading,
   error,
   groupedTraces,
-  serverInput,
-  setServerInput,
-  onSubmitServerFilter,
+  serverOptions,
+  onServerSelectionChange,
   userEmailInput,
   setUserEmailInput,
   onSubmitUserEmailFilter,
@@ -647,9 +681,8 @@ function HooksInnerContent({
   isLoading: boolean;
   error: Error | null;
   groupedTraces: HookTrace[];
-  serverInput: string;
-  setServerInput: (value: string) => void;
-  onSubmitServerFilter: () => void;
+  serverOptions: string[];
+  onServerSelectionChange: (values: string[]) => void;
   userEmailInput: string;
   setUserEmailInput: (value: string) => void;
   onSubmitUserEmailFilter: () => void;
@@ -705,9 +738,8 @@ function HooksInnerContent({
           </div>
 
           <ObserveFilterBar
-            serverInput={serverInput}
-            setServerInput={setServerInput}
-            onSubmitServerFilter={onSubmitServerFilter}
+            serverOptions={serverOptions}
+            onServerSelectionChange={onServerSelectionChange}
             userEmailInput={userEmailInput}
             setUserEmailInput={setUserEmailInput}
             onSubmitUserEmailFilter={onSubmitUserEmailFilter}
