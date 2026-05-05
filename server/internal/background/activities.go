@@ -129,7 +129,7 @@ func NewActivities(
 		segmentChat:                   resolution_activities.NewSegmentChat(logger, db, chatClient),
 		deleteChatResolutions:         resolution_activities.NewDeleteChatResolutions(db),
 		analyzeSegment:                resolution_activities.NewAnalyzeSegment(logger, db, chatClient, telemetryLogger),
-		getUserFeedbackForChat:        resolution_activities.NewGetUserFeedbackForChat(db),
+		getUserFeedbackForChat:        resolution_activities.NewGetUserFeedbackForChat(logger, db),
 		fetchUnanalyzedMessages:       risk_analysis.NewFetchUnanalyzed(logger, tracerProvider, db),
 		analyzeBatch:                  risk_analysis.NewAnalyzeBatch(logger, tracerProvider, meterProvider, db, piiScanner, shadowMCPClient),
 		admitAssistantThreads:         activities.NewAdmitAssistantThreads(assistantsCore),

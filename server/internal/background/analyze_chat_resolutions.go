@@ -60,7 +60,10 @@ func AnalyzeChatResolutionsWorkflow(ctx workflow.Context, params AnalyzeChatReso
 
 	var a *Activities
 
-	// Phase 0: Get user feedback message ID if it exists
+	// Phase 0: Pin the chat generation and load user feedback against it. The
+	// generation must be reused by every subsequent activity, otherwise a
+	// generation bump mid-workflow can replace the message set and silently
+	// invalidate the indices computed here.
 	var feedbackResult activities.GetUserFeedbackForChatResult
 	err := workflow.ExecuteActivity(
 		ctx,
@@ -71,7 +74,7 @@ func AnalyzeChatResolutionsWorkflow(ctx workflow.Context, params AnalyzeChatReso
 		},
 	).Get(ctx, &feedbackResult)
 	if err != nil {
-		return fmt.Errorf("failed to get user feedback message ID: %w", err)
+		return fmt.Errorf("get user feedback for chat: %w", err)
 	}
 
 	// Phase 1: Segment the chat into logical breakpoints
@@ -85,11 +88,18 @@ func AnalyzeChatResolutionsWorkflow(ctx workflow.Context, params AnalyzeChatReso
 			ProjectID:    params.ProjectID,
 			OrgID:        params.OrgID,
 			APIKeyID:     params.APIKeyID,
+			Generation:   feedbackResult.Generation,
 			UserFeedback: feedbackResult.UserFeedback,
 		},
 	).Get(ctx, &segmentOutput)
 	if err != nil {
-		return fmt.Errorf("failed to segment chat: %w", err)
+		if activities.IsGenerationBumped(err) {
+			workflow.GetLogger(ctx).Info("chat generation bumped during segmentation, restarting analysis on latest generation",
+				"chat_id", params.ChatID.String(),
+			)
+			return workflow.NewContinueAsNewError(ctx, AnalyzeChatResolutionsWorkflow, params)
+		}
+		return fmt.Errorf("segment chat: %w", err)
 	}
 
 	err = workflow.ExecuteActivity(
@@ -100,7 +110,7 @@ func AnalyzeChatResolutionsWorkflow(ctx workflow.Context, params AnalyzeChatReso
 		},
 	).Get(ctx, nil)
 	if err != nil {
-		return fmt.Errorf("failed to delete existing resolutions: %w", err)
+		return fmt.Errorf("delete existing resolutions: %w", err)
 	}
 
 	// Phase 2: Analyze each segment comprehensively
@@ -112,13 +122,22 @@ func AnalyzeChatResolutionsWorkflow(ctx workflow.Context, params AnalyzeChatReso
 				ChatID:       params.ChatID,
 				ProjectID:    params.ProjectID,
 				OrgID:        params.OrgID,
+				APIKeyID:     params.APIKeyID,
+				Generation:   feedbackResult.Generation,
 				StartIndex:   segment.StartIndex,
 				EndIndex:     segment.EndIndex,
-				APIKeyID:     params.APIKeyID,
 				UserFeedback: feedbackResult.UserFeedback,
 			},
 		).Get(ctx, nil)
 		if err != nil {
+			if activities.IsGenerationBumped(err) {
+				workflow.GetLogger(ctx).Info("chat generation bumped during segment analysis, restarting on latest generation",
+					"chat_id", params.ChatID.String(),
+					"start_index", segment.StartIndex,
+					"end_index", segment.EndIndex,
+				)
+				return workflow.NewContinueAsNewError(ctx, AnalyzeChatResolutionsWorkflow, params)
+			}
 			// Log but continue with other segments
 			workflow.GetLogger(ctx).Error("failed to analyze segment",
 				"error", err.Error(),
