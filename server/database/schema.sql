@@ -2264,7 +2264,6 @@ CREATE TABLE IF NOT EXISTS authz_challenge_resolutions (
 
   resolution_type TEXT NOT NULL,
   role_slug TEXT,
-  notes TEXT,
 
   resolved_by TEXT NOT NULL,
 

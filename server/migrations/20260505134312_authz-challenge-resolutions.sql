@@ -9,7 +9,6 @@ CREATE TABLE "authz_challenge_resolutions" (
   "resource_id" text NOT NULL DEFAULT '',
   "resolution_type" text NOT NULL,
   "role_slug" text NULL,
-  "notes" text NULL,
   "resolved_by" text NOT NULL,
   "created_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
   PRIMARY KEY ("id"),
