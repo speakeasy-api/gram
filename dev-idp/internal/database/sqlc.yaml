@@ -1,0 +1,73 @@
+version: "2"
+sql:
+  - schema: schema.sql
+    queries: queries.sql
+    engine: sqlite
+    gen:
+      go:
+        package: "repo"
+        out: "repo"
+        sql_package: "database/sql"
+        emit_pointers_for_null_types: false
+        omit_unused_structs: true
+        overrides:
+          # users
+          - column: "users.id"
+            go_type:
+              import: "github.com/google/uuid"
+              type: "UUID"
+          - column: "users.admin"
+            go_type: "bool"
+          - column: "users.whitelisted"
+            go_type: "bool"
+          # organizations
+          - column: "organizations.id"
+            go_type:
+              import: "github.com/google/uuid"
+              type: "UUID"
+          # memberships
+          - column: "memberships.id"
+            go_type:
+              import: "github.com/google/uuid"
+              type: "UUID"
+          - column: "memberships.user_id"
+            go_type:
+              import: "github.com/google/uuid"
+              type: "UUID"
+          - column: "memberships.organization_id"
+            go_type:
+              import: "github.com/google/uuid"
+              type: "UUID"
+          # auth_codes
+          - column: "auth_codes.user_id"
+            go_type:
+              import: "github.com/google/uuid"
+              type: "UUID"
+          # tokens
+          - column: "tokens.user_id"
+            go_type:
+              import: "github.com/google/uuid"
+              type: "UUID"
+          # invitations
+          - column: "invitations.id"
+            go_type:
+              import: "github.com/google/uuid"
+              type: "UUID"
+          - column: "invitations.organization_id"
+            go_type:
+              import: "github.com/google/uuid"
+              type: "UUID"
+          - column: "invitations.inviter_user_id"
+            nullable: true
+            go_type:
+              import: "github.com/google/uuid"
+              type: "NullUUID"
+          # organization_roles
+          - column: "organization_roles.id"
+            go_type:
+              import: "github.com/google/uuid"
+              type: "UUID"
+          - column: "organization_roles.organization_id"
+            go_type:
+              import: "github.com/google/uuid"
+              type: "UUID"

@@ -8,10 +8,14 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	mockidp "github.com/speakeasy-api/gram/mock-speakeasy-idp"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 )
+
+// localFallbackEmail is the synthesized email reported on
+// session-cache-miss SessionMetadata in local dev. Hooks consume the
+// metadata only for routing/scoping; the email is informational.
+const localFallbackEmail = "local-hook-testing@example.com"
 
 // localSessionCache wraps a cache and short-circuits session metadata lookups
 // in local development to avoid requiring OTEL export setup.
@@ -45,15 +49,16 @@ func (c *localSessionCache) Get(ctx context.Context, key string, value any) erro
 		return nil
 	}
 
-	// Underlying cache miss — fall back to local dev defaults so OTEL setup
-	// is not required for ad-hoc hook testing.
-	config := mockidp.DefaultConfig()
-	projectsRepo := projectsRepo.New(c.db)
-	projects, err := projectsRepo.ListProjectsByOrganization(ctx, config.Organization.ID)
-	if err != nil || len(projects) == 0 {
+	// Underlying cache miss — fall back to whatever project happens to
+	// exist so OTEL setup is not required for ad-hoc hook testing. The
+	// org id is read off that project; the email is a synthesized
+	// placeholder.
+	project, err := projectsRepo.New(c.db).GetFirstProject(ctx)
+	if err != nil {
 		return fmt.Errorf("get project: %w", err)
 	}
-	projectID := projects[0].ID.String()
+	orgID := project.OrganizationID
+	projectID := project.ID.String()
 
 	// Extract sessionID from key (format: "session:metadata:{sessionID}",
 	// see sessionCacheKey in cache.go).
@@ -62,9 +67,9 @@ func (c *localSessionCache) Get(ctx context.Context, key string, value any) erro
 	metadata := SessionMetadata{
 		SessionID:   sessionID,
 		ServiceName: "claude-code",
-		UserEmail:   config.User.Email,
-		ClaudeOrgID: config.Organization.ID,
-		GramOrgID:   config.Organization.ID,
+		UserEmail:   localFallbackEmail,
+		ClaudeOrgID: orgID,
+		GramOrgID:   orgID,
 		ProjectID:   projectID,
 	}
 

@@ -157,6 +157,8 @@ mise run zero:migrations
 mise db:migrate
 mise clickhouse:migrate
 
+interactive_only mise run zero:devidp
+
 interactive_only mise zero:summary
 
 echo -e "\n✅ All set up!"
