@@ -3,6 +3,7 @@ package background
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -110,7 +111,7 @@ func NewTemporalWorker(
 	tracerProvider trace.TracerProvider,
 	meterProvider metric.MeterProvider,
 	options ...*WorkerOptions,
-) worker.Worker {
+) *Workers {
 	opts := &WorkerOptions{
 		GuardianPolicy:      nil,
 		DB:                  nil,
@@ -169,12 +170,22 @@ func NewTemporalWorker(
 		}
 	}
 
+	workerInterceptors := []interceptor.WorkerInterceptor{
+		&interceptors.Recovery{WorkerInterceptorBase: interceptor.WorkerInterceptorBase{}},
+		&interceptors.InjectExecutionInfo{WorkerInterceptorBase: interceptor.WorkerInterceptorBase{}},
+		&interceptors.Logging{WorkerInterceptorBase: interceptor.WorkerInterceptorBase{}},
+	}
+
 	temporalWorker := worker.New(env.Client(), string(env.Queue()), worker.Options{
-		Interceptors: []interceptor.WorkerInterceptor{
-			&interceptors.Recovery{WorkerInterceptorBase: interceptor.WorkerInterceptorBase{}},
-			&interceptors.InjectExecutionInfo{WorkerInterceptorBase: interceptor.WorkerInterceptorBase{}},
-			&interceptors.Logging{WorkerInterceptorBase: interceptor.WorkerInterceptorBase{}},
-		},
+		Interceptors: workerInterceptors,
+	})
+
+	// Risk analysis runs on its own task queue so we can bound concurrency
+	// independently of the main worker — AnalyzeBatch hits Presidio + LLM
+	// providers that we must not overwhelm.
+	riskWorker := worker.New(env.Client(), RiskAnalysisTaskQueue(env.Queue()), worker.Options{
+		Interceptors:                       workerInterceptors,
+		MaxConcurrentActivityExecutionSize: riskAnalysisMaxConcurrentActivities,
 	})
 
 	activities := NewActivities(
@@ -234,9 +245,11 @@ func NewTemporalWorker(
 	// Trigger related activities
 	temporalWorker.RegisterActivity(activities.DispatchTrigger)
 	temporalWorker.RegisterActivity(activities.ProcessScheduledTrigger)
-	// Risk analysis activities
+	// Risk analysis activities. AnalyzeBatch runs on a dedicated worker so
+	// concurrency against external scanners (Presidio, LLM providers) is
+	// capped independently of the main worker.
 	temporalWorker.RegisterActivity(activities.FetchUnanalyzedMessages)
-	temporalWorker.RegisterActivity(activities.AnalyzeBatch)
+	riskWorker.RegisterActivity(activities.AnalyzeBatch)
 	// Assistant activities
 	temporalWorker.RegisterActivity(activities.AdmitAssistantThreads)
 	temporalWorker.RegisterActivity(activities.ProcessAssistantThread)
@@ -289,5 +302,59 @@ func NewTemporalWorker(
 		logger.ErrorContext(context.Background(), "failed to add assistant runtime janitor schedule", attr.SlogError(err))
 	}
 
-	return temporalWorker
+	return &Workers{main: temporalWorker, riskAnalysis: riskWorker}
+}
+
+// riskAnalysisMaxConcurrentActivities caps how many AnalyzeBatch activities
+// the dedicated risk-analysis worker will run concurrently. Bound to protect
+// downstream scanners (Presidio, LLM providers) from overload. Per-process —
+// scaling the worker horizontally multiplies the effective cap.
+const riskAnalysisMaxConcurrentActivities = 20
+
+// RiskAnalysisTaskQueue returns the dedicated task queue for risk analysis
+// activities, derived from the main worker's queue so each environment
+// (test, dev, prod) stays isolated.
+func RiskAnalysisTaskQueue(mainQueue tenv.TaskQueueName) string {
+	return string(mainQueue) + "-risk-analysis"
+}
+
+// Workers bundles the Temporal workers managed by the background package.
+// Risk analysis runs on its own queue + worker so its concurrency can be
+// capped without throttling the rest of the system.
+type Workers struct {
+	main         worker.Worker
+	riskAnalysis worker.Worker
+}
+
+// Run starts the auxiliary risk-analysis worker, then runs the main worker,
+// blocking until interruptCh receives. Returns the first error encountered.
+func (w *Workers) Run(interruptCh <-chan any) error {
+	if err := w.riskAnalysis.Start(); err != nil {
+		return fmt.Errorf("start risk analysis worker: %w", err)
+	}
+	defer w.riskAnalysis.Stop()
+
+	if err := w.main.Run(interruptCh); err != nil {
+		return fmt.Errorf("run main worker: %w", err)
+	}
+	return nil
+}
+
+// Start starts both workers without blocking. Pair with Stop. Used by tests
+// that drive workflows directly rather than waiting on an interrupt signal.
+func (w *Workers) Start() error {
+	if err := w.main.Start(); err != nil {
+		return fmt.Errorf("start main worker: %w", err)
+	}
+	if err := w.riskAnalysis.Start(); err != nil {
+		w.main.Stop()
+		return fmt.Errorf("start risk analysis worker: %w", err)
+	}
+	return nil
+}
+
+// Stop stops both workers. Safe to call after a partial Start failure.
+func (w *Workers) Stop() {
+	w.riskAnalysis.Stop()
+	w.main.Stop()
 }

@@ -60,6 +60,14 @@ func DrainRiskAnalysisWorkflow(ctx workflow.Context, params DrainRiskAnalysisPar
 	}
 	ctx = workflow.WithActivityOptions(ctx, activityOpts)
 
+	// AnalyzeBatch is dispatched to a dedicated worker pool so its concurrency
+	// against external scanners can be capped independently. The queue name is
+	// derived from the workflow's own task queue so every environment stays
+	// isolated.
+	analyzeBatchOpts := activityOpts
+	analyzeBatchOpts.TaskQueue = RiskAnalysisTaskQueue(tenv.TaskQueueName(workflow.GetInfo(ctx).TaskQueueName))
+	analyzeBatchCtx := workflow.WithActivityOptions(ctx, analyzeBatchOpts)
+
 	var a *Activities
 
 	// ── Fetch unanalyzed messages ──────────────────────────────────────
@@ -89,7 +97,7 @@ func DrainRiskAnalysisWorkflow(ctx workflow.Context, params DrainRiskAnalysisPar
 				pending = pending[1:]
 			}
 
-			f := workflow.ExecuteActivity(ctx, a.AnalyzeBatch, risk_analysis.AnalyzeBatchArgs{
+			f := workflow.ExecuteActivity(analyzeBatchCtx, a.AnalyzeBatch, risk_analysis.AnalyzeBatchArgs{
 				ProjectID:        params.ProjectID,
 				OrganizationID:   fetchResult.OrganizationID,
 				RiskPolicyID:     params.RiskPolicyID,
