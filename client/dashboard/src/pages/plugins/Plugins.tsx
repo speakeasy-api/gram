@@ -196,7 +196,7 @@ export default function Plugins() {
             Code, Cursor, and Codex marketplaces via GitHub.
           </Page.Section.Description>
           <Page.Section.CTA>
-            {hasPlugins && publishStatus?.configured && (
+            {publishStatus?.configured && (
               <Button
                 variant="secondary"
                 onClick={() => setIsPublishDialogOpen(true)}

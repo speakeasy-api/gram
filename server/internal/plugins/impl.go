@@ -1080,10 +1080,6 @@ func (s *Service) PublishPlugins(ctx context.Context, payload *gen.PublishPlugin
 		return nil, err
 	}
 
-	if len(pluginInfos) == 0 {
-		return nil, oops.E(oops.CodeBadRequest, nil, "no plugins with servers to publish")
-	}
-
 	project, err := projectsrepo.New(s.db).GetProjectByID(ctx, *ac.ProjectID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "get project").Log(ctx, s.logger)
