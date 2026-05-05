@@ -23,8 +23,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/deployments"
+	"github.com/speakeasy-api/gram/server/internal/externalmcptest"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/functions"
+	"github.com/speakeasy-api/gram/server/internal/functionstest"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -85,9 +87,9 @@ func newTestFunctionsService(t *testing.T) (context.Context, *testInstance) {
 	f := &feature.InMemory{}
 
 	assetStorage := assetstest.NewTestBlobStore(t)
-	funcs := testenv.NewFunctionsTestOrchestrator(t, assetStorage)
+	funcs := functionstest.NewOrchestrator(t, assetStorage)
 	tigrisStore := assets.NewTigrisStore(assetStorage)
-	mcpRegistryClient := testenv.NewMCPRegistryClient(t, logger, tracerProvider)
+	mcpRegistryClient := externalmcptest.NewRegistryClient(t, logger, tracerProvider)
 
 	temporalEnv, _ := infra.NewTemporalEnv(t)
 	worker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, background.ForDeploymentProcessing(guardianPolicy, conn, f, assetStorage, enc, funcs, mcpRegistryClient))

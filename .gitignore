@@ -28,6 +28,7 @@ scratch/
 /local/ssl
 /local/keys
 /local/functions
+/local/devidp
 /agents/runner/target
 /agents/runtime-artifacts
 .speakeasy/temp

@@ -2,7 +2,6 @@ package mcp
 
 import (
 	"context"
-	"database/sql"
 	_ "embed"
 	"encoding/json"
 	"errors"
@@ -19,8 +18,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/temporal"
@@ -62,6 +61,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	organizations_repo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	platformtoolsruntime "github.com/speakeasy-api/gram/server/internal/platformtools/runtime"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -87,7 +87,6 @@ type Service struct {
 	billingTracker      billing.Tracker
 	billingRepository   billing.Repository
 	toolsetCache        cache.TypedCacheObject[mv.ToolsetBaseContents]
-	features            *productfeatures.Client
 	telemLogger         *tm.Logger
 	vectorToolStore     *rag.ToolsetVectorStore
 	temporal            *temporal.Environment
@@ -98,6 +97,7 @@ type Service struct {
 	deploymentsRepo     *deployments_repo.Queries
 	enc                 *encryption.Client
 	authz               *authz.Engine
+	shadowMCPClient     *shadowmcp.Client
 }
 
 type oauthTokenInputs struct {
@@ -139,12 +139,12 @@ func NewService(
 	billingRepository billing.Repository,
 	telemLogger *tm.Logger,
 	telemSvc *tm.Service,
-	features *productfeatures.Client,
 	vectorToolStore *rag.ToolsetVectorStore,
 	triggerApp *bgtriggers.App,
 	temporal *temporal.Environment,
 	authzEngine *authz.Engine,
 	assistantTokens *assistanttokens.Manager,
+	shadowMCPClient *shadowmcp.Client,
 ) *Service {
 	tracer := tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/mcp")
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/mcp")
@@ -191,7 +191,6 @@ func NewService(
 		billingRepository:   billingRepository,
 		toolsetCache:        cache.NewTypedObjectCache[mv.ToolsetBaseContents](logger.With(attr.SlogCacheNamespace("toolset")), cacheImpl, cache.SuffixNone),
 		telemLogger:         telemLogger,
-		features:            features,
 		vectorToolStore:     vectorToolStore,
 		temporal:            temporal,
 		assistantTokens:     assistantTokens,
@@ -199,6 +198,7 @@ func NewService(
 		chatSessionsManager: chatSessionsManager,
 		enc:                 enc,
 		authz:               authzEngine,
+		shadowMCPClient:     shadowMCPClient,
 	}
 }
 
@@ -313,9 +313,15 @@ func (s *Service) HandleWellKnownOAuthServerMetadata(w http.ResponseWriter, r *h
 		return nil
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
+	return writeOAuthServerMetadataResponse(ctx, s.logger, w, result)
+}
 
+// writeOAuthServerMetadataResponse builds the OAuth server metadata body and
+// only commits the 200 OK status once the body is ready. This ordering matters:
+// if marshaling fails or the result kind is unrecognized, the caller's error
+// handler middleware needs an unwritten ResponseWriter so it can emit the real
+// error status — Go's net/http silently drops a second WriteHeader call.
+func writeOAuthServerMetadataResponse(ctx context.Context, logger *slog.Logger, w http.ResponseWriter, result *wellknown.OAuthServerMetadataResult) error {
 	var body []byte
 	switch result.Kind {
 	case wellknown.OAuthServerMetadataResultKindRaw:
@@ -324,15 +330,16 @@ func (s *Service) HandleWellKnownOAuthServerMetadata(w http.ResponseWriter, r *h
 		var marshalErr error
 		body, marshalErr = json.Marshal(result.Static)
 		if marshalErr != nil {
-			return oops.E(oops.CodeUnexpected, marshalErr, "failed to marshal OAuth server metadata").Log(ctx, s.logger)
+			return oops.E(oops.CodeUnexpected, marshalErr, "failed to marshal OAuth server metadata").Log(ctx, logger)
 		}
 	default:
-		return oops.E(oops.CodeUnexpected, nil, "unexpected OAuth server metadata result kind").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, nil, "unexpected OAuth server metadata result kind").Log(ctx, logger)
 	}
 
-	_, writeErr := w.Write(body)
-	if writeErr != nil {
-		return oops.E(oops.CodeUnexpected, writeErr, "failed to write response body").Log(ctx, s.logger)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if _, err := w.Write(body); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to write response body").Log(ctx, logger)
 	}
 
 	return nil
@@ -375,17 +382,23 @@ func (s *Service) HandleWellKnownOAuthProtectedResourceMetadata(w http.ResponseW
 		return oops.E(oops.CodeNotFound, nil, "not found")
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
+	return writeOAuthProtectedResourceMetadataResponse(ctx, s.logger, w, metadata)
+}
 
+// writeOAuthProtectedResourceMetadataResponse builds the OAuth protected
+// resource metadata body and only commits the 200 OK status once the body is
+// ready. See writeOAuthServerMetadataResponse for the rationale behind the
+// ordering.
+func writeOAuthProtectedResourceMetadataResponse(ctx context.Context, logger *slog.Logger, w http.ResponseWriter, metadata *wellknown.OAuthProtectedResourceMetadata) error {
 	body, err := json.Marshal(metadata)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to marshal OAuth protected resource metadata").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to marshal OAuth protected resource metadata").Log(ctx, logger)
 	}
 
-	_, writeErr := w.Write(body)
-	if writeErr != nil {
-		return oops.E(oops.CodeUnexpected, writeErr, "failed to write response body").Log(ctx, s.logger)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if _, err := w.Write(body); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to write response body").Log(ctx, logger)
 	}
 
 	return nil
@@ -541,7 +554,7 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 	if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil && authCtx.ActiveOrganizationID != "" {
 		projects, err := s.authRepo.ListProjectsByOrganization(ctx, authCtx.ActiveOrganizationID)
 		switch {
-		case errors.Is(err, sql.ErrNoRows):
+		case errors.Is(err, pgx.ErrNoRows):
 			return oops.E(oops.CodeForbidden, nil, "no projects found").Log(ctx, s.logger)
 		case err != nil:
 			return oops.E(oops.CodeUnexpected, err, "error checking project access").Log(ctx, s.logger, attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
@@ -782,7 +795,7 @@ func (s *Service) loadToolsetFromMcpSlug(ctx context.Context, mcpSlug string) (*
 	}
 
 	switch {
-	case errors.Is(toolsetErr, sql.ErrNoRows):
+	case errors.Is(toolsetErr, pgx.ErrNoRows):
 		return nil, nil, errToolsetNotFound
 	case toolsetErr != nil:
 		return nil, nil, fmt.Errorf("lookup toolset: %w", toolsetErr)
@@ -885,7 +898,7 @@ func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *ra
 	case "notifications/initialized", "notifications/cancelled":
 		return nil, nil
 	case "tools/list":
-		return handleToolsList(ctx, s.logger, s.authz, s.guardianPolicy, s.db, s.env, payload, req, s.posthog, &s.toolsetCache, s.vectorToolStore, s.temporal, s.features)
+		return handleToolsList(ctx, s.logger, s.authz, s.guardianPolicy, s.db, s.env, payload, req, s.posthog, &s.toolsetCache, s.vectorToolStore, s.temporal, s.shadowMCPClient)
 	case "tools/call":
 		return handleToolsCall(ctx, s.logger, s.metrics, s.authz, s.guardianPolicy, s.db, s.env, payload, req, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache, s.telemLogger, s.vectorToolStore, s.temporal, s.mcpMetadataRepo)
 	case "prompts/list":
@@ -1060,7 +1073,7 @@ func (s *Service) HandleToolsList(
 		&s.toolsetCache,
 		s.vectorToolStore,
 		s.temporal,
-		s.features,
+		s.shadowMCPClient,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("handle tools list: %w", err)

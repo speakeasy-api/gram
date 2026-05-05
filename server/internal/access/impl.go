@@ -9,9 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"database/sql"
-
 	"github.com/jackc/pgerrcode"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
@@ -1197,7 +1196,7 @@ func (s *Service) DisableRBAC(ctx context.Context, _ *gen.DisableRBACPayload) er
 		OrganizationID: ac.ActiveOrganizationID,
 		FeatureName:    string(productfeatures.FeatureRBAC),
 	}); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if errors.Is(err, pgx.ErrNoRows) {
 			// Already disabled — no active feature row to soft-delete.
 			return nil
 		}

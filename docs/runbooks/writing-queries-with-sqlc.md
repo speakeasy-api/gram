@@ -64,7 +64,7 @@ WHERE id = @id AND deleted IS FALSE;
 
 ### Query annotations
 
-- `:one` - Returns a single row (or `sql.ErrNoRows` if not found)
+- `:one` - Returns a single row (or `pgx.ErrNoRows` if not found)
 - `:many` - Returns multiple rows as a slice
 - `:exec` - Executes the query without returning data
 - `:execrows` - Executes and returns the number of affected rows
@@ -168,7 +168,7 @@ func (s *Service) CreateUser(ctx context.Context, name, email string) (*repo.Use
 func (s *Service) GetUser(ctx context.Context, id uuid.UUID) (*repo.User, error) {
     user, err := s.repo.GetUserByID(ctx, id)
     if err != nil {
-        if errors.Is(err, sql.ErrNoRows) {
+        if errors.Is(err, pgx.ErrNoRows) {
             return nil, oops.C(oops.CodeNotFound)
         }
         return nil, oops.E(oops.CodeUnexpected, err, "failed to get user")
@@ -228,7 +228,7 @@ Always handle SQLC errors appropriately:
 func (s *Service) GetUser(ctx context.Context, id uuid.UUID) (*repo.User, error) {
     user, err := s.repo.GetUserByID(ctx, id)
     if err != nil {
-        if errors.Is(err, sql.ErrNoRows) {
+        if errors.Is(err, pgx.ErrNoRows) {
             return nil, oops.C(oops.CodeNotFound, "user not found")
         }
         return nil, oops.E(oops.CodeUnexpected, err, "failed to get user")
@@ -334,7 +334,7 @@ GROUP BY p.id;
 
 1. **Query naming**: Use descriptive names that indicate the operation and return type
 2. **Parameter naming**: Use clear, descriptive parameter names with `@` prefix
-3. **Error handling**: Always handle `sql.ErrNoRows` appropriately
+3. **Error handling**: Always handle `pgx.ErrNoRows` appropriately
 4. **Transactions**: Use transactions for operations that need to be atomic
 5. **Soft deletes**: Always check `deleted IS FALSE` in queries
 6. **Timestamps**: Use `clock_timestamp()` over `now()` or `CURRENT_TIMESTAMP` for updates because it returns the actual current time at the point of execution of the SQL query, and its value changes within a transaction

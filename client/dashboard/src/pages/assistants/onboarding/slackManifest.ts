@@ -68,18 +68,13 @@ export const SLACK_EVENT_BINDINGS: Record<string, SlackEventBinding> = {
   file_shared: { bot_events: ["file_shared"], scopes: ["files:read"] },
   file_unshared: { bot_events: ["file_unshared"], scopes: ["files:read"] },
   group_archive: { bot_events: ["group_archive"], scopes: ["groups:read"] },
-  group_close: { bot_events: ["group_close"], scopes: ["groups:read"] },
   group_deleted: { bot_events: ["group_deleted"], scopes: ["groups:read"] },
   group_left: { bot_events: ["group_left"], scopes: ["groups:read"] },
-  group_open: { bot_events: ["group_open"], scopes: ["groups:read"] },
   group_rename: { bot_events: ["group_rename"], scopes: ["groups:read"] },
   group_unarchive: {
     bot_events: ["group_unarchive"],
     scopes: ["groups:read"],
   },
-  im_close: { bot_events: ["im_close"], scopes: ["im:read"] },
-  im_created: { bot_events: ["im_created"], scopes: ["im:read"] },
-  im_open: { bot_events: ["im_open"], scopes: ["im:read"] },
   link_shared: { bot_events: ["link_shared"], scopes: ["links:read"] },
   member_joined_channel: {
     bot_events: ["member_joined_channel"],

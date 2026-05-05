@@ -73,7 +73,11 @@ export default defineConfig(({ command }) => {
       target: "es2022",
     },
     optimizeDeps: {
-      include: ["monaco-editor"],
+      include: [
+        "monaco-editor",
+        "@assistant-ui/react",
+        "@assistant-ui/react-markdown",
+      ],
       esbuildOptions: {
         target: "es2022",
       },

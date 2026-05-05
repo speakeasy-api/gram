@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
-	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -18,6 +17,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
@@ -497,7 +497,7 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 
 	chat, err := s.repo.GetChat(ctx, chatID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.C(oops.CodeNotFound)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to load chat").Log(ctx, s.logger)
@@ -526,14 +526,13 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 	resultMessages := make([]*gen.ChatMessage, len(messages))
 	for i, msg := range messages {
 		toolCalls := string(msg.ToolCalls)
-		content := s.loadMessageContent(ctx, msg)
 		resultMessages[i] = &gen.ChatMessage{
 			ID:             msg.ID.String(),
 			Role:           msg.Role,
 			Model:          msg.Model.String,
 			UserID:         &msg.UserID.String,
 			ExternalUserID: &msg.ExternalUserID.String,
-			Content:        &content,
+			Content:        s.loadMessageContent(ctx, msg),
 			ToolCalls:      &toolCalls,
 			ToolCallID:     &msg.ToolCallID.String,
 			FinishReason:   &msg.FinishReason.String,
@@ -760,8 +759,9 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 			UserAgent: metadata.UserAgent,
 			IPAddress: metadata.IPAddress,
 		},
-		APIKeyID:   authCtx.APIKeyID,
-		JSONSchema: jsonSchema,
+		APIKeyID:                  authCtx.APIKeyID,
+		JSONSchema:                jsonSchema,
+		NormalizeOutboundMessages: r.URL.Query().Get("unstable_normalizeOutboundMessages") == "1",
 	}
 
 	isStreaming := chatRequest.Stream
@@ -872,7 +872,7 @@ func (s *Service) GenerateTitle(ctx context.Context, payload *gen.GenerateTitleP
 	// Load the chat to verify access
 	chat, err := s.repo.GetChat(ctx, chatID)
 	switch {
-	case errors.Is(err, sql.ErrNoRows):
+	case errors.Is(err, pgx.ErrNoRows):
 		return nil, oops.C(oops.CodeNotFound)
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to load chat").Log(ctx, s.logger)
@@ -927,7 +927,7 @@ func (s *Service) SubmitFeedback(ctx context.Context, payload *gen.SubmitFeedbac
 	// Load the chat to verify access
 	chat, err := s.repo.GetChat(ctx, chatID)
 	switch {
-	case errors.Is(err, sql.ErrNoRows):
+	case errors.Is(err, pgx.ErrNoRows):
 		return nil, oops.C(oops.CodeNotFound)
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to load chat").Log(ctx, s.logger)
@@ -942,8 +942,7 @@ func (s *Service) SubmitFeedback(ctx context.Context, payload *gen.SubmitFeedbac
 		return nil, oops.E(oops.CodeInvalid, nil, "feedback must be 'success' or 'failure'")
 	}
 
-	// Get the most recent message ID to track where user gave feedback
-	messages, err := s.repo.ListChatMessages(ctx, repo.ListChatMessagesParams{
+	messages, err := s.repo.ListLatestGenerationChatMessages(ctx, repo.ListLatestGenerationChatMessagesParams{
 		ChatID:    chatID,
 		ProjectID: *authCtx.ProjectID,
 	})

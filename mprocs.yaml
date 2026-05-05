@@ -1,7 +1,22 @@
 # mprocs configuration
 procs:
-  mock-idp:
-    cmd: ["mise", "run", "start:mock-idp"]
+  otel-collector:
+    cmd: ["docker", "compose", "logs", "-f", "otel-collector"]
+    stop:
+      send-keys: ["<C-c>"]
+  jaeger:
+    cmd: ["docker", "compose", "logs", "-f", "jaeger"]
+    stop:
+      send-keys: ["<C-c>"]
+  prometheus:
+    cmd: ["docker", "compose", "logs", "-f", "prometheus"]
+    stop:
+      send-keys: ["<C-c>"]
+  dev-idp:
+    cmd: ["mise", "run", "start:dev-idp"]
+    stop: SIGTERM
+  dev-idp-dashboard:
+    cmd: ["mise", "run", "start:dev-idp-dashboard"]
     stop:
       send-keys: ["<C-c>"]
   server:

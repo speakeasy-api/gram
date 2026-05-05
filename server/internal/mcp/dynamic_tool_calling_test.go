@@ -2,17 +2,13 @@ package mcp
 
 import (
 	"encoding/json"
-	"log/slog"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
-
-func testLogger() *slog.Logger {
-	return slog.New(slog.DiscardHandler)
-}
 
 func TestBuildDynamicSearchToolsSchema(t *testing.T) {
 	t.Parallel()
@@ -166,7 +162,7 @@ func TestHandleDescribeToolsCall(t *testing.T) {
 	t.Run("returns_error_for_empty_tool_names", func(t *testing.T) {
 		t.Parallel()
 		ctx := t.Context()
-		logger := testLogger()
+		logger := testenv.NewLogger(t)
 
 		toolset := &types.Toolset{
 			Tools: []*types.Tool{
@@ -185,7 +181,7 @@ func TestHandleDescribeToolsCall(t *testing.T) {
 	t.Run("returns_error_for_missing_tool_names", func(t *testing.T) {
 		t.Parallel()
 		ctx := t.Context()
-		logger := testLogger()
+		logger := testenv.NewLogger(t)
 
 		toolset := &types.Toolset{
 			Tools: []*types.Tool{
@@ -203,7 +199,7 @@ func TestHandleDescribeToolsCall(t *testing.T) {
 	t.Run("returns_error_for_invalid_json_args", func(t *testing.T) {
 		t.Parallel()
 		ctx := t.Context()
-		logger := testLogger()
+		logger := testenv.NewLogger(t)
 
 		toolset := &types.Toolset{}
 		argsRaw := json.RawMessage(`{invalid}`)
@@ -217,7 +213,7 @@ func TestHandleDescribeToolsCall(t *testing.T) {
 	t.Run("describes_existing_tools", func(t *testing.T) {
 		t.Parallel()
 		ctx := t.Context()
-		logger := testLogger()
+		logger := testenv.NewLogger(t)
 
 		toolset := &types.Toolset{
 			Tools: []*types.Tool{
@@ -252,7 +248,7 @@ func TestHandleDescribeToolsCall(t *testing.T) {
 	t.Run("handles_nonexistent_tool_names_gracefully", func(t *testing.T) {
 		t.Parallel()
 		ctx := t.Context()
-		logger := testLogger()
+		logger := testenv.NewLogger(t)
 
 		toolset := &types.Toolset{
 			Tools: []*types.Tool{
@@ -273,7 +269,7 @@ func TestHandleDescribeToolsCall(t *testing.T) {
 	t.Run("returns_error_for_proxy_tools", func(t *testing.T) {
 		t.Parallel()
 		ctx := t.Context()
-		logger := testLogger()
+		logger := testenv.NewLogger(t)
 
 		proxyType := "proxy"
 		toolset := &types.Toolset{
@@ -293,7 +289,7 @@ func TestHandleDescribeToolsCall(t *testing.T) {
 	t.Run("handles_multiple_tool_names", func(t *testing.T) {
 		t.Parallel()
 		ctx := t.Context()
-		logger := testLogger()
+		logger := testenv.NewLogger(t)
 
 		toolset := &types.Toolset{
 			Tools: []*types.Tool{
@@ -316,7 +312,7 @@ func TestHandleDescribeToolsCall(t *testing.T) {
 	t.Run("trims_whitespace_from_tool_names", func(t *testing.T) {
 		t.Parallel()
 		ctx := t.Context()
-		logger := testLogger()
+		logger := testenv.NewLogger(t)
 
 		toolset := &types.Toolset{
 			Tools: []*types.Tool{

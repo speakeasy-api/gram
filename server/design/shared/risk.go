@@ -4,6 +4,30 @@ import (
 	. "goa.design/goa/v3/dsl"
 )
 
+// RiskPolicyActionEnum applies the allowed-values constraint to an action
+// attribute. Use it inside an Attribute("action", String, ...) DSL so every
+// payload and result that exposes the field keeps the set in sync.
+//
+// Callers add Default("flag") on payloads that want the default-flag
+// semantics; on update payloads (where the field is optional) they leave the
+// default off so the generated Go type stays *string.
+//
+// "redact" is intentionally absent. Genuine in-transit redaction would need
+// to rewrite both user prompts and tool inputs before they reach the model.
+// Tool-input rewriting is supported by every coding-agent hook protocol we
+// target (Claude Code's PreToolUse `hookSpecificOutput.updatedInput`,
+// Cursor's `preToolUse.updated_input`, Gemini CLI's `BeforeTool.tool_input`),
+// but user-prompt rewriting is NOT — those protocols only let a hook append
+// context or block, never replace the prompt verbatim. Shipping redact
+// anyway would silently leak secrets from prompts even when policy claims
+// otherwise, so we keep the surface to flag/block until we have a story for
+// the prompt path. See:
+//   - https://docs.claude.com/en/docs/claude-code/hooks
+//   - https://cursor.com/docs/agent/hooks
+func RiskPolicyActionEnum() {
+	Enum("flag", "block")
+}
+
 var RiskPolicy = Type("RiskPolicy", func() {
 	Meta("struct:pkg:path", "types")
 
@@ -17,6 +41,11 @@ var RiskPolicy = Type("RiskPolicy", func() {
 	Attribute("sources", ArrayOf(String), "Detection sources enabled for this policy.")
 	Attribute("presidio_entities", ArrayOf(String), "Presidio entity types to scan for. When empty, scans all entities.")
 	Attribute("enabled", Boolean, "Whether the policy is active.")
+	Attribute("action", String, "Policy action: flag (log only) or block (deny in real-time).", func() {
+		RiskPolicyActionEnum()
+		Default("flag")
+	})
+	Attribute("auto_name", Boolean, "Whether the policy name is auto-generated. When true, the name is regenerated on each update.")
 	Attribute("version", Int64, "Policy version, incremented on each update.")
 	Attribute("created_at", String, "When the policy was created.", func() {
 		Format(FormatDateTime)
@@ -27,7 +56,7 @@ var RiskPolicy = Type("RiskPolicy", func() {
 	Attribute("pending_messages", Int64, "Number of messages not yet analyzed at the current policy version.")
 	Attribute("total_messages", Int64, "Total number of messages in the project.")
 
-	Required("id", "project_id", "name", "sources", "enabled", "version", "created_at", "updated_at", "pending_messages", "total_messages")
+	Required("id", "project_id", "name", "sources", "enabled", "action", "auto_name", "version", "created_at", "updated_at", "pending_messages", "total_messages")
 })
 
 var RiskResult = Type("RiskResult", func() {

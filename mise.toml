@@ -111,20 +111,24 @@ GRAM_REDIS_CACHE_ADDR = "{{env.GRAM_REDIS_CACHE_HOST}}:{{env.GRAM_REDIS_CACHE_PO
 GRAM_REDIS_CACHE_PASSWORD = "xi9XILbY"
 GRAM_REDIS_ENABLE_TRACING = "false"
 OPENROUTER_DEV_KEY = "unset"
-## The following variables configure the mock Speakeasy IDP for local dev.
-## MOCK_IDP_PORT is auto-remapped by `mise work:init` for parallel worktrees.
-MOCK_IDP_HOST = "localhost"
-MOCK_IDP_PORT = "35291"
-MOCK_IDP_USER_ADMIN = "true"
-SPEAKEASY_SERVER_ADDRESS = "http://{{env.MOCK_IDP_HOST}}:{{env.MOCK_IDP_PORT}}"
+## The dev-idp is a top-level project (dev-idp/) backed by SQLite.
+## GRAM_DEVIDP_PORT is auto-remapped by `mise work:init` for parallel worktrees.
+GRAM_DEVIDP_HOST = "localhost"
+GRAM_DEVIDP_PORT = "35291"
+GRAM_DEVIDP_CONTROL_PORT = "35292"
+GRAM_DEVIDP_DASHBOARD_PORT = "35293"
+GRAM_DEVIDP_ADDRESS = ":{{env.GRAM_DEVIDP_PORT}}"
+GRAM_DEVIDP_CONTROL_ADDRESS = ":{{env.GRAM_DEVIDP_CONTROL_PORT}}"
+GRAM_DEVIDP_EXTERNAL_URL = "http://{{env.GRAM_DEVIDP_HOST}}:{{env.GRAM_DEVIDP_PORT}}"
+GRAM_DEVIDP_DB = "file:{{ config_root }}/local/devidp/devidp.db"
+SPEAKEASY_SERVER_ADDRESS = "{{env.GRAM_DEVIDP_EXTERNAL_URL}}/local-speakeasy"
 SPEAKEASY_SECRET_KEY = "test-secret"
-## The following variables enable OIDC mode for the mock IDP, which
-## authenticates against a real OIDC provider (e.g. WorkOS AuthKit dev env).
-## Run `mise run zero:workos` to configure these.
-OIDC_ISSUER = "unset"
-OIDC_CLIENT_ID = "unset"
-OIDC_CLIENT_SECRET = "unset"
-OIDC_EXTERNAL_URL = "http://{{env.MOCK_IDP_HOST}}:{{env.MOCK_IDP_PORT}}"
+## Override base URL for Gram's WorkOS client (defaults to api.workos.com).
+# WORKOS_API_URL = ""
+## PEM-encoded RSA private key for stable JWKS across dev-idp restarts.
+# GRAM_DEVIDP_RSA_PRIVATE_KEY = ""
+## Override base URL for the dev-idp's WorkOS client (defaults to api.workos.com).
+# WORKOS_HOST = ""
 ## The following variables are only needed if you want to do one of the following:
 ## - Run the server with SSL enabled and not rely on SSL termination at a load balancer.
 ## - Local development with SSL enabled.
@@ -150,6 +154,7 @@ GRAM_ENABLE_OTEL_METRICS = 1
 ## Local development settings ##
 ################################
 JAEGER_WEB_PORT = "16686"
+PROMETHEUS_PORT = "9099"
 GRAM_LOG_PRETTY = 1
 ## This config is used by the Elements SDK and CLI to point to the correct Gram
 ## API server

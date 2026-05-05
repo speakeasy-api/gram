@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"log/slog"
 	"net/http"
 	"os"
 	"testing"
@@ -12,7 +11,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
-	"go.opentelemetry.io/otel/trace/noop"
 
 	gen "github.com/speakeasy-api/gram/server/gen/usage"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -112,8 +110,8 @@ func rbacDisabled(_ context.Context, _ string) (bool, error) { return false, nil
 
 func newTestService(t *testing.T, billingRepo billing.Repository, orgID string, serverCount int) *Service {
 	t.Helper()
-	logger := slog.Default()
-	tp := noop.NewTracerProvider()
+	logger := testenv.NewLogger(t)
+	tp := testenv.NewTracerProvider(t)
 	db, err := infra.CloneTestDatabase(t, "usage")
 	require.NoError(t, err)
 	seedEnabledToolsets(t, db, orgID, serverCount)

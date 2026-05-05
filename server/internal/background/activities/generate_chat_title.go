@@ -69,8 +69,7 @@ func (g *GenerateChatTitle) Do(ctx context.Context, args GenerateChatTitleArgs) 
 		return nil
 	}
 
-	// Build context from the first few user/assistant messages.
-	messages, err := g.repo.ListChatMessages(ctx, repo.ListChatMessagesParams{
+	messages, err := g.repo.ListLatestGenerationChatMessages(ctx, repo.ListLatestGenerationChatMessagesParams{
 		ChatID:    chatID,
 		ProjectID: chat.ProjectID,
 	})
@@ -140,17 +139,18 @@ func (g *GenerateChatTitle) generateTitle(ctx context.Context, orgID, projectID 
 			openrouter.CreateMessageSystem(systemPrompt),
 			openrouter.CreateMessageUser(conversationContext),
 		},
-		Tools:          nil,
-		Temperature:    nil,
-		Model:          "",
-		Stream:         false,
-		UsageSource:    billing.ModelUsageSourceGram,
-		UserID:         "",
-		ExternalUserID: "",
-		UserEmail:      "",
-		HTTPMetadata:   nil,
-		APIKeyID:       "",
-		JSONSchema:     nil,
+		Tools:                     nil,
+		Temperature:               nil,
+		Model:                     "",
+		Stream:                    false,
+		UsageSource:               billing.ModelUsageSourceGram,
+		UserID:                    "",
+		ExternalUserID:            "",
+		UserEmail:                 "",
+		HTTPMetadata:              nil,
+		APIKeyID:                  "",
+		JSONSchema:                nil,
+		NormalizeOutboundMessages: false,
 	})
 	if err != nil {
 		g.logger.WarnContext(ctx, "failed to generate chat title via OpenRouter", attr.SlogError(err))

@@ -80,7 +80,7 @@ func TestListRiskResults_ByPolicy(t *testing.T) {
 		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
 	)
 
-	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: "Results Test"})
+	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: new("Results Test")})
 	require.NoError(t, err)
 
 	policyID, _ := uuid.Parse(policy.ID)
@@ -104,7 +104,7 @@ func TestListRiskResults_ByChatID(t *testing.T) {
 		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
 	)
 
-	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: "Chat Filter Test"})
+	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: new("Chat Filter Test")})
 	require.NoError(t, err)
 
 	policyID, _ := uuid.Parse(policy.ID)
@@ -129,7 +129,7 @@ func TestListRiskResults_ExcludesNotFound(t *testing.T) {
 		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
 	)
 
-	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: "Found Filter"})
+	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: new("Found Filter")})
 	require.NoError(t, err)
 
 	policyID, _ := uuid.Parse(policy.ID)
@@ -150,7 +150,7 @@ func TestGetRiskPolicyStatus_WithAnalyzedMessages(t *testing.T) {
 		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
 	)
 
-	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: "Status Detail"})
+	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: new("Status Detail")})
 	require.NoError(t, err)
 
 	policyID, _ := uuid.Parse(policy.ID)
@@ -178,7 +178,7 @@ func TestGetRiskPolicyStatus_AllAnalyzed(t *testing.T) {
 		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
 	)
 
-	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: "Complete"})
+	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: new("Complete")})
 	require.NoError(t, err)
 
 	policyID, _ := uuid.Parse(policy.ID)

@@ -141,6 +141,9 @@ const (
 	AssistantRuntimeIDKey          = attribute.Key("gram.assistant.runtime_id")
 	AssistantRuntimeBackendKey     = attribute.Key("gram.assistant.runtime_backend")
 	AssistantPhaseKey              = attribute.Key("gram.assistant.phase")
+	AssistantColdStartKey          = attribute.Key("gram.assistant.cold_start")
+	AssistantAppCreatedKey         = attribute.Key("gram.assistant.app_created")
+	AssistantSetupFailureClassKey  = attribute.Key("gram.assistant.setup_failure_class")
 	AssistantServerIPKey           = attribute.Key("gram.assistant.server_ip")
 	ChatModelKey                   = attribute.Key("gram.chat.model")
 	ChatToolCountKey               = attribute.Key("gram.chat.tool_count")
@@ -295,6 +298,12 @@ const (
 	GenAIEvaluationScoreValueKey  = attribute.Key("gen_ai.evaluation.score.value") // Numeric score (0-100)
 	GenAIEvaluationScoreLabelKey  = attribute.Key("gen_ai.evaluation.score.label") // Low cardinality label (success, failure, partial, abandoned)
 	GenAIEvaluationExplanationKey = attribute.Key("gen_ai.evaluation.explanation") // Free-form explanation
+
+	RemoteMCPProxyInterceptorKey       = attribute.Key("gram.remote_mcp.proxy.interceptor")
+	RemoteMCPProxyRemoteStatusCodeKey  = attribute.Key("gram.remote_mcp.proxy.remote_status_code")
+	RemoteMCPProxyRemoteStatusClassKey = attribute.Key("gram.remote_mcp.proxy.remote_status_class")
+	RemoteMCPServerIDKey               = attribute.Key("gram.remote_mcp_server.id")
+	RemoteMCPServerURLKey              = attribute.Key("gram.remote_mcp_server.url")
 
 	StatsToolCallCountKey  = attribute.Key("gram.stats.tool_call_count")
 	StatsMCPServerCountKey = attribute.Key("gram.stats.mcp_server_count")
@@ -879,6 +888,37 @@ func SlogProjectSlug(v string) slog.Attr      { return slog.String(string(Projec
 func ProjectName(v string) attribute.KeyValue { return ProjectNameKey.String(v) }
 func SlogProjectName(v string) slog.Attr      { return slog.String(string(ProjectNameKey), v) }
 
+func RemoteMCPServerID(v string) attribute.KeyValue { return RemoteMCPServerIDKey.String(v) }
+func SlogRemoteMCPServerID(v string) slog.Attr {
+	return slog.String(string(RemoteMCPServerIDKey), v)
+}
+
+func RemoteMCPServerURL(v string) attribute.KeyValue { return RemoteMCPServerURLKey.String(v) }
+func SlogRemoteMCPServerURL(v string) slog.Attr {
+	return slog.String(string(RemoteMCPServerURLKey), v)
+}
+
+func RemoteMCPProxyInterceptor(v string) attribute.KeyValue {
+	return RemoteMCPProxyInterceptorKey.String(v)
+}
+func SlogRemoteMCPProxyInterceptor(v string) slog.Attr {
+	return slog.String(string(RemoteMCPProxyInterceptorKey), v)
+}
+
+func RemoteMCPProxyRemoteStatusCode(v int) attribute.KeyValue {
+	return RemoteMCPProxyRemoteStatusCodeKey.Int(v)
+}
+func SlogRemoteMCPProxyRemoteStatusCode(v int) slog.Attr {
+	return slog.Int(string(RemoteMCPProxyRemoteStatusCodeKey), v)
+}
+
+func RemoteMCPProxyRemoteStatusClass(v string) attribute.KeyValue {
+	return RemoteMCPProxyRemoteStatusClassKey.String(v)
+}
+func SlogRemoteMCPProxyRemoteStatusClass(v string) slog.Attr {
+	return slog.String(string(RemoteMCPProxyRemoteStatusClassKey), v)
+}
+
 func RiskPolicyCount(v int) attribute.KeyValue { return RiskPolicyCountKey.Int(v) }
 func SlogRiskPolicyCount(v int) slog.Attr      { return slog.Int(string(RiskPolicyCountKey), v) }
 
@@ -1250,6 +1290,14 @@ func SlogAssistantAttempt(v int) slog.Attr      { return slog.Int(string(Assista
 
 func AssistantServerIP(v string) attribute.KeyValue { return AssistantServerIPKey.String(v) }
 func SlogAssistantServerIP(v string) slog.Attr      { return slog.String(string(AssistantServerIPKey), v) }
+
+func AssistantColdStart(v bool) attribute.KeyValue { return AssistantColdStartKey.Bool(v) }
+
+func AssistantAppCreated(v bool) attribute.KeyValue { return AssistantAppCreatedKey.Bool(v) }
+
+func AssistantSetupFailureClass(v string) attribute.KeyValue {
+	return AssistantSetupFailureClassKey.String(v)
+}
 
 func ChatModel(v string) attribute.KeyValue { return ChatModelKey.String(v) }
 func SlogChatModel(v string) slog.Attr      { return slog.String(string(ChatModelKey), v) }

@@ -16,7 +16,7 @@ import (
 )
 
 // bufferHook stores a hook payload in Redis for later processing using atomic RPUSH
-func (s *Service) bufferHook(ctx context.Context, sessionID string, payload *gen.ClaudeHookPayload) error {
+func (s *Service) bufferHook(ctx context.Context, sessionID string, payload *gen.ClaudePayload) error {
 	// Use atomic RPUSH operation to append to the list
 	// This eliminates the race condition from read-modify-write
 	ttl := 5 * time.Minute // TTL for buffered hooks. This is very generous. Could be lower since this can trigger through an unauthenticated endpoint.
@@ -32,7 +32,7 @@ func (s *Service) bufferHook(ctx context.Context, sessionID string, payload *gen
 }
 
 // persistToolCallEvent writes a hook event to ClickHouse with full session context
-func (s *Service) persistToolCallEvent(ctx context.Context, payload *gen.ClaudeHookPayload, metadata *SessionMetadata) error {
+func (s *Service) persistToolCallEvent(ctx context.Context, payload *gen.ClaudePayload, metadata *SessionMetadata) error {
 	attrs := s.buildTelemetryAttributesWithMetadata(ctx, payload, metadata)
 	toolName, ok := attrs[attr.ToolNameKey].(string) //  Make sure this comes from here so that we get the parsed tool name
 	if !ok {
@@ -82,7 +82,7 @@ func (s *Service) persistToolCallEvent(ctx context.Context, payload *gen.ClaudeH
 }
 
 // buildTelemetryAttributesWithMetadata creates attributes for a hook event with session metadata
-func (s *Service) buildTelemetryAttributesWithMetadata(ctx context.Context, payload *gen.ClaudeHookPayload, metadata *SessionMetadata) map[attr.Key]any {
+func (s *Service) buildTelemetryAttributesWithMetadata(ctx context.Context, payload *gen.ClaudePayload, metadata *SessionMetadata) map[attr.Key]any {
 	toolName := ""
 	if payload.ToolName != nil {
 		toolName = *payload.ToolName
@@ -364,7 +364,7 @@ func extractMetricsForClickHouse(payload *gen.MetricsPayload) ([]MetricDataPoint
 // Conversation events (UserPromptSubmit, Stop) are written to PostgreSQL.
 func (s *Service) flushPendingHooks(ctx context.Context, sessionID string, metadata *SessionMetadata) {
 	// Use LRANGE to get all payloads from the list atomically
-	var payloads []gen.ClaudeHookPayload
+	var payloads []gen.ClaudePayload
 	key := hookPendingCacheKey(sessionID)
 
 	if err := s.cache.ListRange(ctx, key, 0, -1, &payloads); err != nil {

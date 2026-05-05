@@ -41,6 +41,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/risk"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
@@ -477,7 +478,7 @@ func newWorkerCommand() *cli.Command {
 				logger,
 			)
 			shutdownFuncs = append(shutdownFuncs, riskSignaler.Shutdown)
-			chatWriter.AddObserver(risk.NewObserver(logger, db, riskSignaler))
+			chatWriter.AddObserver(risk.NewObserver(logger, tracerProvider, db, riskSignaler))
 
 			completionsClient := openrouter.NewUnifiedClient(
 				logger,
@@ -519,6 +520,8 @@ func newWorkerCommand() *cli.Command {
 
 			assistantTokenManager := assistanttokens.New(c.String("jwt-signing-key"), db, authzEngine)
 
+			shadowMCPClient := shadowmcp.NewClient(logger, db, cache.NewRedisCacheAdapter(redisClient))
+
 			mcpService := mcp.NewService(
 				logger,
 				tracerProvider,
@@ -538,12 +541,12 @@ func newWorkerCommand() *cli.Command {
 				billingRepo,
 				telemetryLogger,
 				telemetryService,
-				productFeatures,
 				ragService,
 				triggerApp,
 				temporalEnv,
 				authzEngine,
 				assistantTokenManager,
+				shadowMCPClient,
 			)
 
 			chatClient := chat.NewAgenticChatClient(
@@ -555,11 +558,11 @@ func newWorkerCommand() *cli.Command {
 				mcpclient.NewInternalMCPClient(mcpService),
 			)
 
-			assistantRuntime, err := newAssistantRuntime(ctx, logger, c, guardianPolicy, db, serverURL)
+			assistantRuntime, err := newAssistantRuntime(ctx, logger, tracerProvider, c, guardianPolicy, db, serverURL)
 			if err != nil {
 				return err
 			}
-			assistantsCore := assistants.NewServiceCore(logger, db, assistantRuntime, slackClient, assistantTokenManager, serverURL, telemetryLogger)
+			assistantsCore := assistants.NewServiceCore(logger, tracerProvider, db, assistantRuntime, slackClient, assistantTokenManager, serverURL, telemetryLogger)
 			assistantsSvc := assistants.NewService(logger, tracerProvider, db, sessionManager, authzEngine, assistantsCore, &background.AssistantWorkflowSignaler{TemporalEnv: temporalEnv})
 			triggerApp.RegisterDispatcher(assistantsSvc)
 
@@ -598,6 +601,7 @@ func newWorkerCommand() *cli.Command {
 				AssistantsCore:      assistantsCore,
 				TemporalEnv:         temporalEnv,
 				PIIScanner:          piiScanner,
+				ShadowMCPClient:     shadowMCPClient,
 			})
 
 			return temporalWorker.Run(worker.InterruptCh())

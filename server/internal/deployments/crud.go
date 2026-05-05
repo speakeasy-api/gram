@@ -2,11 +2,11 @@ package deployments
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"log/slog"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
@@ -98,7 +98,7 @@ func createDeployment(
 		ExternalID:  conv.ToPGTextEmpty(fields.externalID),
 		ExternalUrl: conv.ToPGTextEmpty(fields.externalURL),
 	})
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return uuid.Nil, oops.E(oops.CodeUnexpected, err, "error creating deployment").Log(ctx, logger)
 	}
 
@@ -262,7 +262,7 @@ func amendDeployment(
 			Name:         a.name,
 			Slug:         a.slug,
 		})
-		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 			return oops.E(oops.CodeUnexpected, err, "error adding deployment openapi v3 asset").Log(ctx, logger)
 		}
 	}
@@ -289,7 +289,7 @@ func amendDeployment(
 			MemoryMib:    mem,
 			Scale:        scale,
 		})
-		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 			return oops.E(oops.CodeUnexpected, err, "error adding deployment functions asset").Log(ctx, logger)
 		}
 	}
@@ -300,7 +300,7 @@ func amendDeployment(
 			PackageID:    p.packageID,
 			VersionID:    p.versionID,
 		})
-		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 			return oops.E(oops.CodeUnexpected, err, "error adding deployment package").Log(ctx, logger)
 		}
 	}
@@ -315,7 +315,7 @@ func amendDeployment(
 			RegistryServerSpecifier:             e.registryServerSpecifier,
 			SelectedRemotes:                     e.selectedRemotes,
 		})
-		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 			return oops.E(oops.CodeUnexpected, err, "error adding deployment external mcp").Log(ctx, logger)
 		}
 	}

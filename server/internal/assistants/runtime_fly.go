@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -20,6 +21,8 @@ import (
 	"github.com/superfly/fly-go"
 	"github.com/superfly/fly-go/flaps"
 	"github.com/superfly/fly-go/tokens"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
 
 const (
@@ -35,13 +38,28 @@ const (
 	flyMachineMetadataRoleAssistant = "assistant_runtime"
 )
 
+// errFlyAppCorrupted signals the Fly Machines API reports the app missing on
+// an established runtime — i.e. flaps 404s after we previously launched a
+// machine on this app. GraphQL/orchestrator and the Machines backend have
+// drifted; the only reliable recovery is to destroy + recreate. Distinct from
+// the create-time propagation lag covered by isFlyAppPropagating.
+var errFlyAppCorrupted = errors.New("assistant fly runtime app corrupted")
+
 type flyRuntimeMetadata struct {
 	AppName    string `json:"app_name"`
+	AppID      string `json:"app_id,omitempty"`
 	AppURL     string `json:"app_url"`
 	AppIP      string `json:"app_ip,omitempty"`
 	MachineID  string `json:"machine_id"`
 	Region     string `json:"region"`
 	LastBootID string `json:"last_boot_id,omitempty"`
+}
+
+type flyRuntimeAppIdentity struct {
+	Name     string
+	ID       string
+	SharedIP string
+	Created  bool
 }
 
 type flyRuntimeStateResponse struct {
@@ -62,6 +80,7 @@ type flyRuntimeFlapsClient interface {
 	Launch(ctx context.Context, appName string, input fly.LaunchMachineInput) (*fly.Machine, error)
 	List(ctx context.Context, appName, state string) ([]*fly.Machine, error)
 	Start(ctx context.Context, appName, machineID string, nonce string) (*fly.MachineStartResponse, error)
+	Stop(ctx context.Context, appName string, in fly.StopMachineInput, nonce string) error
 	Wait(ctx context.Context, appName string, machine *fly.Machine, state string, timeout time.Duration) error
 }
 
@@ -99,13 +118,14 @@ func (f *defaultFlyRuntimeFlapsFactory) New(ctx context.Context) (flyRuntimeFlap
 
 type FlyRuntimeBackend struct {
 	logger       *slog.Logger
+	tracer       trace.Tracer
 	config       FlyRuntimeConfig
 	client       flyRuntimeAPIClient
 	flapsFactory flyRuntimeFlapsFactory
 	httpClient   flyRuntimeHTTPDoer
 }
 
-func NewFlyRuntimeBackend(logger *slog.Logger, httpPolicy *guardian.Policy, config FlyRuntimeConfig) *FlyRuntimeBackend {
+func NewFlyRuntimeBackend(logger *slog.Logger, tracerProvider trace.TracerProvider, httpPolicy *guardian.Policy, config FlyRuntimeConfig) *FlyRuntimeBackend {
 	config.DefaultFlyRegion = firstNonEmpty(config.DefaultFlyRegion, defaultFlyRuntimeRegion)
 	config.AppNamePrefix = sanitizeFlyAppNamePrefix(firstNonEmpty(config.AppNamePrefix, defaultFlyRuntimePrefix))
 	if config.AppNamePrefix == "" {
@@ -139,6 +159,7 @@ func NewFlyRuntimeBackend(logger *slog.Logger, httpPolicy *guardian.Policy, conf
 
 	return &FlyRuntimeBackend{
 		logger: logger.With(attr.SlogComponent("assistants_flyio_runtime")),
+		tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/assistants"),
 		config: config,
 		client: client,
 		flapsFactory: &defaultFlyRuntimeFlapsFactory{
@@ -200,54 +221,82 @@ func (f *FlyRuntimeBackend) ensureExisting(
 		appURL = flyRuntimeAppURL(appName)
 	}
 
-	appIP, err := f.ensureApp(ctx, appName)
+	app, err := f.tracedEnsureApp(ctx, appName)
 	if err != nil {
 		return RuntimeBackendEnsureResult{}, err
 	}
+	appIP := app.SharedIP
 	if appIP == "" {
 		appIP = metadata.AppIP
 	}
+	sameAppIncarnation := metadata.AppID != "" && app.ID != "" && metadata.AppID == app.ID
+	if app.Created || (metadata.AppID != "" && app.ID != "" && metadata.AppID != app.ID) {
+		// Metadata may have been recovered from a prior runtime row after a
+		// failed/corrupted app was deleted. Once the app has been recreated,
+		// old machine/boot IDs describe the previous app incarnation and must
+		// not make normal Machines propagation look like established drift.
+		metadata.MachineID = ""
+		metadata.LastBootID = ""
+	}
 
-	machine, err := f.resolveMachine(ctx, flapsClient, appName, runtime.AssistantThreadID, metadata.MachineID)
+	machine, err := f.tracedResolveMachine(ctx, flapsClient, appName, runtime.AssistantThreadID, metadata.MachineID, metadata.LastBootID, sameAppIncarnation)
 	if err != nil {
+		if errors.Is(err, errFlyAppCorrupted) {
+			f.logger.WarnContext(ctx,
+				"assistant fly runtime app corrupted, tearing down for recreate",
+				attr.SlogFlyAppName(appName),
+				attr.SlogAssistantThreadID(runtime.AssistantThreadID.String()),
+			)
+			if delErr := f.deleteApp(ctx, appName); delErr != nil && !isFlyNotFound(delErr) {
+				f.logger.WarnContext(ctx,
+					"delete corrupted assistant fly runtime app failed",
+					attr.SlogFlyAppName(appName),
+					attr.SlogError(delErr),
+				)
+			}
+		}
 		return RuntimeBackendEnsureResult{}, err
 	}
 
 	coldStart := false
 	if machine == nil {
-		machine, err = f.launchMachine(ctx, flapsClient, runtime, appName)
+		coldStart = true
+		launched, err := f.tracedLaunchMachine(ctx, flapsClient, runtime, appName)
 		if err != nil {
 			return RuntimeBackendEnsureResult{}, err
 		}
-		coldStart = true
+		machine = launched
+		if err := f.tracedWaitStarted(ctx, flapsClient, appName, machine, coldStart); err != nil {
+			return RuntimeBackendEnsureResult{}, fmt.Errorf("wait for assistant fly runtime machine launch: %w", err)
+		}
 	}
 
 	if !machine.IsActive() {
+		coldStart = true
 		if _, err := flapsClient.Start(ctx, appName, machine.ID, ""); err != nil {
 			return RuntimeBackendEnsureResult{}, fmt.Errorf("start assistant fly runtime machine: %w", err)
 		}
-		if err := flapsClient.Wait(ctx, appName, machine, "started", defaultFlyRuntimeHealthTimeout); err != nil {
+		if err := f.tracedWaitStarted(ctx, flapsClient, appName, machine, coldStart); err != nil {
 			return RuntimeBackendEnsureResult{}, fmt.Errorf("wait for assistant fly runtime machine start: %w", err)
 		}
-		coldStart = true
 		refreshed, getErr := flapsClient.Get(ctx, appName, machine.ID)
 		if getErr == nil && refreshed != nil {
 			machine = refreshed
 		}
 	}
 
+	if !coldStart && machine.InstanceID != "" && machine.InstanceID != metadata.LastBootID {
+		coldStart = true
+	}
+
 	target := flyRuntimeTarget{URL: appURL, IP: appIP}
-	if err := f.waitForRuntimeHealth(ctx, target); err != nil {
+	if err := f.tracedWaitHealth(ctx, target, coldStart); err != nil {
 		return RuntimeBackendEnsureResult{}, fmt.Errorf("wait for assistant fly runtime health: %w", err)
 	}
 
-	state, err := f.runtimeState(ctx, target)
+	state, err := f.tracedRuntimeState(ctx, target, coldStart)
 	if err != nil {
 		return RuntimeBackendEnsureResult{}, fmt.Errorf("load assistant fly runtime state: %w", err)
-	}
-
-	if machine.InstanceID != "" && machine.InstanceID != metadata.LastBootID {
-		coldStart = true
 	}
 
 	needsConfigure := !state.Configured
@@ -257,6 +306,7 @@ func (f *FlyRuntimeBackend) ensureExisting(
 
 	nextMetadata := flyRuntimeMetadata{
 		AppName:    appName,
+		AppID:      app.ID,
 		AppURL:     appURL,
 		AppIP:      appIP,
 		MachineID:  machine.ID,
@@ -276,32 +326,37 @@ func (f *FlyRuntimeBackend) ensureExisting(
 	}, nil
 }
 
-// ensureApp returns the app's shared v4 IP so callers can dial it directly
-// instead of waiting on public DNS propagation (see flyRuntimeTarget).
-func (f *FlyRuntimeBackend) ensureApp(ctx context.Context, appName string) (string, error) {
+// ensureApp returns the app identity and shared v4 IP so callers can dial it
+// directly instead of waiting on public DNS propagation (see flyRuntimeTarget).
+func (f *FlyRuntimeBackend) ensureApp(ctx context.Context, appName string) (flyRuntimeAppIdentity, error) {
 	app, err := f.client.GetApp(ctx, appName)
 	switch {
 	case err == nil:
-		return app.SharedIPAddress, nil
+		return flyRuntimeAppIdentity{Name: app.Name, ID: app.ID, SharedIP: app.SharedIPAddress, Created: false}, nil
 	case isFlyNotFound(err):
 		org, err := f.client.GetOrganizationBySlug(ctx, f.config.DefaultFlyOrg)
 		if err != nil {
-			return "", fmt.Errorf("resolve assistant fly runtime organization: %w", err)
+			return flyRuntimeAppIdentity{}, fmt.Errorf("resolve assistant fly runtime organization: %w", err)
 		}
+		created := true
 		_, err = f.client.CreateApp(ctx, fly.CreateAppInput{
 			OrganizationID:  org.ID,
 			Name:            appName,
 			PreferredRegion: new(f.config.DefaultFlyRegion),
 		})
-		if err != nil && !isFlyAppNameTaken(err) {
-			return "", fmt.Errorf("create assistant fly runtime app: %w", err)
+		if err != nil {
+			if !isFlyAppNameTaken(err) {
+				return flyRuntimeAppIdentity{}, fmt.Errorf("create assistant fly runtime app: %w", err)
+			}
+			created = false
 		}
-		if _, getErr := f.client.GetApp(ctx, appName); getErr != nil {
-			return "", fmt.Errorf("verify assistant fly runtime app: %w", getErr)
+		verified, getErr := f.client.GetApp(ctx, appName)
+		if getErr != nil {
+			return flyRuntimeAppIdentity{}, fmt.Errorf("verify assistant fly runtime app: %w", getErr)
 		}
 		ip, err := f.client.AllocateSharedIPAddress(ctx, appName)
 		if err != nil && !isFlyIPAlreadyAssigned(err) {
-			return "", fmt.Errorf("allocate assistant fly runtime shared ip: %w", err)
+			return flyRuntimeAppIdentity{}, fmt.Errorf("allocate assistant fly runtime shared ip: %w", err)
 		}
 		ipStr := ""
 		if ip != nil {
@@ -312,7 +367,7 @@ func (f *FlyRuntimeBackend) ensureApp(ctx context.Context, appName string) (stri
 		// propagate, blowing past waitForRuntimeHealth's budget. Allocating
 		// a v6 forces an immediate DNS publish for both records.
 		if _, err := f.client.AllocateIPAddress(ctx, appName, "v6", "", org.ID, ""); err != nil && !isFlyIPAlreadyAssigned(err) {
-			return "", fmt.Errorf("allocate assistant fly runtime v6 ip: %w", err)
+			return flyRuntimeAppIdentity{}, fmt.Errorf("allocate assistant fly runtime v6 ip: %w", err)
 		}
 		if ipStr == "" {
 			// IP was already allocated previously (isFlyIPAlreadyAssigned path
@@ -321,9 +376,9 @@ func (f *FlyRuntimeBackend) ensureApp(ctx context.Context, appName string) (stri
 				ipStr = refreshed.SharedIPAddress
 			}
 		}
-		return ipStr, nil
+		return flyRuntimeAppIdentity{Name: verified.Name, ID: verified.ID, SharedIP: ipStr, Created: created}, nil
 	default:
-		return "", fmt.Errorf("load assistant fly runtime app: %w", err)
+		return flyRuntimeAppIdentity{}, fmt.Errorf("load assistant fly runtime app: %w", err)
 	}
 }
 
@@ -333,8 +388,11 @@ func (f *FlyRuntimeBackend) resolveMachine(
 	appName string,
 	threadID uuid.UUID,
 	machineID string,
+	lastBootID string,
+	sameAppIncarnation bool,
 ) (*fly.Machine, error) {
 	wantThreadID := threadID.String()
+	hadPriorBoot := sameAppIncarnation && (lastBootID != "" || machineID != "")
 
 	if machineID != "" {
 		machine, err := flapsClient.Get(ctx, appName, machineID)
@@ -351,6 +409,12 @@ func (f *FlyRuntimeBackend) resolveMachine(
 
 	machines, err := flapsClient.List(ctx, appName, "")
 	if err != nil {
+		// Established runtime + flaps notFound = backend drift, not propagation
+		// lag. ensureApp just confirmed the app via GraphQL, so the two Fly
+		// backends disagree and only a destroy+recreate clears it.
+		if isFlyNotFound(err) && hadPriorBoot {
+			return nil, errFlyAppCorrupted
+		}
 		return nil, fmt.Errorf("list assistant fly runtime machines: %w", err)
 	}
 
@@ -389,9 +453,6 @@ func (f *FlyRuntimeBackend) launchMachine(
 	machine, err := f.launchMachineWithRetry(ctx, flapsClient, appName, input)
 	if err != nil {
 		return nil, fmt.Errorf("launch assistant fly runtime machine: %w", err)
-	}
-	if err := flapsClient.Wait(ctx, appName, machine, "started", defaultFlyRuntimeHealthTimeout); err != nil {
-		return nil, fmt.Errorf("wait for assistant fly runtime machine launch: %w", err)
 	}
 	return machine, nil
 }
@@ -439,18 +500,121 @@ func (f *FlyRuntimeBackend) Configure(ctx context.Context, runtime assistantRunt
 	if err != nil {
 		return fmt.Errorf("marshal assistant fly runtime config: %w", err)
 	}
-	_, err = f.runtimeRequest(ctx, targetFromMetadata(metadata), runtimeHTTPRequest{
+	if _, err := f.runtimeRequest(ctx, targetFromMetadata(metadata), runtimeHTTPRequest{
 		Method:         http.MethodPost,
 		Path:           "/configure",
 		ContentType:    "application/json",
 		Body:           body,
 		MaxTimeSeconds: 0,
 		IdempotencyKey: "",
-	})
-	if err != nil {
+	}); err != nil {
 		return fmt.Errorf("configure assistant fly runtime: %w", err)
 	}
 	return nil
+}
+
+func (f *FlyRuntimeBackend) tracedEnsureApp(ctx context.Context, appName string) (app flyRuntimeAppIdentity, err error) {
+	ctx, span := f.tracer.Start(ctx, "assistants.runtime.ensureApp")
+	defer func() {
+		if err != nil {
+			span.SetAttributes(attr.AssistantSetupFailureClass(classifySetupError(err)))
+			span.SetStatus(codes.Error, err.Error())
+		}
+		span.End()
+	}()
+	app, err = f.ensureApp(ctx, appName)
+	span.SetAttributes(attr.AssistantAppCreated(app.Created))
+	return app, err
+}
+
+func (f *FlyRuntimeBackend) tracedResolveMachine(
+	ctx context.Context,
+	flapsClient flyRuntimeFlapsClient,
+	appName string,
+	threadID uuid.UUID,
+	machineID string,
+	lastBootID string,
+	sameAppIncarnation bool,
+) (machine *fly.Machine, err error) {
+	ctx, span := f.tracer.Start(ctx, "assistants.runtime.resolveMachine")
+	defer func() {
+		if err != nil {
+			span.SetAttributes(attr.AssistantSetupFailureClass(classifySetupError(err)))
+			span.SetStatus(codes.Error, err.Error())
+		}
+		span.End()
+	}()
+	return f.resolveMachine(ctx, flapsClient, appName, threadID, machineID, lastBootID, sameAppIncarnation)
+}
+
+func (f *FlyRuntimeBackend) tracedLaunchMachine(
+	ctx context.Context,
+	flapsClient flyRuntimeFlapsClient,
+	runtime assistantRuntimeRecord,
+	appName string,
+) (machine *fly.Machine, err error) {
+	ctx, span := f.tracer.Start(ctx, "assistants.runtime.launchMachine",
+		trace.WithAttributes(attr.AssistantColdStart(true)),
+	)
+	defer func() {
+		if err != nil {
+			span.SetAttributes(attr.AssistantSetupFailureClass(classifySetupError(err)))
+			span.SetStatus(codes.Error, err.Error())
+		}
+		span.End()
+	}()
+	return f.launchMachine(ctx, flapsClient, runtime, appName)
+}
+
+func (f *FlyRuntimeBackend) tracedWaitStarted(
+	ctx context.Context,
+	flapsClient flyRuntimeFlapsClient,
+	appName string,
+	machine *fly.Machine,
+	coldStart bool,
+) (err error) {
+	ctx, span := f.tracer.Start(ctx, "assistants.runtime.waitStarted",
+		trace.WithAttributes(attr.AssistantColdStart(coldStart)),
+	)
+	defer func() {
+		if err != nil {
+			span.SetAttributes(attr.AssistantSetupFailureClass(classifySetupError(err)))
+			span.SetStatus(codes.Error, err.Error())
+		}
+		span.End()
+	}()
+	if waitErr := flapsClient.Wait(ctx, appName, machine, "started", defaultFlyRuntimeHealthTimeout); waitErr != nil {
+		return fmt.Errorf("flaps wait started: %w", waitErr)
+	}
+	return nil
+}
+
+func (f *FlyRuntimeBackend) tracedWaitHealth(ctx context.Context, target flyRuntimeTarget, coldStart bool) (err error) {
+	ctx, span := f.tracer.Start(ctx, "assistants.runtime.waitHealth",
+		trace.WithAttributes(attr.AssistantColdStart(coldStart)),
+	)
+	defer func() {
+		if err != nil {
+			span.SetAttributes(attr.AssistantSetupFailureClass(classifySetupError(err)))
+			span.SetStatus(codes.Error, err.Error())
+		}
+		span.End()
+	}()
+	return f.waitForRuntimeHealth(ctx, target)
+}
+
+func (f *FlyRuntimeBackend) tracedRuntimeState(ctx context.Context, target flyRuntimeTarget, coldStart bool) (state flyRuntimeStateResponse, err error) {
+	ctx, span := f.tracer.Start(ctx, "assistants.runtime.runtimeState",
+		trace.WithAttributes(attr.AssistantColdStart(coldStart)),
+	)
+	defer func() {
+		if err != nil {
+			span.SetAttributes(attr.AssistantSetupFailureClass(classifySetupError(err)))
+			span.SetStatus(codes.Error, err.Error())
+		}
+		span.End()
+	}()
+	return f.runtimeState(ctx, target)
 }
 
 func (f *FlyRuntimeBackend) RunTurn(ctx context.Context, runtime assistantRuntimeRecord, idempotencyKey string, authToken string, prompt string) error {
@@ -525,6 +689,8 @@ func (f *FlyRuntimeBackend) ServerURL(_ context.Context, runtime assistantRuntim
 	return &cloned, nil
 }
 
+// Stop pauses the machine but preserves the app, allocated IP, and backend
+// metadata so a subsequent admit can resume the same incarnation.
 func (f *FlyRuntimeBackend) Stop(ctx context.Context, runtime assistantRuntimeRecord) error {
 	if err := validateRuntimeBackend(f, runtime.Backend); err != nil {
 		return err
@@ -533,10 +699,21 @@ func (f *FlyRuntimeBackend) Stop(ctx context.Context, runtime assistantRuntimeRe
 	if err != nil {
 		return err
 	}
-	if metadata.AppName == "" {
+	if metadata.AppName == "" || metadata.MachineID == "" {
 		return nil
 	}
-	return f.deleteApp(ctx, metadata.AppName)
+
+	flapsClient, err := f.flapsFactory.New(ctx)
+	if err != nil {
+		return fmt.Errorf("create fly runtime flaps client: %w", err)
+	}
+
+	if err := flapsClient.Stop(ctx, metadata.AppName, fly.StopMachineInput{
+		ID: metadata.MachineID,
+	}, ""); err != nil && !isFlyNotFound(err) {
+		return fmt.Errorf("stop assistant fly runtime machine: %w", err)
+	}
+	return nil
 }
 
 func (f *FlyRuntimeBackend) deleteApp(ctx context.Context, appName string) error {
@@ -711,6 +888,7 @@ func decodeFlyRuntimeMetadata(raw []byte) (flyRuntimeMetadata, error) {
 	if len(raw) == 0 {
 		return flyRuntimeMetadata{
 			AppName:    "",
+			AppID:      "",
 			AppURL:     "",
 			AppIP:      "",
 			MachineID:  "",
@@ -796,6 +974,38 @@ func isFlyAppPropagating(err error) bool {
 	}
 	msg := strings.ToLower(err.Error())
 	return strings.Contains(msg, "no rows in result set") || strings.Contains(msg, "failed to get app")
+}
+
+// classifySetupError buckets a setup-phase error into one of a fixed set of
+// failure classes for span attribute reporting. Sentinel/typed errors win
+// over message substring matches; unmapped errors fall into "unknown".
+func classifySetupError(err error) string {
+	switch {
+	case err == nil:
+		return ""
+	case errors.Is(err, errFlyAppCorrupted):
+		return "app_corrupted"
+	case errors.Is(err, context.DeadlineExceeded):
+		return "timeout"
+	case errors.Is(err, context.Canceled):
+		return "canceled"
+	case isFlyAppPropagating(err):
+		return "app_propagation"
+	case isFlyNotFound(err):
+		return "not_found"
+	case isFlyAppNameTaken(err):
+		return "conflict"
+	case isFlyIPAlreadyAssigned(err):
+		return "ip_already_assigned"
+	}
+	msg := strings.ToLower(err.Error())
+	switch {
+	case strings.Contains(msg, "timed out"), strings.Contains(msg, "deadline exceeded"):
+		return "timeout"
+	case strings.Contains(msg, "connection refused"), strings.Contains(msg, "eof"), strings.Contains(msg, "reset by peer"):
+		return "network"
+	}
+	return "unknown"
 }
 
 type assistantFlyLogger struct {

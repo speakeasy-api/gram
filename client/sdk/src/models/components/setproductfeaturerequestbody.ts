@@ -13,7 +13,6 @@ export const FeatureName = {
   Logs: "logs",
   ToolIoLogs: "tool_io_logs",
   SessionCapture: "session_capture",
-  BlockShadowMcp: "block_shadow_mcp",
 } as const;
 /**
  * Name of the feature to update

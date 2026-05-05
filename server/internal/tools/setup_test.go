@@ -24,7 +24,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/deployments"
+	"github.com/speakeasy-api/gram/server/internal/externalmcptest"
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/functionstest"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	packages "github.com/speakeasy-api/gram/server/internal/packages"
@@ -97,8 +99,8 @@ func newTestToolsService(t *testing.T, assetStorage assets.BlobStore) (context.C
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
 
 	enc := testenv.NewEncryptionClient(t)
-	funcs := testenv.NewFunctionsTestOrchestrator(t, assetStorage)
-	mcpRegistryClient := testenv.NewMCPRegistryClient(t, logger, tracerProvider)
+	funcs := functionstest.NewOrchestrator(t, assetStorage)
+	mcpRegistryClient := externalmcptest.NewRegistryClient(t, logger, tracerProvider)
 
 	f := &feature.InMemory{}
 

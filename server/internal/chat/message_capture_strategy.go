@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"slices"
 	"strings"
 
 	or "github.com/OpenRouterTeam/go-sdk/models/components"
@@ -82,13 +81,7 @@ func (s *ChatMessageCaptureStrategy) StartOrResumeChat(ctx context.Context, requ
 		return nil, oops.E(oops.CodeUnexpected, err, "create chat")
 	}
 
-	// Normalize incoming to the same canonical (text-row, tools-row) shape
-	// buildAssistantRows uses for stored rows. Without this, a single combined
-	// assistant message from the runner hashes differently than the two stored
-	// rows it splits into, forcing a new generation on every multi-step turn.
-	normalized := slices.Collect(openrouter.NormalizeAssistantMessages(request.Messages))
-
-	matchResult, err := s.matchIncomingAgainstStored(ctx, chatID, normalized)
+	matchResult, err := s.matchIncomingAgainstStored(ctx, chatID, request.Messages)
 	if err != nil {
 		return nil, err
 	}
@@ -102,7 +95,7 @@ func (s *ChatMessageCaptureStrategy) StartOrResumeChat(ctx context.Context, requ
 		matchedPrefix = 0
 	}
 
-	newMessages := normalized[matchedPrefix:]
+	newMessages := request.Messages[matchedPrefix:]
 	if len(newMessages) == 0 {
 		return &chatCaptureSession{
 			generation:  generation,
@@ -135,10 +128,11 @@ type matchResult struct {
 	diverged      bool
 }
 
-// matchIncomingAgainstStored walks the current generation's stored messages
-// against the incoming request to find the longest matching prefix by message
-// slot identity. The first slot mismatch (or a stored row past the end of
-// incoming) signals divergence and triggers a new generation.
+// matchIncomingAgainstStored finds the longest matching prefix between
+// stored and incoming by slot identity. Blank-assistant slots are skipped
+// on both sides — the server may persist them while clients omit them on
+// replay. Any other mismatch, or stored content past the end of incoming,
+// signals divergence and triggers a new generation.
 func (s *ChatMessageCaptureStrategy) matchIncomingAgainstStored(ctx context.Context, chatID uuid.UUID, incoming []or.ChatMessages) (matchResult, error) {
 	currentGen, err := s.repo.GetMaxGenerationForChat(ctx, chatID)
 	if err != nil {
@@ -155,23 +149,50 @@ func (s *ChatMessageCaptureStrategy) matchIncomingAgainstStored(ctx context.Cont
 		return matchResult{}, oops.E(oops.CodeUnexpected, err, "list chat messages for match")
 	}
 
-	matchedPrefix := 0
+	storedSlotAt := func(i int) messageSlot {
+		row := stored[i]
+		return slotFromStored(row.Role, row.Content, row.ToolCallID.String, row.ToolCalls)
+	}
+
+	si, ii := 0, 0
 	diverged := false
-	for i, row := range stored {
-		if i >= len(incoming) {
+	for si < len(stored) && ii < len(incoming) {
+		storedSlot := storedSlotAt(si)
+		if storedSlot.isBlankAssistant() {
+			si++
+			continue
+		}
+		incomingSlot := slotFromIncoming(incoming[ii])
+		if incomingSlot.isBlankAssistant() {
+			ii++
+			continue
+		}
+		if storedSlot != incomingSlot {
 			diverged = true
 			break
 		}
-		if slotFromStored(row.Role, row.Content, row.ToolCallID.String, row.ToolCalls) != slotFromIncoming(incoming[i]) {
-			diverged = true
-			break
+		si++
+		ii++
+	}
+
+	if !diverged {
+		// Drain trailing blanks on both sides: a real stored row past
+		// incoming must trip divergence, and phantom blanks at the head of
+		// the new tail must not be re-persisted by buildPendingRows.
+		for si < len(stored) && storedSlotAt(si).isBlankAssistant() {
+			si++
 		}
-		matchedPrefix = i + 1
+		for ii < len(incoming) && slotFromIncoming(incoming[ii]).isBlankAssistant() {
+			ii++
+		}
+		if si < len(stored) {
+			diverged = true
+		}
 	}
 
 	return matchResult{
 		generation:    currentGen,
-		matchedPrefix: matchedPrefix,
+		matchedPrefix: ii,
 		diverged:      diverged,
 	}, nil
 }
@@ -299,12 +320,9 @@ func (s *ChatMessageCaptureStrategy) CaptureMessage(
 	return nil
 }
 
-// buildAssistantRows turns a single completion response into 1 or 2 assistant
-// rows. When the response carries both text content and tool_calls, it splits
-// into a text-only row followed by a tool-calls-only row so the stored shape
-// matches what NormalizeAssistantMessages produces on replay. Tokens and
-// finish_reason land on the final row to keep per-turn accounting on a single
-// row.
+// buildAssistantRows turns a single completion response into one assistant row.
+// The row preserves any narrative text and tool_calls from the model response;
+// provider-specific replay normalization happens at the OpenRouter boundary.
 func buildAssistantRows(
 	request openrouter.CompletionRequest,
 	response openrouter.CompletionResponse,
@@ -313,17 +331,12 @@ func buildAssistantRows(
 	origin, userAgent, ipAddress string,
 	generation int32,
 ) []repo.CreateChatMessageParams {
-	// Whitespace-only content is treated as "no text" to stay in sync with
-	// NormalizeAssistantMessages, which trims before deciding whether to split
-	// a replayed combined message. Any divergence here would slot the stored
-	// rows against a different incoming shape and bump generation every turn.
+	// Whitespace-only content is treated as no text; preserving invisible
+	// assistant narrative around tool calls does not add useful replay context.
 	content := response.Content
 	if strings.TrimSpace(content) == "" {
 		content = ""
 	}
-	hasText := content != ""
-	hasTools := len(toolCallsJSON) > 0
-
 	base := repo.CreateChatMessageParams{
 		ChatID:           request.ChatID,
 		Role:             "assistant",
@@ -354,20 +367,6 @@ func buildAssistantRows(
 	promptTokens := int64(response.Usage.PromptTokens)
 	completionTokens := int64(response.Usage.CompletionTokens)
 	totalTokens := int64(response.Usage.TotalTokens)
-
-	if hasText && hasTools {
-		text := base
-		text.Content = content
-
-		tools := base
-		tools.ToolCalls = toolCallsJSON
-		tools.FinishReason = finishReason
-		tools.PromptTokens = promptTokens
-		tools.CompletionTokens = completionTokens
-		tools.TotalTokens = totalTokens
-
-		return []repo.CreateChatMessageParams{text, tools}
-	}
 
 	only := base
 	only.Content = content

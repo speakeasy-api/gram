@@ -7371,6 +7371,21 @@ paths:
       summary: claude hooks
       description: Unified endpoint for all Claude Code hook events. Handles SessionStart, PreToolUse, PostToolUse, and PostToolUseFailure.
       operationId: hooks#claude
+      parameters:
+        - name: Gram-Key
+          in: header
+          description: Optional API key for plugin-driven attribution.
+          allowEmptyValue: true
+          schema:
+            type: string
+            description: Optional API key for plugin-driven attribution.
+        - name: Gram-Project
+          in: header
+          description: Optional project slug for plugin-driven attribution.
+          allowEmptyValue: true
+          schema:
+            type: string
+            description: Optional project slug for plugin-driven attribution.
       requestBody:
         required: true
         content:
@@ -11800,6 +11815,113 @@ paths:
       x-speakeasy-name-override: deletePlugin
       x-speakeasy-react-hook:
         name: DeletePlugin
+  /rpc/plugins.downloadObservabilityPlugin:
+    get:
+      description: Download a ZIP of the per-org observability plugin (Gram hooks). Mints a fresh hooks-scoped API key on each download and embeds it in the plugin's hook script.
+      operationId: downloadObservabilityPlugin
+      parameters:
+        - allowEmptyValue: true
+          description: Target platform.
+          in: query
+          name: platform
+          required: true
+          schema:
+            description: Target platform.
+            enum:
+              - claude
+              - cursor
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/zip:
+              schema:
+                format: binary
+                type: string
+          description: OK response.
+          headers:
+            Content-Disposition:
+              schema:
+                type: string
+            Content-Type:
+              schema:
+                type: string
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: downloadObservabilityPlugin plugins
+      tags:
+        - plugins
+      x-speakeasy-name-override: downloadObservabilityPlugin
   /rpc/plugins.downloadPluginPackage:
     get:
       description: Download a ZIP of a single plugin package for direct installation.
@@ -21423,8 +21545,7 @@ components:
       type: object
       properties:
         content:
-          type: string
-          description: The content of the message
+          description: The content of the message — string for plain text, array for multimodal/tool-call content parts, null for assistant messages that only carry tool_calls
         created_at:
           type: string
           description: When the message was created.
@@ -22263,12 +22384,22 @@ components:
     CreateRiskPolicyRequestBody:
       type: object
       properties:
+        action:
+          type: string
+          description: 'Policy action: flag or block.'
+          default: flag
+          enum:
+            - flag
+            - block
+        auto_name:
+          type: boolean
+          description: Whether the policy name should be auto-generated.
         enabled:
           type: boolean
           description: Whether the policy is active.
         name:
           type: string
-          description: The policy name.
+          description: The policy name. If omitted, a name will be auto-generated.
         presidio_entities:
           type: array
           items:
@@ -22279,8 +22410,6 @@ components:
           items:
             type: string
           description: Detection sources to enable.
-      required:
-        - name
     CreateRoleForm:
       type: object
       properties:
@@ -24177,9 +24306,6 @@ components:
     GramProductFeatures:
       type: object
       properties:
-        block_shadow_mcp_enabled:
-          type: boolean
-          description: Whether shadow-MCP guarding is enabled (injects required toolset id and rejects unsigned tool calls)
         logs_enabled:
           type: boolean
           description: Whether logging is enabled
@@ -24194,7 +24320,6 @@ components:
         - logs_enabled
         - tool_io_logs_enabled
         - session_capture_enabled
-        - block_shadow_mcp_enabled
     HTTPToolDefinition:
       type: object
       properties:
@@ -27315,6 +27440,16 @@ components:
     RiskPolicy:
       type: object
       properties:
+        action:
+          type: string
+          description: 'Policy action: flag (log only) or block (deny in real-time).'
+          default: flag
+          enum:
+            - flag
+            - block
+        auto_name:
+          type: boolean
+          description: Whether the policy name is auto-generated. When true, the name is regenerated on each update.
         created_at:
           type: string
           description: When the policy was created.
@@ -27365,6 +27500,8 @@ components:
         - name
         - sources
         - enabled
+        - action
+        - auto_name
         - version
         - created_at
         - updated_at
@@ -28244,7 +28381,6 @@ components:
             - logs
             - tool_io_logs
             - session_capture
-            - block_shadow_mcp
           maxLength: 60
       required:
         - feature_name
@@ -29701,6 +29837,15 @@ components:
     UpdateRiskPolicyRequestBody:
       type: object
       properties:
+        action:
+          type: string
+          description: 'Policy action: flag or block.'
+          enum:
+            - flag
+            - block
+        auto_name:
+          type: boolean
+          description: Whether the policy name should be auto-generated.
         enabled:
           type: boolean
           description: Whether the policy is active.

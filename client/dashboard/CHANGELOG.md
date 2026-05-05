@@ -1,5 +1,58 @@
 # dashboard
 
+## 0.45.2
+
+### Patch Changes
+
+- 485e9fa: Tag chat sessions started from the Assistants page with `X-Gram-Source: assistant` (was `assistant-onboarding`). Agent session logs now show `assistant` as the source for these sessions instead of conflating ongoing assistant chats with the onboarding flow.
+- abf9f59: fix certain agent session side panel failing to load conversation history
+- 07819a8: Show function memory and instances on source overview
+- 8701c12: Redesign the MCP servers list on the plugin detail page so each entry
+  matches the card pattern from the MCP list page: the Network icon in
+  the dot-pattern sidebar, name plus tool-count badge in the header, and
+  the Public / Private / Disabled status indicator on the footer left.
+  The footer right has a trash icon button that removes the server from
+  the plugin, and servers whose toolset has been deleted are flagged
+  inline. Also extracts the shared status indicator from MCPCard,
+  MCPTableRow, and the new card into a reusable
+  `MCPStatusIndicator` component.
+
+## 0.45.1
+
+### Patch Changes
+
+- 02712dc: Teams installing Gram-published plugins now get observability automatically.
+  Each org's published marketplace ships a `base` plugin containing the team's
+  hooks with credentials embedded — no manual SessionStart configuration, no
+  credential paste, no risk of forgetting the setup step. Install once per
+  machine and tool events flow into the Gram dashboard for the org regardless
+  of how many feature plugins a team member also installs.
+- ceaf5a8: Switch the Plugins list from a table to a card grid that matches the Collections
+  page. Each plugin card surfaces name, slug, description, server count, and last
+  updated time, and the existing delete action moves into a per-card menu. The
+  empty state is replaced by the shared "create resource" tile so the layout stays
+  consistent with Collections.
+- b0726b5: Normalized observe component filenames to (section)(feature) pattern
+
+## 0.45.0
+
+### Minor Changes
+
+- cc00be4: Assistants v0: server-side service, Temporal workflows + reaper, Fly.io / local Firecracker runtime providers, per-thread token manager, and the dashboard create/edit/onboarding UI for assistants with model, instructions, toolset and environment bindings.
+- fb726e1: Reorganized Observe into tabbed Insights and Logs sections
+
+### Patch Changes
+
+- c44959b: Handle missing deployment and MCP detail routes with a not-found state instead of surfacing raw errors
+- 745d0b2: feat(access): reassign members to the default role on role deletion and surface the affected members in the dashboard delete dialog
+- 04c2dbf: Improve automatic setup of OAuth Settings for Remote MCP servers
+- f32d4e2: Edit log filter chips on click instead of deleting
+- 7721e8e: Add a one-click "Auto-Configure" path on the OAuth wizard's path selection step for OAuth 2.1 MCP servers, and drop the requirement that custom OAuth proxy configurations supply scopes.
+- 2fa84af: click-to-reveal for sensitive data in risk findings
+- 7c3be05: Support for shadow mcp blocking (block unapproved MCP servers org-wide)
+- Updated dependencies [cc00be4]
+  - @gram-ai/elements@1.30.1
+
 ## 0.44.0
 
 ### Minor Changes

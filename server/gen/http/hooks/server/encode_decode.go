@@ -33,9 +33,9 @@ func EncodeClaudeResponse(encoder func(context.Context, http.ResponseWriter) goa
 
 // DecodeClaudeRequest returns a decoder for requests sent to the hooks claude
 // endpoint.
-func DecodeClaudeRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*hooks.ClaudeHookPayload, error) {
-	return func(r *http.Request) (*hooks.ClaudeHookPayload, error) {
-		var payload *hooks.ClaudeHookPayload
+func DecodeClaudeRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*hooks.ClaudePayload, error) {
+	return func(r *http.Request) (*hooks.ClaudePayload, error) {
+		var payload *hooks.ClaudePayload
 		var (
 			body ClaudeRequestBody
 			err  error
@@ -55,7 +55,20 @@ func DecodeClaudeRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.
 		if err != nil {
 			return payload, err
 		}
-		payload = NewClaudeHookPayload(&body)
+
+		var (
+			apikeyToken      *string
+			projectSlugInput *string
+		)
+		apikeyTokenRaw := r.Header.Get("Gram-Key")
+		if apikeyTokenRaw != "" {
+			apikeyToken = &apikeyTokenRaw
+		}
+		projectSlugInputRaw := r.Header.Get("Gram-Project")
+		if projectSlugInputRaw != "" {
+			projectSlugInput = &projectSlugInputRaw
+		}
+		payload = NewClaudePayload(&body, apikeyToken, projectSlugInput)
 
 		return payload, nil
 	}

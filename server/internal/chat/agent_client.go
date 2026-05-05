@@ -189,21 +189,22 @@ func (c *Client) AgentChat(
 	for {
 		// Build completion request
 		completionReq := openrouter.CompletionRequest{
-			OrgID:          orgID,
-			ProjectID:      projectID.String(),
-			Messages:       messages,
-			Tools:          toolDefs,
-			Temperature:    opts.Temperature,
-			Model:          opts.Model,
-			Stream:         false,
-			UsageSource:    billing.ModelUsageSourceAgents,
-			ChatID:         chatID,
-			UserID:         "",
-			ExternalUserID: "", // TODO
-			UserEmail:      "",
-			HTTPMetadata:   nil,
-			APIKeyID:       "",
-			JSONSchema:     nil,
+			OrgID:                     orgID,
+			ProjectID:                 projectID.String(),
+			Messages:                  messages,
+			Tools:                     toolDefs,
+			Temperature:               opts.Temperature,
+			Model:                     opts.Model,
+			Stream:                    false,
+			UsageSource:               billing.ModelUsageSourceAgents,
+			ChatID:                    chatID,
+			UserID:                    "",
+			ExternalUserID:            "", // TODO
+			UserEmail:                 "",
+			HTTPMetadata:              nil,
+			APIKeyID:                  "",
+			JSONSchema:                nil,
+			NormalizeOutboundMessages: false,
 		}
 
 		if opts.UsageSource != "" {

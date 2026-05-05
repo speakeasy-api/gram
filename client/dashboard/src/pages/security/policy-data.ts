@@ -16,6 +16,8 @@ export type RuleCategory =
   | "prompt_attacks"
   | "prompt_injection"
   | "off_policy"
+  | "shadow_mcp"
+  | "destructive_tool"
   | "custom";
 
 export type DetectionRule = {
@@ -63,7 +65,7 @@ export const RULE_CATEGORY_META: Record<
   },
   pii: {
     label: "Personal Identifiable Information",
-    description: "Names, addresses, phone numbers, email addresses",
+    description: "Phone numbers, email addresses, IP and MAC addresses",
     icon: "user",
   },
   government_ids: {
@@ -91,6 +93,18 @@ export const RULE_CATEGORY_META: Record<
     description:
       "Requests that violate usage policies or acceptable use guidelines",
     icon: "ban",
+  },
+  shadow_mcp: {
+    label: "Shadow MCP",
+    description:
+      "Tool calls in Cursor and Claude Code that don't come from a Speakeasy-issued MCP server. Requires Speakeasy hooks to be installed on the agent.",
+    icon: "shield-off",
+  },
+  destructive_tool: {
+    label: "Destructive Tools",
+    description:
+      "MCP tool calls whose Gram tool definition is annotated as destructive. Requires Speakeasy hooks and Gram-issued MCP tool metadata.",
+    icon: "shield-alert",
   },
   custom: {
     label: "Custom Patterns",
@@ -1206,18 +1220,12 @@ export const DETECTION_RULES: Record<RuleCategory, DetectionRule[]> = {
     { id: "CRYPTO", title: "Bitcoin wallet address", source: "presidio" },
   ],
   pii: [
-    {
-      id: "PERSON",
-      title: "Full person name (NLP-backed)",
-      source: "presidio",
-    },
+    // PERSON intentionally omitted: Presidio's NER-backed person detection
+    // is too brittle for the runtime hot path (false positives on common
+    // capitalized words). Re-enable once we have a confidence threshold or
+    // a scoped allow-list.
     { id: "EMAIL_ADDRESS", title: "Email address", source: "presidio" },
     { id: "PHONE_NUMBER", title: "Telephone number", source: "presidio" },
-    {
-      id: "LOCATION",
-      title: "Geographically defined location",
-      source: "presidio",
-    },
     {
       id: "IP_ADDRESS",
       title: "IPv4 or IPv6 address",
@@ -1409,6 +1417,8 @@ export const DETECTION_RULES: Record<RuleCategory, DetectionRule[]> = {
       source: "presidio",
     },
   ],
+  shadow_mcp: [],
+  destructive_tool: [],
   custom: [],
 };
 
@@ -1445,7 +1455,6 @@ export const MOCK_POLICIES: DlpPolicy[] = [
     enabled: true,
     ruleCategories: ["pii", "government_ids"],
     selectedRules: [
-      "PERSON",
       "EMAIL_ADDRESS",
       "PHONE_NUMBER",
       "US_SSN",

@@ -115,19 +115,8 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           <SidebarGroupLabel>observe</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              <ScopeGatedNavItem
-                item={routes.observability}
-                scope="project:read"
-              />
+              <ScopeGatedNavItem item={routes.insights} scope="project:read" />
               <ScopeGatedNavItem item={routes.logs} scope="project:read" />
-              <ScopeGatedNavItem
-                item={routes.chatSessions}
-                scope="project:read"
-              />
-              <ScopeGatedNavItem
-                item={routes.hooks}
-                scope={["project:read", "project:write"]}
-              />
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>

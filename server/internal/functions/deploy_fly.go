@@ -3,7 +3,6 @@ package functions
 import (
 	"bytes"
 	"context"
-	"database/sql"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -19,6 +18,7 @@ import (
 
 	backoff "github.com/cenkalti/backoff/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	slogmulti "github.com/samber/slog-multi"
@@ -149,7 +149,7 @@ func (f *FlyRunner) prepareFunctionAuth(ctx context.Context, logger *slog.Logger
 		AccessID:     baseReq.FunctionsAccessID,
 	})
 	switch {
-	case errors.Is(err, sql.ErrNoRows):
+	case errors.Is(err, pgx.ErrNoRows):
 		return "", nil, oops.E(oops.CodeNotFound, err, "no function runner available").Log(ctx, logger)
 	case err != nil:
 		return "", nil, oops.E(oops.CodeUnexpected, err, "failed to fetch function runner").Log(ctx, logger)
@@ -556,7 +556,7 @@ func (f *FlyRunner) reap(ctx context.Context, logger *slog.Logger, appsRepo *rep
 		FunctionID:   req.FunctionID,
 	})
 	switch {
-	case errors.Is(err, sql.ErrNoRows):
+	case errors.Is(err, pgx.ErrNoRows):
 		return nil
 	case err != nil:
 		return fmt.Errorf("get existing app name: %w", err)
@@ -635,7 +635,7 @@ func (f *FlyRunner) reap(ctx context.Context, logger *slog.Logger, appsRepo *rep
 // the hard cap.
 func concurrencyLimits(memoryMB int) (softLimit, hardLimit int) {
 	hardLimit = max(memoryMB/48, 4)
-	softLimit = max(hardLimit*3/4, 2)
+	softLimit = max(hardLimit*1/5, 2)
 	return softLimit, hardLimit
 }
 
@@ -656,7 +656,7 @@ func (f *FlyRunner) newMachineConfig(req RunnerDeployRequest, image string, file
 		},
 		Guest: &fly.MachineGuest{
 			CPUKind:       "shared",
-			CPUs:          2,
+			CPUs:          4,
 			MemoryMB:      mem,
 			GPUs:          0,
 			PersistRootfs: fly.MachinePersistRootfsNever,

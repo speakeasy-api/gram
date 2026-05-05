@@ -4,13 +4,15 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"slices"
+	"strings"
 	"time"
 
+	or "github.com/OpenRouterTeam/go-sdk/models/components"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
-	tracenoop "go.opentelemetry.io/otel/trace/noop"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
 
@@ -23,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/background"
+	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -30,6 +33,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -42,13 +47,15 @@ type RiskAnalysisSignaler interface {
 }
 
 type Service struct {
-	tracer   trace.Tracer
-	logger   *slog.Logger
-	db       *pgxpool.Pool
-	repo     *repo.Queries
-	auth     *auth.Auth
-	authz    *authz.Engine
-	signaler RiskAnalysisSignaler
+	tracer           trace.Tracer
+	logger           *slog.Logger
+	db               *pgxpool.Pool
+	repo             *repo.Queries
+	auth             *auth.Auth
+	authz            *authz.Engine
+	signaler         RiskAnalysisSignaler
+	completionClient openrouter.CompletionClient
+	shadowMCPClient  *shadowmcp.Client
 }
 
 var _ chat.MessageObserver = (*Service)(nil)
@@ -56,15 +63,17 @@ var _ chat.MessageObserver = (*Service)(nil)
 // NewObserver creates a lightweight chat.MessageObserver that signals the risk
 // drain workflow when new messages are stored. Use this in contexts (e.g. the
 // worker process) where the full risk Service is not needed.
-func NewObserver(logger *slog.Logger, db *pgxpool.Pool, signaler RiskAnalysisSignaler) chat.MessageObserver {
+func NewObserver(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, signaler RiskAnalysisSignaler) chat.MessageObserver {
 	return &Service{
-		tracer:   tracenoop.NewTracerProvider().Tracer(""),
-		logger:   logger.With(attr.SlogComponent("risk")),
-		db:       db,
-		repo:     repo.New(db),
-		auth:     nil,
-		authz:    nil,
-		signaler: signaler,
+		tracer:           tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/risk"),
+		logger:           logger.With(attr.SlogComponent("risk")),
+		db:               db,
+		repo:             repo.New(db),
+		auth:             nil,
+		authz:            nil,
+		signaler:         signaler,
+		completionClient: nil,
+		shadowMCPClient:  nil,
 	}
 }
 
@@ -75,17 +84,21 @@ func NewService(
 	sessions *sessions.Manager,
 	authzEngine *authz.Engine,
 	signaler RiskAnalysisSignaler,
+	completionClient openrouter.CompletionClient,
+	shadowMCPClient *shadowmcp.Client,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("risk"))
 
 	return &Service{
-		tracer:   tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/risk"),
-		logger:   logger,
-		db:       db,
-		repo:     repo.New(db),
-		auth:     auth.New(logger, db, sessions, authzEngine),
-		authz:    authzEngine,
-		signaler: signaler,
+		tracer:           tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/risk"),
+		logger:           logger,
+		db:               db,
+		repo:             repo.New(db),
+		auth:             auth.New(logger, db, sessions, authzEngine),
+		authz:            authzEngine,
+		signaler:         signaler,
+		completionClient: completionClient,
+		shadowMCPClient:  shadowMCPClient,
 	}
 }
 
@@ -138,7 +151,27 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 		return nil, err
 	}
 
-	if err := validatePolicyName(payload.Name); err != nil {
+	name := ""
+	if payload.Name != nil {
+		name = *payload.Name
+	}
+
+	// Default auto_name to true only when the caller did not supply Name at
+	// all (nil pointer). An explicitly empty Name (`Name: new("")`) is
+	// treated as a validation error below — that path is exercised by
+	// TestCreateRiskPolicy_EmptyName. An explicit auto_name in the payload
+	// always wins over the default so callers can opt in/out without
+	// ambiguity.
+	autoName := payload.Name == nil
+	if payload.AutoName != nil {
+		autoName = *payload.AutoName
+	}
+
+	action := payload.Action
+	if action == "" {
+		action = "flag"
+	}
+	if err := validateAction(action); err != nil {
 		return nil, err
 	}
 
@@ -146,10 +179,33 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 	if sources == nil {
 		sources = []string{"gitleaks"}
 	}
+	if err := validateSources(sources); err != nil {
+		return nil, err
+	}
+	if err := validateSourceAction(sources, action); err != nil {
+		return nil, err
+	}
 
 	enabled := true
 	if payload.Enabled != nil {
 		enabled = *payload.Enabled
+	}
+
+	// Auto-generate a name when the caller opted in (explicit auto_name=true
+	// or omitted both auto_name and name). Setting auto_name=false with an
+	// empty name surfaces a validation error below rather than silently
+	// auto-generating.
+	if autoName {
+		existingPolicies, _ := s.repo.ListRiskPolicies(ctx, *authCtx.ProjectID)
+		var existingNames []string
+		for _, p := range existingPolicies {
+			existingNames = append(existingNames, p.Name)
+		}
+		name = s.generatePolicyName(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), sources, payload.PresidioEntities, action, existingNames)
+	}
+
+	if err := validatePolicyName(name); err != nil {
+		return nil, err
 	}
 
 	id, err := uuid.NewV7()
@@ -167,10 +223,12 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 		ID:               id,
 		ProjectID:        *authCtx.ProjectID,
 		OrganizationID:   authCtx.ActiveOrganizationID,
-		Name:             payload.Name,
+		Name:             name,
 		Sources:          sources,
 		PresidioEntities: payload.PresidioEntities,
 		Enabled:          enabled,
+		Action:           action,
+		AutoName:         autoName,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "create risk policy").Log(ctx, s.logger)
@@ -190,6 +248,10 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit risk policy create").Log(ctx, s.logger)
+	}
+
+	if s.shadowMCPClient != nil {
+		s.shadowMCPClient.Invalidate(ctx, row.ProjectID)
 	}
 
 	// Trigger the drain workflow for the new policy.
@@ -271,9 +333,9 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		return nil, oops.C(oops.CodeInvalid)
 	}
 
-	if err := validatePolicyName(payload.Name); err != nil {
-		return nil, err
-	}
+	// Name validation runs after the auto-name regeneration block below, so
+	// callers can send auto_name=true with an empty name and have the server
+	// generate one before validation rejects it.
 
 	// Fetch the current policy so we can preserve fields not provided in the payload.
 	current, err := s.repo.GetRiskPolicy(ctx, repo.GetRiskPolicyParams{
@@ -287,6 +349,9 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 	sources := current.Sources
 	if payload.Sources != nil {
 		sources = payload.Sources
+		if err := validateSources(sources); err != nil {
+			return nil, err
+		}
 	}
 
 	presidioEntities := current.PresidioEntities
@@ -297,6 +362,41 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 	enabled := current.Enabled
 	if payload.Enabled != nil {
 		enabled = *payload.Enabled
+	}
+
+	action := current.Action
+	if payload.Action != nil {
+		if err := validateAction(*payload.Action); err != nil {
+			return nil, err
+		}
+		action = *payload.Action
+	}
+	if err := validateSourceAction(sources, action); err != nil {
+		return nil, err
+	}
+
+	autoName := current.AutoName
+	if payload.AutoName != nil {
+		autoName = *payload.AutoName
+	}
+
+	// Regenerate the name only when the caller explicitly opts in on this
+	// update via auto_name=true. Toggling unrelated fields (e.g. enabled)
+	// should not silently rename the policy.
+	name := payload.Name
+	if payload.AutoName != nil && *payload.AutoName {
+		existingPolicies, _ := s.repo.ListRiskPolicies(ctx, *authCtx.ProjectID)
+		var existingNames []string
+		for _, p := range existingPolicies {
+			if p.ID != id {
+				existingNames = append(existingNames, p.Name)
+			}
+		}
+		name = s.generatePolicyName(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), sources, presidioEntities, action, existingNames)
+	}
+
+	if err := validatePolicyName(name); err != nil {
+		return nil, err
 	}
 
 	snapshotBefore := policyRowSnapshot(current)
@@ -310,10 +410,12 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 	row, err := repo.New(dbtx).UpdateRiskPolicy(ctx, repo.UpdateRiskPolicyParams{
 		ID:               id,
 		ProjectID:        *authCtx.ProjectID,
-		Name:             payload.Name,
+		Name:             name,
 		Sources:          sources,
 		PresidioEntities: presidioEntities,
 		Enabled:          enabled,
+		Action:           action,
+		AutoName:         autoName,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "update risk policy").Log(ctx, s.logger)
@@ -335,6 +437,10 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit risk policy update").Log(ctx, s.logger)
+	}
+
+	if s.shadowMCPClient != nil {
+		s.shadowMCPClient.Invalidate(ctx, row.ProjectID)
 	}
 
 	// Signal the drain workflow — it reads the current enabled/version
@@ -400,6 +506,10 @@ func (s *Service) DeleteRiskPolicy(ctx context.Context, payload *gen.DeleteRiskP
 
 	if err := dbtx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "commit risk policy delete").Log(ctx, s.logger)
+	}
+
+	if s.shadowMCPClient != nil {
+		s.shadowMCPClient.Invalidate(ctx, *authCtx.ProjectID)
 	}
 
 	return nil
@@ -700,6 +810,8 @@ func (s *Service) policyToType(ctx context.Context, row repo.RiskPolicy) (*types
 		Sources:          row.Sources,
 		PresidioEntities: row.PresidioEntities,
 		Enabled:          row.Enabled,
+		Action:           row.Action,
+		AutoName:         row.AutoName,
 		Version:          row.Version,
 		CreatedAt:        row.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:        row.UpdatedAt.Time.Format(time.RFC3339),
@@ -720,12 +832,127 @@ func policyRowSnapshot(row repo.RiskPolicy) *types.RiskPolicy {
 		Sources:          row.Sources,
 		PresidioEntities: row.PresidioEntities,
 		Enabled:          row.Enabled,
+		Action:           row.Action,
+		AutoName:         row.AutoName,
 		Version:          row.Version,
 		CreatedAt:        row.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:        row.UpdatedAt.Time.Format(time.RFC3339),
 		PendingMessages:  -1,
 		TotalMessages:    -1,
 	}
+}
+
+func (s *Service) generatePolicyName(ctx context.Context, orgID, projectID string, sources, presidioEntities []string, action string, existingNames []string) string {
+	if s.completionClient == nil {
+		return s.fallbackPolicyName(sources, action)
+	}
+
+	prompt := fmt.Sprintf(
+		"Generate a short, human-friendly name (2-5 words) for a security policy with these settings:\n"+
+			"- Detection sources: %v\n"+
+			"- PII entities: %v\n"+
+			"- Action: %s\n"+
+			"- Existing policy names to avoid: %v\n\n"+
+			"Return ONLY the name, no quotes or explanation. Make it descriptive and distinct from existing names.",
+		sources, presidioEntities, action, existingNames,
+	)
+
+	// Tight timeout: this runs synchronously in the API request path. If
+	// OpenRouter is slow we fall back to fallbackPolicyName rather than
+	// blocking the create/update RPC for long.
+	nameCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+
+	response, err := s.completionClient.GetCompletion(nameCtx, openrouter.CompletionRequest{
+		OrgID:     orgID,
+		ProjectID: projectID,
+		ChatID:    uuid.Nil,
+		Messages: []or.ChatMessages{
+			openrouter.CreateMessageUser(prompt),
+		},
+		Tools:                     nil,
+		Temperature:               nil,
+		Model:                     "",
+		Stream:                    false,
+		UsageSource:               billing.ModelUsageSourceGram,
+		UserID:                    "",
+		ExternalUserID:            "",
+		UserEmail:                 "",
+		HTTPMetadata:              nil,
+		APIKeyID:                  "",
+		JSONSchema:                nil,
+		NormalizeOutboundMessages: false,
+	})
+	if err != nil {
+		s.logger.WarnContext(ctx, "failed to generate policy name via OpenRouter", attr.SlogError(err))
+		return s.fallbackPolicyName(sources, action)
+	}
+
+	name := strings.TrimSpace(openrouter.GetText(*response.Message))
+	if name == "" {
+		return s.fallbackPolicyName(sources, action)
+	}
+
+	// Truncate to 100 chars
+	runes := []rune(name)
+	if len(runes) > 100 {
+		name = string(runes[:100])
+	}
+
+	return name
+}
+
+func (s *Service) fallbackPolicyName(sources []string, action string) string {
+	var parts []string
+	for _, src := range sources {
+		switch src {
+		case "gitleaks":
+			parts = append(parts, "Secret")
+		case "presidio":
+			parts = append(parts, "PII")
+		case shadowmcp.SourceShadowMCP:
+			parts = append(parts, "Shadow MCP")
+		case shadowmcp.SourceDestructiveTool:
+			parts = append(parts, "Destructive Tool")
+		}
+	}
+	if len(parts) == 0 {
+		parts = append(parts, "Risk")
+	}
+
+	actionLabel := "Scanner"
+	if action == "block" {
+		actionLabel = "Blocker"
+	}
+
+	return strings.Join(parts, " & ") + " " + actionLabel
+}
+
+func validateAction(action string) error {
+	switch action {
+	case "flag", "block":
+		return nil
+	default:
+		return oops.E(oops.CodeInvalid, nil, "action must be one of: flag, block")
+	}
+}
+
+func validateSources(sources []string) error {
+	for _, src := range sources {
+		switch src {
+		case "gitleaks", "presidio", shadowmcp.SourceShadowMCP, shadowmcp.SourceDestructiveTool:
+		default:
+			return oops.E(oops.CodeInvalid, nil, "source %q is not a recognized policy source", src)
+		}
+	}
+	return nil
+}
+
+func validateSourceAction(sources []string, action string) error {
+	if action == "block" && slices.Contains(sources, shadowmcp.SourceDestructiveTool) {
+		return oops.E(oops.CodeInvalid, nil, "source %q supports flagging only", shadowmcp.SourceDestructiveTool)
+	}
+	return nil
 }
 
 func validatePolicyName(name string) error {

@@ -21,7 +21,7 @@ func TestUpdateRiskPolicy_Success(t *testing.T) {
 
 	enabled := true
 	created, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
-		Name:    "Original",
+		Name:    new("Original"),
 		Sources: []string{"gitleaks"},
 		Enabled: &enabled,
 	})
@@ -48,7 +48,7 @@ func TestUpdateRiskPolicy_BumpsVersionOnSourcesChange(t *testing.T) {
 	)
 
 	created, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
-		Name:    "Version Test",
+		Name:    new("Version Test"),
 		Sources: []string{"gitleaks"},
 	})
 	require.NoError(t, err)
@@ -57,7 +57,7 @@ func TestUpdateRiskPolicy_BumpsVersionOnSourcesChange(t *testing.T) {
 	updated, err := ti.service.UpdateRiskPolicy(ctx, &gen.UpdateRiskPolicyPayload{
 		ID:      created.ID,
 		Name:    "Version Test",
-		Sources: []string{"gitleaks", "llm"},
+		Sources: []string{"gitleaks", "presidio"},
 	})
 	require.NoError(t, err)
 	require.Equal(t, int64(2), updated.Version, "sources change should bump version")
@@ -73,7 +73,7 @@ func TestUpdateRiskPolicy_BumpsVersionOnEnabledChange(t *testing.T) {
 	)
 
 	created, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
-		Name: "Toggle Test",
+		Name: new("Toggle Test"),
 	})
 	require.NoError(t, err)
 
@@ -99,7 +99,7 @@ func TestUpdateRiskPolicy_PreservesFieldsWhenOmitted(t *testing.T) {
 
 	disabled := false
 	created, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
-		Name:    "Preserve Test",
+		Name:    new("Preserve Test"),
 		Sources: []string{"gitleaks"},
 		Enabled: &disabled,
 	})

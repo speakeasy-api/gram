@@ -4,9 +4,11 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"log"
 	"net/url"
 	"os"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -49,7 +51,7 @@ func TestServiceCoreAdmitPendingThreadsUsesFlyBackend(t *testing.T) {
 
 	insertAssistantFixture(t, conn, projectID, assistantID, chatID, threadID)
 
-	core := NewServiceCore(testenv.NewLogger(t), conn, testRuntimeBackend{backend: runtimeBackendFlyIO, runTurnErr: nil}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)))
+	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn, testRuntimeBackend{backend: runtimeBackendFlyIO, runTurnErr: nil}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)))
 
 	admitted, err := core.AdmitPendingThreads(t.Context(), assistantID)
 	require.NoError(t, err)
@@ -105,7 +107,7 @@ WHERE id = $3
 `, eventStatusProcessing, time.Now().UTC(), eventID)
 	require.NoError(t, err)
 
-	core := NewServiceCore(testenv.NewLogger(t), conn, testRuntimeBackend{backend: runtimeBackendFlyIO, runTurnErr: nil}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)))
+	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn, testRuntimeBackend{backend: runtimeBackendFlyIO, runTurnErr: nil}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)))
 
 	result, err := core.ReapStuckRuntimes(t.Context())
 	require.NoError(t, err)
@@ -172,7 +174,7 @@ WHERE id = $3
 `, eventStatusProcessing, time.Now().UTC().Add(-(eventProcessingRequeueGrace + time.Minute)), eventID)
 	require.NoError(t, err)
 
-	core := NewServiceCore(testenv.NewLogger(t), conn, testRuntimeBackend{backend: runtimeBackendFlyIO, runTurnErr: nil}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)))
+	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn, testRuntimeBackend{backend: runtimeBackendFlyIO, runTurnErr: nil}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)))
 
 	result, err := core.ReapStuckRuntimes(t.Context())
 	require.NoError(t, err)
@@ -276,7 +278,7 @@ VALUES ($1, $2, $3, $4, $5::jsonb, $6)
 		require.NoError(t, err)
 	}
 
-	core := NewServiceCore(testenv.NewLogger(t), conn, testRuntimeBackend{backend: runtimeBackendFlyIO, runTurnErr: nil}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)))
+	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn, testRuntimeBackend{backend: runtimeBackendFlyIO, runTurnErr: nil}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)))
 
 	history, err := core.loadChatHistory(t.Context(), chatID, projectID)
 	require.NoError(t, err)
@@ -308,6 +310,59 @@ VALUES ($1, $2, $3, $4, $5::jsonb, $6)
 	require.Equal(t, "thanks", history[4].Content)
 }
 
+func TestServiceCoreLoadChatHistoryReturnsOnlyLatestGeneration(t *testing.T) {
+	t.Parallel()
+
+	conn, err := assistantsInfra.CloneTestDatabase(t, "assistants_load_history_gens")
+	require.NoError(t, err)
+
+	projectID := uuid.New()
+	chatID := uuid.New()
+
+	_, err = conn.Exec(t.Context(), `
+INSERT INTO projects (id, name, slug, organization_id)
+VALUES ($1, 'Project', 'project', 'org-test')
+`, projectID)
+	require.NoError(t, err)
+
+	_, err = conn.Exec(t.Context(), `
+INSERT INTO chats (id, project_id, organization_id)
+VALUES ($1, $2, 'org-test')
+`, chatID, projectID)
+	require.NoError(t, err)
+
+	rows := []struct {
+		gen     int
+		role    string
+		content string
+	}{
+		{gen: 0, role: "user", content: "gen-0-user"},
+		{gen: 0, role: "assistant", content: "gen-0-asst"},
+		{gen: 1, role: "user", content: "gen-1-user"},
+		{gen: 1, role: "assistant", content: "gen-1-asst"},
+		{gen: 2, role: "user", content: "gen-2-user-a"},
+		{gen: 2, role: "assistant", content: "gen-2-asst"},
+		{gen: 2, role: "user", content: "gen-2-user-b"},
+	}
+	for _, r := range rows {
+		_, err = conn.Exec(t.Context(), `
+INSERT INTO chat_messages (chat_id, project_id, role, content, generation)
+VALUES ($1, $2, $3, $4, $5)
+`, chatID, projectID, r.role, r.content, r.gen)
+		require.NoError(t, err)
+	}
+
+	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn, testRuntimeBackend{backend: runtimeBackendFlyIO, runTurnErr: nil}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)))
+
+	history, err := core.loadChatHistory(t.Context(), chatID, projectID)
+	require.NoError(t, err)
+
+	require.Len(t, history, 3, "only gen 2 rows make it into the replay")
+	require.Equal(t, "gen-2-user-a", history[0].Content)
+	require.Equal(t, "gen-2-asst", history[1].Content)
+	require.Equal(t, "gen-2-user-b", history[2].Content)
+}
+
 func TestServiceCoreLoadChatHistoryFailsWhenToolRowMissingCallID(t *testing.T) {
 	t.Parallel()
 
@@ -335,7 +390,7 @@ VALUES ($1, $2, 'tool', 'orphan result')
 `, chatID, projectID)
 	require.NoError(t, err)
 
-	core := NewServiceCore(testenv.NewLogger(t), conn, testRuntimeBackend{backend: runtimeBackendFlyIO, runTurnErr: nil}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)))
+	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn, testRuntimeBackend{backend: runtimeBackendFlyIO, runTurnErr: nil}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)))
 
 	_, err = core.loadChatHistory(t.Context(), chatID, projectID)
 	require.ErrorContains(t, err, "tool chat row missing tool_call_id")
@@ -355,7 +410,7 @@ func TestServiceCoreProcessThreadEventsCompletesEvent(t *testing.T) {
 
 	logger := testenv.NewLogger(t)
 	tokens := assistanttokens.New("test-jwt-secret", conn, nil)
-	core := NewServiceCore(logger, conn, testRuntimeBackend{backend: runtimeBackendFlyIO, runTurnErr: nil}, nil, tokens, nil, telemetry.NewStub(logger))
+	core := NewServiceCore(logger, testenv.NewTracerProvider(t), conn, testRuntimeBackend{backend: runtimeBackendFlyIO, runTurnErr: nil}, nil, tokens, nil, telemetry.NewStub(logger))
 
 	admitted, err := core.AdmitPendingThreads(t.Context(), assistantID)
 	require.NoError(t, err)
@@ -403,7 +458,7 @@ func TestServiceCoreProcessThreadEventsRequeuesOnTurnFailure(t *testing.T) {
 	logger := testenv.NewLogger(t)
 	tokens := assistanttokens.New("test-jwt-secret", conn, nil)
 	backend := testRuntimeBackend{backend: runtimeBackendFlyIO, runTurnErr: errors.New("runtime RunTurn blew up")}
-	core := NewServiceCore(logger, conn, backend, nil, tokens, nil, telemetry.NewStub(logger))
+	core := NewServiceCore(logger, testenv.NewTracerProvider(t), conn, backend, nil, tokens, nil, telemetry.NewStub(logger))
 
 	admitted, err := core.AdmitPendingThreads(t.Context(), assistantID)
 	require.NoError(t, err)
@@ -430,9 +485,152 @@ WHERE assistant_thread_id = $1
 	require.Contains(t, lastError.String, "runtime RunTurn blew up")
 }
 
+func TestServiceCoreProcessThreadEventsMarksRuntimeFailedOnUnhealthyTurn(t *testing.T) {
+	t.Parallel()
+
+	conn, err := assistantsInfra.CloneTestDatabase(t, "assistants_unhealthy_turn")
+	require.NoError(t, err)
+
+	projectID := uuid.New()
+	assistantID := uuid.New()
+	chatID := uuid.New()
+	threadID := uuid.New()
+	insertAssistantFixture(t, conn, projectID, assistantID, chatID, threadID)
+
+	var stopCalls atomic.Int64
+	logger := testenv.NewLogger(t)
+	tokens := assistanttokens.New("test-jwt-secret", conn, nil)
+	backend := testRuntimeBackend{
+		backend:    runtimeBackendFlyIO,
+		runTurnErr: ErrRuntimeUnhealthy,
+		stopCalls:  &stopCalls,
+	}
+	core := NewServiceCore(logger, testenv.NewTracerProvider(t), conn, backend, nil, tokens, mustParseURLForServiceTest(t, "https://gram.example.com"), telemetry.NewStub(logger))
+
+	admitted, err := core.AdmitPendingThreads(t.Context(), assistantID)
+	require.NoError(t, err)
+	require.Equal(t, []uuid.UUID{threadID}, admitted.ThreadIDs)
+
+	result, err := core.ProcessThreadEvents(t.Context(), projectID, threadID)
+	require.NoError(t, err)
+	require.True(t, result.RetryAdmission)
+	require.False(t, result.RuntimeActive)
+	require.False(t, result.ProcessedAnyEvent)
+	require.Equal(t, int64(1), stopCalls.Load(), "unhealthy turn must tear the VM down")
+
+	var state string
+	var deleted bool
+	err = conn.QueryRow(t.Context(), `
+SELECT state, deleted
+FROM assistant_runtimes
+WHERE assistant_thread_id = $1
+`, threadID).Scan(&state, &deleted)
+	require.NoError(t, err)
+	require.Equal(t, runtimeStateFailed, state, "unhealthy turn must mark runtime failed so the admission backoff applies")
+	require.True(t, deleted)
+
+	var eventStatus string
+	err = conn.QueryRow(t.Context(), `
+SELECT status
+FROM assistant_thread_events
+WHERE assistant_thread_id = $1
+`, threadID).Scan(&eventStatus)
+	require.NoError(t, err)
+	require.Equal(t, eventStatusProcessing, eventStatus, "unhealthy turn leaves the event in processing for the reaper")
+}
+
+func TestServiceCoreProcessThreadEventsDoesNotStopRuntimeOnConfigureFailure(t *testing.T) {
+	t.Parallel()
+
+	conn, err := assistantsInfra.CloneTestDatabase(t, "assistants_config_fail")
+	require.NoError(t, err)
+
+	projectID := uuid.New()
+	assistantID := uuid.New()
+	chatID := uuid.New()
+	threadID := uuid.New()
+	insertAssistantFixture(t, conn, projectID, assistantID, chatID, threadID)
+
+	var stopCalls atomic.Int64
+	logger := testenv.NewLogger(t)
+	tokens := assistanttokens.New("test-jwt-secret", conn, nil)
+	backend := testRuntimeBackend{
+		backend: runtimeBackendFlyIO,
+		ensureResult: RuntimeBackendEnsureResult{
+			ColdStart:      true,
+			NeedsConfigure: true,
+			BackendMetadataJSON: []byte(`{
+				"app_name": "gram-asst-test",
+				"app_url": "https://gram-asst-test.fly.dev",
+				"machine_id": "machine-1",
+				"last_boot_id": "boot-1"
+			}`),
+		},
+		configureErr: errors.New("runtime Configure blew up"),
+		stopCalls:    &stopCalls,
+	}
+	core := NewServiceCore(logger, testenv.NewTracerProvider(t), conn, backend, nil, tokens, mustParseURLForServiceTest(t, "https://gram.example.com"), telemetry.NewStub(logger))
+
+	admitted, err := core.AdmitPendingThreads(t.Context(), assistantID)
+	require.NoError(t, err)
+	require.Equal(t, []uuid.UUID{threadID}, admitted.ThreadIDs)
+
+	result, err := core.ProcessThreadEvents(t.Context(), projectID, threadID)
+	require.NoError(t, err)
+	require.True(t, result.RetryAdmission)
+	require.False(t, result.RuntimeActive)
+	require.Equal(t, int64(0), stopCalls.Load(), "configure failure should preserve the Fly app for reuse/recovery")
+
+	var state string
+	var deleted bool
+	var metadata []byte
+	err = conn.QueryRow(t.Context(), `
+SELECT state, deleted, backend_metadata_json
+FROM assistant_runtimes
+WHERE assistant_thread_id = $1
+`, threadID).Scan(&state, &deleted, &metadata)
+	require.NoError(t, err)
+	require.Equal(t, runtimeStateFailed, state)
+	require.True(t, deleted)
+	require.JSONEq(t, string(backend.ensureResult.BackendMetadataJSON), string(metadata))
+
+	hotAdmit, err := core.AdmitPendingThreads(t.Context(), assistantID)
+	require.NoError(t, err)
+	require.Empty(t, hotAdmit.ThreadIDs, "admission backoff must block re-admit immediately after a setup failure")
+
+	// Simulate the backoff window elapsing so the next admit is eligible.
+	_, err = conn.Exec(t.Context(), `
+UPDATE assistant_runtimes
+SET updated_at = clock_timestamp() - INTERVAL '1 hour'
+WHERE assistant_thread_id = $1
+  AND state = $2
+`, threadID, runtimeStateFailed)
+	require.NoError(t, err)
+
+	admittedAgain, err := core.AdmitPendingThreads(t.Context(), assistantID)
+	require.NoError(t, err)
+	require.Equal(t, []uuid.UUID{threadID}, admittedAgain.ThreadIDs)
+
+	var nextMetadata []byte
+	err = conn.QueryRow(t.Context(), `
+SELECT backend_metadata_json
+FROM assistant_runtimes
+WHERE assistant_thread_id = $1
+  AND deleted IS FALSE
+ORDER BY created_at DESC
+LIMIT 1
+`, threadID).Scan(&nextMetadata)
+	require.NoError(t, err)
+	require.JSONEq(t, string(backend.ensureResult.BackendMetadataJSON), string(nextMetadata))
+}
+
 type testRuntimeBackend struct {
-	backend    string
-	runTurnErr error
+	backend      string
+	ensureResult RuntimeBackendEnsureResult
+	ensureErr    error
+	configureErr error
+	runTurnErr   error
+	stopCalls    *atomic.Int64
 }
 
 func (t testRuntimeBackend) Backend() string {
@@ -444,11 +642,14 @@ func (t testRuntimeBackend) SupportsBackend(backend string) bool {
 }
 
 func (t testRuntimeBackend) Ensure(context.Context, assistantRuntimeRecord) (RuntimeBackendEnsureResult, error) {
-	return RuntimeBackendEnsureResult{ColdStart: false, NeedsConfigure: false, BackendMetadataJSON: nil}, nil
+	if t.ensureErr != nil {
+		return RuntimeBackendEnsureResult{}, t.ensureErr
+	}
+	return t.ensureResult, nil
 }
 
 func (t testRuntimeBackend) Configure(context.Context, assistantRuntimeRecord, runtimeStartupConfig) error {
-	return nil
+	return t.configureErr
 }
 
 func (t testRuntimeBackend) RunTurn(context.Context, assistantRuntimeRecord, string, string, string) error {
@@ -456,9 +657,23 @@ func (t testRuntimeBackend) RunTurn(context.Context, assistantRuntimeRecord, str
 }
 
 func (t testRuntimeBackend) ServerURL(context.Context, assistantRuntimeRecord, *url.URL) (*url.URL, error) {
-	return nil, nil
+	parsed, err := url.Parse("https://gram.example.com")
+	if err != nil {
+		return nil, fmt.Errorf("parse test server url: %w", err)
+	}
+	return parsed, nil
 }
 
 func (t testRuntimeBackend) Stop(context.Context, assistantRuntimeRecord) error {
+	if t.stopCalls != nil {
+		t.stopCalls.Add(1)
+	}
 	return nil
+}
+
+func mustParseURLForServiceTest(t *testing.T, raw string) *url.URL {
+	t.Helper()
+	parsed, err := url.Parse(raw)
+	require.NoError(t, err)
+	return parsed
 }

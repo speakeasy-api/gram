@@ -692,13 +692,29 @@ function MaskedMatchInline({ value }: { value: string }) {
 }
 
 function RiskBadgePopover({ results }: { results: RiskResult[] }) {
+  // Long messages can repeat the same secret/email many times. Collapse to
+  // distinct (source, ruleId, match) so the popover lists each unique
+  // finding once with an occurrence count instead of an N-row scroll of
+  // identical rows.
+  const grouped = new Map<string, { result: RiskResult; count: number }>();
+  for (const r of results) {
+    const key = `${r.source}\u0000${r.ruleId ?? ""}\u0000${r.match ?? ""}`;
+    const hit = grouped.get(key);
+    if (hit) {
+      hit.count++;
+    } else {
+      grouped.set(key, { result: r, count: 1 });
+    }
+  }
+  const unique = [...grouped.values()];
+
   return (
     <Popover>
       <PopoverTrigger asChild>
         <button type="button" className="cursor-pointer">
           <Badge variant="destructive" className="text-xs">
             <Icon name="shield-alert" className="mr-1 size-3" />
-            {results.length} {results.length === 1 ? "Risk" : "Risks"}
+            {unique.length} {unique.length === 1 ? "Risk" : "Risks"}
           </Badge>
         </button>
       </PopoverTrigger>
@@ -709,7 +725,7 @@ function RiskBadgePopover({ results }: { results: RiskResult[] }) {
         <div className="space-y-3">
           <div className="text-sm font-semibold">Risk Findings</div>
           <div className="divide-border divide-y">
-            {results.map((r) => (
+            {unique.map(({ result: r, count }) => (
               <div key={r.id} className="py-2 first:pt-0 last:pb-0">
                 <div className="flex items-center gap-2">
                   <Badge variant="destructive" className="shrink-0 text-[10px]">
@@ -719,6 +735,14 @@ function RiskBadgePopover({ results }: { results: RiskResult[] }) {
                     <span className="text-muted-foreground truncate font-mono text-xs">
                       {r.ruleId}
                     </span>
+                  )}
+                  {count > 1 && (
+                    <Badge
+                      variant="neutral"
+                      className="ml-auto shrink-0 text-[10px]"
+                    >
+                      ×{count}
+                    </Badge>
                   )}
                 </div>
                 {r.description && (

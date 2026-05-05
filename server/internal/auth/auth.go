@@ -2,12 +2,12 @@ package auth
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"log/slog"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"goa.design/goa/v3/security"
 
@@ -80,7 +80,7 @@ func (s *Auth) checkProjectAccess(ctx context.Context, logger *slog.Logger, proj
 
 	projects, err := s.repo.ListProjectsByOrganization(ctx, authCtx.ActiveOrganizationID)
 	switch {
-	case errors.Is(err, sql.ErrNoRows):
+	case errors.Is(err, pgx.ErrNoRows):
 		return ctx, oops.E(oops.CodeForbidden, nil, "no projects found")
 	case err != nil:
 		return ctx, oops.E(oops.CodeUnexpected, err, "error checking project access").Log(ctx, logger, attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
@@ -125,7 +125,7 @@ func (s *Auth) CheckProjectAccess(ctx context.Context, logger *slog.Logger, proj
 		ProjectID:      projectID,
 	})
 	switch {
-	case errors.Is(err, sql.ErrNoRows):
+	case errors.Is(err, pgx.ErrNoRows):
 		return oops.C(oops.CodeForbidden).Log(ctx, logger, attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
 	case err != nil:
 		return oops.E(oops.CodeUnexpected, err, "error checking project access").Log(ctx, logger, attr.SlogOrganizationID(authCtx.ActiveOrganizationID))

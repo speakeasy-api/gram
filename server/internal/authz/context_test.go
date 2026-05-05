@@ -9,6 +9,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testinfra"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -21,7 +22,7 @@ func TestPrepareContext_loadsUserGrants(t *testing.T) {
 
 	ctx := enterpriseTestCtx(t.Context())
 	conn := newTestDB(t)
-	engine := NewEngine(testinfra.NewLogger(t), conn, testinfra.NewClickhouseStub(), rbacAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
+	engine := NewEngine(testenv.NewLogger(t), conn, testinfra.NewClickhouseStub(), rbacAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -44,7 +45,7 @@ func TestPrepareContext_skipsNonSessionAuth(t *testing.T) {
 
 	ctx := enterpriseTestCtx(t.Context())
 	conn := newTestDB(t)
-	engine := NewEngine(testinfra.NewLogger(t), conn, testinfra.NewClickhouseStub(), rbacAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
+	engine := NewEngine(testenv.NewLogger(t), conn, testinfra.NewClickhouseStub(), rbacAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -64,7 +65,7 @@ func TestPrepareContext_loadsAssistantPrincipalGrants(t *testing.T) {
 
 	ctx := enterpriseTestCtx(t.Context())
 	conn := newTestDB(t)
-	engine := NewEngine(testinfra.NewLogger(t), conn, testinfra.NewClickhouseStub(), rbacAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
+	engine := NewEngine(testenv.NewLogger(t), conn, testinfra.NewClickhouseStub(), rbacAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -92,7 +93,7 @@ func TestShouldEnforce_assistantPrincipalOnEnterpriseOrgEnforces(t *testing.T) {
 
 	ctx := enterpriseTestCtx(t.Context())
 	conn := newTestDB(t)
-	engine := NewEngine(testinfra.NewLogger(t), conn, testinfra.NewClickhouseStub(), rbacAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
+	engine := NewEngine(testenv.NewLogger(t), conn, testinfra.NewClickhouseStub(), rbacAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -115,7 +116,7 @@ func TestShouldEnforce_assistantPrincipalOnNonEnterpriseSkips(t *testing.T) {
 
 	ctx := enterpriseTestCtx(t.Context())
 	conn := newTestDB(t)
-	engine := NewEngine(testinfra.NewLogger(t), conn, testinfra.NewClickhouseStub(), rbacAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
+	engine := NewEngine(testenv.NewLogger(t), conn, testinfra.NewClickhouseStub(), rbacAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -137,7 +138,7 @@ func TestPrepareContext_skipsNonEnterpriseOrgs(t *testing.T) {
 
 	ctx := enterpriseTestCtx(t.Context())
 	conn := newTestDB(t)
-	engine := NewEngine(testinfra.NewLogger(t), conn, testinfra.NewClickhouseStub(), rbacAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
+	engine := NewEngine(testenv.NewLogger(t), conn, testinfra.NewClickhouseStub(), rbacAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)

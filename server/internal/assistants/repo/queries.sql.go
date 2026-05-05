@@ -520,6 +520,20 @@ WHERE t.project_id = $1
         OR (r.state = $5 AND (r.warm_until IS NULL OR r.warm_until > clock_timestamp()))
       )
   )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM assistant_runtimes lr
+    WHERE lr.project_id = t.project_id
+      AND lr.assistant_thread_id = t.id
+      AND lr.state = $6
+      AND lr.updated_at > $7
+      AND lr.created_at = (
+        SELECT MAX(rlatest.created_at)
+        FROM assistant_runtimes rlatest
+        WHERE rlatest.project_id = t.project_id
+          AND rlatest.assistant_thread_id = t.id
+      )
+  )
 ORDER BY (
   SELECT MIN(e.created_at)
   FROM assistant_thread_events e
@@ -528,17 +542,19 @@ ORDER BY (
     AND e.deleted IS FALSE
     AND e.status = $3
 ) ASC
-LIMIT $6
+LIMIT $8
 FOR UPDATE OF t SKIP LOCKED
 `
 
 type ListColdPendingThreadsForAdmitParams struct {
-	ProjectID     uuid.UUID
-	AssistantID   uuid.UUID
-	PendingStatus string
-	StartingState string
-	ActiveState   string
-	LimitCount    int32
+	ProjectID                 uuid.UUID
+	AssistantID               uuid.UUID
+	PendingStatus             string
+	StartingState             string
+	ActiveState               string
+	FailedState               string
+	AdmitFailureBackoffCutoff pgtype.Timestamptz
+	LimitCount                int32
 }
 
 type ListColdPendingThreadsForAdmitRow struct {
@@ -553,6 +569,8 @@ func (q *Queries) ListColdPendingThreadsForAdmit(ctx context.Context, arg ListCo
 		arg.PendingStatus,
 		arg.StartingState,
 		arg.ActiveState,
+		arg.FailedState,
+		arg.AdmitFailureBackoffCutoff,
 		arg.LimitCount,
 	)
 	if err != nil {
@@ -974,7 +992,16 @@ INSERT INTO assistant_runtimes (
   $3,
   $4,
   $5,
-  '{}'::jsonb
+  COALESCE((
+    SELECT r.backend_metadata_json
+    FROM assistant_runtimes r
+    WHERE r.project_id = $3
+      AND r.assistant_thread_id = $1
+      AND r.backend = $4
+      AND r.backend_metadata_json <> '{}'::jsonb
+    ORDER BY r.created_at DESC
+    LIMIT 1
+  ), '{}'::jsonb)
 )
 ON CONFLICT DO NOTHING
 `

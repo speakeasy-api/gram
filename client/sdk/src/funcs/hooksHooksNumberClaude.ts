@@ -4,7 +4,7 @@
 
 import * as z from "zod/v4-mini";
 import { GramCore } from "../core.js";
-import { encodeJSON } from "../lib/encodings.js";
+import { encodeJSON, encodeSimple } from "../lib/encodings.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
 import { safeParse } from "../lib/schemas.js";
@@ -22,6 +22,7 @@ import {
 import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
+import * as operations from "../models/operations/index.js";
 import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
@@ -33,7 +34,7 @@ import { Result } from "../types/fp.js";
  */
 export function hooksHooksNumberClaude(
   client: GramCore,
-  request: components.ClaudeHookPayload,
+  request: operations.HooksNumberClaudeRequest,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -58,7 +59,7 @@ export function hooksHooksNumberClaude(
 
 async function $do(
   client: GramCore,
-  request: components.ClaudeHookPayload,
+  request: operations.HooksNumberClaudeRequest,
   options?: RequestOptions,
 ): Promise<
   [
@@ -79,20 +80,29 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) => z.parse(components.ClaudeHookPayload$outboundSchema, value),
+    (value) =>
+      z.parse(operations.HooksNumberClaudeRequest$outboundSchema, value),
     "Input validation failed",
   );
   if (!parsed.ok) {
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = encodeJSON("body", payload, { explode: true });
+  const body = encodeJSON("body", payload.ClaudeHookPayload, { explode: true });
 
   const path = pathToFunc("/rpc/hooks.claude")();
 
   const headers = new Headers(compactMap({
     "Content-Type": "application/json",
     Accept: "application/json",
+    "Gram-Key": encodeSimple("Gram-Key", payload["Gram-Key"], {
+      explode: false,
+      charEncoding: "none",
+    }),
+    "Gram-Project": encodeSimple("Gram-Project", payload["Gram-Project"], {
+      explode: false,
+      charEncoding: "none",
+    }),
   }));
 
   const context = {

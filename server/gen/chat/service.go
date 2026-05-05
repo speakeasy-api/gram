@@ -95,8 +95,10 @@ type ChatMessage struct {
 	ID string
 	// The role of the message
 	Role string
-	// The content of the message
-	Content *json.RawMessage
+	// The content of the message — string for plain text, array for
+	// multimodal/tool-call content parts, null for assistant messages that only
+	// carry tool_calls
+	Content json.RawMessage
 	// The model that generated the message
 	Model string
 	// The tool call ID of the message

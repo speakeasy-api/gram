@@ -2,7 +2,6 @@ package mcpendpoints
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -180,7 +179,7 @@ func (s *Service) GetMcpEndpoint(ctx context.Context, payload *gen.GetMcpEndpoin
 			ProjectID: *authCtx.ProjectID,
 		})
 		if err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
+			if errors.Is(err, pgx.ErrNoRows) {
 				return nil, oops.E(oops.CodeNotFound, err, "mcp endpoint not found").Log(ctx, s.logger)
 			}
 			return nil, oops.E(oops.CodeUnexpected, err, "get mcp endpoint").Log(ctx, s.logger)
@@ -200,7 +199,7 @@ func (s *Service) GetMcpEndpoint(ctx context.Context, payload *gen.GetMcpEndpoin
 		CustomDomainID: customDomainID,
 	})
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.E(oops.CodeNotFound, err, "mcp endpoint not found").Log(ctx, s.logger)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "get mcp endpoint").Log(ctx, s.logger)
@@ -291,7 +290,7 @@ func (s *Service) UpdateMcpEndpoint(ctx context.Context, payload *gen.UpdateMcpE
 		ProjectID: *authCtx.ProjectID,
 	})
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.E(oops.CodeNotFound, err, "mcp endpoint not found").Log(ctx, logger)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "get mcp endpoint").Log(ctx, logger)
@@ -311,7 +310,7 @@ func (s *Service) UpdateMcpEndpoint(ctx context.Context, payload *gen.UpdateMcpE
 		ProjectID:      *authCtx.ProjectID,
 	})
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.E(oops.CodeNotFound, err, "mcp endpoint not found").Log(ctx, logger)
 		}
 		var pgErr *pgconn.PgError
@@ -374,7 +373,7 @@ func (s *Service) DeleteMcpEndpoint(ctx context.Context, payload *gen.DeleteMcpE
 		ProjectID: *authCtx.ProjectID,
 	})
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return oops.E(oops.CodeNotFound, err, "mcp endpoint not found").Log(ctx, logger)
 		}
 		return oops.E(oops.CodeUnexpected, err, "delete mcp endpoint").Log(ctx, logger)
@@ -432,7 +431,7 @@ func verifyEndpointReferenceOwnership(
 		ID:        mcpServerID,
 		ProjectID: projectID,
 	}); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return fmt.Errorf("mcp_server_id does not reference a resource in this project")
 		}
 		return fmt.Errorf("check mcp server ownership: %w", err)
@@ -446,7 +445,7 @@ func verifyEndpointReferenceOwnership(
 		ID:             customDomainID.UUID,
 		OrganizationID: organizationID,
 	}); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return fmt.Errorf("custom_domain_id does not reference a resource in this organization")
 		}
 		return fmt.Errorf("check custom domain ownership: %w", err)

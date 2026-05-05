@@ -154,7 +154,13 @@ func (wc *Client) newRequest(ctx context.Context, method, path string, body []by
 }
 
 func convertUser(u usermanagement.User) User {
-	return User{ID: u.ID, FirstName: u.FirstName, LastName: u.LastName, Email: u.Email}
+	return User{
+		ID:                u.ID,
+		FirstName:         u.FirstName,
+		LastName:          u.LastName,
+		Email:             u.Email,
+		ProfilePictureURL: u.ProfilePictureURL,
+	}
 }
 
 func convertMember(m usermanagement.OrganizationMembership) Member {

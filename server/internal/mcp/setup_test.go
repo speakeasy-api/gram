@@ -16,7 +16,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/stretchr/testify/require"
-	"go.opentelemetry.io/otel/metric/noop"
 	"go.opentelemetry.io/otel/trace"
 
 	keys_gen "github.com/speakeasy-api/gram/server/gen/keys"
@@ -35,6 +34,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/oauth"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -84,7 +84,7 @@ func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
 
 	logger := testenv.NewLogger(t)
 	tracerProvider := testenv.NewTracerProvider(t)
-	meterProvider := noop.NewMeterProvider()
+	meterProvider := testenv.NewMeterProvider(t)
 	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 
@@ -146,7 +146,9 @@ func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
 	require.NoError(t, err2)
 	chatSessionsManager := chatsessions.NewManager(logger, redisClient, "test-jwt-secret")
 	assistantTokens := assistanttokens.New("test-jwt-secret", conn, authzEngine)
-	svc := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, serverURL, enc, cacheAdapter, guardianPolicy, funcs, oauthService, billingStub, billingStub, telemLogger, telemService, featClient, vectorToolStore, nil, temporalEnv, authzEngine, assistantTokens)
+	_ = featClient
+	shadowMCPClient := shadowmcp.NewClient(logger, conn, cacheAdapter)
+	svc := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, serverURL, enc, cacheAdapter, guardianPolicy, funcs, oauthService, billingStub, billingStub, telemLogger, telemService, vectorToolStore, nil, temporalEnv, authzEngine, assistantTokens, shadowMCPClient)
 
 	return ctx, &testInstance{
 		service:        svc,

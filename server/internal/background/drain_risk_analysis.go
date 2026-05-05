@@ -29,9 +29,8 @@ const (
 	// drainBatchSize is how many messages each AnalyzeBatch activity processes.
 	drainBatchSize = 1_000
 
-	// drainMaxConcurrency is the maximum number of AnalyzeBatch activities
-	// running in parallel.
-	drainMaxConcurrency = 20
+	// Tuned to demand as-of 2026-05-01.
+	drainMaxConcurrency = 1
 )
 
 // DrainRiskAnalysisParams identifies the policy this workflow drains.

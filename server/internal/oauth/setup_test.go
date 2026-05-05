@@ -13,7 +13,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
-	"go.opentelemetry.io/otel/metric/noop"
 
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
@@ -158,7 +157,7 @@ func newOAuthServiceTestEnv(t *testing.T) *oauthServiceTestEnv {
 
 	logger := testenv.NewLogger(t)
 	tracerProvider := testenv.NewTracerProvider(t)
-	meterProvider := noop.NewMeterProvider()
+	meterProvider := testenv.NewMeterProvider(t)
 	enc := testenv.NewEncryptionClient(t)
 
 	redisClient, err := infra.NewRedisClient(t, 0)
@@ -190,9 +189,4 @@ func newOAuthServiceTestEnv(t *testing.T) *oauthServiceTestEnv {
 		},
 		service: svc,
 	}
-}
-
-func newLogger(t *testing.T) *slog.Logger {
-	t.Helper()
-	return testenv.NewLogger(t)
 }

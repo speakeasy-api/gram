@@ -24,7 +24,7 @@ import (
 	"go.temporal.io/sdk/client"
 	goahttp "goa.design/goa/v3/http"
 
-	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/auditapi"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 
@@ -75,6 +75,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/resources"
 	"github.com/speakeasy-api/gram/server/internal/risk"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/templates"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -88,6 +89,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
 	"github.com/speakeasy-api/gram/server/internal/usage"
 	"github.com/speakeasy-api/gram/server/internal/variations"
+	"github.com/speakeasy-api/gram/server/internal/xmcp"
 )
 
 func newStartCommand() *cli.Command {
@@ -358,6 +360,12 @@ func newStartCommand() *cli.Command {
 			Name:     "workos-api-key",
 			Usage:    "WorkOS API key for user identity lookups",
 			EnvVars:  []string{"WORKOS_API_KEY"},
+			Required: false,
+		},
+		&cli.StringFlag{
+			Name:     "workos-endpoint",
+			Usage:    "Base URL for WorkOS API calls. Leave unset for production (defaults to https://api.workos.com); set to the dev-idp's local-speakeasy mode for fully-local development.",
+			EnvVars:  []string{"WORKOS_API_URL"},
 			Required: false,
 		},
 		&cli.StringFlag{
@@ -648,12 +656,13 @@ func newStartCommand() *cli.Command {
 
 			authorizer := auth.New(logger, db, sessionManager, authzEngine)
 			assistantTokenManager := assistanttokens.New(c.String("jwt-signing-key"), db, authzEngine)
-			assistantRuntime, err := newAssistantRuntime(ctx, logger, c, guardianPolicy, db, serverURL)
+			assistantRuntime, err := newAssistantRuntime(ctx, logger, tracerProvider, c, guardianPolicy, db, serverURL)
 			if err != nil {
 				return err
 			}
 			oauthService := oauth.NewService(logger, tracerProvider, meterProvider, db, serverURL, cache.NewRedisCacheAdapter(redisClient), encryptionClient, env, sessionManager, guardianPolicy)
 			externalOAuthService := oauth.NewExternalOAuthService(logger, guardianPolicy, db, cache.NewRedisCacheAdapter(redisClient), authorizer, encryptionClient, externalMcpOAuthConfig)
+			shadowMCPClient := shadowmcp.NewClient(logger, db, cache.NewRedisCacheAdapter(redisClient))
 			triggerApp := newTriggersApp(logger, db, encryptionClient, temporalEnv, telemLogger, serverURL)
 
 			platformSvc := platformtoolsruntime.NewService(
@@ -683,12 +692,12 @@ func newStartCommand() *cli.Command {
 				billingRepo,
 				telemLogger,
 				telemSvc,
-				productFeatures,
 				ragService,
 				triggerApp,
 				temporalEnv,
 				authzEngine,
 				assistantTokenManager,
+				shadowMCPClient,
 			)
 
 			chatClient := chat.NewAgenticChatClient(
@@ -700,7 +709,7 @@ func newStartCommand() *cli.Command {
 				mcpclient.NewInternalMCPClient(mcpService),
 			)
 			chatService := chat.NewService(logger, tracerProvider, db, sessionManager, chatSessionsManager, openRouter, chatClient, posthogClient, telemSvc, assetStorage, authzEngine, assistantTokenManager)
-			assistantsCore := assistants.NewServiceCore(logger, db, assistantRuntime, slackClient, assistantTokenManager, serverURL, telemLogger)
+			assistantsCore := assistants.NewServiceCore(logger, tracerProvider, db, assistantRuntime, slackClient, assistantTokenManager, serverURL, telemLogger)
 			assistantsSvc := assistants.NewService(logger, tracerProvider, db, sessionManager, authzEngine, assistantsCore, &background.AssistantWorkflowSignaler{TemporalEnv: temporalEnv})
 			triggerApp.RegisterDispatcher(assistantsSvc)
 
@@ -729,11 +738,23 @@ func newStartCommand() *cli.Command {
 			mux.Use(middleware.AdminOverrideMiddleware)
 			mux.Use(middleware.RBACOverrideMiddleware())
 
+			// Reuse the same Presidio client the worker uses for offline analysis
+			// so the runtime hook scanner can flag/redact PII inputs too.
+			var hookPIIScanner risk_analysis.PIIScanner
+			if presidioURL := c.String("presidio-analyzer-url"); presidioURL != "" {
+				hookPIIScanner = risk_analysis.NewPresidioClient(presidioURL, tracerProvider, meterProvider, logger)
+			}
+
+			riskScanner, err := risk.NewScanner(logger, db, hookPIIScanner, meterProvider)
+			if err != nil {
+				return fmt.Errorf("create risk scanner: %w", err)
+			}
+
 			about.Attach(mux, about.NewService(logger, tracerProvider))
 			access.Attach(mux, access.NewService(logger, tracerProvider, db, sessionManager, roleClient, authzEngine, productFeatures))
 			assistants.Attach(mux, assistantsSvc)
-			hooks.Attach(mux, hooks.NewService(logger, db, tracerProvider, telemLogger, sessionManager, hooksCache, chatClient, temporalEnv, authzEngine, productFeatures, &background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv}, chatWriter))
-			audit.Attach(mux, audit.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
+			hooks.Attach(mux, hooks.NewService(logger, db, tracerProvider, telemLogger, sessionManager, hooksCache, chatClient, temporalEnv, authzEngine, productFeatures, &background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv}, riskScanner, shadowMCPClient, chatWriter))
+			auditapi.Attach(mux, auditapi.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
 			auth.Attach(mux, auth.NewService(
 				logger,
 				tracerProvider,
@@ -778,7 +799,8 @@ func newStartCommand() *cli.Command {
 			environments.Attach(mux, environments.NewService(logger, tracerProvider, db, sessionManager, encryptionClient, authzEngine))
 			mcpservers.Attach(mux, mcpservers.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
 			mcpendpoints.Attach(mux, mcpendpoints.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
-			remotemcp.Attach(mux, remotemcp.NewService(logger, tracerProvider, db, sessionManager, encryptionClient, authzEngine))
+			remotemcp.Attach(mux, remotemcp.NewService(logger, tracerProvider, db, sessionManager, encryptionClient, authzEngine, guardianPolicy))
+			xmcp.Attach(mux, xmcp.NewService(logger, tracerProvider, meterProvider, db, sessionManager, encryptionClient, authzEngine, guardianPolicy, billingRepo, billingTracker), mcpService, mcpMetadataService)
 			triggers.Attach(mux, triggers.NewService(logger, tracerProvider, db, sessionManager, authzEngine, triggerApp))
 			tools.Attach(mux, tools.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
 			resources.Attach(mux, resources.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
@@ -802,7 +824,7 @@ func newStartCommand() *cli.Command {
 				logger,
 			)
 			shutdownFuncs = append(shutdownFuncs, riskSignaler.Shutdown)
-			riskService := risk.NewService(logger, tracerProvider, db, sessionManager, authzEngine, riskSignaler)
+			riskService := risk.NewService(logger, tracerProvider, db, sessionManager, authzEngine, riskSignaler, completionsClient, shadowMCPClient)
 			chatWriter.AddObserver(riskService)
 			risk.Attach(mux, riskService)
 
@@ -863,6 +885,7 @@ func newStartCommand() *cli.Command {
 						AssistantsCore:      assistantsCore,
 						TemporalEnv:         temporalEnv,
 						PIIScanner:          piiScanner,
+						ShadowMCPClient:     shadowMCPClient,
 					})
 					if err := temporalWorker.Run(workerInterruptCh); err != nil {
 						logger.ErrorContext(ctx, "temporal worker failed", attr.SlogError(err))

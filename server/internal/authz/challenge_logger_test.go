@@ -9,6 +9,7 @@ import (
 
 	authzrepo "github.com/speakeasy-api/gram/server/internal/authz/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testinfra"
 )
 
@@ -16,7 +17,7 @@ func TestChallengeLogger_skipsWithoutAuthContext(t *testing.T) {
 	t.Parallel()
 
 	conn := testinfra.NewClickhouseStub()
-	logger := testinfra.NewLogger(t)
+	logger := testenv.NewLogger(t)
 
 	check := Check{Scope: ScopeProjectRead, ResourceID: "proj_1"}
 	challengeLogger{
@@ -57,7 +58,7 @@ func TestChallengeLogger_writesUserPrincipal(t *testing.T) {
 		{PrincipalUrn: "role:admin", Scope: ScopeProjectRead, Selector: NewSelector(ScopeProjectRead, WildcardResource)},
 	})
 	conn := testinfra.NewClickhouseStub()
-	logger := testinfra.NewLogger(t)
+	logger := testenv.NewLogger(t)
 
 	check := Check{Scope: ScopeProjectRead, ResourceID: "proj_user"}
 	challengeLogger{
@@ -121,7 +122,7 @@ func TestChallengeLogger_writesAPIKeyPrincipal(t *testing.T) {
 		AccountType:          "enterprise",
 	})
 	conn := testinfra.NewClickhouseStub()
-	logger := testinfra.NewLogger(t)
+	logger := testenv.NewLogger(t)
 
 	check := Check{Scope: ScopeProjectRead, ResourceID: "proj_apikey"}
 	challengeLogger{
@@ -172,7 +173,7 @@ func TestChallengeLogger_writesAssistantPrincipal(t *testing.T) {
 		ThreadID:    uuid.New(),
 	})
 	conn := testinfra.NewClickhouseStub()
-	logger := testinfra.NewLogger(t)
+	logger := testenv.NewLogger(t)
 
 	check := Check{Scope: ScopeMCPConnect, ResourceID: "tool_assistant"}
 	challengeLogger{
@@ -215,7 +216,7 @@ func TestChallengeLogger_stampsRequestID(t *testing.T) {
 	})
 	ctx = contextvalues.SetRequestContext(ctx, &contextvalues.RequestContext{ReqID: reqID})
 	conn := testinfra.NewClickhouseStub()
-	logger := testinfra.NewLogger(t)
+	logger := testenv.NewLogger(t)
 
 	check := Check{Scope: ScopeProjectRead, ResourceID: "proj_req"}
 	challengeLogger{
@@ -255,7 +256,7 @@ func TestChallengeLogger_persistsNestedAndExpandedFields(t *testing.T) {
 		AccountType:          "enterprise",
 	})
 	conn := testinfra.NewClickhouseStub()
-	logger := testinfra.NewLogger(t)
+	logger := testenv.NewLogger(t)
 
 	focus := Check{Scope: ScopeProjectRead, ResourceID: "proj_focus"}
 	checks := []Check{
@@ -334,7 +335,7 @@ func TestChallengeLogger_persistsFilterCounts(t *testing.T) {
 		AccountType:          "enterprise",
 	})
 	conn := testinfra.NewClickhouseStub()
-	logger := testinfra.NewLogger(t)
+	logger := testenv.NewLogger(t)
 
 	focus := Check{Scope: ScopeProjectRead, ResourceID: "proj_filter"}
 	challengeLogger{

@@ -2,14 +2,10 @@ package mcp
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 
-	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 )
 
 // xGramToolsetIDPropName is the JSON-schema property the MCP server injects
@@ -17,28 +13,6 @@ import (
 // that tool callers must echo back so the hooks layer can validate the call.
 // Strip it from the call payload before forwarding to the underlying tool.
 const xGramToolsetIDPropName = "x-gram-toolset-id"
-
-// blockShadowMCPEnabled reports whether the FeatureBlockShadowMCP gate is on
-// for the given org. A nil features client (e.g. in some tests) or a lookup
-// failure returns false so the schema-injection / hook-denial path stays off.
-func blockShadowMCPEnabled(
-	ctx context.Context,
-	logger *slog.Logger,
-	features *productfeatures.Client,
-	orgID string,
-) bool {
-	if features == nil || orgID == "" {
-		return false
-	}
-	enabled, err := features.IsFeatureEnabled(ctx, orgID, productfeatures.FeatureBlockShadowMCP)
-	if err != nil {
-		logger.WarnContext(ctx, "failed to check block_shadow_mcp feature; defaulting to off",
-			attr.SlogError(err),
-		)
-		return false
-	}
-	return enabled
-}
 
 // injectToolsetIDConstant injects an "x-gram-toolset-id" property into the tool's
 // input JSON schema as a required const equal to the toolset ID. Tool callers must
