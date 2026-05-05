@@ -184,6 +184,11 @@ run();
 * [register](docs/sdks/auth/README.md#register) - register auth
 * [switchScopes](docs/sdks/auth/README.md#switchscopes) - switchScopes auth
 
+### [Authz](docs/sdks/authz/README.md)
+
+* [listChallenges](docs/sdks/authz/README.md#listchallenges) - listChallenges authz
+* [resolveChallenge](docs/sdks/authz/README.md#resolvechallenge) - resolveChallenge authz
+
 ### [Chat](docs/sdks/chat/README.md)
 
 * [creditUsage](docs/sdks/chat/README.md#creditusage) - creditUsage chat
@@ -506,6 +511,8 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`authLogout`](docs/sdks/auth/README.md#logout) - logout auth
 - [`authRegister`](docs/sdks/auth/README.md#register) - register auth
 - [`authSwitchScopes`](docs/sdks/auth/README.md#switchscopes) - switchScopes auth
+- [`authzListChallenges`](docs/sdks/authz/README.md#listchallenges) - listChallenges authz
+- [`authzResolveChallenge`](docs/sdks/authz/README.md#resolvechallenge) - resolveChallenge authz
 - [`chatCreditUsage`](docs/sdks/chat/README.md#creditusage) - creditUsage chat
 - [`chatDelete`](docs/sdks/chat/README.md#delete) - deleteChat chat
 - [`chatGenerateTitle`](docs/sdks/chat/README.md#generatetitle) - generateTitle chat
@@ -714,6 +721,7 @@ To learn about this feature and how to get started, check
 - [`useAssistantsUpdateMutation`](docs/sdks/assistants/README.md#update) - updateAssistant assistants
 - [`useAuditLogFacets`](docs/sdks/auditlogs/README.md#listfacets) - listFacets auditlogs
 - [`useAuditLogs`](docs/sdks/auditlogs/README.md#list) - list auditlogs
+- [`useChallenges`](docs/sdks/authz/README.md#listchallenges) - listChallenges authz
 - [`useChatDeleteMutation`](docs/sdks/chat/README.md#delete) - deleteChat chat
 - [`useChatGenerateTitleMutation`](docs/sdks/chat/README.md#generatetitle) - generateTitle chat
 - [`useChatSessionsCreateMutation`](docs/sdks/chatsessions/README.md#create) - create chatSessions
@@ -851,6 +859,7 @@ To learn about this feature and how to get started, check
 - [`useRemovePluginServerMutation`](docs/sdks/plugins/README.md#removepluginserver) - removePluginServer plugins
 - [`useRenderTemplate`](docs/sdks/templates/README.md#render) - renderTemplate templates
 - [`useRenderTemplateByID`](docs/sdks/templates/README.md#renderbyid) - renderTemplateByID templates
+- [`useResolveChallengeMutation`](docs/sdks/authz/README.md#resolvechallenge) - resolveChallenge authz
 - [`useResumeTriggerMutation`](docs/sdks/triggers/README.md#resume) - resumeTriggerInstance triggers
 - [`useRevokeAPIKeyMutation`](docs/sdks/keys/README.md#revokebyid) - revokeKey keys
 - [`useRevokeInviteMutation`](docs/sdks/organizations/README.md#revokeinvite) - revokeInvite organizations

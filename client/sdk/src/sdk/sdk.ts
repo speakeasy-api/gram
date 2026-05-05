@@ -8,6 +8,7 @@ import { Assets } from "./assets.js";
 import { Assistants } from "./assistants.js";
 import { Auditlogs } from "./auditlogs.js";
 import { Auth } from "./auth.js";
+import { Authz } from "./authz.js";
 import { Chat } from "./chat.js";
 import { ChatSessions } from "./chatsessions.js";
 import { Collections } from "./collections.js";
@@ -64,6 +65,11 @@ export class Gram extends ClientSDK {
   private _auth?: Auth;
   get auth(): Auth {
     return (this._auth ??= new Auth(this._options));
+  }
+
+  private _authz?: Authz;
+  get authz(): Authz {
+    return (this._authz ??= new Authz(this._options));
   }
 
   private _chat?: Chat;
