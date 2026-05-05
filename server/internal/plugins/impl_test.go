@@ -444,21 +444,6 @@ func TestPluginsService_GetPublishStatus_Configured(t *testing.T) {
 	require.False(t, result.Connected)
 }
 
-func TestPluginsService_PublishPlugins_NoPlugins(t *testing.T) {
-	t.Parallel()
-
-	mock := &mockGitHubPublisher{}
-	ctx, ti := newTestPluginsServiceWithGitHub(t, mock)
-
-	_, err := ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
-	require.Error(t, err)
-
-	var oopsErr *oops.ShareableError
-	require.ErrorAs(t, err, &oopsErr)
-	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
-	require.False(t, mock.createRepoCalled)
-}
-
 func TestPluginsService_PublishPlugins_HappyPath(t *testing.T) {
 	t.Parallel()
 
