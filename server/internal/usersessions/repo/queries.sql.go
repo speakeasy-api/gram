@@ -289,6 +289,50 @@ func (q *Queries) GetUserSessionClientByID(ctx context.Context, arg GetUserSessi
 	return i, err
 }
 
+const getUserSessionConsentByID = `-- name: GetUserSessionConsentByID :one
+SELECT c.id, c.subject_urn, c.user_session_client_id, c.remote_set_hash, c.consented_at, c.created_at, c.updated_at, c.deleted_at, c.deleted, cli.user_session_issuer_id AS user_session_issuer_id
+FROM user_session_consents AS c
+JOIN user_session_clients AS cli ON cli.id = c.user_session_client_id
+JOIN user_session_issuers AS iss ON iss.id = cli.user_session_issuer_id
+WHERE c.id = $1 AND iss.project_id = $2 AND c.deleted IS FALSE
+`
+
+type GetUserSessionConsentByIDParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+type GetUserSessionConsentByIDRow struct {
+	ID                  uuid.UUID
+	SubjectUrn          urn.SessionSubject
+	UserSessionClientID uuid.UUID
+	RemoteSetHash       string
+	ConsentedAt         pgtype.Timestamptz
+	CreatedAt           pgtype.Timestamptz
+	UpdatedAt           pgtype.Timestamptz
+	DeletedAt           pgtype.Timestamptz
+	Deleted             bool
+	UserSessionIssuerID uuid.UUID
+}
+
+func (q *Queries) GetUserSessionConsentByID(ctx context.Context, arg GetUserSessionConsentByIDParams) (GetUserSessionConsentByIDRow, error) {
+	row := q.db.QueryRow(ctx, getUserSessionConsentByID, arg.ID, arg.ProjectID)
+	var i GetUserSessionConsentByIDRow
+	err := row.Scan(
+		&i.ID,
+		&i.SubjectUrn,
+		&i.UserSessionClientID,
+		&i.RemoteSetHash,
+		&i.ConsentedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+		&i.UserSessionIssuerID,
+	)
+	return i, err
+}
+
 const getUserSessionIssuerByID = `-- name: GetUserSessionIssuerByID :one
 SELECT id, project_id, slug, authn_challenge_mode, session_duration, created_at, updated_at, deleted_at, deleted
 FROM user_session_issuers
@@ -405,6 +449,83 @@ func (q *Queries) ListUserSessionClientsByProjectID(ctx context.Context, arg Lis
 	return items, nil
 }
 
+const listUserSessionConsentsByProjectID = `-- name: ListUserSessionConsentsByProjectID :many
+SELECT c.id, c.subject_urn, c.user_session_client_id, c.remote_set_hash, c.consented_at, c.created_at, c.updated_at, c.deleted_at, c.deleted, cli.user_session_issuer_id AS user_session_issuer_id
+FROM user_session_consents AS c
+JOIN user_session_clients AS cli ON cli.id = c.user_session_client_id
+JOIN user_session_issuers AS iss ON iss.id = cli.user_session_issuer_id
+WHERE iss.project_id = $1
+  AND c.deleted IS FALSE
+  AND cli.deleted IS FALSE
+  AND iss.deleted IS FALSE
+  AND ($2::text IS NULL OR c.subject_urn = $2::text)
+  AND ($3::uuid IS NULL OR c.user_session_client_id = $3::uuid)
+  AND ($4::uuid IS NULL OR cli.user_session_issuer_id = $4::uuid)
+  AND ($5::uuid IS NULL OR c.id < $5::uuid)
+ORDER BY c.id DESC
+LIMIT $6
+`
+
+type ListUserSessionConsentsByProjectIDParams struct {
+	ProjectID           uuid.UUID
+	SubjectUrn          pgtype.Text
+	UserSessionClientID uuid.NullUUID
+	UserSessionIssuerID uuid.NullUUID
+	Cursor              uuid.NullUUID
+	LimitValue          int32
+}
+
+type ListUserSessionConsentsByProjectIDRow struct {
+	ID                  uuid.UUID
+	SubjectUrn          urn.SessionSubject
+	UserSessionClientID uuid.UUID
+	RemoteSetHash       string
+	ConsentedAt         pgtype.Timestamptz
+	CreatedAt           pgtype.Timestamptz
+	UpdatedAt           pgtype.Timestamptz
+	DeletedAt           pgtype.Timestamptz
+	Deleted             bool
+	UserSessionIssuerID uuid.UUID
+}
+
+func (q *Queries) ListUserSessionConsentsByProjectID(ctx context.Context, arg ListUserSessionConsentsByProjectIDParams) ([]ListUserSessionConsentsByProjectIDRow, error) {
+	rows, err := q.db.Query(ctx, listUserSessionConsentsByProjectID,
+		arg.ProjectID,
+		arg.SubjectUrn,
+		arg.UserSessionClientID,
+		arg.UserSessionIssuerID,
+		arg.Cursor,
+		arg.LimitValue,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListUserSessionConsentsByProjectIDRow
+	for rows.Next() {
+		var i ListUserSessionConsentsByProjectIDRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.SubjectUrn,
+			&i.UserSessionClientID,
+			&i.RemoteSetHash,
+			&i.ConsentedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+			&i.UserSessionIssuerID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listUserSessionIssuersByProjectID = `-- name: ListUserSessionIssuersByProjectID :many
 SELECT id, project_id, slug, authn_challenge_mode, session_duration, created_at, updated_at, deleted_at, deleted
 FROM user_session_issuers
@@ -483,6 +604,54 @@ func (q *Queries) RevokeUserSessionClient(ctx context.Context, arg RevokeUserSes
 		&i.UpdatedAt,
 		&i.DeletedAt,
 		&i.Deleted,
+	)
+	return i, err
+}
+
+const revokeUserSessionConsent = `-- name: RevokeUserSessionConsent :one
+UPDATE user_session_consents AS c
+SET deleted_at = clock_timestamp()
+FROM user_session_clients AS cli, user_session_issuers AS iss
+WHERE c.id = $1
+  AND cli.id = c.user_session_client_id
+  AND iss.id = cli.user_session_issuer_id
+  AND iss.project_id = $2
+  AND c.deleted IS FALSE
+RETURNING c.id, c.subject_urn, c.user_session_client_id, c.remote_set_hash, c.consented_at, c.created_at, c.updated_at, c.deleted_at, c.deleted, cli.user_session_issuer_id AS user_session_issuer_id
+`
+
+type RevokeUserSessionConsentParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+type RevokeUserSessionConsentRow struct {
+	ID                  uuid.UUID
+	SubjectUrn          urn.SessionSubject
+	UserSessionClientID uuid.UUID
+	RemoteSetHash       string
+	ConsentedAt         pgtype.Timestamptz
+	CreatedAt           pgtype.Timestamptz
+	UpdatedAt           pgtype.Timestamptz
+	DeletedAt           pgtype.Timestamptz
+	Deleted             bool
+	UserSessionIssuerID uuid.UUID
+}
+
+func (q *Queries) RevokeUserSessionConsent(ctx context.Context, arg RevokeUserSessionConsentParams) (RevokeUserSessionConsentRow, error) {
+	row := q.db.QueryRow(ctx, revokeUserSessionConsent, arg.ID, arg.ProjectID)
+	var i RevokeUserSessionConsentRow
+	err := row.Scan(
+		&i.ID,
+		&i.SubjectUrn,
+		&i.UserSessionClientID,
+		&i.RemoteSetHash,
+		&i.ConsentedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+		&i.UserSessionIssuerID,
 	)
 	return i, err
 }

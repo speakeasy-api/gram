@@ -39,7 +39,7 @@ func DecodeListUserSessionConsentsRequest(mux goahttp.Muxer, decoder func(*http.
 	return func(r *http.Request) (*usersessionconsents.ListUserSessionConsentsPayload, error) {
 		var payload *usersessionconsents.ListUserSessionConsentsPayload
 		var (
-			principalUrn        *string
+			subjectUrn          *string
 			userSessionClientID *string
 			userSessionIssuerID *string
 			cursor              *string
@@ -50,9 +50,9 @@ func DecodeListUserSessionConsentsRequest(mux goahttp.Muxer, decoder func(*http.
 			err                 error
 		)
 		qp := r.URL.Query()
-		principalUrnRaw := qp.Get("principal_urn")
-		if principalUrnRaw != "" {
-			principalUrn = &principalUrnRaw
+		subjectUrnRaw := qp.Get("subject_urn")
+		if subjectUrnRaw != "" {
+			subjectUrn = &subjectUrnRaw
 		}
 		userSessionClientIDRaw := qp.Get("user_session_client_id")
 		if userSessionClientIDRaw != "" {
@@ -71,6 +71,9 @@ func DecodeListUserSessionConsentsRequest(mux goahttp.Muxer, decoder func(*http.
 		cursorRaw := qp.Get("cursor")
 		if cursorRaw != "" {
 			cursor = &cursorRaw
+		}
+		if cursor != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("cursor", *cursor, goa.FormatUUID))
 		}
 		{
 			limitRaw := qp.Get("limit")
@@ -98,7 +101,7 @@ func DecodeListUserSessionConsentsRequest(mux goahttp.Muxer, decoder func(*http.
 		if err != nil {
 			return payload, err
 		}
-		payload = NewListUserSessionConsentsPayload(principalUrn, userSessionClientID, userSessionIssuerID, cursor, limit, sessionToken, apikeyToken, projectSlugInput)
+		payload = NewListUserSessionConsentsPayload(subjectUrn, userSessionClientID, userSessionIssuerID, cursor, limit, sessionToken, apikeyToken, projectSlugInput)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -521,7 +524,7 @@ func EncodeRevokeUserSessionConsentError(encoder func(context.Context, http.Resp
 func marshalTypesUserSessionConsentToUserSessionConsentResponseBody(v *types.UserSessionConsent) *UserSessionConsentResponseBody {
 	res := &UserSessionConsentResponseBody{
 		ID:                  v.ID,
-		PrincipalUrn:        v.PrincipalUrn,
+		SubjectUrn:          v.SubjectUrn,
 		UserSessionClientID: v.UserSessionClientID,
 		RemoteSetHash:       v.RemoteSetHash,
 		ConsentedAt:         v.ConsentedAt,

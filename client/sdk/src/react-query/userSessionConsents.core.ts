@@ -78,7 +78,7 @@ export function buildUserSessionConsentsQuery(
 } {
   return {
     queryKey: queryKeyUserSessionConsents({
-      principalUrn: request?.principalUrn,
+      subjectUrn: request?.subjectUrn,
       userSessionClientId: request?.userSessionClientId,
       userSessionIssuerId: request?.userSessionIssuerId,
       cursor: request?.cursor,
@@ -124,7 +124,7 @@ export function buildUserSessionConsentsInfiniteQuery(
 } {
   return {
     queryKey: queryKeyUserSessionConsentsInfinite({
-      principalUrn: request?.principalUrn,
+      subjectUrn: request?.subjectUrn,
       userSessionClientId: request?.userSessionClientId,
       userSessionIssuerId: request?.userSessionIssuerId,
       cursor: request?.cursor,
@@ -167,7 +167,7 @@ export function buildUserSessionConsentsInfiniteQuery(
 
 export function queryKeyUserSessionConsents(
   parameters: {
-    principalUrn?: string | undefined;
+    subjectUrn?: string | undefined;
     userSessionClientId?: string | undefined;
     userSessionIssuerId?: string | undefined;
     cursor?: string | undefined;
@@ -182,7 +182,7 @@ export function queryKeyUserSessionConsents(
 
 export function queryKeyUserSessionConsentsInfinite(
   parameters: {
-    principalUrn?: string | undefined;
+    subjectUrn?: string | undefined;
     userSessionClientId?: string | undefined;
     userSessionIssuerId?: string | undefined;
     cursor?: string | undefined;

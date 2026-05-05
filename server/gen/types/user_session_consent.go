@@ -11,9 +11,9 @@ package types
 type UserSessionConsent struct {
 	// The user_session_consent id.
 	ID string
-	// The consenting principal URN (user:<id> | apikey:<uuid> |
+	// The consenting subject URN (user:<id> | apikey:<uuid> |
 	// anonymous:<mcp-session-id>).
-	PrincipalUrn string
+	SubjectUrn string
 	// The user_session_client this consent binds to.
 	UserSessionClientID string
 	// SHA-256 of the sorted list of remote_session_issuer ids on the client's

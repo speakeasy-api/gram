@@ -107,6 +107,40 @@ SET deleted_at = clock_timestamp()
 WHERE user_session_client_id = @user_session_client_id AND deleted IS FALSE
 RETURNING *;
 
+-- name: GetUserSessionConsentByID :one
+SELECT c.*, cli.user_session_issuer_id AS user_session_issuer_id
+FROM user_session_consents AS c
+JOIN user_session_clients AS cli ON cli.id = c.user_session_client_id
+JOIN user_session_issuers AS iss ON iss.id = cli.user_session_issuer_id
+WHERE c.id = @id AND iss.project_id = @project_id AND c.deleted IS FALSE;
+
+-- name: ListUserSessionConsentsByProjectID :many
+SELECT c.*, cli.user_session_issuer_id AS user_session_issuer_id
+FROM user_session_consents AS c
+JOIN user_session_clients AS cli ON cli.id = c.user_session_client_id
+JOIN user_session_issuers AS iss ON iss.id = cli.user_session_issuer_id
+WHERE iss.project_id = @project_id
+  AND c.deleted IS FALSE
+  AND cli.deleted IS FALSE
+  AND iss.deleted IS FALSE
+  AND (sqlc.narg('subject_urn')::text IS NULL OR c.subject_urn = sqlc.narg('subject_urn')::text)
+  AND (sqlc.narg('user_session_client_id')::uuid IS NULL OR c.user_session_client_id = sqlc.narg('user_session_client_id')::uuid)
+  AND (sqlc.narg('user_session_issuer_id')::uuid IS NULL OR cli.user_session_issuer_id = sqlc.narg('user_session_issuer_id')::uuid)
+  AND (sqlc.narg('cursor')::uuid IS NULL OR c.id < sqlc.narg('cursor')::uuid)
+ORDER BY c.id DESC
+LIMIT sqlc.arg('limit_value');
+
+-- name: RevokeUserSessionConsent :one
+UPDATE user_session_consents AS c
+SET deleted_at = clock_timestamp()
+FROM user_session_clients AS cli, user_session_issuers AS iss
+WHERE c.id = @id
+  AND cli.id = c.user_session_client_id
+  AND iss.id = cli.user_session_issuer_id
+  AND iss.project_id = @project_id
+  AND c.deleted IS FALSE
+RETURNING c.*, cli.user_session_issuer_id AS user_session_issuer_id;
+
 -- The Create* queries below are exercised by tests and by the OAuth surface
 -- that lands in milestone #2 (DCR registration, /token exchange, /authorize
 -- consent). They have no exposure on the management API.

@@ -26,9 +26,9 @@ export type ListUserSessionConsentsSecurity = {
 
 export type ListUserSessionConsentsRequest = {
   /**
-   * Filter by principal URN.
+   * Filter by subject URN.
    */
-  principalUrn?: string | undefined;
+  subjectUrn?: string | undefined;
   /**
    * Filter by user_session_client id.
    */
@@ -38,7 +38,7 @@ export type ListUserSessionConsentsRequest = {
    */
   userSessionIssuerId?: string | undefined;
   /**
-   * Pagination cursor.
+   * Pagination cursor: id of the last item from the previous page.
    */
   cursor?: string | undefined;
   /**
@@ -172,7 +172,7 @@ export function listUserSessionConsentsSecurityToJSON(
 
 /** @internal */
 export type ListUserSessionConsentsRequest$Outbound = {
-  principal_urn?: string | undefined;
+  subject_urn?: string | undefined;
   user_session_client_id?: string | undefined;
   user_session_issuer_id?: string | undefined;
   cursor?: string | undefined;
@@ -188,7 +188,7 @@ export const ListUserSessionConsentsRequest$outboundSchema: z.ZodMiniType<
   ListUserSessionConsentsRequest
 > = z.pipe(
   z.object({
-    principalUrn: z.optional(z.string()),
+    subjectUrn: z.optional(z.string()),
     userSessionClientId: z.optional(z.string()),
     userSessionIssuerId: z.optional(z.string()),
     cursor: z.optional(z.string()),
@@ -199,7 +199,7 @@ export const ListUserSessionConsentsRequest$outboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
-      principalUrn: "principal_urn",
+      subjectUrn: "subject_urn",
       userSessionClientId: "user_session_client_id",
       userSessionIssuerId: "user_session_issuer_id",
       gramSession: "Gram-Session",

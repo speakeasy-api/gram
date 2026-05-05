@@ -413,9 +413,9 @@ type RevokeUserSessionConsentGatewayErrorResponseBody struct {
 type UserSessionConsentResponseBody struct {
 	// The user_session_consent id.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// The consenting principal URN (user:<id> | apikey:<uuid> |
+	// The consenting subject URN (user:<id> | apikey:<uuid> |
 	// anonymous:<mcp-session-id>).
-	PrincipalUrn *string `form:"principal_urn,omitempty" json:"principal_urn,omitempty" xml:"principal_urn,omitempty"`
+	SubjectUrn *string `form:"subject_urn,omitempty" json:"subject_urn,omitempty" xml:"subject_urn,omitempty"`
 	// The user_session_client this consent binds to.
 	UserSessionClientID *string `form:"user_session_client_id,omitempty" json:"user_session_client_id,omitempty" xml:"user_session_client_id,omitempty"`
 	// SHA-256 of the sorted list of remote_session_issuer ids on the client's
@@ -1260,8 +1260,8 @@ func ValidateUserSessionConsentResponseBody(body *UserSessionConsentResponseBody
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
 	}
-	if body.PrincipalUrn == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("principal_urn", "body"))
+	if body.SubjectUrn == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("subject_urn", "body"))
 	}
 	if body.UserSessionClientID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("user_session_client_id", "body"))

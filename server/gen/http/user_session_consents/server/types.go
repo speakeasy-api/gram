@@ -412,9 +412,9 @@ type RevokeUserSessionConsentGatewayErrorResponseBody struct {
 type UserSessionConsentResponseBody struct {
 	// The user_session_consent id.
 	ID string `form:"id" json:"id" xml:"id"`
-	// The consenting principal URN (user:<id> | apikey:<uuid> |
+	// The consenting subject URN (user:<id> | apikey:<uuid> |
 	// anonymous:<mcp-session-id>).
-	PrincipalUrn string `form:"principal_urn" json:"principal_urn" xml:"principal_urn"`
+	SubjectUrn string `form:"subject_urn" json:"subject_urn" xml:"subject_urn"`
 	// The user_session_client this consent binds to.
 	UserSessionClientID string `form:"user_session_client_id" json:"user_session_client_id" xml:"user_session_client_id"`
 	// SHA-256 of the sorted list of remote_session_issuer ids on the client's
@@ -749,9 +749,9 @@ func NewRevokeUserSessionConsentGatewayErrorResponseBody(res *goa.ServiceError) 
 
 // NewListUserSessionConsentsPayload builds a userSessionConsents service
 // listUserSessionConsents endpoint payload.
-func NewListUserSessionConsentsPayload(principalUrn *string, userSessionClientID *string, userSessionIssuerID *string, cursor *string, limit *int, sessionToken *string, apikeyToken *string, projectSlugInput *string) *usersessionconsents.ListUserSessionConsentsPayload {
+func NewListUserSessionConsentsPayload(subjectUrn *string, userSessionClientID *string, userSessionIssuerID *string, cursor *string, limit *int, sessionToken *string, apikeyToken *string, projectSlugInput *string) *usersessionconsents.ListUserSessionConsentsPayload {
 	v := &usersessionconsents.ListUserSessionConsentsPayload{}
-	v.PrincipalUrn = principalUrn
+	v.SubjectUrn = subjectUrn
 	v.UserSessionClientID = userSessionClientID
 	v.UserSessionIssuerID = userSessionIssuerID
 	v.Cursor = cursor

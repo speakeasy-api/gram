@@ -20742,11 +20742,11 @@ paths:
             operationId: listUserSessionConsents
             parameters:
                 - allowEmptyValue: true
-                  description: Filter by principal URN.
+                  description: Filter by subject URN.
                   in: query
-                  name: principal_urn
+                  name: subject_urn
                   schema:
-                    description: Filter by principal URN.
+                    description: Filter by subject URN.
                     type: string
                 - allowEmptyValue: true
                   description: Filter by user_session_client id.
@@ -20765,11 +20765,12 @@ paths:
                     format: uuid
                     type: string
                 - allowEmptyValue: true
-                  description: Pagination cursor.
+                  description: 'Pagination cursor: id of the last item from the previous page.'
                   in: query
                   name: cursor
                   schema:
-                    description: Pagination cursor.
+                    description: 'Pagination cursor: id of the last item from the previous page.'
+                    format: uuid
                     type: string
                 - allowEmptyValue: true
                   description: Page size (default 50, max 100).
@@ -20882,7 +20883,7 @@ paths:
                 name: UserSessionConsents
     /rpc/userSessionConsents.revoke:
         post:
-            description: Withdraw consent. The next /mcp/{slug}/authorize from any session matching (principal_urn, user_session_client_id) re-prompts.
+            description: Withdraw consent. Subsequent authorization requests for matching (subject, user_session_client) pairs re-prompt.
             operationId: revokeUserSessionConsent
             parameters:
                 - allowEmptyValue: true
@@ -31719,12 +31720,12 @@ components:
                     type: string
                     description: The user_session_consent id.
                     format: uuid
-                principal_urn:
-                    type: string
-                    description: The consenting principal URN (user:<id> | apikey:<uuid> | anonymous:<mcp-session-id>).
                 remote_set_hash:
                     type: string
                     description: SHA-256 of the sorted list of remote_session_issuer ids on the client's owning issuer at consent time.
+                subject_urn:
+                    type: string
+                    description: The consenting subject URN (user:<id> | apikey:<uuid> | anonymous:<mcp-session-id>).
                 updated_at:
                     type: string
                     format: date-time
@@ -31735,7 +31736,7 @@ components:
             description: A user_session_consent record. Per-client (not per-issuer) consent.
             required:
                 - id
-                - principal_urn
+                - subject_urn
                 - user_session_client_id
                 - remote_set_hash
                 - consented_at
@@ -32018,7 +32019,7 @@ tags:
     - name: userSessionClients
       description: Operator visibility into DCR'd MCP clients (user_session_clients). Read + revoke; registrations are written by /mcp/{slug}/register.
     - name: userSessionConsents
-      description: Operator visibility into user_session_consents — persistent consent records per (principal, user_session_client). List + revoke.
+      description: Operator visibility into user_session_consents — persistent consent records per (subject, user_session_client). List + revoke.
     - name: userSessionIssuers
       description: Manage user_session_issuer records — Gram-side authorization-server configuration that issues user sessions for an MCP server.
     - name: userSessions

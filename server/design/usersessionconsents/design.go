@@ -8,7 +8,7 @@ import (
 )
 
 var _ = Service("userSessionConsents", func() {
-	Description("Operator visibility into user_session_consents — persistent consent records per (principal, user_session_client). List + revoke.")
+	Description("Operator visibility into user_session_consents — persistent consent records per (subject, user_session_client). List + revoke.")
 	Security(security.Session, security.ProjectSlug)
 	Security(security.ByKey, security.ProjectSlug, func() {
 		Scope("producer")
@@ -19,14 +19,16 @@ var _ = Service("userSessionConsents", func() {
 		Description("List consent records for the caller's project.")
 
 		Payload(func() {
-			Attribute("principal_urn", String, "Filter by principal URN.")
+			Attribute("subject_urn", String, "Filter by subject URN.")
 			Attribute("user_session_client_id", String, "Filter by user_session_client id.", func() {
 				Format(FormatUUID)
 			})
 			Attribute("user_session_issuer_id", String, "Filter by user_session_issuer id (joins through user_session_clients).", func() {
 				Format(FormatUUID)
 			})
-			Attribute("cursor", String, "Pagination cursor.")
+			Attribute("cursor", String, "Pagination cursor: id of the last item from the previous page.", func() {
+				Format(FormatUUID)
+			})
 			Attribute("limit", Int, "Page size (default 50, max 100).")
 			security.SessionPayload()
 			security.ByKeyPayload()
@@ -37,7 +39,7 @@ var _ = Service("userSessionConsents", func() {
 
 		HTTP(func() {
 			GET("/rpc/userSessionConsents.list")
-			Param("principal_urn")
+			Param("subject_urn")
 			Param("user_session_client_id")
 			Param("user_session_issuer_id")
 			Param("cursor")
@@ -55,7 +57,7 @@ var _ = Service("userSessionConsents", func() {
 	})
 
 	Method("revokeUserSessionConsent", func() {
-		Description("Withdraw consent. The next /mcp/{slug}/authorize from any session matching (principal_urn, user_session_client_id) re-prompts.")
+		Description("Withdraw consent. Subsequent authorization requests for matching (subject, user_session_client) pairs re-prompt.")
 
 		Payload(func() {
 			Attribute("id", String, "The user_session_consent id.", func() {
@@ -89,7 +91,7 @@ var UserSessionConsent = Type("UserSessionConsent", func() {
 	Attribute("id", String, "The user_session_consent id.", func() {
 		Format(FormatUUID)
 	})
-	Attribute("principal_urn", String, "The consenting principal URN (user:<id> | apikey:<uuid> | anonymous:<mcp-session-id>).")
+	Attribute("subject_urn", String, "The consenting subject URN (user:<id> | apikey:<uuid> | anonymous:<mcp-session-id>).")
 	Attribute("user_session_client_id", String, "The user_session_client this consent binds to.", func() {
 		Format(FormatUUID)
 	})
@@ -104,7 +106,7 @@ var UserSessionConsent = Type("UserSessionConsent", func() {
 		Format(FormatDateTime)
 	})
 
-	Required("id", "principal_urn", "user_session_client_id", "remote_set_hash", "consented_at", "created_at", "updated_at")
+	Required("id", "subject_urn", "user_session_client_id", "remote_set_hash", "consented_at", "created_at", "updated_at")
 })
 
 var ListUserSessionConsentsResult = Type("ListUserSessionConsentsResult", func() {

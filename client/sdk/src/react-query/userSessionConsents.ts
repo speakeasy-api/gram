@@ -215,7 +215,7 @@ export function setUserSessionConsentsData(
   client: QueryClient,
   queryKeyBase: [
     parameters: {
-      principalUrn?: string | undefined;
+      subjectUrn?: string | undefined;
       userSessionClientId?: string | undefined;
       userSessionIssuerId?: string | undefined;
       cursor?: string | undefined;
@@ -236,7 +236,7 @@ export function invalidateUserSessionConsents(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
     [parameters: {
-      principalUrn?: string | undefined;
+      subjectUrn?: string | undefined;
       userSessionClientId?: string | undefined;
       userSessionIssuerId?: string | undefined;
       cursor?: string | undefined;

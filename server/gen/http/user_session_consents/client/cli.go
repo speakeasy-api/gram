@@ -18,12 +18,12 @@ import (
 
 // BuildListUserSessionConsentsPayload builds the payload for the
 // userSessionConsents listUserSessionConsents endpoint from CLI flags.
-func BuildListUserSessionConsentsPayload(userSessionConsentsListUserSessionConsentsPrincipalUrn string, userSessionConsentsListUserSessionConsentsUserSessionClientID string, userSessionConsentsListUserSessionConsentsUserSessionIssuerID string, userSessionConsentsListUserSessionConsentsCursor string, userSessionConsentsListUserSessionConsentsLimit string, userSessionConsentsListUserSessionConsentsSessionToken string, userSessionConsentsListUserSessionConsentsApikeyToken string, userSessionConsentsListUserSessionConsentsProjectSlugInput string) (*usersessionconsents.ListUserSessionConsentsPayload, error) {
+func BuildListUserSessionConsentsPayload(userSessionConsentsListUserSessionConsentsSubjectUrn string, userSessionConsentsListUserSessionConsentsUserSessionClientID string, userSessionConsentsListUserSessionConsentsUserSessionIssuerID string, userSessionConsentsListUserSessionConsentsCursor string, userSessionConsentsListUserSessionConsentsLimit string, userSessionConsentsListUserSessionConsentsSessionToken string, userSessionConsentsListUserSessionConsentsApikeyToken string, userSessionConsentsListUserSessionConsentsProjectSlugInput string) (*usersessionconsents.ListUserSessionConsentsPayload, error) {
 	var err error
-	var principalUrn *string
+	var subjectUrn *string
 	{
-		if userSessionConsentsListUserSessionConsentsPrincipalUrn != "" {
-			principalUrn = &userSessionConsentsListUserSessionConsentsPrincipalUrn
+		if userSessionConsentsListUserSessionConsentsSubjectUrn != "" {
+			subjectUrn = &userSessionConsentsListUserSessionConsentsSubjectUrn
 		}
 	}
 	var userSessionClientID *string
@@ -50,6 +50,10 @@ func BuildListUserSessionConsentsPayload(userSessionConsentsListUserSessionConse
 	{
 		if userSessionConsentsListUserSessionConsentsCursor != "" {
 			cursor = &userSessionConsentsListUserSessionConsentsCursor
+			err = goa.MergeErrors(err, goa.ValidateFormat("cursor", *cursor, goa.FormatUUID))
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 	var limit *int
@@ -83,7 +87,7 @@ func BuildListUserSessionConsentsPayload(userSessionConsentsListUserSessionConse
 		}
 	}
 	v := &usersessionconsents.ListUserSessionConsentsPayload{}
-	v.PrincipalUrn = principalUrn
+	v.SubjectUrn = subjectUrn
 	v.UserSessionClientID = userSessionClientID
 	v.UserSessionIssuerID = userSessionIssuerID
 	v.Cursor = cursor

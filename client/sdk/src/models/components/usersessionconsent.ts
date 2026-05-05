@@ -19,13 +19,13 @@ export type UserSessionConsent = {
    */
   id: string;
   /**
-   * The consenting principal URN (user:<id> | apikey:<uuid> | anonymous:<mcp-session-id>).
-   */
-  principalUrn: string;
-  /**
    * SHA-256 of the sorted list of remote_session_issuer ids on the client's owning issuer at consent time.
    */
   remoteSetHash: string;
+  /**
+   * The consenting subject URN (user:<id> | apikey:<uuid> | anonymous:<mcp-session-id>).
+   */
+  subjectUrn: string;
   updatedAt: Date;
   /**
    * The user_session_client this consent binds to.
@@ -48,8 +48,8 @@ export const UserSessionConsent$inboundSchema: z.ZodMiniType<
       z.transform(v => new Date(v)),
     ),
     id: z.string(),
-    principal_urn: z.string(),
     remote_set_hash: z.string(),
+    subject_urn: z.string(),
     updated_at: z.pipe(
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
@@ -60,8 +60,8 @@ export const UserSessionConsent$inboundSchema: z.ZodMiniType<
     return remap$(v, {
       "consented_at": "consentedAt",
       "created_at": "createdAt",
-      "principal_urn": "principalUrn",
       "remote_set_hash": "remoteSetHash",
+      "subject_urn": "subjectUrn",
       "updated_at": "updatedAt",
       "user_session_client_id": "userSessionClientId",
     });

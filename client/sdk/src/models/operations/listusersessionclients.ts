@@ -30,7 +30,7 @@ export type ListUserSessionClientsRequest = {
    */
   userSessionIssuerId?: string | undefined;
   /**
-   * Pagination cursor.
+   * Pagination cursor: id of the last item from the previous page.
    */
   cursor?: string | undefined;
   /**

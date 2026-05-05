@@ -57,8 +57,8 @@ func EncodeListUserSessionConsentsRequest(encoder func(*http.Request) goahttp.En
 			req.Header.Set("Gram-Project", head)
 		}
 		values := req.URL.Query()
-		if p.PrincipalUrn != nil {
-			values.Add("principal_urn", *p.PrincipalUrn)
+		if p.SubjectUrn != nil {
+			values.Add("subject_urn", *p.SubjectUrn)
 		}
 		if p.UserSessionClientID != nil {
 			values.Add("user_session_client_id", *p.UserSessionClientID)
@@ -514,7 +514,7 @@ func DecodeRevokeUserSessionConsentResponse(decoder func(*http.Response) goahttp
 func unmarshalUserSessionConsentResponseBodyToTypesUserSessionConsent(v *UserSessionConsentResponseBody) *types.UserSessionConsent {
 	res := &types.UserSessionConsent{
 		ID:                  *v.ID,
-		PrincipalUrn:        *v.PrincipalUrn,
+		SubjectUrn:          *v.SubjectUrn,
 		UserSessionClientID: *v.UserSessionClientID,
 		RemoteSetHash:       *v.RemoteSetHash,
 		ConsentedAt:         *v.ConsentedAt,

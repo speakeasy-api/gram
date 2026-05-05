@@ -30,7 +30,7 @@ import { Result } from "../types/fp.js";
  * revokeUserSessionConsent userSessionConsents
  *
  * @remarks
- * Withdraw consent. The next /mcp/{slug}/authorize from any session matching (principal_urn, user_session_client_id) re-prompts.
+ * Withdraw consent. Subsequent authorization requests for matching (subject, user_session_client) pairs re-prompt.
  */
 export function userSessionConsentsRevoke(
   client: GramCore,
