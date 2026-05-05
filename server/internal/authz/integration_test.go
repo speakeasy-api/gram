@@ -8,7 +8,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
-	"github.com/speakeasy-api/gram/server/internal/testinfra"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -30,7 +29,9 @@ func TestRequire_withLoadedGrantsFromContext(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx = GrantsToContext(ctx, grants)
-	engine := NewEngine(testenv.NewLogger(t), conn, testinfra.NewClickhouseStub(), rbacAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
+	chConn, err := newClickhouseClient(t)
+	require.NoError(t, err)
+	engine := NewEngine(testenv.NewLogger(t), conn, chConn, rbacAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
 
 	err = engine.Require(ctx,
 		Check{Scope: ScopeProjectRead, ResourceID: "proj:123"},
@@ -62,7 +63,9 @@ func TestFilter_withLoadedGrantsFromContext(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx = GrantsToContext(ctx, grants)
-	engine := NewEngine(testenv.NewLogger(t), conn, testinfra.NewClickhouseStub(), rbacAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
+	chConn, err := newClickhouseClient(t)
+	require.NoError(t, err)
+	engine := NewEngine(testenv.NewLogger(t), conn, chConn, rbacAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
 
 	projectIDs, err := engine.Filter(ctx, []Check{
 		{Scope: ScopeProjectRead, ResourceID: "proj:123"},
@@ -99,7 +102,9 @@ func TestFilter_withDimensions(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx = GrantsToContext(ctx, grants)
-	engine := NewEngine(testenv.NewLogger(t), conn, testinfra.NewClickhouseStub(), rbacAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
+	chConn, err := newClickhouseClient(t)
+	require.NoError(t, err)
+	engine := NewEngine(testenv.NewLogger(t), conn, chConn, rbacAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
 
 	results, err := engine.Filter(ctx, []Check{
 		MCPToolCallCheck("toolsetX", MCPToolCallDimensions{Tool: "allowed_tool", Disposition: ""}),
