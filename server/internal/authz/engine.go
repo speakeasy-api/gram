@@ -408,6 +408,7 @@ func (e *Engine) Filter(ctx context.Context, checks []Check) ([]string, error) {
 	}
 
 	allowed := make([]string, 0, len(checks))
+	matches := make([]grantMatch, 0, len(checks))
 	for _, c := range checks {
 		if err := validateInput(c); err != nil {
 			focus := c
@@ -427,36 +428,30 @@ func (e *Engine) Filter(ctx context.Context, checks []Check) ([]string, error) {
 
 		if matchedGrant, matchedCheck := findMatchingGrant(grants, c.expand()); matchedGrant != nil {
 			allowed = append(allowed, c.ResourceID)
-			focus := c
-			challengeLogger{
-				Operation:            authzrepo.OperationFilter,
-				Outcome:              authzrepo.OutcomeAllow,
-				Reason:               authzrepo.ReasonGrantMatched,
-				Checks:               checks,
-				Focus:                &focus,
-				Matches:              []grantMatch{{Grant: *matchedGrant, ViaCheck: *matchedCheck}},
-				EvaluatedGrantCount:  uint32(len(grants)), //nolint:gosec // grant count is small
-				FilterCandidateCount: uint32(len(checks)), //nolint:gosec // candidate count is small
-				FilterAllowedCount:   1,
-			}.Log(ctx, e.chDB, e.logger)
-			continue
+			matches = append(matches, grantMatch{Grant: *matchedGrant, ViaCheck: *matchedCheck})
 		}
+	}
 
+	if len(checks) > 0 {
+		outcome := authzrepo.OutcomeDeny
 		reason := authzrepo.ReasonScopeUnsatisfied
-		if len(grants) == 0 {
+		switch {
+		case len(allowed) > 0:
+			outcome = authzrepo.OutcomeAllow
+			reason = authzrepo.ReasonGrantMatched
+		case len(grants) == 0:
 			reason = authzrepo.ReasonNoGrants
 		}
-		focus := c
 		challengeLogger{
 			Operation:            authzrepo.OperationFilter,
-			Outcome:              authzrepo.OutcomeDeny,
+			Outcome:              outcome,
 			Reason:               reason,
 			Checks:               checks,
-			Focus:                &focus,
-			Matches:              nil,
-			EvaluatedGrantCount:  uint32(len(grants)), //nolint:gosec // grant count is small
-			FilterCandidateCount: uint32(len(checks)), //nolint:gosec // candidate count is small
-			FilterAllowedCount:   0,
+			Focus:                nil,
+			Matches:              matches,
+			EvaluatedGrantCount:  uint32(len(grants)),  //nolint:gosec // grant count is small
+			FilterCandidateCount: uint32(len(checks)),  //nolint:gosec // candidate count is small
+			FilterAllowedCount:   uint32(len(allowed)), //nolint:gosec // allowed count is small
 		}.Log(ctx, e.chDB, e.logger)
 	}
 
