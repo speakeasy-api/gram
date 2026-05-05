@@ -24,7 +24,7 @@ export type RuleCategory =
 export type DetectionRule = {
   id: string;
   title: string;
-  source: "gitleaks" | "presidio";
+  source: "gitleaks" | "presidio" | "prompt_injection";
 };
 
 export type McpServerScope = {
@@ -1380,28 +1380,7 @@ export const DETECTION_RULES: Record<RuleCategory, DetectionRule[]> = {
       source: "presidio",
     },
   ],
-  prompt_injection: [
-    {
-      id: "indirect-injection",
-      title: "Indirect prompt injection via external content",
-      source: "presidio",
-    },
-    {
-      id: "tool-output-injection",
-      title: "Malicious instructions embedded in tool responses",
-      source: "presidio",
-    },
-    {
-      id: "hidden-instruction",
-      title: "Hidden instructions in user-provided data",
-      source: "presidio",
-    },
-    {
-      id: "encoding-evasion",
-      title: "Encoded or obfuscated injection payloads",
-      source: "presidio",
-    },
-  ],
+  prompt_injection: [],
   off_policy: [
     {
       id: "harmful-content-request",
