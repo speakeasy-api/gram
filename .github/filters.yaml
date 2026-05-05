@@ -48,11 +48,6 @@ migrations:
   - "server/migrations/**"
   - "server/clickhouse/migrations/**"
 
-database-changes:
-  - "server/database/**"
-  - "server/migrations/**"
-  - "server/clickhouse/**"
-
 plog:
   - "go.mod"
   - "go.sum"
