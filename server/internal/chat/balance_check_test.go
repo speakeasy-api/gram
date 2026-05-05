@@ -41,7 +41,7 @@ func TestCheckCreditBalance_AllowsWhenUnderIncluded(t *testing.T) {
 		storedUsage: &gen.PeriodUsage{Credits: 10, IncludedCredits: 100},
 	})
 
-	require.NoError(t, svc.checkCreditBalance(t.Context(), "org-1"))
+	require.NoError(t, svc.checkCreditBalance(t.Context(), "org-1", "free"))
 }
 
 func TestCheckCreditBalance_RejectsWhenAtLimit(t *testing.T) {
@@ -51,7 +51,7 @@ func TestCheckCreditBalance_RejectsWhenAtLimit(t *testing.T) {
 		storedUsage: &gen.PeriodUsage{Credits: 100, IncludedCredits: 100},
 	})
 
-	err := svc.checkCreditBalance(t.Context(), "org-1")
+	err := svc.checkCreditBalance(t.Context(), "org-1", "free")
 	require.Error(t, err)
 	var se *oops.ShareableError
 	require.ErrorAs(t, err, &se)
@@ -65,7 +65,7 @@ func TestCheckCreditBalance_RejectsWhenOverLimit(t *testing.T) {
 		storedUsage: &gen.PeriodUsage{Credits: 250, IncludedCredits: 100},
 	})
 
-	err := svc.checkCreditBalance(t.Context(), "org-1")
+	err := svc.checkCreditBalance(t.Context(), "org-1", "free")
 	require.Error(t, err)
 	var se *oops.ShareableError
 	require.ErrorAs(t, err, &se)
@@ -82,7 +82,7 @@ func TestCheckCreditBalance_AllowsWhenIncludedZero(t *testing.T) {
 		storedUsage: &gen.PeriodUsage{Credits: 0, IncludedCredits: 0},
 	})
 
-	require.NoError(t, svc.checkCreditBalance(t.Context(), "org-1"))
+	require.NoError(t, svc.checkCreditBalance(t.Context(), "org-1", "free"))
 }
 
 func TestCheckCreditBalance_BypassesSpecialLimitOrgs(t *testing.T) {
@@ -92,7 +92,19 @@ func TestCheckCreditBalance_BypassesSpecialLimitOrgs(t *testing.T) {
 	repo := &fakeBillingRepo{storedErr: errors.New("must not be called")}
 	svc := newServiceWithBilling(t, repo)
 
-	require.NoError(t, svc.checkCreditBalance(t.Context(), "5a25158b-24dc-4d49-b03d-e85acfbea59c"))
+	require.NoError(t, svc.checkCreditBalance(t.Context(), "5a25158b-24dc-4d49-b03d-e85acfbea59c", "free"))
+}
+
+func TestCheckCreditBalance_BypassesPaidAccountTypes(t *testing.T) {
+	t.Parallel()
+
+	// Pro/enterprise are bounded by the OpenRouter key cap, not this gate
+	// (Phase 0). Repo would error if called.
+	repo := &fakeBillingRepo{storedErr: errors.New("must not be called")}
+	svc := newServiceWithBilling(t, repo)
+
+	require.NoError(t, svc.checkCreditBalance(t.Context(), "org-pro", "pro"))
+	require.NoError(t, svc.checkCreditBalance(t.Context(), "org-ent", "enterprise"))
 }
 
 func TestCheckCreditBalance_AllowsOnCacheMiss(t *testing.T) {
@@ -105,5 +117,5 @@ func TestCheckCreditBalance_AllowsOnCacheMiss(t *testing.T) {
 		storedErr: errors.New("cache miss"),
 	})
 
-	require.NoError(t, svc.checkCreditBalance(t.Context(), "org-1"))
+	require.NoError(t, svc.checkCreditBalance(t.Context(), "org-1", "free"))
 }

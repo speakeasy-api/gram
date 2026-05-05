@@ -625,8 +625,16 @@ func extractHTTPMetadata(r *http.Request) httpMetadata {
 // credits. Reads only the cached period usage so the gate stays cheap; on
 // cache miss we fail open and rely on the OpenRouter per-key monthly limit as
 // the hard backstop. Speakeasy-internal orgs (specialLimitOrgs) bypass.
-func (s *Service) checkCreditBalance(ctx context.Context, orgID string) error {
+//
+// Phase 0: only enforce the hard gate on free-tier orgs. Pro/enterprise stay
+// bounded by the OpenRouter monthly key cap (creditsAccountTypeMap) until the
+// two limit sources are unified — see AGE-2122.
+func (s *Service) checkCreditBalance(ctx context.Context, orgID, accountType string) error {
 	if openrouter.IsSpecialLimitOrg(orgID) {
+		return nil
+	}
+
+	if accountType != string(billing.TierBase) && accountType != "" {
 		return nil
 	}
 
@@ -656,7 +664,7 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 		return err
 	}
 
-	if err := s.checkCreditBalance(ctx, authCtx.ActiveOrganizationID); err != nil {
+	if err := s.checkCreditBalance(ctx, authCtx.ActiveOrganizationID, authCtx.AccountType); err != nil {
 		return err
 	}
 

@@ -3,4 +3,4 @@
 "dashboard": patch
 ---
 
-Add token-balance billing on /chat/completions: pre-request gate returns 402 `insufficient_credits` when an org's cached Polar credit balance is exhausted, OpenRouter cost is debited to the credits meter in $0.001 units, and a self-serve top-up checkout (`usage.createTopUpCheckout`) opens a one-time Polar product. Special Speakeasy-internal orgs bypass the gate; cache misses fail open (the OpenRouter monthly key limit remains the hard backstop).
+Add a credit-balance gate on `/chat/completions` for **free-tier** orgs: pre-request check returns HTTP 402 `insufficient_credits` once the cached Polar Chat Credits balance is exhausted. Pro and enterprise stay bounded by the existing OpenRouter monthly key cap; unifying the two limit sources is tracked separately. Speakeasy-internal orgs (`specialLimitOrgs`) bypass; cache misses fail open. Self-serve top-up checkout (`usage.createTopUpCheckout`) opens a one-time Polar product configured via `POLAR_PRODUCT_IDS_TOPUP`.
