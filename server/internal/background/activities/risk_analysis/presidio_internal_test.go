@@ -107,7 +107,7 @@ func TestPresidioAnalyzeBatchSplitsPoisonedBatch(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	client := NewPresidioClientWithWorkers(
+	client := NewPresidioClientWithConcurrency(
 		srv.URL,
 		otel.GetTracerProvider(),
 		otel.GetMeterProvider(),
@@ -164,7 +164,7 @@ func TestPresidioAnalyzeBatchSplitsUntilSingleTexts(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	client := NewPresidioClientWithWorkers(
+	client := NewPresidioClientWithConcurrency(
 		srv.URL,
 		otel.GetTracerProvider(),
 		otel.GetMeterProvider(),

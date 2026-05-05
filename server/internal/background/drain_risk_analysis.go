@@ -29,8 +29,12 @@ const (
 	// drainBatchSize is how many messages each AnalyzeBatch activity processes.
 	drainBatchSize = 1_000
 
-	// Tuned to demand as-of 2026-05-01.
-	drainMaxConcurrency = 1
+	// Per-drain (per-policy) cap on AnalyzeBatch activities in flight. NOT
+	// fleet-wide — N drain workflows can each have this many in flight, so
+	// fleet load = N × perDrainBatchConcurrency × perBatchRequestConcurrency.
+	// The fleet-wide ceiling lives on the risk-analysis worker
+	// (perPodAnalyzeBatchConcurrency in worker.go). Tuned to demand 2026-05-01.
+	perDrainBatchConcurrency = 1
 )
 
 // DrainRiskAnalysisParams identifies the policy this workflow drains.
@@ -87,10 +91,10 @@ func DrainRiskAnalysisWorkflow(ctx workflow.Context, params DrainRiskAnalysisPar
 	// ── Analyze batches ────────────────────────────────────────────────
 	if len(fetchResult.MessageIDs) > 0 {
 		batches := chunkUUIDs(fetchResult.MessageIDs, drainBatchSize)
-		pending := make([]workflow.Future, 0, min(len(batches), drainMaxConcurrency))
+		pending := make([]workflow.Future, 0, min(len(batches), perDrainBatchConcurrency))
 
 		for _, batch := range batches {
-			if len(pending) >= drainMaxConcurrency {
+			if len(pending) >= perDrainBatchConcurrency {
 				if err := pending[0].Get(ctx, nil); err != nil {
 					logger.Error("analyze batch failed", "error", err.Error())
 				}

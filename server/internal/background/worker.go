@@ -185,7 +185,7 @@ func NewTemporalWorker(
 	// providers that we must not overwhelm.
 	riskWorker := worker.New(env.Client(), RiskAnalysisTaskQueue(env.Queue()), worker.Options{
 		Interceptors:                       workerInterceptors,
-		MaxConcurrentActivityExecutionSize: riskAnalysisMaxConcurrentActivities,
+		MaxConcurrentActivityExecutionSize: perPodAnalyzeBatchConcurrency,
 	})
 
 	activities := NewActivities(
@@ -305,11 +305,13 @@ func NewTemporalWorker(
 	return &Workers{main: temporalWorker, riskAnalysis: riskWorker}
 }
 
-// riskAnalysisMaxConcurrentActivities caps how many AnalyzeBatch activities
-// the dedicated risk-analysis worker will run concurrently. Bound to protect
-// downstream scanners (Presidio, LLM providers) from overload. Per-process —
-// scaling the worker horizontally multiplies the effective cap.
-const riskAnalysisMaxConcurrentActivities = 20
+// perPodAnalyzeBatchConcurrency caps in-flight AnalyzeBatch activities per
+// worker pod. The only fleet-wide ceiling in the chain — perDrainBatchConcurrency
+// (drain_risk_analysis.go) and perBatchRequestConcurrency (presidio.go) are
+// scope-local and multiply with N policies / N batches, so they cannot bound
+// fleet load. Fleet ceiling = pod_count × perPodAnalyzeBatchConcurrency.
+// Bound to protect downstream scanners (Presidio, LLM providers) from overload.
+const perPodAnalyzeBatchConcurrency = 20
 
 // RiskAnalysisTaskQueue returns the dedicated task queue for risk analysis
 // activities, derived from the main worker's queue so each environment
