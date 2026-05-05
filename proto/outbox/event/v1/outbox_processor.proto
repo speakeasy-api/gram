@@ -1,0 +1,27 @@
+edition = "2024";
+
+package outbox.event.v1;
+
+import "infra/pubsub/v1/options.proto";
+
+option go_package = "github.com/speakeasy-api/gram/protogen/outbox/event/v1;eventv1";
+
+message OutboxProcessor {
+  option (infra.pubsub.v1.subscription) = {
+    topic: "outbox.event.v1.Event"
+    ack_deadline: {
+      seconds: 30
+    }
+    retry_policy: {
+      minimum_backoff: {
+        seconds: 10
+      }
+      maximum_backoff: {
+        seconds: 600
+      }
+    }
+    dead_letter: {
+      max_delivery_attempts: 5
+    }
+  };
+}

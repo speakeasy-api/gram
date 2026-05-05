@@ -26,6 +26,7 @@ hk = "1.38.0"
 pkl = "0.31.0"
 "github:speakeasy-api/madprocs" = "0.1.32"
 "github:temporalio/cli" = "1.6.1"
+buf = "1.69.0"
 
 # ℹ️ The settings below are sensible defaults for local development. When
 # deploying to production, you will want to configure these more carefully.
@@ -169,6 +170,8 @@ TEMPORAL_WEB_PORT = "8233"
 # GRAM_LOCAL_FEATURE_FLAGS_CSV = "{{config_root}}/flags.csv"
 ## Set to 1 to disable air hot reload and run server/worker directly
 GRAM_DISABLE_AIR = 0
+PUBSUB_EMULATOR_PORT = "8088"
+PUBSUB_EMULATOR_HOST = "localhost:{{env.PUBSUB_EMULATOR_PORT}}"
 
 ####################################
 ## Gram Functions runner settings ##

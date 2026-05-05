@@ -1,0 +1,21 @@
+edition = "2024";
+
+package outbox.event.v1;
+
+import "google/protobuf/timestamp.proto";
+import "infra/pubsub/v1/options.proto";
+
+option go_package = "github.com/speakeasy-api/gram/protogen/outbox/event/v1;eventv1";
+
+message Event {
+  string id = 1;
+  string type = 2;
+  google.protobuf.Timestamp created_at = 3;
+  bytes payload = 4;
+
+  option (infra.pubsub.v1.topic) = {
+    retention_hint: {
+      seconds: 604800 /* 7 days */
+    }
+  };
+}
