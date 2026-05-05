@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
@@ -112,6 +113,8 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
 
+	auditLogger := audit.NewLogger()
+
 	svc := triggers.NewService(
 		logger,
 		tracerProvider,
@@ -119,6 +122,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 		sessionManager,
 		authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache),
 		app,
+		auditLogger,
 	)
 
 	return ctx, &testInstance{

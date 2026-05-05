@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
@@ -94,7 +95,9 @@ func newTestPluginsService(t *testing.T) (context.Context, *testInstance) {
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
 
-	svc := plugins.NewService(logger, tracerProvider, conn, sessionManager, authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache), nil, "local", "https://app.getgram.ai")
+	auditLogger := audit.NewLogger()
+
+	svc := plugins.NewService(logger, tracerProvider, conn, sessionManager, authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache), auditLogger, nil, "local", "https://app.getgram.ai")
 
 	return ctx, &testInstance{
 		service:        svc,
@@ -144,10 +147,18 @@ func newTestPluginsServiceWithGitHub(t *testing.T, ghClient plugins.GitHubPublis
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
 
+	auditLogger := audit.NewLogger()
+
 	svc := plugins.NewService(
-		logger, tracerProvider, conn, sessionManager,
+		logger,
+		tracerProvider,
+		conn,
+		sessionManager,
 		authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache),
-		ghConfig, "local", "https://app.getgram.ai",
+		auditLogger,
+		ghConfig,
+		"local",
+		"https://app.getgram.ai",
 	)
 
 	return ctx, &testInstance{

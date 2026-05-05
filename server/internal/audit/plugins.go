@@ -43,7 +43,7 @@ type LogPluginCreateEvent struct {
 	PluginSlug string
 }
 
-func LogPluginCreate(ctx context.Context, dbtx repo.DBTX, event LogPluginCreateEvent) error {
+func (l *Logger) LogPluginCreate(ctx context.Context, dbtx repo.DBTX, event LogPluginCreateEvent) error {
 	action := ActionPluginCreate
 	entry := repo.InsertAuditLogParams{
 		OrganizationID: event.OrganizationID,
@@ -88,7 +88,7 @@ type LogPluginUpdateEvent struct {
 	SnapshotAfter  *PluginSnapshot
 }
 
-func LogPluginUpdate(ctx context.Context, dbtx repo.DBTX, event LogPluginUpdateEvent) error {
+func (l *Logger) LogPluginUpdate(ctx context.Context, dbtx repo.DBTX, event LogPluginUpdateEvent) error {
 	action := ActionPluginUpdate
 
 	beforeSnapshot, err := marshalAuditPayload(event.SnapshotBefore)
@@ -142,7 +142,7 @@ type LogPluginDeleteEvent struct {
 	PluginSlug string
 }
 
-func LogPluginDelete(ctx context.Context, dbtx repo.DBTX, event LogPluginDeleteEvent) error {
+func (l *Logger) LogPluginDelete(ctx context.Context, dbtx repo.DBTX, event LogPluginDeleteEvent) error {
 	action := ActionPluginDelete
 	entry := repo.InsertAuditLogParams{
 		OrganizationID: event.OrganizationID,
@@ -191,7 +191,7 @@ type LogPluginServerAddEvent struct {
 	ToolsetURN        urn.Toolset
 }
 
-func LogPluginServerAdd(ctx context.Context, dbtx repo.DBTX, event LogPluginServerAddEvent) error {
+func (l *Logger) LogPluginServerAdd(ctx context.Context, dbtx repo.DBTX, event LogPluginServerAddEvent) error {
 	action := ActionPluginServerAdd
 
 	metadata, err := marshalAuditPayload(map[string]any{
@@ -251,7 +251,7 @@ type LogPluginServerUpdateEvent struct {
 	ServerSortOrder   int32
 }
 
-func LogPluginServerUpdate(ctx context.Context, dbtx repo.DBTX, event LogPluginServerUpdateEvent) error {
+func (l *Logger) LogPluginServerUpdate(ctx context.Context, dbtx repo.DBTX, event LogPluginServerUpdateEvent) error {
 	action := ActionPluginServerUpdate
 
 	metadata, err := marshalAuditPayload(map[string]any{
@@ -307,7 +307,7 @@ type LogPluginServerRemoveEvent struct {
 	ServerID uuid.UUID //nolint:glint // TODO(AGE-1954): introduce urn.PluginServer and migrate to ServerURN; pending team discussion
 }
 
-func LogPluginServerRemove(ctx context.Context, dbtx repo.DBTX, event LogPluginServerRemoveEvent) error {
+func (l *Logger) LogPluginServerRemove(ctx context.Context, dbtx repo.DBTX, event LogPluginServerRemoveEvent) error {
 	action := ActionPluginServerRemove
 
 	metadata, err := marshalAuditPayload(map[string]any{
@@ -360,7 +360,7 @@ type LogPluginAssignmentsSetEvent struct {
 	PrincipalURNs []string
 }
 
-func LogPluginAssignmentsSet(ctx context.Context, dbtx repo.DBTX, event LogPluginAssignmentsSetEvent) error {
+func (l *Logger) LogPluginAssignmentsSet(ctx context.Context, dbtx repo.DBTX, event LogPluginAssignmentsSetEvent) error {
 	action := ActionPluginAssignmentsSet
 
 	metadata, err := marshalAuditPayload(map[string]any{
@@ -417,7 +417,7 @@ type LogPluginPublishEvent struct {
 	RepoName    string
 }
 
-func LogPluginPublish(ctx context.Context, dbtx repo.DBTX, event LogPluginPublishEvent) error {
+func (l *Logger) LogPluginPublish(ctx context.Context, dbtx repo.DBTX, event LogPluginPublishEvent) error {
 	action := ActionPluginPublish
 
 	metadata, err := marshalAuditPayload(map[string]any{

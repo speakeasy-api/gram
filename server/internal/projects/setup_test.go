@@ -12,6 +12,7 @@ import (
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/billing"
@@ -92,9 +93,25 @@ func newTestProjectsService(t *testing.T, enableRBAC bool) (context.Context, *te
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
 
-	svc := projects.NewService(logger, tracerProvider, conn, sessionManager, authz.NewEngine(logger, conn, chConn, func(context.Context, string) (bool, error) {
-		return enableRBAC, nil
-	}, workos.NewStubClient(), cache.NoopCache))
+	auditLogger := audit.NewLogger()
+
+	svc := projects.NewService(
+		logger,
+		tracerProvider,
+		conn,
+		sessionManager,
+		authz.NewEngine(
+			logger,
+			conn,
+			chConn,
+			func(context.Context, string) (bool, error) {
+				return enableRBAC, nil
+			},
+			workos.NewStubClient(),
+			cache.NoopCache,
+		),
+		auditLogger,
+	)
 
 	return ctx, &testInstance{
 		service:        svc,

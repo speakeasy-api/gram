@@ -41,6 +41,7 @@ type Service struct {
 	logger *slog.Logger
 	auth   *auth.Auth
 	app    *bgtriggers.App
+	audit  *audit.Logger
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -53,6 +54,7 @@ func NewService(
 	sessions *sessions.Manager,
 	authzEngine *authz.Engine,
 	app *bgtriggers.App,
+	auditLogger *audit.Logger,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("triggers"))
 	return &Service{
@@ -60,6 +62,7 @@ func NewService(
 		logger: logger,
 		auth:   auth.New(logger, db, sessions, authzEngine),
 		app:    app,
+		audit:  auditLogger,
 	}
 }
 
@@ -163,7 +166,7 @@ func (s *Service) CreateTriggerInstance(ctx context.Context, payload *gen.Create
 		Config:         payload.Config,
 		Status:         normalizeTriggerStatus(payload.Status),
 	}, func(ctx context.Context, dbtx pgx.Tx, instance triggerrepo.TriggerInstance) error {
-		return audit.LogTriggerInstanceCreate(ctx, dbtx, audit.LogTriggerInstanceCreateEvent{
+		return s.audit.LogTriggerInstanceCreate(ctx, dbtx, audit.LogTriggerInstanceCreateEvent{
 			OrganizationID:     authCtx.ActiveOrganizationID,
 			ProjectID:          *authCtx.ProjectID,
 			Actor:              urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
@@ -238,7 +241,7 @@ func (s *Service) UpdateTriggerInstance(ctx context.Context, payload *gen.Update
 		if err != nil {
 			return fmt.Errorf("build trigger instance after-snapshot: %w", err)
 		}
-		return audit.LogTriggerInstanceUpdate(ctx, dbtx, audit.LogTriggerInstanceUpdateEvent{
+		return s.audit.LogTriggerInstanceUpdate(ctx, dbtx, audit.LogTriggerInstanceUpdateEvent{
 			OrganizationID:                authCtx.ActiveOrganizationID,
 			ProjectID:                     *authCtx.ProjectID,
 			Actor:                         urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
@@ -274,7 +277,7 @@ func (s *Service) DeleteTriggerInstance(ctx context.Context, payload *gen.Delete
 	}
 
 	if err := s.app.Delete(ctx, *authCtx.ProjectID, triggerID, func(ctx context.Context, dbtx pgx.Tx, instance triggerrepo.TriggerInstance) error {
-		return audit.LogTriggerInstanceDelete(ctx, dbtx, audit.LogTriggerInstanceDeleteEvent{
+		return s.audit.LogTriggerInstanceDelete(ctx, dbtx, audit.LogTriggerInstanceDeleteEvent{
 			OrganizationID:     authCtx.ActiveOrganizationID,
 			ProjectID:          *authCtx.ProjectID,
 			Actor:              urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
@@ -298,7 +301,7 @@ func (s *Service) PauseTriggerInstance(ctx context.Context, payload *gen.PauseTr
 	}
 
 	return s.setTriggerStatus(ctx, authCtx, payload.ID, bgtriggers.StatusPaused, func(ctx context.Context, dbtx pgx.Tx, instance triggerrepo.TriggerInstance) error {
-		return audit.LogTriggerInstancePause(ctx, dbtx, audit.LogTriggerInstancePauseEvent{
+		return s.audit.LogTriggerInstancePause(ctx, dbtx, audit.LogTriggerInstancePauseEvent{
 			OrganizationID:     authCtx.ActiveOrganizationID,
 			ProjectID:          *authCtx.ProjectID,
 			Actor:              urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
@@ -318,7 +321,7 @@ func (s *Service) ResumeTriggerInstance(ctx context.Context, payload *gen.Resume
 	}
 
 	return s.setTriggerStatus(ctx, authCtx, payload.ID, bgtriggers.StatusActive, func(ctx context.Context, dbtx pgx.Tx, instance triggerrepo.TriggerInstance) error {
-		return audit.LogTriggerInstanceResume(ctx, dbtx, audit.LogTriggerInstanceResumeEvent{
+		return s.audit.LogTriggerInstanceResume(ctx, dbtx, audit.LogTriggerInstanceResumeEvent{
 			OrganizationID:     authCtx.ActiveOrganizationID,
 			ProjectID:          *authCtx.ProjectID,
 			Actor:              urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),

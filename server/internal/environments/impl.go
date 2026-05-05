@@ -43,11 +43,19 @@ type Service struct {
 	auth    *auth.Auth
 	authz   *authz.Engine
 	entries *EnvironmentEntries
+	audit   *audit.Logger
 }
 
 var _ gen.Service = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, enc *encryption.Client, authz *authz.Engine) *Service {
+func NewService(logger *slog.Logger,
+	tracerProvider trace.TracerProvider,
+	db *pgxpool.Pool,
+	sessions *sessions.Manager,
+	enc *encryption.Client,
+	authz *authz.Engine,
+	auditLogger *audit.Logger,
+) *Service {
 	logger = logger.With(attr.SlogComponent("environments"))
 	envRepo := repo.New(db)
 	mcpMetadataRepo := mcpmetadata_repo.New(db)
@@ -60,6 +68,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		auth:    auth.New(logger, db, sessions, authz),
 		authz:   authz,
 		entries: NewEnvironmentEntries(logger, db, enc, mcpMetadataRepo),
+		audit:   auditLogger,
 	}
 }
 
@@ -134,7 +143,7 @@ func (s *Service) CreateEnvironment(ctx context.Context, payload *gen.CreateEnvi
 
 	environmentView := buildEnvironmentView(environment, rows)
 
-	if err := audit.LogEnvironmentCreate(ctx, dbtx, audit.LogEnvironmentCreateEvent{
+	if err := s.audit.LogEnvironmentCreate(ctx, dbtx, audit.LogEnvironmentCreateEvent{
 		OrganizationID:   authCtx.ActiveOrganizationID,
 		ProjectID:        *authCtx.ProjectID,
 		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
@@ -297,7 +306,7 @@ func (s *Service) UpdateEnvironment(ctx context.Context, payload *gen.UpdateEnvi
 
 	afterView := buildEnvironmentView(environment, entries)
 
-	if err := audit.LogEnvironmentUpdate(ctx, dbtx, audit.LogEnvironmentUpdateEvent{
+	if err := s.audit.LogEnvironmentUpdate(ctx, dbtx, audit.LogEnvironmentUpdateEvent{
 		OrganizationID:            authCtx.ActiveOrganizationID,
 		ProjectID:                 *authCtx.ProjectID,
 		Actor:                     urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
@@ -350,7 +359,7 @@ func (s *Service) DeleteEnvironment(ctx context.Context, payload *gen.DeleteEnvi
 		return oops.E(oops.CodeUnexpected, err, "failed to delete environment").Log(ctx, logger)
 	}
 
-	if err := audit.LogEnvironmentDelete(ctx, dbtx, audit.LogEnvironmentDeleteEvent{
+	if err := s.audit.LogEnvironmentDelete(ctx, dbtx, audit.LogEnvironmentDeleteEvent{
 		OrganizationID:   authCtx.ActiveOrganizationID,
 		ProjectID:        *authCtx.ProjectID,
 		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),

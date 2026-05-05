@@ -362,6 +362,8 @@ func newWorkerCommand() *cli.Command {
 				return fmt.Errorf("failed to create encryption client: %w", err)
 			}
 
+			auditLogger := newAuditLogger()
+
 			mcpMetadataRepo := mcpmetadata_repo.New(db)
 			env := environments.NewEnvironmentEntries(logger, db, encryptionClient, mcpMetadataRepo)
 
@@ -478,7 +480,7 @@ func newWorkerCommand() *cli.Command {
 				logger,
 			)
 			shutdownFuncs = append(shutdownFuncs, riskSignaler.Shutdown)
-			chatWriter.AddObserver(risk.NewObserver(logger, tracerProvider, db, riskSignaler))
+			chatWriter.AddObserver(risk.NewObserver(logger, tracerProvider, db, riskSignaler, auditLogger))
 
 			completionsClient := openrouter.NewUnifiedClient(
 				logger,
@@ -547,6 +549,7 @@ func newWorkerCommand() *cli.Command {
 				authzEngine,
 				assistantTokenManager,
 				shadowMCPClient,
+				auditLogger,
 			)
 
 			chatClient := chat.NewAgenticChatClient(
@@ -602,6 +605,7 @@ func newWorkerCommand() *cli.Command {
 				TemporalEnv:         temporalEnv,
 				PIIScanner:          piiScanner,
 				ShadowMCPClient:     shadowMCPClient,
+				AuditLogger:         auditLogger,
 			})
 
 			return temporalWorker.Run(worker.InterruptCh())

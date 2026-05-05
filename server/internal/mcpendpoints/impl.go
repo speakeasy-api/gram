@@ -42,12 +42,20 @@ type Service struct {
 	db     *pgxpool.Pool
 	auth   *auth.Auth
 	authz  *authz.Engine
+	audit  *audit.Logger
 }
 
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, authzEngine *authz.Engine) *Service {
+func NewService(
+	logger *slog.Logger,
+	tracerProvider trace.TracerProvider,
+	db *pgxpool.Pool,
+	sessions *sessions.Manager,
+	authzEngine *authz.Engine,
+	auditLogger *audit.Logger,
+) *Service {
 	logger = logger.With(attr.SlogComponent("mcpendpoints"))
 
 	return &Service{
@@ -56,6 +64,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		db:     db,
 		auth:   auth.New(logger, db, sessions, authzEngine),
 		authz:  authzEngine,
+		audit:  auditLogger,
 	}
 }
 
@@ -126,7 +135,7 @@ func (s *Service) CreateMcpEndpoint(ctx context.Context, payload *gen.CreateMcpE
 		return nil, oops.E(oops.CodeUnexpected, err, "create mcp endpoint").Log(ctx, logger)
 	}
 
-	if err := audit.LogMcpEndpointCreate(ctx, dbtx, audit.LogMcpEndpointCreateEvent{
+	if err := s.audit.LogMcpEndpointCreate(ctx, dbtx, audit.LogMcpEndpointCreateEvent{
 		OrganizationID:   authCtx.ActiveOrganizationID,
 		ProjectID:        *authCtx.ProjectID,
 		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
@@ -322,7 +331,7 @@ func (s *Service) UpdateMcpEndpoint(ctx context.Context, payload *gen.UpdateMcpE
 
 	afterView := mv.BuildMcpEndpointView(updated)
 
-	if err := audit.LogMcpEndpointUpdate(ctx, dbtx, audit.LogMcpEndpointUpdateEvent{
+	if err := s.audit.LogMcpEndpointUpdate(ctx, dbtx, audit.LogMcpEndpointUpdateEvent{
 		OrganizationID:            authCtx.ActiveOrganizationID,
 		ProjectID:                 *authCtx.ProjectID,
 		Actor:                     urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
@@ -379,7 +388,7 @@ func (s *Service) DeleteMcpEndpoint(ctx context.Context, payload *gen.DeleteMcpE
 		return oops.E(oops.CodeUnexpected, err, "delete mcp endpoint").Log(ctx, logger)
 	}
 
-	if err := audit.LogMcpEndpointDelete(ctx, dbtx, audit.LogMcpEndpointDeleteEvent{
+	if err := s.audit.LogMcpEndpointDelete(ctx, dbtx, audit.LogMcpEndpointDeleteEvent{
 		OrganizationID:   authCtx.ActiveOrganizationID,
 		ProjectID:        *authCtx.ProjectID,
 		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),

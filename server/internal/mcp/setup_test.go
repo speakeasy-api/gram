@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
@@ -75,6 +76,7 @@ type testInstance struct {
 	cacheAdapter   cache.Cache
 	enc            *encryption.Client
 	authzEngine    *authz.Engine
+	audit          *audit.Logger
 }
 
 func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
@@ -148,7 +150,8 @@ func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
 	assistantTokens := assistanttokens.New("test-jwt-secret", conn, authzEngine)
 	_ = featClient
 	shadowMCPClient := shadowmcp.NewClient(logger, conn, cacheAdapter)
-	svc := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, serverURL, enc, cacheAdapter, guardianPolicy, funcs, oauthService, billingStub, billingStub, telemLogger, telemService, vectorToolStore, nil, temporalEnv, authzEngine, assistantTokens, shadowMCPClient)
+	auditLogger := audit.NewLogger()
+	svc := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, serverURL, enc, cacheAdapter, guardianPolicy, funcs, oauthService, billingStub, billingStub, telemLogger, telemService, vectorToolStore, nil, temporalEnv, authzEngine, assistantTokens, shadowMCPClient, auditLogger)
 
 	return ctx, &testInstance{
 		service:        svc,
@@ -161,13 +164,14 @@ func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
 		cacheAdapter:   cacheAdapter,
 		enc:            enc,
 		authzEngine:    authzEngine,
+		audit:          auditLogger,
 	}
 }
 
 // createTestAPIKey creates an API key for the test context project
 func (ti *testInstance) createTestAPIKey(ctx context.Context, t *testing.T) string {
 	t.Helper()
-	keysService := keys.NewService(ti.logger, ti.tracerProvider, ti.conn, ti.sessionManager, "local", ti.authzEngine)
+	keysService := keys.NewService(ti.logger, ti.tracerProvider, ti.conn, ti.sessionManager, "local", ti.authzEngine, ti.audit)
 
 	key, err := keysService.CreateKey(ctx, &keys_gen.CreateKeyPayload{
 		Name:   "test-key",

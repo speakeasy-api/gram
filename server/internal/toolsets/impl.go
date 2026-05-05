@@ -70,11 +70,20 @@ type Service struct {
 	oauthRepo       *oauthRepo.Queries
 	mcpmetadataRepo *mcpmetadataRepo.Queries
 	toolsetCache    cache.TypedCacheObject[mv.ToolsetBaseContents]
+	audit           *audit.Logger
 }
 
 var _ gen.Service = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, cacheAdapter cache.Cache, authzEngine *authz.Engine) *Service {
+func NewService(
+	logger *slog.Logger,
+	tracerProvider trace.TracerProvider,
+	db *pgxpool.Pool,
+	sessions *sessions.Manager,
+	cacheAdapter cache.Cache,
+	authzEngine *authz.Engine,
+	auditLogger *audit.Logger,
+) *Service {
 	logger = logger.With(attr.SlogComponent("toolsets"))
 
 	return &Service{
@@ -91,6 +100,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		oauthRepo:       oauthRepo.New(db),
 		mcpmetadataRepo: mcpmetadataRepo.New(db),
 		toolsetCache:    cache.NewTypedObjectCache[mv.ToolsetBaseContents](logger.With(attr.SlogCacheNamespace("toolset")), cacheAdapter, cache.SuffixNone),
+		audit:           auditLogger,
 	}
 }
 
@@ -201,7 +211,7 @@ func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetP
 		return nil, err
 	}
 
-	if err := audit.LogToolsetCreate(ctx, dbtx, audit.LogToolsetCreateEvent{
+	if err := s.audit.LogToolsetCreate(ctx, dbtx, audit.LogToolsetCreateEvent{
 		OrganizationID:   authCtx.ActiveOrganizationID,
 		ProjectID:        *authCtx.ProjectID,
 		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
@@ -471,7 +481,7 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 		if existingView.ExternalOauthServer != nil {
 			extoauthslug = new(string(existingView.ExternalOauthServer.Slug))
 		}
-		if err := audit.LogToolsetDetachExternalOAuth(ctx, dbtx, audit.LogToolsetDetachExternalOAuthEvent{
+		if err := s.audit.LogToolsetDetachExternalOAuth(ctx, dbtx, audit.LogToolsetDetachExternalOAuthEvent{
 			OrganizationID:          authCtx.ActiveOrganizationID,
 			ProjectID:               *authCtx.ProjectID,
 			Actor:                   urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
@@ -493,7 +503,7 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 		if existingView.OauthProxyServer != nil {
 			oauthProxySlug = new(string(existingView.OauthProxyServer.Slug))
 		}
-		if err := audit.LogToolsetDetachOAuthProxy(ctx, dbtx, audit.LogToolsetDetachOAuthProxyEvent{
+		if err := s.audit.LogToolsetDetachOAuthProxy(ctx, dbtx, audit.LogToolsetDetachOAuthProxyEvent{
 			OrganizationID:       authCtx.ActiveOrganizationID,
 			ProjectID:            *authCtx.ProjectID,
 			Actor:                urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
@@ -510,7 +520,7 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 		}
 	}
 
-	if err := audit.LogToolsetUpdate(ctx, dbtx, audit.LogToolsetUpdateEvent{
+	if err := s.audit.LogToolsetUpdate(ctx, dbtx, audit.LogToolsetUpdateEvent{
 		OrganizationID:        authCtx.ActiveOrganizationID,
 		ProjectID:             *authCtx.ProjectID,
 		Actor:                 urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
@@ -575,7 +585,7 @@ func (s *Service) DeleteToolset(ctx context.Context, payload *gen.DeleteToolsetP
 		return oops.E(oops.CodeUnexpected, err, "failed to delete toolset").Log(ctx, logger)
 	}
 
-	if err := audit.LogToolsetDelete(ctx, dbtx, audit.LogToolsetDeleteEvent{
+	if err := s.audit.LogToolsetDelete(ctx, dbtx, audit.LogToolsetDeleteEvent{
 		OrganizationID:   authCtx.ActiveOrganizationID,
 		ProjectID:        *authCtx.ProjectID,
 		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
@@ -710,7 +720,7 @@ func (s *Service) CloneToolset(ctx context.Context, payload *gen.CloneToolsetPay
 		return nil, oops.E(oops.CodeConflict, nil, "could not create unique toolset name").Log(ctx, logger)
 	}
 
-	if err := audit.LogToolsetCreate(ctx, dbtx, audit.LogToolsetCreateEvent{
+	if err := s.audit.LogToolsetCreate(ctx, dbtx, audit.LogToolsetCreateEvent{
 		OrganizationID:   authCtx.ActiveOrganizationID,
 		ProjectID:        *authCtx.ProjectID,
 		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
@@ -869,7 +879,7 @@ func (s *Service) AddExternalOAuthServer(ctx context.Context, payload *gen.AddEx
 		return nil, err
 	}
 
-	if err := audit.LogToolsetAttachExternalOAuth(ctx, dbtx, audit.LogToolsetAttachExternalOAuthEvent{
+	if err := s.audit.LogToolsetAttachExternalOAuth(ctx, dbtx, audit.LogToolsetAttachExternalOAuthEvent{
 		OrganizationID:          authCtx.ActiveOrganizationID,
 		ProjectID:               *authCtx.ProjectID,
 		Actor:                   urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
@@ -981,7 +991,7 @@ func (s *Service) RemoveOAuthServer(ctx context.Context, payload *gen.RemoveOAut
 	}
 
 	if externalServerID != nil {
-		if err := audit.LogToolsetDetachExternalOAuth(ctx, dbtx, audit.LogToolsetDetachExternalOAuthEvent{
+		if err := s.audit.LogToolsetDetachExternalOAuth(ctx, dbtx, audit.LogToolsetDetachExternalOAuthEvent{
 			OrganizationID:          authCtx.ActiveOrganizationID,
 			ProjectID:               *authCtx.ProjectID,
 			Actor:                   urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
@@ -999,7 +1009,7 @@ func (s *Service) RemoveOAuthServer(ctx context.Context, payload *gen.RemoveOAut
 	}
 
 	if oauthProxyID != nil {
-		if err := audit.LogToolsetDetachOAuthProxy(ctx, dbtx, audit.LogToolsetDetachOAuthProxyEvent{
+		if err := s.audit.LogToolsetDetachOAuthProxy(ctx, dbtx, audit.LogToolsetDetachOAuthProxyEvent{
 			OrganizationID:       authCtx.ActiveOrganizationID,
 			ProjectID:            *authCtx.ProjectID,
 			Actor:                urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
@@ -1182,7 +1192,7 @@ func (s *Service) AddOAuthProxyServer(ctx context.Context, payload *gen.AddOAuth
 		return nil, err
 	}
 
-	if err := audit.LogToolsetAttachOAuthProxy(ctx, dbtx, audit.LogToolsetAttachOAuthProxyEvent{
+	if err := s.audit.LogToolsetAttachOAuthProxy(ctx, dbtx, audit.LogToolsetAttachOAuthProxyEvent{
 		OrganizationID:       authCtx.ActiveOrganizationID,
 		ProjectID:            *authCtx.ProjectID,
 		Actor:                urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),

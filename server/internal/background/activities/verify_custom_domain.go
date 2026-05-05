@@ -26,15 +26,17 @@ type VerifyCustomDomain struct {
 	db                  *pgxpool.Pool
 	logger              *slog.Logger
 	expectedTargetCNAME string
+	audit               *audit.Logger
 	resolver            dns.Resolver
 }
 
-func NewVerifyCustomDomain(logger *slog.Logger, db *pgxpool.Pool, expectedTargetCNAME string) *VerifyCustomDomain {
+func NewVerifyCustomDomain(logger *slog.Logger, db *pgxpool.Pool, auditLogger *audit.Logger, expectedTargetCNAME string) *VerifyCustomDomain {
 	return &VerifyCustomDomain{
 		db:                  db,
 		logger:              logger,
 		expectedTargetCNAME: expectedTargetCNAME,
 		resolver:            dns.NewNetResolver(),
+		audit:               auditLogger,
 	}
 }
 
@@ -89,7 +91,7 @@ func (d *VerifyCustomDomain) Do(ctx context.Context, args VerifyCustomDomainArgs
 			return oops.E(oops.CodeUnexpected, err, "error creating custom domain").Log(ctx, d.logger)
 		}
 
-		if err := audit.LogCustomDomainCreate(ctx, dbtx, audit.LogCustomDomainCreateEvent{
+		if err := d.audit.LogCustomDomainCreate(ctx, dbtx, audit.LogCustomDomainCreateEvent{
 			OrganizationID:   args.OrgID,
 			Actor:            args.CreatedBy,
 			ActorDisplayName: args.CreatedByName,

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
@@ -74,7 +75,9 @@ func newTestVariationsService(t *testing.T) (context.Context, *testInstance) {
 	require.NoError(t, err)
 
 	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
-	svc := variations.NewService(logger, tracerProvider, conn, sessionManager, authzEngine)
+	auditLogger := audit.NewLogger()
+
+	svc := variations.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, auditLogger)
 
 	return ctx, &testInstance{
 		service:        svc,

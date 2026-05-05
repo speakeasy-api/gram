@@ -56,6 +56,7 @@ type Service struct {
 	signaler         RiskAnalysisSignaler
 	completionClient openrouter.CompletionClient
 	shadowMCPClient  *shadowmcp.Client
+	audit            *audit.Logger
 }
 
 var _ chat.MessageObserver = (*Service)(nil)
@@ -63,9 +64,16 @@ var _ chat.MessageObserver = (*Service)(nil)
 // NewObserver creates a lightweight chat.MessageObserver that signals the risk
 // drain workflow when new messages are stored. Use this in contexts (e.g. the
 // worker process) where the full risk Service is not needed.
-func NewObserver(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, signaler RiskAnalysisSignaler) chat.MessageObserver {
+func NewObserver(
+	logger *slog.Logger,
+	tracerProvider trace.TracerProvider,
+	db *pgxpool.Pool,
+	signaler RiskAnalysisSignaler,
+	auditLogger *audit.Logger,
+) chat.MessageObserver {
 	return &Service{
-		tracer:           tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/risk"),
+		tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/risk"),
+
 		logger:           logger.With(attr.SlogComponent("risk")),
 		db:               db,
 		repo:             repo.New(db),
@@ -74,6 +82,7 @@ func NewObserver(logger *slog.Logger, tracerProvider trace.TracerProvider, db *p
 		signaler:         signaler,
 		completionClient: nil,
 		shadowMCPClient:  nil,
+		audit:            auditLogger,
 	}
 }
 
@@ -86,6 +95,7 @@ func NewService(
 	signaler RiskAnalysisSignaler,
 	completionClient openrouter.CompletionClient,
 	shadowMCPClient *shadowmcp.Client,
+	auditLogger *audit.Logger,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("risk"))
 
@@ -99,6 +109,7 @@ func NewService(
 		signaler:         signaler,
 		completionClient: completionClient,
 		shadowMCPClient:  shadowMCPClient,
+		audit:            auditLogger,
 	}
 }
 
@@ -234,7 +245,7 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 		return nil, oops.E(oops.CodeUnexpected, err, "create risk policy").Log(ctx, s.logger)
 	}
 
-	if err := audit.LogRiskPolicyCreate(ctx, dbtx, audit.LogRiskPolicyCreateEvent{
+	if err := s.audit.LogRiskPolicyCreate(ctx, dbtx, audit.LogRiskPolicyCreateEvent{
 		OrganizationID:   authCtx.ActiveOrganizationID,
 		ProjectID:        *authCtx.ProjectID,
 		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
@@ -421,7 +432,7 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		return nil, oops.E(oops.CodeUnexpected, err, "update risk policy").Log(ctx, s.logger)
 	}
 
-	if err := audit.LogRiskPolicyUpdate(ctx, dbtx, audit.LogRiskPolicyUpdateEvent{
+	if err := s.audit.LogRiskPolicyUpdate(ctx, dbtx, audit.LogRiskPolicyUpdateEvent{
 		OrganizationID:   authCtx.ActiveOrganizationID,
 		ProjectID:        *authCtx.ProjectID,
 		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
@@ -492,7 +503,7 @@ func (s *Service) DeleteRiskPolicy(ctx context.Context, payload *gen.DeleteRiskP
 		return oops.E(oops.CodeUnexpected, err, "delete risk policy").Log(ctx, s.logger)
 	}
 
-	if err := audit.LogRiskPolicyDelete(ctx, dbtx, audit.LogRiskPolicyDeleteEvent{
+	if err := s.audit.LogRiskPolicyDelete(ctx, dbtx, audit.LogRiskPolicyDeleteEvent{
 		OrganizationID:   authCtx.ActiveOrganizationID,
 		ProjectID:        *authCtx.ProjectID,
 		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
@@ -764,7 +775,7 @@ func (s *Service) TriggerRiskAnalysis(ctx context.Context, payload *gen.TriggerR
 		return oops.E(oops.CodeUnexpected, err, "bump policy version").Log(ctx, s.logger)
 	}
 
-	if err := audit.LogRiskPolicyTrigger(ctx, s.db, audit.LogRiskPolicyTriggerEvent{
+	if err := s.audit.LogRiskPolicyTrigger(ctx, s.db, audit.LogRiskPolicyTriggerEvent{
 		OrganizationID:   authCtx.ActiveOrganizationID,
 		ProjectID:        *authCtx.ProjectID,
 		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),

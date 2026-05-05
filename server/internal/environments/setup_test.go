@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
@@ -75,9 +76,10 @@ func newTestEnvironmentService(t *testing.T) (context.Context, *testInstance) {
 
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
+	auditLogger := audit.NewLogger()
 
 	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
-	svc := environments.NewService(logger, tracerProvider, conn, sessionManager, enc, authzEngine)
+	svc := environments.NewService(logger, tracerProvider, conn, sessionManager, enc, authzEngine, auditLogger)
 
 	return ctx, &testInstance{
 		service:        svc,

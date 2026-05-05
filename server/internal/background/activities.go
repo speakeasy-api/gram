@@ -12,6 +12,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/assistants"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	resolution_activities "github.com/speakeasy-api/gram/server/internal/background/activities/chat_resolutions"
 	risk_analysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
@@ -101,6 +102,7 @@ func NewActivities(
 	assistantsCore *assistants.ServiceCore,
 	piiScanner risk_analysis.PIIScanner,
 	shadowMCPClient *shadowmcp.Client,
+	auditLogger *audit.Logger,
 ) *Activities {
 	usageTrackingStrategy := chat.NewDefaultUsageTrackingStrategy(db, logger, openrouterProvisioner, billingTracker, nil)
 
@@ -123,7 +125,7 @@ func NewActivities(
 		slackChatCompletion:           activities.NewSlackChatCompletionActivity(logger, slackClient, chatClient),
 		transitionDeployment:          activities.NewTransitionDeployment(logger, db),
 		validateDeployment:            activities.NewValidateDeployment(logger, db, billingRepo),
-		verifyCustomDomain:            activities.NewVerifyCustomDomain(logger, db, expectedTargetCNAME),
+		verifyCustomDomain:            activities.NewVerifyCustomDomain(logger, db, auditLogger, expectedTargetCNAME),
 		generateToolsetEmbeddings:     activities.NewGenerateToolsetEmbeddingsActivity(tracerProvider, db, ragService, logger),
 		dispatchTrigger:               activities.NewDispatchTrigger(triggerApp),
 		processScheduledTrigger:       activities.NewProcessScheduledTrigger(triggerApp),

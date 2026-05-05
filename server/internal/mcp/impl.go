@@ -20,6 +20,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/temporal"
@@ -145,6 +146,7 @@ func NewService(
 	authzEngine *authz.Engine,
 	assistantTokens *assistanttokens.Manager,
 	shadowMCPClient *shadowmcp.Client,
+	auditLogger *audit.Logger,
 ) *Service {
 	tracer := tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/mcp")
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/mcp")
@@ -154,6 +156,7 @@ func NewService(
 		logger,
 		db,
 		telemSvc,
+		auditLogger,
 		platformtoolsruntime.WithTriggerTools(triggerApp),
 		platformtoolsruntime.WithSlackHTTPClient(guardianPolicy.PooledClient()),
 	)

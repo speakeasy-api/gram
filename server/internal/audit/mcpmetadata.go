@@ -32,7 +32,7 @@ type LogMCPMetadataUpdateEvent struct {
 	MCPMetadataSnapshotAfter  *types.McpMetadata
 }
 
-func LogMCPMetadataUpdate(ctx context.Context, dbtx repo.DBTX, event LogMCPMetadataUpdateEvent) error {
+func (l *Logger) LogMCPMetadataUpdate(ctx context.Context, dbtx repo.DBTX, event LogMCPMetadataUpdateEvent) error {
 	action := ActionMCPMetadataUpdate
 
 	var beforePayload any

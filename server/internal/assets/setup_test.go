@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
 	"github.com/speakeasy-api/gram/server/internal/assets/repo"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -84,7 +85,25 @@ func newTestAssetsService(t *testing.T) (context.Context, *testInstance) {
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
 
-	svc := assets.NewService(logger, tracerProvider, guardianPolicy, conn, sessionManager, chatSessionsManager, storage, "test-jwt-secret", authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache))
+	auditLogger := audit.NewLogger()
+
+	svc := assets.NewService(logger,
+		tracerProvider,
+		guardianPolicy,
+		conn,
+		sessionManager,
+		chatSessionsManager,
+		storage,
+		"test-jwt-secret",
+		authz.NewEngine(logger,
+			conn,
+			chConn,
+			authztest.RBACAlwaysEnabled,
+			workos.NewStubClient(),
+			cache.NoopCache,
+		),
+		auditLogger,
+	)
 	repository := repo.New(conn)
 
 	return ctx, &testInstance{

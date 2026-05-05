@@ -62,6 +62,7 @@ type Service struct {
 	temporalEnv    *temporal.Environment
 	posthog        *posthog.Posthog
 	siteURL        *url.URL
+	audit          *audit.Logger
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -78,6 +79,7 @@ func NewService(
 	siteURL *url.URL,
 	mcpRegistryClient *externalmcp.RegistryClient,
 	authzEngine *authz.Engine,
+	auditLogger *audit.Logger,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("deployments"))
 	tracer := tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/deployments")
@@ -97,6 +99,7 @@ func NewService(
 		posthog:        posthog,
 		siteURL:        siteURL,
 		registryClient: mcpRegistryClient,
+		audit:          auditLogger,
 		Service:        annotations.Service[gen.Service, gen.Auther]{},
 	}
 }
@@ -519,7 +522,7 @@ func (s *Service) CreateDeployment(ctx context.Context, form *gen.CreateDeployme
 		return nil, err
 	}
 
-	if err := audit.LogDeploymentCreate(ctx, dbtx, audit.LogDeploymentCreateEvent{
+	if err := s.audit.LogDeploymentCreate(ctx, dbtx, audit.LogDeploymentCreateEvent{
 		OrganizationID:   organizationID,
 		ProjectID:        projectID,
 		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
@@ -782,7 +785,7 @@ func (s *Service) Evolve(ctx context.Context, form *gen.EvolvePayload) (*gen.Evo
 		return nil, err
 	}
 
-	if err := audit.LogDeploymentEvolve(ctx, dbtx, audit.LogDeploymentEvolveEvent{
+	if err := s.audit.LogDeploymentEvolve(ctx, dbtx, audit.LogDeploymentEvolveEvent{
 		OrganizationID: organizationID,
 		ProjectID:      projectID,
 
@@ -893,7 +896,7 @@ func (s *Service) Redeploy(ctx context.Context, payload *gen.RedeployPayload) (*
 		return nil, err
 	}
 
-	if err := audit.LogDeploymentRedeploy(ctx, dbtx, audit.LogDeploymentRedeployEvent{
+	if err := s.audit.LogDeploymentRedeploy(ctx, dbtx, audit.LogDeploymentRedeployEvent{
 		OrganizationID: organizationID,
 		ProjectID:      projectID,
 

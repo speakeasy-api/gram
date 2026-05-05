@@ -30,7 +30,7 @@ type LogKeyCreateEvent struct {
 	Scopes []string
 }
 
-func LogKeyCreate(ctx context.Context, dbtx repo.DBTX, event LogKeyCreateEvent) error {
+func (l *Logger) LogKeyCreate(ctx context.Context, dbtx repo.DBTX, event LogKeyCreateEvent) error {
 	action := ActionKeyCreate
 
 	metadata, err := marshalAuditPayload(map[string]any{
@@ -81,7 +81,7 @@ type LogKeyRevokeEvent struct {
 	Scopes []string
 }
 
-func LogKeyRevoke(ctx context.Context, dbtx repo.DBTX, event LogKeyRevokeEvent) error {
+func (l *Logger) LogKeyRevoke(ctx context.Context, dbtx repo.DBTX, event LogKeyRevokeEvent) error {
 	action := ActionKeyRevoke
 
 	metadata, err := marshalAuditPayload(map[string]any{

@@ -39,6 +39,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -718,4 +719,8 @@ func newTriggersApp(
 		serverURL,
 		bgtriggers.NewNoopDispatcher(logger),
 	)
+}
+
+func newAuditLogger() *audit.Logger {
+	return audit.NewLogger()
 }

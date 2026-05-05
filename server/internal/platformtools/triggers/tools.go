@@ -96,6 +96,7 @@ type ConfigureTrigger struct {
 	db          *pgxpool.Pool
 	app         *bgtriggers.App
 	inputSchema []byte
+	audit       *audit.Logger
 }
 
 func NewListTriggersTool(db *pgxpool.Pool, app *bgtriggers.App) *ListTriggers {
@@ -105,11 +106,12 @@ func NewListTriggersTool(db *pgxpool.Pool, app *bgtriggers.App) *ListTriggers {
 	}
 }
 
-func NewConfigureTriggerTool(db *pgxpool.Pool, app *bgtriggers.App) *ConfigureTrigger {
+func NewConfigureTriggerTool(db *pgxpool.Pool, app *bgtriggers.App, audit *audit.Logger) *ConfigureTrigger {
 	return &ConfigureTrigger{
 		db:          db,
 		app:         app,
 		inputSchema: buildConfigureTriggerInputSchema(),
+		audit:       audit,
 	}
 }
 
@@ -413,7 +415,7 @@ func (t *ConfigureTrigger) upsertTrigger(
 			Config:         params.Config,
 			Status:         status,
 		}, func(ctx context.Context, dbtx pgx.Tx, instance triggerrepo.TriggerInstance) error {
-			return audit.LogTriggerInstanceCreate(ctx, dbtx, audit.LogTriggerInstanceCreateEvent{
+			return t.audit.LogTriggerInstanceCreate(ctx, dbtx, audit.LogTriggerInstanceCreateEvent{
 				OrganizationID:     authCtx.ActiveOrganizationID,
 				ProjectID:          *authCtx.ProjectID,
 				Actor:              actorPrincipal,
@@ -463,7 +465,7 @@ func (t *ConfigureTrigger) upsertTrigger(
 			if err != nil {
 				return fmt.Errorf("build trigger instance after-snapshot: %w", err)
 			}
-			return audit.LogTriggerInstanceUpdate(ctx, dbtx, audit.LogTriggerInstanceUpdateEvent{
+			return t.audit.LogTriggerInstanceUpdate(ctx, dbtx, audit.LogTriggerInstanceUpdateEvent{
 				OrganizationID:                authCtx.ActiveOrganizationID,
 				ProjectID:                     *authCtx.ProjectID,
 				Actor:                         actorPrincipal,

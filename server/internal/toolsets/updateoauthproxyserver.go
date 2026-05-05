@@ -215,7 +215,7 @@ func (s *Service) UpdateOAuthProxyServer(ctx context.Context, payload *gen.Updat
 	// Emit audit event inside the transaction (before commit). Pass before/after
 	// toolset snapshots so the audit log captures what actually changed, not just
 	// that an update occurred. Mirrors LogToolsetUpdate's snapshot pattern.
-	if err := audit.LogToolsetUpdateOAuthProxy(ctx, dbtx, audit.LogToolsetUpdateOAuthProxyEvent{
+	if err := s.audit.LogToolsetUpdateOAuthProxy(ctx, dbtx, audit.LogToolsetUpdateOAuthProxyEvent{
 		OrganizationID:        authCtx.ActiveOrganizationID,
 		ProjectID:             *authCtx.ProjectID,
 		Actor:                 urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),

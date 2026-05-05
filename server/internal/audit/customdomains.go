@@ -27,7 +27,7 @@ type LogCustomDomainCreateEvent struct {
 	DomainName      string
 }
 
-func LogCustomDomainCreate(ctx context.Context, dbtx repo.DBTX, event LogCustomDomainCreateEvent) error {
+func (l *Logger) LogCustomDomainCreate(ctx context.Context, dbtx repo.DBTX, event LogCustomDomainCreateEvent) error {
 	action := ActionCustomDomainsCreate
 
 	entry := repo.InsertAuditLogParams{

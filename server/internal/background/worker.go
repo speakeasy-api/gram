@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/assistants"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	risk_analysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/background/interceptors"
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
@@ -64,6 +65,7 @@ type WorkerOptions struct {
 	TemporalEnv         *tenv.Environment
 	PIIScanner          risk_analysis.PIIScanner
 	ShadowMCPClient     *shadowmcp.Client
+	AuditLogger         *audit.Logger
 }
 
 func ForDeploymentProcessing(
@@ -74,6 +76,7 @@ func ForDeploymentProcessing(
 	enc *encryption.Client,
 	deployer functions.Deployer,
 	mcpRegistryClient *externalmcp.RegistryClient,
+	auditLogger *audit.Logger,
 ) *WorkerOptions {
 	return &WorkerOptions{
 		DB:                  db,
@@ -84,6 +87,7 @@ func ForDeploymentProcessing(
 		FunctionsDeployer:   deployer,
 		FunctionsVersion:    "local", // Test deployers don't use baked versions
 		MCPRegistryClient:   mcpRegistryClient,
+		AuditLogger:         auditLogger,
 		SlackClient:         nil,
 		ChatClient:          nil,
 		OpenRouter:          nil,
@@ -137,6 +141,7 @@ func NewTemporalWorker(
 		TemporalEnv:         env,
 		PIIScanner:          nil,
 		ShadowMCPClient:     nil,
+		AuditLogger:         nil,
 	}
 
 	for _, o := range options {
@@ -166,6 +171,7 @@ func NewTemporalWorker(
 			TemporalEnv:         conv.Default(o.TemporalEnv, opts.TemporalEnv),
 			PIIScanner:          conv.Default(o.PIIScanner, opts.PIIScanner),
 			ShadowMCPClient:     conv.Default(o.ShadowMCPClient, opts.ShadowMCPClient),
+			AuditLogger:         conv.Default(o.AuditLogger, opts.AuditLogger),
 		}
 	}
 
@@ -205,6 +211,7 @@ func NewTemporalWorker(
 		opts.AssistantsCore,
 		opts.PIIScanner,
 		opts.ShadowMCPClient,
+		opts.AuditLogger,
 	)
 
 	temporalWorker.RegisterActivity(activities.ProcessDeployment)

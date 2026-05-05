@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -82,7 +83,8 @@ func newTestKeysService(t *testing.T) (context.Context, *testInstance) {
 	require.NoError(t, err)
 
 	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
-	svc := keys.NewService(logger, tracerProvider, conn, sessionManager, "local", authzEngine)
+	auditLogger := audit.NewLogger()
+	svc := keys.NewService(logger, tracerProvider, conn, sessionManager, "local", authzEngine, auditLogger)
 	keyAuth := auth.NewKeyAuth(conn, logger, billingClient)
 
 	return ctx, &testInstance{

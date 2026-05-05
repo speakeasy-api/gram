@@ -36,7 +36,7 @@ type LogToolsetCreateEvent struct {
 	ToolsetSlug string
 }
 
-func LogToolsetCreate(ctx context.Context, dbtx repo.DBTX, event LogToolsetCreateEvent) error {
+func (l *Logger) LogToolsetCreate(ctx context.Context, dbtx repo.DBTX, event LogToolsetCreateEvent) error {
 	action := ActionToolsetCreate
 	entry := repo.InsertAuditLogParams{
 		OrganizationID: event.OrganizationID,
@@ -82,7 +82,7 @@ type LogToolsetUpdateEvent struct {
 	ToolsetSnapshotAfter  *types.Toolset
 }
 
-func LogToolsetUpdate(ctx context.Context, dbtx repo.DBTX, event LogToolsetUpdateEvent) error {
+func (l *Logger) LogToolsetUpdate(ctx context.Context, dbtx repo.DBTX, event LogToolsetUpdateEvent) error {
 	action := ActionToolsetUpdate
 
 	// Clone snapshots and strip the Tools field to avoid serializing a potentially massive list of tools into the audit log.
@@ -156,7 +156,7 @@ type LogToolsetDeleteEvent struct {
 	ToolsetSlug string
 }
 
-func LogToolsetDelete(ctx context.Context, dbtx repo.DBTX, event LogToolsetDeleteEvent) error {
+func (l *Logger) LogToolsetDelete(ctx context.Context, dbtx repo.DBTX, event LogToolsetDeleteEvent) error {
 	action := ActionToolsetDelete
 	entry := repo.InsertAuditLogParams{
 		OrganizationID: event.OrganizationID,
@@ -203,7 +203,7 @@ type LogToolsetAttachExternalOAuthEvent struct {
 	ExternalOAuthServerSlug string
 }
 
-func LogToolsetAttachExternalOAuth(ctx context.Context, dbtx repo.DBTX, event LogToolsetAttachExternalOAuthEvent) error {
+func (l *Logger) LogToolsetAttachExternalOAuth(ctx context.Context, dbtx repo.DBTX, event LogToolsetAttachExternalOAuthEvent) error {
 	action := ActionToolsetAttachExternalOAuth
 
 	metadata, err := marshalAuditPayload(map[string]any{
@@ -260,7 +260,7 @@ type LogToolsetDetachExternalOAuthEvent struct {
 	ExternalOAuthServerSlug *string
 }
 
-func LogToolsetDetachExternalOAuth(ctx context.Context, dbtx repo.DBTX, event LogToolsetDetachExternalOAuthEvent) error {
+func (l *Logger) LogToolsetDetachExternalOAuth(ctx context.Context, dbtx repo.DBTX, event LogToolsetDetachExternalOAuthEvent) error {
 	action := ActionToolsetDetachExternalOAuth
 
 	metadata, err := marshalAuditPayload(map[string]any{
@@ -317,7 +317,7 @@ type LogToolsetAttachOAuthProxyEvent struct {
 	OAuthProxyServerSlug string
 }
 
-func LogToolsetAttachOAuthProxy(ctx context.Context, dbtx repo.DBTX, event LogToolsetAttachOAuthProxyEvent) error {
+func (l *Logger) LogToolsetAttachOAuthProxy(ctx context.Context, dbtx repo.DBTX, event LogToolsetAttachOAuthProxyEvent) error {
 	action := ActionToolsetAttachOAuthProxy
 
 	metadata, err := marshalAuditPayload(map[string]any{
@@ -374,7 +374,7 @@ type LogToolsetDetachOAuthProxyEvent struct {
 	OAuthProxyServerSlug *string
 }
 
-func LogToolsetDetachOAuthProxy(ctx context.Context, dbtx repo.DBTX, event LogToolsetDetachOAuthProxyEvent) error {
+func (l *Logger) LogToolsetDetachOAuthProxy(ctx context.Context, dbtx repo.DBTX, event LogToolsetDetachOAuthProxyEvent) error {
 	action := ActionToolsetDetachOAuthProxy
 
 	metadata, err := marshalAuditPayload(map[string]any{
@@ -434,7 +434,7 @@ type LogToolsetUpdateOAuthProxyEvent struct {
 	ToolsetSnapshotAfter  *types.Toolset
 }
 
-func LogToolsetUpdateOAuthProxy(ctx context.Context, dbtx repo.DBTX, event LogToolsetUpdateOAuthProxyEvent) error {
+func (l *Logger) LogToolsetUpdateOAuthProxy(ctx context.Context, dbtx repo.DBTX, event LogToolsetUpdateOAuthProxyEvent) error {
 	action := ActionToolsetUpdateOAuthProxy
 
 	// Clone snapshots and strip the Tools field to avoid serializing a potentially massive list of tools into the audit log.

@@ -31,7 +31,7 @@ type LogAccessRoleCreateEvent struct {
 	RoleSlug string
 }
 
-func LogAccessRoleCreate(ctx context.Context, dbtx repo.DBTX, event LogAccessRoleCreateEvent) error {
+func (l *Logger) LogAccessRoleCreate(ctx context.Context, dbtx repo.DBTX, event LogAccessRoleCreateEvent) error {
 	action := ActionAccessRoleCreate
 
 	entry := repo.InsertAuditLogParams{
@@ -77,7 +77,7 @@ type LogAccessRoleUpdateEvent struct {
 	RoleSnapshotAfter  *accessgen.Role
 }
 
-func LogAccessRoleUpdate(ctx context.Context, dbtx repo.DBTX, event LogAccessRoleUpdateEvent) error {
+func (l *Logger) LogAccessRoleUpdate(ctx context.Context, dbtx repo.DBTX, event LogAccessRoleUpdateEvent) error {
 	action := ActionAccessRoleUpdate
 
 	beforeSnapshot, err := marshalAuditPayload(event.RoleSnapshotBefore)
@@ -130,7 +130,7 @@ type LogAccessRoleDeleteEvent struct {
 	RoleSlug string
 }
 
-func LogAccessRoleDelete(ctx context.Context, dbtx repo.DBTX, event LogAccessRoleDeleteEvent) error {
+func (l *Logger) LogAccessRoleDelete(ctx context.Context, dbtx repo.DBTX, event LogAccessRoleDeleteEvent) error {
 	action := ActionAccessRoleDelete
 	entry := repo.InsertAuditLogParams{
 		OrganizationID: event.OrganizationID,
@@ -175,7 +175,7 @@ type LogAccessMemberRoleUpdateEvent struct {
 	MemberSnapshotAfter  *accessgen.AccessMember
 }
 
-func LogAccessMemberRoleUpdate(ctx context.Context, dbtx repo.DBTX, event LogAccessMemberRoleUpdateEvent) error {
+func (l *Logger) LogAccessMemberRoleUpdate(ctx context.Context, dbtx repo.DBTX, event LogAccessMemberRoleUpdateEvent) error {
 	action := ActionAccessMemberRoleUpdate
 
 	beforeSnapshot, err := marshalAuditPayload(event.MemberSnapshotBefore)

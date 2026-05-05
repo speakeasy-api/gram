@@ -70,12 +70,22 @@ type Service struct {
 	authz        *authz.Engine
 	roles        RoleProvider
 	featureCache FeatureCacheWriter
+	audit        *audit.Logger
 }
 
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, roles RoleProvider, authz *authz.Engine, featureCache FeatureCacheWriter) *Service {
+func NewService(
+	logger *slog.Logger,
+	tracerProvider trace.TracerProvider,
+	db *pgxpool.Pool,
+	sessions *sessions.Manager,
+	roles RoleProvider,
+	authz *authz.Engine,
+	featureCache FeatureCacheWriter,
+	auditLogger *audit.Logger,
+) *Service {
 	logger = logger.With(attr.SlogComponent("access"))
 
 	return &Service{
@@ -86,6 +96,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		authz:        authz,
 		roles:        roles,
 		featureCache: featureCache,
+		audit:        auditLogger,
 	}
 }
 
@@ -311,7 +322,7 @@ func (s *Service) CreateRole(ctx context.Context, payload *gen.CreateRolePayload
 		return nil, err
 	}
 
-	if err := audit.LogAccessRoleCreate(ctx, s.db, audit.LogAccessRoleCreateEvent{
+	if err := s.audit.LogAccessRoleCreate(ctx, s.db, audit.LogAccessRoleCreateEvent{
 		OrganizationID:   ac.ActiveOrganizationID,
 		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
 		ActorDisplayName: ac.Email,
@@ -449,7 +460,7 @@ func (s *Service) UpdateRole(ctx context.Context, payload *gen.UpdateRolePayload
 		return nil, err
 	}
 
-	if err := audit.LogAccessRoleUpdate(ctx, s.db, audit.LogAccessRoleUpdateEvent{
+	if err := s.audit.LogAccessRoleUpdate(ctx, s.db, audit.LogAccessRoleUpdateEvent{
 		OrganizationID:     ac.ActiveOrganizationID,
 		Actor:              urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
 		ActorDisplayName:   ac.Email,
@@ -540,7 +551,7 @@ func (s *Service) DeleteRole(ctx context.Context, payload *gen.DeleteRolePayload
 		return oops.E(oops.CodeUnexpected, err, "delete role in workos").Log(ctx, logger)
 	}
 
-	if err := audit.LogAccessRoleDelete(ctx, s.db, audit.LogAccessRoleDeleteEvent{
+	if err := s.audit.LogAccessRoleDelete(ctx, s.db, audit.LogAccessRoleDeleteEvent{
 		OrganizationID:   ac.ActiveOrganizationID,
 		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
 		ActorDisplayName: ac.Email,
@@ -846,7 +857,7 @@ func (s *Service) UpdateMemberRole(ctx context.Context, payload *gen.UpdateMembe
 		JoinedAt: conv.Default(updatedMember.CreatedAt, time.Time{}.UTC().Format(time.RFC3339)),
 	}
 
-	if err := audit.LogAccessMemberRoleUpdate(ctx, s.db, audit.LogAccessMemberRoleUpdateEvent{
+	if err := s.audit.LogAccessMemberRoleUpdate(ctx, s.db, audit.LogAccessMemberRoleUpdateEvent{
 		OrganizationID:       ac.ActiveOrganizationID,
 		Actor:                urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
 		ActorDisplayName:     ac.Email,

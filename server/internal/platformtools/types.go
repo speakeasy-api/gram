@@ -4,6 +4,7 @@ import (
 	"log/slog"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/platformtools/core"
@@ -33,6 +34,7 @@ type Dependencies struct {
 	TelemetryService TelemetryService
 	TriggerApp       *bgtriggers.App
 	SlackHTTPClient  *guardian.HTTPClient
+	Audit            *audit.Logger
 }
 
 type ToolDescriptor = core.ToolDescriptor

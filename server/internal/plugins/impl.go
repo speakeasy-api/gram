@@ -137,6 +137,7 @@ type Service struct {
 	repo      *repo.Queries
 	auth      *auth.Auth
 	authz     *authz.Engine
+	audit     *audit.Logger
 	github    *GitHubConfig
 	serverURL string
 	keyPrefix string
@@ -151,6 +152,7 @@ func NewService(
 	db *pgxpool.Pool,
 	sessions *sessions.Manager,
 	authzEngine *authz.Engine,
+	auditLogger *audit.Logger,
 	github *GitHubConfig,
 	env string,
 	serverURL string,
@@ -164,6 +166,7 @@ func NewService(
 		repo:      repo.New(db),
 		auth:      auth.New(logger, db, sessions, authzEngine),
 		authz:     authzEngine,
+		audit:     auditLogger,
 		github:    github,
 		serverURL: serverURL,
 		keyPrefix: auth.APIKeyPrefix(env),
@@ -307,7 +310,7 @@ func (s *Service) CreatePlugin(ctx context.Context, payload *gen.CreatePluginPay
 		return nil, oops.E(oops.CodeUnexpected, err, "create plugin").Log(ctx, s.logger)
 	}
 
-	if err := audit.LogPluginCreate(ctx, tx, audit.LogPluginCreateEvent{
+	if err := s.audit.LogPluginCreate(ctx, tx, audit.LogPluginCreateEvent{
 		OrganizationID:   ac.ActiveOrganizationID,
 		ProjectID:        *ac.ProjectID,
 		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
@@ -386,7 +389,7 @@ func (s *Service) UpdatePlugin(ctx context.Context, payload *gen.UpdatePluginPay
 		return nil, oops.E(oops.CodeUnexpected, err, "update plugin").Log(ctx, s.logger)
 	}
 
-	if err := audit.LogPluginUpdate(ctx, tx, audit.LogPluginUpdateEvent{
+	if err := s.audit.LogPluginUpdate(ctx, tx, audit.LogPluginUpdateEvent{
 		OrganizationID:   ac.ActiveOrganizationID,
 		ProjectID:        *ac.ProjectID,
 		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
@@ -474,7 +477,7 @@ func (s *Service) DeletePlugin(ctx context.Context, payload *gen.DeletePluginPay
 		return oops.E(oops.CodeUnexpected, err, "delete plugin").Log(ctx, s.logger)
 	}
 
-	if err := audit.LogPluginDelete(ctx, tx, audit.LogPluginDeleteEvent{
+	if err := s.audit.LogPluginDelete(ctx, tx, audit.LogPluginDeleteEvent{
 		OrganizationID:   ac.ActiveOrganizationID,
 		ProjectID:        *ac.ProjectID,
 		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
@@ -560,7 +563,7 @@ func (s *Service) AddPluginServer(ctx context.Context, payload *gen.AddPluginSer
 		return nil, oops.E(oops.CodeUnexpected, err, "add plugin server").Log(ctx, s.logger)
 	}
 
-	if err := audit.LogPluginServerAdd(ctx, tx, audit.LogPluginServerAddEvent{
+	if err := s.audit.LogPluginServerAdd(ctx, tx, audit.LogPluginServerAddEvent{
 		OrganizationID:    ac.ActiveOrganizationID,
 		ProjectID:         *ac.ProjectID,
 		Actor:             urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
@@ -633,7 +636,7 @@ func (s *Service) UpdatePluginServer(ctx context.Context, payload *gen.UpdatePlu
 		return nil, oops.E(oops.CodeUnexpected, err, "update plugin server").Log(ctx, s.logger)
 	}
 
-	if err := audit.LogPluginServerUpdate(ctx, tx, audit.LogPluginServerUpdateEvent{
+	if err := s.audit.LogPluginServerUpdate(ctx, tx, audit.LogPluginServerUpdateEvent{
 		OrganizationID:    ac.ActiveOrganizationID,
 		ProjectID:         *ac.ProjectID,
 		Actor:             urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
@@ -698,7 +701,7 @@ func (s *Service) RemovePluginServer(ctx context.Context, payload *gen.RemovePlu
 		return oops.E(oops.CodeUnexpected, err, "remove plugin server").Log(ctx, s.logger)
 	}
 
-	if err := audit.LogPluginServerRemove(ctx, tx, audit.LogPluginServerRemoveEvent{
+	if err := s.audit.LogPluginServerRemove(ctx, tx, audit.LogPluginServerRemoveEvent{
 		OrganizationID:   ac.ActiveOrganizationID,
 		ProjectID:        *ac.ProjectID,
 		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
@@ -775,7 +778,7 @@ func (s *Service) SetPluginAssignments(ctx context.Context, payload *gen.SetPlug
 		assignments = append(assignments, pluginAssignmentToGen(row))
 	}
 
-	if err := audit.LogPluginAssignmentsSet(ctx, tx, audit.LogPluginAssignmentsSetEvent{
+	if err := s.audit.LogPluginAssignmentsSet(ctx, tx, audit.LogPluginAssignmentsSetEvent{
 		OrganizationID:   ac.ActiveOrganizationID,
 		ProjectID:        *ac.ProjectID,
 		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
@@ -1002,7 +1005,7 @@ func (s *Service) persistDownloadAPIKey(ctx context.Context, ac *contextvalues.A
 		return fmt.Errorf("create api key: %w", err)
 	}
 
-	if err := audit.LogKeyCreate(ctx, tx, audit.LogKeyCreateEvent{
+	if err := s.audit.LogKeyCreate(ctx, tx, audit.LogKeyCreateEvent{
 		OrganizationID:   ac.ActiveOrganizationID,
 		ProjectID:        projectID,
 		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
@@ -1238,7 +1241,7 @@ func (s *Service) persistPluginAPIKeys(
 			return fmt.Errorf("create api key %s: %w", candidate.keyName, err)
 		}
 
-		if err := audit.LogKeyCreate(ctx, tx, audit.LogKeyCreateEvent{
+		if err := s.audit.LogKeyCreate(ctx, tx, audit.LogKeyCreateEvent{
 			OrganizationID:   ac.ActiveOrganizationID,
 			ProjectID:        projectID,
 			Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
@@ -1265,7 +1268,7 @@ func (s *Service) persistPluginAPIKeys(
 	if ac.ProjectSlug != nil {
 		projectSlug = *ac.ProjectSlug
 	}
-	if err := audit.LogPluginPublish(ctx, tx, audit.LogPluginPublishEvent{
+	if err := s.audit.LogPluginPublish(ctx, tx, audit.LogPluginPublishEvent{
 		OrganizationID:   ac.ActiveOrganizationID,
 		ProjectID:        *ac.ProjectID,
 		ProjectName:      projectName,
