@@ -24,18 +24,24 @@ import (
 // reference themselves recursively in Go, so callers pass the function being
 // defined here.
 //
+// `signalIDFunc` derives the signal channel name from the workflow params.
+// It must produce the same string for the same params across all callers
+// (workflow body, signal-with-start entrypoint, and any direct signal sender)
+// so the debounce signal lands on the channel the workflow is listening on.
+// Typical shape: `fmt.Sprintf("v1:my-workflow:%s/signal", params.Key)`.
+//
 // `reenqueue` lets callers say "another run is needed even without an extra
 // signal" — e.g. when the activity reports HasMore. Treated additively with
 // any signals received during this run.
 func Debounce[Params any, Result any](
 	wrapped func(ctx workflow.Context, params Params) (result Result, err error),
 	continueAsSelf func(ctx workflow.Context, params Params) (result Result, err error),
-	signalName string,
+	signalIDFunc func(params Params) string,
 	reenqueue func(params Params, result Result) bool,
 ) func(ctx workflow.Context, params Params) (result Result, err error) {
 	return func(ctx workflow.Context, params Params) (result Result, err error) {
 		discard := ""
-		signalCh := workflow.GetSignalChannel(ctx, signalName)
+		signalCh := workflow.GetSignalChannel(ctx, signalIDFunc(params))
 		// Drain the signal that triggered this run via signal-with-start so it
 		// doesn't double-count toward the post-run reenqueue check.
 		_ = signalCh.ReceiveAsync(&discard)

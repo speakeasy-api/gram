@@ -61,11 +61,10 @@ func ExecuteProcessWorkOSOrganizationEventsWorkflowDebounced(ctx context.Context
 }
 
 func ProcessWorkOSOrganizationEventsWorkflowDebounced(ctx workflow.Context, params ProcessWorkOSEventsParams) (*ProcessWorkOSEventsResult, error) {
-	sig := processWorkOSOrganizationEventsDebounceSignal(params)
 	return Debounce(
 		ProcessWorkOSOrganizationEventsWorkflow,          // wrapped: runs one page per execution
 		ProcessWorkOSOrganizationEventsWorkflowDebounced, // continueAsSelf: keeps debounce on the next run
-		sig,
+		processWorkOSOrganizationEventsDebounceSignal,
 		func(_ ProcessWorkOSEventsParams, result *ProcessWorkOSEventsResult) bool {
 			return result.HasMore
 		},
