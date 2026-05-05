@@ -226,7 +226,7 @@ func (h *Handler) handleExchange(w http.ResponseWriter, r *http.Request) {
 	}
 
 	queries := repo.New(h.db)
-	codeRow, err := queries.ConsumeAuthCode(ctx, repo.ConsumeAuthCodeParams{Code: body.Code, Mode: Mode, Ts: time.Now()})
+	codeRow, err := queries.ConsumeAuthCode(ctx, repo.ConsumeAuthCodeParams{Code: body.Code, Mode: Mode})
 	if err != nil {
 		// Tolerance: tests sometimes /exchange without /login. Fall back to
 		// the configured currentUser shadow.
@@ -263,7 +263,7 @@ func (h *Handler) handleValidate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	queries := repo.New(h.db)
-	tokenRow, err := queries.GetActiveToken(ctx, repo.GetActiveTokenParams{Token: idToken, Mode: Mode, Ts: time.Now()})
+	tokenRow, err := queries.GetActiveToken(ctx, repo.GetActiveTokenParams{Token: idToken, Mode: Mode})
 	if err != nil {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Invalid or expired token"})
 		return
@@ -323,7 +323,7 @@ func (h *Handler) handleRegister(w http.ResponseWriter, r *http.Request) {
 	}
 
 	queries := repo.New(h.db)
-	tokenRow, err := queries.GetActiveToken(ctx, repo.GetActiveTokenParams{Token: idToken, Mode: Mode, Ts: time.Now()})
+	tokenRow, err := queries.GetActiveToken(ctx, repo.GetActiveTokenParams{Token: idToken, Mode: Mode})
 	if err != nil {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Invalid or expired token"})
 		return
@@ -505,7 +505,6 @@ func (h *Handler) resolveShadowUserID(ctx context.Context) (uuid.UUID, error) {
 	}
 
 	shadow, err := queries.UpsertUserByEmail(ctx, repo.UpsertUserByEmailParams{
-		ID:          uuid.New(),
 		Email:       user.Email,
 		DisplayName: strings.TrimSpace(user.FirstName + " " + user.LastName),
 	})

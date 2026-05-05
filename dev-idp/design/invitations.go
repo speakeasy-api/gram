@@ -1,7 +1,7 @@
 package design
 
 import (
-	. "goa.design/goa/v3/dsl" //nolint:staticcheck // Goa DSL convention
+	. "goa.design/goa/v3/dsl"
 )
 
 var ListInvitationsResult = Type("ListInvitationsResult", func() {

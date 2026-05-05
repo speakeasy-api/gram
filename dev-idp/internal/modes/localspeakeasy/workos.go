@@ -474,7 +474,6 @@ func (h *Handler) handleWorkosAcceptInvitation(w http.ResponseWriter, r *http.Re
 	// Find or create the user by the invited email; the display_name
 	// defaults to the email local-part since we don't have a name yet.
 	user, err := queries.UpsertUserByEmail(ctx, repo.UpsertUserByEmailParams{
-		ID:          uuid.New(),
 		Email:       inv.Email,
 		DisplayName: emailLocalPart(inv.Email),
 	})

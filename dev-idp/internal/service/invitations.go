@@ -199,7 +199,6 @@ func (s *InvitationsService) Accept(ctx context.Context, p *gen.AcceptPayload) (
 	}
 
 	user, err := queries.UpsertUserByEmail(ctx, repo.UpsertUserByEmailParams{
-		ID:          uuid.New(),
 		Email:       inv.Email,
 		DisplayName: emailLocalPart(inv.Email),
 	})

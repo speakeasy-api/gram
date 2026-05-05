@@ -76,7 +76,6 @@ func BootstrapLocalUser(ctx context.Context, db *sql.DB, mode string) (uuid.UUID
 	now := time.Now()
 
 	user, err := queries.UpsertUserByEmail(ctx, repo.UpsertUserByEmailParams{
-		ID:          uuid.New(),
 		Email:       committer.Email,
 		DisplayName: committer.Name,
 	})
