@@ -190,7 +190,7 @@ function ChatPane({ mode }: { mode: "create" | "edit" }) {
           api: {
             url: getServerURL(),
             session: getSession,
-            headers: { "X-Gram-Source": "assistant-onboarding" },
+            headers: { "X-Gram-Source": "assistant" },
           },
           history: {
             enabled: true,

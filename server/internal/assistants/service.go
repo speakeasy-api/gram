@@ -15,6 +15,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/gen/types"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
@@ -58,6 +60,7 @@ const (
 	runtimeProcessingLeaseGrace  = 2 * time.Minute
 	eventProcessingRequeueGrace  = 3 * time.Minute
 	processingLeaseHeartbeatTick = 30 * time.Second
+	admitFailureBackoff          = 30 * time.Second
 )
 
 var errAssistantValidation = errors.New("assistant validation")
@@ -244,6 +247,7 @@ type ProcessThreadEventsResult struct {
 
 type ServiceCore struct {
 	logger          *slog.Logger
+	tracer          trace.Tracer
 	db              *pgxpool.Pool
 	runtime         RuntimeBackend
 	slackClient     *slackclient.SlackClient
@@ -254,6 +258,7 @@ type ServiceCore struct {
 
 func NewServiceCore(
 	logger *slog.Logger,
+	tracerProvider trace.TracerProvider,
 	db *pgxpool.Pool,
 	runtime RuntimeBackend,
 	slackClient *slackclient.SlackClient,
@@ -263,6 +268,7 @@ func NewServiceCore(
 ) *ServiceCore {
 	return &ServiceCore{
 		logger:          logger,
+		tracer:          tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/assistants"),
 		db:              db,
 		runtime:         newTelemetryRuntimeBackend(runtime, telemetryLogger),
 		slackClient:     slackClient,
@@ -1031,12 +1037,14 @@ func (s *ServiceCore) AdmitPendingThreads(ctx context.Context, assistantID uuid.
 	available := max(assistant.MaxConcurrency-conv.SafeInt(activeCount), 0)
 	if available > 0 {
 		coldThreads, err := queries.ListColdPendingThreadsForAdmit(ctx, assistantrepo.ListColdPendingThreadsForAdmitParams{
-			ProjectID:     assistant.ProjectID,
-			AssistantID:   assistantID,
-			PendingStatus: eventStatusPending,
-			StartingState: runtimeStateStarting,
-			ActiveState:   runtimeStateActive,
-			LimitCount:    conv.SafeInt32(available),
+			ProjectID:                 assistant.ProjectID,
+			AssistantID:               assistantID,
+			PendingStatus:             eventStatusPending,
+			StartingState:             runtimeStateStarting,
+			ActiveState:               runtimeStateActive,
+			FailedState:               runtimeStateFailed,
+			AdmitFailureBackoffCutoff: conv.ToPGTimestamptz(time.Now().UTC().Add(-admitFailureBackoff)),
+			LimitCount:                conv.SafeInt32(available),
 		})
 		if err != nil {
 			return AdmitPendingThreadsResult{}, fmt.Errorf("select cold assistant threads: %w", err)
@@ -1105,7 +1113,7 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 	}
 
 	if ensureResult.NeedsConfigure {
-		startupConfig, err := s.buildRuntimeStartupConfig(ctx, thread, runtimeRecord, assistant)
+		startupConfig, err := s.tracedBuildStartupConfig(ctx, thread, runtimeRecord, assistant, ensureResult.ColdStart)
 		if err != nil {
 			s.logger.ErrorContext(ctx, "build runtime startup config failed", attr.SlogAssistantThreadID(thread.ID.String()), attr.SlogError(err))
 			_ = s.stopRuntimeRecord(ctx, thread.ProjectID, thread.ID, runtimeStateFailed)
@@ -1117,7 +1125,7 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 				ProcessedAnyEvent: false,
 			}, nil
 		}
-		if err := s.runtime.Configure(ctx, runtimeRecord, startupConfig); err != nil {
+		if err := s.tracedConfigure(ctx, runtimeRecord, startupConfig, ensureResult.ColdStart); err != nil {
 			s.logger.ErrorContext(ctx, "configure assistant runtime failed", attr.SlogAssistantThreadID(thread.ID.String()), attr.SlogError(err))
 			_ = s.stopRuntimeRecord(ctx, thread.ProjectID, thread.ID, runtimeStateFailed)
 			return ProcessThreadEventsResult{
@@ -1169,7 +1177,7 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 			// window so they flow through cleanly under a fresh VM.
 			if errors.Is(runErr, ErrRuntimeUnhealthy) {
 				_ = s.runtime.Stop(ctx, runtimeRecord)
-				_ = s.stopRuntimeRecord(ctx, thread.ProjectID, thread.ID, runtimeStateStopped)
+				_ = s.stopRuntimeRecord(ctx, thread.ProjectID, thread.ID, runtimeStateFailed)
 				return ProcessThreadEventsResult{
 					AssistantID:       assistant.ID,
 					WarmUntil:         time.Time{},
@@ -1327,6 +1335,56 @@ func (s *ServiceCore) touchProcessingLease(ctx context.Context, projectID, runti
 	})
 	if err != nil {
 		return fmt.Errorf("touch assistant processing lease: %w", err)
+	}
+	return nil
+}
+
+// tracedBuildStartupConfig spans buildRuntimeStartupConfig so its latency
+// joins the rest of the runtime configure pipeline in Datadog APM. Cold
+// start is set as a span attribute since it's the dimension on-call needs
+// to filter setup latency by.
+func (s *ServiceCore) tracedBuildStartupConfig(
+	ctx context.Context,
+	thread assistantThreadRecord,
+	runtime assistantRuntimeRecord,
+	assistant assistantRecord,
+	coldStart bool,
+) (cfg runtimeStartupConfig, err error) {
+	ctx, span := s.tracer.Start(ctx, "assistants.runtime.buildStartupConfig",
+		trace.WithAttributes(attr.AssistantColdStart(coldStart)),
+	)
+	defer func() {
+		if err != nil {
+			span.SetAttributes(attr.AssistantSetupFailureClass(classifySetupError(err)))
+			span.SetStatus(codes.Error, err.Error())
+		}
+		span.End()
+	}()
+	return s.buildRuntimeStartupConfig(ctx, thread, runtime, assistant)
+}
+
+// tracedConfigure wraps the runtime Configure call so its latency joins the
+// rest of the setup pipeline in Datadog APM with the cold-start attribute
+// attached. The Fly backend's Configure no longer opens its own span —
+// this is the only span covering the configure HTTP roundtrip.
+func (s *ServiceCore) tracedConfigure(
+	ctx context.Context,
+	runtime assistantRuntimeRecord,
+	config runtimeStartupConfig,
+	coldStart bool,
+) (err error) {
+	ctx, span := s.tracer.Start(ctx, "assistants.runtime.configure",
+		trace.WithAttributes(attr.AssistantColdStart(coldStart)),
+	)
+	defer func() {
+		if err != nil {
+			span.SetAttributes(attr.AssistantSetupFailureClass(classifySetupError(err)))
+			span.SetStatus(codes.Error, err.Error())
+		}
+		span.End()
+	}()
+	if err := s.runtime.Configure(ctx, runtime, config); err != nil {
+		return fmt.Errorf("configure runtime: %w", err)
 	}
 	return nil
 }
@@ -1559,7 +1617,8 @@ func (s *ServiceCore) loadActiveRuntimeRecord(ctx context.Context, projectID, th
 }
 
 func (s *ServiceCore) loadChatHistory(ctx context.Context, chatID uuid.UUID, projectID uuid.UUID) ([]runtimeMessage, error) {
-	messages, err := chatrepo.New(s.db).ListChatMessages(ctx, chatrepo.ListChatMessagesParams{
+	// Earlier generations are audit-only snapshots; only the latest is the live transcript.
+	messages, err := chatrepo.New(s.db).ListLatestGenerationChatMessages(ctx, chatrepo.ListLatestGenerationChatMessagesParams{
 		ChatID:    chatID,
 		ProjectID: projectID,
 	})

@@ -1,9 +1,16 @@
 import { InputField } from "@/components/moon/input-field";
 import { Page } from "@/components/page-layout";
+import { MCPStatusIndicator } from "@/components/mcp/MCPStatusIndicator";
+import { ToolCollectionBadge } from "@/components/tool-collection-badge";
+import { Badge } from "@/components/ui/badge";
+import { Button as UiButton } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
+import { DotCard } from "@/components/ui/dot-card";
 import { Heading } from "@/components/ui/heading";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Type } from "@/components/ui/type";
+import { cn } from "@/lib/utils";
+import { useRoutes } from "@/routes";
 import {
   invalidateAllPlugin,
   usePluginSuspense,
@@ -15,19 +22,21 @@ import { useRemovePluginServerMutation } from "@gram/client/react-query/removePl
 import { useListToolsets } from "@gram/client/react-query/listToolsets";
 import {
   Button,
-  Column,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
   Icon,
   Stack,
-  Table,
 } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { Network, Trash2 } from "lucide-react";
+import { useMemo, useState } from "react";
 import { useParams } from "react-router";
-import type { PluginServer } from "@gram/client/models/components";
+import type {
+  PluginServer,
+  ToolsetEntry,
+} from "@gram/client/models/components";
 import { useSdkClient } from "@/contexts/Sdk";
 import { toast } from "sonner";
 
@@ -43,7 +52,10 @@ export default function PluginDetail() {
   const client = useSdkClient();
   const { data: toolsetsData, isLoading: isLoadingToolsets } =
     useListToolsets();
-  const toolsets = toolsetsData?.toolsets ?? [];
+  const toolsets = useMemo(
+    () => toolsetsData?.toolsets ?? [],
+    [toolsetsData?.toolsets],
+  );
 
   const invalidateAll = async () => {
     await invalidateAllPlugin(queryClient);
@@ -67,6 +79,13 @@ export default function PluginDetail() {
   const removeServerMutation = useRemovePluginServerMutation({
     onSuccess: () => invalidateAll(),
   });
+
+  const handleRemoveServer = (server: PluginServer) => {
+    removeServerMutation.mutate({
+      security: { sessionHeaderGramSession: "" },
+      request: { id: server.id, pluginId: pluginId! },
+    });
+  };
 
   const handleUpdate: React.FormEventHandler<HTMLFormElement> = (e) => {
     e.preventDefault();
@@ -102,13 +121,6 @@ export default function PluginDetail() {
     });
   };
 
-  const handleRemoveServer = (server: PluginServer) => {
-    removeServerMutation.mutate({
-      security: { sessionHeaderGramSession: "" },
-      request: { id: server.id, pluginId: pluginId! },
-    });
-  };
-
   const handleDownload = async (platform: "claude" | "cursor" | "codex") => {
     setIsDownloadMenuOpen(false);
     try {
@@ -130,40 +142,15 @@ export default function PluginDetail() {
     }
   };
 
-  const serverColumns: Column<PluginServer>[] = [
-    {
-      key: "displayName",
-      header: "Name",
-      width: "2fr",
-      render: (s) => <Type variant="body">{s.displayName}</Type>,
-    },
-    {
-      key: "policy",
-      header: "Policy",
-      width: "100px",
-      render: (s) => <Type variant="body">{s.policy}</Type>,
-    },
-    {
-      key: "actions",
-      header: "",
-      width: "80px",
-      render: (s) => (
-        <Button
-          variant="tertiary"
-          size="sm"
-          onClick={() => handleRemoveServer(s)}
-          className="hover:text-destructive"
-        >
-          <Button.LeftIcon>
-            <Icon name="trash-2" className="h-4 w-4" />
-          </Button.LeftIcon>
-          <Button.Text className="sr-only">Remove</Button.Text>
-        </Button>
-      ),
-    },
-  ];
+  const toolsetById = useMemo(() => {
+    const map = new Map<string, ToolsetEntry>();
+    for (const t of toolsets) map.set(t.id, t);
+    return map;
+  }, [toolsets]);
 
   if (!plugin) return null;
+
+  const servers = plugin.servers ?? [];
 
   return (
     <Page>
@@ -210,32 +197,38 @@ export default function PluginDetail() {
             Add Server
           </Button>
         </Stack>
-        <Table
-          columns={serverColumns}
-          data={plugin.servers ?? []}
-          rowKey={(row) => row.id}
-          noResultsMessage={
-            <Stack
-              gap={2}
-              className="bg-background h-full p-4"
-              align="center"
-              justify="center"
+        {servers.length === 0 ? (
+          <Stack
+            gap={2}
+            className="bg-background mb-8 rounded-md border p-8"
+            align="center"
+            justify="center"
+          >
+            <Type variant="body">No servers added yet</Type>
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => setIsAddServerOpen(true)}
             >
-              <Type variant="body">No servers added yet</Type>
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={() => setIsAddServerOpen(true)}
-              >
-                <Button.LeftIcon>
-                  <Icon name="plus" className="h-4 w-4" />
-                </Button.LeftIcon>
-                <Button.Text>Add Server</Button.Text>
-              </Button>
-            </Stack>
-          }
-          className="mb-8"
-        />
+              <Button.LeftIcon>
+                <Icon name="plus" className="h-4 w-4" />
+              </Button.LeftIcon>
+              <Button.Text>Add Server</Button.Text>
+            </Button>
+          </Stack>
+        ) : (
+          <div className="mb-8 grid grid-cols-1 gap-6 xl:grid-cols-2">
+            {servers.map((server) => (
+              <PluginServerCard
+                key={server.id}
+                server={server}
+                toolset={toolsetById.get(server.toolsetId)}
+                isLoadingToolset={isLoadingToolsets}
+                onRemove={() => handleRemoveServer(server)}
+              />
+            ))}
+          </div>
+        )}
 
         {/* Download section */}
         <Heading variant="h5" className="mb-3">
@@ -369,5 +362,80 @@ export default function PluginDetail() {
         </Dialog>
       </Page.Body>
     </Page>
+  );
+}
+
+function PluginServerCard({
+  server,
+  toolset,
+  isLoadingToolset,
+  onRemove,
+}: {
+  server: PluginServer;
+  toolset: ToolsetEntry | undefined;
+  isLoadingToolset: boolean;
+  onRemove: () => void;
+}) {
+  const routes = useRoutes();
+
+  const handleClick = () => {
+    if (toolset) routes.mcp.details.goTo(toolset.slug);
+  };
+
+  return (
+    <DotCard
+      className={cn(toolset && "cursor-pointer")}
+      onClick={toolset ? handleClick : undefined}
+      icon={<Network className="text-muted-foreground h-8 w-8" />}
+    >
+      <div className="mb-2 flex items-start justify-between gap-2">
+        <Type
+          variant="subheading"
+          as="div"
+          className="text-md group-hover:text-primary flex-1 truncate transition-colors"
+          title={server.displayName}
+        >
+          {server.displayName}
+        </Type>
+        <div className="flex items-center gap-1">
+          {toolset ? (
+            <ToolCollectionBadge toolNames={toolset.tools.map((t) => t.name)} />
+          ) : isLoadingToolset ? (
+            <Skeleton className="h-5 w-16" />
+          ) : (
+            <Badge variant="destructive" className="text-xs">
+              Toolset missing
+            </Badge>
+          )}
+        </div>
+      </div>
+
+      <div className="mt-auto flex items-center justify-between gap-2 pt-2">
+        {toolset ? (
+          <MCPStatusIndicator
+            mcpEnabled={toolset.mcpEnabled}
+            mcpIsPublic={toolset.mcpIsPublic}
+          />
+        ) : isLoadingToolset ? (
+          <Skeleton className="h-3.5 w-20" />
+        ) : (
+          <span />
+        )}
+        <UiButton
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          tooltip="Remove server"
+          aria-label="Remove server"
+          className="hover:text-destructive"
+          onClick={(e) => {
+            e.stopPropagation();
+            onRemove();
+          }}
+        >
+          <Trash2 className="h-4 w-4" />
+        </UiButton>
+      </div>
+    </DotCard>
   );
 }

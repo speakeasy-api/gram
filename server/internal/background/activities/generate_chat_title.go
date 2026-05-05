@@ -69,8 +69,7 @@ func (g *GenerateChatTitle) Do(ctx context.Context, args GenerateChatTitleArgs) 
 		return nil
 	}
 
-	// Build context from the first few user/assistant messages.
-	messages, err := g.repo.ListChatMessages(ctx, repo.ListChatMessagesParams{
+	messages, err := g.repo.ListLatestGenerationChatMessages(ctx, repo.ListLatestGenerationChatMessagesParams{
 		ChatID:    chatID,
 		ProjectID: chat.ProjectID,
 	})

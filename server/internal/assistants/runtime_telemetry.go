@@ -170,6 +170,9 @@ func (t *telemetryRuntimeBackend) emit(
 		attr.AssistantRuntimeIDKey:      runtime.ID.String(),
 		attr.AssistantRuntimeBackendKey: runtime.Backend,
 	}
+	if err != nil {
+		attrs[attr.ErrorMessageKey] = err.Error()
+	}
 	if lc.CorrelationID != "" {
 		attrs[attr.TriggerCorrelationIDKey] = lc.CorrelationID
 	}
@@ -184,9 +187,6 @@ func (t *telemetryRuntimeBackend) emit(
 	}
 	if lc.Attempt > 0 {
 		attrs[attr.AssistantAttemptKey] = int64(lc.Attempt)
-	}
-	if err != nil {
-		attrs[attr.ErrorMessageKey] = err.Error()
 	}
 
 	name := "assistant:" + lc.AssistantName

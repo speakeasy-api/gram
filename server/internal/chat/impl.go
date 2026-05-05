@@ -526,14 +526,13 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 	resultMessages := make([]*gen.ChatMessage, len(messages))
 	for i, msg := range messages {
 		toolCalls := string(msg.ToolCalls)
-		content := s.loadMessageContent(ctx, msg)
 		resultMessages[i] = &gen.ChatMessage{
 			ID:             msg.ID.String(),
 			Role:           msg.Role,
 			Model:          msg.Model.String,
 			UserID:         &msg.UserID.String,
 			ExternalUserID: &msg.ExternalUserID.String,
-			Content:        &content,
+			Content:        s.loadMessageContent(ctx, msg),
 			ToolCalls:      &toolCalls,
 			ToolCallID:     &msg.ToolCallID.String,
 			FinishReason:   &msg.FinishReason.String,
@@ -943,8 +942,7 @@ func (s *Service) SubmitFeedback(ctx context.Context, payload *gen.SubmitFeedbac
 		return nil, oops.E(oops.CodeInvalid, nil, "feedback must be 'success' or 'failure'")
 	}
 
-	// Get the most recent message ID to track where user gave feedback
-	messages, err := s.repo.ListChatMessages(ctx, repo.ListChatMessagesParams{
+	messages, err := s.repo.ListLatestGenerationChatMessages(ctx, repo.ListLatestGenerationChatMessagesParams{
 		ChatID:    chatID,
 		ProjectID: *authCtx.ProjectID,
 	})

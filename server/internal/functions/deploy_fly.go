@@ -635,7 +635,7 @@ func (f *FlyRunner) reap(ctx context.Context, logger *slog.Logger, appsRepo *rep
 // the hard cap.
 func concurrencyLimits(memoryMB int) (softLimit, hardLimit int) {
 	hardLimit = max(memoryMB/48, 4)
-	softLimit = max(hardLimit*3/4, 2)
+	softLimit = max(hardLimit*1/5, 2)
 	return softLimit, hardLimit
 }
 
@@ -656,7 +656,7 @@ func (f *FlyRunner) newMachineConfig(req RunnerDeployRequest, image string, file
 		},
 		Guest: &fly.MachineGuest{
 			CPUKind:       "shared",
-			CPUs:          2,
+			CPUs:          4,
 			MemoryMB:      mem,
 			GPUs:          0,
 			PersistRootfs: fly.MachinePersistRootfsNever,

@@ -128,10 +128,11 @@ type matchResult struct {
 	diverged      bool
 }
 
-// matchIncomingAgainstStored walks the current generation's stored messages
-// against the incoming request to find the longest matching prefix by message
-// slot identity. The first slot mismatch (or a stored row past the end of
-// incoming) signals divergence and triggers a new generation.
+// matchIncomingAgainstStored finds the longest matching prefix between
+// stored and incoming by slot identity. Blank-assistant slots are skipped
+// on both sides — the server may persist them while clients omit them on
+// replay. Any other mismatch, or stored content past the end of incoming,
+// signals divergence and triggers a new generation.
 func (s *ChatMessageCaptureStrategy) matchIncomingAgainstStored(ctx context.Context, chatID uuid.UUID, incoming []or.ChatMessages) (matchResult, error) {
 	currentGen, err := s.repo.GetMaxGenerationForChat(ctx, chatID)
 	if err != nil {
@@ -148,23 +149,50 @@ func (s *ChatMessageCaptureStrategy) matchIncomingAgainstStored(ctx context.Cont
 		return matchResult{}, oops.E(oops.CodeUnexpected, err, "list chat messages for match")
 	}
 
-	matchedPrefix := 0
+	storedSlotAt := func(i int) messageSlot {
+		row := stored[i]
+		return slotFromStored(row.Role, row.Content, row.ToolCallID.String, row.ToolCalls)
+	}
+
+	si, ii := 0, 0
 	diverged := false
-	for i, row := range stored {
-		if i >= len(incoming) {
+	for si < len(stored) && ii < len(incoming) {
+		storedSlot := storedSlotAt(si)
+		if storedSlot.isBlankAssistant() {
+			si++
+			continue
+		}
+		incomingSlot := slotFromIncoming(incoming[ii])
+		if incomingSlot.isBlankAssistant() {
+			ii++
+			continue
+		}
+		if storedSlot != incomingSlot {
 			diverged = true
 			break
 		}
-		if slotFromStored(row.Role, row.Content, row.ToolCallID.String, row.ToolCalls) != slotFromIncoming(incoming[i]) {
-			diverged = true
-			break
+		si++
+		ii++
+	}
+
+	if !diverged {
+		// Drain trailing blanks on both sides: a real stored row past
+		// incoming must trip divergence, and phantom blanks at the head of
+		// the new tail must not be re-persisted by buildPendingRows.
+		for si < len(stored) && storedSlotAt(si).isBlankAssistant() {
+			si++
 		}
-		matchedPrefix = i + 1
+		for ii < len(incoming) && slotFromIncoming(incoming[ii]).isBlankAssistant() {
+			ii++
+		}
+		if si < len(stored) {
+			diverged = true
+		}
 	}
 
 	return matchResult{
 		generation:    currentGen,
-		matchedPrefix: matchedPrefix,
+		matchedPrefix: ii,
 		diverged:      diverged,
 	}, nil
 }

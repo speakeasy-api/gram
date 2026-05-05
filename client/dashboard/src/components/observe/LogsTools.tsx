@@ -48,7 +48,7 @@ import {
   Chart as ChartJS,
 } from "chart.js";
 import { Settings } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import { LogDetailSheet } from "@/pages/logs/LogDetailSheet";
 import { TraceLogsList } from "@/pages/logs/TraceLogsList";
@@ -381,32 +381,26 @@ export function LogsTools() {
     [setSearchParams],
   );
 
-  useEffect(() => {
-    if (!serverInput.trim()) return;
-
-    const timeoutId = setTimeout(() => {
-      addFilter({
-        display: serverInput,
-        filters: [serverInput],
-        path: "gram.tool_call.source",
-      });
-      setServerInput("");
-    }, 500);
-    return () => clearTimeout(timeoutId);
+  const submitServerFilter = useCallback(() => {
+    const trimmed = serverInput.trim();
+    if (!trimmed) return;
+    addFilter({
+      display: trimmed,
+      filters: [trimmed],
+      path: "gram.tool_call.source",
+    });
+    setServerInput("");
   }, [serverInput, addFilter]);
 
-  useEffect(() => {
-    if (!userEmailInput.trim()) return;
-
-    const timeoutId = setTimeout(() => {
-      addFilter({
-        display: userEmailInput,
-        filters: [userEmailInput],
-        path: "user.email",
-      });
-      setUserEmailInput("");
-    }, 500);
-    return () => clearTimeout(timeoutId);
+  const submitUserEmailFilter = useCallback(() => {
+    const trimmed = userEmailInput.trim();
+    if (!trimmed) return;
+    addFilter({
+      display: trimmed,
+      filters: [trimmed],
+      path: "user.email",
+    });
+    setUserEmailInput("");
   }, [userEmailInput, addFilter]);
 
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
@@ -504,8 +498,10 @@ export function LogsTools() {
             groupedTraces={groupedTraces}
             serverInput={serverInput}
             setServerInput={setServerInput}
+            onSubmitServerFilter={submitServerFilter}
             userEmailInput={userEmailInput}
             setUserEmailInput={setUserEmailInput}
+            onSubmitUserEmailFilter={submitUserEmailFilter}
             activeFilters={activeFilters}
             addFilter={addFilter}
             removeFilter={removeFilter}
@@ -542,8 +538,10 @@ function HooksInnerContent({
   groupedTraces,
   serverInput,
   setServerInput,
+  onSubmitServerFilter,
   userEmailInput,
   setUserEmailInput,
+  onSubmitUserEmailFilter,
   activeFilters,
   removeFilter,
   selectedHookTypes,
@@ -573,8 +571,10 @@ function HooksInnerContent({
   groupedTraces: HookTrace[];
   serverInput: string;
   setServerInput: (value: string) => void;
+  onSubmitServerFilter: () => void;
   userEmailInput: string;
   setUserEmailInput: (value: string) => void;
+  onSubmitUserEmailFilter: () => void;
   activeFilters: FilterChip[];
   addFilter: (chip: FilterChip) => void;
   removeFilter: (path: string, display?: string) => void;
@@ -625,7 +625,8 @@ function HooksInnerContent({
             <MultiSearch
               value={serverInput}
               onChange={setServerInput}
-              placeholder="Filter by server name"
+              onSubmit={onSubmitServerFilter}
+              placeholder="Filter by server name (press Enter to add)"
               className="min-w-[200px] flex-1"
               chips={activeFilters
                 .filter((f) => f.path === "gram.tool_call.source")
@@ -637,7 +638,8 @@ function HooksInnerContent({
             <MultiSearch
               value={userEmailInput}
               onChange={setUserEmailInput}
-              placeholder="Filter by user email"
+              onSubmit={onSubmitUserEmailFilter}
+              placeholder="Filter by user email (press Enter to add)"
               className="min-w-[200px] flex-1"
               chips={activeFilters
                 .filter((f) => f.path === "user.email")

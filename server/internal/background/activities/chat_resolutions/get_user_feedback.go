@@ -51,7 +51,7 @@ func (g *GetUserFeedbackForChat) Do(ctx context.Context, args GetUserFeedbackFor
 		return nil, fmt.Errorf("failed to list user feedback message IDs: %w", err)
 	}
 
-	messages, err := g.repo.ListChatMessages(ctx, repo.ListChatMessagesParams{
+	messages, err := g.repo.ListLatestGenerationChatMessages(ctx, repo.ListLatestGenerationChatMessagesParams{
 		ChatID:    args.ChatID,
 		ProjectID: args.ProjectID,
 	})

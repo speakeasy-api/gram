@@ -1415,8 +1415,10 @@ type ChatMessageResponseBody struct {
 	ID string `form:"id" json:"id" xml:"id"`
 	// The role of the message
 	Role string `form:"role" json:"role" xml:"role"`
-	// The content of the message
-	Content *json.RawMessage `form:"content,omitempty" json:"content,omitempty" xml:"content,omitempty"`
+	// The content of the message — string for plain text, array for
+	// multimodal/tool-call content parts, null for assistant messages that only
+	// carry tool_calls
+	Content json.RawMessage `form:"content,omitempty" json:"content,omitempty" xml:"content,omitempty"`
 	// The model that generated the message
 	Model string `form:"model" json:"model" xml:"model"`
 	// The tool call ID of the message

@@ -10,6 +10,7 @@ interface FilterChip {
 export function MultiSearch({
   value,
   onChange,
+  onSubmit,
   placeholder = "Search",
   className,
   disabled,
@@ -18,6 +19,7 @@ export function MultiSearch({
 }: {
   value: string;
   onChange: (value: string) => void;
+  onSubmit?: () => void;
   placeholder?: string;
   className?: string;
   disabled?: boolean;
@@ -65,6 +67,12 @@ export function MultiSearch({
         placeholder={placeholder}
         value={value}
         onChange={(e) => onChange(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && onSubmit && value.trim()) {
+            e.preventDefault();
+            onSubmit();
+          }
+        }}
         disabled={disabled}
         className="min-w-0 flex-1 bg-transparent outline-none disabled:cursor-not-allowed"
       />

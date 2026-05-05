@@ -10,9 +10,9 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type ChatMessage = {
   /**
-   * The content of the message
+   * The content of the message — string for plain text, array for multimodal/tool-call content parts, null for assistant messages that only carry tool_calls
    */
-  content?: string | undefined;
+  content?: any | undefined;
   /**
    * When the message was created.
    */
@@ -59,7 +59,7 @@ export type ChatMessage = {
 export const ChatMessage$inboundSchema: z.ZodMiniType<ChatMessage, unknown> = z
   .pipe(
     z.object({
-      content: z.optional(z.string()),
+      content: z.optional(z.any()),
       created_at: z.pipe(
         z.iso.datetime({ offset: true }),
         z.transform(v => new Date(v)),
