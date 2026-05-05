@@ -50,14 +50,10 @@ type BeginExpireAssistantRuntimeRow struct {
 	WarmUntil           pgtype.Timestamptz
 }
 
-// Atomic CAS to `expiring` on a single thread's runtime row, returning the row
-// needed to drive backend Status/Stop. Accepts both `active` (first attempt)
-// and `expiring` (Temporal-retried attempt after a previous Stop failure) so
-// the caller can re-enter the Status/Stop path idempotently. ErrNoRows means
-// another actor (Stop, reaper, manual API) moved the row to a terminal state,
-// so the caller should not subsequently call Stop. Relies on the partial
-// unique index on (assistant_thread_id) WHERE deleted IS FALSE AND ended IS
-// FALSE.
+// Accepts both `active` and `expiring` so a Temporal-retried attempt (after
+// Stop failed mid-flight) re-enters the Status/Stop path idempotently.
+// ErrNoRows means another actor (Stop, reaper, manual API) already finalized
+// the row; callers must not then call Stop.
 func (q *Queries) BeginExpireAssistantRuntime(ctx context.Context, arg BeginExpireAssistantRuntimeParams) (BeginExpireAssistantRuntimeRow, error) {
 	row := q.db.QueryRow(ctx, beginExpireAssistantRuntime,
 		arg.ExpiringState,
@@ -1064,10 +1060,9 @@ WHERE deleted IS FALSE
       AND warm_until < $5
       AND COALESCE(last_heartbeat_at, updated_at) < $6
     )
-    -- Backstop for ExpireThreadRuntime activities that exhaust Temporal's
-    -- retry budget after CAS active->expiring but before Stop or Revert.
-    -- Without this the row stays in ` + "`" + `expiring` + "`" + ` indefinitely, blocking the
-    -- partial unique index that ReserveAssistantRuntime relies on.
+    -- Backstop for activities that exhaust Temporal's retry budget after CAS
+    -- active->expiring without reaching Stop. Without this the partial unique
+    -- index on (assistant_thread_id) blocks new admits indefinitely.
     OR (state = $7 AND updated_at < $8)
   )
 RETURNING assistant_id
@@ -1333,10 +1328,6 @@ type RevertExpireAssistantRuntimeToActiveParams struct {
 	ExpiringState string
 }
 
-// Reverts an expiring runtime back to active when the post-CAS status re-poll
-// finds the runner busy (a turn slipped in between the warm-TTL timer and the
-// CAS commit). Bumps warm_until so the workflow can re-arm its timer with the
-// remaining warm window.
 func (q *Queries) RevertExpireAssistantRuntimeToActive(ctx context.Context, arg RevertExpireAssistantRuntimeToActiveParams) error {
 	_, err := q.db.Exec(ctx, revertExpireAssistantRuntimeToActive,
 		arg.ActiveState,

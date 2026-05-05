@@ -1,5 +1,4 @@
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 use agentkit_core::{MetadataMap, ToolOutput, ToolResultPart};
@@ -8,6 +7,7 @@ use agentkit_tools_derive::tool;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::json;
+use tempfile::NamedTempFile;
 use tokio::process::Command;
 use tokio::time::timeout;
 
@@ -16,10 +16,6 @@ use crate::workdir::{ASSISTANT_WORKDIR, canonicalize_inside_workdir};
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(600);
 const STDOUT_LIMIT: usize = 50_000;
 const STDERR_LIMIT: usize = 10_000;
-
-// Per-call counter so concurrent inline `bun_run` calls don't trample each
-// other's source file in the persistent workdir.
-static INLINE_SEQ: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct BunRunInput {
@@ -102,27 +98,19 @@ pub async fn bun_run(input: BunRunInput) -> Result<ToolResult, ToolError> {
     })
 }
 
-/// Resolved script path with optional cleanup for inline writes. Inline calls
-/// drop the temp file after the bun process exits so the persistent workdir
-/// doesn't accumulate `.bun-inline-*.ts` cruft.
 #[derive(Debug)]
 enum Script {
-    Inline(PathBuf),
+    /// O_EXCL temp file inside the persistent workdir; deleted on Drop so
+    /// inline calls don't accumulate `.bun-inline-*.ts` cruft.
+    Inline(NamedTempFile),
     File(PathBuf),
 }
 
 impl Script {
     fn path(&self) -> &Path {
         match self {
-            Script::Inline(p) | Script::File(p) => p,
-        }
-    }
-}
-
-impl Drop for Script {
-    fn drop(&mut self) {
-        if let Script::Inline(path) = self {
-            let _ = std::fs::remove_file(path);
+            Script::Inline(f) => f.path(),
+            Script::File(p) => p,
         }
     }
 }
@@ -136,13 +124,17 @@ async fn resolve_script(input: &BunRunInput) -> Result<Script, ToolError> {
             "bun_run requires either `code` or `file`".into(),
         )),
         (Some(code), None) => {
-            let seq = INLINE_SEQ.fetch_add(1, Ordering::Relaxed);
-            let path =
-                PathBuf::from(ASSISTANT_WORKDIR).join(format!(".bun-inline-{seq}.ts"));
-            tokio::fs::write(&path, code)
+            let tmp = tempfile::Builder::new()
+                .prefix(".bun-inline-")
+                .suffix(".ts")
+                .tempfile_in(ASSISTANT_WORKDIR)
+                .map_err(|e| {
+                    ToolError::ExecutionFailed(format!("create inline script: {e}"))
+                })?;
+            tokio::fs::write(tmp.path(), code)
                 .await
                 .map_err(|e| ToolError::ExecutionFailed(format!("write inline script: {e}")))?;
-            Ok(Script::Inline(path))
+            Ok(Script::Inline(tmp))
         }
         (None, Some(file)) => {
             canonicalize_inside_workdir(Path::new(file)).map(Script::File)

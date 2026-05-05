@@ -194,8 +194,9 @@ func AssistantThreadWorkflow(ctx workflow.Context, input AssistantThreadWorkflow
 			}
 
 			if err := workflow.ExecuteActivity(ctx, a.ExpireAssistantThreadRuntime, activities.ExpireAssistantThreadRuntimeInput{
-				ThreadID:  input.ThreadID,
-				ProjectID: input.ProjectID,
+				ThreadID:       input.ThreadID,
+				ProjectID:      input.ProjectID,
+				WarmTTLSeconds: 0, // v0 disables the revert path; activity falls through to Stop.
 			}).Get(ctx, nil); err != nil {
 				return err
 			}

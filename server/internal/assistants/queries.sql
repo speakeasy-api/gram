@@ -13,10 +13,9 @@ WHERE deleted IS FALSE
       AND warm_until < @warm_cutoff
       AND COALESCE(last_heartbeat_at, updated_at) < @heartbeat_cutoff
     )
-    -- Backstop for ExpireThreadRuntime activities that exhaust Temporal's
-    -- retry budget after CAS active->expiring but before Stop or Revert.
-    -- Without this the row stays in `expiring` indefinitely, blocking the
-    -- partial unique index that ReserveAssistantRuntime relies on.
+    -- Backstop for activities that exhaust Temporal's retry budget after CAS
+    -- active->expiring without reaching Stop. Without this the partial unique
+    -- index on (assistant_thread_id) blocks new admits indefinitely.
     OR (state = @expiring_state AND updated_at < @expiring_cutoff)
   )
 RETURNING assistant_id;
@@ -504,14 +503,10 @@ WHERE id = @runtime_id
   AND project_id = @project_id;
 
 -- name: BeginExpireAssistantRuntime :one
--- Atomic CAS to `expiring` on a single thread's runtime row, returning the row
--- needed to drive backend Status/Stop. Accepts both `active` (first attempt)
--- and `expiring` (Temporal-retried attempt after a previous Stop failure) so
--- the caller can re-enter the Status/Stop path idempotently. ErrNoRows means
--- another actor (Stop, reaper, manual API) moved the row to a terminal state,
--- so the caller should not subsequently call Stop. Relies on the partial
--- unique index on (assistant_thread_id) WHERE deleted IS FALSE AND ended IS
--- FALSE.
+-- Accepts both `active` and `expiring` so a Temporal-retried attempt (after
+-- Stop failed mid-flight) re-enters the Status/Stop path idempotently.
+-- ErrNoRows means another actor (Stop, reaper, manual API) already finalized
+-- the row; callers must not then call Stop.
 UPDATE assistant_runtimes
 SET
   state = @expiring_state,
@@ -524,10 +519,6 @@ WHERE project_id = @project_id
 RETURNING id, assistant_thread_id, assistant_id, project_id, backend, backend_metadata_json, state, warm_until;
 
 -- name: RevertExpireAssistantRuntimeToActive :exec
--- Reverts an expiring runtime back to active when the post-CAS status re-poll
--- finds the runner busy (a turn slipped in between the warm-TTL timer and the
--- CAS commit). Bumps warm_until so the workflow can re-arm its timer with the
--- remaining warm window.
 UPDATE assistant_runtimes
 SET
   state = @active_state,
