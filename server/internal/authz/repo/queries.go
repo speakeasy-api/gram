@@ -123,3 +123,156 @@ func (q *Queries) InsertChallenge(ctx context.Context, row ChallengeRow) error {
 	}
 	return nil
 }
+
+// ChallengeListFilters controls which rows ListChallenges returns.
+type ChallengeListFilters struct {
+	OrganizationID string
+	ProjectID      string // empty = no filter
+	Outcome        string // empty = no filter
+	PrincipalURN   string // empty = no filter
+	Scope          string // empty = no filter
+	Limit          uint64
+	Offset         uint64
+}
+
+// ChallengeSummary is the subset of a challenge row returned by ListChallenges.
+type ChallengeSummary struct {
+	ID                  string
+	Timestamp           string // RFC 3339
+	OrganizationID      string
+	ProjectID           string
+	PrincipalURN        string
+	PrincipalType       string
+	UserID              *string
+	UserEmail           *string
+	Operation           string
+	Outcome             string
+	Reason              string
+	Scope               string
+	ResourceKind        string
+	ResourceID          string
+	RoleSlugs           []string
+	EvaluatedGrantCount uint32
+	MatchedGrantCount   uint64
+}
+
+// ListChallenges queries ClickHouse for authz challenge events.
+func (q *Queries) ListChallenges(ctx context.Context, f ChallengeListFilters) ([]ChallengeSummary, error) {
+	qb := sq.Select(
+		"id",
+		"formatDateTime(timestamp, '%Y-%m-%dT%H:%i:%S.000Z', 'UTC') AS ts",
+		"organization_id",
+		"project_id",
+		"principal_urn",
+		"principal_type",
+		"user_id",
+		"user_email",
+		"operation",
+		"outcome",
+		"reason",
+		"scope",
+		"resource_kind",
+		"resource_id",
+		"role_slugs",
+		"evaluated_grant_count",
+		"length(matched_grants.scope) AS matched_grant_count",
+	).From("authz_challenges").
+		Where(squirrel.Eq{"organization_id": f.OrganizationID}).
+		OrderBy("timestamp DESC").
+		Limit(f.Limit).
+		Offset(f.Offset)
+
+	if f.ProjectID != "" {
+		qb = qb.Where(squirrel.Eq{"project_id": f.ProjectID})
+	}
+	if f.Outcome != "" {
+		qb = qb.Where(squirrel.Eq{"outcome": f.Outcome})
+	}
+	if f.PrincipalURN != "" {
+		qb = qb.Where(squirrel.Eq{"principal_urn": f.PrincipalURN})
+	}
+	if f.Scope != "" {
+		qb = qb.Where(squirrel.Eq{"scope": f.Scope})
+	}
+
+	query, args, err := qb.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("build list challenges query: %w", err)
+	}
+
+	rows, err := q.conn.Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("exec list challenges: %w", err)
+	}
+	defer rows.Close() //nolint:errcheck // best-effort close
+
+	var results []ChallengeSummary
+	for rows.Next() {
+		var r ChallengeSummary
+		if err := rows.Scan(
+			&r.ID,
+			&r.Timestamp,
+			&r.OrganizationID,
+			&r.ProjectID,
+			&r.PrincipalURN,
+			&r.PrincipalType,
+			&r.UserID,
+			&r.UserEmail,
+			&r.Operation,
+			&r.Outcome,
+			&r.Reason,
+			&r.Scope,
+			&r.ResourceKind,
+			&r.ResourceID,
+			&r.RoleSlugs,
+			&r.EvaluatedGrantCount,
+			&r.MatchedGrantCount,
+		); err != nil {
+			return nil, fmt.Errorf("scan challenge row: %w", err)
+		}
+		results = append(results, r)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate challenge rows: %w", err)
+	}
+	return results, nil
+}
+
+// CountChallenges returns the total number of matching challenges for pagination.
+func (q *Queries) CountChallenges(ctx context.Context, f ChallengeListFilters) (uint64, error) {
+	qb := sq.Select("count(*)").
+		From("authz_challenges").
+		Where(squirrel.Eq{"organization_id": f.OrganizationID})
+
+	if f.ProjectID != "" {
+		qb = qb.Where(squirrel.Eq{"project_id": f.ProjectID})
+	}
+	if f.Outcome != "" {
+		qb = qb.Where(squirrel.Eq{"outcome": f.Outcome})
+	}
+	if f.PrincipalURN != "" {
+		qb = qb.Where(squirrel.Eq{"principal_urn": f.PrincipalURN})
+	}
+	if f.Scope != "" {
+		qb = qb.Where(squirrel.Eq{"scope": f.Scope})
+	}
+
+	query, args, err := qb.ToSql()
+	if err != nil {
+		return 0, fmt.Errorf("build count challenges query: %w", err)
+	}
+
+	rows, err := q.conn.Query(ctx, query, args...)
+	if err != nil {
+		return 0, fmt.Errorf("exec count challenges: %w", err)
+	}
+	defer rows.Close() //nolint:errcheck // best-effort close
+
+	var count uint64
+	if rows.Next() {
+		if err := rows.Scan(&count); err != nil {
+			return 0, fmt.Errorf("scan count: %w", err)
+		}
+	}
+	return count, nil
+}

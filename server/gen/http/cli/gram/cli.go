@@ -20,6 +20,7 @@ import (
 	assistantsc "github.com/speakeasy-api/gram/server/gen/http/assistants/client"
 	auditlogsc "github.com/speakeasy-api/gram/server/gen/http/auditlogs/client"
 	authc "github.com/speakeasy-api/gram/server/gen/http/auth/client"
+	authzc "github.com/speakeasy-api/gram/server/gen/http/authz/client"
 	chatc "github.com/speakeasy-api/gram/server/gen/http/chat/client"
 	chatsessionsc "github.com/speakeasy-api/gram/server/gen/http/chat_sessions/client"
 	collectionsc "github.com/speakeasy-api/gram/server/gen/http/collections/client"
@@ -68,6 +69,7 @@ func UsageCommands() []string {
 		"assistants (list-assistants|get-assistant|create-assistant|update-assistant|delete-assistant)",
 		"auditlogs (list|list-facets)",
 		"auth (callback|login|switch-scopes|logout|register|info)",
+		"authz (list-challenges|resolve-challenge)",
 		"chat (list-chats|load-chat|generate-title|credit-usage|list-chats-with-resolutions|delete-chat|submit-feedback)",
 		"chat-sessions (create|revoke)",
 		"deployments (get-deployment|get-latest-deployment|get-active-deployment|create-deployment|evolve|redeploy|list-deployments|get-deployment-logs)",
@@ -325,6 +327,24 @@ func ParseEndpoint(
 
 		authInfoFlags            = flag.NewFlagSet("info", flag.ExitOnError)
 		authInfoSessionTokenFlag = authInfoFlags.String("session-token", "", "")
+
+		authzFlags = flag.NewFlagSet("authz", flag.ContinueOnError)
+
+		authzListChallengesFlags            = flag.NewFlagSet("list-challenges", flag.ExitOnError)
+		authzListChallengesOutcomeFlag      = authzListChallengesFlags.String("outcome", "", "")
+		authzListChallengesPrincipalUrnFlag = authzListChallengesFlags.String("principal-urn", "", "")
+		authzListChallengesScopeFlag        = authzListChallengesFlags.String("scope", "", "")
+		authzListChallengesProjectIDFlag    = authzListChallengesFlags.String("project-id", "", "")
+		authzListChallengesResolvedFlag     = authzListChallengesFlags.String("resolved", "", "")
+		authzListChallengesLimitFlag        = authzListChallengesFlags.String("limit", "50", "")
+		authzListChallengesOffsetFlag       = authzListChallengesFlags.String("offset", "", "")
+		authzListChallengesApikeyTokenFlag  = authzListChallengesFlags.String("apikey-token", "", "")
+		authzListChallengesSessionTokenFlag = authzListChallengesFlags.String("session-token", "", "")
+
+		authzResolveChallengeFlags            = flag.NewFlagSet("resolve-challenge", flag.ExitOnError)
+		authzResolveChallengeBodyFlag         = authzResolveChallengeFlags.String("body", "REQUIRED", "")
+		authzResolveChallengeApikeyTokenFlag  = authzResolveChallengeFlags.String("apikey-token", "", "")
+		authzResolveChallengeSessionTokenFlag = authzResolveChallengeFlags.String("session-token", "", "")
 
 		chatFlags = flag.NewFlagSet("chat", flag.ContinueOnError)
 
@@ -1377,6 +1397,10 @@ func ParseEndpoint(
 	authRegisterFlags.Usage = authRegisterUsage
 	authInfoFlags.Usage = authInfoUsage
 
+	authzFlags.Usage = authzUsage
+	authzListChallengesFlags.Usage = authzListChallengesUsage
+	authzResolveChallengeFlags.Usage = authzResolveChallengeUsage
+
 	chatFlags.Usage = chatUsage
 	chatListChatsFlags.Usage = chatListChatsUsage
 	chatLoadChatFlags.Usage = chatLoadChatUsage
@@ -1642,6 +1666,8 @@ func ParseEndpoint(
 			svcf = auditlogsFlags
 		case "auth":
 			svcf = authFlags
+		case "authz":
+			svcf = authzFlags
 		case "chat":
 			svcf = chatFlags
 		case "chat-sessions":
@@ -1863,6 +1889,16 @@ func ParseEndpoint(
 
 			case "info":
 				epf = authInfoFlags
+
+			}
+
+		case "authz":
+			switch epn {
+			case "list-challenges":
+				epf = authzListChallengesFlags
+
+			case "resolve-challenge":
+				epf = authzResolveChallengeFlags
 
 			}
 
@@ -2684,6 +2720,16 @@ func ParseEndpoint(
 			case "info":
 				endpoint = c.Info()
 				data, err = authc.BuildInfoPayload(*authInfoSessionTokenFlag)
+			}
+		case "authz":
+			c := authzc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "list-challenges":
+				endpoint = c.ListChallenges()
+				data, err = authzc.BuildListChallengesPayload(*authzListChallengesOutcomeFlag, *authzListChallengesPrincipalUrnFlag, *authzListChallengesScopeFlag, *authzListChallengesProjectIDFlag, *authzListChallengesResolvedFlag, *authzListChallengesLimitFlag, *authzListChallengesOffsetFlag, *authzListChallengesApikeyTokenFlag, *authzListChallengesSessionTokenFlag)
+			case "resolve-challenge":
+				endpoint = c.ResolveChallenge()
+				data, err = authzc.BuildResolveChallengePayload(*authzResolveChallengeBodyFlag, *authzResolveChallengeApikeyTokenFlag, *authzResolveChallengeSessionTokenFlag)
 			}
 		case "chat":
 			c := chatc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -4285,6 +4331,73 @@ func authInfoUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auth info --session-token \"abc123\"")
+}
+
+// authzUsage displays the usage of the authz command and its subcommands.
+func authzUsage() {
+	fmt.Fprintln(os.Stderr, `Query and resolve authorization challenge events.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] authz COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    list-challenges: List authz challenge events from ClickHouse, enriched with resolution state from PostgreSQL.`)
+	fmt.Fprintln(os.Stderr, `    resolve-challenge: Record a resolution for a denied authz challenge. The caller is responsible for assigning the role first.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s authz COMMAND --help\n", os.Args[0])
+}
+func authzListChallengesUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] authz list-challenges", os.Args[0])
+	fmt.Fprint(os.Stderr, " -outcome STRING")
+	fmt.Fprint(os.Stderr, " -principal-urn STRING")
+	fmt.Fprint(os.Stderr, " -scope STRING")
+	fmt.Fprint(os.Stderr, " -project-id STRING")
+	fmt.Fprint(os.Stderr, " -resolved BOOL")
+	fmt.Fprint(os.Stderr, " -limit INT")
+	fmt.Fprint(os.Stderr, " -offset INT")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List authz challenge events from ClickHouse, enriched with resolution state from PostgreSQL.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -outcome STRING: `)
+	fmt.Fprintln(os.Stderr, `    -principal-urn STRING: `)
+	fmt.Fprintln(os.Stderr, `    -scope STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -resolved BOOL: `)
+	fmt.Fprintln(os.Stderr, `    -limit INT: `)
+	fmt.Fprintln(os.Stderr, `    -offset INT: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "authz list-challenges --outcome \"deny\" --principal-urn \"abc123\" --scope \"abc123\" --project-id \"abc123\" --resolved false --limit 2 --offset 1 --apikey-token \"abc123\" --session-token \"abc123\"")
+}
+
+func authzResolveChallengeUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] authz resolve-challenge", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Record a resolution for a denied authz challenge. The caller is responsible for assigning the role first.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "authz resolve-challenge --body '{\n      \"challenge_id\": \"abc123\",\n      \"principal_urn\": \"abc123\",\n      \"resolution_type\": \"dismissed\",\n      \"resource_id\": \"abc123\",\n      \"resource_kind\": \"abc123\",\n      \"role_slug\": \"abc123\",\n      \"scope\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
 }
 
 // chatUsage displays the usage of the chat command and its subcommands.
