@@ -5,11 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"slices"
 	"time"
 
-	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	"github.com/ClickHouse/clickhouse-go/v2"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	authzrepo "github.com/speakeasy-api/gram/server/internal/authz/repo"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -54,22 +55,26 @@ func (r roleSlugCache) AdditionalCacheKeys() []string {
 
 type Engine struct {
 	logger     *slog.Logger
-	db         accessrepo.DBTX
+	db         *pgxpool.Pool
+	chDB       clickhouse.Conn
 	isEnabled  IsRBACEnabled
 	isDev      bool
 	membership MembershipFetcher
 	roleCache  cache.TypedCacheObject[roleSlugCache]
 }
 
-func NewEngine(logger *slog.Logger, db accessrepo.DBTX, isEnabled IsRBACEnabled, membership MembershipFetcher, roleCache cache.Cache, opts ...EngineOpts) *Engine {
+func NewEngine(logger *slog.Logger, db *pgxpool.Pool, chDB clickhouse.Conn, isEnabled IsRBACEnabled, membership MembershipFetcher, roleCache cache.Cache, opts ...EngineOpts) *Engine {
 	var devMode bool
 	if len(opts) > 0 {
 		devMode = opts[0].DevMode
 	}
 
+	authzLogger := logger.With(attr.SlogComponent("authz"))
+
 	return &Engine{
-		logger:     logger.With(attr.SlogComponent("authz")),
+		logger:     authzLogger,
 		db:         db,
+		chDB:       chDB,
 		isEnabled:  isEnabled,
 		isDev:      devMode,
 		membership: membership,
@@ -257,16 +262,58 @@ func (e *Engine) Require(ctx context.Context, checks ...Check) error {
 		return e.mapError(ctx, ErrMissingGrants)
 	}
 
+	matches := make([]grantMatch, 0, len(checks))
 	for _, check := range checks {
 		if err := validateInput(check); err != nil {
+			challengeLogger{
+				Operation:            authzrepo.OperationRequire,
+				Outcome:              authzrepo.OutcomeError,
+				Reason:               authzrepo.ReasonInvalidCheck,
+				Checks:               checks,
+				Focus:                &check,
+				Matches:              nil,
+				EvaluatedGrantCount:  uint32(len(grants)), //nolint:gosec // grant count is small
+				FilterCandidateCount: 0,
+				FilterAllowedCount:   0,
+			}.Log(ctx, e.chDB, e.logger)
 			return e.mapError(ctx, err)
 		}
 
-		if !grantsSatisfy(grants, check.expand()) {
+		expanded := check.expand()
+
+		matchedGrant, matchedCheck := findMatchingGrant(grants, expanded)
+		if matchedGrant == nil {
+			reason := authzrepo.ReasonScopeUnsatisfied
+			if len(grants) == 0 {
+				reason = authzrepo.ReasonNoGrants
+			}
+			challengeLogger{
+				Operation:            authzrepo.OperationRequire,
+				Outcome:              authzrepo.OutcomeDeny,
+				Reason:               reason,
+				Checks:               checks,
+				Focus:                &check,
+				Matches:              nil,
+				EvaluatedGrantCount:  uint32(len(grants)), //nolint:gosec // grant count is small
+				FilterCandidateCount: 0,
+				FilterAllowedCount:   0,
+			}.Log(ctx, e.chDB, e.logger)
 			return e.mapError(ctx, Denied(check.Scope, check.selector()))
 		}
+		matches = append(matches, grantMatch{Grant: *matchedGrant, ViaCheck: *matchedCheck})
 	}
 
+	challengeLogger{
+		Operation:            authzrepo.OperationRequire,
+		Outcome:              authzrepo.OutcomeAllow,
+		Reason:               authzrepo.ReasonGrantMatched,
+		Checks:               checks,
+		Focus:                &checks[0],
+		Matches:              matches,
+		EvaluatedGrantCount:  uint32(len(grants)), //nolint:gosec // grant count is small
+		FilterCandidateCount: 0,
+		FilterAllowedCount:   0,
+	}.Log(ctx, e.chDB, e.logger)
 	return nil
 }
 
@@ -289,14 +336,53 @@ func (e *Engine) RequireAny(ctx context.Context, checks ...Check) error {
 
 	for _, check := range checks {
 		if err := validateInput(check); err != nil {
+			challengeLogger{
+				Operation:            authzrepo.OperationRequireAny,
+				Outcome:              authzrepo.OutcomeError,
+				Reason:               authzrepo.ReasonInvalidCheck,
+				Checks:               checks,
+				Focus:                &check,
+				Matches:              nil,
+				EvaluatedGrantCount:  uint32(len(grants)), //nolint:gosec // grant count is small
+				FilterCandidateCount: 0,
+				FilterAllowedCount:   0,
+			}.Log(ctx, e.chDB, e.logger)
 			return e.mapError(ctx, err)
 		}
 	}
 
-	if slices.ContainsFunc(checks, func(c Check) bool { return grantsSatisfy(grants, c.expand()) }) {
-		return nil
+	for _, check := range checks {
+		if matchedGrant, matchedCheck := findMatchingGrant(grants, check.expand()); matchedGrant != nil {
+			challengeLogger{
+				Operation:            authzrepo.OperationRequireAny,
+				Outcome:              authzrepo.OutcomeAllow,
+				Reason:               authzrepo.ReasonGrantMatched,
+				Checks:               checks,
+				Focus:                &check,
+				Matches:              []grantMatch{{Grant: *matchedGrant, ViaCheck: *matchedCheck}},
+				EvaluatedGrantCount:  uint32(len(grants)), //nolint:gosec // grant count is small
+				FilterCandidateCount: 0,
+				FilterAllowedCount:   0,
+			}.Log(ctx, e.chDB, e.logger)
+			return nil
+		}
 	}
 
+	reason := authzrepo.ReasonScopeUnsatisfied
+	if len(grants) == 0 {
+		reason = authzrepo.ReasonNoGrants
+	}
+	challengeLogger{
+		Operation:            authzrepo.OperationRequireAny,
+		Outcome:              authzrepo.OutcomeDeny,
+		Reason:               reason,
+		Checks:               checks,
+		Focus:                &checks[0],
+		Matches:              nil,
+		EvaluatedGrantCount:  uint32(len(grants)), //nolint:gosec // grant count is small
+		FilterCandidateCount: 0,
+		FilterAllowedCount:   0,
+	}.Log(ctx, e.chDB, e.logger)
 	return e.mapError(ctx, Denied(checks[0].Scope, checks[0].selector()))
 }
 
@@ -324,11 +410,54 @@ func (e *Engine) Filter(ctx context.Context, checks []Check) ([]string, error) {
 	allowed := make([]string, 0, len(checks))
 	for _, c := range checks {
 		if err := validateInput(c); err != nil {
+			focus := c
+			challengeLogger{
+				Operation:            authzrepo.OperationFilter,
+				Outcome:              authzrepo.OutcomeError,
+				Reason:               authzrepo.ReasonInvalidCheck,
+				Checks:               checks,
+				Focus:                &focus,
+				Matches:              nil,
+				EvaluatedGrantCount:  uint32(len(grants)), //nolint:gosec // grant count is small
+				FilterCandidateCount: uint32(len(checks)), //nolint:gosec // candidate count is small
+				FilterAllowedCount:   0,
+			}.Log(ctx, e.chDB, e.logger)
 			return nil, e.mapError(ctx, err)
 		}
-		if grantsSatisfy(grants, c.expand()) {
+
+		if matchedGrant, matchedCheck := findMatchingGrant(grants, c.expand()); matchedGrant != nil {
 			allowed = append(allowed, c.ResourceID)
+			focus := c
+			challengeLogger{
+				Operation:            authzrepo.OperationFilter,
+				Outcome:              authzrepo.OutcomeAllow,
+				Reason:               authzrepo.ReasonGrantMatched,
+				Checks:               checks,
+				Focus:                &focus,
+				Matches:              []grantMatch{{Grant: *matchedGrant, ViaCheck: *matchedCheck}},
+				EvaluatedGrantCount:  uint32(len(grants)), //nolint:gosec // grant count is small
+				FilterCandidateCount: uint32(len(checks)), //nolint:gosec // candidate count is small
+				FilterAllowedCount:   1,
+			}.Log(ctx, e.chDB, e.logger)
+			continue
 		}
+
+		reason := authzrepo.ReasonScopeUnsatisfied
+		if len(grants) == 0 {
+			reason = authzrepo.ReasonNoGrants
+		}
+		focus := c
+		challengeLogger{
+			Operation:            authzrepo.OperationFilter,
+			Outcome:              authzrepo.OutcomeDeny,
+			Reason:               reason,
+			Checks:               checks,
+			Focus:                &focus,
+			Matches:              nil,
+			EvaluatedGrantCount:  uint32(len(grants)), //nolint:gosec // grant count is small
+			FilterCandidateCount: uint32(len(checks)), //nolint:gosec // candidate count is small
+			FilterAllowedCount:   0,
+		}.Log(ctx, e.chDB, e.logger)
 	}
 
 	return allowed, nil

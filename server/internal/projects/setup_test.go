@@ -29,7 +29,7 @@ var (
 )
 
 func TestMain(m *testing.M) {
-	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Redis: true})
+	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Redis: true, ClickHouse: true})
 	if err != nil {
 		log.Fatalf("Failed to launch test infrastructure: %v", err)
 		os.Exit(1)
@@ -89,7 +89,10 @@ func newTestProjectsService(t *testing.T, enableRBAC bool) (context.Context, *te
 	// Create test asset storage for testing
 	assetStorage := assetstest.NewTestBlobStore(t)
 
-	svc := projects.NewService(logger, tracerProvider, conn, sessionManager, authz.NewEngine(logger, conn, func(context.Context, string) (bool, error) {
+	chConn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+
+	svc := projects.NewService(logger, tracerProvider, conn, sessionManager, authz.NewEngine(logger, conn, chConn, func(context.Context, string) (bool, error) {
 		return enableRBAC, nil
 	}, workos.NewStubClient(), cache.NoopCache))
 

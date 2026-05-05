@@ -35,7 +35,7 @@ func (noopFeatureCacheWriter) UpdateFeatureCache(context.Context, string, produc
 }
 
 func TestMain(m *testing.M) {
-	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Redis: true})
+	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Redis: true, ClickHouse: true})
 	if err != nil {
 		log.Fatalf("Failed to launch test infrastructure: %v", err)
 	}
@@ -86,7 +86,10 @@ func newTestAccessService(t *testing.T) (context.Context, *testInstance) {
 
 	roles := newMockRoleProvider(t)
 
-	svc := NewService(logger, tracerProvider, conn, sessionManager, roles, authz.NewEngine(logger, conn, authztest.RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache), noopFeatureCacheWriter{})
+	chConn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+
+	svc := NewService(logger, tracerProvider, conn, sessionManager, roles, authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache), noopFeatureCacheWriter{})
 
 	return ctx, &testInstance{
 		service: svc,
