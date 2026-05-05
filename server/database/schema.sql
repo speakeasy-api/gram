@@ -2251,3 +2251,38 @@ ON risk_results (project_id, chat_message_id);
 CREATE INDEX IF NOT EXISTS risk_results_project_found_idx
 ON risk_results (project_id, created_at DESC)
 WHERE found IS TRUE;
+
+CREATE TABLE IF NOT EXISTS authz_challenge_resolutions (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  challenge_id TEXT NOT NULL,
+
+  principal_urn TEXT NOT NULL,
+  scope TEXT NOT NULL,
+  resource_kind TEXT NOT NULL DEFAULT '',
+  resource_id TEXT NOT NULL DEFAULT '',
+
+  resolution_type TEXT NOT NULL,
+  role_slug TEXT,
+  notes TEXT,
+
+  resolved_by TEXT NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT authz_challenge_resolutions_pkey PRIMARY KEY (id),
+  CONSTRAINT authz_challenge_resolutions_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
+);
+
+COMMENT ON TABLE authz_challenge_resolutions IS 'Tracks admin resolutions of authz challenge denials. challenge_id references authz_challenges.id in ClickHouse (soft cross-DB reference).';
+COMMENT ON COLUMN authz_challenge_resolutions.challenge_id IS 'UUID of the denied challenge in the ClickHouse authz_challenges table.';
+COMMENT ON COLUMN authz_challenge_resolutions.principal_urn IS 'The principal that was denied, copied from the challenge for query convenience.';
+COMMENT ON COLUMN authz_challenge_resolutions.resolution_type IS 'How the challenge was resolved: role_assigned, dismissed.';
+COMMENT ON COLUMN authz_challenge_resolutions.role_slug IS 'When resolution_type=role_assigned, the role slug that was assigned to the principal.';
+COMMENT ON COLUMN authz_challenge_resolutions.resolved_by IS 'URN of the admin who resolved the challenge.';
+
+CREATE UNIQUE INDEX IF NOT EXISTS authz_challenge_resolutions_org_challenge_key
+ON authz_challenge_resolutions (organization_id, challenge_id);
+
+CREATE INDEX IF NOT EXISTS authz_challenge_resolutions_org_principal_idx
+ON authz_challenge_resolutions (organization_id, principal_urn);
