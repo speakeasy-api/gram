@@ -1,4 +1,4 @@
-import { CircleCheck, CircleDashed, Settings2 } from "lucide-react";
+import { CircleCheck, ExternalLink, Settings2 } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { cn } from "@/lib/utils";
 import {
@@ -15,34 +15,42 @@ import { PROVIDER_INFO } from "@/lib/provider-info";
 import { EnvReadout } from "@/components/EnvReadout";
 
 /**
- * Right-column sidebar that answers two questions at a glance:
+ * Right-column sidebar — answers two questions:
  *  1. Which provider is Gram talking to right now?
  *  2. What does that provider actually do?
  *
- * It also lists the other available modes so the developer has somewhere to
- * jump for activation instructions / discovery endpoints without us cluttering
- * the dashboard primary surface.
+ * Switching providers is intentionally pushed to the deeper /providers/$mode
+ * route since it requires editing env vars and a Gram restart — not a
+ * one-click action.
  */
 export function ActiveProviderPanel() {
   const { data, isLoading } = useGramMode();
   const activeMode = data?.mode ?? null;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 lg:sticky lg:top-4">
       <Card>
-        <CardHeader>
+        <CardHeader className="border-b pb-4">
           <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-mono">
             Active provider
           </div>
-          <CardTitle className="font-mono text-lg">
-            {isLoading
-              ? "…"
-              : activeMode
-                ? MODE_LABELS[activeMode]
-                : "none"}
+          <CardTitle className="font-mono text-lg flex items-center gap-2">
+            {isLoading ? (
+              "…"
+            ) : activeMode ? (
+              <>
+                <span
+                  className="inline-block size-2 rounded-full bg-[var(--retro-green)] shadow-[0_0_6px_var(--retro-green)]"
+                  aria-hidden="true"
+                />
+                {MODE_LABELS[activeMode]}
+              </>
+            ) : (
+              "none"
+            )}
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-3">
+        <CardContent className="space-y-4">
           {isLoading ? (
             <div className="text-xs text-muted-foreground">Loading…</div>
           ) : activeMode ? (
@@ -53,7 +61,7 @@ export function ActiveProviderPanel() {
         </CardContent>
       </Card>
 
-      {activeMode && <OtherProvidersList active={activeMode} />}
+      {activeMode && <SwitchProviderCard active={activeMode} />}
 
       <EnvReadout />
     </div>
@@ -70,14 +78,16 @@ function ActiveDetails({ mode }: { mode: Mode }) {
           strokeWidth={2.5}
         />
         <div className="text-xs leading-relaxed">
-          <span className="font-semibold">Gram is logging in via this provider.</span>
+          <span className="font-semibold">
+            Gram is logging in via this provider.
+          </span>
           <div className="text-muted-foreground mt-0.5">
             {MODE_SUBTITLES[mode]}
           </div>
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-1.5 pt-1">
+      <div className="flex flex-wrap gap-1.5">
         {info.capabilities.map((c) => (
           <CapabilityBadge key={c}>{c}</CapabilityBadge>
         ))}
@@ -115,34 +125,31 @@ function UnconfiguredDetails() {
   );
 }
 
-function OtherProvidersList({ active }: { active: Mode }) {
+function SwitchProviderCard({ active }: { active: Mode }) {
   const others = MODES.filter((m) => m !== active);
   return (
     <Card size="sm">
       <CardHeader>
-        <CardTitle className="text-sm flex items-center gap-2">
-          <CircleDashed className="size-3.5 text-muted-foreground" />
-          Other providers
+        <CardTitle className="text-xs font-mono uppercase tracking-wider text-muted-foreground">
+          Switch provider
         </CardTitle>
       </CardHeader>
-      <CardContent className="-my-1">
-        <ul className="divide-y divide-border">
+      <CardContent>
+        <ul className="-my-1">
           {others.map((m) => (
             <li key={m}>
               <Link
                 to="/providers/$mode"
                 params={{ mode: m }}
                 className={cn(
-                  "block py-2 group",
-                  "text-muted-foreground hover:text-foreground",
+                  "flex items-center gap-2 py-1.5 -mx-2 px-2 rounded",
+                  "text-sm hover:bg-muted/60 group/link transition-colors",
                 )}
               >
-                <div className="font-mono text-sm font-medium">
+                <span className="font-mono font-medium flex-1 truncate">
                   {MODE_LABELS[m]}
-                </div>
-                <div className="text-[11px] text-muted-foreground/80 leading-snug">
-                  {MODE_SUBTITLES[m]}
-                </div>
+                </span>
+                <ExternalLink className="size-3 text-muted-foreground opacity-0 group-hover/link:opacity-100 transition-opacity" />
               </Link>
             </li>
           ))}

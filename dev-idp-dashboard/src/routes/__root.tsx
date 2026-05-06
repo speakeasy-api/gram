@@ -7,6 +7,7 @@ import {
 } from "@tanstack/react-router";
 import { QueryClientProvider, type QueryClient } from "@tanstack/react-query";
 import type { ReactNode } from "react";
+import { ActiveModeChip } from "@/components/dashboard/ActiveModeChip";
 import appCss from "@/styles/app.css?url";
 
 interface RouterContext {
@@ -33,13 +34,16 @@ function RootComponent() {
     <QueryClientProvider client={queryClient}>
       <div className="min-h-screen flex flex-col">
         <header className="border-b border-border px-6 py-4">
-          <div className="max-w-6xl mx-auto flex items-baseline gap-3">
-            <h1 className="font-heading text-lg font-semibold tracking-tight">
-              dev-idp
-            </h1>
-            <span className="text-xs text-muted-foreground">
-              local identity provider for Gram development
-            </span>
+          <div className="max-w-6xl mx-auto flex items-center justify-between gap-4">
+            <div className="flex items-baseline gap-3 min-w-0">
+              <h1 className="font-heading text-lg font-semibold tracking-tight">
+                dev-idp
+              </h1>
+              <span className="text-xs text-muted-foreground hidden sm:inline truncate">
+                local identity provider for Gram development
+              </span>
+            </div>
+            <ActiveModeChip />
           </div>
         </header>
         <main className="flex-1 px-6 py-6">

@@ -1,17 +1,19 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Building2, Pencil } from "lucide-react";
+import { Building2, Pencil, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   Card,
+  CardAction,
   CardContent,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { useMemberships, useOrganizations } from "@/hooks/use-devidp";
+import { useMemberships, useOrganizations, useUsers } from "@/hooks/use-devidp";
 import type { Mode, User, WorkosCurrentUser } from "@/lib/devidp";
 import { EditOrgModal } from "@/components/EditOrgModal";
+import { EditUserModal } from "@/components/EditUserModal";
 
 interface WorkosShadow {
   workos_sub: string;
@@ -31,9 +33,9 @@ interface Props {
 }
 
 /**
- * Resolves the local user-id we should look up memberships for, regardless
- * of which mode is active. local-speakeasy returns the user id directly;
- * workos has to bounce through the shadow lookup.
+ * Resolves the local user-id to look up memberships against, regardless of
+ * mode. local-speakeasy hands us the id directly; workos requires a bounce
+ * through the shadow lookup.
  */
 function useEffectiveUserId(props: Props): {
   userId: string | null;
@@ -58,20 +60,22 @@ function useEffectiveUserId(props: Props): {
 
 export function OrganizationsCard(props: Props) {
   const { mode } = props;
-
   if (mode === "oauth2" || mode === "oauth2-1") return null;
-
   return <OrganizationsCardInner {...props} />;
 }
 
 function OrganizationsCardInner(props: Props) {
-  const { userId, loading } = useEffectiveUserId(props);
+  const { userId, loading: idLoading } = useEffectiveUserId(props);
   const orgsQ = useOrganizations();
+  const usersQ = useUsers();
   const membershipsQ = useMemberships();
   const [editingOrgId, setEditingOrgId] = useState<string | null>(null);
+  const [managingMemberships, setManagingMemberships] = useState(false);
 
   const allOrgs = orgsQ.data?.items ?? [];
+  const allUsers = usersQ.data?.items ?? [];
   const allMemberships = membershipsQ.data?.items ?? [];
+
   const orgsById = useMemo(
     () => new Map(allOrgs.map((o) => [o.id, o])),
     [allOrgs],
@@ -81,25 +85,41 @@ function OrganizationsCardInner(props: Props) {
       userId ? allMemberships.filter((m) => m.user_id === userId) : [],
     [allMemberships, userId],
   );
+  const localUser = userId
+    ? (allUsers.find((u) => u.id === userId) ?? null)
+    : null;
 
   const isLoading =
-    loading || orgsQ.isLoading || membershipsQ.isLoading;
+    idLoading || orgsQ.isLoading || membershipsQ.isLoading || usersQ.isLoading;
 
   const editingOrg = editingOrgId ? orgsById.get(editingOrgId) : null;
 
   return (
     <>
       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
+        <CardHeader className="border-b pb-4">
+          <CardTitle className="flex items-center gap-2 text-sm font-semibold">
             <Building2 className="size-4 text-muted-foreground" />
             Organizations
             {userMemberships.length > 0 && (
-              <span className="text-xs font-normal text-muted-foreground">
-                ({userMemberships.length})
+              <span className="text-[10px] font-mono text-muted-foreground rounded-full border border-border px-1.5">
+                {userMemberships.length}
               </span>
             )}
           </CardTitle>
+          {localUser && (
+            <CardAction>
+              <Button
+                type="button"
+                variant="outline"
+                size="xs"
+                onClick={() => setManagingMemberships(true)}
+              >
+                <Plus />
+                Manage memberships
+              </Button>
+            </CardAction>
+          )}
         </CardHeader>
         <CardContent>
           {!userId ? (
@@ -112,19 +132,18 @@ function OrganizationsCardInner(props: Props) {
                 <div
                   key={i}
                   className={cn(
-                    "h-14 rounded-md bg-muted animate-pulse",
+                    "h-12 rounded-md bg-muted animate-pulse",
                     i === 1 && "opacity-60",
                   )}
                 />
               ))}
             </div>
           ) : userMemberships.length === 0 ? (
-            <div className="text-sm text-muted-foreground italic">
-              This user is not a member of any organisation yet. Edit the user
-              from the legacy graph view to add memberships.
-            </div>
+            <EmptyMemberships
+              onAdd={localUser ? () => setManagingMemberships(true) : null}
+            />
           ) : (
-            <ul className="divide-y divide-border -my-2">
+            <ul className="divide-y divide-border -my-3">
               {userMemberships.map((m) => {
                 const org = orgsById.get(m.organization_id);
                 return (
@@ -132,6 +151,7 @@ function OrganizationsCardInner(props: Props) {
                     key={m.id}
                     className="py-3 flex items-center gap-3 group"
                   >
+                    <Building2 className="size-4 text-muted-foreground shrink-0" />
                     <div className="min-w-0 flex-1">
                       <div className="font-medium truncate">
                         {org?.name ?? m.organization_id}
@@ -148,9 +168,7 @@ function OrganizationsCardInner(props: Props) {
                         )}
                       </div>
                     </div>
-                    <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground rounded-sm border border-border bg-muted/40 px-1.5 py-0.5">
-                      {m.role}
-                    </span>
+                    <RoleBadge role={m.role} />
                     {org && (
                       <Button
                         type="button"
@@ -177,6 +195,45 @@ function OrganizationsCardInner(props: Props) {
           onClose={() => setEditingOrgId(null)}
         />
       )}
+      {managingMemberships && localUser && (
+        <EditUserModal
+          user={localUser}
+          layoutId={`dash-user-${localUser.id}`}
+          onClose={() => setManagingMemberships(false)}
+        />
+      )}
     </>
+  );
+}
+
+function RoleBadge({ role }: { role: string }) {
+  const isAdmin = role.toLowerCase() === "admin";
+  return (
+    <span
+      className={cn(
+        "text-[10px] font-mono uppercase tracking-wider rounded-sm border px-1.5 py-0.5",
+        isAdmin
+          ? "bg-[var(--retro-yellow)]/20 border-[var(--retro-yellow)]/40 text-foreground"
+          : "bg-muted/40 border-border text-muted-foreground",
+      )}
+    >
+      {role}
+    </span>
+  );
+}
+
+function EmptyMemberships({ onAdd }: { onAdd: (() => void) | null }) {
+  return (
+    <div className="rounded-md border border-dashed border-border bg-muted/20 px-4 py-6 text-center space-y-3">
+      <div className="text-sm text-muted-foreground">
+        This user isn't a member of any organisation yet.
+      </div>
+      {onAdd && (
+        <Button type="button" variant="outline" size="sm" onClick={onAdd}>
+          <Plus />
+          Join an organisation
+        </Button>
+      )}
+    </div>
   );
 }

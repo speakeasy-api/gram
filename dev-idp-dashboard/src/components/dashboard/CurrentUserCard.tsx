@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { match } from "ts-pattern";
-import { ExternalLink, ShieldCheck, ShieldOff, UserRound } from "lucide-react";
+import { ExternalLink, ShieldCheck, UserRound } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   Card,
@@ -26,6 +26,8 @@ import {
   useUsers,
 } from "@/hooks/use-devidp";
 import type { Mode, User, WorkosCurrentUser } from "@/lib/devidp";
+import { Avatar } from "@/components/dashboard/Avatar";
+import { InlineCopy } from "@/components/dashboard/InlineCopy";
 
 const WORKOS_USERS_DASHBOARD_URL =
   "https://dashboard.workos.com/environment_01J5C09A9KMAHSZ0T9WBK3TXHJ/users";
@@ -57,17 +59,15 @@ interface Props {
 }
 
 /**
- * Top-of-dashboard card that surfaces who Gram thinks the current user is and
- * exposes the two destructive-ish toggles a developer reaches for most: admin
- * on/off and switching to another user.
+ * Top-of-dashboard hero card. Surfaces the active "current user" with avatar,
+ * id, admin toggle, and a switcher.
  *
- * Mode handling diverges around identity sources:
- *  - local-speakeasy: `user` is the source of truth (local row), id is a uuid.
- *  - workos: `workos.workos_sub` is set, but admin status and the "real"
- *    backing user id live on the local shadow record fetched from
- *    `/devidp/workos/currentUser`. We re-look up the WorkOS profile to get a
- *    pretty display name when available.
- *  - oauth2 / oauth2-1: not a "current user" mode; render an explanation.
+ * Identity sources diverge by mode:
+ *  - local-speakeasy: `user` is the source of truth (local row).
+ *  - workos: `workos.workos_sub` identifies the WorkOS user, but admin status
+ *    and the backing local id live on the shadow record fetched from
+ *    `/devidp/workos/currentUser`.
+ *  - oauth2 / oauth2-1: not a "current user" mode — explanatory state.
  */
 export function CurrentUserCard({ mode, user, workos }: Props) {
   if (mode === "oauth2" || mode === "oauth2-1") {
@@ -96,36 +96,38 @@ function LocalUserCard({
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
+      <CardHeader className="border-b pb-4">
+        <CardTitle className="flex items-center gap-2 text-sm font-semibold">
           <UserRound className="size-4 text-muted-foreground" />
           Current user
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-5">
         {user ? (
-          <UserSummary
+          <UserHero
             displayName={user.display_name}
             secondary={user.email}
             idLabel="id"
             id={user.id}
-            isAdmin={user.admin}
-            onToggleAdmin={() =>
-              update.mutate({ id: user.id, admin: !user.admin })
-            }
-            adminLoading={update.isPending}
-            onClear={() => clear.mutate({ mode })}
-            clearLoading={clear.isPending}
+            photoUrl={user.photo_url ?? null}
           />
         ) : (
           <EmptyState mode={mode} />
         )}
 
-        <Divider />
+        {user && (
+          <AdminToggleRow
+            isAdmin={user.admin}
+            loading={update.isPending}
+            onToggle={() =>
+              update.mutate({ id: user.id, admin: !user.admin })
+            }
+          />
+        )}
 
-        <div className="space-y-2">
-          <Label className="text-xs text-muted-foreground uppercase tracking-wide">
-            {user ? "Switch to another user" : "Pick a user"}
+        <div className="border-t pt-4 space-y-2">
+          <Label className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground/80">
+            {user ? "Switch to another user" : "Pick a user to begin"}
           </Label>
           <div className="flex gap-2">
             <Select value={picked} onValueChange={(v) => setPicked(v ?? "")}>
@@ -157,6 +159,16 @@ function LocalUserCard({
             >
               {set.isPending ? "Switching…" : user ? "Switch" : "Set"}
             </Button>
+            {user && (
+              <Button
+                type="button"
+                variant="ghost"
+                disabled={clear.isPending}
+                onClick={() => clear.mutate({ mode })}
+              >
+                {clear.isPending ? "Clearing…" : "Clear"}
+              </Button>
+            )}
           </div>
           {set.error && (
             <div className="text-xs text-destructive">
@@ -178,9 +190,9 @@ function WorkosUserCard({ workos }: { workos: WorkosCurrentUser | null }) {
 
   const sub = workos?.workos_sub;
 
-  // The /rpc/devIdp.getCurrentUser response only persists workos_sub; first /
-  // last name and email come back empty unless the WorkOS lookup was already
-  // populated. Re-resolve via the proxy here.
+  // /rpc/devIdp.getCurrentUser only persists workos_sub; first/last name and
+  // email come back empty unless the WorkOS lookup was already populated. Re-
+  // resolve via the proxy so we can render a real name and a profile photo.
   const lookupQ = useQuery<WorkosUserLookup>({
     queryKey: ["workos", "current-lookup", sub],
     queryFn: () =>
@@ -190,8 +202,8 @@ function WorkosUserCard({ workos }: { workos: WorkosCurrentUser | null }) {
     enabled: !!sub,
   });
 
-  // Shadow record gives us shadow_id and shadow_admin so we can toggle admin
-  // and link the WorkOS user to its local row (organisations live there).
+  // Shadow record gives us shadow_id (the local user row) and shadow_admin so
+  // we can toggle admin and link memberships from it.
   const shadowQ = useQuery<WorkosShadow>({
     queryKey: ["workos", "shadow", sub],
     queryFn: () => fetchWorkos("currentUser") as Promise<WorkosShadow>,
@@ -211,57 +223,65 @@ function WorkosUserCard({ workos }: { workos: WorkosCurrentUser | null }) {
     .filter(Boolean)
     .join(" ");
   const email = lookupQ.data?.email ?? workos?.email ?? "";
+  const photo =
+    lookupQ.data?.profile_picture_url ?? workos?.profile_picture_url ?? null;
   const shadowId = shadowQ.data?.shadow_id;
   const isAdmin = shadowQ.data?.shadow_admin ?? false;
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
+      <CardHeader className="border-b pb-4">
+        <CardTitle className="flex items-center gap-2 text-sm font-semibold">
           <UserRound className="size-4 text-muted-foreground" />
           Current user
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-5">
         {workos ? (
-          <UserSummary
+          <UserHero
             displayName={fullName || email || "Unknown user"}
             secondary={fullName ? email : undefined}
             idLabel="workos_sub"
             id={workos.workos_sub}
-            isAdmin={isAdmin}
-            onToggleAdmin={
-              shadowId
-                ? () =>
-                    update.mutate(
-                      { id: shadowId, admin: !isAdmin },
-                      {
-                        onSuccess: () =>
-                          qc.invalidateQueries({
-                            queryKey: ["workos", "shadow", sub],
-                          }),
-                      },
-                    )
-                : undefined
-            }
-            adminLoading={update.isPending}
-            onClear={() => clear.mutate({ mode: "workos" })}
-            clearLoading={clear.isPending}
-            adminUnavailable={!shadowId}
+            photoUrl={photo}
           />
         ) : (
           <EmptyState mode="workos" />
         )}
 
-        <Divider />
+        {workos && shadowId && (
+          <AdminToggleRow
+            isAdmin={isAdmin}
+            loading={update.isPending}
+            onToggle={() =>
+              update.mutate(
+                { id: shadowId, admin: !isAdmin },
+                {
+                  onSuccess: () =>
+                    qc.invalidateQueries({
+                      queryKey: ["workos", "shadow", sub],
+                    }),
+                },
+              )
+            }
+          />
+        )}
+        {workos && !shadowId && (
+          <div className="rounded-md border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+            Shadow record unavailable — admin can't be toggled until the user
+            has logged in via Gram once.
+          </div>
+        )}
 
-        <div className="space-y-2">
+        <div className="border-t pt-4 space-y-2">
           <div className="flex items-baseline justify-between gap-2">
             <Label
               htmlFor="workos-sub-input"
-              className="text-xs text-muted-foreground uppercase tracking-wide"
+              className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground/80"
             >
-              {workos ? "Switch to another WorkOS user" : "Pick a WorkOS user"}
+              {workos
+                ? "Switch to another WorkOS user"
+                : "Pick a WorkOS user to begin"}
             </Label>
             <a
               href={WORKOS_USERS_DASHBOARD_URL}
@@ -301,6 +321,16 @@ function WorkosUserCard({ workos }: { workos: WorkosCurrentUser | null }) {
             >
               {set.isPending ? "Saving…" : workos ? "Switch" : "Set"}
             </Button>
+            {workos && (
+              <Button
+                type="button"
+                variant="ghost"
+                disabled={clear.isPending}
+                onClick={() => clear.mutate({ mode: "workos" })}
+              >
+                {clear.isPending ? "Clearing…" : "Clear"}
+              </Button>
+            )}
           </div>
           {preview.error && (
             <div className="text-xs text-destructive">
@@ -318,33 +348,24 @@ function WorkosUserCard({ workos }: { workos: WorkosCurrentUser | null }) {
   );
 }
 
-function UserSummary({
+function UserHero({
   displayName,
   secondary,
   idLabel,
   id,
-  isAdmin,
-  onToggleAdmin,
-  adminLoading,
-  onClear,
-  clearLoading,
-  adminUnavailable,
+  photoUrl,
 }: {
   displayName: string;
   secondary?: string;
   idLabel: string;
   id: string;
-  isAdmin: boolean;
-  onToggleAdmin?: () => void;
-  adminLoading: boolean;
-  onClear: () => void;
-  clearLoading: boolean;
-  adminUnavailable?: boolean;
+  photoUrl: string | null;
 }) {
   return (
-    <div className="flex items-start justify-between gap-4">
-      <div className="min-w-0 space-y-1">
-        <div className="text-base font-semibold leading-tight truncate">
+    <div className="flex items-center gap-4">
+      <Avatar src={photoUrl} name={displayName} size="lg" />
+      <div className="min-w-0 flex-1 space-y-1">
+        <div className="text-xl font-semibold leading-tight truncate">
           {displayName}
         </div>
         {secondary && (
@@ -352,73 +373,92 @@ function UserSummary({
             {secondary}
           </div>
         )}
-        <div className="text-xs text-muted-foreground">
-          <span className="font-mono uppercase tracking-wider mr-1">
-            {idLabel}
-          </span>
-          <code className="font-mono">{id}</code>
-        </div>
-
-        <div className="flex items-center gap-2 pt-2">
-          <AdminBadge isAdmin={isAdmin} />
-          {onToggleAdmin && (
-            <Button
-              type="button"
-              variant="outline"
-              size="xs"
-              disabled={adminLoading}
-              onClick={onToggleAdmin}
-            >
-              {adminLoading ? "…" : isAdmin ? "Revoke admin" : "Make admin"}
-            </Button>
-          )}
-          {adminUnavailable && (
-            <span className="text-[11px] text-muted-foreground italic">
-              Shadow record unavailable
-            </span>
-          )}
+        <div className="-ml-1.5">
+          <InlineCopy value={id} label={idLabel} />
         </div>
       </div>
-
-      <Button
-        type="button"
-        variant="ghost"
-        size="xs"
-        disabled={clearLoading}
-        onClick={onClear}
-      >
-        {clearLoading ? "Clearing…" : "Clear"}
-      </Button>
     </div>
   );
 }
 
-function AdminBadge({ isAdmin }: { isAdmin: boolean }) {
+function AdminToggleRow({
+  isAdmin,
+  loading,
+  onToggle,
+}: {
+  isAdmin: boolean;
+  loading: boolean;
+  onToggle: () => void;
+}) {
   return (
-    <span
+    <button
+      type="button"
+      onClick={onToggle}
+      disabled={loading}
+      aria-pressed={isAdmin}
       className={cn(
-        "inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-[10px] font-mono uppercase tracking-wider border",
+        "group/admin w-full text-left rounded-md border px-3 py-3",
+        "flex items-center gap-3 transition-colors",
+        "disabled:opacity-60 disabled:cursor-wait",
         isAdmin
-          ? "bg-[var(--retro-green)]/15 border-[var(--retro-green)]/40 text-foreground"
-          : "bg-muted/40 border-border text-muted-foreground",
+          ? "border-[var(--retro-green)]/40 bg-[var(--retro-green)]/10 hover:bg-[var(--retro-green)]/15"
+          : "border-border bg-muted/30 hover:bg-muted/60",
       )}
     >
-      {isAdmin ? (
-        <ShieldCheck className="size-3" />
-      ) : (
-        <ShieldOff className="size-3" />
+      <ShieldCheck
+        className={cn(
+          "size-5 shrink-0 transition-colors",
+          isAdmin ? "text-[var(--retro-green)]" : "text-muted-foreground",
+        )}
+        strokeWidth={isAdmin ? 2.5 : 2}
+      />
+      <div className="min-w-0 flex-1">
+        <div className="text-sm font-medium leading-tight">
+          {isAdmin ? "Speakeasy admin" : "Standard user"}
+        </div>
+        <div className="text-xs text-muted-foreground leading-snug">
+          {isAdmin
+            ? "Has full Speakeasy admin scope. Click to revoke."
+            : "Click to grant Speakeasy admin scope."}
+        </div>
+      </div>
+      <Toggle on={isAdmin} loading={loading} />
+    </button>
+  );
+}
+
+function Toggle({ on, loading }: { on: boolean; loading: boolean }) {
+  return (
+    <span
+      role="presentation"
+      className={cn(
+        "relative inline-flex h-5 w-9 shrink-0 rounded-full transition-colors",
+        on ? "bg-[var(--retro-green)]" : "bg-muted-foreground/30",
+        loading && "animate-pulse",
       )}
-      {isAdmin ? "admin" : "not admin"}
+    >
+      <span
+        className={cn(
+          "absolute top-0.5 size-4 rounded-full bg-card shadow transition-all",
+          on ? "left-[18px]" : "left-0.5",
+        )}
+      />
     </span>
   );
 }
 
 function EmptyState({ mode }: { mode: Mode }) {
   return (
-    <div className="text-sm text-muted-foreground italic">
-      {match(mode)
-        .with("workos", () => "No WorkOS user selected yet.")
-        .otherwise(() => "No current user selected yet for this mode.")}
+    <div className="flex items-center gap-4 py-1">
+      <Avatar name="?" size="lg" className="opacity-60" />
+      <div className="text-sm text-muted-foreground">
+        {match(mode)
+          .with(
+            "workos",
+            () => "No WorkOS user selected yet. Pick one below.",
+          )
+          .otherwise(() => "No current user selected. Pick one below.")}
+      </div>
     </div>
   );
 }
@@ -426,8 +466,8 @@ function EmptyState({ mode }: { mode: Mode }) {
 function OAuthIssuerEmptyState({ mode }: { mode: "oauth2" | "oauth2-1" }) {
   return (
     <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
+      <CardHeader className="border-b pb-4">
+        <CardTitle className="flex items-center gap-2 text-sm font-semibold">
           <UserRound className="size-4 text-muted-foreground" />
           Current user
         </CardTitle>
@@ -437,13 +477,10 @@ function OAuthIssuerEmptyState({ mode }: { mode: "oauth2" | "oauth2-1" }) {
           Gram is currently using <code className="font-mono">{mode}</code> as
           an MCP OAuth issuer. There is no concept of a "current user" in this
           mode — switch to <code className="font-mono">local-speakeasy</code>{" "}
-          or <code className="font-mono">workos</code> to manage user identity.
+          or <code className="font-mono">workos</code> to manage user
+          identity.
         </div>
       </CardContent>
     </Card>
   );
-}
-
-function Divider() {
-  return <div className="border-t border-border" />;
 }
