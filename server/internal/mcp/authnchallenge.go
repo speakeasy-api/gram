@@ -17,7 +17,7 @@
 //   3. HandleGetAuthorizationServer — GET <new path TBD>.
 //   4. HandleRegister — POST /mcp/{slug}/register (RFC 7591 DCR).
 //   5. HandleAuthorize — GET /mcp/{slug}/authorize.
-//   6. HandleClientLoginCallback — GET /mcp/{slug}/client_login_callback
+//   6. HandleIDPCallback — GET /mcp/{slug}/idp_callback
 //      (Speakeasy IDP returns here on the private-toolset path).
 //   7. HandleConsent — GET, POST /mcp/{slug}/connect.
 //   8. HandleToken — POST /mcp/{slug}/token (auth-code grant).
@@ -81,7 +81,7 @@ type AuthnChallengeState struct {
 	State               string    `json:"state,omitempty"`
 	CodeChallenge       string    `json:"code_challenge"`
 	CodeChallengeMethod string    `json:"code_challenge_method"`
-	// Subject is nil on creation; HandleClientLoginCallback (private path)
+	// Subject is nil on creation; HandleIDPCallback (private path)
 	// stamps `user:<id>`, HandleConsent's POST mints a fresh
 	// `anonymous:<uuid>` on the public path. Pointer so the Redis JSON
 	// can round-trip an unstamped state (the URN's MarshalJSON refuses
@@ -551,7 +551,7 @@ func generateClientSecret() (string, error) {
 //   - mint an AuthnChallengeState in Redis carrying the request context
 //   - branch on the toolset's privacy:
 //   - private (`!McpIsPublic`): 302 to the Speakeasy IDP login page; on
-//     return HandleClientLoginCallback stamps `user:<id>` onto the state
+//     return HandleIDPCallback stamps `user:<id>` onto the state
 //   - public (`McpIsPublic`): 302 directly to /connect; HandleConsent's
 //     POST stamps `anonymous:<prospective_mcp_session_id>`
 func (s *Service) HandleAuthorize(w http.ResponseWriter, r *http.Request) error {
@@ -629,7 +629,7 @@ func (s *Service) HandleAuthorize(w http.ResponseWriter, r *http.Request) error 
 		State:               state,
 		CodeChallenge:       codeChallenge,
 		CodeChallengeMethod: codeChallengeMethod,
-		// Subject is left nil — HandleClientLoginCallback (private path) and
+		// Subject is left nil — HandleIDPCallback (private path) and
 		// HandleConsent (public path) stamp it later in the flow.
 		Subject:   nil,
 		CreatedAt: time.Now(),
@@ -645,7 +645,7 @@ func (s *Service) HandleAuthorize(w http.ResponseWriter, r *http.Request) error 
 	}
 
 	if !toolset.McpIsPublic {
-		callbackURL := fmt.Sprintf("%s/mcp/%s/client_login_callback", baseURL, mcpSlug)
+		callbackURL := fmt.Sprintf("%s/mcp/%s/idp_callback", baseURL, mcpSlug)
 		idpURL, err := s.sessions.BuildAuthorizationURL(ctx, sessions.AuthURLParams{
 			CallbackURL:     callbackURL,
 			Scope:           "",
@@ -682,7 +682,6 @@ func writeAuthorizeError(ctx context.Context, w http.ResponseWriter, logger *slo
 
 	logger.InfoContext(ctx, "authorize request rejected",
 		attr.SlogOAuthError(code),
-		// > [NOTE] why are these called DCR errors? DCR is not related to this context?
 		attr.SlogOAuthErrorDescription(description),
 	)
 
@@ -693,5 +692,114 @@ func writeAuthorizeError(ctx context.Context, w http.ResponseWriter, logger *slo
 	if _, werr := w.Write(body); werr != nil {
 		return oops.E(oops.CodeUnexpected, werr, "failed to write authorize error body").Log(ctx, logger)
 	}
+	return nil
+}
+
+// HandleIDPCallback is the GET endpoint Speakeasy IDP redirects back to
+// after the user authenticates on the private-toolset path. Mounted at
+// `GET /mcp/{mcpSlug}/idp_callback`.
+//
+// The name pairs with `remote_login_callback` (spike §6.5) — the other
+// callback on this surface, used for upstream OAuth resource providers
+// (Linear, Notion, etc.). Reading the two side-by-side: IDP returns user
+// identity; remote returns resource-access tokens.
+//
+// It is independent of the chat-session manager: we drive the IDP wire calls
+// directly through s.idpClient (see speakeasyclient.go) and skip everything
+// the chat-session path bundles in (userInfoCache writes, posthog, pylon,
+// WorkOS sync, admin override, cookie issuance). We DO upsert the Gram user
+// row -- otherwise we have no Gram user_id to put in the URN.
+//
+// Side effects on success: UpsertUser, AuthnChallengeState rewrite (subject
+// stamped). The IDP idToken is consumed and discarded; no chat session
+// persists.
+func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+	mcpSlug := chi.URLParam(r, "mcpSlug")
+	if mcpSlug == "" {
+		return oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided").Log(ctx, s.logger)
+	}
+
+	toolset, customDomainCtx, err := s.loadToolsetFromMcpSlug(ctx, mcpSlug)
+	switch {
+	case errors.Is(err, errToolsetNotFound):
+		return oops.E(oops.CodeNotFound, err, "mcp server not found")
+	case err != nil:
+		return oops.E(oops.CodeUnexpected, err, "failed to load MCP server").Log(ctx, s.logger)
+	}
+	if !toolset.UserSessionIssuerID.Valid {
+		return oops.E(oops.CodeNotFound, nil, "not found")
+	}
+
+	logger := s.logger.With(
+		attr.SlogToolsetID(toolset.ID.String()),
+		attr.SlogProjectID(toolset.ProjectID.String()),
+	)
+
+	q := r.URL.Query()
+	stateID := q.Get("state")
+	code := q.Get("code")
+	if stateID == "" || code == "" {
+		return oops.E(oops.CodeBadRequest, nil, "state and code are required").Log(ctx, logger)
+	}
+
+	challengeState, err := s.authnChallengeCache.Get(ctx, "authnChallenge:"+stateID)
+	if err != nil {
+		return oops.E(oops.CodeUnauthorized, err, "authn challenge state not found or expired").Log(ctx, logger)
+	}
+
+	// State-confusion guard: the state must belong to this toolset.
+	if challengeState.ToolsetID != toolset.ID {
+		return oops.E(oops.CodeUnauthorized, nil, "authn challenge state does not match this MCP server").Log(ctx, logger)
+	}
+
+	idToken, err := s.idpClient.ExchangeCode(ctx, code)
+	if err != nil {
+		return oops.E(oops.CodeUnauthorized, err, "failed to exchange IDP code").Log(ctx, logger)
+	}
+
+	validated, err := s.idpClient.ValidateIDToken(ctx, idToken)
+	if err != nil {
+		return oops.E(oops.CodeUnauthorized, err, "failed to validate IDP id token").Log(ctx, logger)
+	}
+
+	// Here we validate that the owner belongs to the toolset Org before proceeding
+	// We don't want to mess around with issuing tokens to non-org users
+	// Why not the project? Well the mcp:connect RBAC policy operates at
+	// an organization level. This policy will be enforced in the MCP endpoint
+	// but we defer the check to be more general here
+	authorized := false
+	for _, org := range validated.Organizations {
+		if org.ID == toolset.OrganizationID {
+			authorized = true
+			break
+		}
+	}
+	if !authorized {
+		return oops.E(oops.CodeForbidden, nil, "user is not a member of this MCP server's organization").Log(ctx, logger)
+	}
+
+	// Run the shared post-IDP user bootstrap: UpsertUser + posthog signup
+	// event + WorkOS membership sync. Same side effects the chat-session
+	// manager runs on dashboard logins, identical ordering. WorkOS sync in
+	// particular is required so downstream RBAC has the right org-membership
+	// records for an MCP-only user authenticating for the first time.
+	user, err := s.idpClient.BootstrapUser(ctx, validated)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to bootstrap user").Log(ctx, logger)
+	}
+
+	subject := urn.NewUserSubject(user.ID)
+	challengeState.Subject = &subject
+	if err := s.authnChallengeCache.Store(ctx, challengeState); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to update authn challenge state").Log(ctx, logger)
+	}
+
+	baseURL := s.serverURL.String()
+	if customDomainCtx != nil {
+		baseURL = fmt.Sprintf("https://%s", customDomainCtx.Domain)
+	}
+	consentURL := fmt.Sprintf("%s/mcp/%s/connect?state=%s", baseURL, mcpSlug, url.QueryEscape(challengeState.ID))
+	http.Redirect(w, r, consentURL, http.StatusFound)
 	return nil
 }

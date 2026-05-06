@@ -720,6 +720,7 @@ func newStartCommand() *cli.Command {
 				assistantTokenManager,
 				shadowMCPClient,
 				auditLogger,
+				speakeasyIDPClient,
 			)
 
 			chatClient := chat.NewAgenticChatClient(

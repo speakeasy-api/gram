@@ -35,6 +35,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
 	auth_repo "github.com/speakeasy-api/gram/server/internal/auth/repo"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/auth/speakeasyclient"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/billing"
@@ -99,6 +100,12 @@ type Service struct {
 	authz               *authz.Engine
 	shadowMCPClient     *shadowmcp.Client
 	authnChallengeCache cache.TypedCacheObject[AuthnChallengeState]
+	// idpClient drives the user-session AS authn-challenge path's calls to
+	// the Speakeasy IDP (issuer-gated /authorize → /idp_callback flow). The
+	// same client backs the chat-session Manager via auth/sessions, so both
+	// paths share the user-bootstrap side effects (UpsertUser, posthog
+	// signup, WorkOS sync). See auth/speakeasyclient.
+	idpClient *speakeasyclient.Client
 }
 
 type oauthTokenInputs struct {
@@ -147,6 +154,7 @@ func NewService(
 	assistantTokens *assistanttokens.Manager,
 	shadowMCPClient *shadowmcp.Client,
 	auditLogger *audit.Logger,
+	idpClient *speakeasyclient.Client,
 ) *Service {
 	tracer := tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/mcp")
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/mcp")
@@ -207,6 +215,7 @@ func NewService(
 			cacheImpl,
 			cache.SuffixNone,
 		),
+		idpClient: idpClient,
 	}
 }
 
@@ -226,6 +235,7 @@ func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Se
 	o11y.AttachHandler(mux, "GET", "/.well-known/oauth-authorization-server/mcp/{mcpSlug}", oops.ErrHandle(service.logger, service.HandleGetAuthorizationServer).ServeHTTP)
 	o11y.AttachHandler(mux, "POST", "/mcp/{mcpSlug}/register", oops.ErrHandle(service.logger, service.HandleRegister).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/{mcpSlug}/authorize", oops.ErrHandle(service.logger, service.HandleAuthorize).ServeHTTP)
+	o11y.AttachHandler(mux, "GET", "/mcp/{mcpSlug}/idp_callback", oops.ErrHandle(service.logger, service.HandleIDPCallback).ServeHTTP)
 }
 
 // HandleGetServer handles GET requests to /mcp/{mcpSlug}, checking for HTML requests
