@@ -1268,7 +1268,7 @@ func slugify(name string) (string, error) {
 
 func (s *Service) ListChallenges(ctx context.Context, payload *gen.ListChallengesPayload) (*gen.ListChallengesResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
+	if !ok || authCtx == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
@@ -1296,6 +1296,10 @@ func (s *Service) ListChallenges(ctx context.Context, payload *gen.ListChallenge
 		projectID = *payload.ProjectID
 	}
 
+	// When resolved filter is active, skip CH-side pagination – fetch all matching rows,
+	// apply the resolved filter in Go, then slice for the requested page.
+	skipPagination := payload.Resolved != nil
+
 	filters := chrepo.ChallengeListFilters{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		ProjectID:      projectID,
@@ -1304,6 +1308,7 @@ func (s *Service) ListChallenges(ctx context.Context, payload *gen.ListChallenge
 		Scope:          scopeFilter,
 		Limit:          uint64(payload.Limit),  //nolint:gosec // Goa validates 1..200
 		Offset:         uint64(payload.Offset), //nolint:gosec // Goa validates >= 0
+		SkipPagination: skipPagination,
 	}
 
 	chQueries := chrepo.New(s.chConn)
@@ -1313,9 +1318,12 @@ func (s *Service) ListChallenges(ctx context.Context, payload *gen.ListChallenge
 		return nil, oops.E(oops.CodeUnexpected, err, "list challenges from clickhouse").Log(ctx, s.logger)
 	}
 
-	total, err := chQueries.CountChallenges(ctx, filters)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "count challenges from clickhouse").Log(ctx, s.logger)
+	var total uint64
+	if !skipPagination {
+		total, err = chQueries.CountChallenges(ctx, filters)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "count challenges from clickhouse").Log(ctx, s.logger)
+		}
 	}
 
 	if len(challenges) == 0 {
@@ -1340,7 +1348,8 @@ func (s *Service) ListChallenges(ctx context.Context, payload *gen.ListChallenge
 		resolutionMap[r.ChallengeID] = r
 	}
 
-	// Apply resolved filter post-join if requested.
+	// Apply resolved filter post-join if requested, then paginate in Go
+	// (CH-side pagination was skipped so total and page slice are correct).
 	if payload.Resolved != nil {
 		wantResolved := *payload.Resolved
 		filtered := challenges[:0]
@@ -1351,6 +1360,15 @@ func (s *Service) ListChallenges(ctx context.Context, payload *gen.ListChallenge
 			}
 		}
 		challenges = filtered
+		total = uint64(len(challenges))  //nolint:gosec // count fits int
+		offset := uint64(payload.Offset) //nolint:gosec // Goa validates >= 0
+		limit := uint64(payload.Limit)   //nolint:gosec // Goa validates 1..200
+		if offset >= total {
+			challenges = nil
+		} else {
+			end := min(offset+limit, total)
+			challenges = challenges[offset:end]
+		}
 	}
 
 	// Batch-lookup user photos from PG.
@@ -1473,7 +1491,7 @@ func (s *Service) ListChallenges(ctx context.Context, payload *gen.ListChallenge
 
 func (s *Service) ResolveChallenge(ctx context.Context, payload *gen.ResolveChallengePayload) (*gen.ChallengeResolution, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
+	if !ok || authCtx == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
@@ -1535,6 +1553,19 @@ func (s *Service) ResolveChallenge(ctx context.Context, payload *gen.ResolveChal
 	}
 	if row.RoleSlug.Valid {
 		pResRoleSlug = &row.RoleSlug.String
+	}
+
+	if err := s.audit.LogAccessChallengeResolve(ctx, s.db, audit.LogAccessChallengeResolveEvent{
+		OrganizationID:   authCtx.ActiveOrganizationID,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName: authCtx.Email,
+		ChallengeID:      payload.ChallengeID,
+		PrincipalURN:     payload.PrincipalUrn,
+		Scope:            payload.Scope,
+		ResolutionType:   payload.ResolutionType,
+		RoleSlug:         payload.RoleSlug,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "log access challenge resolve").Log(ctx, s.logger)
 	}
 
 	return &gen.ChallengeResolution{

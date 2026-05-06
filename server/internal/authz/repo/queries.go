@@ -3,9 +3,9 @@ package repo
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
-	"github.com/Masterminds/squirrel"
 )
 
 // InsertChallenge writes a single challenge row using server-side async insert.
@@ -134,6 +134,32 @@ type ChallengeListFilters struct {
 	Scope          string // empty = no filter
 	Limit          uint64
 	Offset         uint64
+	SkipPagination bool // when true, omit LIMIT/OFFSET (used when resolved filter requires post-join pagination)
+}
+
+// challengeWhereClause builds a WHERE clause and args slice from ChallengeListFilters.
+func challengeWhereClause(f ChallengeListFilters) (string, []any) {
+	conditions := []string{"organization_id = ?"}
+	args := []any{f.OrganizationID}
+
+	if f.ProjectID != "" {
+		conditions = append(conditions, "project_id = ?")
+		args = append(args, f.ProjectID)
+	}
+	if f.Outcome != "" {
+		conditions = append(conditions, "outcome = ?")
+		args = append(args, f.Outcome)
+	}
+	if f.PrincipalURN != "" {
+		conditions = append(conditions, "principal_urn = ?")
+		args = append(args, f.PrincipalURN)
+	}
+	if f.Scope != "" {
+		conditions = append(conditions, "scope = ?")
+		args = append(args, f.Scope)
+	}
+
+	return strings.Join(conditions, " AND "), args
 }
 
 // ChallengeSummary is the subset of a challenge row returned by ListChallenges.
@@ -159,46 +185,31 @@ type ChallengeSummary struct {
 
 // ListChallenges queries ClickHouse for authz challenge events.
 func (q *Queries) ListChallenges(ctx context.Context, f ChallengeListFilters) ([]ChallengeSummary, error) {
-	qb := squirrel.Select(
-		"id",
-		"formatDateTime(timestamp, '%Y-%m-%dT%H:%i:%S.000Z', 'UTC') AS ts",
-		"organization_id",
-		"project_id",
-		"principal_urn",
-		"principal_type",
-		"user_id",
-		"user_email",
-		"operation",
-		"outcome",
-		"reason",
-		"scope",
-		"resource_kind",
-		"resource_id",
-		"role_slugs",
-		"evaluated_grant_count",
-		"length(matched_grants.scope) AS matched_grant_count",
-	).From("authz_challenges").
-		Where(squirrel.Eq{"organization_id": f.OrganizationID}).
-		OrderBy("timestamp DESC").
-		Limit(f.Limit).
-		Offset(f.Offset)
+	where, args := challengeWhereClause(f)
+	query := `SELECT
+		id,
+		formatDateTime(timestamp, '%Y-%m-%dT%H:%i:%S.000Z', 'UTC') AS ts,
+		organization_id,
+		project_id,
+		principal_urn,
+		principal_type,
+		user_id,
+		user_email,
+		operation,
+		outcome,
+		reason,
+		scope,
+		resource_kind,
+		resource_id,
+		role_slugs,
+		evaluated_grant_count,
+		length(matched_grants.scope) AS matched_grant_count
+	FROM authz_challenges
+	WHERE ` + where + `
+	ORDER BY timestamp DESC`
 
-	if f.ProjectID != "" {
-		qb = qb.Where(squirrel.Eq{"project_id": f.ProjectID})
-	}
-	if f.Outcome != "" {
-		qb = qb.Where(squirrel.Eq{"outcome": f.Outcome})
-	}
-	if f.PrincipalURN != "" {
-		qb = qb.Where(squirrel.Eq{"principal_urn": f.PrincipalURN})
-	}
-	if f.Scope != "" {
-		qb = qb.Where(squirrel.Eq{"scope": f.Scope})
-	}
-
-	query, args, err := qb.ToSql()
-	if err != nil {
-		return nil, fmt.Errorf("build list challenges query: %w", err)
+	if !f.SkipPagination {
+		query += fmt.Sprintf(" LIMIT %d OFFSET %d", f.Limit, f.Offset)
 	}
 
 	rows, err := q.conn.Query(ctx, query, args...)
@@ -241,27 +252,8 @@ func (q *Queries) ListChallenges(ctx context.Context, f ChallengeListFilters) ([
 
 // CountChallenges returns the total number of matching challenges for pagination.
 func (q *Queries) CountChallenges(ctx context.Context, f ChallengeListFilters) (uint64, error) {
-	qb := squirrel.Select("count(*)").
-		From("authz_challenges").
-		Where(squirrel.Eq{"organization_id": f.OrganizationID})
-
-	if f.ProjectID != "" {
-		qb = qb.Where(squirrel.Eq{"project_id": f.ProjectID})
-	}
-	if f.Outcome != "" {
-		qb = qb.Where(squirrel.Eq{"outcome": f.Outcome})
-	}
-	if f.PrincipalURN != "" {
-		qb = qb.Where(squirrel.Eq{"principal_urn": f.PrincipalURN})
-	}
-	if f.Scope != "" {
-		qb = qb.Where(squirrel.Eq{"scope": f.Scope})
-	}
-
-	query, args, err := qb.ToSql()
-	if err != nil {
-		return 0, fmt.Errorf("build count challenges query: %w", err)
-	}
+	where, args := challengeWhereClause(f)
+	query := "SELECT count(*) FROM authz_challenges WHERE " + where
 
 	rows, err := q.conn.Query(ctx, query, args...)
 	if err != nil {

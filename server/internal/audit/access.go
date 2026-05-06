@@ -17,6 +17,7 @@ const (
 	ActionAccessRoleUpdate       Action = "access_role:update"
 	ActionAccessRoleDelete       Action = "access_role:delete"
 	ActionAccessMemberRoleUpdate Action = "access_member:update_role"
+	ActionAccessChallengeResolve Action = "access_challenge:resolve"
 )
 
 type LogAccessRoleCreateEvent struct {
@@ -206,6 +207,50 @@ func (l *Logger) LogAccessMemberRoleUpdate(ctx context.Context, dbtx repo.DBTX, 
 
 		BeforeSnapshot: beforeSnapshot,
 		AfterSnapshot:  afterSnapshot,
+		Metadata:       nil,
+	}
+
+	if _, err := repo.New(dbtx).InsertAuditLog(ctx, entry); err != nil {
+		return fmt.Errorf("log %s: %w", action, err)
+	}
+
+	return nil
+}
+
+type LogAccessChallengeResolveEvent struct {
+	OrganizationID string
+
+	Actor            urn.Principal
+	ActorDisplayName *string
+
+	ChallengeID    string
+	PrincipalURN   string
+	Scope          string
+	ResolutionType string
+	RoleSlug       *string
+}
+
+func (l *Logger) LogAccessChallengeResolve(ctx context.Context, dbtx repo.DBTX, event LogAccessChallengeResolveEvent) error {
+	action := ActionAccessChallengeResolve
+
+	entry := repo.InsertAuditLogParams{
+		OrganizationID: event.OrganizationID,
+		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+
+		ActorID:          event.Actor.ID,
+		ActorType:        string(event.Actor.Type),
+		ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName),
+		ActorSlug:        conv.PtrToPGTextEmpty(nil),
+
+		Action: string(action),
+
+		SubjectID:          event.ChallengeID,
+		SubjectType:        string(subjectTypeAccessChallenge),
+		SubjectDisplayName: conv.ToPGTextEmpty(event.PrincipalURN),
+		SubjectSlug:        conv.ToPGTextEmpty(event.ResolutionType),
+
+		BeforeSnapshot: nil,
+		AfterSnapshot:  nil,
 		Metadata:       nil,
 	}
 
