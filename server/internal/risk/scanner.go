@@ -107,7 +107,6 @@ type Scanner struct {
 	gitleaksMu sync.Mutex       // DetectString is not concurrent-safe
 	detector   *detect.Detector // pre-created, reused across scans
 	piiScanner ra.PIIScanner    // nil if Presidio is unavailable
-	classifier ra.PromptInjectionClassifier
 	metrics    *scannerMetrics
 }
 
@@ -117,14 +116,10 @@ type Scanner struct {
 // an error if the detector cannot be built (init relies on viper global
 // state and should never realistically fail, but propagating the error
 // keeps startup honest).
-func NewScanner(logger *slog.Logger, db *pgxpool.Pool, piiScanner ra.PIIScanner, classifier ra.PromptInjectionClassifier, meterProvider metric.MeterProvider) (*Scanner, error) {
+func NewScanner(logger *slog.Logger, db *pgxpool.Pool, piiScanner ra.PIIScanner, meterProvider metric.MeterProvider) (*Scanner, error) {
 	det, err := ra.SharedDetector()
 	if err != nil {
 		return nil, fmt.Errorf("create gitleaks detector: %w", err)
-	}
-
-	if classifier == nil {
-		classifier = ra.NoopClassifier{}
 	}
 
 	return &Scanner{
@@ -133,7 +128,6 @@ func NewScanner(logger *slog.Logger, db *pgxpool.Pool, piiScanner ra.PIIScanner,
 		gitleaksMu: sync.Mutex{},
 		detector:   det,
 		piiScanner: piiScanner,
-		classifier: classifier,
 		metrics:    newScannerMetrics(meterProvider, logger),
 	}, nil
 }
@@ -288,7 +282,6 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text s
 			}
 		case ra.SourcePromptInjection:
 			cfg := ra.PromptInjectionConfigDefaults()
-			cfg.Classifier = s.classifier
 			findings, err := ra.DetectPromptInjection(ctx, text, cfg)
 			if err != nil {
 				return nil, fmt.Errorf("prompt injection scan: %w", err)

@@ -38,16 +38,12 @@ type AnalyzeBatch struct {
 	db              *pgxpool.Pool
 	scanner         *Scanner
 	piiScanner      PIIScanner
-	classifier      PromptInjectionClassifier
 	shadowMCPClient *shadowmcp.Client
 }
 
-func NewAnalyzeBatch(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, piiScanner PIIScanner, classifier PromptInjectionClassifier, shadowMCPClient *shadowmcp.Client) *AnalyzeBatch {
+func NewAnalyzeBatch(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, piiScanner PIIScanner, shadowMCPClient *shadowmcp.Client) *AnalyzeBatch {
 	if piiScanner == nil {
 		piiScanner = &StubPIIScanner{}
-	}
-	if classifier == nil {
-		classifier = NoopClassifier{}
 	}
 	return &AnalyzeBatch{
 		logger:          logger,
@@ -56,7 +52,6 @@ func NewAnalyzeBatch(logger *slog.Logger, tracerProvider trace.TracerProvider, m
 		db:              db,
 		scanner:         NewScanner(),
 		piiScanner:      piiScanner,
-		classifier:      classifier,
 		shadowMCPClient: shadowMCPClient,
 	}
 }
@@ -252,7 +247,6 @@ func (a *AnalyzeBatch) scan(ctx context.Context, args AnalyzeBatchArgs, messages
 
 	if slices.Contains(args.Sources, SourcePromptInjection) {
 		cfg := PromptInjectionConfigDefaults()
-		cfg.Classifier = a.classifier
 		for i, content := range contents {
 			f, err := DetectPromptInjection(ctx, content, cfg)
 			if err != nil {
