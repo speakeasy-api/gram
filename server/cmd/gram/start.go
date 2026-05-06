@@ -37,6 +37,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/auth/speakeasyclient"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/background"
 	risk_analysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
@@ -489,6 +490,17 @@ func newStartCommand() *cli.Command {
 				return fmt.Errorf("failed to create billing provider: %w", err)
 			}
 
+			speakeasyIDPClient := speakeasyclient.NewClient(
+				logger,
+				tracerProvider,
+				guardianPolicy,
+				c.String("speakeasy-server-address"),
+				c.String("speakeasy-secret-key"),
+				db,
+				conv.Ternary(workosAvailable, workosClient, nil),
+				posthogClient,
+			)
+
 			sessionManager := sessions.NewManager(
 				logger,
 				tracerProvider,
@@ -502,6 +514,7 @@ func newStartCommand() *cli.Command {
 				posthogClient,
 				billingRepo,
 				conv.Ternary(workosAvailable, workosClient, nil),
+				speakeasyIDPClient,
 			)
 
 			chatSessionsManager := chatsessions.NewManager(logger, redisClient, c.String("jwt-signing-key"))

@@ -1,3 +1,16 @@
+// DEPRECATED: this package backs Gram's chat-session authentication path
+// (cookie-based, Speakeasy-IDP-mediated). It is being replaced by the
+// user-session JWT path under `server/internal/usersessions/` (per spike §4.5
+// / RFC "Remote OAuth Clients for Private Repos"). New work belongs in the
+// user-sessions package; do NOT extend this manager.
+//
+// The shared post-IDP user bootstrap (UpsertUser, posthog signup event,
+// WorkOS membership sync) lives in `auth/speakeasyclient` so both this
+// package and the user-session AS path get identical baseline treatment for
+// authenticated users — required for downstream RBAC. This Manager retains
+// only chat-session-specific concerns (sessionCache, userInfoCache, pylon,
+// admin-override, nonFreeOrganizations).
+
 package sessions
 
 import (
@@ -11,6 +24,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/auth/speakeasyclient"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -38,6 +52,11 @@ type Manager struct {
 	posthog                *posthog.Posthog // posthog metrics will no-op if the dependency is not provided
 	billingRepo            billing.Repository
 	workos                 *workos.Client
+	// speakeasyClientFacade owns shared post-IDP bootstrap (UpsertUser,
+	// posthog signup, WorkOS sync) and the validate wire call. Refactor
+	// target: have it own all four IDP wire calls so the manager-side raw
+	// fields above can be removed entirely. See auth/speakeasyclient.
+	speakeasyClientFacade *speakeasyclient.Client
 }
 
 func NewManager(
@@ -53,6 +72,7 @@ func NewManager(
 	posthog *posthog.Posthog,
 	billingRepo billing.Repository,
 	workos *workos.Client,
+	speakeasyClientFacade *speakeasyclient.Client,
 ) *Manager {
 	logger = logger.With(attr.SlogComponent("sessions"))
 	speakeasyClient := guardianPolicy.PooledClient()
@@ -72,6 +92,7 @@ func NewManager(
 		posthog:                posthog,
 		billingRepo:            billingRepo,
 		workos:                 workos,
+		speakeasyClientFacade:  speakeasyClientFacade,
 	}
 }
 

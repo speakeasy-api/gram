@@ -15,6 +15,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/auth/speakeasyclient"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/billing"
@@ -302,7 +303,8 @@ func newTestAuthService(t *testing.T, userInfo *MockUserInfo) (context.Context, 
 
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 
-	sessionManager := sessions.NewManager(logger, testenv.NewTracerProvider(t), guardianPolicy, conn, redisClient, cache.Suffix("gram-test"), mockServer.URL, "test-secret-key", pylon, posthog, billingClient, nil)
+	speakeasyIDPClient := speakeasyclient.NewClient(logger, testenv.NewTracerProvider(t), guardianPolicy, mockServer.URL, "test-secret-key", conn, nil, posthog)
+	sessionManager := sessions.NewManager(logger, testenv.NewTracerProvider(t), guardianPolicy, conn, redisClient, cache.Suffix("gram-test"), mockServer.URL, "test-secret-key", pylon, posthog, billingClient, nil, speakeasyIDPClient)
 
 	authConfigs := auth.AuthConfigurations{
 		SpeakeasyServerAddress: mockServer.URL,
@@ -342,7 +344,8 @@ func newTestAuthServiceWithAuthz(t *testing.T, userInfo *MockUserInfo) (context.
 
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 
-	sessionManager := sessions.NewManager(logger, testenv.NewTracerProvider(t), guardianPolicy, conn, redisClient, cache.Suffix("gram-test"), mockServer.URL, "test-secret-key", pylon, posthog, billingClient, nil)
+	speakeasyIDPClient := speakeasyclient.NewClient(logger, testenv.NewTracerProvider(t), guardianPolicy, mockServer.URL, "test-secret-key", conn, nil, posthog)
+	sessionManager := sessions.NewManager(logger, testenv.NewTracerProvider(t), guardianPolicy, conn, redisClient, cache.Suffix("gram-test"), mockServer.URL, "test-secret-key", pylon, posthog, billingClient, nil, speakeasyIDPClient)
 
 	authConfigs := auth.AuthConfigurations{
 		SpeakeasyServerAddress: mockServer.URL,

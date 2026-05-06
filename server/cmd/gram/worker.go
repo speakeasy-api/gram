@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/auth/speakeasyclient"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/background"
 	risk_analysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
@@ -529,7 +530,8 @@ func newWorkerCommand() *cli.Command {
 				return fmt.Errorf("failed to create pylon client: %w", err)
 			}
 
-			sessionManager := sessions.NewManager(logger, tracerProvider, guardianPolicy, db, redisClient, cache.SuffixNone, c.String("speakeasy-server-address"), c.String("speakeasy-secret-key"), pylonClient, posthogClient, billingRepo, nil)
+			speakeasyIDPClient := speakeasyclient.NewClient(logger, tracerProvider, guardianPolicy, c.String("speakeasy-server-address"), c.String("speakeasy-secret-key"), db, nil, posthogClient)
+			sessionManager := sessions.NewManager(logger, tracerProvider, guardianPolicy, db, redisClient, cache.SuffixNone, c.String("speakeasy-server-address"), c.String("speakeasy-secret-key"), pylonClient, posthogClient, billingRepo, nil, speakeasyIDPClient)
 
 			chatSessionsManager := chatsessions.NewManager(logger, redisClient, c.String("jwt-signing-key"))
 
