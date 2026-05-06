@@ -21,6 +21,8 @@ import { getInitials, reasonLabel } from "./challengeHelpers";
 export function useChallengeRowColumns(
   animatingOutIds?: Set<string>,
   groupCounts?: Map<string, number>,
+  groupKeys?: Map<string, string>,
+  onToggleGroup?: (groupKey: string) => void,
 ): Column<AuthzChallenge>[] {
   const { orgSlug } = useSlugs();
   const { organization } = useSession();
@@ -199,14 +201,29 @@ export function useChallengeRowColumns(
                 </TooltipContent>
               </Tooltip>
               {count > 1 && (
-                <span className="text-muted-foreground bg-muted rounded-full px-1.5 py-0.5 text-[10px] font-medium tabular-nums">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const key = groupKeys?.get(row.id);
+                    if (key) onToggleGroup?.(key);
+                  }}
+                  className="text-muted-foreground bg-muted hover:bg-primary/10 hover:text-primary cursor-pointer rounded-full px-1.5 py-0.5 text-[10px] font-medium tabular-nums transition-colors"
+                >
                   ×{count}
-                </span>
+                </button>
               )}
             </div>
           );
         },
       },
     ];
-  }, [orgSlug, projectMap, memberMap, animatingOutIds, groupCounts]);
+  }, [
+    orgSlug,
+    projectMap,
+    memberMap,
+    animatingOutIds,
+    groupCounts,
+    groupKeys,
+    onToggleGroup,
+  ]);
 }

@@ -16,7 +16,7 @@ import {
   Table,
 } from "@speakeasy-api/moonshine";
 import { Check } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useSearchParams } from "react-router";
 import { useChallengeRowColumns } from "./useChallengeRowColumns";
 import { useGrantFlow } from "./useGrantFlow";
@@ -137,7 +137,19 @@ export function ChallengesTab() {
     return [...set].filter(Boolean).sort();
   }, [challenges]);
 
-  const { filtered, groupCounts } = useMemo(() => {
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const toggleGroup = useCallback((groupKey: string) => {
+    setExpandedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(groupKey)) next.delete(groupKey);
+      else next.add(groupKey);
+      return next;
+    });
+  }, []);
+
+  const { filtered, groupCounts, groupKeys } = useMemo(() => {
     let base = challenges;
     if (outcomeFilter === "resolved") {
       base = base.filter(
@@ -165,31 +177,43 @@ export function ChallengesTab() {
       return b.timestamp.getTime() - a.timestamp.getTime();
     });
 
-    // Deduplicate by (principal, scope, outcome, resource) — keep most recent
-    const seen = new Map<string, AuthzChallenge>();
-    const counts = new Map<string, number>();
+    // Group by (principal, scope, outcome, resource)
+    const groups = new Map<string, AuthzChallenge[]>();
     for (const c of sorted) {
       const key = `${c.principalUrn}|${c.scope}|${c.outcome}|${c.resourceKind ?? ""}|${c.resourceId ?? ""}`;
-      if (!seen.has(key)) {
-        seen.set(key, c);
-        counts.set(c.id, 1);
+      const arr = groups.get(key);
+      if (arr) arr.push(c);
+      else groups.set(key, [c]);
+    }
+
+    const result: AuthzChallenge[] = [];
+    const counts = new Map<string, number>();
+    const keys = new Map<string, string>();
+    for (const [key, members] of groups) {
+      counts.set(members[0].id, members.length);
+      if (expandedGroups.has(key)) {
+        for (const m of members) keys.set(m.id, key);
+        result.push(...members);
       } else {
-        const rep = seen.get(key)!;
-        counts.set(rep.id, (counts.get(rep.id) ?? 1) + 1);
+        keys.set(members[0].id, key);
+        result.push(members[0]);
       }
     }
-    return { filtered: [...seen.values()], groupCounts: counts };
+    return { filtered: result, groupCounts: counts, groupKeys: keys };
   }, [
     challenges,
     outcomeFilter,
     principalFilter,
     scopeFilter,
     recentlyResolvedIds,
+    expandedGroups,
   ]);
 
   const challengeRowColumns = useChallengeRowColumns(
     animatingOutIds,
     groupCounts,
+    groupKeys,
+    toggleGroup,
   );
 
   const columns: Column<AuthzChallenge>[] = [
