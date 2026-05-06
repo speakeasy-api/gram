@@ -1,8 +1,15 @@
 import { Button } from "@/components/ui/button";
 import { CopyButton } from "@/components/ui/copy-button";
 import { Dialog } from "@/components/ui/dialog";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 import { BookOpen, ExternalLink } from "lucide-react";
 import { useState } from "react";
+import { HookSourceIcon } from "../hooks/HookSourceIcon";
 
 const COWORK_DOCS_URL =
   "https://support.claude.com/en/articles/13837433-manage-claude-cowork-plugins-for-your-organization";
@@ -13,19 +20,52 @@ type ContentProps = {
   marketplaceUrl: string | undefined;
 };
 
+type Provider =
+  | "claude"
+  | "cursor"
+  | "codex"
+  | "copilot"
+  | "gemini"
+  | "glean"
+  | "bedrock";
+
+const providers: {
+  id: Provider;
+  label: string;
+  source: string;
+  available: boolean;
+}[] = [
+  {
+    id: "claude",
+    label: "Claude Code",
+    source: "claude-code",
+    available: true,
+  },
+  { id: "cursor", label: "Cursor", source: "cursor", available: false },
+  { id: "codex", label: "Codex", source: "codex", available: false },
+  { id: "copilot", label: "Copilot", source: "copilot", available: false },
+  { id: "gemini", label: "Gemini", source: "gemini", available: false },
+  { id: "glean", label: "Glean", source: "glean", available: false },
+  {
+    id: "bedrock",
+    label: "AWS Bedrock",
+    source: "aws-bedrock",
+    available: false,
+  },
+];
+
 /**
- * Two-track install guidance for a published Gram plugin marketplace:
- *  - individual Claude Code users register the URL-based marketplace via
- *    the marketplace proxy
+ * Claude Code-specific install guidance:
+ *  - individual users register the URL-based marketplace via the proxy
  *  - Claude Cowork org admins add the underlying private GitHub repo as a
  *    GitHub-source plugin in Organization settings; the proxy URL doesn't
- *    apply there because Cowork uses its own GitHub App for org-managed
- *    marketplaces.
+ *    apply on that path because Cowork uses its own GitHub App for
+ *    org-managed marketplaces.
  *
- * Visual style mirrors HooksSetupDialog so the two install surfaces feel
- * consistent.
+ * Other providers (Cursor, Codex, etc.) get their own components as their
+ * install flows are designed.
  */
-function InstallInstructionsContent({
+function ClaudeInstallContent({
   repoOwner,
   repoName,
   marketplaceUrl,
@@ -116,8 +156,8 @@ function InstallInstructionsContent({
             </h4>
             <p className="text-muted-foreground text-sm">
               The Claude GitHub App must be installed on this repository so
-              Cowork can sync from it. If the repo doesn't appear in the
-              picker, install the app and retry.
+              Cowork can sync from it. If the repo doesn't appear in the picker,
+              install the app and retry.
             </p>
           </div>
 
@@ -148,13 +188,57 @@ export function InstallInstructionsDialog({
   onOpenChange,
   ...content
 }: DialogProps) {
+  const [selected, setSelected] = useState<Provider>("claude");
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <Dialog.Content className="max-w-3xl">
         <Dialog.Header>
           <Dialog.Title>Distribute your marketplace</Dialog.Title>
         </Dialog.Header>
-        <InstallInstructionsContent {...content} />
+
+        <div className="mb-6 flex flex-wrap gap-3">
+          {providers.map((p) => {
+            const button = (
+              <button
+                key={p.id}
+                onClick={() => p.available && setSelected(p.id)}
+                disabled={!p.available}
+                className={cn(
+                  "relative flex items-center gap-2 rounded-md border px-3 py-2 text-sm font-medium transition-colors",
+                  selected === p.id
+                    ? "border-primary bg-primary/5"
+                    : "border-border hover:border-primary/50 hover:bg-muted/50",
+                  !p.available &&
+                    "hover:border-border cursor-not-allowed opacity-50 hover:bg-transparent",
+                )}
+              >
+                <HookSourceIcon source={p.source} className="size-5" />
+                {p.label}
+                {!p.available && (
+                  <span className="text-muted-foreground ml-1 text-[10px] tracking-wide uppercase">
+                    Soon
+                  </span>
+                )}
+              </button>
+            );
+
+            if (!p.available) {
+              return (
+                <Tooltip key={p.id}>
+                  <TooltipTrigger asChild>{button}</TooltipTrigger>
+                  <TooltipContent>
+                    <p>Coming soon</p>
+                  </TooltipContent>
+                </Tooltip>
+              );
+            }
+
+            return button;
+          })}
+        </div>
+
+        {selected === "claude" && <ClaudeInstallContent {...content} />}
       </Dialog.Content>
     </Dialog>
   );
