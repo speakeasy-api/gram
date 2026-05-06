@@ -336,31 +336,12 @@ func (s *Service) CloneEnvironment(ctx context.Context, payload *gen.CloneEnviro
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	// Destination-write authz: the user is creating a new env in this project, so we
-	// don't yet have an env id. ResourceKind is "environment" (matching the scope
-	// family) and ResourceID is the wildcard. The project boundary is expressed as a
-	// dimension, mirroring the grant shape produced by the role dialog.
-	if err := s.authz.Require(ctx, authz.Check{
-		Scope:        authz.ScopeEnvironmentWrite,
-		ResourceKind: "environment",
-		ResourceID:   authz.WildcardResource,
-		Dimensions:   map[string]string{"project_id": authCtx.ProjectID.String()},
-	}); err != nil {
-		return nil, err
-	}
-
 	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()), attr.SlogEnvironmentSlug(string(payload.Slug)))
 
-	dbtx, err := s.db.Begin(ctx)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to access environments").Log(ctx, logger)
-	}
-	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
-
-	er := s.repo.WithTx(dbtx)
-	entriesRepo := NewEnvironmentEntries(logger, dbtx, s.entries.enc, s.entries.mcpMetadataRepo)
-
-	sourceEnv, err := er.GetEnvironmentBySlug(ctx, repo.GetEnvironmentBySlugParams{
+	// Source lookup is project-bounded at the SQL layer (ProjectID parameter), so
+	// cross-project leakage isn't possible even before authz runs. We need the
+	// source env id to express the authz check at the right granularity.
+	sourceEnv, err := s.repo.GetEnvironmentBySlug(ctx, repo.GetEnvironmentBySlugParams{
 		Slug:      conv.ToLower(payload.Slug),
 		ProjectID: *authCtx.ProjectID,
 	})
@@ -371,19 +352,28 @@ func (s *Service) CloneEnvironment(ctx context.Context, payload *gen.CloneEnviro
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to fetch source environment").Log(ctx, logger)
 	}
 
-	// Source-read authz: we know the source env id now, so we can check at that
-	// specific resource with the project_id as a constraining dimension. Wildcard
-	// grants ({resource_id: "*"}) match; per-env grants pinned to a different env
-	// don't. Future per-env granularity is additive — change the resource_id from
-	// "*" to a specific UUID at the role-builder layer.
+	// Authz: env:write on the source env with project_id as a constraining
+	// dimension. env:write implies env:read via scope expansion, so this single
+	// check covers both reading the source and producing the destination. Future
+	// per-env granularity is additive at the role layer (per-env grants instead
+	// of wildcard).
 	if err := s.authz.Require(ctx, authz.Check{
-		Scope:        authz.ScopeEnvironmentRead,
+		Scope:        authz.ScopeEnvironmentWrite,
 		ResourceKind: "environment",
 		ResourceID:   sourceEnv.ID.String(),
 		Dimensions:   map[string]string{"project_id": authCtx.ProjectID.String()},
 	}); err != nil {
 		return nil, err
 	}
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to access environments").Log(ctx, logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	er := s.repo.WithTx(dbtx)
+	entriesRepo := NewEnvironmentEntries(logger, dbtx, s.entries.enc, s.entries.mcpMetadataRepo)
 
 	newName := payload.NewName
 	newSlug := conv.ToSlug(newName)
