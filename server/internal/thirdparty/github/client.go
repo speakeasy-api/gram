@@ -84,6 +84,15 @@ func (c *Client) appJWT() (string, error) {
 	return signed, nil
 }
 
+// InstallationToken returns a (possibly cached) GitHub App installation token
+// for the given installation ID. Callers that need to act as the installation
+// outside of doAPI (for example, forwarding the token to a third party as
+// Basic-auth credentials for git smart-HTTP) should use this entry point so
+// they share the same JWT signing, singleflight, and cache machinery.
+func (c *Client) InstallationToken(ctx context.Context, installationID int64) (string, error) {
+	return c.installationToken(ctx, installationID)
+}
+
 func (c *Client) installationToken(ctx context.Context, installationID int64) (string, error) {
 	// Fast path: return cached token if still valid.
 	c.mu.Lock()

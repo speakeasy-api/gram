@@ -311,6 +311,11 @@ const (
 
 	StatsToolCallCountKey  = attribute.Key("gram.stats.tool_call_count")
 	StatsMCPServerCountKey = attribute.Key("gram.stats.mcp_server_count")
+
+	GitProxyOwnerKey    = attribute.Key("gram.git_proxy.owner")
+	GitProxyRepoKey     = attribute.Key("gram.git_proxy.repo")
+	GitProxyOpKey       = attribute.Key("gram.git_proxy.op")
+	GitProxyReadOnlyKey = attribute.Key("gram.git_proxy.read_only")
 )
 
 const (
@@ -1334,3 +1339,15 @@ func SlogChatToolCount(v int) slog.Attr      { return slog.Int(string(ChatToolCo
 
 func ChatToolNames(v any) attribute.KeyValue { return ChatToolNamesKey.String(fmt.Sprintf("%v", v)) }
 func SlogChatToolNames(v any) slog.Attr      { return slog.Any(string(ChatToolNamesKey), v) }
+
+func GitProxyOwner(v string) attribute.KeyValue { return GitProxyOwnerKey.String(v) }
+func SlogGitProxyOwner(v string) slog.Attr      { return slog.String(string(GitProxyOwnerKey), v) }
+
+func GitProxyRepo(v string) attribute.KeyValue { return GitProxyRepoKey.String(v) }
+func SlogGitProxyRepo(v string) slog.Attr      { return slog.String(string(GitProxyRepoKey), v) }
+
+func GitProxyOp(v string) attribute.KeyValue { return GitProxyOpKey.String(v) }
+func SlogGitProxyOp(v string) slog.Attr      { return slog.String(string(GitProxyOpKey), v) }
+
+func GitProxyReadOnly(v bool) attribute.KeyValue { return GitProxyReadOnlyKey.Bool(v) }
+func SlogGitProxyReadOnly(v bool) slog.Attr      { return slog.Bool(string(GitProxyReadOnlyKey), v) }

@@ -53,6 +53,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/functions"
+	"github.com/speakeasy-api/gram/server/internal/gitproxy"
 	"github.com/speakeasy-api/gram/server/internal/hooks"
 	"github.com/speakeasy-api/gram/server/internal/instances"
 	"github.com/speakeasy-api/gram/server/internal/integrations"
@@ -379,6 +380,7 @@ func newStartCommand() *cli.Command {
 	flags = append(flags, clickHouseFlags...)
 	flags = append(flags, functionsFlags...)
 	flags = append(flags, pluginsFlags...)
+	flags = append(flags, gitProxyFlags...)
 	flags = append(flags, assistantRuntimeFlags...)
 	flags = append(flags, pulseMCPFlags...)
 
@@ -796,6 +798,23 @@ func newStartCommand() *cli.Command {
 				logger.InfoContext(ctx, "GitHub publishing for plugins: disabled")
 			}
 			plugins.Attach(mux, plugins.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, pluginsGitHub, c.String("environment"), c.String("server-url")))
+
+			gitProxyConfig, err := gitproxy.NewConfig(gitproxy.Config{
+				AppID:          c.Int64("git-proxy-github-app-id"),
+				PrivateKey:     c.String("git-proxy-github-private-key"),
+				InstallationID: c.Int64("git-proxy-github-installation-id"),
+				ReadOnly:       c.Bool("git-proxy-read-only"),
+				HTTPClient:     guardianPolicy.Client(),
+			})
+			if err != nil {
+				return fmt.Errorf("git proxy config: %w", err)
+			}
+			if gitProxyConfig != nil {
+				logger.InfoContext(ctx, "git smart-HTTP proxy: enabled", attr.SlogGitProxyReadOnly(gitProxyConfig.ReadOnly))
+				gitproxy.Attach(mux, gitproxy.NewService(logger, tracerProvider, db, billingRepo, guardianPolicy, gitProxyConfig))
+			} else {
+				logger.InfoContext(ctx, "git smart-HTTP proxy: disabled")
+			}
 			productfeatures.Attach(mux, productfeatures.NewService(logger, tracerProvider, db, sessionManager, redisClient, authzEngine))
 			toolsets.Attach(mux, toolsetsSvc)
 			integrations.Attach(mux, integrations.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
