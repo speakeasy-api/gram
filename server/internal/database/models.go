@@ -776,6 +776,8 @@ type OrganizationMetadatum struct {
 	GramAccountType    string
 	SsoConnectionID    pgtype.Text
 	WorkosID           pgtype.Text
+	WorkosUpdatedAt    pgtype.Timestamptz
+	WorkosLastEventID  pgtype.Text
 	Whitelisted        bool
 	FreeTrialStartedAt pgtype.Timestamptz
 	FreeTrialEndsAt    pgtype.Timestamptz
@@ -819,6 +821,8 @@ type OrganizationUserRelationship struct {
 	OrganizationID     string
 	UserID             string
 	WorkosMembershipID pgtype.Text
+	WorkosUpdatedAt    pgtype.Timestamptz
+	WorkosLastEventID  pgtype.Text
 	CreatedAt          pgtype.Timestamptz
 	UpdatedAt          pgtype.Timestamptz
 	DeletedAt          pgtype.Timestamptz
