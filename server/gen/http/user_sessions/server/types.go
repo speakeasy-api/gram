@@ -413,9 +413,9 @@ type UserSessionResponseBody struct {
 	ID string `form:"id" json:"id" xml:"id"`
 	// The issuing user_session_issuer id.
 	UserSessionIssuerID string `form:"user_session_issuer_id" json:"user_session_issuer_id" xml:"user_session_issuer_id"`
-	// The session's principal URN (user:<id> | apikey:<uuid> |
+	// The session's subject URN (user:<id> | apikey:<uuid> |
 	// anonymous:<mcp-session-id>).
-	PrincipalUrn string `form:"principal_urn" json:"principal_urn" xml:"principal_urn"`
+	SubjectUrn string `form:"subject_urn" json:"subject_urn" xml:"subject_urn"`
 	// Current access-token JTI; used by the revocation path.
 	Jti string `form:"jti" json:"jti" xml:"jti"`
 	// Next refresh deadline.
@@ -739,9 +739,9 @@ func NewRevokeUserSessionGatewayErrorResponseBody(res *goa.ServiceError) *Revoke
 
 // NewListUserSessionsPayload builds a userSessions service listUserSessions
 // endpoint payload.
-func NewListUserSessionsPayload(principalUrn *string, userSessionIssuerID *string, cursor *string, limit *int, sessionToken *string, apikeyToken *string, projectSlugInput *string) *usersessions.ListUserSessionsPayload {
+func NewListUserSessionsPayload(subjectUrn *string, userSessionIssuerID *string, cursor *string, limit *int, sessionToken *string, apikeyToken *string, projectSlugInput *string) *usersessions.ListUserSessionsPayload {
 	v := &usersessions.ListUserSessionsPayload{}
-	v.PrincipalUrn = principalUrn
+	v.SubjectUrn = subjectUrn
 	v.UserSessionIssuerID = userSessionIssuerID
 	v.Cursor = cursor
 	v.Limit = limit

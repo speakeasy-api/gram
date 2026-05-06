@@ -1,8 +1,7 @@
 // DEPRECATED: this package backs Gram's chat-session authentication path
 // (cookie-based, Speakeasy-IDP-mediated). It is being replaced by the
-// user-session JWT path under `server/internal/usersessions/` (per spike §4.5
-// / RFC "Remote OAuth Clients for Private Repos"). New work belongs in the
-// user-sessions package; do NOT extend this manager.
+// user-session JWT path under `server/internal/usersessions/`. New work
+// belongs in the user-sessions package; do NOT extend this manager.
 //
 // The shared post-IDP user bootstrap (UpsertUser, posthog signup event,
 // WorkOS membership sync) lives in `auth/speakeasyclient` so both this

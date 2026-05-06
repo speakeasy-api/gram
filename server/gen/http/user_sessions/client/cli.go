@@ -18,12 +18,12 @@ import (
 
 // BuildListUserSessionsPayload builds the payload for the userSessions
 // listUserSessions endpoint from CLI flags.
-func BuildListUserSessionsPayload(userSessionsListUserSessionsPrincipalUrn string, userSessionsListUserSessionsUserSessionIssuerID string, userSessionsListUserSessionsCursor string, userSessionsListUserSessionsLimit string, userSessionsListUserSessionsSessionToken string, userSessionsListUserSessionsApikeyToken string, userSessionsListUserSessionsProjectSlugInput string) (*usersessions.ListUserSessionsPayload, error) {
+func BuildListUserSessionsPayload(userSessionsListUserSessionsSubjectUrn string, userSessionsListUserSessionsUserSessionIssuerID string, userSessionsListUserSessionsCursor string, userSessionsListUserSessionsLimit string, userSessionsListUserSessionsSessionToken string, userSessionsListUserSessionsApikeyToken string, userSessionsListUserSessionsProjectSlugInput string) (*usersessions.ListUserSessionsPayload, error) {
 	var err error
-	var principalUrn *string
+	var subjectUrn *string
 	{
-		if userSessionsListUserSessionsPrincipalUrn != "" {
-			principalUrn = &userSessionsListUserSessionsPrincipalUrn
+		if userSessionsListUserSessionsSubjectUrn != "" {
+			subjectUrn = &userSessionsListUserSessionsSubjectUrn
 		}
 	}
 	var userSessionIssuerID *string
@@ -40,6 +40,10 @@ func BuildListUserSessionsPayload(userSessionsListUserSessionsPrincipalUrn strin
 	{
 		if userSessionsListUserSessionsCursor != "" {
 			cursor = &userSessionsListUserSessionsCursor
+			err = goa.MergeErrors(err, goa.ValidateFormat("cursor", *cursor, goa.FormatUUID))
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 	var limit *int
@@ -73,7 +77,7 @@ func BuildListUserSessionsPayload(userSessionsListUserSessionsPrincipalUrn strin
 		}
 	}
 	v := &usersessions.ListUserSessionsPayload{}
-	v.PrincipalUrn = principalUrn
+	v.SubjectUrn = subjectUrn
 	v.UserSessionIssuerID = userSessionIssuerID
 	v.Cursor = cursor
 	v.Limit = limit

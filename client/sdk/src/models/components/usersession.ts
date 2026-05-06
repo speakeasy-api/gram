@@ -26,13 +26,13 @@ export type UserSession = {
    */
   jti: string;
   /**
-   * The session's principal URN (user:<id> | apikey:<uuid> | anonymous:<mcp-session-id>).
-   */
-  principalUrn: string;
-  /**
    * Next refresh deadline.
    */
   refreshExpiresAt: Date;
+  /**
+   * The session's subject URN (user:<id> | apikey:<uuid> | anonymous:<mcp-session-id>).
+   */
+  subjectUrn: string;
   updatedAt: Date;
   /**
    * The issuing user_session_issuer id.
@@ -54,11 +54,11 @@ export const UserSession$inboundSchema: z.ZodMiniType<UserSession, unknown> = z
       ),
       id: z.string(),
       jti: z.string(),
-      principal_urn: z.string(),
       refresh_expires_at: z.pipe(
         z.iso.datetime({ offset: true }),
         z.transform(v => new Date(v)),
       ),
+      subject_urn: z.string(),
       updated_at: z.pipe(
         z.iso.datetime({ offset: true }),
         z.transform(v => new Date(v)),
@@ -69,8 +69,8 @@ export const UserSession$inboundSchema: z.ZodMiniType<UserSession, unknown> = z
       return remap$(v, {
         "created_at": "createdAt",
         "expires_at": "expiresAt",
-        "principal_urn": "principalUrn",
         "refresh_expires_at": "refreshExpiresAt",
+        "subject_urn": "subjectUrn",
         "updated_at": "updatedAt",
         "user_session_issuer_id": "userSessionIssuerId",
       });

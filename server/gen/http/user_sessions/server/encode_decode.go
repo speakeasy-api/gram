@@ -39,7 +39,7 @@ func DecodeListUserSessionsRequest(mux goahttp.Muxer, decoder func(*http.Request
 	return func(r *http.Request) (*usersessions.ListUserSessionsPayload, error) {
 		var payload *usersessions.ListUserSessionsPayload
 		var (
-			principalUrn        *string
+			subjectUrn          *string
 			userSessionIssuerID *string
 			cursor              *string
 			limit               *int
@@ -49,9 +49,9 @@ func DecodeListUserSessionsRequest(mux goahttp.Muxer, decoder func(*http.Request
 			err                 error
 		)
 		qp := r.URL.Query()
-		principalUrnRaw := qp.Get("principal_urn")
-		if principalUrnRaw != "" {
-			principalUrn = &principalUrnRaw
+		subjectUrnRaw := qp.Get("subject_urn")
+		if subjectUrnRaw != "" {
+			subjectUrn = &subjectUrnRaw
 		}
 		userSessionIssuerIDRaw := qp.Get("user_session_issuer_id")
 		if userSessionIssuerIDRaw != "" {
@@ -63,6 +63,9 @@ func DecodeListUserSessionsRequest(mux goahttp.Muxer, decoder func(*http.Request
 		cursorRaw := qp.Get("cursor")
 		if cursorRaw != "" {
 			cursor = &cursorRaw
+		}
+		if cursor != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("cursor", *cursor, goa.FormatUUID))
 		}
 		{
 			limitRaw := qp.Get("limit")
@@ -90,7 +93,7 @@ func DecodeListUserSessionsRequest(mux goahttp.Muxer, decoder func(*http.Request
 		if err != nil {
 			return payload, err
 		}
-		payload = NewListUserSessionsPayload(principalUrn, userSessionIssuerID, cursor, limit, sessionToken, apikeyToken, projectSlugInput)
+		payload = NewListUserSessionsPayload(subjectUrn, userSessionIssuerID, cursor, limit, sessionToken, apikeyToken, projectSlugInput)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -513,7 +516,7 @@ func marshalTypesUserSessionToUserSessionResponseBody(v *types.UserSession) *Use
 	res := &UserSessionResponseBody{
 		ID:                  v.ID,
 		UserSessionIssuerID: v.UserSessionIssuerID,
-		PrincipalUrn:        v.PrincipalUrn,
+		SubjectUrn:          v.SubjectUrn,
 		Jti:                 v.Jti,
 		RefreshExpiresAt:    v.RefreshExpiresAt,
 		ExpiresAt:           v.ExpiresAt,

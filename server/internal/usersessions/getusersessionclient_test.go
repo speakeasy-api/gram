@@ -17,11 +17,11 @@ func TestGetUserSessionClient(t *testing.T) {
 	ctx, ti := newTestService(t)
 
 	issuer, err := ti.service.CreateUserSessionIssuer(ctx, &issuersgen.CreateUserSessionIssuerPayload{
-		SessionToken:       nil,
-		ApikeyToken:        nil,
-		ProjectSlugInput:   nil,
-		Slug:               "get-client-issuer",
-		AuthnChallengeMode: "chain",
+		SessionToken:         nil,
+		ApikeyToken:          nil,
+		ProjectSlugInput:     nil,
+		Slug:                 "get-client-issuer",
+		AuthnChallengeMode:   "chain",
 		SessionDurationHours: 24,
 	})
 	require.NoError(t, err)
@@ -39,7 +39,7 @@ func TestGetUserSessionClient(t *testing.T) {
 	require.Equal(t, client.ID.String(), got.ID)
 	require.Equal(t, "the-client", got.ClientID)
 	// client_secret_hash is not part of the API type — the Goa-generated struct
-	// has no such field, which is what guarantees the spike §6.1 contract.
+	// has no such field, so it can never reach the wire.
 }
 
 func TestGetUserSessionClient_NotFound(t *testing.T) {

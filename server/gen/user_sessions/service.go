@@ -50,11 +50,11 @@ var MethodNames = [2]string{"listUserSessions", "revokeUserSession"}
 // ListUserSessionsPayload is the payload type of the userSessions service
 // listUserSessions method.
 type ListUserSessionsPayload struct {
-	// Exact-match filter on principal URN.
-	PrincipalUrn *string
+	// Exact-match filter on subject URN.
+	SubjectUrn *string
 	// Filter by user_session_issuer id.
 	UserSessionIssuerID *string
-	// Pagination cursor.
+	// Pagination cursor: id of the last item from the previous page.
 	Cursor *string
 	// Page size (default 50, max 100).
 	Limit            *int

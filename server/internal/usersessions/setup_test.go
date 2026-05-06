@@ -11,9 +11,11 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
@@ -51,9 +53,11 @@ func TestMain(m *testing.M) {
 }
 
 type testInstance struct {
-	service        *usersessions.Service
-	conn           *pgxpool.Pool
-	sessionManager *sessions.Manager
+	service             *usersessions.Service
+	conn                *pgxpool.Pool
+	sessionManager      *sessions.Manager
+	chatSessionsManager *chatsessions.Manager
+	redis               *redis.Client
 }
 
 func newTestService(t *testing.T) (context.Context, *testInstance) {
@@ -74,6 +78,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, guardianPolicy, conn, redisClient, cache.Suffix("gram-local"), billingClient)
+	chatSessionsManager := chatsessions.NewManager(logger, redisClient, "test-jwt-secret")
 
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
 
@@ -82,14 +87,28 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 		tracerProvider,
 		conn,
 		sessionManager,
+		chatSessionsManager,
 		authz.NewEngine(logger, conn, authztest.RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache),
 	)
 
 	return ctx, &testInstance{
-		service:        svc,
-		conn:           conn,
-		sessionManager: sessionManager,
+		service:             svc,
+		conn:                conn,
+		sessionManager:      sessionManager,
+		chatSessionsManager: chatSessionsManager,
+		redis:               redisClient,
 	}
+}
+
+// jtiRevoked reports whether the chat_session_revoked:{jti}: key exists in
+// the test redis. The trailing colon comes from cache.fullKey with
+// cache.SuffixNone. Bypasses chatsessions.Manager.IsTokenRevoked, which has
+// a brittle error-string match that fires false negatives on missing keys.
+func jtiRevoked(t *testing.T, ctx context.Context, r *redis.Client, jti string) bool {
+	t.Helper()
+	n, err := r.Exists(ctx, "chat_session_revoked:"+jti+":").Result()
+	require.NoError(t, err)
+	return n > 0
 }
 
 // withExactAuthzGrants flips the auth context to enterprise (so RBAC is

@@ -240,6 +240,40 @@ func (q *Queries) DeleteUserSessionIssuer(ctx context.Context, arg DeleteUserSes
 	return i, err
 }
 
+const getUserSessionByID = `-- name: GetUserSessionByID :one
+SELECT s.id, s.user_session_issuer_id, s.user_session_client_id, s.subject_urn, s.jti, s.refresh_token_hash, s.refresh_expires_at, s.expires_at, s.created_at, s.updated_at, s.deleted_at, s.deleted
+FROM user_sessions AS s
+JOIN user_session_issuers AS iss ON iss.id = s.user_session_issuer_id
+WHERE s.id = $1 AND iss.project_id = $2 AND s.deleted IS FALSE
+`
+
+type GetUserSessionByIDParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// Returns the session row scoped to the caller's project, joined through
+// user_session_issuers so project scoping is enforced in the same query.
+func (q *Queries) GetUserSessionByID(ctx context.Context, arg GetUserSessionByIDParams) (UserSession, error) {
+	row := q.db.QueryRow(ctx, getUserSessionByID, arg.ID, arg.ProjectID)
+	var i UserSession
+	err := row.Scan(
+		&i.ID,
+		&i.UserSessionIssuerID,
+		&i.UserSessionClientID,
+		&i.SubjectUrn,
+		&i.Jti,
+		&i.RefreshTokenHash,
+		&i.RefreshExpiresAt,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const getUserSessionClientByID = `-- name: GetUserSessionClientByID :one
 SELECT cli.id, cli.user_session_issuer_id, cli.client_id, cli.client_secret_hash, cli.client_name, cli.redirect_uris, cli.client_id_issued_at, cli.client_secret_expires_at, cli.created_at, cli.updated_at, cli.deleted_at, cli.deleted, iss.project_id AS issuer_project_id
 FROM user_session_clients AS cli
@@ -570,6 +604,123 @@ func (q *Queries) ListUserSessionIssuersByProjectID(ctx context.Context, arg Lis
 		return nil, err
 	}
 	return items, nil
+}
+
+const listUserSessionsByProjectID = `-- name: ListUserSessionsByProjectID :many
+SELECT s.id, s.user_session_issuer_id, s.user_session_client_id, s.subject_urn, s.jti,
+       s.refresh_expires_at, s.expires_at,
+       s.created_at, s.updated_at, s.deleted_at, s.deleted
+FROM user_sessions AS s
+JOIN user_session_issuers AS iss ON iss.id = s.user_session_issuer_id
+WHERE iss.project_id = $1
+  AND s.deleted IS FALSE
+  AND iss.deleted IS FALSE
+  AND ($2::text IS NULL OR s.subject_urn = $2::text)
+  AND ($3::uuid IS NULL OR s.user_session_issuer_id = $3::uuid)
+  AND ($4::uuid IS NULL OR s.id < $4::uuid)
+ORDER BY s.id DESC
+LIMIT $5
+`
+
+type ListUserSessionsByProjectIDParams struct {
+	ProjectID           uuid.UUID
+	SubjectUrn          pgtype.Text
+	UserSessionIssuerID uuid.NullUUID
+	Cursor              uuid.NullUUID
+	LimitValue          int32
+}
+
+type ListUserSessionsByProjectIDRow struct {
+	ID                  uuid.UUID
+	UserSessionIssuerID uuid.UUID
+	UserSessionClientID uuid.NullUUID
+	SubjectUrn          urn.SessionSubject
+	Jti                 string
+	RefreshExpiresAt    pgtype.Timestamptz
+	ExpiresAt           pgtype.Timestamptz
+	CreatedAt           pgtype.Timestamptz
+	UpdatedAt           pgtype.Timestamptz
+	DeletedAt           pgtype.Timestamptz
+	Deleted             bool
+}
+
+// refresh_token_hash is excluded from the projection so the management API
+// surface cannot accidentally return it.
+func (q *Queries) ListUserSessionsByProjectID(ctx context.Context, arg ListUserSessionsByProjectIDParams) ([]ListUserSessionsByProjectIDRow, error) {
+	rows, err := q.db.Query(ctx, listUserSessionsByProjectID,
+		arg.ProjectID,
+		arg.SubjectUrn,
+		arg.UserSessionIssuerID,
+		arg.Cursor,
+		arg.LimitValue,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListUserSessionsByProjectIDRow
+	for rows.Next() {
+		var i ListUserSessionsByProjectIDRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserSessionIssuerID,
+			&i.UserSessionClientID,
+			&i.SubjectUrn,
+			&i.Jti,
+			&i.RefreshExpiresAt,
+			&i.ExpiresAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const revokeUserSession = `-- name: RevokeUserSession :one
+UPDATE user_sessions AS s
+SET deleted_at = clock_timestamp()
+FROM user_session_issuers AS iss
+WHERE s.id = $1
+  AND iss.id = s.user_session_issuer_id
+  AND iss.project_id = $2
+  AND s.deleted IS FALSE
+RETURNING s.id, s.user_session_issuer_id, s.user_session_client_id, s.subject_urn, s.jti, s.refresh_token_hash, s.refresh_expires_at, s.expires_at, s.created_at, s.updated_at, s.deleted_at, s.deleted
+`
+
+type RevokeUserSessionParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// Soft-deletes the session. Project scoping is enforced through the join on
+// user_session_issuers. Returns the affected row so the handler can push the
+// jti into the revocation cache and emit an audit event.
+func (q *Queries) RevokeUserSession(ctx context.Context, arg RevokeUserSessionParams) (UserSession, error) {
+	row := q.db.QueryRow(ctx, revokeUserSession, arg.ID, arg.ProjectID)
+	var i UserSession
+	err := row.Scan(
+		&i.ID,
+		&i.UserSessionIssuerID,
+		&i.UserSessionClientID,
+		&i.SubjectUrn,
+		&i.Jti,
+		&i.RefreshTokenHash,
+		&i.RefreshExpiresAt,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
 }
 
 const revokeUserSessionClient = `-- name: RevokeUserSessionClient :one
