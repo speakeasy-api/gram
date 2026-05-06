@@ -8,6 +8,7 @@ export function useGrantFlow() {
   const [grantChallenge, setGrantChallenge] = useState<AuthzChallenge | null>(
     null,
   );
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
 
   const actionsColumn: Column<AuthzChallenge> = {
@@ -19,7 +20,10 @@ export function useGrantFlow() {
         <Button
           variant="primary"
           size="sm"
-          onClick={() => setGrantChallenge(row)}
+          onClick={() => {
+            setGrantChallenge(row);
+            setIsDrawerOpen(true);
+          }}
         >
           <Button.Text>Grant</Button.Text>
         </Button>
@@ -29,9 +33,11 @@ export function useGrantFlow() {
   const grantFlowPortals = (
     <>
       <GrantDrawer
-        open={!!grantChallenge}
+        open={isDrawerOpen}
         onOpenChange={(isOpen) => {
-          if (!isOpen) setGrantChallenge(null);
+          setIsDrawerOpen(isOpen);
+          // Delay clearing challenge so Sheet exit animation can complete
+          if (!isOpen) setTimeout(() => setGrantChallenge(null), 350);
         }}
         challenge={grantChallenge}
         onCreateNew={() => setIsCreateOpen(true)}
