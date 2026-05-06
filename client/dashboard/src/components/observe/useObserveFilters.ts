@@ -11,6 +11,21 @@ import {
 } from "./observeFilterUtils";
 
 const DEFAULT_HOOK_TYPES: TypesToInclude[] = ["mcp", "skill"];
+const VALID_HOOK_TYPES: TypesToInclude[] = ["mcp", "local", "skill"];
+const SERVER_FILTER_PATH = "gram.tool_call.source";
+const USER_EMAIL_FILTER_PATH = "user.email";
+
+function parseHookTypesParam(raw: string | null): TypesToInclude[] {
+  if (!raw) return [...DEFAULT_HOOK_TYPES];
+
+  const parsed = raw
+    .split(",")
+    .filter((t): t is TypesToInclude =>
+      VALID_HOOK_TYPES.includes(t as TypesToInclude),
+    );
+  const unique = [...new Set(parsed)];
+  return unique.length > 0 ? unique : [...DEFAULT_HOOK_TYPES];
+}
 
 export function useObserveFilters() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -28,7 +43,7 @@ export function useObserveFilters() {
           filters.push({
             display: value,
             filters: [value],
-            path: "gram.tool_call.source",
+            path: SERVER_FILTER_PATH,
           });
         });
     }
@@ -43,7 +58,7 @@ export function useObserveFilters() {
           filters.push({
             display: value,
             filters: [value],
-            path: "user.email",
+            path: USER_EMAIL_FILTER_PATH,
           });
         });
     }
@@ -52,15 +67,7 @@ export function useObserveFilters() {
   });
 
   const [selectedHookTypes, setSelectedHookTypes] = useState<TypesToInclude[]>(
-    () => {
-      const raw = searchParams.get("hookTypes");
-      if (!raw) return DEFAULT_HOOK_TYPES;
-      return raw
-        .split(",")
-        .filter((t) =>
-          ["mcp", "local", "skill"].includes(t),
-        ) as TypesToInclude[];
-    },
+    () => parseHookTypesParam(searchParams.get("hookTypes")),
   );
   const [knownServers, setKnownServers] = useState<string[]>([]);
   const [knownUserEmails, setKnownUserEmails] = useState<string[]>([]);
@@ -157,15 +164,15 @@ export function useObserveFilters() {
 
   const serverOptions = useMemo(() => {
     const selected = activeFilters
-      .filter((f) => f.path === "gram.tool_call.source")
-      .map((f) => f.filters[0])
-      .filter((v): v is string => Boolean(v));
+      .filter((f) => f.path === SERVER_FILTER_PATH)
+      .map((f) => f.display)
+      .filter(Boolean);
     return [...new Set([...knownServers, ...selected])];
   }, [knownServers, activeFilters]);
 
   const userEmailOptions = useMemo(() => {
     const selected = activeFilters
-      .filter((f) => f.path === "user.email")
+      .filter((f) => f.path === USER_EMAIL_FILTER_PATH)
       .map((f) => f.filters[0])
       .filter((v): v is string => Boolean(v));
     return [...new Set([...knownUserEmails, ...selected])];
@@ -174,11 +181,11 @@ export function useObserveFilters() {
   const handleUserEmailSelectionChange = useCallback(
     (values: string[]) => {
       setActiveFilters((prev) => {
-        const nonEmail = prev.filter((f) => f.path !== "user.email");
+        const nonEmail = prev.filter((f) => f.path !== USER_EMAIL_FILTER_PATH);
         const emailFilters: FilterChip[] = values.map((v) => ({
           display: v,
           filters: [v],
-          path: "user.email",
+          path: USER_EMAIL_FILTER_PATH,
         }));
         return [...nonEmail, ...emailFilters];
       });
@@ -201,14 +208,20 @@ export function useObserveFilters() {
   const handleServerSelectionChange = useCallback(
     (values: string[]) => {
       setActiveFilters((prev) => {
-        const nonServer = prev.filter(
-          (f) => f.path !== "gram.tool_call.source",
+        const nonServer = prev.filter((f) => f.path !== SERVER_FILTER_PATH);
+        const existingServers = new Map(
+          prev
+            .filter((f) => f.path === SERVER_FILTER_PATH)
+            .map((filter) => [filter.display, filter]),
         );
-        const serverFilters: FilterChip[] = values.map((v) => ({
-          display: v,
-          filters: [v],
-          path: "gram.tool_call.source",
-        }));
+        const serverFilters: FilterChip[] = values.map(
+          (v) =>
+            existingServers.get(v) ?? {
+              display: v,
+              filters: [v],
+              path: SERVER_FILTER_PATH,
+            },
+        );
         return [...nonServer, ...serverFilters];
       });
       setSearchParams(
@@ -240,14 +253,14 @@ export function useObserveFilters() {
         setSearchParams(
           (urlPrev) => {
             const next = new URLSearchParams(urlPrev);
-            if (chip.path === "gram.tool_call.source") {
+            if (chip.path === SERVER_FILTER_PATH) {
               const serverFilters = newFilters
-                .filter((f) => f.path === "gram.tool_call.source")
+                .filter((f) => f.path === SERVER_FILTER_PATH)
                 .map((f) => f.display);
               next.set("server", serverFilters.join(","));
-            } else if (chip.path === "user.email") {
+            } else if (chip.path === USER_EMAIL_FILTER_PATH) {
               const userFilters = newFilters
-                .filter((f) => f.path === "user.email")
+                .filter((f) => f.path === USER_EMAIL_FILTER_PATH)
                 .map((f) => f.display);
               next.set("user", userFilters.join(","));
             }
@@ -272,18 +285,18 @@ export function useObserveFilters() {
         setSearchParams(
           (urlPrev) => {
             const next = new URLSearchParams(urlPrev);
-            if (path === "gram.tool_call.source") {
+            if (path === SERVER_FILTER_PATH) {
               const serverFilters = newFilters
-                .filter((f) => f.path === "gram.tool_call.source")
+                .filter((f) => f.path === SERVER_FILTER_PATH)
                 .map((f) => f.display);
               if (serverFilters.length > 0) {
                 next.set("server", serverFilters.join(","));
               } else {
                 next.delete("server");
               }
-            } else if (path === "user.email") {
+            } else if (path === USER_EMAIL_FILTER_PATH) {
               const userFilters = newFilters
-                .filter((f) => f.path === "user.email")
+                .filter((f) => f.path === USER_EMAIL_FILTER_PATH)
                 .map((f) => f.display);
               if (userFilters.length > 0) {
                 next.set("user", userFilters.join(","));
@@ -304,21 +317,28 @@ export function useObserveFilters() {
 
   const handleHookTypesChange = useCallback(
     (types: TypesToInclude[]) => {
-      setSelectedHookTypes(types);
+      const nextTypes = [
+        ...new Set(
+          types.filter((t): t is TypesToInclude =>
+            VALID_HOOK_TYPES.includes(t as TypesToInclude),
+          ),
+        ),
+      ];
+      if (nextTypes.length === 0) return;
+
+      setSelectedHookTypes(nextTypes);
       setSearchParams(
         (prev) => {
           const next = new URLSearchParams(prev);
           const isDefault =
-            types.length === 2 &&
-            types.includes("mcp") &&
-            types.includes("skill") &&
-            !types.includes("local");
+            nextTypes.length === 2 &&
+            nextTypes.includes("mcp") &&
+            nextTypes.includes("skill") &&
+            !nextTypes.includes("local");
           if (isDefault) {
             next.delete("hookTypes");
-          } else if (types.length > 0) {
-            next.set("hookTypes", types.join(","));
           } else {
-            next.delete("hookTypes");
+            next.set("hookTypes", nextTypes.join(","));
           }
           return next;
         },

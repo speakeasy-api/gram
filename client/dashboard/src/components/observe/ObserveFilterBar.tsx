@@ -89,29 +89,39 @@ export function ObserveTypeFilter({
       </PopoverTrigger>
       <PopoverContent className="w-[200px] p-3" align="start">
         <div className="space-y-2">
-          {SERVER_TYPES.map((option) => (
-            <div key={option.value} className="flex items-center space-x-2">
-              <Checkbox
-                id={`observe-type-${option.value}`}
-                checked={selectedTypes.includes(option.value)}
-                onCheckedChange={(checked) => {
-                  if (checked) {
-                    onTypesChange([...selectedTypes, option.value]);
-                  } else {
-                    onTypesChange(
-                      selectedTypes.filter((t) => t !== option.value),
-                    );
-                  }
-                }}
-              />
-              <label
-                htmlFor={`observe-type-${option.value}`}
-                className="cursor-pointer text-sm leading-none font-medium"
-              >
-                {option.label}
-              </label>
-            </div>
-          ))}
+          {SERVER_TYPES.map((option) => {
+            const isSelected = selectedTypes.includes(option.value);
+            const isLastSelected = isSelected && selectedTypes.length === 1;
+            return (
+              <div key={option.value} className="flex items-center space-x-2">
+                <Checkbox
+                  id={`observe-type-${option.value}`}
+                  checked={isSelected}
+                  disabled={isLastSelected}
+                  onCheckedChange={(checked) => {
+                    if (checked) {
+                      if (!isSelected) {
+                        onTypesChange([...selectedTypes, option.value]);
+                      }
+                    } else {
+                      const nextTypes = selectedTypes.filter(
+                        (t) => t !== option.value,
+                      );
+                      if (nextTypes.length > 0) {
+                        onTypesChange(nextTypes);
+                      }
+                    }
+                  }}
+                />
+                <label
+                  htmlFor={`observe-type-${option.value}`}
+                  className="cursor-pointer text-sm leading-none font-medium"
+                >
+                  {option.label}
+                </label>
+              </div>
+            );
+          })}
         </div>
       </PopoverContent>
     </Popover>
@@ -155,8 +165,8 @@ export function ObserveFilterBar({
     () =>
       activeFilters
         .filter((f) => f.path === "gram.tool_call.source")
-        .map((f) => f.filters[0])
-        .filter((v): v is string => Boolean(v)),
+        .map((f) => f.display)
+        .filter(Boolean),
     [activeFilters],
   );
 
