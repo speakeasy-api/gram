@@ -195,6 +195,7 @@ function reasonLabel(reason: Reason): string {
 
 export function useChallengeRowColumns(
   animatingOutIds?: Set<string>,
+  groupCounts?: Map<string, number>,
 ): Column<AuthzChallenge>[] {
   const { orgSlug } = useSlugs();
   const { organization } = useSession();
@@ -308,7 +309,7 @@ export function useChallengeRowColumns(
       {
         key: "resource",
         header: "Resource",
-        width: "1.5fr",
+        width: "1fr",
         render: (row: AuthzChallenge) => (
           <div className={cn("min-w-0 overflow-hidden", rowFade(row))}>
             <ResourceLink
@@ -354,26 +355,35 @@ export function useChallengeRowColumns(
       {
         key: "timestamp",
         header: "Time",
-        width: "120px",
-        render: (row: AuthzChallenge) => (
-          <Tooltip delayDuration={500}>
-            <TooltipTrigger asChild>
-              <Type
-                variant="body"
-                className={cn(
-                  "text-muted-foreground cursor-default text-sm whitespace-nowrap underline decoration-dotted underline-offset-4",
-                  rowFade(row),
-                )}
-              >
-                <HumanizeDateTime date={row.timestamp} />
-              </Type>
-            </TooltipTrigger>
-            <TooltipContent>{row.timestamp.toLocaleString()}</TooltipContent>
-          </Tooltip>
-        ),
+        width: "160px",
+        render: (row: AuthzChallenge) => {
+          const count = groupCounts?.get(row.id) ?? 1;
+          return (
+            <div className={cn("flex items-center gap-1.5", rowFade(row))}>
+              <Tooltip delayDuration={500}>
+                <TooltipTrigger asChild>
+                  <Type
+                    variant="body"
+                    className="text-muted-foreground cursor-default text-sm whitespace-nowrap underline decoration-dotted underline-offset-4"
+                  >
+                    <HumanizeDateTime date={row.timestamp} />
+                  </Type>
+                </TooltipTrigger>
+                <TooltipContent>
+                  {row.timestamp.toLocaleString()}
+                </TooltipContent>
+              </Tooltip>
+              {count > 1 && (
+                <span className="text-muted-foreground bg-muted rounded-full px-1.5 py-0.5 text-[10px] font-medium tabular-nums">
+                  ×{count}
+                </span>
+              )}
+            </div>
+          );
+        },
       },
     ],
-    [orgSlug, projectMap, memberMap, animatingOutIds],
+    [orgSlug, projectMap, memberMap, animatingOutIds, groupCounts],
   );
 }
 
@@ -390,7 +400,10 @@ export function ChallengesTab() {
     recentlyResolvedIds,
     animatingOutIds,
   } = useGrantFlow();
-  const challengeRowColumns = useChallengeRowColumns(animatingOutIds);
+  const challengeRowColumns = useChallengeRowColumns(
+    animatingOutIds,
+    groupCounts,
+  );
 
   const { data, isLoading } = useChallenges({ limit: 200 });
   const challenges = useMemo(
@@ -422,7 +435,7 @@ export function ChallengesTab() {
     return [...set].filter(Boolean).sort();
   }, [challenges]);
 
-  const filtered = useMemo(() => {
+  const { filtered, groupCounts } = useMemo(() => {
     let base = challenges;
     if (outcomeFilter === "resolved") {
       base = base.filter(
@@ -443,12 +456,27 @@ export function ChallengesTab() {
     if (scopeFilter !== "all") {
       base = base.filter((c) => c.scope === scopeFilter);
     }
-    return [...base].sort((a, b) => {
+    const sorted = [...base].sort((a, b) => {
       const order = (o: Outcome) => (o === "deny" ? 0 : o === "error" ? 1 : 2);
       const diff = order(a.outcome) - order(b.outcome);
       if (diff !== 0) return diff;
       return b.timestamp.getTime() - a.timestamp.getTime();
     });
+
+    // Deduplicate by (principal, scope, outcome, resource) — keep most recent
+    const seen = new Map<string, AuthzChallenge>();
+    const counts = new Map<string, number>();
+    for (const c of sorted) {
+      const key = `${c.principalUrn}|${c.scope}|${c.outcome}|${c.resourceKind ?? ""}|${c.resourceId ?? ""}`;
+      if (!seen.has(key)) {
+        seen.set(key, c);
+        counts.set(c.id, 1);
+      } else {
+        const rep = seen.get(key)!;
+        counts.set(rep.id, (counts.get(rep.id) ?? 1) + 1);
+      }
+    }
+    return { filtered: [...seen.values()], groupCounts: counts };
   }, [
     challenges,
     outcomeFilter,
