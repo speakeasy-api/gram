@@ -1,39 +1,41 @@
 package marketplace
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
-	"os/exec"
-	"time"
+	"net/url"
 )
 
+// publishedManifestRef pins manifest fetches to the same branch the publish
+// flow writes to (see plugins/impl.go). If the publish flow ever stops
+// hardcoding "main", this needs to track that.
+const publishedManifestRef = "main"
+
 // Server hosts the URL-based marketplace.json endpoint and the git Smart HTTP
-// proxy for plugin sources. Both are scoped to a single opaque URL token that
-// the resolver maps to an upstream private repo.
+// proxy for plugin sources. Both stream directly from GitHub against an
+// installation token minted by the resolver — no local mirror state.
 type Server struct {
 	resolver      Resolver
-	mirror        *Mirror
-	publicBaseURL string // e.g. https://marketplaces.gram.dev
-	fetchInterval time.Duration
+	httpClient    *http.Client
+	publicBaseURL string
 	logger        *slog.Logger
 }
 
 func NewServer(
 	resolver Resolver,
-	mirror *Mirror,
+	httpClient *http.Client,
 	publicBaseURL string,
-	fetchInterval time.Duration,
 	logger *slog.Logger,
 ) *Server {
 	return &Server{
 		resolver:      resolver,
-		mirror:        mirror,
+		httpClient:    httpClient,
 		publicBaseURL: publicBaseURL,
-		fetchInterval: fetchInterval,
 		logger:        logger,
 	}
 }
@@ -41,8 +43,8 @@ func NewServer(
 func (s *Server) Routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /m/{token}/marketplace.json", s.handleManifest)
-	// The {slug} segment captures "<token>.git"; the handler strips the suffix.
-	// Go 1.22 ServeMux disallows mixing literals with wildcards inside one segment.
+	// {slug} captures "<token>.git"; the handler strips the suffix. Go 1.22's
+	// ServeMux disallows mixing literals with wildcards inside one segment.
 	mux.HandleFunc("GET /p/{slug}/info/refs", s.handleInfoRefs)
 	mux.HandleFunc("POST /p/{slug}/git-upload-pack", s.handleUploadPack)
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
@@ -51,8 +53,7 @@ func (s *Server) Routes() http.Handler {
 	return mux
 }
 
-// tokenFromSlug extracts the URL token from a "{token}.git" path segment.
-// Returns "" if the segment is missing the .git suffix.
+// tokenFromSlug extracts the URL token from a "<token>.git" path segment.
 func tokenFromSlug(slug string) string {
 	const suffix = ".git"
 	if len(slug) <= len(suffix) || slug[len(slug)-len(suffix):] != suffix {
@@ -61,10 +62,9 @@ func tokenFromSlug(slug string) string {
 	return slug[:len(slug)-len(suffix)]
 }
 
-// handleManifest serves a URL-based Claude Code marketplace.json. It reads the
-// existing .claude-plugin/marketplace.json the publish flow already wrote to
-// the upstream and rewrites each plugin's source to an absolute git URL on
-// this proxy with a `path` selector.
+// handleManifest fetches the upstream's published .claude-plugin/marketplace.json
+// via the GitHub Contents API and rewrites each plugin's source to an absolute
+// git URL on this proxy.
 func (s *Server) handleManifest(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	token := r.PathValue("token")
@@ -75,17 +75,15 @@ func (s *Server) handleManifest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	mirrorPath, err := s.mirror.Ensure(ctx, up, s.fetchInterval)
+	raw, err := s.fetchPublishedManifest(ctx, up)
 	if err != nil {
-		s.logger.ErrorContext(ctx, "ensure mirror", slog.Any("error", err))
-		http.Error(w, "mirror unavailable", http.StatusBadGateway)
-		return
-	}
-
-	raw, err := s.mirror.ReadFileAtHead(ctx, mirrorPath, ".claude-plugin/marketplace.json")
-	if err != nil {
-		s.logger.ErrorContext(ctx, "read marketplace.json", slog.Any("error", err))
-		http.Error(w, "marketplace.json missing in upstream", http.StatusNotFound)
+		var nf *upstreamNotFoundError
+		if errors.As(err, &nf) {
+			http.Error(w, "marketplace.json missing in upstream", http.StatusNotFound)
+			return
+		}
+		s.logger.ErrorContext(ctx, "fetch published manifest", slog.Any("error", err))
+		http.Error(w, "manifest unavailable", http.StatusBadGateway)
 		return
 	}
 
@@ -101,10 +99,59 @@ func (s *Server) handleManifest(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(rewritten)
 }
 
+// upstreamNotFoundError signals that the upstream returned 404 for the
+// resource being fetched (file missing in the repo or repo not found).
+type upstreamNotFoundError struct{ resource string }
+
+func (e *upstreamNotFoundError) Error() string {
+	return "upstream not found: " + e.resource
+}
+
+// fetchPublishedManifest returns the raw bytes of the marketplace.json file at
+// the published ref via the GitHub Contents API. Using the raw media type
+// avoids a base64 round-trip through the metadata response.
+func (s *Server) fetchPublishedManifest(ctx context.Context, up Upstream) ([]byte, error) {
+	apiURL := fmt.Sprintf(
+		"https://api.github.com/repos/%s/%s/contents/.claude-plugin/marketplace.json?ref=%s",
+		url.PathEscape(up.Owner), url.PathEscape(up.Repo), url.QueryEscape(publishedManifestRef),
+	)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("build manifest request: %w", err)
+	}
+	req.Header.Set("Accept", "application/vnd.github.raw+json")
+	req.Header.Set("Authorization", "Bearer "+up.AccessToken)
+	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
+
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("contents api request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, &upstreamNotFoundError{resource: ".claude-plugin/marketplace.json"}
+	}
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		return nil, fmt.Errorf("contents api: status %d: %s", resp.StatusCode, body)
+	}
+
+	// Bound the read so a misbehaving upstream can't blow our memory.
+	const maxManifestBytes = 4 << 20 // 4 MiB
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxManifestBytes+1))
+	if err != nil {
+		return nil, fmt.Errorf("read manifest body: %w", err)
+	}
+	if len(body) > maxManifestBytes {
+		return nil, fmt.Errorf("manifest exceeds %d bytes", maxManifestBytes)
+	}
+	return body, nil
+}
+
 // rewriteManifest transforms a git-based manifest (string-typed plugin sources
 // like "./foo") into a URL-based one (object-typed sources pointing at the
-// proxy). String sources are interpreted as relative paths into the upstream
-// repo; object sources are passed through unmodified.
+// proxy). Object sources are passed through unmodified.
 func (s *Server) rewriteManifest(raw []byte, token string) ([]byte, error) {
 	var m map[string]any
 	if err := json.Unmarshal(raw, &m); err != nil {
@@ -125,8 +172,13 @@ func (s *Server) rewriteManifest(raw []byte, token string) ([]byte, error) {
 			continue
 		}
 		if pathStr, isString := src.(string); isString {
+			// Per the official Claude Code marketplace schema (schemastore.org/
+			// claude-code-marketplace.json), `git-subdir` is the source type for
+			// "clone this URL, the plugin lives at the given subdirectory". The
+			// plain "git" source type doesn't exist; the four supported types
+			// are npm | url | github | git-subdir.
 			entry["source"] = map[string]any{
-				"source": "git",
+				"source": "git-subdir",
 				"url":    gitURL,
 				"path":   trimRelPrefix(pathStr),
 			}
@@ -144,9 +196,9 @@ func trimRelPrefix(s string) string {
 	return s
 }
 
-// handleInfoRefs serves the Smart HTTP ref-advertisement.
+// handleInfoRefs streams the Smart HTTP ref-advertisement straight from
+// github.com.
 func (s *Server) handleInfoRefs(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
 	if r.URL.Query().Get("service") != "git-upload-pack" {
 		http.Error(w, "only git-upload-pack supported", http.StatusForbidden)
 		return
@@ -157,67 +209,91 @@ func (s *Server) handleInfoRefs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	up, err := s.resolver.Resolve(ctx, token)
+	up, err := s.resolver.Resolve(r.Context(), token)
 	if err != nil {
 		s.errorResponse(w, r, err)
 		return
 	}
 
-	mirrorPath, err := s.mirror.Ensure(ctx, up, s.fetchInterval)
-	if err != nil {
-		s.logger.ErrorContext(ctx, "ensure mirror", slog.Any("error", err))
-		http.Error(w, "mirror unavailable", http.StatusBadGateway)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/x-git-upload-pack-advertisement")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.WriteHeader(http.StatusOK)
-
-	if _, err := w.Write(pktLine("# service=git-upload-pack\n")); err != nil {
-		return
-	}
-	if _, err := w.Write([]byte("0000")); err != nil {
-		return
-	}
-
-	cmd := exec.CommandContext(ctx, "git", "upload-pack", "--stateless-rpc", "--advertise-refs", mirrorPath)
-	cmd.Stdout = w
-	if err := cmd.Run(); err != nil {
-		s.logger.ErrorContext(ctx, "upload-pack advertise", slog.Any("error", err))
-	}
+	upstreamURL := fmt.Sprintf(
+		"https://github.com/%s/%s.git/info/refs?service=git-upload-pack",
+		url.PathEscape(up.Owner), url.PathEscape(up.Repo),
+	)
+	s.proxyToGitHub(w, r, http.MethodGet, upstreamURL, up.AccessToken, nil)
 }
 
-// handleUploadPack streams the packfile for a fetch/clone request.
+// handleUploadPack streams the packfile by piping the client's wants/haves to
+// github.com and the resulting packfile back.
 func (s *Server) handleUploadPack(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
 	token := tokenFromSlug(r.PathValue("slug"))
 	if token == "" {
 		http.NotFound(w, r)
 		return
 	}
 
-	up, err := s.resolver.Resolve(ctx, token)
+	up, err := s.resolver.Resolve(r.Context(), token)
 	if err != nil {
 		s.errorResponse(w, r, err)
 		return
 	}
 
-	mirrorPath, err := s.mirror.Ensure(ctx, up, s.fetchInterval)
+	upstreamURL := fmt.Sprintf(
+		"https://github.com/%s/%s.git/git-upload-pack",
+		url.PathEscape(up.Owner), url.PathEscape(up.Repo),
+	)
+	s.proxyToGitHub(w, r, http.MethodPost, upstreamURL, up.AccessToken, r.Body)
+}
+
+// proxyToGitHub forwards a Smart HTTP request to github.com with installation-
+// token basic auth and streams the response back. Body and headers are
+// streamed without buffering so packfiles flow through in chunks.
+func (s *Server) proxyToGitHub(
+	w http.ResponseWriter,
+	r *http.Request,
+	method string,
+	upstreamURL string,
+	accessToken string,
+	body io.Reader,
+) {
+	ctx := r.Context()
+
+	upstreamReq, err := http.NewRequestWithContext(ctx, method, upstreamURL, body)
 	if err != nil {
-		s.logger.ErrorContext(ctx, "ensure mirror", slog.Any("error", err))
-		http.Error(w, "mirror unavailable", http.StatusBadGateway)
+		s.logger.ErrorContext(ctx, "build upstream request", slog.Any("error", err))
+		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
+	upstreamReq.SetBasicAuth("x-access-token", accessToken)
+	if ct := r.Header.Get("Content-Type"); ct != "" {
+		upstreamReq.Header.Set("Content-Type", ct)
+	}
+	// Forward git-protocol negotiation hints. Git advertises protocol v2 via
+	// this header; without it GitHub falls back to v0/v1 and clients may see
+	// degraded behavior.
+	if gp := r.Header.Get("Git-Protocol"); gp != "" {
+		upstreamReq.Header.Set("Git-Protocol", gp)
+	}
 
-	w.Header().Set("Content-Type", "application/x-git-upload-pack-result")
-	w.Header().Set("Cache-Control", "no-cache")
+	resp, err := s.httpClient.Do(upstreamReq)
+	if err != nil {
+		s.logger.ErrorContext(ctx, "upstream request", slog.Any("error", err))
+		http.Error(w, "upstream unavailable", http.StatusBadGateway)
+		return
+	}
+	defer resp.Body.Close()
 
-	cmd := exec.CommandContext(ctx, "git", "upload-pack", "--stateless-rpc", mirrorPath)
-	cmd.Stdin = r.Body
-	cmd.Stdout = w
-	if err := cmd.Run(); err != nil {
-		s.logger.ErrorContext(ctx, "upload-pack stream", slog.Any("error", err))
+	// Mirror the response shape the git client expects. We pass through
+	// Content-Type (carries the application/x-git-* media type), Cache-Control,
+	// and Content-Encoding; everything else (cookies, GitHub-specific
+	// headers) is dropped.
+	for _, h := range []string{"Content-Type", "Cache-Control", "Content-Encoding"} {
+		if v := resp.Header.Get(h); v != "" {
+			w.Header().Set(h, v)
+		}
+	}
+	w.WriteHeader(resp.StatusCode)
+	if _, err := io.Copy(w, resp.Body); err != nil {
+		s.logger.WarnContext(ctx, "stream upstream body", slog.Any("error", err))
 	}
 }
 
@@ -228,11 +304,4 @@ func (s *Server) errorResponse(w http.ResponseWriter, r *http.Request, err error
 	}
 	s.logger.ErrorContext(r.Context(), "resolve token", slog.Any("error", err))
 	http.Error(w, "internal error", http.StatusInternalServerError)
-}
-
-// pktLine wraps a payload in git's pkt-line framing: 4-hex-digit length prefix
-// (length includes the 4 prefix bytes) followed by the payload bytes.
-func pktLine(payload string) []byte {
-	n := len(payload) + 4
-	return fmt.Appendf(nil, "%04x%s", n, payload)
 }

@@ -417,6 +417,7 @@ func TestPluginsService_GetPublishStatus_NotConfigured(t *testing.T) {
 	require.Nil(t, result.RepoOwner)
 	require.Nil(t, result.RepoName)
 	require.Nil(t, result.RepoURL)
+	require.Nil(t, result.MarketplaceURL)
 }
 
 func TestPluginsService_PublishPlugins_NotConfigured(t *testing.T) {
@@ -474,6 +475,11 @@ func TestPluginsService_PublishPlugins_HappyPath(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, status.Connected)
 	require.NotNil(t, status.RepoURL)
+	// Publish auto-mints a marketplace token, so the URL must be present
+	// and shaped like <server-url>/m/<token>/marketplace.json.
+	require.NotNil(t, status.MarketplaceURL)
+	require.Contains(t, *status.MarketplaceURL, "/m/")
+	require.Contains(t, *status.MarketplaceURL, "/marketplace.json")
 }
 
 func TestPluginsService_PublishPlugins_WithCollaborator(t *testing.T) {

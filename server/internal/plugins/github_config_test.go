@@ -1,22 +1,43 @@
 package plugins_test
 
 import (
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"encoding/pem"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
+	ghclient "github.com/speakeasy-api/gram/server/internal/thirdparty/github"
 )
 
+// newTestGitHubClient builds a real *ghclient.Client for use in validation
+// tests. The signing key is generated fresh per call and used only for the
+// in-memory client construction — no network traffic is generated.
+func newTestGitHubClient(t *testing.T) *ghclient.Client {
+	t.Helper()
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	keyPEM := pem.EncodeToMemory(&pem.Block{
+		Type:  "RSA PRIVATE KEY",
+		Bytes: x509.MarshalPKCS1PrivateKey(key),
+	})
+	c, err := ghclient.NewClient(1, keyPEM, &guardian.HTTPClient{})
+	require.NoError(t, err)
+	return c
+}
+
 // NewGitHubConfig must hard-fail on any partial configuration so a deployment
-// missing one of the four env vars surfaces immediately rather than silently
-// running with publishing disabled.
+// missing one of the inputs surfaces immediately rather than silently running
+// with publishing disabled.
 func TestNewGitHubConfig_Validation(t *testing.T) {
 	t.Parallel()
 
 	full := plugins.GitHubConfigInput{
-		AppID:          1,
-		PrivateKey:     "pem",
+		Client:         newTestGitHubClient(t),
 		Org:            "acme",
 		InstallationID: 2,
 	}
@@ -35,18 +56,11 @@ func TestNewGitHubConfig_Validation(t *testing.T) {
 			wantErr:    false,
 		},
 		{
-			name:        "missing app id",
-			mutate:      func(in *plugins.GitHubConfigInput) { in.AppID = 0 },
+			name:        "missing client",
+			mutate:      func(in *plugins.GitHubConfigInput) { in.Client = nil },
 			wantNilCfg:  true,
 			wantErr:     true,
-			errContains: "plugins-github-app-id",
-		},
-		{
-			name:        "missing private key",
-			mutate:      func(in *plugins.GitHubConfigInput) { in.PrivateKey = "" },
-			wantNilCfg:  true,
-			wantErr:     true,
-			errContains: "plugins-github-private-key",
+			errContains: "plugins-github-client",
 		},
 		{
 			name:        "missing org",
@@ -65,12 +79,12 @@ func TestNewGitHubConfig_Validation(t *testing.T) {
 		{
 			name: "multiple missing names all reported",
 			mutate: func(in *plugins.GitHubConfigInput) {
-				in.PrivateKey = ""
+				in.Client = nil
 				in.Org = ""
 			},
 			wantNilCfg:  true,
 			wantErr:     true,
-			errContains: "plugins-github-private-key, plugins-github-org",
+			errContains: "plugins-github-client, plugins-github-org",
 		},
 	}
 
@@ -93,20 +107,4 @@ func TestNewGitHubConfig_Validation(t *testing.T) {
 			}
 		})
 	}
-}
-
-// All-set inputs reach the underlying ghclient.NewClient, which rejects
-// invalid PEM. The error surfaces with the "create github client" prefix.
-func TestNewGitHubConfig_InvalidPEMBubbles(t *testing.T) {
-	t.Parallel()
-
-	cfg, err := plugins.NewGitHubConfig(plugins.GitHubConfigInput{
-		AppID:          1,
-		PrivateKey:     "not a pem",
-		Org:            "acme",
-		InstallationID: 2,
-	})
-	require.Error(t, err)
-	require.Nil(t, cfg)
-	require.Contains(t, err.Error(), "create github client", "expected client-creation error, got: %v", err)
 }

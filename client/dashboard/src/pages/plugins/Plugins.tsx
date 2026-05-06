@@ -1,6 +1,7 @@
 import { CreateResourceCard } from "@/components/create-resource-card";
 import { InputField } from "@/components/moon/input-field";
 import { Page } from "@/components/page-layout";
+import { CopyButton } from "@/components/ui/copy-button";
 import { Dialog } from "@/components/ui/dialog";
 import { SearchBar } from "@/components/ui/search-bar";
 import { Type } from "@/components/ui/type";
@@ -221,19 +222,36 @@ export default function Plugins() {
           <Page.Section.Body>
             <Stack direction="vertical" gap={4}>
               {publishStatus?.connected && publishStatus.repoUrl && (
-                <span>
-                  Plugin marketplace:{" "}
-                  <a
-                    href={publishStatus.repoUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-sm text-sky-500 hover:text-sky-600 hover:underline"
-                  >
-                    {publishStatus.repoOwner && publishStatus.repoName
-                      ? `${publishStatus.repoOwner}/${publishStatus.repoName}`
-                      : publishStatus.repoUrl}
-                  </a>
-                </span>
+                <Stack direction="vertical" gap={2}>
+                  <span>
+                    Plugin marketplace:{" "}
+                    <a
+                      href={publishStatus.repoUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm text-sky-500 hover:text-sky-600 hover:underline"
+                    >
+                      {publishStatus.repoOwner && publishStatus.repoName
+                        ? `${publishStatus.repoOwner}/${publishStatus.repoName}`
+                        : publishStatus.repoUrl}
+                    </a>
+                  </span>
+                  {publishStatus.marketplaceUrl && (
+                    <Stack direction="horizontal" gap={2} align="center">
+                      <Type variant="small" muted>
+                        Claude Code install:
+                      </Type>
+                      <Type variant="small" mono>
+                        /plugin marketplace add {publishStatus.marketplaceUrl}
+                      </Type>
+                      <CopyButton
+                        size="inline"
+                        text={`/plugin marketplace add ${publishStatus.marketplaceUrl}`}
+                        tooltip="Copy install command"
+                      />
+                    </Stack>
+                  )}
+                </Stack>
               )}
               {hasPlugins && (
                 <SearchBar

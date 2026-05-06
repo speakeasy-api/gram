@@ -58,6 +58,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/integrations"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/keys"
+	"github.com/speakeasy-api/gram/server/internal/marketplace"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpclient"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
@@ -78,6 +79,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/templates"
+	ghclient "github.com/speakeasy-api/gram/server/internal/thirdparty/github"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/pylon"
@@ -726,11 +728,50 @@ func newStartCommand() *cli.Command {
 
 			toolsetsSvc := toolsets.NewService(logger, tracerProvider, db, sessionManager, cache.NewRedisCacheAdapter(redisClient), authzEngine, auditLogger)
 			mcpMetadataService := mcpmetadata.NewService(logger, tracerProvider, db, sessionManager, serverURL, siteURL, cache.NewRedisCacheAdapter(redisClient), authzEngine, auditLogger)
+
+			// Construct the GitHub App client once; share with the plugin publish
+			// flow and the marketplace proxy so they hit the same token cache and
+			// the same App identity. nil when the App isn't configured.
+			var ghClient *ghclient.Client
+			if appID, key := c.Int64("plugins-github-app-id"), c.String("plugins-github-private-key"); appID != 0 && key != "" {
+				ghClient, err = ghclient.NewClient(appID, []byte(key), guardianPolicy.Client())
+				if err != nil {
+					return fmt.Errorf("create github app client: %w", err)
+				}
+			}
+
+			// Marketplace proxy routes (URL-based marketplace.json + git Smart
+			// HTTP for plugin source clones). Mounted via middleware ahead of
+			// Goa so /m/ and /p/ paths short-circuit the RPC mux. nil when the
+			// GitHub App isn't configured — there's nothing to front.
+			// Marketplace public URL is by definition the same as server-url —
+			// the proxy is mounted on this server, so plugin source URLs
+			// embedded in the rendered manifest must point back at it.
+			var marketplaceRoutes http.Handler
+			if ghClient != nil {
+				mp := marketplace.NewServer(
+					marketplace.NewDBResolver(db, ghClient),
+					guardianPolicy.Client(),
+					c.String("server-url"),
+					logger,
+				)
+				marketplaceRoutes = mp.Routes()
+				logger.InfoContext(ctx, "marketplace proxy: enabled",
+					attr.SlogServerAddress(c.String("address")),
+				)
+			} else {
+				logger.InfoContext(ctx, "marketplace proxy: disabled (no github app configured)")
+			}
+
 			mux := goahttp.NewMuxer()
 			mux.Use(func(h http.Handler) http.Handler {
 				return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					if r.Method == http.MethodGet && r.URL.Path == "/healthz" {
 						w.WriteHeader(http.StatusOK)
+						return
+					}
+					if marketplaceRoutes != nil && (strings.HasPrefix(r.URL.Path, "/m/") || strings.HasPrefix(r.URL.Path, "/p/")) {
+						marketplaceRoutes.ServeHTTP(w, r)
 						return
 					}
 
@@ -784,11 +825,9 @@ func newStartCommand() *cli.Command {
 			packages.Attach(mux, packages.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
 
 			pluginsGitHub, err := plugins.NewGitHubConfig(plugins.GitHubConfigInput{
-				AppID:          c.Int64("plugins-github-app-id"),
-				PrivateKey:     c.String("plugins-github-private-key"),
+				Client:         ghClient,
 				Org:            c.String("plugins-github-org"),
 				InstallationID: c.Int64("plugins-github-installation-id"),
-				HTTPClient:     guardianPolicy.Client(),
 			})
 			if err != nil {
 				return fmt.Errorf("plugins github config: %w", err)

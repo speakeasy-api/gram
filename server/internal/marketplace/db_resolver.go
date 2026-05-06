@@ -50,9 +50,9 @@ func (r *DBResolver) Resolve(ctx context.Context, token string) (Upstream, error
 	}
 
 	return Upstream{
-		Token: token,
-		Owner: conn.RepoOwner,
-		Repo:  conn.RepoName,
-		Auth:  BasicAuth{Username: "x-access-token", Password: instToken},
+		Token:       token,
+		Owner:       conn.RepoOwner,
+		Repo:        conn.RepoName,
+		AccessToken: instToken,
 	}, nil
 }
