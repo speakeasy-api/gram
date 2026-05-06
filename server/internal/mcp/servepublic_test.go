@@ -15,9 +15,11 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
+	goahttp "goa.design/goa/v3/http"
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mcp"
 	metadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
@@ -198,6 +200,54 @@ func TestServePublic_PrivateDisabledMCP_Returns404(t *testing.T) {
 	_, err = servePublicHTTP(t, context.Background(), ti, toolset.Slug, makeInitializeBody(), "", nil)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "not found")
+}
+
+func TestServePublic_AttachedAuthErrorReturnsMCPError(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	toolsetsRepo := toolsets_repo.New(ti.conn)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	toolset, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+		OrganizationID:         authCtx.ActiveOrganizationID,
+		ProjectID:              *authCtx.ProjectID,
+		Name:                   "Private Auth Error MCP",
+		Slug:                   "private-auth-error-mcp",
+		Description:            conv.ToPGText("A private MCP that rejects unauthenticated requests"),
+		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
+		McpSlug:                conv.ToPGText("private-auth-error-mcp"),
+		McpEnabled:             true,
+	})
+	require.NoError(t, err)
+
+	router := goahttp.NewMuxer()
+	mcp.Attach(router, ti.service, nil)
+
+	req := httptest.NewRequest(http.MethodPost, "/mcp/"+toolset.McpSlug.String, bytes.NewReader(makeInitializeBody()))
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Content-Type", "application/json")
+
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	require.Equal(t, "application/json", w.Header().Get("Content-Type"))
+	require.NotContains(t, w.Body.String(), "<!doctype")
+
+	var response map[string]any
+	err = json.Unmarshal(w.Body.Bytes(), &response)
+	require.NoError(t, err, "response body: %s", w.Body.String())
+	require.Equal(t, "2.0", response["jsonrpc"])
+	require.InDelta(t, 1, response["id"], 0)
+
+	errorBody, ok := response["error"].(map[string]any)
+	require.True(t, ok, "expected JSON-RPC error: %v", response)
+	require.InDelta(t, -32600, errorBody["code"], 0)
+	require.Contains(t, errorBody["message"], "expired or invalid access token")
 }
 
 func TestServePublic_ServerInstructionsInInitializeResponse(t *testing.T) {

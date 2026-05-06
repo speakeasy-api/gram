@@ -206,7 +206,7 @@ func NewService(
 }
 
 func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Service) {
-	o11y.AttachHandler(mux, "POST", "/mcp/{mcpSlug}", oops.ErrHandle(service.logger, service.ServePublic).ServeHTTP)
+	o11y.AttachHandler(mux, "POST", "/mcp/{mcpSlug}", oops.MCPErrHandle(service.logger, service.ServePublic).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/{mcpSlug}", oops.ErrHandle(service.logger, func(w http.ResponseWriter, r *http.Request) error {
 		return service.HandleGetServer(w, r, metadataService)
 	}).ServeHTTP)
@@ -448,6 +448,17 @@ func (s *Service) ServeToolsetResolved(w http.ResponseWriter, r *http.Request, t
 		baseURL = fmt.Sprintf("https://%s", customDomainCtx.Domain)
 	}
 
+	// Capture the JSON-RPC id before auth can fail.
+	bodyBytes, bodyReadErr := io.ReadAll(r.Body)
+	if bodyReadErr == nil {
+		var req struct {
+			ID json.RawMessage `json:"id"`
+		}
+		if err := json.Unmarshal(bodyBytes, &req); err == nil {
+			contextvalues.SetMCPID(ctx, req.ID)
+		}
+	}
+
 	// Extract tokens from headers separately:
 	// - authToken: from Authorization header (for OAuth flows)
 	// - sessionToken: from Gram-Chat-Session header (for chat session fallback on non-OAuth endpoints)
@@ -600,12 +611,11 @@ func (s *Service) ServeToolsetResolved(w http.ResponseWriter, r *http.Request, t
 	}
 
 	// Decode the raw body first to check for batch requests
-	bodyBytes, err := io.ReadAll(r.Body)
 	switch {
-	case errors.Is(err, io.EOF) || len(bodyBytes) == 0:
+	case errors.Is(bodyReadErr, io.EOF) || len(bodyBytes) == 0:
 		return nil
-	case err != nil:
-		return oops.E(oops.CodeBadRequest, err, "failed to read request body").Log(ctx, s.logger)
+	case bodyReadErr != nil:
+		return oops.E(oops.CodeBadRequest, bodyReadErr, "failed to read request body").Log(ctx, s.logger)
 	}
 
 	// Reject batch (array) requests — batch is deprecated in the MCP spec

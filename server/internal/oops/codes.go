@@ -67,3 +67,20 @@ func (c Code) IsTemporary() bool {
 		return false
 	}
 }
+
+func (c Code) MCPCode() MCPCode {
+	switch c {
+	case CodeBadRequest:
+		return MCPCodeParseError
+	case CodeUnauthorized, CodeForbidden, CodeConflict, CodeUnsupportedMedia:
+		return MCPCodeInvalidRequest
+	case CodeNotFound:
+		return MCPCodeResourceNotFound
+	case CodeInvalid:
+		return MCPCodeInvalidParams
+	case CodeNotImplemented:
+		return MCPCodeMethodNotFound
+	default:
+		return MCPCodeInternalError
+	}
+}
