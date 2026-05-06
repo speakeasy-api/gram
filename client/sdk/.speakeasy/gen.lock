@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 066adbf51372b2c866fcfd50eda47a09
+  docChecksum: d2f65669f7d06acce7de40680b3d7f2c
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -263,7 +263,7 @@ trackedFiles:
   docs/models/components/externaloauthserverform.md:
     last_write_checksum: sha1:2dfca2bf1f6cf89befb98dabc7e7db5d83523c65
   docs/models/components/featurename.md:
-    last_write_checksum: sha1:0002ce40c13e29d6b6b0e29defd6491f63b56d17
+    last_write_checksum: sha1:b2d8e8177ccf2ddb44fc6bc6414ccf8e28a68867
   docs/models/components/feedback.md:
     last_write_checksum: sha1:ef93dc1781469531617f39432611ded991048862
   docs/models/components/fetchopenapiv3fromurlform2.md:
@@ -319,7 +319,7 @@ trackedFiles:
   docs/models/components/getusermetricssummaryresult.md:
     last_write_checksum: sha1:7b76f799d62fe0f3eefe3dc7727880167ca5dd71
   docs/models/components/gramproductfeatures.md:
-    last_write_checksum: sha1:e321c7730ebee7ade692078391369b191180cd3a
+    last_write_checksum: sha1:b009584fe6b7830c6f79ed7e05de46f303d76776
   docs/models/components/headerinput.md:
     last_write_checksum: sha1:adc9e1b54d733fb807511030368240cc0e7a2172
   docs/models/components/hookeventname.md:
@@ -3287,7 +3287,7 @@ trackedFiles:
   src/models/components/getusermetricssummaryresult.ts:
     last_write_checksum: sha1:c45ae48235990ba664b1fa62cc0a9df2406ea25d
   src/models/components/gramproductfeatures.ts:
-    last_write_checksum: sha1:8e7d5b6d52e1b0a2909ca4abf3d071cffd08a784
+    last_write_checksum: sha1:418531c304e1e4921d142f1bc0bb4fa318da814a
   src/models/components/headerinput.ts:
     last_write_checksum: sha1:4be0fa70c99fe8b12b02906b04cedb33c78868a0
   src/models/components/hooksbreakdownrow.ts:
@@ -3736,7 +3736,7 @@ trackedFiles:
     last_write_checksum: sha1:880bca89d1b570199aa3c9161292f13052406ea9
   src/models/components/setproductfeaturerequestbody.ts:
     id: 777e1e95ac32
-    last_write_checksum: sha1:fa575a3e22da689572bcb546bd750bb0bd47e720
+    last_write_checksum: sha1:a61b6f430b7736a9a4eed52a53e0cd2b2d608718
     pristine_git_object: 9fb7bac3d53f59bb384ae78dee065d0fb9f9a21e
   src/models/components/setprojectlogoresult.ts:
     id: 88cdb2cc5e3d
@@ -7063,7 +7063,7 @@ examples:
     speakeasy-default-get-product-features:
       responses:
         "200":
-          application/json: {"logs_enabled": false, "session_capture_enabled": false, "tool_io_logs_enabled": false}
+          application/json: {"authz_challenge_logging_enabled": false, "logs_enabled": false, "session_capture_enabled": false, "tool_io_logs_enabled": false}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":

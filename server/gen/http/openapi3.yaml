@@ -24153,6 +24153,9 @@ components:
         GramProductFeatures:
             type: object
             properties:
+                authz_challenge_logging_enabled:
+                    type: boolean
+                    description: Whether authz challenge logging to ClickHouse is enabled
                 logs_enabled:
                     type: boolean
                     description: Whether logging is enabled
@@ -24167,6 +24170,7 @@ components:
                 - logs_enabled
                 - tool_io_logs_enabled
                 - session_capture_enabled
+                - authz_challenge_logging_enabled
         HTTPToolDefinition:
             type: object
             properties:
@@ -28231,6 +28235,7 @@ components:
                         - logs
                         - tool_io_logs
                         - session_capture
+                        - authz_challenge_logging
                     maxLength: 60
             required:
                 - feature_name

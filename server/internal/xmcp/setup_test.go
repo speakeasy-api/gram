@@ -37,7 +37,7 @@ import (
 var infra *testenv.Environment
 
 func TestMain(m *testing.M) {
-	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Redis: true})
+	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Redis: true, ClickHouse: true})
 	if err != nil {
 		log.Fatalf("launch test infrastructure: %v", err)
 		os.Exit(1)
@@ -87,7 +87,9 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
 
 	enc := testenv.NewEncryptionClient(t)
-	authzEngine := authz.NewEngine(logger, conn, authztest.RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
+	chConn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), cache.NoopCache)
 
 	svc := xmcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, enc, authzEngine, guardianPolicy, billingClient, billingClient)
 

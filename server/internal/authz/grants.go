@@ -58,25 +58,15 @@ func SeedSystemRoleGrants(ctx context.Context, logger *slog.Logger, db *pgxpool.
 }
 
 type Grant struct {
-	Scope    Scope
-	Selector Selector
+	PrincipalUrn string
+	Scope        Scope
+	Selector     Selector
 }
 
 type ScopedGrant struct {
 	Scope     string
 	SubScopes []string
 	Selectors []Selector
-}
-
-func grantsSatisfy(grants []Grant, checks []Check) bool {
-	for _, grant := range grants {
-		for _, check := range checks {
-			if grant.Scope == check.Scope && grant.Selector.Matches(check.selector()) {
-				return true
-			}
-		}
-	}
-	return false
 }
 
 func SyncGrants(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, orgID string, roleSlug string, grants []*RoleGrant) error {
@@ -163,6 +153,8 @@ func GrantsForRole(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, o
 		return nil, oops.E(oops.CodeUnexpected, err, "list grants for role").Log(ctx, logger)
 	}
 
+	rolePrincipalURN := urn.NewPrincipal(urn.PrincipalTypeRole, roleSlug).String()
+
 	grantRows := make([]Grant, 0, len(rows))
 	for _, row := range rows {
 		selectors, err := SelectorFromRow(row.Selectors)
@@ -170,8 +162,9 @@ func GrantsForRole(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, o
 			return nil, oops.E(oops.CodeUnexpected, err, "unmarshal grant selector").Log(ctx, logger)
 		}
 		grantRows = append(grantRows, Grant{
-			Scope:    Scope(row.Scope),
-			Selector: selectors,
+			PrincipalUrn: rolePrincipalURN,
+			Scope:        Scope(row.Scope),
+			Selector:     selectors,
 		})
 	}
 
@@ -224,4 +217,19 @@ func GrantsToScopedGrants(rows []Grant) []*ScopedGrant {
 	}
 
 	return grants
+}
+
+// findMatchingGrant compares a list of grants against a list of checks and returns
+// the first grant / check tuple that is satisfied.
+func findMatchingGrant(grants []Grant, checks []Check) (*Grant, *Check) {
+	for _, grant := range grants {
+		for _, check := range checks {
+			if grant.Scope == check.Scope && grant.Selector.Matches(check.selector()) {
+				g, c := grant, check
+				return &g, &c
+			}
+		}
+	}
+
+	return nil, nil
 }

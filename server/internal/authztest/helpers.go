@@ -30,3 +30,11 @@ func RBACAlwaysEnabled(context.Context, string) (bool, error) {
 func RBACAlwaysDisabled(context.Context, string) (bool, error) {
 	return false, nil
 }
+
+func ChallengeLoggingAlwaysDisabled(context.Context, string) (bool, error) {
+	return false, nil
+}
+
+func ChallengeLoggingAlwaysEnabled(context.Context, string) (bool, error) {
+	return true, nil
+}

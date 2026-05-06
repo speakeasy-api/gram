@@ -3,16 +3,18 @@ package usage
 import (
 	"context"
 	"fmt"
+	"log"
 	"net/http"
+	"os"
 	"testing"
 
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/usage"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -21,6 +23,27 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/usage/repo"
 )
+
+var infra *testenv.Environment
+
+func TestMain(m *testing.M) {
+	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, ClickHouse: true})
+	if err != nil {
+		log.Fatalf("Failed to launch test infrastructure: %v", err)
+		os.Exit(1)
+	}
+
+	infra = res
+
+	code := m.Run()
+
+	if err := cleanup(); err != nil {
+		log.Fatalf("Failed to cleanup test infrastructure: %v", err)
+		os.Exit(1)
+	}
+
+	os.Exit(code)
+}
 
 // --- mock billing.Repository ---
 
@@ -82,47 +105,21 @@ func (m *mockBillingRepo) InvalidateBillingCustomerCaches(ctx context.Context, o
 
 var _ billing.Repository = (*mockBillingRepo)(nil)
 
-// --- mock DBTX for repo.Queries ---
-
-type mockRow struct {
-	val int64
-}
-
-func (r *mockRow) Scan(dest ...any) error {
-	if len(dest) > 0 {
-		if p, ok := dest[0].(*int64); ok {
-			*p = r.val
-		}
-	}
-	return nil
-}
-
-type mockDBTX struct {
-	serverCount int64
-}
-
-func (m *mockDBTX) Exec(_ context.Context, _ string, _ ...any) (pgconn.CommandTag, error) {
-	return pgconn.CommandTag{}, nil
-}
-
-func (m *mockDBTX) Query(_ context.Context, _ string, _ ...any) (pgx.Rows, error) {
-	return nil, nil
-}
-
-func (m *mockDBTX) QueryRow(_ context.Context, _ string, _ ...any) pgx.Row {
-	return &mockRow{val: m.serverCount}
-}
-
 // --- test helpers ---
 
 func rbacDisabled(_ context.Context, _ string) (bool, error) { return false, nil }
 
-func newTestService(t *testing.T, billingRepo billing.Repository, serverCount int64) *Service {
+func newTestService(t *testing.T, billingRepo billing.Repository, orgID string, serverCount int) *Service {
 	t.Helper()
 	logger := testenv.NewLogger(t)
 	tp := testenv.NewTracerProvider(t)
-	db := &mockDBTX{serverCount: serverCount}
-	authzEngine := authz.NewEngine(logger, db, rbacDisabled, workos.NewStubClient(), cache.NoopCache)
+	db, err := infra.CloneTestDatabase(t, "usage")
+	require.NoError(t, err)
+	seedEnabledToolsets(t, db, orgID, serverCount)
+
+	chConn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+	authzEngine := authz.NewEngine(logger, db, chConn, rbacDisabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), cache.NoopCache)
 
 	return &Service{
 		tracer:      tp.Tracer("test"),
@@ -130,6 +127,26 @@ func newTestService(t *testing.T, billingRepo billing.Repository, serverCount in
 		authz:       authzEngine,
 		repo:        repo.New(db),
 		billingRepo: billingRepo,
+	}
+}
+
+func seedEnabledToolsets(t *testing.T, db repo.DBTX, orgID string, serverCount int) {
+	t.Helper()
+	ctx := t.Context()
+	projectID := uuid.New()
+	_, err := db.Exec(ctx, `
+		INSERT INTO projects (id, organization_id, name, slug)
+		VALUES ($1, $2, 'Usage Test Project', $3)
+	`, projectID, orgID, "usage-"+projectID.String()[:8])
+	require.NoError(t, err)
+
+	for i := range serverCount {
+		toolsetID := uuid.New()
+		_, err = db.Exec(ctx, `
+			INSERT INTO toolsets (id, organization_id, project_id, name, slug, mcp_enabled)
+			VALUES ($1, $2, $3, $4, $5, TRUE)
+		`, toolsetID, orgID, projectID, "Enabled Server", fmt.Sprintf("enabled-%d-%s", i, toolsetID.String()[:8]))
+		require.NoError(t, err)
 	}
 }
 
@@ -164,7 +181,7 @@ func TestGetPeriodUsage_CacheHit(t *testing.T) {
 	billingMock := &mockBillingRepo{}
 	billingMock.On("GetStoredPeriodUsage", mock.Anything, orgID).Return(cached, nil)
 	// GetPeriodUsage should NOT be called
-	svc := newTestService(t, billingMock, 5)
+	svc := newTestService(t, billingMock, orgID, 5)
 
 	ctx := testAuthContext(orgID)
 	result, err := svc.GetPeriodUsage(ctx, &gen.GetPeriodUsagePayload{})
@@ -185,7 +202,7 @@ func TestGetPeriodUsage_CacheMissFallback(t *testing.T) {
 	billingMock := &mockBillingRepo{}
 	billingMock.On("GetStoredPeriodUsage", mock.Anything, orgID).Return(nil, fmt.Errorf("cache miss"))
 	billingMock.On("GetPeriodUsage", mock.Anything, orgID).Return(fresh, nil)
-	svc := newTestService(t, billingMock, 3)
+	svc := newTestService(t, billingMock, orgID, 3)
 
 	ctx := testAuthContext(orgID)
 	result, err := svc.GetPeriodUsage(ctx, &gen.GetPeriodUsagePayload{})
@@ -205,7 +222,7 @@ func TestGetPeriodUsage_BothFail(t *testing.T) {
 	billingMock := &mockBillingRepo{}
 	billingMock.On("GetStoredPeriodUsage", mock.Anything, orgID).Return(nil, fmt.Errorf("cache miss"))
 	billingMock.On("GetPeriodUsage", mock.Anything, orgID).Return(nil, fmt.Errorf("polar API down"))
-	svc := newTestService(t, billingMock, 0)
+	svc := newTestService(t, billingMock, orgID, 0)
 
 	ctx := testAuthContext(orgID)
 	_, err := svc.GetPeriodUsage(ctx, &gen.GetPeriodUsagePayload{})
@@ -220,7 +237,7 @@ func TestGetPeriodUsage_NoAuthContext(t *testing.T) {
 	t.Parallel()
 
 	billingMock := &mockBillingRepo{}
-	svc := newTestService(t, billingMock, 0)
+	svc := newTestService(t, billingMock, "org-no-auth", 0)
 
 	// Empty context — no auth
 	_, err := svc.GetPeriodUsage(context.Background(), &gen.GetPeriodUsagePayload{})
@@ -239,7 +256,7 @@ func TestGetPeriodUsage_ActualServerCountFromDB(t *testing.T) {
 
 	billingMock := &mockBillingRepo{}
 	billingMock.On("GetStoredPeriodUsage", mock.Anything, orgID).Return(cached, nil)
-	svc := newTestService(t, billingMock, 7) // DB says 7
+	svc := newTestService(t, billingMock, orgID, 7) // DB says 7
 
 	ctx := testAuthContext(orgID)
 	result, err := svc.GetPeriodUsage(ctx, &gen.GetPeriodUsagePayload{})
