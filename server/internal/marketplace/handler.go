@@ -127,7 +127,7 @@ func (s *Server) fetchPublishedManifest(ctx context.Context, up Upstream) ([]byt
 	if err != nil {
 		return nil, fmt.Errorf("contents api request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer o11y.NoLogDefer(func() error { return resp.Body.Close() })
 
 	if resp.StatusCode == http.StatusNotFound {
 		return nil, &upstreamNotFoundError{resource: ".claude-plugin/marketplace.json"}
@@ -280,7 +280,7 @@ func (s *Server) proxyToGitHub(
 		http.Error(w, "upstream unavailable", http.StatusBadGateway)
 		return
 	}
-	defer resp.Body.Close()
+	defer o11y.NoLogDefer(func() error { return resp.Body.Close() })
 
 	// Mirror the response shape the git client expects. We pass through
 	// Content-Type (carries the application/x-git-* media type), Cache-Control,
