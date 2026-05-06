@@ -476,9 +476,9 @@ func TestPluginsService_PublishPlugins_HappyPath(t *testing.T) {
 	require.True(t, status.Connected)
 	require.NotNil(t, status.RepoURL)
 	// Publish auto-mints a marketplace token, so the URL must be present
-	// and shaped like <server-url>/m/<token>/marketplace.json.
+	// and shaped like <server-url>/marketplace/m/<token>/marketplace.json.
 	require.NotNil(t, status.MarketplaceURL)
-	require.Contains(t, *status.MarketplaceURL, "/m/")
+	require.Contains(t, *status.MarketplaceURL, "/marketplace/m/")
 	require.Contains(t, *status.MarketplaceURL, "/marketplace.json")
 }
 

@@ -753,15 +753,18 @@ func newStartCommand() *cli.Command {
 			// chain-level recovery, so without this wrap a panic in any
 			// marketplace handler (or the DB resolver) would crash the
 			// server process.
-			var marketplaceRoutes http.Handler
+			var (
+				marketplaceServer *marketplace.Server
+				marketplaceRoutes http.Handler
+			)
 			if ghClient != nil {
-				mp := marketplace.NewServer(
+				marketplaceServer = marketplace.NewServer(
 					marketplace.NewDBResolver(db, ghClient),
 					guardianPolicy.Client(),
 					c.String("server-url"),
 					logger,
 				)
-				marketplaceRoutes = middleware.NewRecovery(logger)(mp.Routes())
+				marketplaceRoutes = middleware.NewRecovery(logger)(marketplaceServer.Routes())
 				logger.InfoContext(ctx, "marketplace proxy: enabled",
 					attr.SlogServerAddress(c.String("address")),
 				)
@@ -776,7 +779,7 @@ func newStartCommand() *cli.Command {
 						w.WriteHeader(http.StatusOK)
 						return
 					}
-					if marketplaceRoutes != nil && (strings.HasPrefix(r.URL.Path, "/m/") || strings.HasPrefix(r.URL.Path, "/p/")) {
+					if marketplaceServer != nil && marketplaceServer.IsMarketplaceRoute(r) {
 						marketplaceRoutes.ServeHTTP(w, r)
 						return
 					}

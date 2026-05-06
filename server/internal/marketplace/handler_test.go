@@ -47,7 +47,7 @@ func TestRewriteManifest(t *testing.T) {
 		require.NoError(t, json.Unmarshal(out, &got))
 		require.Len(t, got.Plugins, 1)
 		require.Equal(t, "git-subdir", got.Plugins[0].Source["source"])
-		require.Equal(t, "https://gram.test/p/TOK.git", got.Plugins[0].Source["url"])
+		require.Equal(t, "https://gram.test/marketplace/p/TOK.git", got.Plugins[0].Source["url"])
 		require.Equal(t, "foo", got.Plugins[0].Source["path"])
 	})
 
@@ -141,12 +141,12 @@ func TestMalformedTokensSkipResolver(t *testing.T) {
 		name string
 		req  *http.Request
 	}{
-		{"manifest: too short", httptest.NewRequest(http.MethodGet, "/m/short/marketplace.json", nil)},
-		{"manifest: bad chars", httptest.NewRequest(http.MethodGet, "/m/bad!chars1234567890123456789012345678901234567/marketplace.json", nil)},
-		{"manifest: too long", httptest.NewRequest(http.MethodGet, "/m/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/marketplace.json", nil)},
-		{"info/refs: no .git suffix", httptest.NewRequest(http.MethodGet, "/p/short/info/refs?service=git-upload-pack", nil)},
-		{"info/refs: bad chars before .git", httptest.NewRequest(http.MethodGet, "/p/bad!chars1234567890123456789012345678901234567.git/info/refs?service=git-upload-pack", nil)},
-		{"upload-pack: too short", httptest.NewRequest(http.MethodPost, "/p/short.git/git-upload-pack", nil)},
+		{"manifest: too short", httptest.NewRequest(http.MethodGet, "/marketplace/m/short/marketplace.json", nil)},
+		{"manifest: bad chars", httptest.NewRequest(http.MethodGet, "/marketplace/m/bad!chars1234567890123456789012345678901234567/marketplace.json", nil)},
+		{"manifest: too long", httptest.NewRequest(http.MethodGet, "/marketplace/m/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/marketplace.json", nil)},
+		{"info/refs: no .git suffix", httptest.NewRequest(http.MethodGet, "/marketplace/p/short/info/refs?service=git-upload-pack", nil)},
+		{"info/refs: bad chars before .git", httptest.NewRequest(http.MethodGet, "/marketplace/p/bad!chars1234567890123456789012345678901234567.git/info/refs?service=git-upload-pack", nil)},
+		{"upload-pack: too short", httptest.NewRequest(http.MethodPost, "/marketplace/p/short.git/git-upload-pack", nil)},
 	}
 
 	for _, tc := range cases {

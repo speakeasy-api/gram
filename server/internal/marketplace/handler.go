@@ -10,11 +10,18 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"strings"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
+
+// RoutePrefix is the single top-level path segment reserved by the marketplace
+// proxy. All proxy routes (manifest + git Smart HTTP) live under this prefix
+// so the main mux only carves out one namespace, and so the dispatch logic
+// stays here rather than leaking into the server bootstrap.
+const RoutePrefix = "/marketplace/"
 
 // publishedManifestRef pins manifest fetches to the same branch the publish
 // flow writes to (see plugins/impl.go). If the publish flow ever stops
@@ -47,15 +54,23 @@ func NewServer(
 
 func (s *Server) Routes() http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /m/{token}/marketplace.json", s.handleManifest)
+	mux.HandleFunc("GET "+RoutePrefix+"m/{token}/marketplace.json", s.handleManifest)
 	// {slug} captures "<token>.git"; the handler strips the suffix. Go 1.22's
 	// ServeMux disallows mixing literals with wildcards inside one segment.
-	mux.HandleFunc("GET /p/{slug}/info/refs", s.handleInfoRefs)
-	mux.HandleFunc("POST /p/{slug}/git-upload-pack", s.handleUploadPack)
-	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("GET "+RoutePrefix+"p/{slug}/info/refs", s.handleInfoRefs)
+	mux.HandleFunc("POST "+RoutePrefix+"p/{slug}/git-upload-pack", s.handleUploadPack)
+	mux.HandleFunc("GET "+RoutePrefix+"healthz", func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = io.WriteString(w, "ok")
 	})
 	return mux
+}
+
+// IsMarketplaceRoute reports whether the request targets a path owned by the
+// marketplace proxy. The main server mux uses this to short-circuit the Goa
+// muxer; centralizing the check here keeps the prefix definition in one
+// place.
+func (s *Server) IsMarketplaceRoute(r *http.Request) bool {
+	return strings.HasPrefix(r.URL.Path, RoutePrefix)
 }
 
 // validTokenPattern matches the shape of a marketplace_token minted by
@@ -190,7 +205,7 @@ func (s *Server) rewriteManifest(raw []byte, token string) ([]byte, error) {
 	if !ok {
 		return nil, errors.New("manifest missing plugins array")
 	}
-	gitURL := fmt.Sprintf("%s/p/%s.git", s.publicBaseURL, token)
+	gitURL := fmt.Sprintf("%s%sp/%s.git", s.publicBaseURL, RoutePrefix, token)
 	for _, p := range pluginsRaw {
 		entry, ok := p.(map[string]any)
 		if !ok {
