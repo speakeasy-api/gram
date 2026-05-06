@@ -14,7 +14,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { McpIcon } from "@/components/ui/mcp-icon";
-import { MultiSearch } from "@/components/ui/multi-search";
 import { MultiSelect } from "@/components/ui/multi-select";
 import {
   Popover,
@@ -122,11 +121,9 @@ export function ObserveTypeFilter({
 export function ObserveFilterBar({
   serverOptions,
   onServerSelectionChange,
-  userEmailInput,
-  setUserEmailInput,
-  onSubmitUserEmailFilter,
+  userEmailOptions,
+  onUserEmailSelectionChange,
   activeFilters,
-  removeFilter,
   selectedTypes,
   onTypesChange,
   dateRange,
@@ -140,11 +137,9 @@ export function ObserveFilterBar({
 }: {
   serverOptions: string[];
   onServerSelectionChange: (values: string[]) => void;
-  userEmailInput: string;
-  setUserEmailInput: (value: string) => void;
-  onSubmitUserEmailFilter: () => void;
+  userEmailOptions: string[];
+  onUserEmailSelectionChange: (values: string[]) => void;
   activeFilters: FilterChip[];
-  removeFilter: (path: string, display?: string) => void;
   selectedTypes: TypesToInclude[];
   onTypesChange: (types: TypesToInclude[]) => void;
   dateRange: DateRangePreset;
@@ -165,6 +160,15 @@ export function ObserveFilterBar({
     [activeFilters],
   );
 
+  const selectedEmails = useMemo(
+    () =>
+      activeFilters
+        .filter((f) => f.path === "user.email")
+        .map((f) => f.filters[0])
+        .filter((v): v is string => Boolean(v)),
+    [activeFilters],
+  );
+
   return (
     <div
       className={cn("flex shrink-0 flex-wrap items-center gap-2", className)}
@@ -174,19 +178,18 @@ export function ObserveFilterBar({
         defaultValue={selectedServers}
         onValueChange={onServerSelectionChange}
         placeholder="Filter by server name"
+        className="min-w-[200px] flex-1"
         hideSelectAll
-        className="min-w-[200px] flex-1"
+        singleLine
       />
-      <MultiSearch
-        value={userEmailInput}
-        onChange={setUserEmailInput}
-        onSubmit={onSubmitUserEmailFilter}
-        placeholder="Filter by user email (press Enter to add)"
+      <MultiSelect
+        options={userEmailOptions.map((e) => ({ label: e, value: e }))}
+        defaultValue={selectedEmails}
+        onValueChange={onUserEmailSelectionChange}
+        placeholder="Filter by user email"
         className="min-w-[200px] flex-1"
-        chips={activeFilters
-          .filter((f) => f.path === "user.email")
-          .map((f) => ({ display: f.display, value: f.display }))}
-        onRemoveChip={(display) => removeFilter("user.email", display)}
+        hideSelectAll
+        singleLine
       />
       <ObserveTypeFilter
         selectedTypes={selectedTypes}

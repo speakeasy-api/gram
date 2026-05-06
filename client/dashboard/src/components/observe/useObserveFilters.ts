@@ -1,6 +1,6 @@
 import { getPresetRange, type DateRangePreset } from "@gram-ai/elements";
 import type { TypesToInclude } from "@gram/client/models/components";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router";
 import type { FilterChip } from "@/components/observe/ObserveFilterBar";
 import {
@@ -51,7 +51,6 @@ export function useObserveFilters() {
     return filters;
   });
 
-  const [userEmailInput, setUserEmailInput] = useState("");
   const [selectedHookTypes, setSelectedHookTypes] = useState<TypesToInclude[]>(
     () => {
       const raw = searchParams.get("hookTypes");
@@ -64,6 +63,7 @@ export function useObserveFilters() {
     },
   );
   const [knownServers, setKnownServers] = useState<string[]>([]);
+  const [knownUserEmails, setKnownUserEmails] = useState<string[]>([]);
 
   const urlRange = searchParams.get("range");
   const urlFrom = searchParams.get("from");
@@ -129,6 +129,11 @@ export function useObserveFilters() {
     [customRange, dateRange],
   );
 
+  useEffect(() => {
+    setKnownServers([]);
+    setKnownUserEmails([]);
+  }, [from, to]);
+
   const logFilters = useMemo(
     () => buildLogFilters(activeFilters),
     [activeFilters],
@@ -142,6 +147,14 @@ export function useObserveFilters() {
     });
   }, []);
 
+  const addKnownUserEmails = useCallback((emails: string[]) => {
+    if (emails.length === 0) return;
+    setKnownUserEmails((prev) => {
+      const merged = [...new Set([...prev, ...emails])];
+      return merged.length === prev.length ? prev : merged;
+    });
+  }, []);
+
   const serverOptions = useMemo(() => {
     const selected = activeFilters
       .filter((f) => f.path === "gram.tool_call.source")
@@ -149,6 +162,41 @@ export function useObserveFilters() {
       .filter((v): v is string => Boolean(v));
     return [...new Set([...knownServers, ...selected])];
   }, [knownServers, activeFilters]);
+
+  const userEmailOptions = useMemo(() => {
+    const selected = activeFilters
+      .filter((f) => f.path === "user.email")
+      .map((f) => f.filters[0])
+      .filter((v): v is string => Boolean(v));
+    return [...new Set([...knownUserEmails, ...selected])];
+  }, [knownUserEmails, activeFilters]);
+
+  const handleUserEmailSelectionChange = useCallback(
+    (values: string[]) => {
+      setActiveFilters((prev) => {
+        const nonEmail = prev.filter((f) => f.path !== "user.email");
+        const emailFilters: FilterChip[] = values.map((v) => ({
+          display: v,
+          filters: [v],
+          path: "user.email",
+        }));
+        return [...nonEmail, ...emailFilters];
+      });
+      setSearchParams(
+        (urlPrev) => {
+          const next = new URLSearchParams(urlPrev);
+          if (values.length > 0) {
+            next.set("user", values.join(","));
+          } else {
+            next.delete("user");
+          }
+          return next;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
 
   const handleServerSelectionChange = useCallback(
     (values: string[]) => {
@@ -254,17 +302,6 @@ export function useObserveFilters() {
     [setSearchParams],
   );
 
-  const submitUserEmailFilter = useCallback(() => {
-    const trimmed = userEmailInput.trim();
-    if (!trimmed) return;
-    addFilter({
-      display: trimmed,
-      filters: [trimmed],
-      path: "user.email",
-    });
-    setUserEmailInput("");
-  }, [userEmailInput, addFilter]);
-
   const handleHookTypesChange = useCallback(
     (types: TypesToInclude[]) => {
       setSelectedHookTypes(types);
@@ -293,8 +330,6 @@ export function useObserveFilters() {
 
   return {
     activeFilters,
-    userEmailInput,
-    setUserEmailInput,
     selectedHookTypes,
     dateRange,
     customRange,
@@ -305,9 +340,11 @@ export function useObserveFilters() {
     serverOptions,
     addKnownServers,
     handleServerSelectionChange,
+    userEmailOptions,
+    addKnownUserEmails,
+    handleUserEmailSelectionChange,
     addFilter,
     removeFilter,
-    submitUserEmailFilter,
     handleHookTypesChange,
     setDateRangeParam,
     setCustomRangeParam,

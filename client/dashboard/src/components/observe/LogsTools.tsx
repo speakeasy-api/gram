@@ -81,11 +81,10 @@ export function LogsTools() {
     addKnownServers,
     serverOptions,
     handleServerSelectionChange,
-    userEmailInput,
-    setUserEmailInput,
-    submitUserEmailFilter,
+    userEmailOptions,
+    addKnownUserEmails,
+    handleUserEmailSelectionChange,
     addFilter,
-    removeFilter,
     handleHookTypesChange,
     dateRange,
     customRange,
@@ -153,6 +152,14 @@ export function LogsTools() {
         .filter((s): s is string => Boolean(s)),
     );
   }, [groupedTraces, addKnownServers]);
+
+  useEffect(() => {
+    addKnownUserEmails(
+      groupedTraces
+        .map((t) => t.userEmail)
+        .filter((e): e is string => Boolean(e)),
+    );
+  }, [groupedTraces, addKnownUserEmails]);
 
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
     const container = e.currentTarget;
@@ -223,12 +230,10 @@ export function LogsTools() {
             groupedTraces={groupedTraces}
             serverOptions={serverOptions}
             onServerSelectionChange={handleServerSelectionChange}
-            userEmailInput={userEmailInput}
-            setUserEmailInput={setUserEmailInput}
-            onSubmitUserEmailFilter={submitUserEmailFilter}
+            userEmailOptions={userEmailOptions}
+            onUserEmailSelectionChange={handleUserEmailSelectionChange}
             activeFilters={activeFilters}
             addFilter={addFilter}
-            removeFilter={removeFilter}
             selectedHookTypes={selectedHookTypes}
             onHookTypesChange={handleHookTypesChange}
             expandedTraceId={expandedTraceId}
@@ -262,11 +267,9 @@ function HooksInnerContent({
   groupedTraces,
   serverOptions,
   onServerSelectionChange,
-  userEmailInput,
-  setUserEmailInput,
-  onSubmitUserEmailFilter,
+  userEmailOptions,
+  onUserEmailSelectionChange,
   activeFilters,
-  removeFilter,
   selectedHookTypes,
   onHookTypesChange,
   expandedTraceId,
@@ -294,12 +297,10 @@ function HooksInnerContent({
   groupedTraces: HookTrace[];
   serverOptions: string[];
   onServerSelectionChange: (values: string[]) => void;
-  userEmailInput: string;
-  setUserEmailInput: (value: string) => void;
-  onSubmitUserEmailFilter: () => void;
+  userEmailOptions: string[];
+  onUserEmailSelectionChange: (values: string[]) => void;
   activeFilters: FilterChip[];
   addFilter: (chip: FilterChip) => void;
-  removeFilter: (path: string, display?: string) => void;
   selectedHookTypes: TypesToInclude[];
   onHookTypesChange: (types: TypesToInclude[]) => void;
   expandedTraceId: string | null;
@@ -346,11 +347,9 @@ function HooksInnerContent({
           <ObserveFilterBar
             serverOptions={serverOptions}
             onServerSelectionChange={onServerSelectionChange}
-            userEmailInput={userEmailInput}
-            setUserEmailInput={setUserEmailInput}
-            onSubmitUserEmailFilter={onSubmitUserEmailFilter}
+            userEmailOptions={userEmailOptions}
+            onUserEmailSelectionChange={onUserEmailSelectionChange}
             activeFilters={activeFilters}
-            removeFilter={removeFilter}
             selectedTypes={selectedHookTypes}
             onTypesChange={onHookTypesChange}
             dateRange={dateRange}
