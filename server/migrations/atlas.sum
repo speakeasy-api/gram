@@ -1,4 +1,4 @@
-h1:mwpEXLSylGsP200SVFqhzR6pRE9n8YuKI0Mc7aUULUg=
+h1:QNGkpxihIcP5obsHuRYviJE4qXw1GS4tQRxJTPBp0PI=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -171,3 +171,4 @@ h1:mwpEXLSylGsP200SVFqhzR6pRE9n8YuKI0Mc7aUULUg=
 20260512175020_otel-forwarding-configs.sql h1:xmDFO0MH0Eyzrym5R1lV+0KTZeQwqMYzByhtmqUZSkM=
 20260512215317_add-retry-after-to-outbox-svix-relays.sql h1:o/1Y3Gh/+rXEdTFyLijpPsNLgXpNyhzNgIVeku/SKYU=
 20260513000047_rename-outbox-relay-table.sql h1:AGyRYZsUpxHNZZj8Ziq1CgY1mu2xaWCWaR9HuRJE47c=
+20260513005837_remotesession_tables.sql h1:5DUSVR2+u/G7JO8BIWqcIpGvcc6KosOs/CmwPR/QA6g=
