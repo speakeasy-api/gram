@@ -98,6 +98,7 @@ type Service struct {
 	enc                 *encryption.Client
 	authz               *authz.Engine
 	shadowMCPClient     *shadowmcp.Client
+	authnChallengeCache cache.TypedCacheObject[AuthnChallengeState]
 }
 
 type oauthTokenInputs struct {
@@ -201,6 +202,11 @@ func NewService(
 		enc:                 enc,
 		authz:               authzEngine,
 		shadowMCPClient:     shadowMCPClient,
+		authnChallengeCache: cache.NewTypedObjectCache[AuthnChallengeState](
+			logger.With(attr.SlogCacheNamespace("authn_challenge")),
+			cacheImpl,
+			cache.SuffixNone,
+		),
 	}
 }
 
@@ -219,6 +225,7 @@ func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Se
 	o11y.AttachHandler(mux, "GET", "/.well-known/oauth-protected-resource/mcp/{mcpSlug}", oops.ErrHandle(service.logger, service.HandleGetProtectedResource).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/.well-known/oauth-authorization-server/mcp/{mcpSlug}", oops.ErrHandle(service.logger, service.HandleGetAuthorizationServer).ServeHTTP)
 	o11y.AttachHandler(mux, "POST", "/mcp/{mcpSlug}/register", oops.ErrHandle(service.logger, service.HandleRegister).ServeHTTP)
+	o11y.AttachHandler(mux, "GET", "/mcp/{mcpSlug}/authorize", oops.ErrHandle(service.logger, service.HandleAuthorize).ServeHTTP)
 }
 
 // HandleGetServer handles GET requests to /mcp/{mcpSlug}, checking for HTML requests

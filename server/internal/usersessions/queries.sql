@@ -75,6 +75,17 @@ FROM user_session_clients AS cli
 JOIN user_session_issuers AS iss ON iss.id = cli.user_session_issuer_id
 WHERE cli.id = @id AND iss.project_id = @project_id AND cli.deleted IS FALSE;
 
+-- name: GetUserSessionClientByClientID :one
+-- Lookup a registered DCR client by its issuer-scoped client_id. Used by the
+-- /authorize, /token, and /revoke handlers to resolve the client behind the
+-- request. Project scoping is intentionally NOT applied here — the OAuth
+-- surface is public and the issuer_id is the authoritative scope.
+SELECT cli.*
+FROM user_session_clients AS cli
+WHERE cli.user_session_issuer_id = @user_session_issuer_id
+  AND cli.client_id = @client_id
+  AND cli.deleted IS FALSE;
+
 -- name: ListUserSessionClientsByProjectID :many
 -- Operator visibility into all DCR-issued clients in the project, with optional
 -- filter by user_session_issuer_id. Joins through issuers for project scoping.

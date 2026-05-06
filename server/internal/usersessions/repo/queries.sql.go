@@ -274,6 +274,43 @@ func (q *Queries) GetUserSessionByID(ctx context.Context, arg GetUserSessionByID
 	return i, err
 }
 
+const getUserSessionClientByClientID = `-- name: GetUserSessionClientByClientID :one
+SELECT cli.id, cli.user_session_issuer_id, cli.client_id, cli.client_secret_hash, cli.client_name, cli.redirect_uris, cli.client_id_issued_at, cli.client_secret_expires_at, cli.created_at, cli.updated_at, cli.deleted_at, cli.deleted
+FROM user_session_clients AS cli
+WHERE cli.user_session_issuer_id = $1
+  AND cli.client_id = $2
+  AND cli.deleted IS FALSE
+`
+
+type GetUserSessionClientByClientIDParams struct {
+	UserSessionIssuerID uuid.UUID
+	ClientID            string
+}
+
+// Lookup a registered DCR client by its issuer-scoped client_id. Used by the
+// /authorize, /token, and /revoke handlers to resolve the client behind the
+// request. Project scoping is intentionally NOT applied here — the OAuth
+// surface is public and the issuer_id is the authoritative scope.
+func (q *Queries) GetUserSessionClientByClientID(ctx context.Context, arg GetUserSessionClientByClientIDParams) (UserSessionClient, error) {
+	row := q.db.QueryRow(ctx, getUserSessionClientByClientID, arg.UserSessionIssuerID, arg.ClientID)
+	var i UserSessionClient
+	err := row.Scan(
+		&i.ID,
+		&i.UserSessionIssuerID,
+		&i.ClientID,
+		&i.ClientSecretHash,
+		&i.ClientName,
+		&i.RedirectUris,
+		&i.ClientIDIssuedAt,
+		&i.ClientSecretExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const getUserSessionClientByID = `-- name: GetUserSessionClientByID :one
 SELECT cli.id, cli.user_session_issuer_id, cli.client_id, cli.client_secret_hash, cli.client_name, cli.redirect_uris, cli.client_id_issued_at, cli.client_secret_expires_at, cli.created_at, cli.updated_at, cli.deleted_at, cli.deleted, iss.project_id AS issuer_project_id
 FROM user_session_clients AS cli

@@ -57,10 +57,51 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
+
+// AuthnChallengeState is the in-flight context of a single Gram-as-AS authn
+// challenge — the OAuth client's request, the issuer it's against, and (after
+// Phase 2) the resolved subject. Stored in Redis under `authnChallenge:{ID}`
+// for ~10 minutes (spike §4.3) — long enough for the user to round-trip
+// through the IDP and land on /connect, short enough that abandoned flows
+// don't pile up.
+type AuthnChallengeState struct {
+	ID                  string    `json:"id"`
+	UserSessionIssuerID uuid.UUID `json:"user_session_issuer_id"`
+	ToolsetID           uuid.UUID `json:"toolset_id"`
+	ClientID            string    `json:"client_id"`
+	RedirectURI         string    `json:"redirect_uri"`
+	Scope               string    `json:"scope,omitempty"`
+	State               string    `json:"state,omitempty"`
+	CodeChallenge       string    `json:"code_challenge"`
+	CodeChallengeMethod string    `json:"code_challenge_method"`
+	// Subject is nil on creation; HandleClientLoginCallback (private path)
+	// stamps `user:<id>`, HandleConsent's POST mints a fresh
+	// `anonymous:<uuid>` on the public path. Pointer so the Redis JSON
+	// can round-trip an unstamped state (the URN's MarshalJSON refuses
+	// to serialise a zero-value SessionSubject).
+	Subject   *urn.SessionSubject `json:"subject,omitempty"`
+	CreatedAt time.Time           `json:"created_at"`
+}
+
+var _ cache.CacheableObject[AuthnChallengeState] = (*AuthnChallengeState)(nil)
+
+// CacheKey implements cache.CacheableObject.
+func (a AuthnChallengeState) CacheKey() string { return "authnChallenge:" + a.ID }
+
+// AdditionalCacheKeys implements cache.CacheableObject. Single-key entry; no
+// fan-out. (Per the Cleanup ticket in project.md, AdditionalCacheKeys is
+// itself slated for removal from the interface.)
+func (a AuthnChallengeState) AdditionalCacheKeys() []string { return []string{} }
+
+// TTL implements cache.CacheableObject.
+func (a AuthnChallengeState) TTL() time.Duration { return 10 * time.Minute }
 
 // supportedGrantTypes / supportedResponseTypes / supportedAuthMethods mirror
 // the values HandleGetAuthorizationServer advertises. Keep in sync — registered
@@ -498,4 +539,159 @@ func generateClientSecret() (string, error) {
 		return "", fmt.Errorf("read random bytes: %w", err)
 	}
 	return base64.RawURLEncoding.EncodeToString(b), nil
+}
+
+// HandleAuthorize implements the OAuth 2.1 authorization endpoint (RFC 6749
+// §4.1.1) on the issuer-gated authn-challenge surface. Mounted at
+// `GET /mcp/{mcpSlug}/authorize`.
+//
+// Flow:
+//   - validate the request (response_type=code, S256 PKCE, known client,
+//     allowed redirect_uri)
+//   - mint an AuthnChallengeState in Redis carrying the request context
+//   - branch on the toolset's privacy:
+//   - private (`!McpIsPublic`): 302 to the Speakeasy IDP login page; on
+//     return HandleClientLoginCallback stamps `user:<id>` onto the state
+//   - public (`McpIsPublic`): 302 directly to /connect; HandleConsent's
+//     POST stamps `anonymous:<prospective_mcp_session_id>`
+func (s *Service) HandleAuthorize(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+	mcpSlug := chi.URLParam(r, "mcpSlug")
+	if mcpSlug == "" {
+		return oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided").Log(ctx, s.logger)
+	}
+
+	toolset, customDomainCtx, err := s.loadToolsetFromMcpSlug(ctx, mcpSlug)
+	switch {
+	case errors.Is(err, errToolsetNotFound):
+		return oops.E(oops.CodeNotFound, err, "mcp server not found")
+	case err != nil:
+		return oops.E(oops.CodeUnexpected, err, "failed to load MCP server").Log(ctx, s.logger)
+	}
+
+	if !toolset.UserSessionIssuerID.Valid {
+		return oops.E(oops.CodeNotFound, nil, "not found")
+	}
+
+	logger := s.logger.With(
+		attr.SlogToolsetID(toolset.ID.String()),
+		attr.SlogProjectID(toolset.ProjectID.String()),
+	)
+
+	q := r.URL.Query()
+	clientID := q.Get("client_id")
+	redirectURI := q.Get("redirect_uri")
+	responseType := q.Get("response_type")
+	state := q.Get("state")
+	scope := q.Get("scope")
+	codeChallenge := q.Get("code_challenge")
+	codeChallengeMethod := q.Get("code_challenge_method")
+
+	if clientID == "" {
+		return writeAuthorizeError(ctx, w, logger, http.StatusBadRequest, "invalid_request", "client_id is required")
+	}
+	if redirectURI == "" {
+		return writeAuthorizeError(ctx, w, logger, http.StatusBadRequest, "invalid_request", "redirect_uri is required")
+	}
+	if responseType != "code" {
+		return writeAuthorizeError(ctx, w, logger, http.StatusBadRequest, "unsupported_response_type", "response_type must be 'code'")
+	}
+	if codeChallenge == "" {
+		return writeAuthorizeError(ctx, w, logger, http.StatusBadRequest, "invalid_request", "code_challenge is required (PKCE mandatory)")
+	}
+	if codeChallengeMethod != "S256" {
+		return writeAuthorizeError(ctx, w, logger, http.StatusBadRequest, "invalid_request", "code_challenge_method must be 'S256'")
+	}
+
+	client, err := usersessions_repo.New(s.db).GetUserSessionClientByClientID(ctx, usersessions_repo.GetUserSessionClientByClientIDParams{
+		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
+		ClientID:            clientID,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return writeAuthorizeError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", "unknown client_id")
+		}
+		return oops.E(oops.CodeUnexpected, err, "lookup user session client").Log(ctx, logger)
+	}
+	if !slices.Contains(client.RedirectUris, redirectURI) {
+		return writeAuthorizeError(ctx, w, logger, http.StatusBadRequest, "invalid_request", "redirect_uri is not registered for this client")
+	}
+
+	challengeID := uuid.NewString()
+
+	challengeState := AuthnChallengeState{
+		ID:                  challengeID,
+		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
+		ToolsetID:           toolset.ID,
+		ClientID:            clientID,
+		RedirectURI:         redirectURI,
+		Scope:               scope,
+		State:               state,
+		CodeChallenge:       codeChallenge,
+		CodeChallengeMethod: codeChallengeMethod,
+		// Subject is left nil — HandleClientLoginCallback (private path) and
+		// HandleConsent (public path) stamp it later in the flow.
+		Subject:   nil,
+		CreatedAt: time.Now(),
+	}
+
+	if err := s.authnChallengeCache.Store(ctx, challengeState); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "store authn challenge state").Log(ctx, logger)
+	}
+
+	baseURL := s.serverURL.String()
+	if customDomainCtx != nil {
+		baseURL = fmt.Sprintf("https://%s", customDomainCtx.Domain)
+	}
+
+	if !toolset.McpIsPublic {
+		callbackURL := fmt.Sprintf("%s/mcp/%s/client_login_callback", baseURL, mcpSlug)
+		idpURL, err := s.sessions.BuildAuthorizationURL(ctx, sessions.AuthURLParams{
+			CallbackURL:     callbackURL,
+			Scope:           "",
+			State:           challengeID,
+			ClientID:        "",
+			ScopesSupported: nil,
+		})
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "build IDP authorization URL").Log(ctx, logger)
+		}
+		http.Redirect(w, r, idpURL.String(), http.StatusFound)
+		return nil
+	}
+
+	// Public toolset: skip IDP, route straight to consent. The anonymous sub
+	// is minted on the consent POST (per plan).
+	consentURL := fmt.Sprintf("%s/mcp/%s/connect?state=%s", baseURL, mcpSlug, url.QueryEscape(challengeID))
+	http.Redirect(w, r, consentURL, http.StatusFound)
+	return nil
+}
+
+// writeAuthorizeError emits an OAuth 2.1 authorization error (RFC 6749
+// §4.1.2.1) inline as a JSON body. We don't redirect to redirect_uri because
+// the request hasn't been validated to that point — per RFC 6749 §3.1.2.4, an
+// invalid redirect_uri must NOT be redirected to.
+func writeAuthorizeError(ctx context.Context, w http.ResponseWriter, logger *slog.Logger, status int, code, description string) error {
+	body, err := json.Marshal(map[string]string{
+		"error":             code,
+		"error_description": description,
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to marshal authorize error").Log(ctx, logger)
+	}
+
+	logger.InfoContext(ctx, "authorize request rejected",
+		attr.SlogOAuthError(code),
+		// > [NOTE] why are these called DCR errors? DCR is not related to this context?
+		attr.SlogOAuthErrorDescription(description),
+	)
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Pragma", "no-cache")
+	w.WriteHeader(status)
+	if _, werr := w.Write(body); werr != nil {
+		return oops.E(oops.CodeUnexpected, werr, "failed to write authorize error body").Log(ctx, logger)
+	}
+	return nil
 }
