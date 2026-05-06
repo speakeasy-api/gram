@@ -211,6 +211,8 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (*gen.
 				attr.SlogEvent("claude_hook_auth_failed"),
 				attr.SlogError(err),
 			)
+
+			return makeHookResult(payload.HookEventName), nil
 		}
 	}
 
