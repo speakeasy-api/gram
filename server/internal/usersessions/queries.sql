@@ -190,6 +190,19 @@ WHERE s.id = @id
   AND s.deleted IS FALSE
 RETURNING s.*;
 
+-- name: RevokeUserSessionByRefreshTokenHash :one
+-- Soft-deletes the session matching the supplied refresh-token hash, scoped
+-- to the issuer. Used by the OAuth /revoke endpoint (RFC 7009) on the public
+-- MCP surface, where project scoping isn't applicable -- the issuer_id is
+-- the authoritative scope. Returns the affected row so the handler can push
+-- the jti into the revocation cache.
+UPDATE user_sessions
+SET deleted_at = clock_timestamp()
+WHERE user_session_issuer_id = @user_session_issuer_id
+  AND refresh_token_hash = @refresh_token_hash
+  AND deleted IS FALSE
+RETURNING *;
+
 -- The Create* queries below are exercised by tests and by the OAuth surface
 -- that lands in milestone #2 (DCR registration, /token exchange, /authorize
 -- consent). They have no exposure on the management API.

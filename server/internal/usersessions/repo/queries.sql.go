@@ -760,6 +760,44 @@ func (q *Queries) RevokeUserSession(ctx context.Context, arg RevokeUserSessionPa
 	return i, err
 }
 
+const revokeUserSessionByRefreshTokenHash = `-- name: RevokeUserSessionByRefreshTokenHash :one
+UPDATE user_sessions
+SET deleted_at = clock_timestamp()
+WHERE user_session_issuer_id = $1
+  AND refresh_token_hash = $2
+  AND deleted IS FALSE
+RETURNING id, user_session_issuer_id, principal_urn, jti, refresh_token_hash, refresh_expires_at, expires_at, created_at, updated_at, deleted_at, deleted
+`
+
+type RevokeUserSessionByRefreshTokenHashParams struct {
+	UserSessionIssuerID uuid.UUID
+	RefreshTokenHash    string
+}
+
+// Soft-deletes the session matching the supplied refresh-token hash, scoped
+// to the issuer. Used by the OAuth /revoke endpoint (RFC 7009) on the public
+// MCP surface, where project scoping isn't applicable -- the issuer_id is
+// the authoritative scope. Returns the affected row so the handler can push
+// the jti into the revocation cache.
+func (q *Queries) RevokeUserSessionByRefreshTokenHash(ctx context.Context, arg RevokeUserSessionByRefreshTokenHashParams) (UserSession, error) {
+	row := q.db.QueryRow(ctx, revokeUserSessionByRefreshTokenHash, arg.UserSessionIssuerID, arg.RefreshTokenHash)
+	var i UserSession
+	err := row.Scan(
+		&i.ID,
+		&i.UserSessionIssuerID,
+		&i.PrincipalUrn,
+		&i.Jti,
+		&i.RefreshTokenHash,
+		&i.RefreshExpiresAt,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const revokeUserSessionClient = `-- name: RevokeUserSessionClient :one
 UPDATE user_session_clients AS cli
 SET deleted_at = clock_timestamp()
