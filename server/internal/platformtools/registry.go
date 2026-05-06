@@ -48,6 +48,21 @@ var registry = []toolFactory{
 	func(deps Dependencies) PlatformToolExecutor {
 		return platformslack.NewSendMessageTool(deps.SlackHTTPClient)
 	},
+	func(deps Dependencies) PlatformToolExecutor {
+		return platformslack.NewAddReactionTool(deps.SlackHTTPClient)
+	},
+	func(deps Dependencies) PlatformToolExecutor {
+		return platformslack.NewRemoveReactionTool(deps.SlackHTTPClient)
+	},
+	func(deps Dependencies) PlatformToolExecutor {
+		return platformslack.NewGetReactionsTool(deps.SlackHTTPClient)
+	},
+	func(deps Dependencies) PlatformToolExecutor {
+		return platformslack.NewListReactionsTool(deps.SlackHTTPClient)
+	},
+	func(deps Dependencies) PlatformToolExecutor {
+		return platformslack.NewListEmojiTool(deps.SlackHTTPClient)
+	},
 }
 
 func BuildExecutors(deps Dependencies) map[string]PlatformToolExecutor {
