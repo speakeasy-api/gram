@@ -1,7 +1,6 @@
 ---
 "server": minor
 "dashboard": minor
-"sdk": minor
 ---
 
 Add a marketplace proxy and end-to-end install UX so users can install Gram-published plugins in Claude Code, Claude Cowork, and Cursor without making the upstream GitHub repo public.
