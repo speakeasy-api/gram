@@ -223,8 +223,8 @@ type PluginServer struct {
 // PublishPluginsPayload is the payload type of the plugins service
 // publishPlugins method.
 type PublishPluginsPayload struct {
-	// GitHub username to add as a collaborator on the repo.
-	GithubUsername   *string
+	// GitHub usernames to add as collaborators on the repo.
+	GithubUsernames  []string
 	SessionToken     *string
 	ProjectSlugInput *string
 }

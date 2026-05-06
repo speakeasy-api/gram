@@ -26,6 +26,7 @@ type mockGitHubPublisher struct {
 	createRepoCalled      bool
 	pushFilesCalled       bool
 	addCollaboratorCalled bool
+	collaborators         []string
 	lastPushedFiles       map[string][]byte
 	createRepoErr         error
 	pushFilesErr          error
@@ -45,8 +46,9 @@ func (m *mockGitHubPublisher) PushFiles(_ context.Context, _ int64, _, _, _, _ s
 	return "abc123", nil
 }
 
-func (m *mockGitHubPublisher) AddCollaborator(_ context.Context, _ int64, _, _, _, _ string) error {
+func (m *mockGitHubPublisher) AddCollaborator(_ context.Context, _ int64, _, _, username, _ string) error {
 	m.addCollaboratorCalled = true
+	m.collaborators = append(m.collaborators, username)
 	return nil
 }
 
@@ -482,7 +484,7 @@ func TestPluginsService_PublishPlugins_HappyPath(t *testing.T) {
 	require.Contains(t, *status.MarketplaceURL, ".git")
 }
 
-func TestPluginsService_PublishPlugins_WithCollaborator(t *testing.T) {
+func TestPluginsService_PublishPlugins_WithCollaborators(t *testing.T) {
 	t.Parallel()
 
 	mock := &mockGitHubPublisher{}
@@ -501,12 +503,12 @@ func TestPluginsService_PublishPlugins_WithCollaborator(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	username := "octocat"
 	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{
-		GithubUsername: &username,
+		GithubUsernames: []string{"octocat", "hubot", "monalisa"},
 	})
 	require.NoError(t, err)
 	require.True(t, mock.addCollaboratorCalled)
+	require.Equal(t, []string{"octocat", "hubot", "monalisa"}, mock.collaborators)
 }
 
 func TestPluginsService_PublishPlugins_CreatesAPIKeyWithCorrectScope(t *testing.T) {

@@ -1083,8 +1083,10 @@ func (s *Service) PublishPlugins(ctx context.Context, payload *gen.PublishPlugin
 		return nil, oops.E(oops.CodeUnexpected, err, "get project").Log(ctx, s.logger)
 	}
 
-	if payload.GithubUsername != nil && *payload.GithubUsername != "" && !validGitHubUsername.MatchString(*payload.GithubUsername) {
-		return nil, oops.E(oops.CodeBadRequest, nil, "invalid github username")
+	for _, u := range payload.GithubUsernames {
+		if u == "" || !validGitHubUsername.MatchString(u) {
+			return nil, oops.E(oops.CodeBadRequest, nil, "invalid github username: %q", u)
+		}
 	}
 
 	// PublishPlugins is session-only — repo names embed the project slug,
@@ -1134,10 +1136,11 @@ func (s *Service) PublishPlugins(ctx context.Context, payload *gen.PublishPlugin
 		return nil, oops.E(oops.CodeGatewayError, err, "push plugin files to GitHub").Log(ctx, s.logger)
 	}
 
-	if payload.GithubUsername != nil && *payload.GithubUsername != "" {
-		if err := s.github.Client.AddCollaborator(ctx, s.github.InstallationID, repoOwner, repoName, *payload.GithubUsername, "pull"); err != nil {
+	for _, username := range payload.GithubUsernames {
+		if err := s.github.Client.AddCollaborator(ctx, s.github.InstallationID, repoOwner, repoName, username, "pull"); err != nil {
 			s.logger.WarnContext(ctx, "failed to add collaborator (non-fatal)",
 				attr.SlogOrganizationID(ac.ActiveOrganizationID),
+				slog.String("github_username", username),
 				attr.SlogError(err),
 			)
 		}
