@@ -9,6 +9,7 @@ import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { cn } from "@/lib/utils";
 import type { Role } from "@gram/client/models/components/role.js";
+import { ResolveChallengeFormResolutionType } from "@gram/client/models/components/resolvechallengeform.js";
 import { invalidateAllChallenges } from "@gram/client/react-query/challenges.js";
 import { useResolveChallengeMutation } from "@gram/client/react-query/resolveChallenge.js";
 import { useRoles } from "@gram/client/react-query/roles.js";
@@ -17,6 +18,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Check, ChevronRight, Plus, Users } from "lucide-react";
 import { useState } from "react";
 import type { AuthzChallenge } from "./ChallengesTab";
+import { toRoleSlug } from "./types";
 
 type Step = "choose" | "select-role" | "confirm";
 
@@ -25,6 +27,7 @@ interface GrantDrawerProps {
   onOpenChange: (open: boolean) => void;
   challenge: AuthzChallenge | null;
   onCreateNew: () => void;
+  onResolved?: (challengeId: string) => void;
 }
 
 export function GrantDrawer({
@@ -32,6 +35,7 @@ export function GrantDrawer({
   onOpenChange,
   challenge,
   onCreateNew,
+  onResolved,
 }: GrantDrawerProps) {
   const [step, setStep] = useState<Step>("choose");
   const [selectedRole, setSelectedRole] = useState<Role | null>(null);
@@ -70,10 +74,6 @@ export function GrantDrawer({
 
   const handleSave = () => {
     if (!challenge || !selectedRole) return;
-    // Derive role slug from name the same way the server does:
-    // slugify(name) → "org-" + lowercase-hyphenated
-    const roleSlug =
-      "org-" + selectedRole.name.toLowerCase().replace(/[\s_]+/g, "-");
     resolveChallenge.mutate(
       {
         request: {
@@ -81,14 +81,19 @@ export function GrantDrawer({
             challengeId: challenge.id,
             principalUrn: challenge.principalUrn,
             scope: challenge.scope,
-            resolutionType: "role_assigned",
-            roleSlug,
+            resolutionType: ResolveChallengeFormResolutionType.RoleAssigned,
+            roleSlug: toRoleSlug(selectedRole.name),
             resourceKind: challenge.resourceKind,
             resourceId: challenge.resourceId,
           },
         },
       },
-      { onSuccess: handleClose },
+      {
+        onSuccess: () => {
+          onResolved?.(challenge.id);
+          handleClose();
+        },
+      },
     );
   };
 

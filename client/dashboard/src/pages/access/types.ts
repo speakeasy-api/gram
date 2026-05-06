@@ -8,6 +8,11 @@ import type {
 export { Scope };
 export type { Selector, Disposition, ResourceKind };
 
+/** Derive role slug from name the same way the server does. */
+export function toRoleSlug(name: string): string {
+  return "org-" + name.toLowerCase().replace(/[\s_]+/g, "-");
+}
+
 /** What kind of resource a scope protects. */
 export type ResourceType = "org" | "project" | "mcp";
 

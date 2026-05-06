@@ -193,7 +193,9 @@ function reasonLabel(reason: Reason): string {
   }
 }
 
-export function useChallengeRowColumns(): Column<AuthzChallenge>[] {
+export function useChallengeRowColumns(
+  animatingOutIds?: Set<string>,
+): Column<AuthzChallenge>[] {
   const { orgSlug } = useSlugs();
   const { organization } = useSession();
   const { data: membersData } = useMembers();
@@ -212,6 +214,12 @@ export function useChallengeRowColumns(): Column<AuthzChallenge>[] {
     return m;
   }, [membersData]);
 
+  const rowFade = (row: AuthzChallenge) =>
+    animatingOutIds?.has(row.id)
+      ? "opacity-0 transition-opacity duration-1000"
+      : (row.outcome === "allow" || row.resolvedAt) &&
+        "opacity-40 transition-opacity duration-1000";
+
   return useMemo(
     () => [
       {
@@ -222,11 +230,7 @@ export function useChallengeRowColumns(): Column<AuthzChallenge>[] {
           const isApiKey = row.principalType === "api_key";
           const display = row.userEmail ?? row.principalUrn;
           return (
-            <div
-              className={cn(
-                (row.outcome === "allow" || row.resolvedAt) && "opacity-40",
-              )}
-            >
+            <div className={cn(rowFade(row))}>
               <Avatar className="h-8 w-8">
                 {row.photoUrl && (
                   <AvatarImage src={row.photoUrl} alt={display} />
@@ -252,10 +256,7 @@ export function useChallengeRowColumns(): Column<AuthzChallenge>[] {
             <TooltipTrigger asChild>
               <Type
                 variant="body"
-                className={cn(
-                  "truncate text-sm font-medium",
-                  (row.outcome === "allow" || row.resolvedAt) && "opacity-40",
-                )}
+                className={cn("truncate text-sm font-medium", rowFade(row))}
               >
                 {row.userEmail ?? row.principalUrn}
               </Type>
@@ -273,11 +274,7 @@ export function useChallengeRowColumns(): Column<AuthzChallenge>[] {
         header: "Outcome",
         width: "85px",
         render: (row: AuthzChallenge) => (
-          <div
-            className={cn(
-              (row.outcome === "allow" || row.resolvedAt) && "opacity-40",
-            )}
-          >
+          <div className={cn(rowFade(row))}>
             <OutcomeBadge outcome={row.outcome} resolved={!!row.resolvedAt} />
           </div>
         ),
@@ -292,7 +289,7 @@ export function useChallengeRowColumns(): Column<AuthzChallenge>[] {
               <code
                 className={cn(
                   "bg-muted rounded px-1.5 py-0.5 font-mono text-xs",
-                  (row.outcome === "allow" || row.resolvedAt) && "opacity-40",
+                  rowFade(row),
                 )}
               >
                 {row.scope}
@@ -313,12 +310,7 @@ export function useChallengeRowColumns(): Column<AuthzChallenge>[] {
         header: "Resource",
         width: "1.5fr",
         render: (row: AuthzChallenge) => (
-          <div
-            className={cn(
-              "min-w-0 overflow-hidden",
-              (row.outcome === "allow" || row.resolvedAt) && "opacity-40",
-            )}
-          >
+          <div className={cn("min-w-0 overflow-hidden", rowFade(row))}>
             <ResourceLink
               challenge={row}
               orgSlug={orgSlug ?? ""}
@@ -370,7 +362,7 @@ export function useChallengeRowColumns(): Column<AuthzChallenge>[] {
                 variant="body"
                 className={cn(
                   "text-muted-foreground cursor-default text-sm whitespace-nowrap underline decoration-dotted underline-offset-4",
-                  (row.outcome === "allow" || row.resolvedAt) && "opacity-40",
+                  rowFade(row),
                 )}
               >
                 <HumanizeDateTime date={row.timestamp} />
@@ -381,7 +373,7 @@ export function useChallengeRowColumns(): Column<AuthzChallenge>[] {
         ),
       },
     ],
-    [orgSlug, projectMap, memberMap],
+    [orgSlug, projectMap, memberMap, animatingOutIds],
   );
 }
 
@@ -392,11 +384,19 @@ export function ChallengesTab() {
     searchParams.get("identity") ?? "all",
   );
   const [scopeFilter, setScopeFilter] = useState("all");
-  const { actionsColumn, grantFlowPortals } = useGrantFlow();
-  const challengeRowColumns = useChallengeRowColumns();
+  const {
+    actionsColumn,
+    grantFlowPortals,
+    recentlyResolvedIds,
+    animatingOutIds,
+  } = useGrantFlow();
+  const challengeRowColumns = useChallengeRowColumns(animatingOutIds);
 
   const { data, isLoading } = useChallenges({ limit: 200 });
-  const challenges = data?.challenges ?? [];
+  const challenges = useMemo(
+    () => (data?.challenges ?? []).filter((c) => !!c.scope),
+    [data?.challenges],
+  );
 
   const counts = useMemo(() => {
     const c = { all: challenges.length, deny: 0, allow: 0, resolved: 0 };
@@ -414,20 +414,26 @@ export function ChallengesTab() {
 
   const uniquePrincipals = useMemo(() => {
     const set = new Set(challenges.map((c) => c.userEmail ?? c.principalUrn));
-    return [...set].sort();
+    return [...set].filter(Boolean).sort();
   }, [challenges]);
 
   const uniqueScopes = useMemo(() => {
     const set = new Set(challenges.map((c) => c.scope));
-    return [...set].sort();
+    return [...set].filter(Boolean).sort();
   }, [challenges]);
 
   const filtered = useMemo(() => {
     let base = challenges;
     if (outcomeFilter === "resolved") {
-      base = base.filter((c) => !!c.resolvedAt);
+      base = base.filter(
+        (c) => !!c.resolvedAt && !recentlyResolvedIds.has(c.id),
+      );
     } else if (outcomeFilter !== "all") {
-      base = base.filter((c) => c.outcome === outcomeFilter && !c.resolvedAt);
+      base = base.filter(
+        (c) =>
+          (c.outcome === outcomeFilter && !c.resolvedAt) ||
+          recentlyResolvedIds.has(c.id),
+      );
     }
     if (principalFilter !== "all") {
       base = base.filter(
@@ -443,7 +449,13 @@ export function ChallengesTab() {
       if (diff !== 0) return diff;
       return b.timestamp.getTime() - a.timestamp.getTime();
     });
-  }, [challenges, outcomeFilter, principalFilter, scopeFilter]);
+  }, [
+    challenges,
+    outcomeFilter,
+    principalFilter,
+    scopeFilter,
+    recentlyResolvedIds,
+  ]);
 
   const columns: Column<AuthzChallenge>[] = [
     ...challengeRowColumns,
