@@ -18,8 +18,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oauth"
-	"github.com/speakeasy-api/gram/server/internal/oauthtest"
 	oauth_repo "github.com/speakeasy-api/gram/server/internal/oauth/repo"
+	"github.com/speakeasy-api/gram/server/internal/oauthtest"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
@@ -27,7 +27,7 @@ import (
 // Well-known OAuth server metadata tests
 // ---------------------------------------------------------------------------
 
-func TestService_HandleWellKnownOAuthServerMetadata(t *testing.T) {
+func TestService_HandleGetAuthorizationServer(t *testing.T) {
 	t.Parallel()
 
 	t.Run("returns_error_when_mcp_slug_is_missing", func(t *testing.T) {
@@ -44,7 +44,7 @@ func TestService_HandleWellKnownOAuthServerMetadata(t *testing.T) {
 		req = req.WithContext(reqCtx)
 
 		w := httptest.NewRecorder()
-		err := ti.service.HandleWellKnownOAuthServerMetadata(w, req)
+		err := ti.service.HandleGetAuthorizationServer(w, req)
 
 		// Should return an error for missing slug
 		require.Error(t, err)
@@ -64,7 +64,7 @@ func TestService_HandleWellKnownOAuthServerMetadata(t *testing.T) {
 		req = req.WithContext(reqCtx)
 
 		w := httptest.NewRecorder()
-		err := ti.service.HandleWellKnownOAuthServerMetadata(w, req)
+		err := ti.service.HandleGetAuthorizationServer(w, req)
 
 		// Should return a 404 error
 		require.Error(t, err)
@@ -103,7 +103,7 @@ func TestService_HandleWellKnownOAuthServerMetadata(t *testing.T) {
 		req = req.WithContext(reqCtx)
 
 		w := httptest.NewRecorder()
-		err = ti.service.HandleWellKnownOAuthServerMetadata(w, req)
+		err = ti.service.HandleGetAuthorizationServer(w, req)
 
 		// Should return 404 for no OAuth configuration
 		require.Error(t, err)
@@ -174,7 +174,7 @@ func TestService_HandleWellKnownOAuthServerMetadata(t *testing.T) {
 		req = req.WithContext(reqCtx)
 
 		w := httptest.NewRecorder()
-		err = ti.service.HandleWellKnownOAuthServerMetadata(w, req)
+		err = ti.service.HandleGetAuthorizationServer(w, req)
 
 		// Should return successfully with metadata
 		require.NoError(t, err)
@@ -188,7 +188,7 @@ func TestService_HandleWellKnownOAuthServerMetadata(t *testing.T) {
 // Well-known OAuth server metadata — refresh token grant tests
 // ---------------------------------------------------------------------------
 
-func TestService_HandleWellKnownOAuthServerMetadata_RefreshTokenGrant(t *testing.T) {
+func TestService_HandleGetAuthorizationServer_RefreshTokenGrant(t *testing.T) {
 	t.Parallel()
 
 	t.Run("grant_types_supported includes refresh_token", func(t *testing.T) {
@@ -249,7 +249,7 @@ func TestService_HandleWellKnownOAuthServerMetadata_RefreshTokenGrant(t *testing
 		req = req.WithContext(context.WithValue(t.Context(), chi.RouteCtxKey, rctx))
 
 		w := httptest.NewRecorder()
-		err = ti.service.HandleWellKnownOAuthServerMetadata(w, req)
+		err = ti.service.HandleGetAuthorizationServer(w, req)
 		require.NoError(t, err)
 		require.Equal(t, http.StatusOK, w.Code)
 
@@ -321,7 +321,7 @@ func TestService_HandleWellKnownOAuthServerMetadata_RefreshTokenGrant(t *testing
 		req = req.WithContext(context.WithValue(t.Context(), chi.RouteCtxKey, rctx))
 
 		w := httptest.NewRecorder()
-		err = ti.service.HandleWellKnownOAuthServerMetadata(w, req)
+		err = ti.service.HandleGetAuthorizationServer(w, req)
 		require.NoError(t, err)
 		require.Equal(t, http.StatusOK, w.Code)
 
@@ -393,7 +393,7 @@ func TestService_HandleWellKnownOAuthServerMetadata_RefreshTokenGrant(t *testing
 		req = req.WithContext(context.WithValue(t.Context(), chi.RouteCtxKey, rctx))
 
 		w := httptest.NewRecorder()
-		err = ti.service.HandleWellKnownOAuthServerMetadata(w, req)
+		err = ti.service.HandleGetAuthorizationServer(w, req)
 		require.NoError(t, err)
 		require.Equal(t, http.StatusOK, w.Code)
 
@@ -414,7 +414,7 @@ func TestService_HandleWellKnownOAuthServerMetadata_RefreshTokenGrant(t *testing
 // Well-known OAuth protected resource metadata tests
 // ---------------------------------------------------------------------------
 
-func TestService_HandleWellKnownOAuthProtectedResourceMetadata(t *testing.T) {
+func TestService_HandleGetProtectedResource(t *testing.T) {
 	t.Parallel()
 
 	t.Run("returns_error_when_mcp_slug_is_missing", func(t *testing.T) {
@@ -431,7 +431,7 @@ func TestService_HandleWellKnownOAuthProtectedResourceMetadata(t *testing.T) {
 		req = req.WithContext(reqCtx)
 
 		w := httptest.NewRecorder()
-		err := ti.service.HandleWellKnownOAuthProtectedResourceMetadata(w, req)
+		err := ti.service.HandleGetProtectedResource(w, req)
 
 		// Should return an error for missing slug
 		require.Error(t, err)
@@ -451,7 +451,7 @@ func TestService_HandleWellKnownOAuthProtectedResourceMetadata(t *testing.T) {
 		req = req.WithContext(reqCtx)
 
 		w := httptest.NewRecorder()
-		err := ti.service.HandleWellKnownOAuthProtectedResourceMetadata(w, req)
+		err := ti.service.HandleGetProtectedResource(w, req)
 
 		// Should return a 404 error
 		require.Error(t, err)
@@ -522,7 +522,7 @@ func TestService_HandleWellKnownOAuthProtectedResourceMetadata(t *testing.T) {
 		req = req.WithContext(reqCtx)
 
 		w := httptest.NewRecorder()
-		err = ti.service.HandleWellKnownOAuthProtectedResourceMetadata(w, req)
+		err = ti.service.HandleGetProtectedResource(w, req)
 
 		// Should return successfully with metadata
 		require.NoError(t, err)
@@ -571,7 +571,7 @@ func TestClientDance_ExternalOAuth_FullFlow(t *testing.T) {
 	require.NotEmpty(t, wwwAuth, "401 must include WWW-Authenticate header")
 	require.Contains(t, wwwAuth, "Bearer resource_metadata=")
 
-	// 5. Call HandleWellKnownOAuthProtectedResourceMetadata and verify it returns
+	// 5. Call HandleGetProtectedResource and verify it returns
 	//    valid JSON containing the MCP resource URL.
 	prReq := httptest.NewRequest(http.MethodGet, "/.well-known/oauth-protected-resource/mcp/"+mcpSlug, nil)
 	prRctx := chi.NewRouteContext()
@@ -579,7 +579,7 @@ func TestClientDance_ExternalOAuth_FullFlow(t *testing.T) {
 	prReq = prReq.WithContext(context.WithValue(t.Context(), chi.RouteCtxKey, prRctx))
 
 	prW := httptest.NewRecorder()
-	err = ti.service.HandleWellKnownOAuthProtectedResourceMetadata(prW, prReq)
+	err = ti.service.HandleGetProtectedResource(prW, prReq)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, prW.Code)
 
@@ -631,14 +631,14 @@ func TestClientDance_ProxyOAuth_WWWAuthenticateChain(t *testing.T) {
 	require.NotEmpty(t, wwwAuth, "401 must include WWW-Authenticate header")
 	require.Contains(t, wwwAuth, "Bearer resource_metadata=")
 
-	// 4. Call HandleWellKnownOAuthProtectedResourceMetadata — verify valid metadata.
+	// 4. Call HandleGetProtectedResource — verify valid metadata.
 	prReq := httptest.NewRequest(http.MethodGet, "/.well-known/oauth-protected-resource/mcp/"+mcpSlug, nil)
 	prRctx := chi.NewRouteContext()
 	prRctx.URLParams.Add("mcpSlug", mcpSlug)
 	prReq = prReq.WithContext(context.WithValue(t.Context(), chi.RouteCtxKey, prRctx))
 
 	prW := httptest.NewRecorder()
-	err = ti.service.HandleWellKnownOAuthProtectedResourceMetadata(prW, prReq)
+	err = ti.service.HandleGetProtectedResource(prW, prReq)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, prW.Code)
 
@@ -650,7 +650,7 @@ func TestClientDance_ProxyOAuth_WWWAuthenticateChain(t *testing.T) {
 	require.True(t, ok, "resource field must be a string")
 	require.Contains(t, resource, mcpSlug, "resource URL should reference the MCP slug")
 
-	// 5. Call HandleWellKnownOAuthServerMetadata — verify it returns valid metadata
+	// 5. Call HandleGetAuthorizationServer — verify it returns valid metadata
 	//    with authorization_endpoint, token_endpoint, and registration_endpoint.
 	smReq := httptest.NewRequest(http.MethodGet, "/.well-known/oauth-authorization-server/mcp/"+mcpSlug, nil)
 	smRctx := chi.NewRouteContext()
@@ -658,7 +658,7 @@ func TestClientDance_ProxyOAuth_WWWAuthenticateChain(t *testing.T) {
 	smReq = smReq.WithContext(context.WithValue(t.Context(), chi.RouteCtxKey, smRctx))
 
 	smW := httptest.NewRecorder()
-	err = ti.service.HandleWellKnownOAuthServerMetadata(smW, smReq)
+	err = ti.service.HandleGetAuthorizationServer(smW, smReq)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, smW.Code)
 

@@ -10,7 +10,6 @@ import (
 	"log/slog"
 	"mime"
 	"net/http"
-	"net/http/httputil"
 	"net/url"
 	"slices"
 	"strings"
@@ -213,9 +212,12 @@ func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Se
 	o11y.AttachHandler(mux, "GET", "/mcp/{mcpSlug}/install", oops.ErrHandle(service.logger, metadataService.ServeInstallPage).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/install-page-{hash}.js", oops.ErrHandle(service.logger, metadataService.ServeInstallPageScript).ServeHTTP)
 
-	// OAuth 2.1 Authorization Server Metadata
-	o11y.AttachHandler(mux, "GET", "/.well-known/oauth-authorization-server/mcp/{mcpSlug}", oops.ErrHandle(service.logger, service.HandleWellKnownOAuthServerMetadata).ServeHTTP)
-	o11y.AttachHandler(mux, "GET", "/.well-known/oauth-protected-resource/mcp/{mcpSlug}", oops.ErrHandle(service.logger, service.HandleWellKnownOAuthProtectedResourceMetadata).ServeHTTP)
+	// OAuth metadata at the canonical RFC paths. The handlers in
+	// authnchallenge.go dispatch internally on toolsets.user_session_issuer_id:
+	// issuer-gated toolsets get the new metadata shape; legacy toolsets fall
+	// through to wellknown.Resolve* (preserving the prior behaviour).
+	o11y.AttachHandler(mux, "GET", "/.well-known/oauth-protected-resource/mcp/{mcpSlug}", oops.ErrHandle(service.logger, service.HandleGetProtectedResource).ServeHTTP)
+	o11y.AttachHandler(mux, "GET", "/.well-known/oauth-authorization-server/mcp/{mcpSlug}", oops.ErrHandle(service.logger, service.HandleGetAuthorizationServer).ServeHTTP)
 }
 
 // HandleGetServer handles GET requests to /mcp/{mcpSlug}, checking for HTML requests
@@ -254,71 +256,6 @@ func (s *Service) HandleGetServer(w http.ResponseWriter, r *http.Request, metada
 	return nil
 }
 
-// handleWellKnownMetadata handles OAuth 2.1 authorization server metadata discovery
-func (s *Service) HandleWellKnownOAuthServerMetadata(w http.ResponseWriter, r *http.Request) error {
-	ctx := r.Context()
-	mcpSlug := chi.URLParam(r, "mcpSlug")
-	if mcpSlug == "" {
-		return oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided").Log(ctx, s.logger)
-	}
-
-	toolset, customDomainCtx, err := s.loadToolsetFromMcpSlug(ctx, mcpSlug)
-	switch {
-	case errors.Is(err, errToolsetNotFound):
-		return oops.E(oops.CodeNotFound, err, "mcp server not found")
-	case err != nil:
-		return oops.E(oops.CodeUnexpected, err, "failed to load MCP server").Log(ctx, s.logger)
-	}
-
-	baseURL := s.serverURL.String()
-	if customDomainCtx != nil {
-		baseURL = fmt.Sprintf("https://%s", customDomainCtx.Domain)
-	}
-
-	result, err := wellknown.ResolveOAuthServerMetadataFromToolset(
-		ctx,
-		s.logger,
-		s.db,
-		s.oauthRepo,
-		&s.toolsetCache,
-		toolset,
-		baseURL,
-		mcpSlug,
-	)
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to resolve OAuth server metadata").Log(ctx, s.logger)
-	}
-
-	if result == nil {
-		return oops.E(oops.CodeNotFound, nil, "no OAuth configuration found")
-	}
-
-	// Handle proxy case - reverse proxy to external MCP OAuth server
-	if result.Kind == wellknown.OAuthServerMetadataResultKindProxy {
-		target, parseErr := url.Parse(result.ProxyURL)
-		if parseErr != nil {
-			return oops.E(oops.CodeUnexpected, parseErr, "failed to parse well-known URL").Log(ctx, s.logger)
-		}
-
-		proxy := &httputil.ReverseProxy{
-			Director: nil,
-			Rewrite: func(pr *httputil.ProxyRequest) {
-				pr.SetURL(target)
-			},
-			Transport:      nil,
-			FlushInterval:  0,
-			ErrorLog:       nil,
-			BufferPool:     nil,
-			ModifyResponse: nil,
-			ErrorHandler:   nil,
-		}
-		proxy.ServeHTTP(w, r)
-		return nil
-	}
-
-	return writeOAuthServerMetadataResponse(ctx, s.logger, w, result)
-}
-
 // writeOAuthServerMetadataResponse builds the OAuth server metadata body and
 // only commits the 200 OK status once the body is ready. This ordering matters:
 // if marshaling fails or the result kind is unrecognized, the caller's error
@@ -346,46 +283,6 @@ func writeOAuthServerMetadataResponse(ctx context.Context, logger *slog.Logger, 
 	}
 
 	return nil
-}
-
-func (s *Service) HandleWellKnownOAuthProtectedResourceMetadata(w http.ResponseWriter, r *http.Request) error {
-	ctx := r.Context()
-	mcpSlug := chi.URLParam(r, "mcpSlug")
-	if mcpSlug == "" {
-		return oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided").Log(ctx, s.logger)
-	}
-
-	toolset, customDomainCtx, err := s.loadToolsetFromMcpSlug(ctx, mcpSlug)
-	switch {
-	case errors.Is(err, errToolsetNotFound):
-		return oops.E(oops.CodeNotFound, err, "mcp server not found")
-	case err != nil:
-		return oops.E(oops.CodeUnexpected, err, "failed to load MCP server").Log(ctx, s.logger)
-	}
-
-	baseURL := s.serverURL.String()
-	if customDomainCtx != nil {
-		baseURL = fmt.Sprintf("https://%s", customDomainCtx.Domain)
-	}
-
-	metadata, err := wellknown.ResolveOAuthProtectedResourceFromToolset(
-		ctx,
-		s.logger,
-		s.db,
-		&s.toolsetCache,
-		toolset,
-		baseURL,
-		mcpSlug,
-	)
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to resolve OAuth protected resource metadata").Log(ctx, s.logger)
-	}
-
-	if metadata == nil {
-		return oops.E(oops.CodeNotFound, nil, "not found")
-	}
-
-	return writeOAuthProtectedResourceMetadataResponse(ctx, s.logger, w, metadata)
 }
 
 // writeOAuthProtectedResourceMetadataResponse builds the OAuth protected

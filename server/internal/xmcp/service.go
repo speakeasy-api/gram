@@ -104,8 +104,8 @@ func Attach(mux goahttp.Muxer, service *Service, mcpService *mcp.Service, metada
 	// from /x/mcp to /mcp.
 	// o11y.AttachHandler(mux, http.MethodGet, "/mcp/install-page-{hash}.js", oops.ErrHandle(service.logger, metadataService.ServeInstallPageScript).ServeHTTP)
 
-	o11y.AttachHandler(mux, http.MethodGet, "/.well-known/oauth-authorization-server/x/mcp/{mcpSlug}", oops.ErrHandle(service.logger, mcpService.HandleWellKnownOAuthServerMetadata).ServeHTTP)
-	o11y.AttachHandler(mux, http.MethodGet, "/.well-known/oauth-protected-resource/x/mcp/{mcpSlug}", oops.ErrHandle(service.logger, mcpService.HandleWellKnownOAuthProtectedResourceMetadata).ServeHTTP)
+	o11y.AttachHandler(mux, http.MethodGet, "/.well-known/oauth-authorization-server/x/mcp/{mcpSlug}", oops.ErrHandle(service.logger, mcpService.HandleGetAuthorizationServer).ServeHTTP)
+	o11y.AttachHandler(mux, http.MethodGet, "/.well-known/oauth-protected-resource/x/mcp/{mcpSlug}", oops.ErrHandle(service.logger, mcpService.HandleGetProtectedResource).ServeHTTP)
 }
 
 // newHeadersRepo returns a per-request headers wrapper bound to the service
