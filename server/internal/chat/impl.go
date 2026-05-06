@@ -951,27 +951,13 @@ func maybeInjectContextWindow(eventText string, getContextWindow func() int) (st
 	return strings.Replace(eventText, dataLine, "data: "+string(rewritten), 1), true
 }
 
+// isFinalFrame reports whether an SSE chunk is OpenRouter's metadata/usage
+// frame — the trailing data event that carries the `usage` block before
+// `[DONE]`. We inject Gram metadata next to OpenRouter's so the two travel
+// together rather than landing on the earlier finish_reason chunk.
 func isFinalFrame(obj map[string]json.RawMessage) bool {
-	if usage, ok := obj["usage"]; ok && len(usage) > 0 && string(usage) != "null" {
-		return true
-	}
-
-	choicesRaw, ok := obj["choices"]
-	if !ok {
-		return false
-	}
-	var choices []struct {
-		FinishReason *string `json:"finish_reason"`
-	}
-	if err := json.Unmarshal(choicesRaw, &choices); err != nil {
-		return false
-	}
-	for _, c := range choices {
-		if c.FinishReason != nil && *c.FinishReason != "" {
-			return true
-		}
-	}
-	return false
+	usage, ok := obj["usage"]
+	return ok && len(usage) > 0 && string(usage) != "null"
 }
 
 // extractDataPayload returns the original `data: <payload>` line and its

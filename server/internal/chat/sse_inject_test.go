@@ -44,11 +44,10 @@ func TestIsFinalFrame(t *testing.T) {
 		want    bool
 	}{
 		{name: "delta only", payload: `{"choices":[{"delta":{"content":"hi"}}]}`, want: false},
-		{name: "delta with null finish_reason", payload: `{"choices":[{"delta":{"content":"hi"},"finish_reason":null}]}`, want: false},
-		{name: "finish_reason stop", payload: `{"choices":[{"finish_reason":"stop"}]}`, want: true},
-		{name: "finish_reason empty string", payload: `{"choices":[{"finish_reason":""}]}`, want: false},
+		{name: "finish_reason without usage", payload: `{"choices":[{"finish_reason":"stop"}]}`, want: false},
 		{name: "usage present", payload: `{"choices":[],"usage":{"prompt_tokens":1,"completion_tokens":2,"total_tokens":3}}`, want: true},
 		{name: "usage null", payload: `{"choices":[],"usage":null}`, want: false},
+		{name: "finish_reason and usage", payload: `{"choices":[{"finish_reason":"stop"}],"usage":{"prompt_tokens":1,"completion_tokens":2,"total_tokens":3}}`, want: true},
 		{name: "no choices, no usage", payload: `{"id":"abc"}`, want: false},
 	}
 
@@ -79,28 +78,19 @@ func TestMaybeInjectContextWindow_SkipsNonFinalFrame(t *testing.T) {
 func TestMaybeInjectContextWindow_SkipsWhenContextWindowZero(t *testing.T) {
 	t.Parallel()
 
-	event := "data: {\"choices\":[{\"finish_reason\":\"stop\"}]}\n\n"
+	event := "data: {\"choices\":[],\"usage\":{\"prompt_tokens\":1,\"completion_tokens\":2,\"total_tokens\":3}}\n\n"
 	got, ok := maybeInjectContextWindow(event, func() int { return 0 })
 	require.False(t, ok)
 	require.Equal(t, event, got)
 }
 
-func TestMaybeInjectContextWindow_InjectsOnFinishReason(t *testing.T) {
+func TestMaybeInjectContextWindow_SkipsFinishReasonOnly(t *testing.T) {
 	t.Parallel()
 
 	event := "data: {\"choices\":[{\"finish_reason\":\"stop\"}]}\n\n"
 	got, ok := maybeInjectContextWindow(event, func() int { return 200000 })
-	require.True(t, ok)
-	require.True(t, strings.HasPrefix(got, "data: "))
-	require.True(t, strings.HasSuffix(got, "\n\n"))
-
-	payload := strings.TrimSuffix(strings.TrimPrefix(got, "data: "), "\n\n")
-	var obj map[string]json.RawMessage
-	require.NoError(t, json.Unmarshal([]byte(payload), &obj))
-
-	gm, ok := obj["gram_metadata"]
-	require.True(t, ok)
-	require.JSONEq(t, `{"context_window":200000}`, string(gm))
+	require.False(t, ok)
+	require.Equal(t, event, got)
 }
 
 func TestMaybeInjectContextWindow_InjectsOnUsageFrame(t *testing.T) {
@@ -120,7 +110,7 @@ func TestMaybeInjectContextWindow_InjectsOnUsageFrame(t *testing.T) {
 func TestMaybeInjectContextWindow_PreservesCRLF(t *testing.T) {
 	t.Parallel()
 
-	event := "data: {\"choices\":[{\"finish_reason\":\"stop\"}]}\r\n\r\n"
+	event := "data: {\"choices\":[],\"usage\":{\"prompt_tokens\":1,\"completion_tokens\":2,\"total_tokens\":3}}\r\n\r\n"
 	got, ok := maybeInjectContextWindow(event, func() int { return 4096 })
 	require.True(t, ok)
 	require.True(t, strings.HasSuffix(got, "\r\n\r\n"))
