@@ -541,3 +541,13 @@ sql:
         out: "../internal/auth/assistanttokens/repo"
         sql_package: "pgx/v5"
         omit_unused_structs: true
+
+  - schema: schema.sql
+    queries: ../internal/memory/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/memory/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true

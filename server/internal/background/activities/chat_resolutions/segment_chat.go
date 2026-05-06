@@ -183,6 +183,7 @@ There are %d messages total (indices 0-%d).%s`, conversationText, numMessages, n
 			Model:          "anthropic/claude-haiku-4.5",
 			SystemPrompt:   systemPrompt,
 			Prompt:         userPrompt,
+			Temperature:    nil,
 			JSONSchema:     &jsonSchemaConfig,
 			UsageSource:    billing.ModelUsageSourceGram,
 			UserID:         "",

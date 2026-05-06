@@ -37,8 +37,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpclient"
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
+	"github.com/speakeasy-api/gram/server/internal/memory"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oauth"
+	platformtoolsruntime "github.com/speakeasy-api/gram/server/internal/platformtools/runtime"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/risk"
@@ -558,6 +560,32 @@ func newWorkerCommand() *cli.Command {
 
 			shadowMCPClient := shadowmcp.NewClient(logger, db, cache.NewRedisCacheAdapter(redisClient))
 
+			memorySvc := memory.NewMemoryService(
+				logger,
+				tracerProvider,
+				meterProvider,
+				db,
+				completionsClient,
+				auditLogger,
+				memory.MemoryServiceConfig{
+					EmbeddingModel:     "",
+					ContradictionModel: "",
+					HalfLife:           0,
+					HardCap:            0,
+					DedupeUpper:        0,
+					DedupeLower:        0,
+					ForgetAmbiguityGap: 0,
+					PerResultBytes:     0,
+					AggregateBytes:     0,
+					TruncationSuffix:   "",
+				},
+			)
+			if err := memorySvc.Validate(); err != nil {
+				return fmt.Errorf("validate memory service: %w", err)
+			}
+			memoryTools := platformtoolsruntime.MemoryExternalTools(memorySvc)
+			platformFeatureChecker := productFeatures.PlatformFeatureCheck
+
 			mcpService := mcp.NewService(
 				logger,
 				tracerProvider,
@@ -584,6 +612,8 @@ func newWorkerCommand() *cli.Command {
 				assistantTokenManager,
 				shadowMCPClient,
 				auditLogger,
+				memoryTools,
+				platformFeatureChecker,
 			)
 
 			chatClient := chat.NewAgenticChatClient(

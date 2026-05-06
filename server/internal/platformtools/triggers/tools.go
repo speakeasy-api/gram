@@ -62,6 +62,13 @@ type configureTriggerInput struct {
 	Config          map[string]any `json:"config"`
 }
 
+// Anthropic's tool validator rejects oneOf/anyOf/allOf at the top level of
+// input_schema. The envelope sinks the discriminated union one layer deep so
+// definition_slug and config can still co-vary inside oneOf.
+type configureTriggerInputEnvelope struct {
+	Input configureTriggerInput `json:"input"`
+}
+
 type triggerToolView struct {
 	ID              string         `json:"id"`
 	DefinitionSlug  string         `json:"definition_slug"`
@@ -117,21 +124,21 @@ func NewConfigureTriggerTool(db *pgxpool.Pool, app *bgtriggers.App, audit *audit
 
 func buildConfigureTriggerInputSchema() []byte {
 	definitionSlugs := listDefinitionSlugs()
-	baseSchema := schemaBytesToMap(core.BuildInputSchema[configureTriggerSharedInput](
+	inner := schemaBytesToMap(core.BuildInputSchema[configureTriggerSharedInput](
 		core.WithPropertyFormat("trigger_id", "uuid"),
 		core.WithPropertyEnum("definition_slug", stringSliceToAny(definitionSlugs)...),
 		core.WithPropertyEnum("status", triggerStatusActive, triggerStatusPaused),
 		core.WithPropertyEnum("target_kind", targetKindAssistant, targetKindNoop),
 	))
 
-	properties := getMap(baseSchema, "properties")
+	properties := getMap(inner, "properties")
 	properties["config"] = map[string]any{
 		"type":        "object",
 		"description": "Trigger-definition-specific configuration.",
 	}
 
-	required := append(getStringSlice(baseSchema, "required"), "config")
-	baseSchema["required"] = dedupeStrings(required)
+	required := append(getStringSlice(inner, "required"), "config")
+	inner["required"] = dedupeStrings(required)
 
 	branches := make([]any, 0, len(definitionSlugs))
 	for _, slug := range definitionSlugs {
@@ -149,9 +156,16 @@ func buildConfigureTriggerInputSchema() []byte {
 			"required": []string{"definition_slug", "config"},
 		})
 	}
-	baseSchema["oneOf"] = branches
+	inner["oneOf"] = branches
 
-	return mustMarshalSchemaMap(baseSchema)
+	return mustMarshalSchemaMap(map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"input": inner,
+		},
+		"required":             []any{"input"},
+		"additionalProperties": false,
+	})
 }
 
 func listDefinitionSlugs() []string {
@@ -325,12 +339,12 @@ func (t *ConfigureTrigger) Call(ctx context.Context, _ toolconfig.ToolCallEnv, p
 		return err
 	}
 
-	var input configureTriggerInput
-	if err := decodePayload(payload, &input); err != nil {
+	var envelope configureTriggerInputEnvelope
+	if err := decodePayload(payload, &envelope); err != nil {
 		return err
 	}
 
-	result, err := t.upsertTrigger(ctx, authCtx, configureTriggerParams(input))
+	result, err := t.upsertTrigger(ctx, authCtx, configureTriggerParams(envelope.Input))
 	if err != nil {
 		return err
 	}
