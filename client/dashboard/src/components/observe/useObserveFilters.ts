@@ -9,9 +9,7 @@ import {
   safeBase64Decode,
   safeBase64Encode,
 } from "./observeFilterUtils";
-
-const DEFAULT_HOOK_TYPES: TypesToInclude[] = ["mcp", "skill"];
-const VALID_HOOK_TYPES: TypesToInclude[] = ["mcp", "local", "skill"];
+import { DEFAULT_HOOK_TYPES, VALID_HOOK_TYPES } from "./observeFilterConstants";
 const SERVER_FILTER_PATH = "gram.tool_call.source";
 const USER_EMAIL_FILTER_PATH = "user.email";
 
@@ -315,6 +313,7 @@ export function useObserveFilters() {
     [setSearchParams],
   );
 
+  // Passing an empty array resets to DEFAULT_HOOK_TYPES and clears the URL param.
   const handleHookTypesChange = useCallback(
     (types: TypesToInclude[]) => {
       const nextTypes = [
@@ -324,21 +323,20 @@ export function useObserveFilters() {
           ),
         ),
       ];
-      if (nextTypes.length === 0) return;
+      const resolved =
+        nextTypes.length === 0 ? [...DEFAULT_HOOK_TYPES] : nextTypes;
+      const isDefault =
+        resolved.length === DEFAULT_HOOK_TYPES.length &&
+        DEFAULT_HOOK_TYPES.every((t) => resolved.includes(t));
 
-      setSelectedHookTypes(nextTypes);
+      setSelectedHookTypes(resolved);
       setSearchParams(
         (prev) => {
           const next = new URLSearchParams(prev);
-          const isDefault =
-            nextTypes.length === 2 &&
-            nextTypes.includes("mcp") &&
-            nextTypes.includes("skill") &&
-            !nextTypes.includes("local");
           if (isDefault) {
             next.delete("hookTypes");
           } else {
-            next.set("hookTypes", nextTypes.join(","));
+            next.set("hookTypes", resolved.join(","));
           }
           return next;
         },

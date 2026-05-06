@@ -9,10 +9,7 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
-  Icon,
 } from "@speakeasy-api/moonshine";
-import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { McpIcon } from "@/components/ui/mcp-icon";
 import { MultiSelect } from "@/components/ui/multi-select";
 import {
@@ -28,105 +25,11 @@ export interface FilterChip {
   path: string;
 }
 
-const SERVER_TYPES: Array<{
-  label: string;
-  labelShort: string;
-  value: TypesToInclude;
-}> = [
-  {
-    label: "MCP Servers",
-    labelShort: "Servers",
-    value: "mcp",
-  },
-  {
-    label: "Local Tools",
-    labelShort: "Local",
-    value: "local",
-  },
-  { label: "Skills", labelShort: "Skills", value: "skill" },
+const SERVER_TYPES: Array<{ label: string; value: TypesToInclude }> = [
+  { label: "MCP Servers", value: "mcp" },
+  { label: "Local Tools", value: "local" },
+  { label: "Skills", value: "skill" },
 ];
-
-export function ObserveTypeFilter({
-  selectedTypes,
-  onTypesChange,
-}: {
-  selectedTypes: TypesToInclude[];
-  onTypesChange: (types: TypesToInclude[]) => void;
-}) {
-  const getButtonText = () => {
-    if (selectedTypes.length === 3) {
-      return "Showing all types";
-    }
-
-    if (selectedTypes.length === 0) {
-      return "No types selected";
-    }
-
-    if (selectedTypes.length === 1) {
-      const selected = SERVER_TYPES.find(
-        (opt) => opt.value === selectedTypes[0],
-      );
-      return `Showing ${selected?.labelShort || selectedTypes[0]}`;
-    }
-
-    const labels = SERVER_TYPES.filter((opt) =>
-      selectedTypes.includes(opt.value),
-    ).map((opt) => opt.labelShort);
-    return `Showing ${labels.join(" & ")}`;
-  };
-
-  return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-[42px] w-[200px] shrink-0 justify-between"
-        >
-          <span className="text-sm">{getButtonText()}</span>
-          <Icon name="chevron-down" className="ml-2 size-4" />
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent className="w-[200px] p-3" align="start">
-        <div className="space-y-2">
-          {SERVER_TYPES.map((option) => {
-            const isSelected = selectedTypes.includes(option.value);
-            const isLastSelected = isSelected && selectedTypes.length === 1;
-            return (
-              <div key={option.value} className="flex items-center space-x-2">
-                <Checkbox
-                  id={`observe-type-${option.value}`}
-                  checked={isSelected}
-                  disabled={isLastSelected}
-                  onCheckedChange={(checked) => {
-                    if (checked) {
-                      if (!isSelected) {
-                        onTypesChange([...selectedTypes, option.value]);
-                      }
-                    } else {
-                      const nextTypes = selectedTypes.filter(
-                        (t) => t !== option.value,
-                      );
-                      if (nextTypes.length > 0) {
-                        onTypesChange(nextTypes);
-                      }
-                    }
-                  }}
-                />
-                <label
-                  htmlFor={`observe-type-${option.value}`}
-                  className="cursor-pointer text-sm leading-none font-medium"
-                >
-                  {option.label}
-                </label>
-              </div>
-            );
-          })}
-        </div>
-      </PopoverContent>
-    </Popover>
-  );
-}
 
 export function ObserveFilterBar({
   serverOptions,
@@ -201,9 +104,16 @@ export function ObserveFilterBar({
         hideSelectAll
         singleLine
       />
-      <ObserveTypeFilter
-        selectedTypes={selectedTypes}
-        onTypesChange={onTypesChange}
+      <MultiSelect
+        options={SERVER_TYPES}
+        defaultValue={selectedTypes}
+        onValueChange={(values) => onTypesChange(values as TypesToInclude[])}
+        placeholder="Filter by type"
+        className="min-w-[96px]"
+        searchable={false}
+        autoSize
+        hideSelectAll
+        singleLine
       />
       <TimeRangePicker
         preset={customRange ? null : dateRange}
