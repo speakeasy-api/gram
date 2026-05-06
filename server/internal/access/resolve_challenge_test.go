@@ -19,7 +19,7 @@ func TestResolveChallenge_Unauthorized(t *testing.T) {
 	_, err := ti.service.ResolveChallenge(t.Context(), &gen.ResolveChallengePayload{
 		ApikeyToken:    nil,
 		SessionToken:   nil,
-		ChallengeID:    uuid.NewString(),
+		ChallengeIds:   []string{uuid.NewString()},
 		PrincipalUrn:   "user:test",
 		Scope:          "org:read",
 		ResourceKind:   nil,
@@ -42,10 +42,10 @@ func TestResolveChallenge_Dismissed(t *testing.T) {
 
 	challengeID := uuid.NewString()
 
-	res, err := ti.service.ResolveChallenge(ctx, &gen.ResolveChallengePayload{
+	result, err := ti.service.ResolveChallenge(ctx, &gen.ResolveChallengePayload{
 		ApikeyToken:    nil,
 		SessionToken:   nil,
-		ChallengeID:    challengeID,
+		ChallengeIds:   []string{challengeID},
 		PrincipalUrn:   "user:denied-user",
 		Scope:          "build:write",
 		ResourceKind:   nil,
@@ -54,8 +54,10 @@ func TestResolveChallenge_Dismissed(t *testing.T) {
 		RoleSlug:       nil,
 	})
 	require.NoError(t, err)
-	require.NotNil(t, res)
+	require.NotNil(t, result)
+	require.Len(t, result.Resolutions, 1)
 
+	res := result.Resolutions[0]
 	require.NotEmpty(t, res.ID)
 	require.Equal(t, authCtx.ActiveOrganizationID, res.OrganizationID)
 	require.Equal(t, challengeID, res.ChallengeID)
@@ -80,10 +82,10 @@ func TestResolveChallenge_RoleAssigned(t *testing.T) {
 	challengeID := uuid.NewString()
 	roleSlug := "editor"
 
-	res, err := ti.service.ResolveChallenge(ctx, &gen.ResolveChallengePayload{
+	result, err := ti.service.ResolveChallenge(ctx, &gen.ResolveChallengePayload{
 		ApikeyToken:    nil,
 		SessionToken:   nil,
-		ChallengeID:    challengeID,
+		ChallengeIds:   []string{challengeID},
 		PrincipalUrn:   "user:denied-user",
 		Scope:          "org:admin",
 		ResourceKind:   nil,
@@ -92,8 +94,10 @@ func TestResolveChallenge_RoleAssigned(t *testing.T) {
 		RoleSlug:       &roleSlug,
 	})
 	require.NoError(t, err)
-	require.NotNil(t, res)
+	require.NotNil(t, result)
+	require.Len(t, result.Resolutions, 1)
 
+	res := result.Resolutions[0]
 	require.Equal(t, authCtx.ActiveOrganizationID, res.OrganizationID)
 	require.Equal(t, challengeID, res.ChallengeID)
 	require.Equal(t, "role_assigned", res.ResolutionType)
@@ -110,10 +114,10 @@ func TestResolveChallenge_WithResourceFields(t *testing.T) {
 	kind := "project"
 	rid := "proj_abc"
 
-	res, err := ti.service.ResolveChallenge(ctx, &gen.ResolveChallengePayload{
+	result, err := ti.service.ResolveChallenge(ctx, &gen.ResolveChallengePayload{
 		ApikeyToken:    nil,
 		SessionToken:   nil,
-		ChallengeID:    challengeID,
+		ChallengeIds:   []string{challengeID},
 		PrincipalUrn:   "user:denied-user",
 		Scope:          "build:read",
 		ResourceKind:   &kind,
@@ -122,6 +126,9 @@ func TestResolveChallenge_WithResourceFields(t *testing.T) {
 		RoleSlug:       nil,
 	})
 	require.NoError(t, err)
+	require.Len(t, result.Resolutions, 1)
+
+	res := result.Resolutions[0]
 	require.NotNil(t, res.ResourceKind)
 	require.Equal(t, "project", *res.ResourceKind)
 	require.NotNil(t, res.ResourceID)
@@ -136,7 +143,7 @@ func TestResolveChallenge_RoleAssigned_MissingSlug(t *testing.T) {
 	_, err := ti.service.ResolveChallenge(ctx, &gen.ResolveChallengePayload{
 		ApikeyToken:    nil,
 		SessionToken:   nil,
-		ChallengeID:    uuid.NewString(),
+		ChallengeIds:   []string{uuid.NewString()},
 		PrincipalUrn:   "user:test",
 		Scope:          "org:read",
 		ResourceKind:   nil,
@@ -160,7 +167,7 @@ func TestResolveChallenge_Dismissed_WithSlug(t *testing.T) {
 	_, err := ti.service.ResolveChallenge(ctx, &gen.ResolveChallengePayload{
 		ApikeyToken:    nil,
 		SessionToken:   nil,
-		ChallengeID:    uuid.NewString(),
+		ChallengeIds:   []string{uuid.NewString()},
 		PrincipalUrn:   "user:test",
 		Scope:          "org:read",
 		ResourceKind:   nil,
@@ -175,7 +182,7 @@ func TestResolveChallenge_Dismissed_WithSlug(t *testing.T) {
 	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
 }
 
-func TestResolveChallenge_DuplicateConflict(t *testing.T) {
+func TestResolveChallenge_DuplicateIsIdempotent(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newChallengeTestService(t)
@@ -185,7 +192,7 @@ func TestResolveChallenge_DuplicateConflict(t *testing.T) {
 	payload := &gen.ResolveChallengePayload{
 		ApikeyToken:    nil,
 		SessionToken:   nil,
-		ChallengeID:    challengeID,
+		ChallengeIds:   []string{challengeID},
 		PrincipalUrn:   "user:denied-user",
 		Scope:          "org:read",
 		ResourceKind:   nil,
@@ -194,15 +201,66 @@ func TestResolveChallenge_DuplicateConflict(t *testing.T) {
 		RoleSlug:       nil,
 	}
 
-	// First resolve succeeds.
-	_, err := ti.service.ResolveChallenge(ctx, payload)
+	// First resolve succeeds with 1 resolution.
+	result, err := ti.service.ResolveChallenge(ctx, payload)
 	require.NoError(t, err)
+	require.Len(t, result.Resolutions, 1)
 
-	// Second resolve with same challenge_id + org conflicts.
-	_, err = ti.service.ResolveChallenge(ctx, payload)
+	// Second resolve with same challenge_id succeeds but returns 0 (already resolved, skipped).
+	result, err = ti.service.ResolveChallenge(ctx, payload)
+	require.NoError(t, err)
+	require.Empty(t, result.Resolutions)
+}
+
+func TestResolveChallenge_BatchMultipleIds(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newChallengeTestService(t)
+
+	ids := []string{uuid.NewString(), uuid.NewString(), uuid.NewString()}
+
+	result, err := ti.service.ResolveChallenge(ctx, &gen.ResolveChallengePayload{
+		ApikeyToken:    nil,
+		SessionToken:   nil,
+		ChallengeIds:   ids,
+		PrincipalUrn:   "user:denied-user",
+		Scope:          "org:read",
+		ResourceKind:   nil,
+		ResourceID:     nil,
+		ResolutionType: "dismissed",
+		RoleSlug:       nil,
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Resolutions, 3)
+
+	resolvedIDs := make(map[string]bool)
+	for _, res := range result.Resolutions {
+		resolvedIDs[res.ChallengeID] = true
+	}
+	for _, id := range ids {
+		require.True(t, resolvedIDs[id], "expected challenge %s to be resolved", id)
+	}
+}
+
+func TestResolveChallenge_EmptyIds(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newChallengeTestService(t)
+
+	_, err := ti.service.ResolveChallenge(ctx, &gen.ResolveChallengePayload{
+		ApikeyToken:    nil,
+		SessionToken:   nil,
+		ChallengeIds:   []string{},
+		PrincipalUrn:   "user:test",
+		Scope:          "org:read",
+		ResourceKind:   nil,
+		ResourceID:     nil,
+		ResolutionType: "dismissed",
+		RoleSlug:       nil,
+	})
 	require.Error(t, err)
 
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
-	require.Equal(t, oops.CodeConflict, oopsErr.Code)
+	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
 }

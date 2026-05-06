@@ -3129,7 +3129,7 @@ func DecodeResolveChallengeResponse(decoder func(*http.Response) goahttp.Decoder
 			if err != nil {
 				return nil, goahttp.ErrValidationError("access", "resolveChallenge", err)
 			}
-			res := NewResolveChallengeChallengeResolutionCreated(&body)
+			res := NewResolveChallengesResultCreated(&body)
 			return res, nil
 		case http.StatusUnauthorized:
 			var (
@@ -3499,6 +3499,27 @@ func unmarshalAuthzChallengeResponseBodyToAccessAuthzChallenge(v *AuthzChallenge
 	res.RoleSlugs = make([]string, len(v.RoleSlugs))
 	for i, val := range v.RoleSlugs {
 		res.RoleSlugs[i] = val
+	}
+
+	return res
+}
+
+// unmarshalChallengeResolutionResponseBodyToAccessChallengeResolution builds a
+// value of type *access.ChallengeResolution from a value of type
+// *ChallengeResolutionResponseBody.
+func unmarshalChallengeResolutionResponseBodyToAccessChallengeResolution(v *ChallengeResolutionResponseBody) *access.ChallengeResolution {
+	res := &access.ChallengeResolution{
+		ID:             *v.ID,
+		OrganizationID: *v.OrganizationID,
+		ChallengeID:    *v.ChallengeID,
+		PrincipalUrn:   *v.PrincipalUrn,
+		Scope:          *v.Scope,
+		ResourceKind:   v.ResourceKind,
+		ResourceID:     v.ResourceID,
+		ResolutionType: *v.ResolutionType,
+		RoleSlug:       v.RoleSlug,
+		ResolvedBy:     *v.ResolvedBy,
+		CreatedAt:      *v.CreatedAt,
 	}
 
 	return res

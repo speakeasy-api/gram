@@ -48,15 +48,17 @@ SELECT * FROM authz_challenge_resolutions
 WHERE organization_id = @organization_id
   AND challenge_id = ANY(@challenge_ids::text[]);
 
--- name: InsertChallengeResolution :one
--- Creates a resolution record for a denied challenge.
+-- name: InsertChallengeResolutions :many
+-- Creates resolution records for one or more denied challenges.
+-- Silently skips challenges that are already resolved (ON CONFLICT DO NOTHING).
 INSERT INTO authz_challenge_resolutions (
   organization_id, challenge_id, principal_urn, scope,
   resource_kind, resource_id, resolution_type, role_slug, resolved_by
-) VALUES (
-  @organization_id, @challenge_id, @principal_urn, @scope,
-  @resource_kind, @resource_id, @resolution_type, @role_slug, @resolved_by
 )
+SELECT
+  @organization_id, unnest(@challenge_ids::text[]), @principal_urn, @scope,
+  @resource_kind, @resource_id, @resolution_type, @role_slug, @resolved_by
+ON CONFLICT (organization_id, challenge_id) DO NOTHING
 RETURNING *;
 
 -- name: GetGlobalRoleBySlug :one

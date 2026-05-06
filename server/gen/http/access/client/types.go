@@ -53,8 +53,8 @@ type UpdateMemberRoleRequestBody struct {
 // ResolveChallengeRequestBody is the type of the "access" service
 // "resolveChallenge" endpoint HTTP request body.
 type ResolveChallengeRequestBody struct {
-	// ID of the challenge in ClickHouse.
-	ChallengeID string `form:"challenge_id" json:"challenge_id" xml:"challenge_id"`
+	// IDs of the challenges in ClickHouse to resolve.
+	ChallengeIds []string `form:"challenge_ids" json:"challenge_ids" xml:"challenge_ids"`
 	// Principal that was denied.
 	PrincipalUrn string `form:"principal_urn" json:"principal_urn" xml:"principal_urn"`
 	// Scope that was denied.
@@ -190,26 +190,8 @@ type ListChallengesResponseBody struct {
 // ResolveChallengeResponseBody is the type of the "access" service
 // "resolveChallenge" endpoint HTTP response body.
 type ResolveChallengeResponseBody struct {
-	// Resolution record ID.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Organization ID.
-	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
-	// ClickHouse challenge ID.
-	ChallengeID *string `form:"challenge_id,omitempty" json:"challenge_id,omitempty" xml:"challenge_id,omitempty"`
-	// Denied principal.
-	PrincipalUrn *string `form:"principal_urn,omitempty" json:"principal_urn,omitempty" xml:"principal_urn,omitempty"`
-	// Denied scope.
-	Scope *string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
-	// Resource kind.
-	ResourceKind *string `form:"resource_kind,omitempty" json:"resource_kind,omitempty" xml:"resource_kind,omitempty"`
-	// Resource ID.
-	ResourceID     *string `form:"resource_id,omitempty" json:"resource_id,omitempty" xml:"resource_id,omitempty"`
-	ResolutionType *string `form:"resolution_type,omitempty" json:"resolution_type,omitempty" xml:"resolution_type,omitempty"`
-	// Assigned role slug.
-	RoleSlug *string `form:"role_slug,omitempty" json:"role_slug,omitempty" xml:"role_slug,omitempty"`
-	// Admin who resolved.
-	ResolvedBy *string `form:"resolved_by,omitempty" json:"resolved_by,omitempty" xml:"resolved_by,omitempty"`
-	CreatedAt  *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	// The created resolution records.
+	Resolutions []*ChallengeResolutionResponseBody `form:"resolutions,omitempty" json:"resolutions,omitempty" xml:"resolutions,omitempty"`
 }
 
 // ListRolesUnauthorizedResponseBody is the type of the "access" service
@@ -2879,6 +2861,31 @@ type AuthzChallengeResponseBody struct {
 	ResolutionRoleSlug *string `form:"resolution_role_slug,omitempty" json:"resolution_role_slug,omitempty" xml:"resolution_role_slug,omitempty"`
 }
 
+// ChallengeResolutionResponseBody is used to define fields on response body
+// types.
+type ChallengeResolutionResponseBody struct {
+	// Resolution record ID.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Organization ID.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	// ClickHouse challenge ID.
+	ChallengeID *string `form:"challenge_id,omitempty" json:"challenge_id,omitempty" xml:"challenge_id,omitempty"`
+	// Denied principal.
+	PrincipalUrn *string `form:"principal_urn,omitempty" json:"principal_urn,omitempty" xml:"principal_urn,omitempty"`
+	// Denied scope.
+	Scope *string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
+	// Resource kind.
+	ResourceKind *string `form:"resource_kind,omitempty" json:"resource_kind,omitempty" xml:"resource_kind,omitempty"`
+	// Resource ID.
+	ResourceID     *string `form:"resource_id,omitempty" json:"resource_id,omitempty" xml:"resource_id,omitempty"`
+	ResolutionType *string `form:"resolution_type,omitempty" json:"resolution_type,omitempty" xml:"resolution_type,omitempty"`
+	// Assigned role slug.
+	RoleSlug *string `form:"role_slug,omitempty" json:"role_slug,omitempty" xml:"role_slug,omitempty"`
+	// Admin who resolved.
+	ResolvedBy *string `form:"resolved_by,omitempty" json:"resolved_by,omitempty" xml:"resolved_by,omitempty"`
+	CreatedAt  *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+}
+
 // NewCreateRoleRequestBody builds the HTTP request body from the payload of
 // the "createRole" endpoint of the "access" service.
 func NewCreateRoleRequestBody(p *access.CreateRolePayload) *CreateRoleRequestBody {
@@ -2948,13 +2955,20 @@ func NewUpdateMemberRoleRequestBody(p *access.UpdateMemberRolePayload) *UpdateMe
 // of the "resolveChallenge" endpoint of the "access" service.
 func NewResolveChallengeRequestBody(p *access.ResolveChallengePayload) *ResolveChallengeRequestBody {
 	body := &ResolveChallengeRequestBody{
-		ChallengeID:    p.ChallengeID,
 		PrincipalUrn:   p.PrincipalUrn,
 		Scope:          p.Scope,
 		ResourceKind:   p.ResourceKind,
 		ResourceID:     p.ResourceID,
 		ResolutionType: p.ResolutionType,
 		RoleSlug:       p.RoleSlug,
+	}
+	if p.ChallengeIds != nil {
+		body.ChallengeIds = make([]string, len(p.ChallengeIds))
+		for i, val := range p.ChallengeIds {
+			body.ChallengeIds[i] = val
+		}
+	} else {
+		body.ChallengeIds = []string{}
 	}
 	return body
 }
@@ -5083,21 +5097,17 @@ func NewListChallengesGatewayError(body *ListChallengesGatewayErrorResponseBody)
 	return v
 }
 
-// NewResolveChallengeChallengeResolutionCreated builds a "access" service
+// NewResolveChallengesResultCreated builds a "access" service
 // "resolveChallenge" endpoint result from a HTTP "Created" response.
-func NewResolveChallengeChallengeResolutionCreated(body *ResolveChallengeResponseBody) *access.ChallengeResolution {
-	v := &access.ChallengeResolution{
-		ID:             *body.ID,
-		OrganizationID: *body.OrganizationID,
-		ChallengeID:    *body.ChallengeID,
-		PrincipalUrn:   *body.PrincipalUrn,
-		Scope:          *body.Scope,
-		ResourceKind:   body.ResourceKind,
-		ResourceID:     body.ResourceID,
-		ResolutionType: *body.ResolutionType,
-		RoleSlug:       body.RoleSlug,
-		ResolvedBy:     *body.ResolvedBy,
-		CreatedAt:      *body.CreatedAt,
+func NewResolveChallengesResultCreated(body *ResolveChallengeResponseBody) *access.ResolveChallengesResult {
+	v := &access.ResolveChallengesResult{}
+	v.Resolutions = make([]*access.ChallengeResolution, len(body.Resolutions))
+	for i, val := range body.Resolutions {
+		if val == nil {
+			v.Resolutions[i] = nil
+			continue
+		}
+		v.Resolutions[i] = unmarshalChallengeResolutionResponseBodyToAccessChallengeResolution(val)
 	}
 
 	return v
@@ -5501,37 +5511,15 @@ func ValidateListChallengesResponseBody(body *ListChallengesResponseBody) (err e
 // ValidateResolveChallengeResponseBody runs the validations defined on
 // ResolveChallengeResponseBody
 func ValidateResolveChallengeResponseBody(body *ResolveChallengeResponseBody) (err error) {
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	if body.Resolutions == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("resolutions", "body"))
 	}
-	if body.OrganizationID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
-	}
-	if body.ChallengeID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("challenge_id", "body"))
-	}
-	if body.PrincipalUrn == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("principal_urn", "body"))
-	}
-	if body.Scope == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("scope", "body"))
-	}
-	if body.ResolutionType == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("resolution_type", "body"))
-	}
-	if body.ResolvedBy == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("resolved_by", "body"))
-	}
-	if body.CreatedAt == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
-	}
-	if body.ResolutionType != nil {
-		if !(*body.ResolutionType == "role_assigned" || *body.ResolutionType == "dismissed") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.resolution_type", *body.ResolutionType, []any{"role_assigned", "dismissed"}))
+	for _, e := range body.Resolutions {
+		if e != nil {
+			if err2 := ValidateChallengeResolutionResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
 		}
-	}
-	if body.CreatedAt != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
 	}
 	return
 }
@@ -9155,6 +9143,44 @@ func ValidateAuthzChallengeResponseBody(body *AuthzChallengeResponseBody) (err e
 		if !(*body.ResolutionType == "role_assigned" || *body.ResolutionType == "dismissed") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.resolution_type", *body.ResolutionType, []any{"role_assigned", "dismissed"}))
 		}
+	}
+	return
+}
+
+// ValidateChallengeResolutionResponseBody runs the validations defined on
+// ChallengeResolutionResponseBody
+func ValidateChallengeResolutionResponseBody(body *ChallengeResolutionResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.ChallengeID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("challenge_id", "body"))
+	}
+	if body.PrincipalUrn == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("principal_urn", "body"))
+	}
+	if body.Scope == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("scope", "body"))
+	}
+	if body.ResolutionType == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("resolution_type", "body"))
+	}
+	if body.ResolvedBy == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("resolved_by", "body"))
+	}
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.ResolutionType != nil {
+		if !(*body.ResolutionType == "role_assigned" || *body.ResolutionType == "dismissed") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.resolution_type", *body.ResolutionType, []any{"role_assigned", "dismissed"}))
+		}
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
 	}
 	return
 }

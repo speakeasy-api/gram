@@ -16,7 +16,7 @@ import {
   Table,
 } from "@speakeasy-api/moonshine";
 import { Check } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
 import { useChallengeRowColumns } from "./useChallengeRowColumns";
 import { useGrantFlow } from "./useGrantFlow";
@@ -100,12 +100,17 @@ export function ChallengesTab() {
     searchParams.get("identity") ?? "all",
   );
   const [scopeFilter, setScopeFilter] = useState("all");
+  const groupSiblingIdsRef = useRef<Map<string, string[]>>(new Map());
+  const getGroupChallengeIds = useCallback(
+    (id: string) => groupSiblingIdsRef.current.get(id) ?? [id],
+    [],
+  );
   const {
     actionsColumn,
     grantFlowPortals,
     recentlyResolvedIds,
     animatingOutIds,
-  } = useGrantFlow();
+  } = useGrantFlow(getGroupChallengeIds);
 
   const { data, isLoading } = useChallenges({ limit: 200 });
   const challenges = useMemo(
@@ -189,16 +194,21 @@ export function ChallengesTab() {
     const result: AuthzChallenge[] = [];
     const counts = new Map<string, number>();
     const keys = new Map<string, string>();
+    const siblingIds = new Map<string, string[]>();
     for (const [key, members] of groups) {
+      const memberIds = members.map((m) => m.id);
       counts.set(members[0].id, members.length);
+      for (const m of members) {
+        keys.set(m.id, key);
+        siblingIds.set(m.id, memberIds);
+      }
       if (expandedGroups.has(key)) {
-        for (const m of members) keys.set(m.id, key);
         result.push(...members);
       } else {
-        keys.set(members[0].id, key);
         result.push(members[0]);
       }
     }
+    groupSiblingIdsRef.current = siblingIds;
     return { filtered: result, groupCounts: counts, groupKeys: keys };
   }, [
     challenges,

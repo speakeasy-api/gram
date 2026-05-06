@@ -113,9 +113,9 @@ func TestListChallenges_EnrichesWithResolution(t *testing.T) {
 	insertCHChallenge(t, ti, authCtx.ActiveOrganizationID, challengeID, "deny", "user:u1", "build:write")
 
 	// Insert a PG resolution for this challenge.
-	_, err := accessrepo.New(ti.conn).InsertChallengeResolution(ctx, accessrepo.InsertChallengeResolutionParams{
+	_, err := accessrepo.New(ti.conn).InsertChallengeResolutions(ctx, accessrepo.InsertChallengeResolutionsParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
-		ChallengeID:    challengeID,
+		ChallengeIds:   []string{challengeID},
 		PrincipalUrn:   "user:u1",
 		Scope:          "build:write",
 		ResourceKind:   "",
@@ -233,9 +233,9 @@ func TestListChallenges_FilterByResolved(t *testing.T) {
 	insertCHChallenge(t, ti, authCtx.ActiveOrganizationID, unresolvedID, "deny", "user:u2", "org:admin")
 
 	// Resolve only the first challenge.
-	_, err := accessrepo.New(ti.conn).InsertChallengeResolution(ctx, accessrepo.InsertChallengeResolutionParams{
+	_, err := accessrepo.New(ti.conn).InsertChallengeResolutions(ctx, accessrepo.InsertChallengeResolutionsParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
-		ChallengeID:    resolvedID,
+		ChallengeIds:   []string{resolvedID},
 		PrincipalUrn:   "user:u1",
 		Scope:          "org:read",
 		ResourceKind:   "",

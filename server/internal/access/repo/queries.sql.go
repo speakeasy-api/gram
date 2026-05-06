@@ -155,20 +155,21 @@ func (q *Queries) GetPrincipalGrants(ctx context.Context, arg GetPrincipalGrants
 	return items, nil
 }
 
-const insertChallengeResolution = `-- name: InsertChallengeResolution :one
+const insertChallengeResolutions = `-- name: InsertChallengeResolutions :many
 INSERT INTO authz_challenge_resolutions (
   organization_id, challenge_id, principal_urn, scope,
   resource_kind, resource_id, resolution_type, role_slug, resolved_by
-) VALUES (
-  $1, $2, $3, $4,
-  $5, $6, $7, $8, $9
 )
+SELECT
+  $1, unnest($2::text[]), $3, $4,
+  $5, $6, $7, $8, $9
+ON CONFLICT (organization_id, challenge_id) DO NOTHING
 RETURNING id, organization_id, challenge_id, principal_urn, scope, resource_kind, resource_id, resolution_type, role_slug, resolved_by, created_at
 `
 
-type InsertChallengeResolutionParams struct {
+type InsertChallengeResolutionsParams struct {
 	OrganizationID string
-	ChallengeID    string
+	ChallengeIds   []string
 	PrincipalUrn   string
 	Scope          string
 	ResourceKind   string
@@ -178,11 +179,12 @@ type InsertChallengeResolutionParams struct {
 	ResolvedBy     string
 }
 
-// Creates a resolution record for a denied challenge.
-func (q *Queries) InsertChallengeResolution(ctx context.Context, arg InsertChallengeResolutionParams) (AuthzChallengeResolution, error) {
-	row := q.db.QueryRow(ctx, insertChallengeResolution,
+// Creates resolution records for one or more denied challenges.
+// Silently skips challenges that are already resolved (ON CONFLICT DO NOTHING).
+func (q *Queries) InsertChallengeResolutions(ctx context.Context, arg InsertChallengeResolutionsParams) ([]AuthzChallengeResolution, error) {
+	rows, err := q.db.Query(ctx, insertChallengeResolutions,
 		arg.OrganizationID,
-		arg.ChallengeID,
+		arg.ChallengeIds,
 		arg.PrincipalUrn,
 		arg.Scope,
 		arg.ResourceKind,
@@ -191,21 +193,34 @@ func (q *Queries) InsertChallengeResolution(ctx context.Context, arg InsertChall
 		arg.RoleSlug,
 		arg.ResolvedBy,
 	)
-	var i AuthzChallengeResolution
-	err := row.Scan(
-		&i.ID,
-		&i.OrganizationID,
-		&i.ChallengeID,
-		&i.PrincipalUrn,
-		&i.Scope,
-		&i.ResourceKind,
-		&i.ResourceID,
-		&i.ResolutionType,
-		&i.RoleSlug,
-		&i.ResolvedBy,
-		&i.CreatedAt,
-	)
-	return i, err
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AuthzChallengeResolution
+	for rows.Next() {
+		var i AuthzChallengeResolution
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.ChallengeID,
+			&i.PrincipalUrn,
+			&i.Scope,
+			&i.ResourceKind,
+			&i.ResourceID,
+			&i.ResolutionType,
+			&i.RoleSlug,
+			&i.ResolvedBy,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listChallengeResolutions = `-- name: ListChallengeResolutions :many

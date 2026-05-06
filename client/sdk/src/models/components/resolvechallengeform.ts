@@ -22,9 +22,9 @@ export type ResolveChallengeFormResolutionType = ClosedEnum<
 
 export type ResolveChallengeForm = {
   /**
-   * ID of the challenge in ClickHouse.
+   * IDs of the challenges in ClickHouse to resolve.
    */
-  challengeId: string;
+  challengeIds: Array<string>;
   /**
    * Principal that was denied.
    */
@@ -58,7 +58,7 @@ export const ResolveChallengeFormResolutionType$outboundSchema: z.ZodMiniEnum<
 
 /** @internal */
 export type ResolveChallengeForm$Outbound = {
-  challenge_id: string;
+  challenge_ids: Array<string>;
   principal_urn: string;
   resolution_type: string;
   resource_id?: string | undefined;
@@ -73,7 +73,7 @@ export const ResolveChallengeForm$outboundSchema: z.ZodMiniType<
   ResolveChallengeForm
 > = z.pipe(
   z.object({
-    challengeId: z.string(),
+    challengeIds: z.array(z.string()),
     principalUrn: z.string(),
     resolutionType: ResolveChallengeFormResolutionType$outboundSchema,
     resourceId: z.optional(z.string()),
@@ -83,7 +83,7 @@ export const ResolveChallengeForm$outboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
-      challengeId: "challenge_id",
+      challengeIds: "challenge_ids",
       principalUrn: "principal_urn",
       resolutionType: "resolution_type",
       resourceId: "resource_id",

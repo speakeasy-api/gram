@@ -3411,7 +3411,7 @@ func accessUsage() {
 	fmt.Fprintln(os.Stderr, `    enable-rbac: Enable RBAC for the current organization. Seeds default grants for system roles.`)
 	fmt.Fprintln(os.Stderr, `    disable-rbac: Disable RBAC enforcement for the current organization.`)
 	fmt.Fprintln(os.Stderr, `    list-challenges: List authz challenge events from ClickHouse, enriched with resolution state from PostgreSQL.`)
-	fmt.Fprintln(os.Stderr, `    resolve-challenge: Record a resolution for a denied authz challenge. The caller is responsible for assigning the role first.`)
+	fmt.Fprintln(os.Stderr, `    resolve-challenge: Record resolutions for one or more denied authz challenges. The caller is responsible for assigning the role first.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s access COMMAND --help\n", os.Args[0])
@@ -3704,7 +3704,7 @@ func accessResolveChallengeUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Record a resolution for a denied authz challenge. The caller is responsible for assigning the role first.`)
+	fmt.Fprintln(os.Stderr, `Record resolutions for one or more denied authz challenges. The caller is responsible for assigning the role first.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -3713,7 +3713,7 @@ func accessResolveChallengeUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access resolve-challenge --body '{\n      \"challenge_id\": \"abc123\",\n      \"principal_urn\": \"abc123\",\n      \"resolution_type\": \"dismissed\",\n      \"resource_id\": \"abc123\",\n      \"resource_kind\": \"abc123\",\n      \"role_slug\": \"abc123\",\n      \"scope\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access resolve-challenge --body '{\n      \"challenge_ids\": [\n         \"abc123\"\n      ],\n      \"principal_urn\": \"abc123\",\n      \"resolution_type\": \"dismissed\",\n      \"resource_id\": \"abc123\",\n      \"resource_kind\": \"abc123\",\n      \"role_slug\": \"abc123\",\n      \"scope\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
 }
 
 // adminUsage displays the usage of the admin command and its subcommands.

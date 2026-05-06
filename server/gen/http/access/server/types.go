@@ -53,8 +53,8 @@ type UpdateMemberRoleRequestBody struct {
 // ResolveChallengeRequestBody is the type of the "access" service
 // "resolveChallenge" endpoint HTTP request body.
 type ResolveChallengeRequestBody struct {
-	// ID of the challenge in ClickHouse.
-	ChallengeID *string `form:"challenge_id,omitempty" json:"challenge_id,omitempty" xml:"challenge_id,omitempty"`
+	// IDs of the challenges in ClickHouse to resolve.
+	ChallengeIds []string `form:"challenge_ids,omitempty" json:"challenge_ids,omitempty" xml:"challenge_ids,omitempty"`
 	// Principal that was denied.
 	PrincipalUrn *string `form:"principal_urn,omitempty" json:"principal_urn,omitempty" xml:"principal_urn,omitempty"`
 	// Scope that was denied.
@@ -190,26 +190,8 @@ type ListChallengesResponseBody struct {
 // ResolveChallengeResponseBody is the type of the "access" service
 // "resolveChallenge" endpoint HTTP response body.
 type ResolveChallengeResponseBody struct {
-	// Resolution record ID.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Organization ID.
-	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
-	// ClickHouse challenge ID.
-	ChallengeID string `form:"challenge_id" json:"challenge_id" xml:"challenge_id"`
-	// Denied principal.
-	PrincipalUrn string `form:"principal_urn" json:"principal_urn" xml:"principal_urn"`
-	// Denied scope.
-	Scope string `form:"scope" json:"scope" xml:"scope"`
-	// Resource kind.
-	ResourceKind *string `form:"resource_kind,omitempty" json:"resource_kind,omitempty" xml:"resource_kind,omitempty"`
-	// Resource ID.
-	ResourceID     *string `form:"resource_id,omitempty" json:"resource_id,omitempty" xml:"resource_id,omitempty"`
-	ResolutionType string  `form:"resolution_type" json:"resolution_type" xml:"resolution_type"`
-	// Assigned role slug.
-	RoleSlug *string `form:"role_slug,omitempty" json:"role_slug,omitempty" xml:"role_slug,omitempty"`
-	// Admin who resolved.
-	ResolvedBy string `form:"resolved_by" json:"resolved_by" xml:"resolved_by"`
-	CreatedAt  string `form:"created_at" json:"created_at" xml:"created_at"`
+	// The created resolution records.
+	Resolutions []*ChallengeResolutionResponseBody `form:"resolutions" json:"resolutions" xml:"resolutions"`
 }
 
 // ListRolesUnauthorizedResponseBody is the type of the "access" service
@@ -2859,6 +2841,31 @@ type AuthzChallengeResponseBody struct {
 	ResolutionRoleSlug *string `form:"resolution_role_slug,omitempty" json:"resolution_role_slug,omitempty" xml:"resolution_role_slug,omitempty"`
 }
 
+// ChallengeResolutionResponseBody is used to define fields on response body
+// types.
+type ChallengeResolutionResponseBody struct {
+	// Resolution record ID.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Organization ID.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// ClickHouse challenge ID.
+	ChallengeID string `form:"challenge_id" json:"challenge_id" xml:"challenge_id"`
+	// Denied principal.
+	PrincipalUrn string `form:"principal_urn" json:"principal_urn" xml:"principal_urn"`
+	// Denied scope.
+	Scope string `form:"scope" json:"scope" xml:"scope"`
+	// Resource kind.
+	ResourceKind *string `form:"resource_kind,omitempty" json:"resource_kind,omitempty" xml:"resource_kind,omitempty"`
+	// Resource ID.
+	ResourceID     *string `form:"resource_id,omitempty" json:"resource_id,omitempty" xml:"resource_id,omitempty"`
+	ResolutionType string  `form:"resolution_type" json:"resolution_type" xml:"resolution_type"`
+	// Assigned role slug.
+	RoleSlug *string `form:"role_slug,omitempty" json:"role_slug,omitempty" xml:"role_slug,omitempty"`
+	// Admin who resolved.
+	ResolvedBy string `form:"resolved_by" json:"resolved_by" xml:"resolved_by"`
+	CreatedAt  string `form:"created_at" json:"created_at" xml:"created_at"`
+}
+
 // RoleGrantRequestBody is used to define fields on request body types.
 type RoleGrantRequestBody struct {
 	// The scope slug this grant applies to.
@@ -3082,19 +3089,19 @@ func NewListChallengesResponseBody(res *access.ListChallengesResult) *ListChalle
 
 // NewResolveChallengeResponseBody builds the HTTP response body from the
 // result of the "resolveChallenge" endpoint of the "access" service.
-func NewResolveChallengeResponseBody(res *access.ChallengeResolution) *ResolveChallengeResponseBody {
-	body := &ResolveChallengeResponseBody{
-		ID:             res.ID,
-		OrganizationID: res.OrganizationID,
-		ChallengeID:    res.ChallengeID,
-		PrincipalUrn:   res.PrincipalUrn,
-		Scope:          res.Scope,
-		ResourceKind:   res.ResourceKind,
-		ResourceID:     res.ResourceID,
-		ResolutionType: res.ResolutionType,
-		RoleSlug:       res.RoleSlug,
-		ResolvedBy:     res.ResolvedBy,
-		CreatedAt:      res.CreatedAt,
+func NewResolveChallengeResponseBody(res *access.ResolveChallengesResult) *ResolveChallengeResponseBody {
+	body := &ResolveChallengeResponseBody{}
+	if res.Resolutions != nil {
+		body.Resolutions = make([]*ChallengeResolutionResponseBody, len(res.Resolutions))
+		for i, val := range res.Resolutions {
+			if val == nil {
+				body.Resolutions[i] = nil
+				continue
+			}
+			body.Resolutions[i] = marshalAccessChallengeResolutionToChallengeResolutionResponseBody(val)
+		}
+	} else {
+		body.Resolutions = []*ChallengeResolutionResponseBody{}
 	}
 	return body
 }
@@ -5234,13 +5241,16 @@ func NewListChallengesPayload(outcome *string, principalUrn *string, scope *stri
 // payload.
 func NewResolveChallengePayload(body *ResolveChallengeRequestBody, apikeyToken *string, sessionToken *string) *access.ResolveChallengePayload {
 	v := &access.ResolveChallengePayload{
-		ChallengeID:    *body.ChallengeID,
 		PrincipalUrn:   *body.PrincipalUrn,
 		Scope:          *body.Scope,
 		ResourceKind:   body.ResourceKind,
 		ResourceID:     body.ResourceID,
 		ResolutionType: *body.ResolutionType,
 		RoleSlug:       body.RoleSlug,
+	}
+	v.ChallengeIds = make([]string, len(body.ChallengeIds))
+	for i, val := range body.ChallengeIds {
+		v.ChallengeIds[i] = val
 	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
@@ -5301,8 +5311,8 @@ func ValidateUpdateMemberRoleRequestBody(body *UpdateMemberRoleRequestBody) (err
 // ValidateResolveChallengeRequestBody runs the validations defined on
 // ResolveChallengeRequestBody
 func ValidateResolveChallengeRequestBody(body *ResolveChallengeRequestBody) (err error) {
-	if body.ChallengeID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("challenge_id", "body"))
+	if body.ChallengeIds == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("challenge_ids", "body"))
 	}
 	if body.PrincipalUrn == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("principal_urn", "body"))

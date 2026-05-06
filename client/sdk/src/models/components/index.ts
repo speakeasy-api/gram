@@ -242,6 +242,7 @@ export * from "./rendertemplatebyidrequestbody.js";
 export * from "./rendertemplaterequestbody.js";
 export * from "./rendertemplateresult.js";
 export * from "./resolvechallengeform.js";
+export * from "./resolvechallengesresult.js";
 export * from "./resource.js";
 export * from "./resourceentry.js";
 export * from "./responsefilter.js";

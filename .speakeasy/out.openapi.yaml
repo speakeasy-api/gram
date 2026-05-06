@@ -1043,7 +1043,7 @@ paths:
         name: ListScopes
   /rpc/access.resolveChallenge:
     post:
-      description: Record a resolution for a denied authz challenge. The caller is responsible for assigning the role first.
+      description: Record resolutions for one or more denied authz challenges. The caller is responsible for assigning the role first.
       operationId: resolveChallenge
       parameters:
         - allowEmptyValue: true
@@ -1071,7 +1071,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ChallengeResolution'
+                $ref: '#/components/schemas/ResolveChallengesResult'
           description: Created response.
         "400":
           content:
@@ -27781,9 +27781,11 @@ components:
     ResolveChallengeForm:
       type: object
       properties:
-        challenge_id:
-          type: string
-          description: ID of the challenge in ClickHouse.
+        challenge_ids:
+          type: array
+          items:
+            type: string
+          description: IDs of the challenges in ClickHouse to resolve.
         principal_urn:
           type: string
           description: Principal that was denied.
@@ -27806,10 +27808,20 @@ components:
           type: string
           description: Scope that was denied.
       required:
-        - challenge_id
+        - challenge_ids
         - principal_urn
         - scope
         - resolution_type
+    ResolveChallengesResult:
+      type: object
+      properties:
+        resolutions:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChallengeResolution'
+          description: The created resolution records.
+      required:
+        - resolutions
     Resource:
       type: object
       properties:

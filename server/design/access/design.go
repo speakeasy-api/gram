@@ -365,7 +365,7 @@ var _ = Service("access", func() {
 	})
 
 	Method("resolveChallenge", func() {
-		Description("Record a resolution for a denied authz challenge. The caller is responsible for assigning the role first.")
+		Description("Record resolutions for one or more denied authz challenges. The caller is responsible for assigning the role first.")
 		Security(security.ByKey, func() {
 			Scope("producer")
 		})
@@ -377,7 +377,7 @@ var _ = Service("access", func() {
 			security.SessionPayload()
 		})
 
-		Result(ChallengeResolutionModel)
+		Result(ResolveChallengesResult)
 
 		HTTP(func() {
 			POST("/rpc/access.resolveChallenge")
@@ -597,9 +597,9 @@ var ListChallengesResult = Type("ListChallengesResult", func() {
 })
 
 var ResolveChallengeForm = Type("ResolveChallengeForm", func() {
-	Required("challenge_id", "principal_urn", "scope", "resolution_type")
+	Required("challenge_ids", "principal_urn", "scope", "resolution_type")
 
-	Attribute("challenge_id", String, "ID of the challenge in ClickHouse.")
+	Attribute("challenge_ids", ArrayOf(String), "IDs of the challenges in ClickHouse to resolve.")
 	Attribute("principal_urn", String, "Principal that was denied.")
 	Attribute("scope", String, "Scope that was denied.")
 	Attribute("resource_kind", String, "Resource kind from the challenge.")
@@ -630,4 +630,9 @@ var ChallengeResolutionModel = Type("ChallengeResolution", func() {
 	Attribute("created_at", String, func() {
 		Format(FormatDateTime)
 	})
+})
+
+var ResolveChallengesResult = Type("ResolveChallengesResult", func() {
+	Required("resolutions")
+	Attribute("resolutions", ArrayOf(ChallengeResolutionModel), "The created resolution records.")
 })

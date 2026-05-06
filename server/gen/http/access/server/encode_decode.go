@@ -2796,7 +2796,7 @@ func EncodeListChallengesError(encoder func(context.Context, http.ResponseWriter
 // the access resolveChallenge endpoint.
 func EncodeResolveChallengeResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*access.ChallengeResolution)
+		res, _ := v.(*access.ResolveChallengesResult)
 		enc := encoder(ctx, w)
 		body := NewResolveChallengeResponseBody(res)
 		w.WriteHeader(http.StatusCreated)
@@ -3203,6 +3203,27 @@ func marshalAccessAuthzChallengeToAuthzChallengeResponseBody(v *access.AuthzChal
 		}
 	} else {
 		res.RoleSlugs = []string{}
+	}
+
+	return res
+}
+
+// marshalAccessChallengeResolutionToChallengeResolutionResponseBody builds a
+// value of type *ChallengeResolutionResponseBody from a value of type
+// *access.ChallengeResolution.
+func marshalAccessChallengeResolutionToChallengeResolutionResponseBody(v *access.ChallengeResolution) *ChallengeResolutionResponseBody {
+	res := &ChallengeResolutionResponseBody{
+		ID:             v.ID,
+		OrganizationID: v.OrganizationID,
+		ChallengeID:    v.ChallengeID,
+		PrincipalUrn:   v.PrincipalUrn,
+		Scope:          v.Scope,
+		ResourceKind:   v.ResourceKind,
+		ResourceID:     v.ResourceID,
+		ResolutionType: v.ResolutionType,
+		RoleSlug:       v.RoleSlug,
+		ResolvedBy:     v.ResolvedBy,
+		CreatedAt:      v.CreatedAt,
 	}
 
 	return res

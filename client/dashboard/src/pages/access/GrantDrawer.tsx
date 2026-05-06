@@ -26,14 +26,16 @@ interface GrantDrawerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   challenge: AuthzChallenge | null;
+  challengeIds?: string[];
   onCreateNew: () => void;
-  onResolved?: (challengeId: string) => void;
+  onResolved?: (challengeIds: string[]) => void;
 }
 
 export function GrantDrawer({
   open,
   onOpenChange,
   challenge,
+  challengeIds: challengeIdsProp,
   onCreateNew,
   onResolved,
 }: GrantDrawerProps) {
@@ -74,11 +76,12 @@ export function GrantDrawer({
 
   const handleSave = () => {
     if (!challenge || !selectedRole) return;
+    const ids = challengeIdsProp ?? [challenge.id];
     resolveChallenge.mutate(
       {
         request: {
           resolveChallengeForm: {
-            challengeId: challenge.id,
+            challengeIds: ids,
             principalUrn: challenge.principalUrn,
             scope: challenge.scope,
             resolutionType: ResolveChallengeFormResolutionType.RoleAssigned,
@@ -90,7 +93,7 @@ export function GrantDrawer({
       },
       {
         onSuccess: () => {
-          onResolved?.(challenge.id);
+          onResolved?.(ids);
           handleClose();
         },
       },

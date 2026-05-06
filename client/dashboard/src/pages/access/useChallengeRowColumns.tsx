@@ -110,7 +110,7 @@ export function useChallengeRowColumns(
       {
         key: "scope",
         header: "Required Scope",
-        width: "1fr",
+        width: "140px",
         render: (row: AuthzChallenge) => (
           <Tooltip>
             <TooltipTrigger asChild>

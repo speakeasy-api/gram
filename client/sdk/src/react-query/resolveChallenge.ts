@@ -34,7 +34,7 @@ export type ResolveChallengeMutationVariables = {
   options?: RequestOptions;
 };
 
-export type ResolveChallengeMutationData = components.ChallengeResolution;
+export type ResolveChallengeMutationData = components.ResolveChallengesResult;
 
 export type ResolveChallengeMutationError =
   | errors.ServiceError
@@ -51,7 +51,7 @@ export type ResolveChallengeMutationError =
  * resolveChallenge access
  *
  * @remarks
- * Record a resolution for a denied authz challenge. The caller is responsible for assigning the role first.
+ * Record resolutions for one or more denied authz challenges. The caller is responsible for assigning the role first.
  */
 export function useResolveChallengeMutation(
   options?: MutationHookOptions<

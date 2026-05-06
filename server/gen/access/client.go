@@ -340,11 +340,11 @@ func (c *Client) ListChallenges(ctx context.Context, p *ListChallengesPayload) (
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
-func (c *Client) ResolveChallenge(ctx context.Context, p *ResolveChallengePayload) (res *ChallengeResolution, err error) {
+func (c *Client) ResolveChallenge(ctx context.Context, p *ResolveChallengePayload) (res *ResolveChallengesResult, err error) {
 	var ires any
 	ires, err = c.ResolveChallengeEndpoint(ctx, p)
 	if err != nil {
 		return
 	}
-	return ires.(*ChallengeResolution), nil
+	return ires.(*ResolveChallengesResult), nil
 }

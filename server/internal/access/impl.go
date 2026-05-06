@@ -1500,7 +1500,7 @@ func (s *Service) ListChallenges(ctx context.Context, payload *gen.ListChallenge
 	}, nil
 }
 
-func (s *Service) ResolveChallenge(ctx context.Context, payload *gen.ResolveChallengePayload) (*gen.ChallengeResolution, error) {
+func (s *Service) ResolveChallenge(ctx context.Context, payload *gen.ResolveChallengePayload) (*gen.ResolveChallengesResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
@@ -1512,6 +1512,10 @@ func (s *Service) ResolveChallenge(ctx context.Context, payload *gen.ResolveChal
 		attr.OrganizationID(authCtx.ActiveOrganizationID),
 		attr.UserID(authCtx.UserID),
 	)
+
+	if len(payload.ChallengeIds) == 0 {
+		return nil, oops.E(oops.CodeBadRequest, nil, "challenge_ids must not be empty").Log(ctx, s.logger)
+	}
 
 	// Validate: role_assigned requires role_slug.
 	if payload.ResolutionType == "role_assigned" && (payload.RoleSlug == nil || *payload.RoleSlug == "") {
@@ -1532,9 +1536,9 @@ func (s *Service) ResolveChallenge(ctx context.Context, payload *gen.ResolveChal
 		resourceID = *payload.ResourceID
 	}
 
-	row, err := repo.New(s.db).InsertChallengeResolution(ctx, repo.InsertChallengeResolutionParams{
+	rows, err := repo.New(s.db).InsertChallengeResolutions(ctx, repo.InsertChallengeResolutionsParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
-		ChallengeID:    payload.ChallengeID,
+		ChallengeIds:   payload.ChallengeIds,
 		PrincipalUrn:   payload.PrincipalUrn,
 		Scope:          payload.Scope,
 		ResourceKind:   resourceKind,
@@ -1544,41 +1548,38 @@ func (s *Service) ResolveChallenge(ctx context.Context, payload *gen.ResolveChal
 		ResolvedBy:     resolvedBy,
 	})
 	if err != nil {
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
-			return nil, oops.E(oops.CodeConflict, err, "challenge already resolved").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "insert challenge resolutions").Log(ctx, s.logger)
+	}
+
+	resolutions := make([]*gen.ChallengeResolution, 0, len(rows))
+	for _, row := range rows {
+		resolutions = append(resolutions, &gen.ChallengeResolution{
+			ID:             row.ID.String(),
+			OrganizationID: row.OrganizationID,
+			ChallengeID:    row.ChallengeID,
+			PrincipalUrn:   row.PrincipalUrn,
+			Scope:          row.Scope,
+			ResourceKind:   conv.PtrEmpty(row.ResourceKind),
+			ResourceID:     conv.PtrEmpty(row.ResourceID),
+			ResolutionType: row.ResolutionType,
+			RoleSlug:       conv.FromPGText[string](row.RoleSlug),
+			ResolvedBy:     row.ResolvedBy,
+			CreatedAt:      row.CreatedAt.Time.Format(time.RFC3339),
+		})
+
+		if err := s.audit.LogAccessChallengeResolve(ctx, s.db, audit.LogAccessChallengeResolveEvent{
+			OrganizationID:   authCtx.ActiveOrganizationID,
+			Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+			ActorDisplayName: authCtx.Email,
+			ChallengeID:      row.ChallengeID,
+			PrincipalURN:     row.PrincipalUrn,
+			Scope:            row.Scope,
+			ResolutionType:   row.ResolutionType,
+			RoleSlug:         payload.RoleSlug,
+		}); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "log access challenge resolve").Log(ctx, s.logger)
 		}
-		return nil, oops.E(oops.CodeUnexpected, err, "insert challenge resolution").Log(ctx, s.logger)
 	}
 
-	pResResourceKind := conv.PtrEmpty(row.ResourceKind)
-	pResResourceID := conv.PtrEmpty(row.ResourceID)
-	pResRoleSlug := conv.FromPGText[string](row.RoleSlug)
-
-	if err := s.audit.LogAccessChallengeResolve(ctx, s.db, audit.LogAccessChallengeResolveEvent{
-		OrganizationID:   authCtx.ActiveOrganizationID,
-		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
-		ActorDisplayName: authCtx.Email,
-		ChallengeID:      payload.ChallengeID,
-		PrincipalURN:     payload.PrincipalUrn,
-		Scope:            payload.Scope,
-		ResolutionType:   payload.ResolutionType,
-		RoleSlug:         payload.RoleSlug,
-	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "log access challenge resolve").Log(ctx, s.logger)
-	}
-
-	return &gen.ChallengeResolution{
-		ID:             row.ID.String(),
-		OrganizationID: row.OrganizationID,
-		ChallengeID:    row.ChallengeID,
-		PrincipalUrn:   row.PrincipalUrn,
-		Scope:          row.Scope,
-		ResourceKind:   pResResourceKind,
-		ResourceID:     pResResourceID,
-		ResolutionType: row.ResolutionType,
-		RoleSlug:       pResRoleSlug,
-		ResolvedBy:     row.ResolvedBy,
-		CreatedAt:      row.CreatedAt.Time.Format(time.RFC3339),
-	}, nil
+	return &gen.ResolveChallengesResult{Resolutions: resolutions}, nil
 }

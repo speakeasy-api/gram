@@ -12,7 +12,9 @@ import { toRoleSlug } from "./types";
 const RESOLVE_LINGER_MS = 3_000;
 const FADE_OUT_MS = 1_000;
 
-export function useGrantFlow() {
+export function useGrantFlow(
+  getGroupChallengeIds?: (challengeId: string) => string[],
+) {
   const [grantChallenge, setGrantChallenge] = useState<AuthzChallenge | null>(
     null,
   );
@@ -55,6 +57,13 @@ export function useGrantFlow() {
     timersRef.current.set(id, [fadeTimer, removeTimer]);
   }, []);
 
+  const markManyResolved = useCallback(
+    (ids: string[]) => {
+      for (const id of ids) markResolved(id);
+    },
+    [markResolved],
+  );
+
   useEffect(() => {
     const ref = timersRef.current;
     return () => {
@@ -94,6 +103,10 @@ export function useGrantFlow() {
     [],
   );
 
+  const challengeIds = grantChallenge
+    ? (getGroupChallengeIds?.(grantChallenge.id) ?? [grantChallenge.id])
+    : [];
+
   const grantFlowPortals = (
     <>
       <GrantDrawer
@@ -104,7 +117,8 @@ export function useGrantFlow() {
           if (!isOpen) setTimeout(() => setGrantChallenge(null), 350);
         }}
         challenge={grantChallenge}
-        onResolved={markResolved}
+        challengeIds={challengeIds}
+        onResolved={markManyResolved}
         onCreateNew={() => {
           setCreateChallenge(grantChallenge);
           setIsCreateOpen(true);
@@ -122,12 +136,14 @@ export function useGrantFlow() {
         editingRole={null}
         onRoleCreated={(roleName) => {
           if (!createChallenge) return;
-          const challengeId = createChallenge.id;
+          const ids = getGroupChallengeIds?.(createChallenge.id) ?? [
+            createChallenge.id,
+          ];
           resolveChallenge.mutate(
             {
               request: {
                 resolveChallengeForm: {
-                  challengeId,
+                  challengeIds: ids,
                   principalUrn: createChallenge.principalUrn,
                   scope: createChallenge.scope,
                   resolutionType:
@@ -138,7 +154,7 @@ export function useGrantFlow() {
                 },
               },
             },
-            { onSuccess: () => markResolved(challengeId) },
+            { onSuccess: () => markManyResolved(ids) },
           );
         }}
       />

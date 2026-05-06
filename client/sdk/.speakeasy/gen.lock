@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 85361da5d87081f193d893b490adb73e
+  docChecksum: 04cc55ef5de7b6f62b5c668d6f696535
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -631,9 +631,11 @@ trackedFiles:
   docs/models/components/resolutiontype.md:
     last_write_checksum: sha1:3e42eadb174664068e2b359b83172b55a358904a
   docs/models/components/resolvechallengeform.md:
-    last_write_checksum: sha1:248f928347ce890f94e54507bc0328434d44d262
+    last_write_checksum: sha1:7f74af7f6d6a9da26dfc87d905206a03904271cc
   docs/models/components/resolvechallengeformresolutiontype.md:
     last_write_checksum: sha1:30bad1efce69cdb1324f632cf0c2fcdbd0f0a8a0
+  docs/models/components/resolvechallengesresult.md:
+    last_write_checksum: sha1:5d010180ac335973c125f16d772dce4b7623fa74
   docs/models/components/resource.md:
     last_write_checksum: sha1:62b0fa197ad020da45d804e389ba7ea3a4eef4e5
   docs/models/components/resourceentry.md:
@@ -1863,7 +1865,7 @@ trackedFiles:
   docs/models/operations/rendertemplatesecurityoption3.md:
     last_write_checksum: sha1:30fe8b15de5ea203a0f020118d496bf7c4151688
   docs/models/operations/resolvechallengerequest.md:
-    last_write_checksum: sha1:c95f4a942f64fade0af31b281cbe9f53e58feace
+    last_write_checksum: sha1:06bb2a5b4e538000816bcb21b42510f567f907e2
   docs/models/operations/resolvechallengesecurity.md:
     last_write_checksum: sha1:2764d3c1b9a143087517ef93c748b52f8ce55589
   docs/models/operations/resumetriggerinstancerequest.md:
@@ -2183,7 +2185,7 @@ trackedFiles:
   docs/models/operations/validateapikeysecurity.md:
     last_write_checksum: sha1:e62caf16f73dad337d51e180798d0a150fab3a71
   docs/sdks/access/README.md:
-    last_write_checksum: sha1:b10af3f01ee7d80bb0a969751453cc30ede63f71
+    last_write_checksum: sha1:c54c2a886b68e91cba43a4c9cacc8ff7d5de0421
   docs/sdks/assets/README.md:
     last_write_checksum: sha1:e1884c390454dd09faad4702a812833f9fdf068a
   docs/sdks/assistants/README.md:
@@ -2309,7 +2311,7 @@ trackedFiles:
   src/funcs/accessListScopes.ts:
     last_write_checksum: sha1:1ad64e3abc6903cae51f27d132504002ba9c94e9
   src/funcs/accessResolveChallenge.ts:
-    last_write_checksum: sha1:2da5be5d7d57de85b2412a3796dbba0b9ffa1ec6
+    last_write_checksum: sha1:f371bbe148c7c16e2735b2726bf5a75488623249
   src/funcs/accessUpdateMemberRole.ts:
     last_write_checksum: sha1:76240cb7550931e33b9dc1fc7c4cc911fd45baf4
   src/funcs/accessUpdateRole.ts:
@@ -3346,7 +3348,7 @@ trackedFiles:
     pristine_git_object: a6f415c341273d2f679cbaa39ea48eaede35f633
   src/models/components/index.ts:
     id: 0aa842dce54d
-    last_write_checksum: sha1:c9ec0cb56c8ddf390e0d99ae36850ba3f5df9d0e
+    last_write_checksum: sha1:cd6e54d88998df6e54d4ef02e455da78ae30e029
     pristine_git_object: 4c964f216a07beb3007a26774ce7bdaa48c9f74c
   src/models/components/inforesponsebody.ts:
     id: a1447891c5a4
@@ -3683,7 +3685,9 @@ trackedFiles:
     last_write_checksum: sha1:e83165a93663a121a4eede775c8bc33d5121b3ce
     pristine_git_object: afe884e46088eaacaf4c34de21b7ba4d31fa1d0a
   src/models/components/resolvechallengeform.ts:
-    last_write_checksum: sha1:fd1ae434e1175e2bed872da6c3fc2bd2dda5baac
+    last_write_checksum: sha1:bd5cbf03345b95ebac0b9c9b2f2efc7f0a1c1aa9
+  src/models/components/resolvechallengesresult.ts:
+    last_write_checksum: sha1:9d97062da31a525feb6d062cf29504208af0619c
   src/models/components/resource.ts:
     id: 7ae010457826
     last_write_checksum: sha1:503b7995da7f318dfb78d1c6f26c2f7166441f59
@@ -5271,7 +5275,7 @@ trackedFiles:
     last_write_checksum: sha1:b7e16c86c1dfb36d752bd7acdb16585987a1552d
     pristine_git_object: 017dbbb786c7807e35cb5e447b26fdd78b59f5d1
   src/react-query/resolveChallenge.ts:
-    last_write_checksum: sha1:79684691a1e86ca90492c0f47aebb55fb2c4e8a4
+    last_write_checksum: sha1:ca8eb531802244a4be06a6c14f45ff107482f809
   src/react-query/resumeTrigger.ts:
     last_write_checksum: sha1:9dc8177cfefb13fc4ed3831284619d147c4832f9
   src/react-query/revokeAPIKey.ts:
@@ -5509,7 +5513,7 @@ trackedFiles:
     last_write_checksum: sha1:b4caae676913cbb7094eeb72f440a6b82a98b769
     pristine_git_object: 5329eedfb7bfe97abac782e76cbbc880737fc9fa
   src/sdk/access.ts:
-    last_write_checksum: sha1:c77cb6eb2e78d99404c3be48a981b217bf3da241
+    last_write_checksum: sha1:35919f6358376363ac8bacba76cce17f802a41f2
   src/sdk/assets.ts:
     id: 43fd5a73edb9
     last_write_checksum: sha1:60ccd4abcd9e1b51f7f5542c97336b5a5847b570
@@ -8301,10 +8305,10 @@ examples:
   resolveChallenge:
     speakeasy-default-resolve-challenge:
       requestBody:
-        application/json: {"challenge_id": "<id>", "principal_urn": "<value>", "resolution_type": "role_assigned", "scope": "<value>"}
+        application/json: {"challenge_ids": ["<value 1>"], "principal_urn": "<value>", "resolution_type": "role_assigned", "scope": "<value>"}
       responses:
         "201":
-          application/json: {"challenge_id": "<id>", "created_at": "2024-06-16T14:13:50.694Z", "id": "<id>", "organization_id": "<id>", "principal_urn": "<value>", "resolution_type": "role_assigned", "resolved_by": "<value>", "scope": "<value>"}
+          application/json: {"resolutions": []}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":

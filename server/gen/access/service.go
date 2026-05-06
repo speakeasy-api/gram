@@ -44,9 +44,9 @@ type Service interface {
 	// List authz challenge events from ClickHouse, enriched with resolution state
 	// from PostgreSQL.
 	ListChallenges(context.Context, *ListChallengesPayload) (res *ListChallengesResult, err error)
-	// Record a resolution for a denied authz challenge. The caller is responsible
-	// for assigning the role first.
-	ResolveChallenge(context.Context, *ResolveChallengePayload) (res *ChallengeResolution, err error)
+	// Record resolutions for one or more denied authz challenges. The caller is
+	// responsible for assigning the role first.
+	ResolveChallenge(context.Context, *ResolveChallengePayload) (res *ResolveChallengesResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -130,8 +130,6 @@ type AuthzChallenge struct {
 	ResolutionRoleSlug *string
 }
 
-// ChallengeResolution is the result type of the access service
-// resolveChallenge method.
 type ChallengeResolution struct {
 	// Resolution record ID.
 	ID string
@@ -308,8 +306,8 @@ type RBACStatus struct {
 type ResolveChallengePayload struct {
 	ApikeyToken  *string
 	SessionToken *string
-	// ID of the challenge in ClickHouse.
-	ChallengeID string
+	// IDs of the challenges in ClickHouse to resolve.
+	ChallengeIds []string
 	// Principal that was denied.
 	PrincipalUrn string
 	// Scope that was denied.
@@ -322,6 +320,13 @@ type ResolveChallengePayload struct {
 	ResolutionType string
 	// Role slug to assign (required when resolution_type=role_assigned).
 	RoleSlug *string
+}
+
+// ResolveChallengesResult is the result type of the access service
+// resolveChallenge method.
+type ResolveChallengesResult struct {
+	// The created resolution records.
+	Resolutions []*ChallengeResolution
 }
 
 // Role is the result type of the access service getRole method.
