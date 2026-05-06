@@ -8,8 +8,9 @@ import (
 
 // marketplaceTokenBytes sets the entropy size for the URL-as-secret token. 32
 // bytes (256 bits) is well past the threshold for resisting offline guessing
-// even at internet scale; 64 base64url chars is the resulting URL segment
-// length.
+// even at internet scale; the base64url-without-padding encoding lands at
+// exactly 43 chars from the [A-Za-z0-9_-] set — the marketplace proxy's
+// handler precheck pins that shape via validTokenPattern.
 const marketplaceTokenBytes = 32
 
 // generateMarketplaceToken returns a fresh URL-safe opaque token used by the

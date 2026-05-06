@@ -741,12 +741,18 @@ func newStartCommand() *cli.Command {
 			}
 
 			// Marketplace proxy routes (URL-based marketplace.json + git Smart
-			// HTTP for plugin source clones). Mounted via middleware ahead of
-			// Goa so /m/ and /p/ paths short-circuit the RPC mux. nil when the
-			// GitHub App isn't configured — there's nothing to front.
-			// Marketplace public URL is by definition the same as server-url —
-			// the proxy is mounted on this server, so plugin source URLs
-			// embedded in the rendered manifest must point back at it.
+			// HTTP for plugin source clones). Mounted via the outermost
+			// mux.Use middleware so /m/ and /p/ paths short-circuit the Goa
+			// mux. Public base URL is server-url by definition — the proxy
+			// lives on this server, so the plugin sources we embed in the
+			// rendered manifest must point back at it. nil when no App is
+			// configured.
+			//
+			// We wrap the proxy with the recovery middleware before mounting:
+			// the dispatch happens inside the outermost mux.Use, ahead of the
+			// chain-level recovery, so without this wrap a panic in any
+			// marketplace handler (or the DB resolver) would crash the
+			// server process.
 			var marketplaceRoutes http.Handler
 			if ghClient != nil {
 				mp := marketplace.NewServer(
@@ -755,12 +761,6 @@ func newStartCommand() *cli.Command {
 					c.String("server-url"),
 					logger,
 				)
-				// Wrap the proxy with the recovery middleware before mounting.
-				// The mux dispatches /m/ and /p/ paths from inside the
-				// outermost mux.Use, which runs *before* the chain-level
-				// recovery middleware — so without this wrap a panic in any
-				// marketplace handler (or the DB resolver) would crash the
-				// server process.
 				marketplaceRoutes = middleware.NewRecovery(logger)(mp.Routes())
 				logger.InfoContext(ctx, "marketplace proxy: enabled",
 					attr.SlogServerAddress(c.String("address")),
