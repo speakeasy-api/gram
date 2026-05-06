@@ -185,7 +185,8 @@ export function ChallengesTab() {
     // Group by (principal, scope, outcome, resource)
     const groups = new Map<string, AuthzChallenge[]>();
     for (const c of sorted) {
-      const key = `${c.principalUrn}|${c.scope}|${c.outcome}|${c.resourceKind ?? ""}|${c.resourceId ?? ""}`;
+      const displayIdentity = c.userEmail ?? c.principalUrn;
+      const key = `${displayIdentity}|${c.scope}|${c.outcome}|${c.resourceKind ?? ""}|${c.resourceId ?? ""}`;
       const arr = groups.get(key);
       if (arr) arr.push(c);
       else groups.set(key, [c]);
