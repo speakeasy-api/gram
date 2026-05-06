@@ -9,6 +9,8 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+
+	"github.com/speakeasy-api/gram/server/internal/attr"
 )
 
 // publishedManifestRef pins manifest fetches to the same branch the publish
@@ -82,14 +84,14 @@ func (s *Server) handleManifest(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "marketplace.json missing in upstream", http.StatusNotFound)
 			return
 		}
-		s.logger.ErrorContext(ctx, "fetch published manifest", slog.Any("error", err))
+		s.logger.ErrorContext(ctx, "fetch published manifest", attr.SlogError(err))
 		http.Error(w, "manifest unavailable", http.StatusBadGateway)
 		return
 	}
 
 	rewritten, err := s.rewriteManifest(raw, token)
 	if err != nil {
-		s.logger.ErrorContext(ctx, "rewrite manifest", slog.Any("error", err))
+		s.logger.ErrorContext(ctx, "rewrite manifest", attr.SlogError(err))
 		http.Error(w, "manifest rewrite failed", http.StatusInternalServerError)
 		return
 	}
@@ -259,7 +261,7 @@ func (s *Server) proxyToGitHub(
 
 	upstreamReq, err := http.NewRequestWithContext(ctx, method, upstreamURL, body)
 	if err != nil {
-		s.logger.ErrorContext(ctx, "build upstream request", slog.Any("error", err))
+		s.logger.ErrorContext(ctx, "build upstream request", attr.SlogError(err))
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
@@ -276,7 +278,7 @@ func (s *Server) proxyToGitHub(
 
 	resp, err := s.httpClient.Do(upstreamReq)
 	if err != nil {
-		s.logger.ErrorContext(ctx, "upstream request", slog.Any("error", err))
+		s.logger.ErrorContext(ctx, "upstream request", attr.SlogError(err))
 		http.Error(w, "upstream unavailable", http.StatusBadGateway)
 		return
 	}
@@ -293,7 +295,7 @@ func (s *Server) proxyToGitHub(
 	}
 	w.WriteHeader(resp.StatusCode)
 	if _, err := io.Copy(w, resp.Body); err != nil {
-		s.logger.WarnContext(ctx, "stream upstream body", slog.Any("error", err))
+		s.logger.WarnContext(ctx, "stream upstream body", attr.SlogError(err))
 	}
 }
 
@@ -302,6 +304,6 @@ func (s *Server) errorResponse(w http.ResponseWriter, r *http.Request, err error
 		http.NotFound(w, r)
 		return
 	}
-	s.logger.ErrorContext(r.Context(), "resolve token", slog.Any("error", err))
+	s.logger.ErrorContext(r.Context(), "resolve token", attr.SlogError(err))
 	http.Error(w, "internal error", http.StatusInternalServerError)
 }
