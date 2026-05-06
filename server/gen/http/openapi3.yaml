@@ -20520,11 +20520,12 @@ paths:
                     format: uuid
                     type: string
                 - allowEmptyValue: true
-                  description: Pagination cursor.
+                  description: 'Pagination cursor: id of the last item from the previous page.'
                   in: query
                   name: cursor
                   schema:
-                    description: Pagination cursor.
+                    description: 'Pagination cursor: id of the last item from the previous page.'
+                    format: uuid
                     type: string
                 - allowEmptyValue: true
                   description: Page size (default 50, max 100).

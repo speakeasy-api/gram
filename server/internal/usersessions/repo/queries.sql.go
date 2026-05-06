@@ -99,9 +99,9 @@ type CreateUserSessionClientParams struct {
 	ClientSecretExpiresAt pgtype.Timestamptz
 }
 
-// The Create* queries below are exercised by the cascading-delete tests and
-// (for CreateUserSession / CreateUserSessionConsent) by the OAuth surface that
-// lands in milestone #2. They have no exposure on the management API.
+// The Create* queries below are exercised by tests and by the OAuth surface
+// that lands in milestone #2 (DCR registration, /token exchange, /authorize
+// consent). They have no exposure on the management API.
 func (q *Queries) CreateUserSessionClient(ctx context.Context, arg CreateUserSessionClientParams) (UserSessionClient, error) {
 	row := q.db.QueryRow(ctx, createUserSessionClient,
 		arg.UserSessionIssuerID,
@@ -240,6 +240,55 @@ func (q *Queries) DeleteUserSessionIssuer(ctx context.Context, arg DeleteUserSes
 	return i, err
 }
 
+const getUserSessionClientByID = `-- name: GetUserSessionClientByID :one
+SELECT cli.id, cli.user_session_issuer_id, cli.client_id, cli.client_secret_hash, cli.client_name, cli.redirect_uris, cli.client_id_issued_at, cli.client_secret_expires_at, cli.created_at, cli.updated_at, cli.deleted_at, cli.deleted, iss.project_id AS issuer_project_id
+FROM user_session_clients AS cli
+JOIN user_session_issuers AS iss ON iss.id = cli.user_session_issuer_id
+WHERE cli.id = $1 AND iss.project_id = $2 AND cli.deleted IS FALSE
+`
+
+type GetUserSessionClientByIDParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+type GetUserSessionClientByIDRow struct {
+	ID                    uuid.UUID
+	UserSessionIssuerID   uuid.UUID
+	ClientID              string
+	ClientSecretHash      pgtype.Text
+	ClientName            string
+	RedirectUris          []string
+	ClientIDIssuedAt      pgtype.Timestamptz
+	ClientSecretExpiresAt pgtype.Timestamptz
+	CreatedAt             pgtype.Timestamptz
+	UpdatedAt             pgtype.Timestamptz
+	DeletedAt             pgtype.Timestamptz
+	Deleted               bool
+	IssuerProjectID       uuid.UUID
+}
+
+func (q *Queries) GetUserSessionClientByID(ctx context.Context, arg GetUserSessionClientByIDParams) (GetUserSessionClientByIDRow, error) {
+	row := q.db.QueryRow(ctx, getUserSessionClientByID, arg.ID, arg.ProjectID)
+	var i GetUserSessionClientByIDRow
+	err := row.Scan(
+		&i.ID,
+		&i.UserSessionIssuerID,
+		&i.ClientID,
+		&i.ClientSecretHash,
+		&i.ClientName,
+		&i.RedirectUris,
+		&i.ClientIDIssuedAt,
+		&i.ClientSecretExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+		&i.IssuerProjectID,
+	)
+	return i, err
+}
+
 const getUserSessionIssuerByID = `-- name: GetUserSessionIssuerByID :one
 SELECT id, project_id, slug, authn_challenge_mode, session_duration, created_at, updated_at, deleted_at, deleted
 FROM user_session_issuers
@@ -296,6 +345,66 @@ func (q *Queries) GetUserSessionIssuerBySlug(ctx context.Context, arg GetUserSes
 	return i, err
 }
 
+const listUserSessionClientsByProjectID = `-- name: ListUserSessionClientsByProjectID :many
+SELECT cli.id, cli.user_session_issuer_id, cli.client_id, cli.client_secret_hash, cli.client_name, cli.redirect_uris, cli.client_id_issued_at, cli.client_secret_expires_at, cli.created_at, cli.updated_at, cli.deleted_at, cli.deleted
+FROM user_session_clients AS cli
+JOIN user_session_issuers AS iss ON iss.id = cli.user_session_issuer_id
+WHERE iss.project_id = $1
+  AND cli.deleted IS FALSE
+  AND iss.deleted IS FALSE
+  AND ($2::uuid IS NULL OR cli.user_session_issuer_id = $2::uuid)
+  AND ($3::uuid IS NULL OR cli.id < $3::uuid)
+ORDER BY cli.id DESC
+LIMIT $4
+`
+
+type ListUserSessionClientsByProjectIDParams struct {
+	ProjectID           uuid.UUID
+	UserSessionIssuerID uuid.NullUUID
+	Cursor              uuid.NullUUID
+	LimitValue          int32
+}
+
+// Operator visibility into all DCR-issued clients in the project, with optional
+// filter by user_session_issuer_id. Joins through issuers for project scoping.
+func (q *Queries) ListUserSessionClientsByProjectID(ctx context.Context, arg ListUserSessionClientsByProjectIDParams) ([]UserSessionClient, error) {
+	rows, err := q.db.Query(ctx, listUserSessionClientsByProjectID,
+		arg.ProjectID,
+		arg.UserSessionIssuerID,
+		arg.Cursor,
+		arg.LimitValue,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []UserSessionClient
+	for rows.Next() {
+		var i UserSessionClient
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserSessionIssuerID,
+			&i.ClientID,
+			&i.ClientSecretHash,
+			&i.ClientName,
+			&i.RedirectUris,
+			&i.ClientIDIssuedAt,
+			&i.ClientSecretExpiresAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listUserSessionIssuersByProjectID = `-- name: ListUserSessionIssuersByProjectID :many
 SELECT id, project_id, slug, authn_challenge_mode, session_duration, created_at, updated_at, deleted_at, deleted
 FROM user_session_issuers
@@ -342,6 +451,42 @@ func (q *Queries) ListUserSessionIssuersByProjectID(ctx context.Context, arg Lis
 	return items, nil
 }
 
+const revokeUserSessionClient = `-- name: RevokeUserSessionClient :one
+UPDATE user_session_clients AS cli
+SET deleted_at = clock_timestamp()
+FROM user_session_issuers AS iss
+WHERE cli.id = $1
+  AND iss.id = cli.user_session_issuer_id
+  AND iss.project_id = $2
+  AND cli.deleted IS FALSE
+RETURNING cli.id, cli.user_session_issuer_id, cli.client_id, cli.client_secret_hash, cli.client_name, cli.redirect_uris, cli.client_id_issued_at, cli.client_secret_expires_at, cli.created_at, cli.updated_at, cli.deleted_at, cli.deleted
+`
+
+type RevokeUserSessionClientParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) RevokeUserSessionClient(ctx context.Context, arg RevokeUserSessionClientParams) (UserSessionClient, error) {
+	row := q.db.QueryRow(ctx, revokeUserSessionClient, arg.ID, arg.ProjectID)
+	var i UserSessionClient
+	err := row.Scan(
+		&i.ID,
+		&i.UserSessionIssuerID,
+		&i.ClientID,
+		&i.ClientSecretHash,
+		&i.ClientName,
+		&i.RedirectUris,
+		&i.ClientIDIssuedAt,
+		&i.ClientSecretExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const softDeleteUserSessionConsentsByIssuerID = `-- name: SoftDeleteUserSessionConsentsByIssuerID :many
 UPDATE user_session_consents AS c
 SET deleted_at = clock_timestamp()
@@ -371,6 +516,48 @@ func (q *Queries) SoftDeleteUserSessionConsentsByIssuerID(ctx context.Context, u
 			&i.UserSessionClientID,
 			&i.RemoteSetHash,
 			&i.ConsentedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const softDeleteUserSessionsByClientID = `-- name: SoftDeleteUserSessionsByClientID :many
+UPDATE user_sessions
+SET deleted_at = clock_timestamp()
+WHERE user_session_client_id = $1 AND deleted IS FALSE
+RETURNING id, user_session_issuer_id, user_session_client_id, subject_urn, jti, refresh_token_hash, refresh_expires_at, expires_at, created_at, updated_at, deleted_at, deleted
+`
+
+// Cascading soft-delete of user_sessions issued through a client being revoked.
+// Returns the affected rows so the handler can emit per-row audit events.
+func (q *Queries) SoftDeleteUserSessionsByClientID(ctx context.Context, userSessionClientID uuid.NullUUID) ([]UserSession, error) {
+	rows, err := q.db.Query(ctx, softDeleteUserSessionsByClientID, userSessionClientID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []UserSession
+	for rows.Next() {
+		var i UserSession
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserSessionIssuerID,
+			&i.UserSessionClientID,
+			&i.SubjectUrn,
+			&i.Jti,
+			&i.RefreshTokenHash,
+			&i.RefreshExpiresAt,
+			&i.ExpiresAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,

@@ -26,6 +26,7 @@ const (
 	subjectTypeVariation          subjectType = "variation"
 	subjectTypeRiskPolicy         subjectType = "risk_policy"
 	subjectTypeUserSession        subjectType = "user_session"
+	subjectTypeUserSessionClient  subjectType = "user_session_client"
 	subjectTypeUserSessionConsent subjectType = "user_session_consent"
 	subjectTypeUserSessionIssuer  subjectType = "user_session_issuer"
 )

@@ -65,7 +65,7 @@ type GetUserSessionClientPayload struct {
 type ListUserSessionClientsPayload struct {
 	// Filter to clients registered with this issuer.
 	UserSessionIssuerID *string
-	// Pagination cursor.
+	// Pagination cursor: id of the last item from the previous page.
 	Cursor *string
 	// Page size (default 50, max 100).
 	Limit            *int

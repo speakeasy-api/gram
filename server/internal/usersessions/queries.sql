@@ -69,9 +69,47 @@ WHERE c.user_session_client_id = cli.id
   AND c.deleted IS FALSE
 RETURNING c.*;
 
--- The Create* queries below are exercised by the cascading-delete tests and
--- (for CreateUserSession / CreateUserSessionConsent) by the OAuth surface that
--- lands in milestone #2. They have no exposure on the management API.
+-- name: GetUserSessionClientByID :one
+SELECT cli.*, iss.project_id AS issuer_project_id
+FROM user_session_clients AS cli
+JOIN user_session_issuers AS iss ON iss.id = cli.user_session_issuer_id
+WHERE cli.id = @id AND iss.project_id = @project_id AND cli.deleted IS FALSE;
+
+-- name: ListUserSessionClientsByProjectID :many
+-- Operator visibility into all DCR-issued clients in the project, with optional
+-- filter by user_session_issuer_id. Joins through issuers for project scoping.
+SELECT cli.*
+FROM user_session_clients AS cli
+JOIN user_session_issuers AS iss ON iss.id = cli.user_session_issuer_id
+WHERE iss.project_id = @project_id
+  AND cli.deleted IS FALSE
+  AND iss.deleted IS FALSE
+  AND (sqlc.narg('user_session_issuer_id')::uuid IS NULL OR cli.user_session_issuer_id = sqlc.narg('user_session_issuer_id')::uuid)
+  AND (sqlc.narg('cursor')::uuid IS NULL OR cli.id < sqlc.narg('cursor')::uuid)
+ORDER BY cli.id DESC
+LIMIT sqlc.arg('limit_value');
+
+-- name: RevokeUserSessionClient :one
+UPDATE user_session_clients AS cli
+SET deleted_at = clock_timestamp()
+FROM user_session_issuers AS iss
+WHERE cli.id = @id
+  AND iss.id = cli.user_session_issuer_id
+  AND iss.project_id = @project_id
+  AND cli.deleted IS FALSE
+RETURNING cli.*;
+
+-- name: SoftDeleteUserSessionsByClientID :many
+-- Cascading soft-delete of user_sessions issued through a client being revoked.
+-- Returns the affected rows so the handler can emit per-row audit events.
+UPDATE user_sessions
+SET deleted_at = clock_timestamp()
+WHERE user_session_client_id = @user_session_client_id AND deleted IS FALSE
+RETURNING *;
+
+-- The Create* queries below are exercised by tests and by the OAuth surface
+-- that lands in milestone #2 (DCR registration, /token exchange, /authorize
+-- consent). They have no exposure on the management API.
 
 -- name: CreateUserSessionClient :one
 INSERT INTO user_session_clients (

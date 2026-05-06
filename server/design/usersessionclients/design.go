@@ -22,7 +22,9 @@ var _ = Service("userSessionClients", func() {
 			Attribute("user_session_issuer_id", String, "Filter to clients registered with this issuer.", func() {
 				Format(FormatUUID)
 			})
-			Attribute("cursor", String, "Pagination cursor.")
+			Attribute("cursor", String, "Pagination cursor: id of the last item from the previous page.", func() {
+				Format(FormatUUID)
+			})
 			Attribute("limit", Int, "Page size (default 50, max 100).")
 			security.SessionPayload()
 			security.ByKeyPayload()

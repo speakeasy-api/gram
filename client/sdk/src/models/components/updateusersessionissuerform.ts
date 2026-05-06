@@ -35,9 +35,9 @@ export type UpdateUserSessionIssuerForm = {
    */
   id: string;
   /**
-   * Go duration string (e.g. "24h").
+   * Issued user session lifetime, in hours.
    */
-  sessionDuration?: string | undefined;
+  sessionDurationHours?: number | undefined;
   /**
    * Rename the slug.
    */
@@ -54,7 +54,7 @@ export const UpdateUserSessionIssuerFormAuthnChallengeMode$outboundSchema:
 export type UpdateUserSessionIssuerForm$Outbound = {
   authn_challenge_mode?: string | undefined;
   id: string;
-  session_duration?: string | undefined;
+  session_duration_hours?: number | undefined;
   slug?: string | undefined;
 };
 
@@ -68,13 +68,13 @@ export const UpdateUserSessionIssuerForm$outboundSchema: z.ZodMiniType<
       UpdateUserSessionIssuerFormAuthnChallengeMode$outboundSchema,
     ),
     id: z.string(),
-    sessionDuration: z.optional(z.string()),
+    sessionDurationHours: z.optional(z.int()),
     slug: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
       authnChallengeMode: "authn_challenge_mode",
-      sessionDuration: "session_duration",
+      sessionDurationHours: "session_duration_hours",
     });
   }),
 );
