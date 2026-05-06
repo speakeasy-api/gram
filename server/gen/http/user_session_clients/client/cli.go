@@ -34,6 +34,10 @@ func BuildListUserSessionClientsPayload(userSessionClientsListUserSessionClients
 	{
 		if userSessionClientsListUserSessionClientsCursor != "" {
 			cursor = &userSessionClientsListUserSessionClientsCursor
+			err = goa.MergeErrors(err, goa.ValidateFormat("cursor", *cursor, goa.FormatUUID))
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 	var limit *int

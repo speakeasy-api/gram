@@ -59,6 +59,9 @@ func DecodeListUserSessionClientsRequest(mux goahttp.Muxer, decoder func(*http.R
 		if cursorRaw != "" {
 			cursor = &cursorRaw
 		}
+		if cursor != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("cursor", *cursor, goa.FormatUUID))
+		}
 		{
 			limitRaw := qp.Get("limit")
 			if limitRaw != "" {

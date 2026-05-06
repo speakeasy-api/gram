@@ -356,8 +356,3 @@ func (p *Manager) BuildAuthorizationURL(ctx context.Context, params AuthURLParam
 
 	return authURL, nil
 }
-
-// syncWorkOSMemberships moved to auth/speakeasyclient.Client.BootstrapUser as
-// part of the shared post-IDP user bootstrap. Both this manager (via
-// GetUserInfoFromSpeakeasy) and the user-session AS path reach it through the
-// same client.
