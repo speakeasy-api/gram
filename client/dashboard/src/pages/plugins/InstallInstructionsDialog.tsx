@@ -14,6 +14,9 @@ import { HookSourceIcon } from "../hooks/HookSourceIcon";
 const COWORK_DOCS_URL =
   "https://support.claude.com/en/articles/13837433-manage-claude-cowork-plugins-for-your-organization";
 
+const CLAUDE_CODE_SETTINGS_DOCS_URL =
+  "https://code.claude.com/docs/en/settings";
+
 type ContentProps = {
   repoOwner: string;
   repoName: string;
@@ -62,19 +65,42 @@ const providers: {
 ];
 
 /**
- * Claude Code (individual CLI) install. The Claude Code client speaks the
- * URL-based marketplace protocol: the user runs one slash command and the
- * marketplace proxy serves the manifest plus plugin sources. No GitHub
- * involvement on the user side.
+ * Claude Code (individual CLI) install. Two paths covered here:
+ *  - per-user registration via the slash command, served by the marketplace
+ *    proxy
+ *  - org-wide enforcement via Claude.ai's Managed Settings, which pushes an
+ *    extraKnownMarketplaces entry into every org member's Claude Code
+ *    install.
  *
- * Org-managed install is a separate, fundamentally different flow — see
- * ClaudeCoworkInstallContent.
+ * Both go through Claude Code itself; neither involves Cowork's plugin
+ * distribution (that's its own tab).
  */
 function ClaudeCodeInstallContent({
+  repoName,
   marketplaceUrl,
-}: Pick<ContentProps, "marketplaceUrl">) {
+}: Pick<ContentProps, "repoName" | "marketplaceUrl">) {
   const installCommand = marketplaceUrl
     ? `/plugin marketplace add ${marketplaceUrl}`
+    : null;
+
+  // Schema reference: https://code.claude.com/docs/en/settings — under
+  // extraKnownMarketplaces (additive; works for managed settings too) and
+  // strictKnownMarketplaces (managed-only, allowlist semantics).
+  const managedSettingsJson = marketplaceUrl
+    ? JSON.stringify(
+        {
+          extraKnownMarketplaces: {
+            [repoName]: {
+              source: {
+                source: "url",
+                url: marketplaceUrl,
+              },
+            },
+          },
+        },
+        null,
+        2,
+      )
     : null;
 
   return (
@@ -112,16 +138,101 @@ function ClaudeCodeInstallContent({
         </p>
       </div>
 
-      <div className="border-border/60 border-t pt-4">
-        <p className="text-muted-foreground text-sm">
-          Rolling this out to your whole organization? See the{" "}
-          <span className="text-foreground font-medium">Claude Cowork</span> tab
-          — Cowork admins push a marketplace policy from{" "}
-          <code className="bg-muted rounded px-1 py-0.5 text-xs">
-            Organization settings → Plugins
-          </code>{" "}
-          on Claude.ai so all members get it automatically.
+      <div>
+        <h3 className="mb-2 text-sm font-semibold">
+          Roll out to your team via Managed Settings
+        </h3>
+        <p className="text-muted-foreground mb-4 text-sm">
+          Push the marketplace to every Claude Code install in your organization
+          through Claude.ai's Managed Settings — no per-user install command
+          required.
         </p>
+
+        <div className="space-y-4">
+          <div>
+            <h4 className="text-muted-foreground mb-2 text-xs font-medium">
+              1. Open Managed Settings on Claude.ai
+            </h4>
+            <p className="text-muted-foreground text-sm">
+              Sign in to{" "}
+              <a
+                href="https://claude.ai/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sky-500 hover:text-sky-600 hover:underline"
+              >
+                claude.ai
+              </a>{" "}
+              as an organization admin, navigate to{" "}
+              <code className="bg-muted rounded px-1 py-0.5 text-xs">
+                Organization settings → Claude Code
+              </code>
+              , then click{" "}
+              <code className="bg-muted rounded px-1 py-0.5 text-xs">
+                Manage
+              </code>{" "}
+              under{" "}
+              <code className="bg-muted rounded px-1 py-0.5 text-xs">
+                Managed Settings
+              </code>
+              .
+            </p>
+          </div>
+
+          <div>
+            <h4 className="text-muted-foreground mb-2 text-xs font-medium">
+              2. Add the marketplace to settings.json
+            </h4>
+            <p className="text-muted-foreground mb-2 text-sm">
+              Merge this entry into the org's managed{" "}
+              <code className="bg-muted rounded px-1 py-0.5 text-xs">
+                settings.json
+              </code>
+              :
+            </p>
+            {managedSettingsJson ? (
+              <div className="bg-muted/50 rounded-lg p-4 font-mono text-sm">
+                <div className="flex items-start justify-between gap-2">
+                  <pre className="overflow-x-auto whitespace-pre-wrap">
+                    {managedSettingsJson}
+                  </pre>
+                  <CopyButton
+                    size="inline"
+                    text={managedSettingsJson}
+                    tooltip="Copy settings.json snippet"
+                  />
+                </div>
+              </div>
+            ) : (
+              <p className="text-muted-foreground text-sm italic">
+                Re-publish to mint a marketplace install URL.
+              </p>
+            )}
+            <p className="text-muted-foreground mt-2 text-xs">
+              Use{" "}
+              <code className="bg-muted rounded px-1 py-0.5 text-xs">
+                strictKnownMarketplaces
+              </code>{" "}
+              instead of{" "}
+              <code className="bg-muted rounded px-1 py-0.5 text-xs">
+                extraKnownMarketplaces
+              </code>{" "}
+              to lock the org to this marketplace and reject all others.
+            </p>
+          </div>
+
+          <Button variant="outline" size="sm" asChild>
+            <a
+              href={CLAUDE_CODE_SETTINGS_DOCS_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2"
+            >
+              <ExternalLink className="size-4" />
+              Claude Code settings docs
+            </a>
+          </Button>
+        </div>
       </div>
     </div>
   );
@@ -293,7 +404,10 @@ export function InstallInstructionsDialog({
         </div>
 
         {selected === "claude-code" && (
-          <ClaudeCodeInstallContent marketplaceUrl={content.marketplaceUrl} />
+          <ClaudeCodeInstallContent
+            repoName={content.repoName}
+            marketplaceUrl={content.marketplaceUrl}
+          />
         )}
         {selected === "claude-cowork" && (
           <ClaudeCoworkInstallContent
