@@ -234,7 +234,7 @@ func TestServePublic_AttachedAuthErrorReturnsMCPError(t *testing.T) {
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
-	require.Equal(t, http.StatusOK, w.Code)
+	require.Equal(t, http.StatusUnauthorized, w.Code)
 	require.Equal(t, "application/json", w.Header().Get("Content-Type"))
 	require.NotContains(t, w.Body.String(), "<!doctype")
 
