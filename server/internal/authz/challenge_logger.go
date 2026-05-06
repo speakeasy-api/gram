@@ -46,10 +46,6 @@ type challengeLogger struct {
 // feature is not enabled for the org (or the check fails), the call is a
 // no-op. Errors are logged at warn level and never bubble back to the caller.
 func (l challengeLogger) Log(ctx context.Context, conn clickhouse.Conn, logger *slog.Logger, isEnabled ChallengeLoggingEnabled) {
-	if conn == nil || isEnabled == nil {
-		return
-	}
-
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
 		return
