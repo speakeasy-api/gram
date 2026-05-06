@@ -3,13 +3,13 @@ package marketplace
 import (
 	"context"
 	"encoding/json"
-	"io"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 // rewriteManifest is the only place we encode the Claude Code marketplace
@@ -23,7 +23,7 @@ func TestRewriteManifest(t *testing.T) {
 
 	s := &Server{
 		publicBaseURL: "https://gram.test",
-		logger:        slog.New(slog.NewTextHandler(io.Discard, nil)),
+		logger:        testenv.NewLogger(t),
 	}
 
 	t.Run("relative path source becomes git-subdir", func(t *testing.T) {
@@ -155,7 +155,7 @@ func TestMalformedTokensSkipResolver(t *testing.T) {
 			spy := &spyResolver{}
 			s := &Server{
 				resolver: spy,
-				logger:   slog.New(slog.NewTextHandler(io.Discard, nil)),
+				logger:   testenv.NewLogger(t),
 			}
 			rec := httptest.NewRecorder()
 			s.Routes().ServeHTTP(rec, tc.req)

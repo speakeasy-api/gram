@@ -12,6 +12,7 @@ import (
 	"regexp"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
 
@@ -25,14 +26,14 @@ const publishedManifestRef = "main"
 // installation token minted by the resolver — no local mirror state.
 type Server struct {
 	resolver      Resolver
-	httpClient    *http.Client
+	httpClient    *guardian.HTTPClient
 	publicBaseURL string
 	logger        *slog.Logger
 }
 
 func NewServer(
 	resolver Resolver,
-	httpClient *http.Client,
+	httpClient *guardian.HTTPClient,
 	publicBaseURL string,
 	logger *slog.Logger,
 ) *Server {
@@ -212,7 +213,11 @@ func (s *Server) rewriteManifest(raw []byte, token string) ([]byte, error) {
 			}
 		}
 	}
-	return json.MarshalIndent(m, "", "  ")
+	out, err := json.MarshalIndent(m, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("marshal rewritten manifest: %w", err)
+	}
+	return out, nil
 }
 
 func trimRelPrefix(s string) string {
