@@ -21,7 +21,8 @@ type ContentProps = {
 };
 
 type Provider =
-  | "claude"
+  | "claude-code"
+  | "claude-cowork"
   | "cursor"
   | "codex"
   | "copilot"
@@ -36,9 +37,15 @@ const providers: {
   available: boolean;
 }[] = [
   {
-    id: "claude",
+    id: "claude-code",
     label: "Claude Code",
     source: "claude-code",
+    available: true,
+  },
+  {
+    id: "claude-cowork",
+    label: "Claude Cowork",
+    source: "cowork",
     available: true,
   },
   { id: "cursor", label: "Cursor", source: "cursor", available: false },
@@ -55,22 +62,17 @@ const providers: {
 ];
 
 /**
- * Claude Code-specific install guidance:
- *  - individual users register the URL-based marketplace via the proxy
- *  - Claude Cowork org admins add the underlying private GitHub repo as a
- *    GitHub-source plugin in Organization settings; the proxy URL doesn't
- *    apply on that path because Cowork uses its own GitHub App for
- *    org-managed marketplaces.
+ * Claude Code (individual CLI) install. The Claude Code client speaks the
+ * URL-based marketplace protocol: the user runs one slash command and the
+ * marketplace proxy serves the manifest plus plugin sources. No GitHub
+ * involvement on the user side.
  *
- * Other providers (Cursor, Codex, etc.) get their own components as their
- * install flows are designed.
+ * Org-managed install is a separate, fundamentally different flow — see
+ * ClaudeCoworkInstallContent.
  */
-function ClaudeInstallContent({
-  repoOwner,
-  repoName,
+function ClaudeCodeInstallContent({
   marketplaceUrl,
-}: ContentProps) {
-  const repoSlug = `${repoOwner}/${repoName}`;
+}: Pick<ContentProps, "marketplaceUrl">) {
   const installCommand = marketplaceUrl
     ? `/plugin marketplace add ${marketplaceUrl}`
     : null;
@@ -78,9 +80,12 @@ function ClaudeInstallContent({
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="mb-2 text-sm font-semibold">Install for yourself</h3>
+        <h3 className="mb-2 text-sm font-semibold">
+          Install in your Claude Code instance
+        </h3>
         <p className="text-muted-foreground mb-4 text-sm">
-          Register the marketplace in your Claude Code instance:
+          Run this command from inside Claude Code to register the marketplace
+          for your user account:
         </p>
         {installCommand ? (
           <div className="bg-muted/50 rounded-lg p-4 font-mono text-sm">
@@ -98,24 +103,73 @@ function ClaudeInstallContent({
             Re-publish to mint a marketplace install URL.
           </p>
         )}
+        <p className="text-muted-foreground mt-3 text-xs">
+          Once registered, install individual plugins with{" "}
+          <code className="bg-muted rounded px-1 py-0.5">
+            /plugin install &lt;name&gt;
+          </code>
+          .
+        </p>
       </div>
 
+      <div className="border-border/60 border-t pt-4">
+        <p className="text-muted-foreground text-sm">
+          Rolling this out to your whole organization? See the{" "}
+          <span className="text-foreground font-medium">Claude Cowork</span> tab
+          — Cowork admins push a marketplace policy from{" "}
+          <code className="bg-muted rounded px-1 py-0.5 text-xs">
+            Organization settings → Plugins
+          </code>{" "}
+          on Claude.ai so all members get it automatically.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Claude Cowork (org-managed) install. Cowork admins point their org at the
+ * underlying private GitHub repo on Claude.ai's Organization Settings page;
+ * Cowork's own GitHub App syncs from there and rolls the marketplace out to
+ * every member's Claude Code and Claude.ai workspace.
+ *
+ * Note: this path doesn't use the marketplace proxy URL — Cowork talks
+ * directly to GitHub via its App installation, not through us.
+ */
+function ClaudeCoworkInstallContent({
+  repoOwner,
+  repoName,
+}: Pick<ContentProps, "repoOwner" | "repoName">) {
+  const repoSlug = `${repoOwner}/${repoName}`;
+
+  return (
+    <div className="space-y-6">
       <div>
         <h3 className="mb-2 text-sm font-semibold">
-          Distribute to your organization
+          Roll out to your organization
         </h3>
         <p className="text-muted-foreground mb-4 text-sm">
-          For Claude Cowork, register the underlying GitHub repository as a
-          plugin source so the marketplace syncs to all org members.
+          Cowork admins register the underlying GitHub repository as a plugin
+          source on Claude.ai. Members get the marketplace automatically — no
+          per-user install command.
         </p>
 
         <div className="space-y-4">
           <div>
             <h4 className="text-muted-foreground mb-2 text-xs font-medium">
-              1. Open Organization settings
+              1. Open Organization settings on Claude.ai
             </h4>
             <p className="text-muted-foreground text-sm">
-              In Claude Desktop, navigate to{" "}
+              Sign in to{" "}
+              <a
+                href="https://claude.ai/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sky-500 hover:text-sky-600 hover:underline"
+              >
+                claude.ai
+              </a>{" "}
+              as an organization admin and navigate to{" "}
               <code className="bg-muted rounded px-1 py-0.5 text-xs">
                 Organization settings → Plugins
               </code>
@@ -188,7 +242,7 @@ export function InstallInstructionsDialog({
   onOpenChange,
   ...content
 }: DialogProps) {
-  const [selected, setSelected] = useState<Provider>("claude");
+  const [selected, setSelected] = useState<Provider>("claude-code");
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -238,7 +292,15 @@ export function InstallInstructionsDialog({
           })}
         </div>
 
-        {selected === "claude" && <ClaudeInstallContent {...content} />}
+        {selected === "claude-code" && (
+          <ClaudeCodeInstallContent marketplaceUrl={content.marketplaceUrl} />
+        )}
+        {selected === "claude-cowork" && (
+          <ClaudeCoworkInstallContent
+            repoOwner={content.repoOwner}
+            repoName={content.repoName}
+          />
+        )}
       </Dialog.Content>
     </Dialog>
   );
