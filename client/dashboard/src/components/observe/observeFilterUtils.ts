@@ -45,10 +45,17 @@ export function safeBase64Decode(str: string): string | null {
 export function buildLogFilters(
   activeFilters: FilterChip[],
 ): LogFilter[] | undefined {
-  const filters: LogFilter[] = activeFilters.map((chip) => ({
-    path: chip.path,
-    operator: chip.filters.length > 1 ? Operator.In : Operator.Contains,
-    values: chip.filters,
-  }));
+  const byPath = new Map<string, string[]>();
+  for (const chip of activeFilters) {
+    byPath.set(chip.path, [...(byPath.get(chip.path) ?? []), ...chip.filters]);
+  }
+  const filters: LogFilter[] = [];
+  for (const [path, values] of byPath) {
+    filters.push({
+      path,
+      operator: values.length > 1 ? Operator.In : Operator.Contains,
+      values,
+    });
+  }
   return filters.length > 0 ? filters : undefined;
 }
