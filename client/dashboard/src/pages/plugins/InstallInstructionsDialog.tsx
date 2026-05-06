@@ -17,6 +17,8 @@ const COWORK_DOCS_URL =
 const CLAUDE_CODE_SETTINGS_DOCS_URL =
   "https://code.claude.com/docs/en/settings";
 
+const CURSOR_DASHBOARD_URL = "https://cursor.com/dashboard";
+
 type ContentProps = {
   repoOwner: string;
   repoName: string;
@@ -51,7 +53,7 @@ const providers: {
     source: "cowork",
     available: true,
   },
-  { id: "cursor", label: "Cursor", source: "cursor", available: false },
+  { id: "cursor", label: "Cursor", source: "cursor", available: true },
   { id: "codex", label: "Codex", source: "codex", available: false },
   { id: "copilot", label: "Copilot", source: "copilot", available: false },
   { id: "gemini", label: "Gemini", source: "gemini", available: false },
@@ -343,6 +345,102 @@ function ClaudeCoworkInstallContent({
   );
 }
 
+/**
+ * Cursor (team marketplace) install. Cursor team admins point their team at
+ * the underlying private GitHub repo from cursor.com/dashboard; Cursor reads
+ * the .cursor-plugin/marketplace.json the publish flow writes there. Steps
+ * mirror what we already document in the published repo's README.md
+ * (generateReadme in server/internal/plugins/generate.go), so changes here
+ * should track those.
+ */
+function CursorInstallContent({
+  repoOwner,
+  repoName,
+}: Pick<ContentProps, "repoOwner" | "repoName">) {
+  const repoUrl = `https://github.com/${repoOwner}/${repoName}`;
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h3 className="mb-2 text-sm font-semibold">
+          Roll out to your team in Cursor
+        </h3>
+        <p className="text-muted-foreground mb-4 text-sm">
+          Cursor team admins register the underlying GitHub repository as a
+          plugin marketplace; once imported, plugins are available to every team
+          member.
+        </p>
+
+        <div className="space-y-4">
+          <div>
+            <h4 className="text-muted-foreground mb-2 text-xs font-medium">
+              1. Open your Cursor team dashboard
+            </h4>
+            <p className="text-muted-foreground text-sm">
+              Sign in to{" "}
+              <a
+                href={CURSOR_DASHBOARD_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sky-500 hover:text-sky-600 hover:underline"
+              >
+                cursor.com/dashboard
+              </a>{" "}
+              as a team admin.
+            </p>
+          </div>
+
+          <div>
+            <h4 className="text-muted-foreground mb-2 text-xs font-medium">
+              2. Import the marketplace
+            </h4>
+            <p className="text-muted-foreground mb-2 text-sm">
+              Navigate to{" "}
+              <code className="bg-muted rounded px-1 py-0.5 text-xs">
+                Settings → Plugins → Import
+              </code>{" "}
+              and paste the repository URL:
+            </p>
+            <div className="bg-muted/50 rounded-lg p-4 font-mono text-sm">
+              <div className="flex items-center justify-between gap-2">
+                <code className="break-all">{repoUrl}</code>
+                <CopyButton
+                  size="inline"
+                  text={repoUrl}
+                  tooltip="Copy repository URL"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <h4 className="text-muted-foreground mb-2 text-xs font-medium">
+              3. Mark observability as required (recommended)
+            </h4>
+            <p className="text-muted-foreground text-sm">
+              In Cursor's team marketplace settings, mark the observability
+              plugin (it ships first in your marketplace) as required so tool
+              events flow to Gram for every team member without per-user setup.
+            </p>
+          </div>
+
+          <Button variant="outline" size="sm" asChild>
+            <a
+              href={CURSOR_DASHBOARD_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2"
+            >
+              <ExternalLink className="size-4" />
+              Open Cursor dashboard
+            </a>
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 type DialogProps = ContentProps & {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -411,6 +509,12 @@ export function InstallInstructionsDialog({
         )}
         {selected === "claude-cowork" && (
           <ClaudeCoworkInstallContent
+            repoOwner={content.repoOwner}
+            repoName={content.repoName}
+          />
+        )}
+        {selected === "cursor" && (
+          <CursorInstallContent
             repoOwner={content.repoOwner}
             repoName={content.repoName}
           />
