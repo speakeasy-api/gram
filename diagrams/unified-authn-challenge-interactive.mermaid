@@ -1,0 +1,85 @@
+sequenceDiagram
+    participant Client as MCP Client
+    participant Browser
+    participant usersessions as usersessions/
+    participant remotesessions as remotesessions/
+    participant Speakeasy as Speakeasy<br/>(Gram identity provider)
+    participant Linear as Linear<br/>(login.linear.com)
+
+    Note over Client, Linear: Preamble — initial 401, MCP-spec discovery, DCR (abstracted)
+
+    Note over Client, Linear: Phase 1 — Resolve Authn Challenges (same as §5.2 chain)
+    Client->>Browser: open https://app.getgram.ai/mcp/authorize?client_id=…&code_challenge=…&state=…
+    Browser->>usersessions: GET /mcp/authorize?…
+    usersessions->>usersessions: buildRequiredAuthnChallenge → required authn challenges
+    Note over usersessions: idempotent — every callback re-runs it. Full state space in §5.1.
+    usersessions->>usersessions: write AuthnChallengeState (MCP Client OAuth context: client_id, redirect_uri, code_challenge, original state, scope)
+
+    Note over Client, Linear: Phase 2 — Establish User Session (same as §5.2 chain)
+    usersessions->>usersessions: read required identity level from AuthnChallengeState (authenticated | anonymous)
+    alt authentication passes AND has sufficient identity level
+        Note over usersessions: reuse the resolved principal
+    else authentication insufficient AND anonymous allowed
+        usersessions->>usersessions: issue new anonymous session for subject anonymous:<mcp-session-id>
+    else authentication insufficient AND user authentication required
+        Note over Browser, Speakeasy: Documented as a Speakeasy IDP authn challenge. (Same shape as §5.2 chain Phase 2.)
+        activate Speakeasy
+        usersessions-->>Browser: 302 → https://app.speakeasyapi.dev/v1/speakeasy_provider/login?return_url=https://app.getgram.ai/mcp/client_login_callback&state=<authn-challenge-state-id>
+        Browser->>Speakeasy: GET /v1/speakeasy_provider/login
+        Speakeasy-->>Browser: return login challenge
+        Browser->>Speakeasy: POST user credentials
+        Speakeasy-->>Browser: 302 → https://app.getgram.ai/mcp/client_login_callback?code=…&state=<authn-challenge-state-id>
+        Browser->>usersessions: GET /mcp/client_login_callback?…
+        usersessions->>Speakeasy: exchange code for ID token, fetch user info
+        Speakeasy-->>usersessions: { id_token, user_info }
+        usersessions->>usersessions: verify user is a member of the user_session_issuer's owning org
+        usersessions->>usersessions: issue new authenticated session for subject user:<user-id>
+        deactivate Speakeasy
+    end
+    usersessions->>usersessions: stamp resolved principal onto AuthnChallengeState
+
+    Note over Client, Linear: Phase 3 — Establish Remote Sessions (interactive — user clicks each remote)
+    usersessions-->>Browser: 302 → /mcp/connect?state=<authn-challenge-state-id>
+    Browser->>usersessions: GET /mcp/connect?state=…
+    usersessions->>usersessions: load AuthnChallengeState, run buildRequiredAuthnChallenge (RemoteSessions still missing)
+    usersessions-->>Browser: connect page — lists remote_session_clients (Connect button per pending, ✓ per completed) plus a "Give '<MCP Client>' Access to these Accounts" button (disabled until every remote is connected)
+
+    loop user clicks "Connect" for each pending remote_session_client (one click in this example)
+        Browser->>usersessions: POST /mcp/connect?state=… (form: remote_session_client=Linear → server starts that remote's auth flow)
+        usersessions->>remotesessions: ensure session (principal, remote_session_client)
+        alt session valid (raced with another tab, or silently refreshed)
+            remotesessions-->>usersessions: existing session
+            usersessions-->>Browser: redirect back to /mcp/connect (page now shows ✓ for Linear)
+        else session missing or expired
+            remotesessions->>remotesessions: write RemoteSessionAuthState + RemoteSessionPKCE
+            Note over remotesessions: state=RemoteSessionAuthState.StateID is the only handle carried across the redirect chain
+            usersessions-->>Browser: 302 → https://login.linear.com/oauth/authorize?client_id=…&state=…&code_challenge=…
+            Browser->>Linear: GET /oauth/authorize?…
+            Linear-->>Browser: return login challenge
+            Browser->>Linear: POST /oauth/login (user credentials)
+            Linear-->>Browser: 302 → https://app.getgram.ai/mcp/remote_login_callback?code=…&state=…
+            Browser->>remotesessions: GET /mcp/remote_login_callback?code=…&state=…
+            remotesessions->>remotesessions: lookup RemoteSessionAuthState by state, fetch RemoteSessionPKCE
+            remotesessions->>Linear: POST /oauth/token (code + verifier)
+            Linear-->>remotesessions: { access_token, refresh_token }
+            remotesessions->>remotesessions: write RemoteSession (existence is the completion marker — no separate progress field)
+            remotesessions-->>Browser: 302 → /mcp/connect?state=<authn-challenge-state-id>
+            Browser->>usersessions: GET /mcp/connect?state=…
+            usersessions-->>Browser: connect page — ✓ for Linear, "Give Access" button enabled once every remote is connected
+        end
+    end
+
+    Note over Client, Linear: Phase 4 — Grant Access and Return Credentials (consent is folded into the connect UI)
+    Browser->>usersessions: POST /mcp/connect?state=… (no remote selector → server treats as Give Access click)
+    usersessions->>usersessions: load AuthnChallengeState, run buildRequiredAuthnChallenge (all RemoteSessions present)
+    alt no consent record OR remote_set_hash mismatch
+        usersessions->>usersessions: write user_session_consents row
+    end
+    usersessions->>usersessions: mint UserSessionGrant (auth code, principal, MCP Client redirect_uri and original state read from AuthnChallengeState)
+    usersessions-->>Client: 302 → MCP Client redirect_uri?code=…&state=<original MCP Client state>
+    Note over usersessions: we finally return control to the clients callback URL and lose control over browser control flow
+    Client->>usersessions: POST /mcp/token (code + verifier)
+    usersessions->>usersessions: verify UserSessionGrant, mint JWT, create UserSession (refresh-token hash key, principal, jti), update UserSessionIndex
+    usersessions-->>Client: { access_token: JWT, refresh_token }
+
+    Note over Client, Linear: Post — Client retries the original MCP request with the JWT (lifecycle covered by §5.1)
