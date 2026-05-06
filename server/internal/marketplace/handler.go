@@ -11,6 +11,7 @@ import (
 	"net/url"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
 
 // publishedManifestRef pins manifest fetches to the same branch the publish
