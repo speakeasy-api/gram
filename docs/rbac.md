@@ -783,3 +783,8 @@ When adding a new selector dimension:
 RBAC in Gram is a small set of moving pieces. Scopes define what can be done. Selectors define where a grant applies. Principals receive grants. Handlers create checks. The engine compares the request's grants to the handler's checks.
 
 Keep scopes coarse and customer-meaningful. Use selectors and dimensions for resource-specific narrowing. Put authorization checks close to the handler boundary. Use `Filter` for partial visibility. Treat every new scope as a product contract, not just a code constant.
+
+## Resources
+
+Please refer to the original [RFC](https://www.notion.so/speakeasyapi/RFC-Gram-RBAC-Scope-Permission-Design-319726c497cc8177b7e9dea65a91ff10) which contains the original decision making process during RBAC
+planning. Please note that this might be slightly outdated, and this guide should be the actual source of truth.
