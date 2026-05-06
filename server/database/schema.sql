@@ -2176,6 +2176,12 @@ CREATE TABLE IF NOT EXISTS plugin_github_connections (
   installation_id BIGINT NOT NULL,
   repo_owner TEXT NOT NULL CHECK (repo_owner <> ''),
   repo_name TEXT NOT NULL CHECK (repo_name <> ''),
+  -- Opaque URL token issued at marketplace setup. The marketplace proxy uses
+  -- it to resolve a Claude Code install URL back to this connection, whose
+  -- installation_id + owner/repo locate the upstream content. Nullable so
+  -- existing connections (and any future connection without the marketplace
+  -- surface enabled) are unconstrained.
+  marketplace_token TEXT,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -2194,6 +2200,13 @@ CREATE UNIQUE INDEX IF NOT EXISTS plugin_github_connections_project_id_key
 -- "Octocat/Hello-World" and "octocat/hello-world" collide as expected.
 CREATE UNIQUE INDEX IF NOT EXISTS plugin_github_connections_installation_repo_key
   ON plugin_github_connections (installation_id, LOWER(repo_owner), LOWER(repo_name));
+
+-- Lookup index for the marketplace proxy. Partial so existing rows without a
+-- token (and any future rows where the marketplace surface isn't enabled)
+-- aren't constrained against each other.
+CREATE UNIQUE INDEX IF NOT EXISTS plugin_github_connections_marketplace_token_key
+  ON plugin_github_connections (marketplace_token)
+  WHERE marketplace_token IS NOT NULL;
 
 -- Risk analysis policies for scanning chat messages against configurable rules.
 -- One workflow per policy drains unanalyzed messages and produces risk_results.
