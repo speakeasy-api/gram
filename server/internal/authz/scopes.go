@@ -26,15 +26,16 @@ const (
 // non-transitive: list every satisfying scope directly, since Check.expand only walks
 // scopeExpansions[c.Scope] one step.
 //
-// environment:* scopes are checked at the project_id (no per-env granularity in the UI),
-// so they share a resource kind and ID with project:* checks — admin-tier grants like
-// project:write can therefore cleanly satisfy environment-level checks via the standard
-// selector matching path.
+// environment:* scopes are independent of project:* in the expansion graph (analogous to
+// mcp:* scopes). Environment checks carry resource_kind="environment" with the project_id
+// as a Dimensions constraint, so they don't share a resource kind with project checks and
+// scope expansion across the boundary would never selector-match. Roles that need
+// environment access must hold environment:read or environment:write explicitly — the
+// system "admin" role does so via SystemRoleGrants.
 //
-// Deliberately, environment:read does NOT include project:read in its expansion: a generic
-// project-viewer should not gain access to environment values (which include secrets). To
-// read or clone an environment, a role must hold environment:read, environment:write, or
-// the project:write admin tier explicitly.
+// Preserves qstearns' non-escalation rule: project:read does not grant environment access
+// (a generic project-viewer must not gain access to environment values, which include
+// secrets).
 var scopeExpansions = map[Scope][]Scope{
 	ScopeRoot:             nil,
 	ScopeOrgRead:          {ScopeOrgAdmin},
@@ -44,8 +45,8 @@ var scopeExpansions = map[Scope][]Scope{
 	ScopeMCPRead:          {ScopeMCPWrite},
 	ScopeMCPWrite:         nil,
 	ScopeMCPConnect:       {ScopeMCPRead, ScopeMCPWrite},
-	ScopeEnvironmentRead:  {ScopeEnvironmentWrite, ScopeProjectWrite},
-	ScopeEnvironmentWrite: {ScopeProjectWrite},
+	ScopeEnvironmentRead:  {ScopeEnvironmentWrite},
+	ScopeEnvironmentWrite: nil,
 }
 
 // scopeSubScopes is the inverse of scopeExpansions: for each higher-privilege

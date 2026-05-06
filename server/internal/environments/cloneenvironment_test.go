@@ -284,42 +284,18 @@ func TestEnvironments_RBAC_Clone_DeniedWithReadOnlyGrant(t *testing.T) {
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }
 
-func TestEnvironments_RBAC_Clone_AllowedWithProjectWriteGrant(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestEnvironmentService(t)
-
-	source, err := ti.service.CreateEnvironment(ctx, &gen.CreateEnvironmentPayload{
-		SessionToken:     nil,
-		ProjectSlugInput: nil,
-		OrganizationID:   "",
-		Name:             "rbac-clone-pw-source",
-		Description:      nil,
-		Entries:          []*gen.EnvironmentEntryInput{},
-	})
-	require.NoError(t, err)
-
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	require.NotNil(t, authCtx)
-
-	// project:write satisfies both environment:write (destination) and environment:read
-	// (source), since environment:* are now project-bounded and resolve via scope expansion.
-	ctx = authztest.WithExactGrants(t, ctx,
-		authz.Grant{
-			Scope:    authz.ScopeProjectWrite,
-			Selector: authz.NewSelector(authz.ScopeProjectWrite, authCtx.ProjectID.String()),
+// envGrant builds an environment-scope grant with the project_id constraint
+// expressed as a Dimensions key, mirroring the shape produced by the role
+// dialog when env:* is granted via the "All in project" pill.
+func envGrant(scope authz.Scope, projectID string) authz.Grant {
+	return authz.Grant{
+		Scope: scope,
+		Selector: authz.Selector{
+			"resource_kind": "environment",
+			"resource_id":   authz.WildcardResource,
+			"project_id":    projectID,
 		},
-	)
-
-	_, err = ti.service.CloneEnvironment(ctx, &gen.CloneEnvironmentPayload{
-		SessionToken:     nil,
-		ProjectSlugInput: nil,
-		Slug:             source.Slug,
-		NewName:          "rbac-clone-pw-target",
-		CopyValues:       nil,
-	})
-	require.NoError(t, err)
+	}
 }
 
 func TestEnvironments_RBAC_Clone_AllowedWithEnvironmentWrite(t *testing.T) {
@@ -341,14 +317,11 @@ func TestEnvironments_RBAC_Clone_AllowedWithEnvironmentWrite(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	// environment:write at the project satisfies both the destination write check and,
-	// via scope expansion (environment:read is satisfied by environment:write at the same
-	// project_id), the source-read check.
+	// environment:write scoped to this project (resource_id wildcard, project_id
+	// dimension) satisfies the destination write check and — via scope expansion —
+	// the source-read check (env:read is implied by env:write at the same selector).
 	ctx = authztest.WithExactGrants(t, ctx,
-		authz.Grant{
-			Scope:    authz.ScopeEnvironmentWrite,
-			Selector: authz.NewSelector(authz.ScopeEnvironmentWrite, authCtx.ProjectID.String()),
-		},
+		envGrant(authz.ScopeEnvironmentWrite, authCtx.ProjectID.String()),
 	)
 
 	_, err = ti.service.CloneEnvironment(ctx, &gen.CloneEnvironmentPayload{
@@ -380,13 +353,10 @@ func TestEnvironments_RBAC_Clone_DeniedWithEnvironmentReadOnly(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	// environment:read at the project lets the user view envs but does NOT
-	// satisfy the environment:write destination check, so clone must be rejected.
+	// environment:read alone lets the user view envs but does NOT satisfy the
+	// environment:write destination check, so clone must be rejected.
 	ctx = authztest.WithExactGrants(t, ctx,
-		authz.Grant{
-			Scope:    authz.ScopeEnvironmentRead,
-			Selector: authz.NewSelector(authz.ScopeEnvironmentRead, authCtx.ProjectID.String()),
-		},
+		envGrant(authz.ScopeEnvironmentRead, authCtx.ProjectID.String()),
 	)
 
 	_, err = ti.service.CloneEnvironment(ctx, &gen.CloneEnvironmentPayload{
@@ -436,6 +406,49 @@ func TestEnvironments_RBAC_Clone_DeniedWithProjectReadOnly(t *testing.T) {
 		ProjectSlugInput: nil,
 		Slug:             source.Slug,
 		NewName:          "rbac-clone-pr-only-target",
+		CopyValues:       nil,
+	})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+}
+
+// project:write alone is intentionally insufficient for the env clone path:
+// environment scopes don't share a resource kind with project scopes, so
+// scope expansion doesn't bridge them. Roles that need env access must hold
+// environment:read or environment:write explicitly. The system "admin" role
+// satisfies this via SystemRoleGrants.
+func TestEnvironments_RBAC_Clone_DeniedWithProjectWriteOnly(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestEnvironmentService(t)
+
+	source, err := ti.service.CreateEnvironment(ctx, &gen.CreateEnvironmentPayload{
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		OrganizationID:   "",
+		Name:             "rbac-clone-pw-only-source",
+		Description:      nil,
+		Entries:          []*gen.EnvironmentEntryInput{},
+	})
+	require.NoError(t, err)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+
+	ctx = authztest.WithExactGrants(t, ctx,
+		authz.Grant{
+			Scope:    authz.ScopeProjectWrite,
+			Selector: authz.NewSelector(authz.ScopeProjectWrite, authCtx.ProjectID.String()),
+		},
+	)
+
+	_, err = ti.service.CloneEnvironment(ctx, &gen.CloneEnvironmentPayload{
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		Slug:             source.Slug,
+		NewName:          "rbac-clone-pw-only-target",
 		CopyValues:       nil,
 	})
 	var oopsErr *oops.ShareableError

@@ -336,7 +336,16 @@ func (s *Service) CloneEnvironment(ctx context.Context, payload *gen.CloneEnviro
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeEnvironmentWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	// Destination-write authz: the user is creating a new env in this project, so we
+	// don't yet have an env id. ResourceKind is "environment" (matching the scope
+	// family) and ResourceID is the wildcard. The project boundary is expressed as a
+	// dimension, mirroring the grant shape produced by the role dialog.
+	if err := s.authz.Require(ctx, authz.Check{
+		Scope:        authz.ScopeEnvironmentWrite,
+		ResourceKind: "environment",
+		ResourceID:   authz.WildcardResource,
+		Dimensions:   map[string]string{"project_id": authCtx.ProjectID.String()},
+	}); err != nil {
 		return nil, err
 	}
 
@@ -362,10 +371,17 @@ func (s *Service) CloneEnvironment(ctx context.Context, payload *gen.CloneEnviro
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to fetch source environment").Log(ctx, logger)
 	}
 
-	// Source-read authz: environment scopes are project-bounded (no per-env granularity
-	// in the UI), so the check happens at the project_id. Role hierarchy in the authz
-	// engine is responsible for letting project:read satisfy environment:read.
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeEnvironmentRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	// Source-read authz: we know the source env id now, so we can check at that
+	// specific resource with the project_id as a constraining dimension. Wildcard
+	// grants ({resource_id: "*"}) match; per-env grants pinned to a different env
+	// don't. Future per-env granularity is additive — change the resource_id from
+	// "*" to a specific UUID at the role-builder layer.
+	if err := s.authz.Require(ctx, authz.Check{
+		Scope:        authz.ScopeEnvironmentRead,
+		ResourceKind: "environment",
+		ResourceID:   sourceEnv.ID.String(),
+		Dimensions:   map[string]string{"project_id": authCtx.ProjectID.String()},
+	}); err != nil {
 		return nil, err
 	}
 
