@@ -250,6 +250,37 @@ func TestServePublic_AttachedAuthErrorReturnsMCPError(t *testing.T) {
 	require.Contains(t, errorBody["message"], "expired or invalid access token")
 }
 
+func TestServePublic_AttachedNotFoundReturnsMCPErrorWithNullID(t *testing.T) {
+	t.Parallel()
+
+	_, ti := newTestMCPService(t)
+
+	router := goahttp.NewMuxer()
+	mcp.Attach(router, ti.service, nil)
+
+	req := httptest.NewRequest(http.MethodPost, "/mcp/bad-slug", bytes.NewReader(makeInitializeBody()))
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Content-Type", "application/json")
+
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusNotFound, w.Code)
+	require.Equal(t, "application/json", w.Header().Get("Content-Type"))
+	require.NotContains(t, w.Body.String(), "<!doctype")
+
+	var response map[string]any
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	require.NoError(t, err, "response body: %s", w.Body.String())
+	require.Equal(t, "2.0", response["jsonrpc"])
+	require.Nil(t, response["id"])
+
+	errorBody, ok := response["error"].(map[string]any)
+	require.True(t, ok, "expected JSON-RPC error: %v", response)
+	require.InDelta(t, -32002, errorBody["code"], 0)
+	require.Equal(t, "mcp server not found", errorBody["message"])
+}
+
 func TestServePublic_ServerInstructionsInInitializeResponse(t *testing.T) {
 	t.Parallel()
 

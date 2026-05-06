@@ -448,7 +448,6 @@ func (s *Service) ServeToolsetResolved(w http.ResponseWriter, r *http.Request, t
 		baseURL = fmt.Sprintf("https://%s", customDomainCtx.Domain)
 	}
 
-	// Capture the JSON-RPC id before auth can fail.
 	bodyBytes, bodyReadErr := io.ReadAll(r.Body)
 	if bodyReadErr == nil {
 		var req struct {
