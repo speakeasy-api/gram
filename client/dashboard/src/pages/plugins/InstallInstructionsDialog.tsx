@@ -1,11 +1,13 @@
 import { Button } from "@/components/ui/button";
 import { CopyButton } from "@/components/ui/copy-button";
-import { ExternalLink } from "lucide-react";
+import { Dialog } from "@/components/ui/dialog";
+import { BookOpen, ExternalLink } from "lucide-react";
+import { useState } from "react";
 
 const COWORK_DOCS_URL =
   "https://support.claude.com/en/articles/13837433-manage-claude-cowork-plugins-for-your-organization";
 
-type Props = {
+type ContentProps = {
   repoOwner: string;
   repoName: string;
   marketplaceUrl: string | undefined;
@@ -20,21 +22,21 @@ type Props = {
  *    apply there because Cowork uses its own GitHub App for org-managed
  *    marketplaces.
  *
- * Visual style matches HooksSetupDialog so the two setup surfaces feel
+ * Visual style mirrors HooksSetupDialog so the two install surfaces feel
  * consistent.
  */
-export function InstallInstructions({
+function InstallInstructionsContent({
   repoOwner,
   repoName,
   marketplaceUrl,
-}: Props) {
+}: ContentProps) {
   const repoSlug = `${repoOwner}/${repoName}`;
   const installCommand = marketplaceUrl
     ? `/plugin marketplace add ${marketplaceUrl}`
     : null;
 
   return (
-    <div className="max-w-3xl space-y-6">
+    <div className="space-y-6">
       <div>
         <h3 className="mb-2 text-sm font-semibold">Install for yourself</h3>
         <p className="text-muted-foreground mb-4 text-sm">
@@ -114,8 +116,8 @@ export function InstallInstructions({
             </h4>
             <p className="text-muted-foreground text-sm">
               The Claude GitHub App must be installed on this repository so
-              Cowork can sync from it. If the repo doesn't appear in the picker,
-              install the app and retry.
+              Cowork can sync from it. If the repo doesn't appear in the
+              picker, install the app and retry.
             </p>
           </div>
 
@@ -133,5 +135,49 @@ export function InstallInstructions({
         </div>
       </div>
     </div>
+  );
+}
+
+type DialogProps = ContentProps & {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+};
+
+export function InstallInstructionsDialog({
+  open,
+  onOpenChange,
+  ...content
+}: DialogProps) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <Dialog.Content className="max-w-3xl">
+        <Dialog.Header>
+          <Dialog.Title>Distribute your marketplace</Dialog.Title>
+        </Dialog.Header>
+        <InstallInstructionsContent {...content} />
+      </Dialog.Content>
+    </Dialog>
+  );
+}
+
+/**
+ * Convenience trigger that owns its own open state. Use this when the page
+ * doesn't need to control the dialog imperatively.
+ */
+export function InstallInstructionsButton(props: ContentProps) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <>
+      <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
+        <BookOpen className="h-4 w-4" />
+        Install instructions
+      </Button>
+      <InstallInstructionsDialog
+        open={open}
+        onOpenChange={setOpen}
+        {...props}
+      />
+    </>
   );
 }

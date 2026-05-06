@@ -4,7 +4,7 @@ import { Page } from "@/components/page-layout";
 import { Dialog } from "@/components/ui/dialog";
 import { SearchBar } from "@/components/ui/search-bar";
 import { Type } from "@/components/ui/type";
-import { InstallInstructions } from "./InstallInstructions";
+import { InstallInstructionsButton } from "./InstallInstructionsDialog";
 import { useFetcher } from "@/contexts/Fetcher";
 import { useRoutes } from "@/routes";
 import { Plugin } from "@gram/client/models/components";
@@ -222,7 +222,7 @@ export default function Plugins() {
           <Page.Section.Body>
             <Stack direction="vertical" gap={4}>
               {publishStatus?.connected && publishStatus.repoUrl && (
-                <Stack direction="vertical" gap={4}>
+                <Stack direction="horizontal" gap={3} align="center">
                   <span>
                     Plugin marketplace:{" "}
                     <a
@@ -237,7 +237,7 @@ export default function Plugins() {
                     </a>
                   </span>
                   {publishStatus.repoOwner && publishStatus.repoName && (
-                    <InstallInstructions
+                    <InstallInstructionsButton
                       repoOwner={publishStatus.repoOwner}
                       repoName={publishStatus.repoName}
                       marketplaceUrl={publishStatus.marketplaceUrl}
