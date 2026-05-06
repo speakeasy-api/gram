@@ -1266,6 +1266,36 @@ func slugify(name string) (string, error) {
 	return slug, nil
 }
 
+type challengeUserInfo struct {
+	email    string
+	photoURL *string
+}
+
+func (s *Service) fetchChallengeUserInfo(ctx context.Context, userIDs []string) map[string]challengeUserInfo {
+	userMap := make(map[string]challengeUserInfo, len(userIDs))
+	if len(userIDs) == 0 {
+		return userMap
+	}
+
+	users, err := usersrepo.New(s.db).GetUsersByIDs(ctx, userIDs)
+	if err != nil {
+		s.logger.WarnContext(ctx, "failed to batch-fetch users for challenge enrichment", attr.SlogError(err))
+		return userMap
+	}
+
+	for _, u := range users {
+		var photoURL *string
+		if u.PhotoUrl.Valid {
+			photoURL = &u.PhotoUrl.String
+		}
+		userMap[u.ID] = challengeUserInfo{
+			email:    u.Email,
+			photoURL: photoURL,
+		}
+	}
+	return userMap
+}
+
 func (s *Service) ListChallenges(ctx context.Context, payload *gen.ListChallengesPayload) (*gen.ListChallengesResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
@@ -1313,17 +1343,21 @@ func (s *Service) ListChallenges(ctx context.Context, payload *gen.ListChallenge
 
 	chQueries := chrepo.New(s.chConn)
 
-	challenges, err := chQueries.ListChallenges(ctx, filters)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list challenges from clickhouse").Log(ctx, s.logger)
-	}
-
 	var total uint64
 	if !skipPagination {
-		total, err = chQueries.CountChallenges(ctx, filters)
+		count, err := chQueries.CountChallenges(ctx, filters)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "count challenges from clickhouse").Log(ctx, s.logger)
 		}
+		if count == 0 {
+			return &gen.ListChallengesResult{Challenges: []*gen.AuthzChallenge{}, Total: 0}, nil
+		}
+		total = count
+	}
+
+	challenges, err := chQueries.ListChallenges(ctx, filters)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list challenges from clickhouse").Log(ctx, s.logger)
 	}
 
 	if len(challenges) == 0 {
@@ -1380,30 +1414,7 @@ func (s *Service) ListChallenges(ctx context.Context, payload *gen.ListChallenge
 			seen[*c.UserID] = true
 		}
 	}
-
-	type userInfo struct {
-		Email    string
-		PhotoURL *string
-	}
-	userMap := make(map[string]userInfo, len(userIDs))
-	if len(userIDs) > 0 {
-		users, err := usersrepo.New(s.db).GetUsersByIDs(ctx, userIDs)
-		if err != nil {
-			s.logger.WarnContext(ctx, "failed to batch-fetch users for challenge enrichment", attr.SlogError(err))
-		} else {
-			for _, u := range users {
-				var photoURL *string
-				if u.PhotoUrl.Valid {
-					photoURL = &u.PhotoUrl.String
-				}
-				info := userInfo{
-					Email:    u.Email,
-					PhotoURL: photoURL,
-				}
-				userMap[u.ID] = info
-			}
-		}
-	}
+	userMap := s.fetchChallengeUserInfo(ctx, userIDs)
 
 	// Build response.
 	result := make([]*gen.AuthzChallenge, 0, len(challenges))
@@ -1438,8 +1449,8 @@ func (s *Service) ListChallenges(ctx context.Context, payload *gen.ListChallenge
 		// Enrich with user data.
 		if c.UserID != nil {
 			if info, ok := userMap[*c.UserID]; ok {
-				pUserEmail = &info.Email
-				pPhotoURL = info.PhotoURL
+				pUserEmail = &info.email
+				pPhotoURL = info.photoURL
 			}
 		}
 		// Fall back to CH email if PG lookup didn't have it.
@@ -1540,20 +1551,9 @@ func (s *Service) ResolveChallenge(ctx context.Context, payload *gen.ResolveChal
 		return nil, oops.E(oops.CodeUnexpected, err, "insert challenge resolution").Log(ctx, s.logger)
 	}
 
-	var (
-		pResResourceKind *string
-		pResResourceID   *string
-		pResRoleSlug     *string
-	)
-	if row.ResourceKind != "" {
-		pResResourceKind = &row.ResourceKind
-	}
-	if row.ResourceID != "" {
-		pResResourceID = &row.ResourceID
-	}
-	if row.RoleSlug.Valid {
-		pResRoleSlug = &row.RoleSlug.String
-	}
+	pResResourceKind := conv.PtrEmpty(row.ResourceKind)
+	pResResourceID := conv.PtrEmpty(row.ResourceID)
+	pResRoleSlug := conv.FromPGText[string](row.RoleSlug)
 
 	if err := s.audit.LogAccessChallengeResolve(ctx, s.db, audit.LogAccessChallengeResolveEvent{
 		OrganizationID:   authCtx.ActiveOrganizationID,
