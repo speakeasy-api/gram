@@ -1,9 +1,12 @@
 package marketplace
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -114,4 +117,51 @@ func TestRewriteManifest(t *testing.T) {
 		_, err := s.rewriteManifest([]byte(`{not json`), "TOK")
 		require.Error(t, err)
 	})
+}
+
+// spyResolver records whether Resolve was called and returns ErrNotFound.
+// Used to assert that malformed tokens are rejected before the DB lookup.
+type spyResolver struct {
+	called bool
+}
+
+func (r *spyResolver) Resolve(_ context.Context, _ string) (Upstream, error) {
+	r.called = true
+	return Upstream{}, ErrNotFound
+}
+
+// Token-format check is a cheap pre-filter that keeps the resolver's DB
+// lookup off the hot path for anyone hammering the proxy with random URLs.
+// The 256-bit token entropy makes brute-force infeasible; this guards the
+// DB from random-string flooding.
+func TestMalformedTokensSkipResolver(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		req  *http.Request
+	}{
+		{"manifest: too short", httptest.NewRequest(http.MethodGet, "/m/short/marketplace.json", nil)},
+		{"manifest: bad chars", httptest.NewRequest(http.MethodGet, "/m/bad!chars1234567890123456789012345678901234567/marketplace.json", nil)},
+		{"manifest: too long", httptest.NewRequest(http.MethodGet, "/m/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/marketplace.json", nil)},
+		{"info/refs: no .git suffix", httptest.NewRequest(http.MethodGet, "/p/short/info/refs?service=git-upload-pack", nil)},
+		{"info/refs: bad chars before .git", httptest.NewRequest(http.MethodGet, "/p/bad!chars1234567890123456789012345678901234567.git/info/refs?service=git-upload-pack", nil)},
+		{"upload-pack: too short", httptest.NewRequest(http.MethodPost, "/p/short.git/git-upload-pack", nil)},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			spy := &spyResolver{}
+			s := &Server{
+				resolver: spy,
+				logger:   slog.New(slog.NewTextHandler(io.Discard, nil)),
+			}
+			rec := httptest.NewRecorder()
+			s.Routes().ServeHTTP(rec, tc.req)
+
+			require.Equal(t, http.StatusNotFound, rec.Code)
+			require.False(t, spy.called, "resolver must not be called for malformed tokens")
+		})
+	}
 }

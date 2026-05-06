@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"regexp"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -56,13 +57,33 @@ func (s *Server) Routes() http.Handler {
 	return mux
 }
 
-// tokenFromSlug extracts the URL token from a "<token>.git" path segment.
+// validTokenPattern matches the shape of a marketplace_token minted by
+// generateMarketplaceToken — 32 random bytes encoded as base64url-without-
+// padding, which lands at exactly 43 characters from the [A-Za-z0-9_-] set.
+// Rejecting malformed tokens at the handler boundary keeps the resolver's DB
+// lookup off the path for anyone hammering the proxy with random URLs.
+var validTokenPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{43}$`)
+
+// isValidToken returns true when s could plausibly be a token we minted. The
+// caller is still responsible for the actual existence check via the
+// resolver; this is a cheap pre-filter.
+func isValidToken(s string) bool {
+	return validTokenPattern.MatchString(s)
+}
+
+// tokenFromSlug extracts the URL token from a "<token>.git" path segment and
+// returns "" if the segment doesn't end in .git or the extracted token isn't
+// well-formed. Caller treats "" as 404 without ever reaching the resolver.
 func tokenFromSlug(slug string) string {
 	const suffix = ".git"
 	if len(slug) <= len(suffix) || slug[len(slug)-len(suffix):] != suffix {
 		return ""
 	}
-	return slug[:len(slug)-len(suffix)]
+	token := slug[:len(slug)-len(suffix)]
+	if !isValidToken(token) {
+		return ""
+	}
+	return token
 }
 
 // handleManifest fetches the upstream's published .claude-plugin/marketplace.json
@@ -71,6 +92,10 @@ func tokenFromSlug(slug string) string {
 func (s *Server) handleManifest(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	token := r.PathValue("token")
+	if !isValidToken(token) {
+		http.NotFound(w, r)
+		return
+	}
 
 	up, err := s.resolver.Resolve(ctx, token)
 	if err != nil {
