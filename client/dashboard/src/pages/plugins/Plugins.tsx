@@ -222,20 +222,22 @@ export default function Plugins() {
           <Page.Section.Body>
             <Stack direction="vertical" gap={4}>
               {publishStatus?.connected && publishStatus.repoUrl && (
-                <Stack direction="horizontal" gap={3} align="center">
-                  <span>
-                    Plugin marketplace:{" "}
+                <div className="bg-muted/30 border-border/60 flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3">
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
+                      Marketplace
+                    </span>
                     <a
                       href={publishStatus.repoUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-sm text-sky-500 hover:text-sky-600 hover:underline"
+                      className="hover:text-primary text-foreground font-mono text-sm hover:underline"
                     >
                       {publishStatus.repoOwner && publishStatus.repoName
                         ? `${publishStatus.repoOwner}/${publishStatus.repoName}`
                         : publishStatus.repoUrl}
                     </a>
-                  </span>
+                  </div>
                   {publishStatus.repoOwner && publishStatus.repoName && (
                     <InstallInstructionsButton
                       repoOwner={publishStatus.repoOwner}
@@ -243,7 +245,7 @@ export default function Plugins() {
                       marketplaceUrl={publishStatus.marketplaceUrl}
                     />
                   )}
-                </Stack>
+                </div>
               )}
               {hasPlugins && (
                 <SearchBar
