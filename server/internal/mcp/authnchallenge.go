@@ -63,8 +63,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
@@ -195,6 +197,59 @@ type dcrRegistrationResponse struct {
 	ResponseTypes           []string `json:"response_types"`
 	TokenEndpointAuthMethod string   `json:"token_endpoint_auth_method"`
 	Scope                   string   `json:"scope,omitempty"`
+}
+
+// validateUserSessionToken parses + verifies a Bearer user-session JWT
+// against the toolset's issuer, checks revocation, and returns a context
+// stamped with the auth state. Returns ok=false on any of: missing token,
+// bad signature, expired/notBefore, audience mismatch, jti revoked.
+//
+// The auth context is built from the toolset (org / project) and the JWT
+// `sub`. Anonymous principals leave UserID/APIKeyID empty; the request
+// proceeds with just an OrganizationID/ProjectID populated.
+func (s *Service) validateUserSessionToken(ctx context.Context, token string, toolset *toolsets_repo.Toolset) (context.Context, bool) {
+	if token == "" {
+		return ctx, false
+	}
+	claims, err := s.userSessionSigner.Validate(token, toolset.Slug)
+	if err != nil || claims == nil {
+		return ctx, false
+	}
+	if revoked, _ := s.chatSessionsManager.IsTokenRevoked(ctx, claims.ID); revoked {
+		return ctx, false
+	}
+
+	subject, err := urn.ParseSessionSubject(claims.Subject)
+	if err != nil {
+		return ctx, false
+	}
+
+	authCtx := &contextvalues.AuthContext{
+		ActiveOrganizationID:  toolset.OrganizationID,
+		ProjectID:             &toolset.ProjectID,
+		UserID:                "",
+		ExternalUserID:        "",
+		APIKeyID:              "",
+		SessionID:             nil,
+		OrganizationSlug:      "",
+		Email:                 nil,
+		AccountType:           "",
+		HasActiveSubscription: false,
+		Whitelisted:           false,
+		ProjectSlug:           nil,
+		APIKeyScopes:          nil,
+		IsAdmin:               false,
+	}
+	switch subject.Kind {
+	case urn.SessionSubjectKindUser:
+		authCtx.UserID = subject.ID
+	case urn.SessionSubjectKindAPIKey:
+		authCtx.APIKeyID = subject.ID
+	case urn.SessionSubjectKindAnonymous:
+		// Anonymous sessions don't populate UserID/APIKeyID. The org/project
+		// scoping from the toolset is the only authoritative context.
+	}
+	return contextvalues.SetAuthContext(ctx, authCtx), true
 }
 
 // WriteAuthenticateChallenge sets the WWW-Authenticate header and returns an

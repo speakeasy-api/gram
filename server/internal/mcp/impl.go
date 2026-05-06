@@ -402,85 +402,101 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 	// Private MCPs still enforce identity auth at this level since that's user
 	// identity, not per-tool security.
 	oauthRequired := toolset.ExternalOauthServerID.Valid || (oAuthProxyProvider != nil)
-	switch {
-	case toolset.McpIsPublic && toolset.ExternalOauthServerID.Valid:
-		// External OAuth server flow — collect token if present
-		if authToken != "" {
-			tokenInputs = append(tokenInputs, oauthTokenInputs{
-				securityKeys: []string{},
-				Token:        authToken,
-			})
+
+	// Issuer-gated path is fully separate from the legacy switch below: try
+	// validating a user-session JWT; on success stamp ctx and skip the legacy
+	// auth chain entirely; on miss, 401 with WWW-Authenticate so the client
+	// can discover the AS surface.
+	issuerGated := toolset.UserSessionIssuerID.Valid
+	if issuerGated {
+		newCtx, ok := s.validateUserSessionToken(ctx, authToken, toolset)
+		if !ok {
+			return WriteAuthenticateChallenge(w, baseURL, mcpSlug, "expired or invalid access token")
 		}
-	case toolset.McpIsPublic && oAuthProxyProvider != nil && oAuthProxyProvider.ProviderType == "custom":
-		// Custom OAuth provider flow — validate and collect tokens if present
-		if authToken != "" {
-			oauthToken, err := s.oauthService.ValidateAccessToken(ctx, toolset.ID, authToken)
-			if errors.Is(err, oauth.ErrExpiredExternalSecrets) && oauthToken != nil {
-				s.logger.InfoContext(ctx, "upstream credentials expired, attempting refresh", attr.SlogToolsetID(toolset.ID.String()), attr.SlogOAuthProvider(oAuthProxyProvider.Slug))
-				var refreshedToken *oauth.Token
-				refreshedToken, err = s.oauthService.RefreshProxyToken(ctx, toolset.ID, oauthToken, oAuthProxyProvider, toolset)
+		ctx = newCtx
+	}
+
+	if !issuerGated {
+		switch {
+		case toolset.McpIsPublic && toolset.ExternalOauthServerID.Valid:
+			// External OAuth server flow — collect token if present
+			if authToken != "" {
+				tokenInputs = append(tokenInputs, oauthTokenInputs{
+					securityKeys: []string{},
+					Token:        authToken,
+				})
+			}
+		case toolset.McpIsPublic && oAuthProxyProvider != nil && oAuthProxyProvider.ProviderType == "custom":
+			// Custom OAuth provider flow — validate and collect tokens if present
+			if authToken != "" {
+				oauthToken, err := s.oauthService.ValidateAccessToken(ctx, toolset.ID, authToken)
+				if errors.Is(err, oauth.ErrExpiredExternalSecrets) && oauthToken != nil {
+					s.logger.InfoContext(ctx, "upstream credentials expired, attempting refresh", attr.SlogToolsetID(toolset.ID.String()), attr.SlogOAuthProvider(oAuthProxyProvider.Slug))
+					var refreshedToken *oauth.Token
+					refreshedToken, err = s.oauthService.RefreshProxyToken(ctx, toolset.ID, oauthToken, oAuthProxyProvider, toolset)
+					if err != nil {
+						s.logger.WarnContext(ctx, "upstream token refresh failed", attr.SlogToolsetID(toolset.ID.String()), attr.SlogOAuthProvider(oAuthProxyProvider.Slug), attr.SlogError(err))
+					} else {
+						oauthToken = refreshedToken
+					}
+				}
 				if err != nil {
-					s.logger.WarnContext(ctx, "upstream token refresh failed", attr.SlogToolsetID(toolset.ID.String()), attr.SlogOAuthProvider(oAuthProxyProvider.Slug), attr.SlogError(err))
+					s.logger.WarnContext(ctx, "OAuth token validation failed", attr.SlogToolsetID(toolset.ID.String()), attr.SlogError(err))
 				} else {
-					oauthToken = refreshedToken
+					s.logger.InfoContext(ctx, "OAuth token validated successfully", attr.SlogToolsetID(toolset.ID.String()), attr.SlogOAuthProvider(oAuthProxyProvider.Slug))
+				}
+				// Collect upstream secrets so checkToolsetSecurity knows the user
+				// authenticated. We skip this when the Gram access token itself has
+				// expired (ErrExpiredAccessToken) — an expired token must not grant
+				// access. We still collect when only the upstream credentials expired
+				// (ErrExpiredExternalSecrets) because the user's Gram session is
+				// valid; the upstream refresh is best-effort.
+				if oauthToken != nil && !errors.Is(err, oauth.ErrExpiredAccessToken) {
+					for _, externalSecret := range oauthToken.ExternalSecrets {
+						tokenInputs = append(tokenInputs, oauthTokenInputs{
+							securityKeys: externalSecret.SecurityKeys,
+							Token:        externalSecret.Token,
+						})
+					}
 				}
 			}
-			if err != nil {
-				s.logger.WarnContext(ctx, "OAuth token validation failed", attr.SlogToolsetID(toolset.ID.String()), attr.SlogError(err))
-			} else {
-				s.logger.InfoContext(ctx, "OAuth token validated successfully", attr.SlogToolsetID(toolset.ID.String()), attr.SlogOAuthProvider(oAuthProxyProvider.Slug))
+		case !toolset.McpIsPublic:
+			// Private MCP — identity auth is required at HTTP level
+			isOAuthCapable := oAuthProxyProvider != nil && oAuthProxyProvider.ProviderType == "gram"
+			token := authToken
+			if token == "" {
+				token = chatSessionJwt
 			}
-			// Collect upstream secrets so checkToolsetSecurity knows the user
-			// authenticated. We skip this when the Gram access token itself has
-			// expired (ErrExpiredAccessToken) — an expired token must not grant
-			// access. We still collect when only the upstream credentials expired
-			// (ErrExpiredExternalSecrets) because the user's Gram session is
-			// valid; the upstream refresh is best-effort.
-			if oauthToken != nil && !errors.Is(err, oauth.ErrExpiredAccessToken) {
-				for _, externalSecret := range oauthToken.ExternalSecrets {
-					tokenInputs = append(tokenInputs, oauthTokenInputs{
-						securityKeys: externalSecret.SecurityKeys,
-						Token:        externalSecret.Token,
-					})
+
+			ctx, err = s.authenticateToken(ctx, token, toolset.ID, isOAuthCapable)
+			if err == nil {
+				break
+			}
+
+			if isOAuthCapable {
+				w.Header().Set(
+					"WWW-Authenticate",
+					fmt.Sprintf(`Bearer resource_metadata="%s"`, baseURL+"/.well-known/oauth-protected-resource/mcp/"+mcpSlug),
+				)
+			}
+
+			return oops.E(oops.CodeUnauthorized, nil, "expired or invalid access token")
+		default:
+			// Public MCP without OAuth — allow chatSessionJwt fallback
+			token := authToken
+			if token == "" {
+				token = chatSessionJwt
+			}
+			if token != "" {
+				ctx, err = s.authenticateToken(ctx, token, toolset.ID, false)
+				if err != nil {
+					return err
 				}
-			}
-		}
-	case !toolset.McpIsPublic:
-		// Private MCP — identity auth is required at HTTP level
-		isOAuthCapable := oAuthProxyProvider != nil && oAuthProxyProvider.ProviderType == "gram"
-		token := authToken
-		if token == "" {
-			token = chatSessionJwt
-		}
 
-		ctx, err = s.authenticateToken(ctx, token, toolset.ID, isOAuthCapable)
-		if err == nil {
-			break
-		}
-
-		if isOAuthCapable {
-			w.Header().Set(
-				"WWW-Authenticate",
-				fmt.Sprintf(`Bearer resource_metadata="%s"`, baseURL+"/.well-known/oauth-protected-resource/mcp/"+mcpSlug),
-			)
-		}
-
-		return oops.E(oops.CodeUnauthorized, nil, "expired or invalid access token")
-	default:
-		// Public MCP without OAuth — allow chatSessionJwt fallback
-		token := authToken
-		if token == "" {
-			token = chatSessionJwt
-		}
-		if token != "" {
-			ctx, err = s.authenticateToken(ctx, token, toolset.ID, false)
-			if err != nil {
-				return err
-			}
-
-			authCtx, ok := contextvalues.GetAuthContext(ctx)
-			if !ok || authCtx == nil {
-				return oops.E(oops.CodeUnauthorized, nil, "no auth context found").Log(ctx, s.logger)
+				authCtx, ok := contextvalues.GetAuthContext(ctx)
+				if !ok || authCtx == nil {
+					return oops.E(oops.CodeUnauthorized, nil, "no auth context found").Log(ctx, s.logger)
+				}
 			}
 		}
 	}

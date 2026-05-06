@@ -70,6 +70,28 @@ func (s *Signer) Mint(subject urn.SessionSubject, audience, issuer string, lifet
 	return signed, jti, nil
 }
 
+// Validate parses + verifies an HS256 SessionClaims JWT. Verifies signature,
+// expiry/notBefore (via the jwt library), and that the audience contains the
+// expected value (typically the toolset slug). Revocation (jti against the
+// shared `chat_session_revoked:{jti}` cache) is the caller's responsibility —
+// this signer doesn't reach into Redis.
+func (s *Signer) Validate(token, expectedAudience string) (*SessionClaims, error) {
+	claims := SessionClaims{RegisteredClaims: jwt.RegisteredClaims{}} //nolint:exhaustruct // ParseWithClaims populates the fields.
+	parsed, err := jwt.ParseWithClaims(token, &claims, func(t *jwt.Token) (any, error) {
+		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
+		}
+		return s.key, nil
+	}, jwt.WithAudience(expectedAudience))
+	if err != nil {
+		return nil, fmt.Errorf("validate token: %w", err)
+	}
+	if !parsed.Valid {
+		return nil, errors.New("token is not valid")
+	}
+	return &claims, nil
+}
+
 // ParseUnverifiedJTI extracts the `jti` claim from a token without verifying
 // the signature. Used by /revoke to push the JTI into the revocation cache —
 // the token's authenticity is established by the client_secret check in the
