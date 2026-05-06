@@ -93,6 +93,7 @@ function ClaudeCodeInstallContent({
         {
           extraKnownMarketplaces: {
             [repoName]: {
+              autoUpdate: true,
               source: {
                 source: "url",
                 url: marketplaceUrl,
