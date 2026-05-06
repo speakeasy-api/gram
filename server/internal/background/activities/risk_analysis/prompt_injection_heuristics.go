@@ -139,35 +139,21 @@ func filterEmpty(in []string) []string {
 	return out
 }
 
-// runHeuristics applies every enabled rule family to text and returns one
-// Finding per match. Caller filters by cfg.HeuristicEmitThreshold.
-func runHeuristics(text string, cfg PromptInjectionConfig) []Finding {
+// runHeuristics applies every rule family to text and returns one Finding
+// per match.
+func runHeuristics(text string) []Finding {
 	if text == "" {
 		return nil
 	}
 
 	var findings []Finding
-
-	if cfg.DetectInstructionOverrides {
-		findings = append(findings, detectInstructionOverrides(text)...)
-	}
-	if cfg.DetectRoleHijack {
-		findings = append(findings, runFamily(text, familyRoleHijack)...)
-		findings = append(findings, detectJailbreakPersonas(text)...)
-	}
-	if cfg.DetectSystemPromptLeak {
-		findings = append(findings, runFamily(text, familySystemPromptLeak)...)
-	}
-	if cfg.DetectDelimiterInjection {
-		findings = append(findings, detectDelimiterInjection(text)...)
-	}
-	if cfg.DetectEncodedPayloads {
-		findings = append(findings, runFamily(text, familyEncodedPayload)...)
-	}
-	if cfg.DetectToolAbuse {
-		findings = append(findings, runFamily(text, familyToolAbuse)...)
-	}
-
+	findings = append(findings, detectInstructionOverrides(text)...)
+	findings = append(findings, runFamily(text, familyRoleHijack)...)
+	findings = append(findings, detectJailbreakPersonas(text)...)
+	findings = append(findings, runFamily(text, familySystemPromptLeak)...)
+	findings = append(findings, detectDelimiterInjection(text)...)
+	findings = append(findings, runFamily(text, familyEncodedPayload)...)
+	findings = append(findings, runFamily(text, familyToolAbuse)...)
 	return findings
 }
 

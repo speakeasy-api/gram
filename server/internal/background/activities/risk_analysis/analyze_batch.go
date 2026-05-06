@@ -246,9 +246,8 @@ func (a *AnalyzeBatch) scan(ctx context.Context, args AnalyzeBatchArgs, messages
 	}
 
 	if slices.Contains(args.Sources, SourcePromptInjection) {
-		cfg := PromptInjectionConfigDefaults()
 		for i, content := range contents {
-			f, err := DetectPromptInjection(ctx, content, cfg)
+			f, err := DetectPromptInjection(ctx, content)
 			if err != nil {
 				a.logger.WarnContext(ctx, "prompt injection scan failed", attr.SlogError(err))
 				continue

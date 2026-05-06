@@ -281,8 +281,7 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text s
 				}, nil
 			}
 		case ra.SourcePromptInjection:
-			cfg := ra.PromptInjectionConfigDefaults()
-			findings, err := ra.DetectPromptInjection(ctx, text, cfg)
+			findings, err := ra.DetectPromptInjection(ctx, text)
 			if err != nil {
 				return nil, fmt.Errorf("prompt injection scan: %w", err)
 			}
