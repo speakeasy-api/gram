@@ -214,8 +214,8 @@ func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Se
 	o11y.AttachHandler(mux, "GET", "/mcp/install-page-{hash}.js", oops.ErrHandle(service.logger, metadataService.ServeInstallPageScript).ServeHTTP)
 
 	// OAuth 2.1 Authorization Server Metadata
-	o11y.AttachHandler(mux, "GET", "/.well-known/oauth-authorization-server/mcp/{mcpSlug}", oops.ErrHandle(service.logger, service.HandleWellKnownOAuthServerMetadata).ServeHTTP)
-	o11y.AttachHandler(mux, "GET", "/.well-known/oauth-protected-resource/mcp/{mcpSlug}", oops.ErrHandle(service.logger, service.HandleWellKnownOAuthProtectedResourceMetadata).ServeHTTP)
+	o11y.AttachHandler(mux, "GET", wellknown.OAuthAuthorizationServerPath+"/mcp/{mcpSlug}", oops.ErrHandle(service.logger, service.HandleWellKnownOAuthServerMetadata).ServeHTTP)
+	o11y.AttachHandler(mux, "GET", wellknown.OAuthProtectedResourcePath+"/mcp/{mcpSlug}", oops.ErrHandle(service.logger, service.HandleWellKnownOAuthProtectedResourceMetadata).ServeHTTP)
 }
 
 // HandleGetServer handles GET requests to /mcp/{mcpSlug}, checking for HTML requests
@@ -425,7 +425,7 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 		return oops.E(oops.CodeUnexpected, err, "failed to load MCP server").Log(ctx, s.logger)
 	}
 
-	return s.ServeToolsetResolved(w, r, toolset, mcpSlug, "/mcp/")
+	return s.ServeToolsetResolved(w, r, toolset, mcpSlug, "mcp")
 }
 
 // ServeToolsetResolved serves an MCP runtime request after the slug has
@@ -433,11 +433,13 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 // surfaces (currently /x/mcp) can delegate the toolset-backed serving body
 // without re-implementing the OAuth/visibility/RBAC and tool dispatch flow.
 //
-// mcpSlug and oauthMetadataPathPrefix are used to build the
-// WWW-Authenticate resource_metadata URL (e.g. "/mcp/" or "/x/mcp/").
+// mcpSlug and mcpRouteBase are used to build the WWW-Authenticate
+// resource_metadata URL. mcpRouteBase is the route segment that sits
+// between the well-known prefix and the slug — "mcp" for /mcp/{slug} or
+// "x/mcp" for /x/mcp/{slug}, no leading or trailing slashes.
 //
 // The caller is responsible for closing r.Body.
-func (s *Service) ServeToolsetResolved(w http.ResponseWriter, r *http.Request, toolset *toolsets_repo.Toolset, mcpSlug, oauthMetadataPathPrefix string) error {
+func (s *Service) ServeToolsetResolved(w http.ResponseWriter, r *http.Request, toolset *toolsets_repo.Toolset, mcpSlug, mcpRouteBase string) error {
 	ctx := r.Context()
 	var err error
 
@@ -481,7 +483,10 @@ func (s *Service) ServeToolsetResolved(w http.ResponseWriter, r *http.Request, t
 	// Private MCPs still enforce identity auth at this level since that's user
 	// identity, not per-tool security.
 	oauthRequired := toolset.ExternalOauthServerID.Valid || (oAuthProxyProvider != nil)
-	oauthProtectedResourceURL := baseURL + "/.well-known/oauth-protected-resource" + oauthMetadataPathPrefix + mcpSlug
+	oauthProtectedResourceURL, err := url.JoinPath(baseURL, wellknown.OAuthProtectedResourcePath, mcpRouteBase, mcpSlug)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to build OAuth protected resource URL").Log(ctx, s.logger)
+	}
 	switch {
 	case toolset.McpIsPublic && toolset.ExternalOauthServerID.Valid:
 		// External OAuth server flow — collect token if present
@@ -946,13 +951,7 @@ func (s *Service) ResolveOAuthProxyUpstreamToken(_ context.Context, _, _ uuid.UU
 // the supplied resource_metadata URL so MCP clients can initiate OAuth, and
 // returns 401.
 func (s *Service) RequirePrivateIdentityAuth(ctx context.Context, w http.ResponseWriter, r *http.Request, isOAuthCapable bool, oauthResourceID uuid.UUID, wwwAuthResourceMetadataURL string) (context.Context, error) {
-	authToken := AuthorizationBearerToken(r)
-	chatSessionJwt := r.Header.Get(constants.ChatSessionsTokenHeader)
-
-	token := authToken
-	if token == "" {
-		token = chatSessionJwt
-	}
+	token := AuthorizationOrChatSessionToken(r)
 
 	authedCtx, err := s.authenticateToken(ctx, token, oauthResourceID, isOAuthCapable)
 	if err == nil {
@@ -973,13 +972,7 @@ func (s *Service) RequirePrivateIdentityAuth(ctx context.Context, w http.Respons
 // the caller supplies an Authorization or Gram-Chat-Session token. Missing
 // tokens are not an error; an invalid supplied token is.
 func (s *Service) TryPublicIdentityAuth(ctx context.Context, r *http.Request, isOAuthCapable bool, oauthResourceID uuid.UUID) (context.Context, error) {
-	authToken := AuthorizationBearerToken(r)
-	chatSessionJwt := r.Header.Get(constants.ChatSessionsTokenHeader)
-
-	token := authToken
-	if token == "" {
-		token = chatSessionJwt
-	}
+	token := AuthorizationOrChatSessionToken(r)
 	if token == "" {
 		return ctx, nil
 	}

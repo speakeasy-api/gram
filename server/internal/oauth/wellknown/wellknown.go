@@ -33,6 +33,18 @@ import (
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
+// OAuthAuthorizationServerPath is the well-known URI path for OAuth 2.0
+// Authorization Server Metadata as defined by RFC 8414.
+//
+// https://datatracker.ietf.org/doc/html/rfc8414
+const OAuthAuthorizationServerPath = "/.well-known/oauth-authorization-server"
+
+// OAuthProtectedResourcePath is the well-known URI path for OAuth 2.0
+// Protected Resource Metadata as defined by RFC 9728.
+//
+// https://datatracker.ietf.org/doc/html/rfc9728
+const OAuthProtectedResourcePath = "/.well-known/oauth-protected-resource"
+
 // OAuthProtectedResourceMetadata represents OAuth 2.0 Protected Resource Metadata (RFC 9728).
 type OAuthProtectedResourceMetadata struct {
 	Resource             string   `json:"resource"`

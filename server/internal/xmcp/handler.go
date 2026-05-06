@@ -76,7 +76,7 @@ func (s *Service) ServeMCP(w http.ResponseWriter, r *http.Request) error {
 			return oops.E(oops.CodeUnexpected, err, "load toolset").Log(ctx, logger)
 		}
 
-		if err := s.mcpService.ServeToolsetResolved(w, r, &toolset, slug, "/x/mcp/"); err != nil {
+		if err := s.mcpService.ServeToolsetResolved(w, r, &toolset, slug, "x/mcp"); err != nil {
 			return fmt.Errorf("serve toolset-backed mcp: %w", err)
 		}
 		return nil

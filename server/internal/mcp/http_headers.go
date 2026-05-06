@@ -3,6 +3,8 @@ package mcp
 import (
 	"net/http"
 	"strings"
+
+	"github.com/speakeasy-api/gram/server/internal/constants"
 )
 
 // AuthorizationBearerToken returns the Bearer token from the request's
@@ -20,4 +22,17 @@ func AuthorizationBearerToken(r *http.Request) string {
 		return token[len(bearerPrefix):]
 	}
 	return ""
+}
+
+// AuthorizationOrChatSessionToken returns the caller's identity token,
+// drawn from the Authorization Bearer header when present, otherwise the
+// Gram-Chat-Session header. Returns "" when neither carries a value.
+// Bearer wins when both are set, matching the priority used by the MCP
+// identity-auth path; non-Bearer Authorization schemes are ignored (see
+// [AuthorizationBearerToken]) and fall through to Gram-Chat-Session.
+func AuthorizationOrChatSessionToken(r *http.Request) string {
+	if t := AuthorizationBearerToken(r); t != "" {
+		return t
+	}
+	return r.Header.Get(constants.ChatSessionsTokenHeader)
 }

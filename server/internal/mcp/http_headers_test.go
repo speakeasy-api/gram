@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 )
 
@@ -16,6 +17,16 @@ func newAuthRequest(t *testing.T, header string) *http.Request {
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	if header != "" {
 		req.Header.Set("Authorization", header)
+	}
+	return req
+}
+
+func newIdentityRequest(t *testing.T, authHeader, chatSession string) *http.Request {
+	t.Helper()
+
+	req := newAuthRequest(t, authHeader)
+	if chatSession != "" {
+		req.Header.Set(constants.ChatSessionsTokenHeader, chatSession)
 	}
 	return req
 }
@@ -81,4 +92,43 @@ func TestAuthorizationBearerToken_BearerLikePrefix(t *testing.T) {
 	// A scheme that starts with the same letters but isn't "Bearer " must not
 	// match — guards against a hypothetical "Bearer-Like xyz" or similar.
 	require.Empty(t, mcp.AuthorizationBearerToken(newAuthRequest(t, "Bearer-Like xyz")))
+}
+
+func TestAuthorizationOrChatSessionToken_BothEmpty(t *testing.T) {
+	t.Parallel()
+
+	require.Empty(t, mcp.AuthorizationOrChatSessionToken(newIdentityRequest(t, "", "")))
+}
+
+func TestAuthorizationOrChatSessionToken_BearerOnly(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, "abc123", mcp.AuthorizationOrChatSessionToken(newIdentityRequest(t, "Bearer abc123", "")))
+}
+
+func TestAuthorizationOrChatSessionToken_ChatSessionOnly(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, "session-jwt", mcp.AuthorizationOrChatSessionToken(newIdentityRequest(t, "", "session-jwt")))
+}
+
+func TestAuthorizationOrChatSessionToken_BearerWinsWhenBothSet(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, "abc123", mcp.AuthorizationOrChatSessionToken(newIdentityRequest(t, "Bearer abc123", "session-jwt")))
+}
+
+// TestAuthorizationOrChatSessionToken_BasicSchemeFallsThrough guards the
+// interaction with [mcp.AuthorizationBearerToken]'s non-Bearer drop: a Basic
+// Authorization header must not block the chat-session fallback.
+func TestAuthorizationOrChatSessionToken_BasicSchemeFallsThrough(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, "session-jwt", mcp.AuthorizationOrChatSessionToken(newIdentityRequest(t, "Basic abc123", "session-jwt")))
+}
+
+func TestAuthorizationOrChatSessionToken_BasicSchemeAlone(t *testing.T) {
+	t.Parallel()
+
+	require.Empty(t, mcp.AuthorizationOrChatSessionToken(newIdentityRequest(t, "Basic abc123", "")))
 }
