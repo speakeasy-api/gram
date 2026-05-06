@@ -53,6 +53,7 @@ import { cn } from "@/lib/utils";
 import { Dialog } from "@/components/ui/dialog";
 import { Button } from "@speakeasy-api/moonshine";
 import { MCPServerFilter } from "@/components/observe/ObserveFilterBar";
+import { isValidPreset } from "@/components/observe/observeFilterUtils";
 
 function hasTimeSeriesData(
   timeSeries: Array<{
@@ -363,23 +364,6 @@ function FilterBar({
       </div>
     </div>
   );
-}
-
-const validPresets: DateRangePreset[] = [
-  "15m",
-  "1h",
-  "4h",
-  "1d",
-  "2d",
-  "3d",
-  "7d",
-  "15d",
-  "30d",
-  "90d",
-];
-
-function isValidPreset(value: string | null): value is DateRangePreset {
-  return value !== null && validPresets.includes(value as DateRangePreset);
 }
 
 function toLocalISOString(date: Date): string {

@@ -43,46 +43,12 @@ import {
   useAttributeLogsQuery,
   type TraceSummary,
 } from "@/pages/logs/use-attribute-logs-query";
-
-const validPresets: DateRangePreset[] = [
-  "15m",
-  "1h",
-  "4h",
-  "1d",
-  "2d",
-  "3d",
-  "7d",
-  "15d",
-  "30d",
-  "90d",
-];
-
-function isValidPreset(value: string | null): value is DateRangePreset {
-  return value !== null && validPresets.includes(value as DateRangePreset);
-}
-
-function safeBase64Encode(str: string): string {
-  try {
-    return btoa(str);
-  } catch {
-    return btoa(encodeURIComponent(str));
-  }
-}
-
-function safeBase64Decode(str: string): string | null {
-  try {
-    const decoded = atob(str);
-    try {
-      return decodeURIComponent(decoded);
-    } catch {
-      return decoded;
-    }
-  } catch {
-    return null;
-  }
-}
-
-const perPage = 100;
+import {
+  isValidPreset,
+  safeBase64Encode,
+  safeBase64Decode,
+  perPage,
+} from "@/components/observe/observeFilterUtils";
 
 export function LogsMCPContent() {
   const [searchParams, setSearchParams] = useSearchParams();
