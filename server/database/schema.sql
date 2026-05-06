@@ -798,6 +798,95 @@ CREATE INDEX IF NOT EXISTS user_sessions_subject_idx
 ON user_sessions (subject_urn, user_session_issuer_id)
 WHERE deleted IS FALSE;
 
+-- Remote session issuers - upstream Authorization Server identity records.
+-- Successor to oauth_proxy_provider; behavioural diff from
+-- external_oauth_server_metadata collapses onto the passthrough flag.
+-- TODO: should ultimately not be project-scoped — see spike §7.
+CREATE TABLE IF NOT EXISTS remote_session_issuers (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+
+  slug TEXT NOT NULL,
+  issuer TEXT NOT NULL,
+  authorization_endpoint TEXT,
+  token_endpoint TEXT,
+  registration_endpoint TEXT,
+  jwks_uri TEXT,
+
+  scopes_supported TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+  grant_types_supported TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+  response_types_supported TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+  token_endpoint_auth_methods_supported TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+
+  oidc BOOLEAN NOT NULL DEFAULT FALSE,
+  passthrough BOOLEAN NOT NULL DEFAULT FALSE,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT remote_session_issuers_pkey PRIMARY KEY (id),
+  CONSTRAINT remote_session_issuers_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS remote_session_issuers_project_slug_key
+ON remote_session_issuers (project_id, slug)
+WHERE deleted IS FALSE;
+
+-- Remote session clients - the credentials Gram presents to a remote_session_issuer.
+-- Jump-table edge between remote_session_issuer and user_session_issuer.
+-- One issuer can have many clients in the schema; in initial scope we use 1:1.
+CREATE TABLE IF NOT EXISTS remote_session_clients (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  remote_session_issuer_id uuid NOT NULL,
+  user_session_issuer_id uuid NOT NULL,
+
+  client_id TEXT NOT NULL,
+  client_secret_encrypted TEXT,
+  client_id_issued_at timestamptz,
+  client_secret_expires_at timestamptz,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT remote_session_clients_pkey PRIMARY KEY (id),
+  CONSTRAINT remote_session_clients_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT remote_session_clients_remote_session_issuer_id_fkey FOREIGN KEY (remote_session_issuer_id) REFERENCES remote_session_issuers (id) ON DELETE CASCADE,
+  CONSTRAINT remote_session_clients_user_session_issuer_id_fkey FOREIGN KEY (user_session_issuer_id) REFERENCES user_session_issuers (id) ON DELETE CASCADE
+);
+
+-- Remote sessions - the durable upstream OAuth session per (principal, remote_session_client).
+-- Holds upstream access + refresh tokens with INDEPENDENT expiries.
+CREATE TABLE IF NOT EXISTS remote_sessions (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  principal_urn TEXT NOT NULL,
+  user_session_issuer_id uuid NOT NULL,
+  remote_session_client_id uuid NOT NULL,
+
+  access_token_encrypted TEXT NOT NULL,
+  access_expires_at timestamptz NOT NULL,
+  refresh_token_encrypted TEXT,
+  refresh_expires_at timestamptz,
+  scopes TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT remote_sessions_pkey PRIMARY KEY (id),
+  CONSTRAINT remote_sessions_user_session_issuer_id_fkey FOREIGN KEY (user_session_issuer_id) REFERENCES user_session_issuers (id) ON DELETE CASCADE,
+  CONSTRAINT remote_sessions_remote_session_client_id_fkey FOREIGN KEY (remote_session_client_id) REFERENCES remote_session_clients (id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS remote_sessions_principal_client_key
+ON remote_sessions (principal_urn, remote_session_client_id)
+WHERE deleted IS FALSE;
+
 CREATE TABLE IF NOT EXISTS toolsets (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
 
