@@ -1251,11 +1251,20 @@ func (s *Service) persistPluginAPIKeys(
 		}
 	}
 
+	// Mint a candidate marketplace token for first-time publishes. The upsert
+	// preserves any existing token via COALESCE, so passing a fresh value on
+	// every publish never overwrites a token that's already minted — token
+	// rotation goes through a dedicated path.
+	candidateToken, err := generateMarketplaceToken()
+	if err != nil {
+		return fmt.Errorf("generate marketplace token: %w", err)
+	}
 	if _, err := s.repo.WithTx(tx).UpsertGitHubConnection(ctx, repo.UpsertGitHubConnectionParams{
-		ProjectID:      *ac.ProjectID,
-		InstallationID: s.github.InstallationID,
-		RepoOwner:      repoOwner,
-		RepoName:       repoName,
+		ProjectID:        *ac.ProjectID,
+		InstallationID:   s.github.InstallationID,
+		RepoOwner:        repoOwner,
+		RepoName:         repoName,
+		MarketplaceToken: pgtype.Text{String: candidateToken, Valid: true},
 	}); err != nil {
 		return fmt.Errorf("upsert github connection: %w", err)
 	}

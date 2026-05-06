@@ -168,6 +168,30 @@ func (q *Queries) GetGitHubConnection(ctx context.Context, projectID uuid.UUID) 
 	return i, err
 }
 
+const getGitHubConnectionByMarketplaceToken = `-- name: GetGitHubConnectionByMarketplaceToken :one
+SELECT id, project_id, installation_id, repo_owner, repo_name, marketplace_token, created_at, updated_at
+FROM plugin_github_connections
+WHERE marketplace_token = $1
+`
+
+// Resolves a marketplace proxy URL token to the upstream connection. The token
+// is the auth credential — there's no project scope to apply ahead of it.
+func (q *Queries) GetGitHubConnectionByMarketplaceToken(ctx context.Context, marketplaceToken pgtype.Text) (PluginGithubConnection, error) {
+	row := q.db.QueryRow(ctx, getGitHubConnectionByMarketplaceToken, marketplaceToken)
+	var i PluginGithubConnection
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.InstallationID,
+		&i.RepoOwner,
+		&i.RepoName,
+		&i.MarketplaceToken,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getOrganizationName = `-- name: GetOrganizationName :one
 SELECT name FROM organization_metadata WHERE id = $1
 `
@@ -556,29 +580,37 @@ func (q *Queries) UpdatePluginServer(ctx context.Context, arg UpdatePluginServer
 }
 
 const upsertGitHubConnection = `-- name: UpsertGitHubConnection :one
-INSERT INTO plugin_github_connections (project_id, installation_id, repo_owner, repo_name)
-VALUES ($1, $2, $3, $4)
+INSERT INTO plugin_github_connections (project_id, installation_id, repo_owner, repo_name, marketplace_token)
+VALUES ($1, $2, $3, $4, $5)
 ON CONFLICT (project_id) DO UPDATE
   SET installation_id = EXCLUDED.installation_id,
       repo_owner = EXCLUDED.repo_owner,
       repo_name = EXCLUDED.repo_name,
+      marketplace_token = COALESCE(plugin_github_connections.marketplace_token, EXCLUDED.marketplace_token),
       updated_at = clock_timestamp()
 RETURNING id, project_id, installation_id, repo_owner, repo_name, marketplace_token, created_at, updated_at
 `
 
 type UpsertGitHubConnectionParams struct {
-	ProjectID      uuid.UUID
-	InstallationID int64
-	RepoOwner      string
-	RepoName       string
+	ProjectID        uuid.UUID
+	InstallationID   int64
+	RepoOwner        string
+	RepoName         string
+	MarketplaceToken pgtype.Text
 }
 
+// Inserts or refreshes a project's GitHub connection. The marketplace_token
+// argument is the candidate token to use if no token is currently set; on
+// conflict the existing token is preserved via COALESCE so callers can pass a
+// freshly-generated token on every publish without overwriting prior state.
+// Token rotation goes through a separate query.
 func (q *Queries) UpsertGitHubConnection(ctx context.Context, arg UpsertGitHubConnectionParams) (PluginGithubConnection, error) {
 	row := q.db.QueryRow(ctx, upsertGitHubConnection,
 		arg.ProjectID,
 		arg.InstallationID,
 		arg.RepoOwner,
 		arg.RepoName,
+		arg.MarketplaceToken,
 	)
 	var i PluginGithubConnection
 	err := row.Scan(
