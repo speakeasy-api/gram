@@ -2,6 +2,7 @@ package contextvalues
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/google/uuid"
 )
@@ -56,6 +57,7 @@ const (
 	AssistantPrincipalKey       contextKey = "assistantPrincipalKey"
 	AdminSessionTokenContextKey contextKey = "adminSessionTokenKey"
 	AdminAuthContextKey         contextKey = "adminAuthKey"
+	MCPIDContextKey             contextKey = "mcpIDContextKey"
 )
 
 func SetSessionTokenInContext(ctx context.Context, value string) context.Context {
@@ -92,6 +94,24 @@ func SetRequestContext(ctx context.Context, value *RequestContext) context.Conte
 func GetRequestContext(ctx context.Context) (*RequestContext, bool) {
 	value, ok := ctx.Value(RequestContextKey).(*RequestContext)
 	return value, ok
+}
+
+func SetMCPIDContext(ctx context.Context, value *json.RawMessage) context.Context {
+	return context.WithValue(ctx, MCPIDContextKey, value)
+}
+
+func SetMCPID(ctx context.Context, value json.RawMessage) {
+	if dst, ok := ctx.Value(MCPIDContextKey).(*json.RawMessage); ok && len(value) > 0 {
+		*dst = value
+	}
+}
+
+func GetMCPID(ctx context.Context) (json.RawMessage, bool) {
+	value, ok := ctx.Value(MCPIDContextKey).(*json.RawMessage)
+	if !ok || value == nil {
+		return nil, false
+	}
+	return *value, len(*value) > 0
 }
 
 func SetRBACScopeOverride(ctx context.Context, value string) context.Context {
