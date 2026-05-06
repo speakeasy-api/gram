@@ -1255,6 +1255,63 @@ type UserOauthToken struct {
 	Deleted               bool
 }
 
+type UserSession struct {
+	ID                  uuid.UUID
+	ProjectID           uuid.UUID
+	UserSessionIssuerID uuid.UUID
+	UserSessionClientID uuid.NullUUID
+	SubjectUrn          string
+	Jti                 string
+	RefreshTokenHash    string
+	RefreshExpiresAt    pgtype.Timestamptz
+	ExpiresAt           pgtype.Timestamptz
+	CreatedAt           pgtype.Timestamptz
+	UpdatedAt           pgtype.Timestamptz
+	DeletedAt           pgtype.Timestamptz
+	Deleted             bool
+}
+
+type UserSessionClient struct {
+	ID                    uuid.UUID
+	ProjectID             uuid.UUID
+	UserSessionIssuerID   uuid.UUID
+	ClientID              string
+	ClientSecretHash      pgtype.Text
+	ClientName            string
+	RedirectUris          []string
+	ClientIDIssuedAt      pgtype.Timestamptz
+	ClientSecretExpiresAt pgtype.Timestamptz
+	CreatedAt             pgtype.Timestamptz
+	UpdatedAt             pgtype.Timestamptz
+	DeletedAt             pgtype.Timestamptz
+	Deleted               bool
+}
+
+type UserSessionConsent struct {
+	ID                  uuid.UUID
+	ProjectID           uuid.UUID
+	SubjectUrn          string
+	UserSessionClientID uuid.UUID
+	RemoteSetHash       string
+	ConsentedAt         pgtype.Timestamptz
+	CreatedAt           pgtype.Timestamptz
+	UpdatedAt           pgtype.Timestamptz
+	DeletedAt           pgtype.Timestamptz
+	Deleted             bool
+}
+
+type UserSessionIssuer struct {
+	ID                 uuid.UUID
+	ProjectID          uuid.UUID
+	Slug               string
+	AuthnChallengeMode string
+	SessionDuration    pgtype.Interval
+	CreatedAt          pgtype.Timestamptz
+	UpdatedAt          pgtype.Timestamptz
+	DeletedAt          pgtype.Timestamptz
+	Deleted            bool
+}
+
 type WorkosOrganizationSync struct {
 	ID                   uuid.UUID
 	WorkosOrganizationID string

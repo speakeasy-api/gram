@@ -1,4 +1,4 @@
-h1:gIxwUvXYX3UbFrgc5luFAvbqvi8c10RLAYx6ZTSPsVw=
+h1:XoemyYloraXZHIMFG2QIhYzvawSwuBful7TtEEMAqp8=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -158,3 +158,4 @@ h1:gIxwUvXYX3UbFrgc5luFAvbqvi8c10RLAYx6ZTSPsVw=
 20260506092802_workos-sync-cursor-cols.sql h1:YTWZ24vx+g/exU+1Fs4uCXHrOYpUOYfe7+BxS/6atLo=
 20260506195409_plugin-github-connections-marketplace-token.sql h1:DgB/RCi4aj3HU4fFOlD5Wa5qhRBUK5b9yu49tT0HPEc=
 20260507132747_add-name-and-slug-to-mcp-server-tables.sql h1:COKpEgovsuMJbmjf6ZE5aZcsToJb/m3+jhzQbXZKMeg=
+20260507160200_usersessions-tables.sql h1:FdPdJM8N6wjlfpRof1fcsyS72hBdyHpfIzNbh3qArjM=
