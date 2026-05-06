@@ -496,8 +496,8 @@ func TestMemoryToView_NullableFields(t *testing.T) {
 
 	rec := repo.GetAssistantMemoryByIDRow{
 		ID:             id,
-		AssistantID:    assistantID,
-		ProjectID:      projectID,
+		AssistantID:    uuid.NullUUID{UUID: assistantID, Valid: true},
+		ProjectID:      uuid.NullUUID{UUID: projectID, Valid: true},
 		OrganizationID: "org",
 		Content:        "content",
 		SupersedesID:   uuid.NullUUID{UUID: supersededID, Valid: true},
@@ -525,8 +525,8 @@ func TestMemoryToView_NullableFields(t *testing.T) {
 func makeRepoMemory(id, assistantID, projectID uuid.UUID, createdAt time.Time) repo.ListAssistantMemoriesForAdminRow {
 	return repo.ListAssistantMemoriesForAdminRow{
 		ID:             id,
-		AssistantID:    assistantID,
-		ProjectID:      projectID,
+		AssistantID:    uuid.NullUUID{UUID: assistantID, Valid: true},
+		ProjectID:      uuid.NullUUID{UUID: projectID, Valid: true},
 		OrganizationID: "org-test",
 		Content:        "hello world",
 		SupersedesID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},

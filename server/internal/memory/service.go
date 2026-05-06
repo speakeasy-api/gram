@@ -54,54 +54,6 @@ const (
 	forgetCandidateLimit   = 3
 )
 
-type MemoryServiceConfig struct {
-	EmbeddingModel     string
-	ContradictionModel string
-	HalfLife           time.Duration
-	HardCap            int
-	DedupeUpper        float64
-	DedupeLower        float64
-	ForgetAmbiguityGap float64
-	PerResultBytes     int
-	AggregateBytes     int
-	TruncationSuffix   string
-}
-
-func (cfg MemoryServiceConfig) applyDefaults() MemoryServiceConfig {
-	out := cfg
-	if out.EmbeddingModel == "" {
-		out.EmbeddingModel = DefaultEmbeddingModel
-	}
-	if out.ContradictionModel == "" {
-		out.ContradictionModel = DefaultContradictionModel
-	}
-	if out.HalfLife <= 0 {
-		out.HalfLife = DefaultHalfLife
-	}
-	if out.HardCap <= 0 {
-		out.HardCap = DefaultHardCap
-	}
-	if out.DedupeUpper == 0 {
-		out.DedupeUpper = DefaultDedupeUpper
-	}
-	if out.DedupeLower == 0 {
-		out.DedupeLower = DefaultDedupeLower
-	}
-	if out.ForgetAmbiguityGap == 0 {
-		out.ForgetAmbiguityGap = DefaultForgetAmbiguityGap
-	}
-	if out.PerResultBytes <= 0 {
-		out.PerResultBytes = DefaultPerResultBytes
-	}
-	if out.AggregateBytes <= 0 {
-		out.AggregateBytes = DefaultAggregateBytes
-	}
-	if out.TruncationSuffix == "" {
-		out.TruncationSuffix = DefaultTruncationSuffix
-	}
-	return out
-}
-
 const (
 	meterMemoryEmbedDuration      = "gram.memory.embed.duration"
 	meterMemoryRecallDuration     = "gram.memory.recall.duration"
@@ -218,9 +170,7 @@ func NewMemoryService(
 	db *pgxpool.Pool,
 	completions openrouter.CompletionClient,
 	auditLogger *audit.Logger,
-	cfg MemoryServiceConfig,
 ) *MemoryService {
-	cfg = cfg.applyDefaults()
 	componentLogger := logger.With(attr.SlogComponent("memory_service"))
 	return &MemoryService{
 		logger:             componentLogger,
@@ -229,39 +179,17 @@ func NewMemoryService(
 		completions:        completions,
 		audit:              auditLogger,
 		metrics:            newMemoryMetrics(meterProvider, componentLogger),
-		embeddingModel:     cfg.EmbeddingModel,
-		contradictionModel: cfg.ContradictionModel,
-		halfLife:           cfg.HalfLife,
-		hardCap:            cfg.HardCap,
-		dedupeUpper:        cfg.DedupeUpper,
-		dedupeLower:        cfg.DedupeLower,
-		forgetAmbiguityGap: cfg.ForgetAmbiguityGap,
-		perResultBytes:     cfg.PerResultBytes,
-		aggregateBytes:     cfg.AggregateBytes,
-		truncationSuffix:   cfg.TruncationSuffix,
+		embeddingModel:     DefaultEmbeddingModel,
+		contradictionModel: DefaultContradictionModel,
+		halfLife:           DefaultHalfLife,
+		hardCap:            DefaultHardCap,
+		dedupeUpper:        DefaultDedupeUpper,
+		dedupeLower:        DefaultDedupeLower,
+		forgetAmbiguityGap: DefaultForgetAmbiguityGap,
+		perResultBytes:     DefaultPerResultBytes,
+		aggregateBytes:     DefaultAggregateBytes,
+		truncationSuffix:   DefaultTruncationSuffix,
 	}
-}
-
-// Validate checks that the service's configuration is internally consistent.
-// Call sites should invoke this once at startup; the constructor stays
-// infallible so wiring in start.go reads cleanly.
-func (s *MemoryService) Validate() error {
-	if s.embeddingModel == "" {
-		return errors.New("memory service: embedding model is empty")
-	}
-	if s.contradictionModel == "" {
-		return errors.New("memory service: contradiction model is empty")
-	}
-	if s.dedupeUpper <= s.dedupeLower {
-		return fmt.Errorf("memory service: dedupe_upper (%f) must exceed dedupe_lower (%f)", s.dedupeUpper, s.dedupeLower)
-	}
-	if s.dedupeUpper > 1 || s.dedupeLower < 0 {
-		return fmt.Errorf("memory service: dedupe thresholds out of range [0,1]: upper=%f lower=%f", s.dedupeUpper, s.dedupeLower)
-	}
-	if s.hardCap <= 0 {
-		return errors.New("memory service: hard_cap must be positive")
-	}
-	return nil
 }
 
 type RememberResult struct {
@@ -862,12 +790,12 @@ func (s *MemoryService) DeleteByID(ctx context.Context, projectID uuid.UUID, id 
 
 	if err := s.audit.LogAssistantMemoryDelete(ctx, tx, audit.LogAssistantMemoryDeleteEvent{
 		OrganizationID:   deleted.OrganizationID,
-		ProjectID:        deleted.ProjectID,
+		ProjectID:        deleted.ProjectID.UUID,
 		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
 		ActorDisplayName: authCtx.Email,
 		ActorSlug:        nil,
 		MemoryID:         deleted.ID,
-		AssistantID:      deleted.AssistantID,
+		AssistantID:      deleted.AssistantID.UUID,
 		ThreadID:         uuid.Nil,
 		Reason:           forgetReasonManualUUIDDelete,
 	}); err != nil {

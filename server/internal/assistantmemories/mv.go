@@ -53,7 +53,7 @@ func memoryToView(m repo.GetAssistantMemoryByIDRow) *types.AssistantMemory {
 
 	return &types.AssistantMemory{
 		ID:           m.ID.String(),
-		AssistantID:  m.AssistantID.String(),
+		AssistantID:  m.AssistantID.UUID.String(),
 		Content:      m.Content,
 		Tags:         tags,
 		CreatedAt:    createdAt,

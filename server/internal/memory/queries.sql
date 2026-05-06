@@ -43,7 +43,7 @@ UPDATE assistant_memories
        updated_at = clock_timestamp()
  WHERE id = @id
    AND deleted_at IS NULL
-RETURNING id, organization_id, project_id::uuid AS project_id, assistant_id::uuid AS assistant_id;
+RETURNING id, organization_id, project_id, assistant_id;
 
 -- name: SoftDeleteAssistantMemoryByProject :one
 -- Project-scoped variant for the management API: filters on (id, project_id)
@@ -54,7 +54,7 @@ UPDATE assistant_memories
  WHERE id = @id
    AND project_id = @project_id::uuid
    AND deleted_at IS NULL
-RETURNING id, organization_id, project_id::uuid AS project_id, assistant_id::uuid AS assistant_id;
+RETURNING id, organization_id, project_id, assistant_id;
 
 -- name: CountActiveAssistantMemories :one
 SELECT count(*) AS active_count
@@ -106,8 +106,8 @@ UPDATE assistant_memories
 -- callers filter in Go. Embedding column is omitted to keep payloads small.
 SELECT
     id,
-    assistant_id::uuid AS assistant_id,
-    project_id::uuid AS project_id,
+    assistant_id,
+    project_id,
     organization_id,
     content,
     supersedes_id,
@@ -133,8 +133,8 @@ SELECT
 -- Embedding column is omitted to keep payloads small.
 SELECT
     id,
-    assistant_id::uuid AS assistant_id,
-    project_id::uuid AS project_id,
+    assistant_id,
+    project_id,
     organization_id,
     content,
     supersedes_id,

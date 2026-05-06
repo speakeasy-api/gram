@@ -691,22 +691,7 @@ func newStartCommand() *cli.Command {
 				db,
 				completionsClient,
 				auditLogger,
-				memory.MemoryServiceConfig{
-					EmbeddingModel:     "",
-					ContradictionModel: "",
-					HalfLife:           0,
-					HardCap:            0,
-					DedupeUpper:        0,
-					DedupeLower:        0,
-					ForgetAmbiguityGap: 0,
-					PerResultBytes:     0,
-					AggregateBytes:     0,
-					TruncationSuffix:   "",
-				},
 			)
-			if err := memorySvc.Validate(); err != nil {
-				return fmt.Errorf("validate memory service: %w", err)
-			}
 
 			ragService := rag.NewToolsetVectorStore(logger, tracerProvider, db, completionsClient)
 			mcpRegistryClient, err := newMCPRegistryClient(logger, tracerProvider, guardianPolicy, mcpRegistryClientOptions{

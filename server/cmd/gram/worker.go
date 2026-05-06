@@ -567,22 +567,7 @@ func newWorkerCommand() *cli.Command {
 				db,
 				completionsClient,
 				auditLogger,
-				memory.MemoryServiceConfig{
-					EmbeddingModel:     "",
-					ContradictionModel: "",
-					HalfLife:           0,
-					HardCap:            0,
-					DedupeUpper:        0,
-					DedupeLower:        0,
-					ForgetAmbiguityGap: 0,
-					PerResultBytes:     0,
-					AggregateBytes:     0,
-					TruncationSuffix:   "",
-				},
 			)
-			if err := memorySvc.Validate(); err != nil {
-				return fmt.Errorf("validate memory service: %w", err)
-			}
 			memoryTools := platformtoolsruntime.MemoryExternalTools(memorySvc)
 			platformFeatureChecker := productFeatures.PlatformFeatureCheck
 

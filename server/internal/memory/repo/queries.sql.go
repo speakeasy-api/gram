@@ -42,8 +42,8 @@ func (q *Queries) CountActiveAssistantMemories(ctx context.Context, assistantID 
 const getAssistantMemoryByID = `-- name: GetAssistantMemoryByID :one
 SELECT
     id,
-    assistant_id::uuid AS assistant_id,
-    project_id::uuid AS project_id,
+    assistant_id,
+    project_id,
     organization_id,
     content,
     supersedes_id,
@@ -68,8 +68,8 @@ type GetAssistantMemoryByIDParams struct {
 
 type GetAssistantMemoryByIDRow struct {
 	ID             uuid.UUID
-	AssistantID    uuid.UUID
-	ProjectID      uuid.UUID
+	AssistantID    uuid.NullUUID
+	ProjectID      uuid.NullUUID
 	OrganizationID string
 	Content        string
 	SupersedesID   uuid.NullUUID
@@ -205,8 +205,8 @@ func (q *Queries) InsertAssistantMemory(ctx context.Context, arg InsertAssistant
 const listAssistantMemoriesForAdmin = `-- name: ListAssistantMemoriesForAdmin :many
 SELECT
     id,
-    assistant_id::uuid AS assistant_id,
-    project_id::uuid AS project_id,
+    assistant_id,
+    project_id,
     organization_id,
     content,
     supersedes_id,
@@ -248,8 +248,8 @@ type ListAssistantMemoriesForAdminParams struct {
 
 type ListAssistantMemoriesForAdminRow struct {
 	ID             uuid.UUID
-	AssistantID    uuid.UUID
-	ProjectID      uuid.UUID
+	AssistantID    uuid.NullUUID
+	ProjectID      uuid.NullUUID
 	OrganizationID string
 	Content        string
 	SupersedesID   uuid.NullUUID
@@ -440,14 +440,14 @@ UPDATE assistant_memories
        updated_at = clock_timestamp()
  WHERE id = $1
    AND deleted_at IS NULL
-RETURNING id, organization_id, project_id::uuid AS project_id, assistant_id::uuid AS assistant_id
+RETURNING id, organization_id, project_id, assistant_id
 `
 
 type SoftDeleteAssistantMemoryRow struct {
 	ID             uuid.UUID
 	OrganizationID string
-	ProjectID      uuid.UUID
-	AssistantID    uuid.UUID
+	ProjectID      uuid.NullUUID
+	AssistantID    uuid.NullUUID
 }
 
 // Returns the deleted row's audit-relevant fields so callers do not need a
@@ -471,7 +471,7 @@ UPDATE assistant_memories
  WHERE id = $1
    AND project_id = $2::uuid
    AND deleted_at IS NULL
-RETURNING id, organization_id, project_id::uuid AS project_id, assistant_id::uuid AS assistant_id
+RETURNING id, organization_id, project_id, assistant_id
 `
 
 type SoftDeleteAssistantMemoryByProjectParams struct {
@@ -482,8 +482,8 @@ type SoftDeleteAssistantMemoryByProjectParams struct {
 type SoftDeleteAssistantMemoryByProjectRow struct {
 	ID             uuid.UUID
 	OrganizationID string
-	ProjectID      uuid.UUID
-	AssistantID    uuid.UUID
+	ProjectID      uuid.NullUUID
+	AssistantID    uuid.NullUUID
 }
 
 // Project-scoped variant for the management API: filters on (id, project_id)
