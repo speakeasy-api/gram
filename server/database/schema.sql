@@ -1668,6 +1668,47 @@ CREATE INDEX IF NOT EXISTS toolset_embeddings_tags_idx
 ON toolset_embeddings
 USING GIN (tags);
 
+CREATE TABLE IF NOT EXISTS assistant_memories (
+  id               uuid NOT NULL DEFAULT generate_uuidv7(),
+  assistant_id     uuid,
+  project_id       uuid,
+  organization_id  TEXT NOT NULL,
+  content          TEXT NOT NULL,
+  embedding        halfvec(4000) NOT NULL,
+  supersedes_id    uuid,
+  superseded_at    timestamptz,
+  valid_at         timestamptz NOT NULL DEFAULT clock_timestamp(),
+  tags             TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+  origin_thread_id uuid,
+  origin_chat_id   uuid,
+  created_at       timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at       timestamptz NOT NULL DEFAULT clock_timestamp(),
+  last_access      timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at       timestamptz,
+  deleted          boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT assistant_memories_pkey PRIMARY KEY (id),
+  CONSTRAINT assistant_memories_assistant_id_fkey
+    FOREIGN KEY (assistant_id) REFERENCES assistants(id) ON DELETE SET NULL,
+  CONSTRAINT assistant_memories_project_id_fkey
+    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL,
+  CONSTRAINT assistant_memories_supersedes_id_fkey
+    FOREIGN KEY (supersedes_id) REFERENCES assistant_memories(id) ON DELETE SET NULL,
+  CONSTRAINT assistant_memories_content_size_check CHECK (octet_length(content) <= 8192)
+);
+
+CREATE INDEX IF NOT EXISTS assistant_memories_embedding_hnsw
+  ON assistant_memories USING hnsw (embedding halfvec_cosine_ops)
+  WHERE deleted IS FALSE AND superseded_at IS NULL;
+
+CREATE INDEX IF NOT EXISTS assistant_memories_assistant_active
+  ON assistant_memories (assistant_id, created_at DESC)
+  WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS assistant_memories_tags_gin
+  ON assistant_memories USING gin (tags)
+  WHERE deleted IS FALSE;
+
 -- Agent executions table
 CREATE TABLE IF NOT EXISTS agent_executions (
   id TEXT NOT NULL,
