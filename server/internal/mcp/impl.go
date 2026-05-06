@@ -69,37 +69,38 @@ import (
 )
 
 type Service struct {
-	logger              *slog.Logger
-	tracer              trace.Tracer
-	metrics             *metrics
-	guardianPolicy      *guardian.Policy
-	db                  *pgxpool.Pool
-	authRepo            *auth_repo.Queries
-	toolsetsRepo        *toolsets_repo.Queries
-	mcpMetadataRepo     *metadata_repo.Queries
-	orgsRepo            *organizations_repo.Queries
-	auth                *auth.Auth
-	env                 toolconfig.EnvironmentLoader
-	serverURL           *url.URL
-	posthog             *posthog.Posthog // posthog metrics will no-op if the dependency is not provided
-	toolProxy           *gateway.ToolProxy
-	oauthService        OAuthService
-	oauthRepo           *oauth_repo.Queries
-	billingTracker      billing.Tracker
-	billingRepository   billing.Repository
-	toolsetCache        cache.TypedCacheObject[mv.ToolsetBaseContents]
-	telemLogger         *tm.Logger
-	vectorToolStore     *rag.ToolsetVectorStore
-	temporal            *temporal.Environment
-	assistantTokens     *assistanttokens.Manager
-	sessions            *sessions.Manager
-	chatSessionsManager *chatsessions.Manager
-	externalmcpRepo     *externalmcp_repo.Queries
-	deploymentsRepo     *deployments_repo.Queries
-	enc                 *encryption.Client
-	authz               *authz.Engine
-	shadowMCPClient     *shadowmcp.Client
-	authnChallengeCache cache.TypedCacheObject[AuthnChallengeState]
+	logger                *slog.Logger
+	tracer                trace.Tracer
+	metrics               *metrics
+	guardianPolicy        *guardian.Policy
+	db                    *pgxpool.Pool
+	authRepo              *auth_repo.Queries
+	toolsetsRepo          *toolsets_repo.Queries
+	mcpMetadataRepo       *metadata_repo.Queries
+	orgsRepo              *organizations_repo.Queries
+	auth                  *auth.Auth
+	env                   toolconfig.EnvironmentLoader
+	serverURL             *url.URL
+	posthog               *posthog.Posthog // posthog metrics will no-op if the dependency is not provided
+	toolProxy             *gateway.ToolProxy
+	oauthService          OAuthService
+	oauthRepo             *oauth_repo.Queries
+	billingTracker        billing.Tracker
+	billingRepository     billing.Repository
+	toolsetCache          cache.TypedCacheObject[mv.ToolsetBaseContents]
+	telemLogger           *tm.Logger
+	vectorToolStore       *rag.ToolsetVectorStore
+	temporal              *temporal.Environment
+	assistantTokens       *assistanttokens.Manager
+	sessions              *sessions.Manager
+	chatSessionsManager   *chatsessions.Manager
+	externalmcpRepo       *externalmcp_repo.Queries
+	deploymentsRepo       *deployments_repo.Queries
+	enc                   *encryption.Client
+	authz                 *authz.Engine
+	shadowMCPClient       *shadowmcp.Client
+	authnChallengeCache   cache.TypedCacheObject[AuthnChallengeState]
+	userSessionGrantCache cache.TypedCacheObject[UserSessionGrant]
 	// idpClient drives the user-session AS authn-challenge path's calls to
 	// the Speakeasy IDP (issuer-gated /authorize → /idp_callback flow). The
 	// same client backs the chat-session Manager via auth/sessions, so both
@@ -215,6 +216,11 @@ func NewService(
 			cacheImpl,
 			cache.SuffixNone,
 		),
+		userSessionGrantCache: cache.NewTypedObjectCache[UserSessionGrant](
+			logger.With(attr.SlogCacheNamespace("user_session_grant")),
+			cacheImpl,
+			cache.SuffixNone,
+		),
 		idpClient: idpClient,
 	}
 }
@@ -236,6 +242,8 @@ func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Se
 	o11y.AttachHandler(mux, "POST", "/mcp/{mcpSlug}/register", oops.ErrHandle(service.logger, service.HandleRegister).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/{mcpSlug}/authorize", oops.ErrHandle(service.logger, service.HandleAuthorize).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/{mcpSlug}/idp_callback", oops.ErrHandle(service.logger, service.HandleIDPCallback).ServeHTTP)
+	o11y.AttachHandler(mux, "GET", "/mcp/{mcpSlug}/connect", oops.ErrHandle(service.logger, service.HandleConsent).ServeHTTP)
+	o11y.AttachHandler(mux, "POST", "/mcp/{mcpSlug}/connect", oops.ErrHandle(service.logger, service.HandleConsent).ServeHTTP)
 }
 
 // HandleGetServer handles GET requests to /mcp/{mcpSlug}, checking for HTML requests
