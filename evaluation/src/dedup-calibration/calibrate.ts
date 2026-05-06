@@ -99,9 +99,17 @@ async function embedBatch(
   client: OpenAI,
   model: string,
   texts: string[],
+  dimensions?: number,
 ): Promise<Map<string, number[]>> {
   const unique = Array.from(new Set(texts));
-  const result = await client.embeddings.create({ model, input: unique });
+  const params: Parameters<typeof client.embeddings.create>[0] = {
+    model,
+    input: unique,
+  };
+  if (dimensions != null) {
+    (params as { dimensions?: number }).dimensions = dimensions;
+  }
+  const result = await client.embeddings.create(params);
   const out = new Map<string, number[]>();
   unique.forEach((t, i) =>
     out.set(t, l2Normalize(result.data[i].embedding as number[])),
@@ -188,6 +196,7 @@ function computeBestKnee(scores: Score[]): ModelResult["bestKnee"] {
 async function runForModel(
   client: OpenAI,
   model: string,
+  dimensions?: number,
 ): Promise<ModelResult> {
   const t0 = Date.now();
   try {
@@ -196,9 +205,9 @@ async function runForModel(
     const stripTexts = rawTexts.map(stripSubject);
 
     const [rawEmb, normEmb, stripEmb] = await Promise.all([
-      embedBatch(client, model, rawTexts),
-      embedBatch(client, model, normTexts),
-      embedBatch(client, model, stripTexts),
+      embedBatch(client, model, rawTexts, dimensions),
+      embedBatch(client, model, normTexts, dimensions),
+      embedBatch(client, model, stripTexts, dimensions),
     ]);
 
     const scores: Score[] = allPairs.map((p) => {
@@ -402,6 +411,13 @@ async function main(): Promise<void> {
     .filter(Boolean);
 
   const verbose = process.env.VERBOSE === "1";
+  const dimensions = process.env.EMBED_DIMENSIONS
+    ? Number(process.env.EMBED_DIMENSIONS)
+    : undefined;
+  if (dimensions != null && (!Number.isFinite(dimensions) || dimensions <= 0)) {
+    console.error(`Invalid EMBED_DIMENSIONS: ${process.env.EMBED_DIMENSIONS}`);
+    process.exit(1);
+  }
 
   const client = new OpenAI({ apiKey, baseURL: OPENROUTER_BASE_URL });
 
@@ -411,13 +427,17 @@ async function main(): Promise<void> {
   process.stderr.write(
     `Fixture: ${unrelated.length} unrelated + ${trueDuplicate.length} true-dup + ${relatedDistinct.length} related-distinct = ${allPairs.length} pairs\n`,
   );
-  process.stderr.write(`Models: ${models.join(", ")}\n\n`);
+  process.stderr.write(`Models: ${models.join(", ")}\n`);
+  if (dimensions != null) {
+    process.stderr.write(`Dimensions override: ${dimensions}\n`);
+  }
+  process.stderr.write("\n");
 
   // Run all models in parallel.
   const results = await Promise.all(
     models.map(async (m) => {
       process.stderr.write(`  → ${m} starting\n`);
-      const r = await runForModel(client, m);
+      const r = await runForModel(client, m, dimensions);
       process.stderr.write(
         `  ← ${m} ${r.error ? `FAILED: ${r.error}` : `done in ${r.embedMs}ms`}\n`,
       );
