@@ -198,21 +198,20 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (*gen.
 	)
 
 	if hasOptionalPluginAuth(payload) {
-		var err error
-		ctx, err = s.authorizePluginRequest(ctx, *payload.ApikeyToken, *payload.ProjectSlugInput)
-		if err != nil {
-			// Log the auth failure but do NOT return an error. Returning a 401
-			// here causes the client-side hook script to block ALL tool calls,
-			// creating a deadlock: the user can't run `gram login` because the
-			// hook blocks Bash, but re-auth requires Bash. Instead, fall through
-			// without auth context — the hook still fires, telemetry is buffered,
-			// and policies that need auth context are skipped gracefully.
-			s.logger.WarnContext(ctx, "plugin auth failed on claude hook; continuing without auth context",
+		// Auth is optional. Returning a 401 on failure deadlocks the client:
+		// send_hook.sh maps any non-2xx to "block all tool calls", but
+		// recovering (e.g. `gram login`) requires Bash, which the hook just
+		// blocked. On failure we leave ctx unchanged and fall through to the
+		// same path a no-headers request takes — recordHook buffers the event
+		// in Redis, and the OTEL Logs endpoint flushes it once the session is
+		// validated. Policies that need auth context degrade gracefully.
+		if authedCtx, err := s.authorizePluginRequest(ctx, *payload.ApikeyToken, *payload.ProjectSlugInput); err != nil {
+			s.logger.WarnContext(ctx, "plugin auth failed on claude hook; falling back to OTEL-buffered path",
 				attr.SlogEvent("claude_hook_auth_failed"),
 				attr.SlogError(err),
 			)
-
-			return makeHookResult(payload.HookEventName), nil
+		} else {
+			ctx = authedCtx
 		}
 	}
 

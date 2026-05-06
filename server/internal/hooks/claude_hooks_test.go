@@ -77,10 +77,12 @@ func TestClaude_PreToolUse_UsesAuthContextWhenNoCachedMetadata(t *testing.T) {
 // When plugin auth headers are present but the API key is invalid/expired,
 // Claude() must NOT return a 401 error — that causes the client-side hook
 // script to block ALL tool calls, deadlocking the user. Instead it should
-// continue without auth context (same as the OTEL-only path).
+// fall through to the same OTEL-buffered path a no-headers request takes:
+// the event is buffered in Redis so flushPendingHooks can replay it once
+// the session is validated.
 func TestClaude_ContinuesWhenPluginAuthFails(t *testing.T) {
 	t.Parallel()
-	_, ti := newTestHooksService(t)
+	ctx, ti := newTestHooksService(t)
 
 	badKey := "gram_key_expired_or_invalid"
 	projectSlug := "some-project"
@@ -96,6 +98,15 @@ func TestClaude_ContinuesWhenPluginAuthFails(t *testing.T) {
 	})
 	require.NoError(t, err, "expired plugin auth must not return an error")
 	require.NotNil(t, result)
+
+	// The whole point of the fallback is that the event still lands in
+	// the Redis buffer, ready for flushPendingHooks once OTEL Logs seeds
+	// the session metadata. Asserting on the buffer (not just NoError)
+	// is what catches a regression to the early-return shape.
+	var buffered []gen.ClaudePayload
+	require.NoError(t, ti.service.cache.ListRange(ctx, hookPendingCacheKey(sessionID), 0, -1, &buffered))
+	require.Len(t, buffered, 1, "hook should be buffered when plugin auth fails")
+	require.Equal(t, "UserPromptSubmit", buffered[0].HookEventName)
 }
 
 // Sanity check the OTEL fallback path: with no auth context and no Redis
