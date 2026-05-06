@@ -388,6 +388,12 @@ type currentUserJSON struct {
 	FirstName         *string `json:"first_name,omitempty"`
 	LastName          *string `json:"last_name,omitempty"`
 	ProfilePictureURL *string `json:"profile_picture_url,omitempty"`
+	// ShadowID is the local users.id of the shadow row that backs this workos
+	// identity. Present whenever the shadow has been created (first login or
+	// first /currentUser fetch). The dashboard uses it to call users.update
+	// for admin/whitelisted toggles.
+	ShadowID    *string `json:"shadow_id,omitempty"`
+	ShadowAdmin bool    `json:"shadow_admin"`
 }
 
 func (h *Handler) handleGetUser(w http.ResponseWriter, r *http.Request) {
@@ -465,6 +471,42 @@ func (h *Handler) handleGetCurrentUser(w http.ResponseWriter, r *http.Request) {
 		resp.FirstName = strPtr(user.FirstName)
 		resp.LastName = strPtr(user.LastName)
 		resp.ProfilePictureURL = strPtr(user.ProfilePictureURL)
+
+		// Resolve the local shadow user for admin toggling. Look up by
+		// email first to avoid the SQLite ON CONFLICT RETURNING nil-UUID
+		// bug. Only call UpsertUserByEmail when no row exists yet (fresh
+		// insert path has no conflict, so RETURNING is safe).
+		q := repo.New(h.db)
+		shadows, serr := q.ListUsersFiltered(ctx, repo.ListUsersFilteredParams{
+			After:          uuid.Nil,
+			Email:          user.Email,
+			OrganizationID: nil,
+			MaxRows:        1,
+		})
+		var shadow *repo.User
+		if serr == nil && len(shadows) > 0 && shadows[0].ID != uuid.Nil {
+			shadow = &shadows[0]
+		} else {
+			displayName := strings.TrimSpace(user.FirstName + " " + user.LastName)
+			if displayName == "" {
+				displayName = user.Email
+			}
+			created, cerr := q.UpsertUserByEmail(ctx, repo.UpsertUserByEmailParams{
+				ID:          uuid.New(),
+				Email:       user.Email,
+				DisplayName: displayName,
+			})
+			if cerr != nil {
+				h.logger.WarnContext(ctx, "create shadow for currentUser", slog.Any("error", cerr))
+			} else if created.ID != uuid.Nil {
+				shadow = &created
+			}
+		}
+		if shadow != nil {
+			sid := shadow.ID.String()
+			resp.ShadowID = &sid
+			resp.ShadowAdmin = shadow.Admin
+		}
 	}
 	writeJSON(w, http.StatusOK, resp)
 }
