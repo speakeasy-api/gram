@@ -74,20 +74,22 @@ export function GrantDrawer({
     // slugify(name) → "org-" + lowercase-hyphenated
     const roleSlug =
       "org-" + selectedRole.name.toLowerCase().replace(/[\s_]+/g, "-");
-    resolveChallenge.mutate({
-      request: {
-        resolveChallengeForm: {
-          challengeId: challenge.id,
-          principalUrn: challenge.principalUrn,
-          scope: challenge.scope,
-          resolutionType: "role_assigned",
-          roleSlug,
-          resourceKind: challenge.resourceKind,
-          resourceId: challenge.resourceId,
+    resolveChallenge.mutate(
+      {
+        request: {
+          resolveChallengeForm: {
+            challengeId: challenge.id,
+            principalUrn: challenge.principalUrn,
+            scope: challenge.scope,
+            resolutionType: "role_assigned",
+            roleSlug,
+            resourceKind: challenge.resourceKind,
+            resourceId: challenge.resourceId,
+          },
         },
       },
-    });
-    handleClose();
+      { onSuccess: handleClose },
+    );
   };
 
   if (!challenge) return null;
@@ -325,11 +327,19 @@ export function GrantDrawer({
                     </div>
                   </div>
 
-                  <Button className="w-full" onClick={handleSave}>
+                  <Button
+                    className="w-full"
+                    onClick={handleSave}
+                    disabled={resolveChallenge.isPending}
+                  >
                     <Button.LeftIcon>
                       <Check className="h-4 w-4" />
                     </Button.LeftIcon>
-                    <Button.Text>Assign to {selectedRole.name}</Button.Text>
+                    <Button.Text>
+                      {resolveChallenge.isPending
+                        ? "Assigning…"
+                        : `Assign to ${selectedRole.name}`}
+                    </Button.Text>
                   </Button>
                 </div>
               )}
