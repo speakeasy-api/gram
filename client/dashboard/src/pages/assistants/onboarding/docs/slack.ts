@@ -15,7 +15,7 @@ The assistant owns one shared environment. Extend it with \`add_environment_keys
 
 ## Recommended flow (pre-filled webhook)
 
-1. **Attach a Slack toolset.** \`list_integrations\` (\`"slack"\`) → \`create_toolset\` if needed → \`attach_toolset\`. Required so the bot's tools are callable in step 7.
+1. **Attach a Slack toolset.** \`list_integrations\` (\`"slack"\`) → \`create_toolset\` if needed → \`attach_toolset\`. Required so the bot's tools are callable in step 7. After attach, default-add the reaction platform tools (\`tools:platform:slack:add_reaction\`, \`tools:platform:slack:remove_reaction\`, \`tools:platform:slack:get_reactions\`, \`tools:platform:slack:list_reactions\`, \`tools:platform:slack:list_emoji\`) via \`add_tools_to_toolset\` — skip only if the user has explicitly said they don't want reaction tooling.
 2. **Declare keys.** \`add_environment_keys({ keys: ["SLACK_BOT_TOKEN", "SLACK_SIGNING_SECRET"] })\`.
 3. **Create the trigger.** \`create_trigger\` with \`definition_slug: "slack"\` and the relevant \`event_types\`. The response includes a \`webhook_url\` that already responds to Slack's \`url_verification\` challenge. Remember the trigger \`id\` for step 7d.
 4. **Show the app guide — only if the bot doesn't exist.** Check \`list_environments\` → \`populated_entry_names\`; skip if \`SLACK_BOT_TOKEN\` is already set. Otherwise \`show_slack_app_guide\` with the \`webhook_url\`. The component derives bot scopes and \`bot_events\` from the attached toolset and trigger; do not pass overrides unless adding a scope the catalog lacks.

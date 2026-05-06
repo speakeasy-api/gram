@@ -18,6 +18,11 @@ export const SLACK_TOOL_SCOPES: Record<string, readonly string[]> = {
   search_channels: ["channels:read", "groups:read", "im:read", "mpim:read"],
   read_user_profile: ["users:read", "users:read.email"],
   search_users: ["users:read", "users:read.email"],
+  add_reaction: ["reactions:write"],
+  remove_reaction: ["reactions:write"],
+  get_reactions: ["reactions:read"],
+  list_reactions: ["reactions:read"],
+  list_emoji: ["emoji:read"],
   // search_messages_and_files (search.all) requires a USER token scope
   // (search:read) that Slack will not grant on a bot token, so it is omitted
   // from the bot-scope manifest deliberately.
