@@ -16,7 +16,7 @@ import {
   Table,
 } from "@speakeasy-api/moonshine";
 import { Check } from "lucide-react";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
 import { useChallengeRowColumns } from "./useChallengeRowColumns";
 import { useGrantFlow } from "./useGrantFlow";
@@ -99,6 +99,13 @@ export function ChallengesTab() {
   const [principalFilter, setPrincipalFilter] = useState(
     searchParams.get("identity") ?? "all",
   );
+
+  // Sync principalFilter when URL search params change (e.g. re-navigation
+  // with a different ?identity= value).
+  useEffect(() => {
+    const identity = searchParams.get("identity");
+    if (identity) setPrincipalFilter(identity);
+  }, [searchParams]);
   const [scopeFilter, setScopeFilter] = useState("all");
   const groupSiblingIdsRef = useRef<Map<string, string[]>>(new Map());
   const getGroupChallengeIds = useCallback(
@@ -225,6 +232,7 @@ export function ChallengesTab() {
     groupCounts,
     groupKeys,
     toggleGroup,
+    outcomeFilter,
   );
 
   const columns: Column<AuthzChallenge>[] = [
@@ -292,8 +300,8 @@ export function ChallengesTab() {
         <SkeletonTable />
       ) : filtered.length === 0 ? (
         <div className="border-border/50 bg-muted/20 rounded-lg border px-6 py-16 text-center">
-          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900/30">
-            <Check className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
+          <div className="bg-primary/10 mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full">
+            <Check className="text-primary h-6 w-6" />
           </div>
           <Type variant="body" className="font-medium">
             {outcomeFilter === "deny"

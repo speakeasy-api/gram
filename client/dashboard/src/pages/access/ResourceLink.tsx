@@ -29,7 +29,7 @@ export function ResourceLink({
   if (resourceKind === "org") {
     label = "Organization";
     IconEl = Building2;
-    to = `/${orgSlug}/settings`;
+    to = `/${orgSlug}`;
   } else if (resourceKind === "project") {
     const proj = projectMap.get(resourceId);
     label = proj?.name ?? resourceId;
@@ -46,7 +46,7 @@ export function ResourceLink({
     return (
       <Link
         to={to}
-        className="inline-flex items-center gap-1.5 truncate text-sm text-blue-600 underline underline-offset-4 hover:text-blue-500 dark:text-blue-400 dark:hover:text-blue-300"
+        className="text-primary hover:text-primary/80 inline-flex items-center gap-1.5 truncate text-sm underline underline-offset-4"
       >
         {IconEl && <IconEl className="h-3.5 w-3.5 shrink-0 opacity-60" />}
         <span className="truncate">{label}</span>

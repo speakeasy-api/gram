@@ -148,7 +148,7 @@ export function useGrantFlow(
                   scope: createChallenge.scope,
                   resolutionType:
                     ResolveChallengeFormResolutionType.RoleAssigned,
-                  roleSlug: toRoleSlug(roleName),
+                  roleSlug: toRoleSlug(roleName), // new roles always get org- prefix
                   resourceKind: createChallenge.resourceKind,
                   resourceId: createChallenge.resourceId,
                 },
