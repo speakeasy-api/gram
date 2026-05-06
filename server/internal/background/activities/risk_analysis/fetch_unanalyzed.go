@@ -73,7 +73,13 @@ func (a *FetchUnanalyzed) Do(ctx context.Context, args FetchUnanalyzedArgs) (_ *
 		a.logger.InfoContext(ctx, "risk policy deleted, skipping fetch",
 			attr.SlogRiskPolicyID(args.RiskPolicyID.String()),
 		)
-		return &FetchUnanalyzedResult{}, nil
+		return &FetchUnanalyzedResult{
+			MessageIDs:       nil,
+			OrganizationID:   "",
+			PolicyVersion:    0,
+			Sources:          nil,
+			PresidioEntities: nil,
+		}, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("get risk policy: %w", err)
