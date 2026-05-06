@@ -25,6 +25,7 @@ type ContextWindowResolver struct {
 	logger     *slog.Logger
 	httpClient *guardian.HTTPClient
 	cache      cache.TypedCacheObject[mv.ModelContextWindow]
+	baseURL    string
 }
 
 func NewContextWindowResolver(logger *slog.Logger, guardianPolicy *guardian.Policy, cacheImpl cache.Cache) *ContextWindowResolver {
@@ -33,6 +34,7 @@ func NewContextWindowResolver(logger *slog.Logger, guardianPolicy *guardian.Poli
 		logger:     component,
 		httpClient: guardianPolicy.PooledClient(guardian.WithDefaultRetryConfig()),
 		cache:      cache.NewTypedObjectCache[mv.ModelContextWindow](component.With(attr.SlogCacheNamespace("openrouter_context_window")), cacheImpl, cache.SuffixNone),
+		baseURL:    OpenRouterBaseURL,
 	}
 }
 
@@ -70,7 +72,7 @@ func (r *ContextWindowResolver) fetchMin(ctx context.Context, modelID string) (i
 		return 0, fmt.Errorf("invalid model id %q: expected <author>/<slug>", modelID)
 	}
 
-	endpoint := fmt.Sprintf("%s/v1/models/%s/%s/endpoints", OpenRouterBaseURL, url.PathEscape(author), url.PathEscape(slug))
+	endpoint := fmt.Sprintf("%s/v1/models/%s/%s/endpoints", r.baseURL, url.PathEscape(author), url.PathEscape(slug))
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		return 0, fmt.Errorf("build endpoints request: %w", err)

@@ -769,13 +769,17 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 		NormalizeOutboundMessages: r.URL.Query().Get("unstable_normalizeOutboundMessages") == "1",
 	}
 
-	// Resolve in parallel with the upstream call so the value is ready by the
-	// time we encode the response (non-stream) or hit the final SSE frame
-	// (stream).
-	getContextWindow := sync.OnceValue(func() int {
-		return s.resolveContextWindow(ctx, completionReq.Model)
-	})
-	go getContextWindow()
+	// Opt-in: callers must pass unstable_includeContextWindow=1 to receive
+	// the gram_metadata.context_window decoration. When off, the resolver
+	// (and its OpenRouter round trip on cache miss) is never called.
+	getContextWindow := func() int { return 0 }
+	if r.URL.Query().Get("unstable_includeContextWindow") == "1" {
+		resolved := sync.OnceValue(func() int {
+			return s.resolveContextWindow(ctx, completionReq.Model)
+		})
+		go resolved()
+		getContextWindow = resolved
+	}
 
 	isStreaming := chatRequest.Stream
 	if isStreaming {
