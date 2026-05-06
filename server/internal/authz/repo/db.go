@@ -1,8 +1,9 @@
-// Package chrepo writes authz challenge rows to ClickHouse.
+// Package repo writes authz challenge rows to ClickHouse.
 //
-// Inserts use server-side async insert (clickhouse.WithAsync(true) +
-// wait_for_async_insert=0) so the request path never blocks on the network or
-// on CH batch construction. CH buffers and flushes batches itself.
+// Inserts use server-side async insert (async_insert=1,
+// wait_for_async_insert=0) so ClickHouse buffers rows and responds
+// immediately without waiting for a disk flush. The Exec call itself
+// still blocks on the network roundtrip to CH.
 package repo
 
 import (
