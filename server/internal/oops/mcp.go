@@ -15,8 +15,8 @@ import (
 // errors as JSON-RPC error responses instead of the generic HTTP error shape.
 func MCPErrHandle(logger *slog.Logger, handler func(http.ResponseWriter, *http.Request) error) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		id := new(json.RawMessage)
-		r = r.WithContext(contextvalues.SetMCPIDContext(r.Context(), id))
+		mcpCtx := &contextvalues.MCPContext{ID: json.RawMessage("null")}
+		r = r.WithContext(contextvalues.SetMCPContext(r.Context(), mcpCtx))
 
 		err := handler(w, r)
 		if err == nil {

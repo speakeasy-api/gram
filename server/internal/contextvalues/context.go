@@ -48,6 +48,10 @@ type AdminAuthContext struct {
 	HD          string
 }
 
+type MCPContext struct {
+	ID json.RawMessage
+}
+
 const (
 	SessionTokenContextKey      contextKey = "sessionTokenKey"
 	SessionValueContextKey      contextKey = "sessionValueKey"
@@ -58,6 +62,7 @@ const (
 	AdminSessionTokenContextKey contextKey = "adminSessionTokenKey"
 	AdminAuthContextKey         contextKey = "adminAuthKey"
 	MCPIDContextKey             contextKey = "mcpIDContextKey"
+	MCPContextKey               contextKey = "mcpContextKey"
 )
 
 func SetSessionTokenInContext(ctx context.Context, value string) context.Context {
@@ -96,22 +101,27 @@ func GetRequestContext(ctx context.Context) (*RequestContext, bool) {
 	return value, ok
 }
 
-func SetMCPIDContext(ctx context.Context, value *json.RawMessage) context.Context {
-	return context.WithValue(ctx, MCPIDContextKey, value)
+func SetMCPContext(ctx context.Context, value *MCPContext) context.Context {
+	return context.WithValue(ctx, MCPContextKey, value)
+}
+
+func GetMCPContext(ctx context.Context) (*MCPContext, bool) {
+	value, ok := ctx.Value(MCPContextKey).(*MCPContext)
+	return value, ok
 }
 
 func SetMCPID(ctx context.Context, value json.RawMessage) {
-	if dst, ok := ctx.Value(MCPIDContextKey).(*json.RawMessage); ok && len(value) > 0 {
-		*dst = value
+	if mcpCtx, ok := GetMCPContext(ctx); ok && len(value) > 0 {
+		mcpCtx.ID = value
 	}
 }
 
 func GetMCPID(ctx context.Context) (json.RawMessage, bool) {
-	value, ok := ctx.Value(MCPIDContextKey).(*json.RawMessage)
-	if !ok || value == nil {
+	mcpCtx, ok := GetMCPContext(ctx)
+	if !ok || len(mcpCtx.ID) == 0 {
 		return nil, false
 	}
-	return *value, len(*value) > 0
+	return mcpCtx.ID, true
 }
 
 func SetRBACScopeOverride(ctx context.Context, value string) context.Context {
