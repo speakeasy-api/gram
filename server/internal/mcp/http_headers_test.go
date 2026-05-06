@@ -58,48 +58,50 @@ func TestAuthorizationBearerToken_BearerUppercase(t *testing.T) {
 func TestAuthorizationBearerToken_BearerEmptyToken(t *testing.T) {
 	t.Parallel()
 
-	// "Bearer " with no token after the space matches the prefix and strips
-	// to empty; callers treat empty returns as "no auth".
+	// "Bearer " with no token after the space is technically a valid prefix
+	// match but yields no token; callers treat empty returns as "no auth".
 	require.Empty(t, mcp.AuthorizationBearerToken(newAuthRequest(t, "Bearer ")))
 }
 
-// TestAuthorizationBearerToken_RawKeyNoScheme is the regression guard for the
-// hosted install-page snippets, which emit "Authorization:${GRAM_KEY}" with
-// no scheme prefix. The user's raw Gram API key must round-trip through this
-// helper untouched. See the [mcp.AuthorizationBearerToken] docstring.
-func TestAuthorizationBearerToken_RawKeyNoScheme(t *testing.T) {
-	t.Parallel()
-
-	require.Equal(t, "gram_live_abc123", mcp.AuthorizationBearerToken(newAuthRequest(t, "gram_live_abc123")))
-}
-
+// TestAuthorizationBearerToken_BasicScheme is the regression test for the
+// non-Bearer fallthrough: returning the raw header would land "Basic abc123"
+// inside an upstream "Authorization: Bearer Basic abc123" — see the function
+// docstring for the proxy-forwarding rationale.
 func TestAuthorizationBearerToken_BasicScheme(t *testing.T) {
 	t.Parallel()
 
-	// Non-Bearer schemes are returned verbatim under the lenient policy.
-	require.Equal(t, "Basic abc123", mcp.AuthorizationBearerToken(newAuthRequest(t, "Basic abc123")))
+	require.Empty(t, mcp.AuthorizationBearerToken(newAuthRequest(t, "Basic abc123")))
 }
 
 func TestAuthorizationBearerToken_DigestScheme(t *testing.T) {
 	t.Parallel()
 
-	require.Equal(t, `Digest username="u", realm="r"`, mcp.AuthorizationBearerToken(newAuthRequest(t, `Digest username="u", realm="r"`)))
+	require.Empty(t, mcp.AuthorizationBearerToken(newAuthRequest(t, `Digest username="u", realm="r"`)))
 }
 
 func TestAuthorizationBearerToken_BareWordBearerNoSpace(t *testing.T) {
 	t.Parallel()
 
-	// "Bearer" alone is shorter than the "Bearer " prefix; it falls through
-	// the prefix check and is returned verbatim.
-	require.Equal(t, "Bearer", mcp.AuthorizationBearerToken(newAuthRequest(t, "Bearer")))
+	// "Bearer" alone is shorter than the "Bearer " prefix and must not match.
+	require.Empty(t, mcp.AuthorizationBearerToken(newAuthRequest(t, "Bearer")))
 }
 
 func TestAuthorizationBearerToken_BearerLikePrefix(t *testing.T) {
 	t.Parallel()
 
-	// A scheme that starts with the same letters but isn't "Bearer " is
-	// returned verbatim rather than matched as a prefix.
-	require.Equal(t, "Bearer-Like xyz", mcp.AuthorizationBearerToken(newAuthRequest(t, "Bearer-Like xyz")))
+	// A scheme that starts with the same letters but isn't "Bearer " must not
+	// match — guards against a hypothetical "Bearer-Like xyz" or similar.
+	require.Empty(t, mcp.AuthorizationBearerToken(newAuthRequest(t, "Bearer-Like xyz")))
+}
+
+// TestAuthorizationBearerToken_RawKeyNoScheme documents that the strict
+// helper does NOT accept a raw token — the lenient path lives in
+// [AuthorizationOrChatSessionToken]. See that helper's tests for the
+// install-page regression guard.
+func TestAuthorizationBearerToken_RawKeyNoScheme(t *testing.T) {
+	t.Parallel()
+
+	require.Empty(t, mcp.AuthorizationBearerToken(newAuthRequest(t, "gram_live_abc123")))
 }
 
 func TestAuthorizationOrChatSessionToken_BothEmpty(t *testing.T) {
@@ -126,21 +128,40 @@ func TestAuthorizationOrChatSessionToken_BearerWinsWhenBothSet(t *testing.T) {
 	require.Equal(t, "abc123", mcp.AuthorizationOrChatSessionToken(newIdentityRequest(t, "Bearer abc123", "session-jwt")))
 }
 
-// TestAuthorizationOrChatSessionToken_RawKeyWinsOverChatSession asserts the
-// lenient-bearer path: a raw Authorization value (e.g. an unprefixed Gram
-// API key from the install-page snippets) is returned and pre-empts the
-// chat-session fallback.
+// TestAuthorizationOrChatSessionToken_RawKeyWinsOverChatSession is the
+// regression guard for the hosted install-page snippets: a raw Gram API
+// key with no Bearer prefix must round-trip through the identity-auth
+// helper untouched and pre-empt the chat-session fallback. See the
+// [mcp.AuthorizationOrChatSessionToken] docstring.
 func TestAuthorizationOrChatSessionToken_RawKeyWinsOverChatSession(t *testing.T) {
 	t.Parallel()
 
 	require.Equal(t, "gram_live_abc123", mcp.AuthorizationOrChatSessionToken(newIdentityRequest(t, "gram_live_abc123", "session-jwt")))
 }
 
-func TestAuthorizationOrChatSessionToken_NonBearerSchemePreEmptsChatSession(t *testing.T) {
+func TestAuthorizationOrChatSessionToken_RawKeyAlone(t *testing.T) {
 	t.Parallel()
 
-	// Non-Bearer schemes are returned verbatim, so they take priority over
-	// the chat-session header just like Bearer and raw values do.
+	require.Equal(t, "gram_live_abc123", mcp.AuthorizationOrChatSessionToken(newIdentityRequest(t, "gram_live_abc123", "")))
+}
+
+func TestAuthorizationOrChatSessionToken_BearerEmptyTokenFallsThrough(t *testing.T) {
+	t.Parallel()
+
+	// "Bearer " with no token after the prefix yields an empty Authorization
+	// value, so the chat-session header takes over.
+	require.Equal(t, "session-jwt", mcp.AuthorizationOrChatSessionToken(newIdentityRequest(t, "Bearer ", "session-jwt")))
+}
+
+// TestAuthorizationOrChatSessionToken_BasicSchemePreEmptsChatSession
+// documents that under the lenient identity-auth policy a non-Bearer
+// scheme is returned verbatim and pre-empts the chat-session header. The
+// returned value will fail API-key lookup downstream — fine for identity
+// auth but unsafe for OAuth upstream forwarding (which uses the strict
+// [mcp.AuthorizationBearerToken] helper instead).
+func TestAuthorizationOrChatSessionToken_BasicSchemePreEmptsChatSession(t *testing.T) {
+	t.Parallel()
+
 	require.Equal(t, "Basic abc123", mcp.AuthorizationOrChatSessionToken(newIdentityRequest(t, "Basic abc123", "session-jwt")))
 }
 
