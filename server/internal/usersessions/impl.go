@@ -1,12 +1,9 @@
 // Package usersessions implements the management API services that surface
 // user_session_issuer / user_session_client / user_session_consent /
-// user_session resources. Per the spike (§3.1, §6.1), four Goa services are
-// authored under server/design/usersession{issuers,clients,consents}/ and
-// server/design/usersessions/, but a single Go package owns their shared
+// user_session resources. The four Goa services are authored under
+// server/design/usersession{issuers,clients,consents}/ and
+// server/design/usersessions/; a single Go package owns their shared
 // implementation, dependencies, and lifecycle.
-//
-// All method bodies are stubbed to oops.CodeNotImplemented; real logic lands
-// in tickets #4-#7.
 package usersessions
 
 import (
@@ -29,6 +26,7 @@ import (
 	sessionsgen "github.com/speakeasy-api/gram/server/gen/user_sessions"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
+	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
@@ -38,11 +36,12 @@ import (
 // packages keeps the management-API surface logically grouped while a single
 // Service struct lets handlers share dependencies.
 type Service struct {
-	tracer trace.Tracer
-	logger *slog.Logger
-	db     *pgxpool.Pool
-	auth   *auth.Auth
-	authz  *authz.Engine
+	tracer       trace.Tracer
+	logger       *slog.Logger
+	db           *pgxpool.Pool
+	auth         *auth.Auth
+	authz        *authz.Engine
+	chatSessions *chatsessions.Manager
 }
 
 var (
@@ -57,16 +56,18 @@ var (
 )
 
 // NewService constructs a Service ready to be Attached against each of the
-// four user_session* Goa services.
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessionManager *sessions.Manager, authzEngine *authz.Engine) *Service {
+// four user_session* Goa services. chatSessionsManager is used by the
+// userSessions revoke handler to push revoked jtis into the revocation cache.
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessionManager *sessions.Manager, chatSessionsManager *chatsessions.Manager, authzEngine *authz.Engine) *Service {
 	logger = logger.With(attr.SlogComponent("usersessions"))
 
 	return &Service{
-		tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/usersessions"),
-		logger: logger,
-		db:     db,
-		auth:   auth.New(logger, db, sessionManager, authzEngine),
-		authz:  authzEngine,
+		tracer:       tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/usersessions"),
+		logger:       logger,
+		db:           db,
+		auth:         auth.New(logger, db, sessionManager, authzEngine),
+		authz:        authzEngine,
+		chatSessions: chatSessionsManager,
 	}
 }
 

@@ -22022,11 +22022,11 @@ paths:
       operationId: listUserSessions
       parameters:
         - allowEmptyValue: true
-          description: Exact-match filter on principal URN.
+          description: Exact-match filter on subject URN.
           in: query
-          name: principal_urn
+          name: subject_urn
           schema:
-            description: Exact-match filter on principal URN.
+            description: Exact-match filter on subject URN.
             type: string
         - allowEmptyValue: true
           description: Filter by user_session_issuer id.
@@ -22037,11 +22037,12 @@ paths:
             format: uuid
             type: string
         - allowEmptyValue: true
-          description: Pagination cursor.
+          description: 'Pagination cursor: id of the last item from the previous page.'
           in: query
           name: cursor
           schema:
-            description: Pagination cursor.
+            description: 'Pagination cursor: id of the last item from the previous page.'
+            format: uuid
             type: string
         - allowEmptyValue: true
           description: Page size (default 50, max 100).
@@ -32351,13 +32352,13 @@ components:
         jti:
           type: string
           description: Current access-token JTI; used by the revocation path.
-        principal_urn:
-          type: string
-          description: The session's principal URN (user:<id> | apikey:<uuid> | anonymous:<mcp-session-id>).
         refresh_expires_at:
           type: string
           description: Next refresh deadline.
           format: date-time
+        subject_urn:
+          type: string
+          description: The session's subject URN (user:<id> | apikey:<uuid> | anonymous:<mcp-session-id>).
         updated_at:
           type: string
           format: date-time
@@ -32369,7 +32370,7 @@ components:
       required:
         - id
         - user_session_issuer_id
-        - principal_urn
+        - subject_urn
         - jti
         - refresh_expires_at
         - expires_at

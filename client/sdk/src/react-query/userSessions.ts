@@ -197,7 +197,7 @@ export function setUserSessionsData(
   client: QueryClient,
   queryKeyBase: [
     parameters: {
-      principalUrn?: string | undefined;
+      subjectUrn?: string | undefined;
       userSessionIssuerId?: string | undefined;
       cursor?: string | undefined;
       limit?: number | undefined;
@@ -217,7 +217,7 @@ export function invalidateUserSessions(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
     [parameters: {
-      principalUrn?: string | undefined;
+      subjectUrn?: string | undefined;
       userSessionIssuerId?: string | undefined;
       cursor?: string | undefined;
       limit?: number | undefined;

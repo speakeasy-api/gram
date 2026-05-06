@@ -56,8 +56,8 @@ func EncodeListUserSessionsRequest(encoder func(*http.Request) goahttp.Encoder) 
 			req.Header.Set("Gram-Project", head)
 		}
 		values := req.URL.Query()
-		if p.PrincipalUrn != nil {
-			values.Add("principal_urn", *p.PrincipalUrn)
+		if p.SubjectUrn != nil {
+			values.Add("subject_urn", *p.SubjectUrn)
 		}
 		if p.UserSessionIssuerID != nil {
 			values.Add("user_session_issuer_id", *p.UserSessionIssuerID)
@@ -507,7 +507,7 @@ func unmarshalUserSessionResponseBodyToTypesUserSession(v *UserSessionResponseBo
 	res := &types.UserSession{
 		ID:                  *v.ID,
 		UserSessionIssuerID: *v.UserSessionIssuerID,
-		PrincipalUrn:        *v.PrincipalUrn,
+		SubjectUrn:          *v.SubjectUrn,
 		Jti:                 *v.Jti,
 		RefreshExpiresAt:    *v.RefreshExpiresAt,
 		ExpiresAt:           *v.ExpiresAt,

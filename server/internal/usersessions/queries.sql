@@ -141,6 +141,44 @@ WHERE c.id = @id
   AND c.deleted IS FALSE
 RETURNING c.*, cli.user_session_issuer_id AS user_session_issuer_id;
 
+-- name: GetUserSessionByID :one
+-- Returns the session row scoped to the caller's project, joined through
+-- user_session_issuers so project scoping is enforced in the same query.
+SELECT s.*
+FROM user_sessions AS s
+JOIN user_session_issuers AS iss ON iss.id = s.user_session_issuer_id
+WHERE s.id = @id AND iss.project_id = @project_id AND s.deleted IS FALSE;
+
+-- name: ListUserSessionsByProjectID :many
+-- refresh_token_hash is excluded from the projection so the management API
+-- surface cannot accidentally return it.
+SELECT s.id, s.user_session_issuer_id, s.user_session_client_id, s.subject_urn, s.jti,
+       s.refresh_expires_at, s.expires_at,
+       s.created_at, s.updated_at, s.deleted_at, s.deleted
+FROM user_sessions AS s
+JOIN user_session_issuers AS iss ON iss.id = s.user_session_issuer_id
+WHERE iss.project_id = @project_id
+  AND s.deleted IS FALSE
+  AND iss.deleted IS FALSE
+  AND (sqlc.narg('subject_urn')::text IS NULL OR s.subject_urn = sqlc.narg('subject_urn')::text)
+  AND (sqlc.narg('user_session_issuer_id')::uuid IS NULL OR s.user_session_issuer_id = sqlc.narg('user_session_issuer_id')::uuid)
+  AND (sqlc.narg('cursor')::uuid IS NULL OR s.id < sqlc.narg('cursor')::uuid)
+ORDER BY s.id DESC
+LIMIT sqlc.arg('limit_value');
+
+-- name: RevokeUserSession :one
+-- Soft-deletes the session. Project scoping is enforced through the join on
+-- user_session_issuers. Returns the affected row so the handler can push the
+-- jti into the revocation cache and emit an audit event.
+UPDATE user_sessions AS s
+SET deleted_at = clock_timestamp()
+FROM user_session_issuers AS iss
+WHERE s.id = @id
+  AND iss.id = s.user_session_issuer_id
+  AND iss.project_id = @project_id
+  AND s.deleted IS FALSE
+RETURNING s.*;
+
 -- The Create* queries below are exercised by tests and by the OAuth surface
 -- that lands in milestone #2 (DCR registration, /token exchange, /authorize
 -- consent). They have no exposure on the management API.

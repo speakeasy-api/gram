@@ -26,15 +26,15 @@ export type ListUserSessionsSecurity = {
 
 export type ListUserSessionsRequest = {
   /**
-   * Exact-match filter on principal URN.
+   * Exact-match filter on subject URN.
    */
-  principalUrn?: string | undefined;
+  subjectUrn?: string | undefined;
   /**
    * Filter by user_session_issuer id.
    */
   userSessionIssuerId?: string | undefined;
   /**
-   * Pagination cursor.
+   * Pagination cursor: id of the last item from the previous page.
    */
   cursor?: string | undefined;
   /**
@@ -162,7 +162,7 @@ export function listUserSessionsSecurityToJSON(
 
 /** @internal */
 export type ListUserSessionsRequest$Outbound = {
-  principal_urn?: string | undefined;
+  subject_urn?: string | undefined;
   user_session_issuer_id?: string | undefined;
   cursor?: string | undefined;
   limit?: number | undefined;
@@ -177,7 +177,7 @@ export const ListUserSessionsRequest$outboundSchema: z.ZodMiniType<
   ListUserSessionsRequest
 > = z.pipe(
   z.object({
-    principalUrn: z.optional(z.string()),
+    subjectUrn: z.optional(z.string()),
     userSessionIssuerId: z.optional(z.string()),
     cursor: z.optional(z.string()),
     limit: z.optional(z.int()),
@@ -187,7 +187,7 @@ export const ListUserSessionsRequest$outboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
-      principalUrn: "principal_urn",
+      subjectUrn: "subject_urn",
       userSessionIssuerId: "user_session_issuer_id",
       gramSession: "Gram-Session",
       gramKey: "Gram-Key",

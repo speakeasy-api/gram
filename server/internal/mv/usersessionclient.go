@@ -8,8 +8,8 @@ import (
 )
 
 // BuildUserSessionClientView converts a repo client row into the API response
-// type. The bcrypt-hashed client_secret_hash is intentionally omitted from the
-// view: per spike §6.1, it is never returned over the management API.
+// type. client_secret_hash is intentionally omitted — it is never returned
+// over the management API.
 func BuildUserSessionClientView(row repo.UserSessionClient) *types.UserSessionClient {
 	var clientSecretExpiresAt *string
 	if row.ClientSecretExpiresAt.Valid {

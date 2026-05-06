@@ -414,9 +414,9 @@ type UserSessionResponseBody struct {
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// The issuing user_session_issuer id.
 	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
-	// The session's principal URN (user:<id> | apikey:<uuid> |
+	// The session's subject URN (user:<id> | apikey:<uuid> |
 	// anonymous:<mcp-session-id>).
-	PrincipalUrn *string `form:"principal_urn,omitempty" json:"principal_urn,omitempty" xml:"principal_urn,omitempty"`
+	SubjectUrn *string `form:"subject_urn,omitempty" json:"subject_urn,omitempty" xml:"subject_urn,omitempty"`
 	// Current access-token JTI; used by the revocation path.
 	Jti *string `form:"jti,omitempty" json:"jti,omitempty" xml:"jti,omitempty"`
 	// Next refresh deadline.
@@ -1259,8 +1259,8 @@ func ValidateUserSessionResponseBody(body *UserSessionResponseBody) (err error) 
 	if body.UserSessionIssuerID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("user_session_issuer_id", "body"))
 	}
-	if body.PrincipalUrn == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("principal_urn", "body"))
+	if body.SubjectUrn == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("subject_urn", "body"))
 	}
 	if body.Jti == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("jti", "body"))
