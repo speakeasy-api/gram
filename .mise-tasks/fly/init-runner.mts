@@ -22,7 +22,8 @@ const TRANSIENT_PATTERNS = [
   /no such host/i,
   /TLS handshake/i,
   /temporarily unavailable/i,
-  /gateway/i,
+  /bad gateway/i,
+  /gateway timeout/i,
   /service unavailable/i,
 ];
 
@@ -89,11 +90,11 @@ async function main() {
   console.log(`ℹ️ Creating fly app in ${org}: ${appName}`);
 
   let proc: ProcessOutput | undefined;
+  let combined = "";
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     proc = await $`fly apps create --org ${org} ${appName}`.nothrow();
+    combined = `${proc.stderr}\n${proc.stdout}`;
     if (proc.exitCode === 0) break;
-
-    const combined = `${proc.stderr}\n${proc.stdout}`;
     if (combined.includes("Name has already been taken")) break;
 
     if (attempt < MAX_ATTEMPTS && isTransient(combined)) {
@@ -112,7 +113,7 @@ async function main() {
 
   halt(proc, "fly apps create did not run");
 
-  const exists = proc.stderr.includes("Name has already been taken");
+  const exists = combined.includes("Name has already been taken");
   const fail = proc.exitCode !== 0;
   switch (true) {
     case fail && exists && yn(process.env["usage_force"]):
@@ -122,7 +123,7 @@ async function main() {
       break;
     case fail:
       console.error("❌ Failed to create fly app:");
-      console.error(proc.stderr);
+      console.error(combined);
       return process.exit(1);
     default:
       console.log(`✅ Fly app ${appName} created in ${org}.`);
