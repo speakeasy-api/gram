@@ -494,8 +494,8 @@ func TestGenerateClaudeObservabilityPluginHooksJSONIncludesAllRegisteredEvents(t
 	files, err := GeneratePluginPackages(nil, cfg)
 	require.NoError(t, err)
 
-	hooksJSON := files[ClaudeObservabilitySlug(cfg)+"/hooks.json"]
-	require.NotNil(t, hooksJSON, "claude observability hooks.json missing")
+	hooksJSON := files[ClaudeObservabilitySlug(cfg)+"/hooks/hooks.json"]
+	require.NotNil(t, hooksJSON, "claude observability hooks/hooks.json missing")
 
 	var parsed claudeHooksConfig
 	require.NoError(t, json.Unmarshal(hooksJSON, &parsed))

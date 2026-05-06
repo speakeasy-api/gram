@@ -433,8 +433,12 @@ func generateClaudeObservabilityPluginInDir(files map[string][]byte, subdir stri
 	}
 	files[path.Join(subdir, ".claude-plugin/plugin.json")] = pluginJSON
 
+	// Claude Code's plugin reference (https://code.claude.com/docs/en/plugins-reference)
+	// requires hooks at hooks/hooks.json, not at the plugin root. With the
+	// flat layout (hooks.json + hook.sh at root) Claude registers the plugin
+	// silently but never wires the hooks up.
 	matchers := []claudeHookMatcher{
-		{Matcher: "*", Hooks: []claudeHookCommand{{Type: "command", Command: `bash "$CLAUDE_PLUGIN_ROOT/hook.sh"`}}},
+		{Matcher: "*", Hooks: []claudeHookCommand{{Type: "command", Command: `bash "$CLAUDE_PLUGIN_ROOT/hooks/hook.sh"`}}},
 	}
 	hookEvents := make(map[string][]claudeHookMatcher, len(ClaudeObservabilityHookEvents))
 	for _, event := range ClaudeObservabilityHookEvents {
@@ -444,9 +448,9 @@ func generateClaudeObservabilityPluginInDir(files map[string][]byte, subdir stri
 	if err != nil {
 		return fmt.Errorf("marshal hooks.json: %w", err)
 	}
-	files[path.Join(subdir, "hooks.json")] = hooksJSON
+	files[path.Join(subdir, "hooks/hooks.json")] = hooksJSON
 
-	files[path.Join(subdir, "hook.sh")] = renderHookScript(cfg, "claude")
+	files[path.Join(subdir, "hooks/hook.sh")] = renderHookScript(cfg, "claude")
 
 	return nil
 }
@@ -482,17 +486,20 @@ func generateCursorObservabilityPluginInDir(files map[string][]byte, subdir stri
 	}
 	files[path.Join(subdir, ".cursor-plugin/plugin.json")] = pluginJSON
 
+	// Same hooks/ subdirectory layout as the Claude side. Cursor follows the
+	// same convention as Claude Code; flat-layout plugins register but their
+	// hooks never fire.
 	hookEvents := make(map[string][]cursorHookCommand, len(CursorObservabilityHookEvents))
 	for _, event := range CursorObservabilityHookEvents {
-		hookEvents[event] = []cursorHookCommand{{Command: `bash "$CURSOR_PLUGIN_ROOT/hook.sh"`}}
+		hookEvents[event] = []cursorHookCommand{{Command: `bash "$CURSOR_PLUGIN_ROOT/hooks/hook.sh"`}}
 	}
 	hooksJSON, err := marshalJSON(cursorHooksConfig{Version: 1, Hooks: hookEvents})
 	if err != nil {
 		return fmt.Errorf("marshal hooks.json: %w", err)
 	}
-	files[path.Join(subdir, "hooks.json")] = hooksJSON
+	files[path.Join(subdir, "hooks/hooks.json")] = hooksJSON
 
-	files[path.Join(subdir, "hook.sh")] = renderHookScript(cfg, "cursor")
+	files[path.Join(subdir, "hooks/hook.sh")] = renderHookScript(cfg, "cursor")
 
 	return nil
 }

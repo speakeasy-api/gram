@@ -923,14 +923,16 @@ func TestPluginsService_PublishPlugins_EmitsObservabilityPlugin(t *testing.T) {
 
 	claudeObservability, cursorObservability := orgObservabilitySlugs(t, ctx, ti)
 
-	// Both Claude and Cursor observability plugins must be present.
+	// Both Claude and Cursor observability plugins must be present, with
+	// hooks living under hooks/ per the Claude Code plugins reference. Files
+	// at the plugin root register the plugin but never wire the hooks up.
 	require.NotNil(t, mock.lastPushedFiles[claudeObservability+"/.claude-plugin/plugin.json"], "claude observability plugin.json missing")
-	require.NotNil(t, mock.lastPushedFiles[claudeObservability+"/hooks.json"], "claude observability hooks.json missing")
-	require.NotNil(t, mock.lastPushedFiles[claudeObservability+"/hook.sh"], "claude observability hook.sh missing")
+	require.NotNil(t, mock.lastPushedFiles[claudeObservability+"/hooks/hooks.json"], "claude observability hooks/hooks.json missing")
+	require.NotNil(t, mock.lastPushedFiles[claudeObservability+"/hooks/hook.sh"], "claude observability hooks/hook.sh missing")
 
 	require.NotNil(t, mock.lastPushedFiles[cursorObservability+"/.cursor-plugin/plugin.json"], "cursor observability plugin.json missing")
-	require.NotNil(t, mock.lastPushedFiles[cursorObservability+"/hooks.json"], "cursor observability hooks.json missing")
-	require.NotNil(t, mock.lastPushedFiles[cursorObservability+"/hook.sh"], "cursor observability hook.sh missing")
+	require.NotNil(t, mock.lastPushedFiles[cursorObservability+"/hooks/hooks.json"], "cursor observability hooks/hooks.json missing")
+	require.NotNil(t, mock.lastPushedFiles[cursorObservability+"/hooks/hook.sh"], "cursor observability hooks/hook.sh missing")
 }
 
 // PublishPlugins must succeed when the org has no custom plugins — the
@@ -947,8 +949,8 @@ func TestPluginsService_PublishPlugins_ObservabilityOnly(t *testing.T) {
 
 	claudeObservability, cursorObservability := orgObservabilitySlugs(t, ctx, ti)
 
-	require.NotNil(t, mock.lastPushedFiles[claudeObservability+"/hook.sh"], "claude observability hook.sh missing")
-	require.NotNil(t, mock.lastPushedFiles[cursorObservability+"/hook.sh"], "cursor observability hook.sh missing")
+	require.NotNil(t, mock.lastPushedFiles[claudeObservability+"/hooks/hook.sh"], "claude observability hooks/hook.sh missing")
+	require.NotNil(t, mock.lastPushedFiles[cursorObservability+"/hooks/hook.sh"], "cursor observability hooks/hook.sh missing")
 
 	for _, p := range []struct {
 		path     string
@@ -1010,7 +1012,7 @@ func TestPluginsService_PublishPlugins_ObservabilityHookScriptContainsAPIKey(t *
 	claudeObservability, cursorObservability := orgObservabilitySlugs(t, ctx, ti)
 	// Both endpoints accept Gram-Key (Cursor requires it via Security; Claude
 	// accepts it as an optional header for plugin-driven attribution).
-	for _, path := range []string{claudeObservability + "/hook.sh", cursorObservability + "/hook.sh"} {
+	for _, path := range []string{claudeObservability + "/hooks/hook.sh", cursorObservability + "/hooks/hook.sh"} {
 		script := string(mock.lastPushedFiles[path])
 		require.NotEmpty(t, script, path+" missing")
 		require.Contains(t, script, "Gram-Key: "+hooksKeyPrefix, "%s does not embed hooks key in Gram-Key", path)
