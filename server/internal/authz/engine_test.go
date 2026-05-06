@@ -163,7 +163,7 @@ func TestEngineFilter_returnsAllowedSubset(t *testing.T) {
 	require.Equal(t, []string{"proj_123"}, resourceIDs)
 }
 
-func TestEngineFilter_logsEachCandidateChallenge(t *testing.T) {
+func TestEngineFilter_logsSingleAggregateChallenge(t *testing.T) {
 	t.Parallel()
 
 	orgID := "org_" + uuid.NewString()
@@ -175,47 +175,110 @@ func TestEngineFilter_logsEachCandidateChallenge(t *testing.T) {
 	resourceIDs, err := engine.Filter(ctx, []Check{
 		{Scope: ScopeProjectRead, ResourceID: "proj_allowed"},
 		{Scope: ScopeProjectRead, ResourceID: "proj_denied"},
+		{Scope: ScopeProjectRead, ResourceID: "proj_other"},
 	})
 	require.NoError(t, err)
 	require.Equal(t, []string{"proj_allowed"}, resourceIDs)
 
 	require.Eventually(t, func() bool {
 		rows, err := chConn.Query(t.Context(), `
-			SELECT resource_id, outcome, reason
+			SELECT count(), any(outcome), any(reason),
+			       any(filter_candidate_count), any(filter_allowed_count),
+			       any(requested_checks.resource_id)
 			FROM authz_challenges
-			WHERE organization_id = ?
-			  AND operation = 'filter'
-			  AND resource_id IN ('proj_allowed', 'proj_denied')
-			ORDER BY resource_id
+			WHERE organization_id = ? AND operation = 'filter'
 		`, orgID)
 		if err != nil {
 			return false
 		}
 		defer func() { _ = rows.Close() }()
-
-		got := map[string]struct {
-			outcome string
-			reason  string
-		}{}
-		for rows.Next() {
-			var resourceID, outcome, reason string
-			if err := rows.Scan(&resourceID, &outcome, &reason); err != nil {
-				return false
-			}
-			got[resourceID] = struct {
-				outcome string
-				reason  string
-			}{outcome: outcome, reason: reason}
-		}
-		if rows.Err() != nil {
+		if !rows.Next() {
 			return false
 		}
-
-		return got["proj_allowed"].outcome == string(authzrepo.OutcomeAllow) &&
-			got["proj_allowed"].reason == string(authzrepo.ReasonGrantMatched) &&
-			got["proj_denied"].outcome == string(authzrepo.OutcomeDeny) &&
-			got["proj_denied"].reason == string(authzrepo.ReasonScopeUnsatisfied)
+		var (
+			count                    uint64
+			outcome, reason          string
+			candidateCnt, allowedCnt uint32
+			reqResourceIDs           []string
+		)
+		if err := rows.Scan(&count, &outcome, &reason, &candidateCnt, &allowedCnt, &reqResourceIDs); err != nil {
+			return false
+		}
+		return count == 1 &&
+			outcome == string(authzrepo.OutcomeAllow) &&
+			reason == string(authzrepo.ReasonGrantMatched) &&
+			candidateCnt == 3 && allowedCnt == 1 &&
+			len(reqResourceIDs) == 3
 	}, 5*time.Second, 100*time.Millisecond)
+}
+
+func TestEngineFilter_logsDenyWhenNoMatches(t *testing.T) {
+	t.Parallel()
+
+	orgID := "org_" + uuid.NewString()
+	ctx := GrantsToContext(enterpriseSessionCtxWithOrg(t, orgID), []Grant{NewGrant(ScopeProjectRead, "proj_other")})
+	chConn, err := newClickhouseClient(t)
+	require.NoError(t, err)
+	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient(), cache.NoopCache)
+
+	resourceIDs, err := engine.Filter(ctx, []Check{
+		{Scope: ScopeProjectRead, ResourceID: "proj_a"},
+		{Scope: ScopeProjectRead, ResourceID: "proj_b"},
+	})
+	require.NoError(t, err)
+	require.Empty(t, resourceIDs)
+
+	require.Eventually(t, func() bool {
+		rows, err := chConn.Query(t.Context(), `
+			SELECT count(), any(outcome), any(reason),
+			       any(filter_candidate_count), any(filter_allowed_count)
+			FROM authz_challenges
+			WHERE organization_id = ? AND operation = 'filter'
+		`, orgID)
+		if err != nil {
+			return false
+		}
+		defer func() { _ = rows.Close() }()
+		if !rows.Next() {
+			return false
+		}
+		var count uint64
+		var outcome, reason string
+		var candidateCnt, allowedCnt uint32
+		if err := rows.Scan(&count, &outcome, &reason, &candidateCnt, &allowedCnt); err != nil {
+			return false
+		}
+		return count == 1 &&
+			outcome == string(authzrepo.OutcomeDeny) &&
+			reason == string(authzrepo.ReasonScopeUnsatisfied) &&
+			candidateCnt == 2 && allowedCnt == 0
+	}, 5*time.Second, 100*time.Millisecond)
+}
+
+func TestEngineFilter_skipsLogWhenNoChecks(t *testing.T) {
+	t.Parallel()
+
+	orgID := "org_" + uuid.NewString()
+	ctx := GrantsToContext(enterpriseSessionCtxWithOrg(t, orgID), []Grant{NewGrant(ScopeProjectRead, WildcardResource)})
+	chConn, err := newClickhouseClient(t)
+	require.NoError(t, err)
+	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient(), cache.NoopCache)
+
+	resourceIDs, err := engine.Filter(ctx, nil)
+	require.NoError(t, err)
+	require.Empty(t, resourceIDs)
+
+	// Give async insert a moment, then verify nothing landed.
+	time.Sleep(500 * time.Millisecond)
+	rows, err := chConn.Query(t.Context(), `
+		SELECT count() FROM authz_challenges WHERE organization_id = ? AND operation = 'filter'
+	`, orgID)
+	require.NoError(t, err)
+	defer func() { _ = rows.Close() }()
+	require.True(t, rows.Next())
+	var count uint64
+	require.NoError(t, rows.Scan(&count))
+	require.Equal(t, uint64(0), count)
 }
 
 func TestEngineFilter_withDimensions(t *testing.T) {
