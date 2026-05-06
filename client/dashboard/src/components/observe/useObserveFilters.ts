@@ -10,6 +10,7 @@ import {
   safeBase64Encode,
 } from "./observeFilterUtils";
 import { DEFAULT_HOOK_TYPES, VALID_HOOK_TYPES } from "./observeFilterConstants";
+
 const SERVER_FILTER_PATH = "gram.tool_call.source";
 const USER_EMAIL_FILTER_PATH = "user.email";
 
@@ -33,32 +34,32 @@ export function useObserveFilters() {
 
     const initialServer = searchParams.get("server");
     if (initialServer) {
-      initialServer
+      const values = initialServer
         .split(",")
         .map((s) => s.trim())
-        .filter(Boolean)
-        .forEach((value) => {
-          filters.push({
-            display: value,
-            filters: [value],
-            path: SERVER_FILTER_PATH,
-          });
+        .filter(Boolean);
+      if (values.length > 0) {
+        filters.push({
+          display: values.join(", "),
+          filters: values,
+          path: SERVER_FILTER_PATH,
         });
+      }
     }
 
     const initialUserEmail = searchParams.get("user");
     if (initialUserEmail) {
-      initialUserEmail
+      const values = initialUserEmail
         .split(",")
         .map((s) => s.trim())
-        .filter(Boolean)
-        .forEach((value) => {
-          filters.push({
-            display: value,
-            filters: [value],
-            path: USER_EMAIL_FILTER_PATH,
-          });
+        .filter(Boolean);
+      if (values.length > 0) {
+        filters.push({
+          display: values.join(", "),
+          filters: values,
+          path: USER_EMAIL_FILTER_PATH,
         });
+      }
     }
 
     return filters;
@@ -163,7 +164,7 @@ export function useObserveFilters() {
   const serverOptions = useMemo(() => {
     const selected = activeFilters
       .filter((f) => f.path === SERVER_FILTER_PATH)
-      .map((f) => f.display)
+      .flatMap((f) => f.filters)
       .filter(Boolean);
     return [...new Set([...knownServers, ...selected])];
   }, [knownServers, activeFilters]);
@@ -171,8 +172,8 @@ export function useObserveFilters() {
   const userEmailOptions = useMemo(() => {
     const selected = activeFilters
       .filter((f) => f.path === USER_EMAIL_FILTER_PATH)
-      .map((f) => f.filters[0])
-      .filter((v): v is string => Boolean(v));
+      .flatMap((f) => f.filters)
+      .filter(Boolean);
     return [...new Set([...knownUserEmails, ...selected])];
   }, [knownUserEmails, activeFilters]);
 
@@ -180,11 +181,16 @@ export function useObserveFilters() {
     (values: string[]) => {
       setActiveFilters((prev) => {
         const nonEmail = prev.filter((f) => f.path !== USER_EMAIL_FILTER_PATH);
-        const emailFilters: FilterChip[] = values.map((v) => ({
-          display: v,
-          filters: [v],
-          path: USER_EMAIL_FILTER_PATH,
-        }));
+        const emailFilters: FilterChip[] =
+          values.length > 0
+            ? [
+                {
+                  display: values.join(", "),
+                  filters: values,
+                  path: USER_EMAIL_FILTER_PATH,
+                },
+              ]
+            : [];
         return [...nonEmail, ...emailFilters];
       });
       setSearchParams(
@@ -207,19 +213,16 @@ export function useObserveFilters() {
     (values: string[]) => {
       setActiveFilters((prev) => {
         const nonServer = prev.filter((f) => f.path !== SERVER_FILTER_PATH);
-        const existingServers = new Map(
-          prev
-            .filter((f) => f.path === SERVER_FILTER_PATH)
-            .map((filter) => [filter.display, filter]),
-        );
-        const serverFilters: FilterChip[] = values.map(
-          (v) =>
-            existingServers.get(v) ?? {
-              display: v,
-              filters: [v],
-              path: SERVER_FILTER_PATH,
-            },
-        );
+        const serverFilters: FilterChip[] =
+          values.length > 0
+            ? [
+                {
+                  display: values.join(", "),
+                  filters: values,
+                  path: SERVER_FILTER_PATH,
+                },
+              ]
+            : [];
         return [...nonServer, ...serverFilters];
       });
       setSearchParams(
@@ -241,66 +244,34 @@ export function useObserveFilters() {
   const addFilter = useCallback(
     (chip: FilterChip) => {
       setActiveFilters((prev) => {
-        const exists = prev.some(
-          (f) => f.path === chip.path && f.display === chip.display,
+        const existing = prev.find((f) => f.path === chip.path);
+        const alreadyPresent = existing?.filters.some((v) =>
+          chip.filters.includes(v),
         );
-        if (exists) return prev;
+        if (alreadyPresent) return prev;
 
-        const newFilters = [...prev, chip];
+        const merged: FilterChip = existing
+          ? {
+              path: chip.path,
+              filters: [...new Set([...existing.filters, ...chip.filters])],
+              display: [
+                ...new Set([...existing.filters, ...chip.filters]),
+              ].join(", "),
+            }
+          : chip;
+
+        const newFilters = [
+          ...prev.filter((f) => f.path !== chip.path),
+          merged,
+        ];
 
         setSearchParams(
           (urlPrev) => {
             const next = new URLSearchParams(urlPrev);
             if (chip.path === SERVER_FILTER_PATH) {
-              const serverFilters = newFilters
-                .filter((f) => f.path === SERVER_FILTER_PATH)
-                .map((f) => f.display);
-              next.set("server", serverFilters.join(","));
+              next.set("server", merged.filters.join(","));
             } else if (chip.path === USER_EMAIL_FILTER_PATH) {
-              const userFilters = newFilters
-                .filter((f) => f.path === USER_EMAIL_FILTER_PATH)
-                .map((f) => f.display);
-              next.set("user", userFilters.join(","));
-            }
-            return next;
-          },
-          { replace: true },
-        );
-
-        return newFilters;
-      });
-    },
-    [setSearchParams],
-  );
-
-  const removeFilter = useCallback(
-    (path: string, display?: string) => {
-      setActiveFilters((prev) => {
-        const newFilters = display
-          ? prev.filter((f) => !(f.path === path && f.display === display))
-          : prev.filter((f) => f.path !== path);
-
-        setSearchParams(
-          (urlPrev) => {
-            const next = new URLSearchParams(urlPrev);
-            if (path === SERVER_FILTER_PATH) {
-              const serverFilters = newFilters
-                .filter((f) => f.path === SERVER_FILTER_PATH)
-                .map((f) => f.display);
-              if (serverFilters.length > 0) {
-                next.set("server", serverFilters.join(","));
-              } else {
-                next.delete("server");
-              }
-            } else if (path === USER_EMAIL_FILTER_PATH) {
-              const userFilters = newFilters
-                .filter((f) => f.path === USER_EMAIL_FILTER_PATH)
-                .map((f) => f.display);
-              if (userFilters.length > 0) {
-                next.set("user", userFilters.join(","));
-              } else {
-                next.delete("user");
-              }
+              next.set("user", merged.filters.join(","));
             }
             return next;
           },
@@ -362,7 +333,6 @@ export function useObserveFilters() {
     addKnownUserEmails,
     handleUserEmailSelectionChange,
     addFilter,
-    removeFilter,
     handleHookTypesChange,
     setDateRangeParam,
     setCustomRangeParam,

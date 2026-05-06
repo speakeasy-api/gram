@@ -68,7 +68,7 @@ export function ObserveFilterBar({
     () =>
       activeFilters
         .filter((f) => f.path === "gram.tool_call.source")
-        .map((f) => f.display)
+        .flatMap((f) => f.filters)
         .filter(Boolean),
     [activeFilters],
   );
@@ -77,8 +77,8 @@ export function ObserveFilterBar({
     () =>
       activeFilters
         .filter((f) => f.path === "user.email")
-        .map((f) => f.filters[0])
-        .filter((v): v is string => Boolean(v)),
+        .flatMap((f) => f.filters)
+        .filter(Boolean),
     [activeFilters],
   );
 
