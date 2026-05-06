@@ -755,7 +755,13 @@ func newStartCommand() *cli.Command {
 					c.String("server-url"),
 					logger,
 				)
-				marketplaceRoutes = mp.Routes()
+				// Wrap the proxy with the recovery middleware before mounting.
+				// The mux dispatches /m/ and /p/ paths from inside the
+				// outermost mux.Use, which runs *before* the chain-level
+				// recovery middleware — so without this wrap a panic in any
+				// marketplace handler (or the DB resolver) would crash the
+				// server process.
+				marketplaceRoutes = middleware.NewRecovery(logger)(mp.Routes())
 				logger.InfoContext(ctx, "marketplace proxy: enabled",
 					attr.SlogServerAddress(c.String("address")),
 				)
