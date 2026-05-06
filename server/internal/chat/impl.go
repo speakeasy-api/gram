@@ -1,6 +1,7 @@
 package chat
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"crypto/sha256"
@@ -14,6 +15,7 @@ import (
 	"net/url"
 	"path"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -63,6 +65,7 @@ type Service struct {
 	tracer           trace.Tracer
 	openRouter       openrouter.Provisioner
 	completionClient openrouter.CompletionClient
+	contextWindow    *openrouter.ContextWindowResolver
 	logger           *slog.Logger
 	sessions         *sessions.Manager
 	chatSessions     *chatsessions.Manager
@@ -80,6 +83,7 @@ func NewService(
 	chatSessions *chatsessions.Manager,
 	openRouter openrouter.Provisioner,
 	completionClient openrouter.CompletionClient,
+	contextWindow *openrouter.ContextWindowResolver,
 	posthog *posthog.Posthog,
 	telemetryService *telemetry.Service,
 	assetStorage assets.BlobStore,
@@ -99,6 +103,7 @@ func NewService(
 		tracer:           tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/chat"),
 		openRouter:       openRouter,
 		completionClient: completionClient,
+		contextWindow:    contextWindow,
 		assetStorage:     assetStorage,
 		posthog:          posthog,
 		telemetryService: telemetryService,
@@ -764,41 +769,28 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 		NormalizeOutboundMessages: r.URL.Query().Get("unstable_normalizeOutboundMessages") == "1",
 	}
 
+	// Resolve in parallel with the upstream call so the value is ready by the
+	// time we encode the response (non-stream) or hit the final SSE frame
+	// (stream).
+	getContextWindow := sync.OnceValue(func() int {
+		return s.resolveContextWindow(ctx, completionReq.Model)
+	})
+	go getContextWindow()
+
 	isStreaming := chatRequest.Stream
 	if isStreaming {
-		// The streamingResponseReader automatically parses SSE and triggers capture/tracking on close
 		streamBody, err := s.completionClient.GetCompletionStream(ctx, completionReq)
 		if err != nil {
 			return oops.E(oops.CodeGatewayError, err, "get completion stream").Log(ctx, s.logger)
 		}
 		defer o11y.NoLogDefer(func() error { return streamBody.Close() })
 
-		// Set response headers for SSE
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.Header().Set("Cache-Control", "no-cache")
 		w.Header().Set("Connection", "keep-alive")
 
-		// Copy stream directly to response writer
-		// UnifiedClient's streamingResponseReader handles SSE parsing and message capture
-		flusher, canFlush := w.(http.Flusher)
-		buf := make([]byte, 4096)
-		for {
-			n, readErr := streamBody.Read(buf)
-			if n > 0 {
-				if _, writeErr := w.Write(buf[:n]); writeErr != nil {
-					s.logger.ErrorContext(ctx, "stream write error", attr.SlogError(writeErr))
-					return oops.E(oops.CodeGatewayError, writeErr, "stream write failed").Log(ctx, s.logger)
-				}
-				if canFlush {
-					flusher.Flush()
-				}
-			}
-			if readErr != nil {
-				if !errors.Is(readErr, io.EOF) {
-					s.logger.ErrorContext(ctx, "stream read error", attr.SlogError(readErr))
-				}
-				break
-			}
+		if err := s.streamCompletion(ctx, w, streamBody, getContextWindow); err != nil {
+			return err
 		}
 
 		eventProperties["success"] = true
@@ -811,6 +803,11 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 	response, err := s.completionClient.GetCompletion(ctx, completionReq)
 	if err != nil {
 		return oops.E(oops.CodeGatewayError, err, "completion failed").Log(ctx, s.logger)
+	}
+
+	var gramMetadata *openrouter.GramMetadata
+	if cw := getContextWindow(); cw > 0 {
+		gramMetadata = &openrouter.GramMetadata{ContextWindow: cw}
 	}
 
 	// Build OpenAI-compatible response
@@ -828,7 +825,8 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 				FinishReason: conv.PtrValOr(response.FinishReason, "stop"),
 			},
 		},
-		Usage: &response.Usage,
+		Usage:        &response.Usage,
+		GramMetadata: gramMetadata,
 	}
 
 	// Write response
@@ -839,6 +837,161 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 
 	eventProperties["success"] = true
 	return nil
+}
+
+func (s *Service) resolveContextWindow(ctx context.Context, requestedModel string) int {
+	model := requestedModel
+	if model == "" {
+		model = openrouter.DefaultChatModel
+	}
+	if resolved := openrouter.ResolveModel(model); resolved != "" {
+		model = resolved
+	}
+
+	tokens, err := s.contextWindow.Resolve(ctx, model)
+	if err != nil {
+		s.logger.WarnContext(ctx, "resolve model context window", attr.SlogError(err), attr.SlogGenAIRequestModel(model))
+		return 0
+	}
+	return tokens
+}
+
+func (s *Service) streamCompletion(ctx context.Context, w http.ResponseWriter, src io.Reader, getContextWindow func() int) error {
+	flusher, canFlush := w.(http.Flusher)
+	br := bufio.NewReader(src)
+
+	var event strings.Builder
+	injected := false
+
+	flush := func() error {
+		text := event.String()
+		event.Reset()
+
+		if !injected {
+			if rewritten, ok := maybeInjectContextWindow(text, getContextWindow); ok {
+				text = rewritten
+				injected = true
+			}
+		}
+
+		if _, err := io.WriteString(w, text); err != nil {
+			return oops.E(oops.CodeGatewayError, err, "stream write failed").Log(ctx, s.logger)
+		}
+		if canFlush {
+			flusher.Flush()
+		}
+		return nil
+	}
+
+	for {
+		line, err := br.ReadString('\n')
+		if line != "" {
+			isBlank := line == "\n" || line == "\r\n"
+			if isBlank && event.Len() == 0 {
+				// Skip leading/inter-event blank lines so we don't emit empty events.
+			} else {
+				event.WriteString(line)
+				if isBlank {
+					if flushErr := flush(); flushErr != nil {
+						return flushErr
+					}
+				}
+			}
+		}
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				if event.Len() > 0 {
+					if flushErr := flush(); flushErr != nil {
+						return flushErr
+					}
+				}
+				return nil
+			}
+			s.logger.ErrorContext(ctx, "stream read error", attr.SlogError(err))
+			return oops.E(oops.CodeGatewayError, err, "stream read failed").Log(ctx, s.logger)
+		}
+	}
+}
+
+func maybeInjectContextWindow(eventText string, getContextWindow func() int) (string, bool) {
+	dataLine, payload, ok := extractDataPayload(eventText)
+	if !ok || payload == "" || payload == "[DONE]" {
+		return eventText, false
+	}
+
+	var obj map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(payload), &obj); err != nil {
+		return eventText, false
+	}
+
+	if !isFinalFrame(obj) {
+		return eventText, false
+	}
+
+	cw := getContextWindow()
+	if cw <= 0 {
+		return eventText, false
+	}
+
+	metadata, err := json.Marshal(openrouter.GramMetadata{ContextWindow: cw})
+	if err != nil {
+		return eventText, false
+	}
+	obj["gram_metadata"] = metadata
+
+	rewritten, err := json.Marshal(obj)
+	if err != nil {
+		return eventText, false
+	}
+
+	return strings.Replace(eventText, dataLine, "data: "+string(rewritten), 1), true
+}
+
+func isFinalFrame(obj map[string]json.RawMessage) bool {
+	if usage, ok := obj["usage"]; ok && len(usage) > 0 && string(usage) != "null" {
+		return true
+	}
+
+	choicesRaw, ok := obj["choices"]
+	if !ok {
+		return false
+	}
+	var choices []struct {
+		FinishReason *string `json:"finish_reason"`
+	}
+	if err := json.Unmarshal(choicesRaw, &choices); err != nil {
+		return false
+	}
+	for _, c := range choices {
+		if c.FinishReason != nil && *c.FinishReason != "" {
+			return true
+		}
+	}
+	return false
+}
+
+// extractDataPayload returns the original `data: <payload>` line and its
+// trimmed payload. OpenRouter does not emit multi-line data frames so the
+// first match wins.
+func extractDataPayload(eventText string) (line string, payload string, ok bool) {
+	const prefix = "data: "
+	rest := eventText
+	for rest != "" {
+		end := strings.IndexByte(rest, '\n')
+		var raw string
+		if end < 0 {
+			raw = rest
+			rest = ""
+		} else {
+			raw = rest[:end]
+			rest = rest[end+1:]
+		}
+		trimmed := strings.TrimRight(raw, "\r")
+		if strings.HasPrefix(trimmed, prefix) {
+			return trimmed, trimmed[len(prefix):], true
+		}
+	}
+	return "", "", false
 }
 
 func (s *Service) CreditUsage(ctx context.Context, payload *gen.CreditUsagePayload) (*gen.CreditUsageResult, error) {
