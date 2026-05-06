@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
+	"github.com/Masterminds/squirrel"
 )
 
 // InsertChallenge writes a single challenge row using server-side async insert.
@@ -158,7 +159,7 @@ type ChallengeSummary struct {
 
 // ListChallenges queries ClickHouse for authz challenge events.
 func (q *Queries) ListChallenges(ctx context.Context, f ChallengeListFilters) ([]ChallengeSummary, error) {
-	qb := sq.Select(
+	qb := squirrel.Select(
 		"id",
 		"formatDateTime(timestamp, '%Y-%m-%dT%H:%i:%S.000Z', 'UTC') AS ts",
 		"organization_id",
@@ -240,7 +241,7 @@ func (q *Queries) ListChallenges(ctx context.Context, f ChallengeListFilters) ([
 
 // CountChallenges returns the total number of matching challenges for pagination.
 func (q *Queries) CountChallenges(ctx context.Context, f ChallengeListFilters) (uint64, error) {
-	qb := sq.Select("count(*)").
+	qb := squirrel.Select("count(*)").
 		From("authz_challenges").
 		Where(squirrel.Eq{"organization_id": f.OrganizationID})
 

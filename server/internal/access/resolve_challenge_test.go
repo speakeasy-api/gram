@@ -1,4 +1,4 @@
-package authzapi_test
+package access
 
 import (
 	"testing"
@@ -7,14 +7,14 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	gen "github.com/speakeasy-api/gram/server/gen/authz"
+	gen "github.com/speakeasy-api/gram/server/gen/access"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
 func TestResolveChallenge_Unauthorized(t *testing.T) {
 	t.Parallel()
 
-	_, ti := newTestService(t)
+	_, ti := newTestAccessService(t)
 
 	_, err := ti.service.ResolveChallenge(t.Context(), &gen.ResolveChallengePayload{
 		ApikeyToken:    nil,
@@ -37,8 +37,8 @@ func TestResolveChallenge_Unauthorized(t *testing.T) {
 func TestResolveChallenge_Dismissed(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestService(t)
-	authCtx := testAuthContext(t, ctx)
+	ctx, ti := newChallengeTestService(t)
+	authCtx := challengeAuthContext(t, ctx)
 
 	challengeID := uuid.NewString()
 
@@ -74,8 +74,8 @@ func TestResolveChallenge_Dismissed(t *testing.T) {
 func TestResolveChallenge_RoleAssigned(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestService(t)
-	authCtx := testAuthContext(t, ctx)
+	ctx, ti := newChallengeTestService(t)
+	authCtx := challengeAuthContext(t, ctx)
 
 	challengeID := uuid.NewString()
 	roleSlug := "editor"
@@ -104,7 +104,7 @@ func TestResolveChallenge_RoleAssigned(t *testing.T) {
 func TestResolveChallenge_WithResourceFields(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestService(t)
+	ctx, ti := newChallengeTestService(t)
 
 	challengeID := uuid.NewString()
 	kind := "project"
@@ -131,7 +131,7 @@ func TestResolveChallenge_WithResourceFields(t *testing.T) {
 func TestResolveChallenge_RoleAssigned_MissingSlug(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestService(t)
+	ctx, ti := newChallengeTestService(t)
 
 	_, err := ti.service.ResolveChallenge(ctx, &gen.ResolveChallengePayload{
 		ApikeyToken:    nil,
@@ -154,7 +154,7 @@ func TestResolveChallenge_RoleAssigned_MissingSlug(t *testing.T) {
 func TestResolveChallenge_Dismissed_WithSlug(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestService(t)
+	ctx, ti := newChallengeTestService(t)
 	slug := "editor"
 
 	_, err := ti.service.ResolveChallenge(ctx, &gen.ResolveChallengePayload{
@@ -178,7 +178,7 @@ func TestResolveChallenge_Dismissed_WithSlug(t *testing.T) {
 func TestResolveChallenge_DuplicateConflict(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestService(t)
+	ctx, ti := newChallengeTestService(t)
 
 	challengeID := uuid.NewString()
 

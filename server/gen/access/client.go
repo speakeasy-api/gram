@@ -27,10 +27,12 @@ type Client struct {
 	GetRBACStatusEndpoint    goa.Endpoint
 	EnableRBACEndpoint       goa.Endpoint
 	DisableRBACEndpoint      goa.Endpoint
+	ListChallengesEndpoint   goa.Endpoint
+	ResolveChallengeEndpoint goa.Endpoint
 }
 
 // NewClient initializes a "access" service client given the endpoints.
-func NewClient(listRoles, getRole, createRole, updateRole, deleteRole, listScopes, listMembers, listGrants, updateMemberRole, getRBACStatus, enableRBAC, disableRBAC goa.Endpoint) *Client {
+func NewClient(listRoles, getRole, createRole, updateRole, deleteRole, listScopes, listMembers, listGrants, updateMemberRole, getRBACStatus, enableRBAC, disableRBAC, listChallenges, resolveChallenge goa.Endpoint) *Client {
 	return &Client{
 		ListRolesEndpoint:        listRoles,
 		GetRoleEndpoint:          getRole,
@@ -44,6 +46,8 @@ func NewClient(listRoles, getRole, createRole, updateRole, deleteRole, listScope
 		GetRBACStatusEndpoint:    getRBACStatus,
 		EnableRBACEndpoint:       enableRBAC,
 		DisableRBACEndpoint:      disableRBAC,
+		ListChallengesEndpoint:   listChallenges,
+		ResolveChallengeEndpoint: resolveChallenge,
 	}
 }
 
@@ -298,4 +302,49 @@ func (c *Client) EnableRBAC(ctx context.Context, p *EnableRBACPayload) (err erro
 func (c *Client) DisableRBAC(ctx context.Context, p *DisableRBACPayload) (err error) {
 	_, err = c.DisableRBACEndpoint(ctx, p)
 	return
+}
+
+// ListChallenges calls the "listChallenges" endpoint of the "access" service.
+// ListChallenges may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListChallenges(ctx context.Context, p *ListChallengesPayload) (res *ListChallengesResult, err error) {
+	var ires any
+	ires, err = c.ListChallengesEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListChallengesResult), nil
+}
+
+// ResolveChallenge calls the "resolveChallenge" endpoint of the "access"
+// service.
+// ResolveChallenge may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ResolveChallenge(ctx context.Context, p *ResolveChallengePayload) (res *ChallengeResolution, err error) {
+	var ires any
+	ires, err = c.ResolveChallengeEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ChallengeResolution), nil
 }

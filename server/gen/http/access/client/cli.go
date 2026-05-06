@@ -10,6 +10,7 @@ package client
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 
 	access "github.com/speakeasy-api/gram/server/gen/access"
 	goa "goa.design/goa/v3/pkg"
@@ -354,6 +355,158 @@ func BuildDisableRBACPayload(accessDisableRBACSessionToken string) (*access.Disa
 		}
 	}
 	v := &access.DisableRBACPayload{}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildListChallengesPayload builds the payload for the access listChallenges
+// endpoint from CLI flags.
+func BuildListChallengesPayload(accessListChallengesOutcome string, accessListChallengesPrincipalUrn string, accessListChallengesScope string, accessListChallengesProjectID string, accessListChallengesResolved string, accessListChallengesLimit string, accessListChallengesOffset string, accessListChallengesApikeyToken string, accessListChallengesSessionToken string) (*access.ListChallengesPayload, error) {
+	var err error
+	var outcome *string
+	{
+		if accessListChallengesOutcome != "" {
+			outcome = &accessListChallengesOutcome
+			if !(*outcome == "allow" || *outcome == "deny") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("outcome", *outcome, []any{"allow", "deny"}))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var principalUrn *string
+	{
+		if accessListChallengesPrincipalUrn != "" {
+			principalUrn = &accessListChallengesPrincipalUrn
+		}
+	}
+	var scope *string
+	{
+		if accessListChallengesScope != "" {
+			scope = &accessListChallengesScope
+		}
+	}
+	var projectID *string
+	{
+		if accessListChallengesProjectID != "" {
+			projectID = &accessListChallengesProjectID
+		}
+	}
+	var resolved *bool
+	{
+		if accessListChallengesResolved != "" {
+			var val bool
+			val, err = strconv.ParseBool(accessListChallengesResolved)
+			resolved = &val
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for resolved, must be BOOL")
+			}
+		}
+	}
+	var limit int
+	{
+		if accessListChallengesLimit != "" {
+			var v int64
+			v, err = strconv.ParseInt(accessListChallengesLimit, 10, strconv.IntSize)
+			limit = int(v)
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for limit, must be INT")
+			}
+			if limit < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 1, true))
+			}
+			if limit > 200 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 200, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var offset int
+	{
+		if accessListChallengesOffset != "" {
+			var v int64
+			v, err = strconv.ParseInt(accessListChallengesOffset, 10, strconv.IntSize)
+			offset = int(v)
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for offset, must be INT")
+			}
+			if offset < 0 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("offset", offset, 0, true))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var apikeyToken *string
+	{
+		if accessListChallengesApikeyToken != "" {
+			apikeyToken = &accessListChallengesApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if accessListChallengesSessionToken != "" {
+			sessionToken = &accessListChallengesSessionToken
+		}
+	}
+	v := &access.ListChallengesPayload{}
+	v.Outcome = outcome
+	v.PrincipalUrn = principalUrn
+	v.Scope = scope
+	v.ProjectID = projectID
+	v.Resolved = resolved
+	v.Limit = limit
+	v.Offset = offset
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildResolveChallengePayload builds the payload for the access
+// resolveChallenge endpoint from CLI flags.
+func BuildResolveChallengePayload(accessResolveChallengeBody string, accessResolveChallengeApikeyToken string, accessResolveChallengeSessionToken string) (*access.ResolveChallengePayload, error) {
+	var err error
+	var body ResolveChallengeRequestBody
+	{
+		err = json.Unmarshal([]byte(accessResolveChallengeBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"challenge_id\": \"abc123\",\n      \"principal_urn\": \"abc123\",\n      \"resolution_type\": \"dismissed\",\n      \"resource_id\": \"abc123\",\n      \"resource_kind\": \"abc123\",\n      \"role_slug\": \"abc123\",\n      \"scope\": \"abc123\"\n   }'")
+		}
+		if !(body.ResolutionType == "role_assigned" || body.ResolutionType == "dismissed") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.resolution_type", body.ResolutionType, []any{"role_assigned", "dismissed"}))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if accessResolveChallengeApikeyToken != "" {
+			apikeyToken = &accessResolveChallengeApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if accessResolveChallengeSessionToken != "" {
+			sessionToken = &accessResolveChallengeSessionToken
+		}
+	}
+	v := &access.ResolveChallengePayload{
+		ChallengeID:    body.ChallengeID,
+		PrincipalUrn:   body.PrincipalUrn,
+		Scope:          body.Scope,
+		ResourceKind:   body.ResourceKind,
+		ResourceID:     body.ResourceID,
+		ResolutionType: body.ResolutionType,
+		RoleSlug:       body.RoleSlug,
+	}
+	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 
 	return v, nil

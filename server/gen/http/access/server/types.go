@@ -50,6 +50,25 @@ type UpdateMemberRoleRequestBody struct {
 	RoleID *string `form:"role_id,omitempty" json:"role_id,omitempty" xml:"role_id,omitempty"`
 }
 
+// ResolveChallengeRequestBody is the type of the "access" service
+// "resolveChallenge" endpoint HTTP request body.
+type ResolveChallengeRequestBody struct {
+	// ID of the challenge in ClickHouse.
+	ChallengeID *string `form:"challenge_id,omitempty" json:"challenge_id,omitempty" xml:"challenge_id,omitempty"`
+	// Principal that was denied.
+	PrincipalUrn *string `form:"principal_urn,omitempty" json:"principal_urn,omitempty" xml:"principal_urn,omitempty"`
+	// Scope that was denied.
+	Scope *string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
+	// Resource kind from the challenge.
+	ResourceKind *string `form:"resource_kind,omitempty" json:"resource_kind,omitempty" xml:"resource_kind,omitempty"`
+	// Resource ID from the challenge.
+	ResourceID *string `form:"resource_id,omitempty" json:"resource_id,omitempty" xml:"resource_id,omitempty"`
+	// How the challenge is being resolved.
+	ResolutionType *string `form:"resolution_type,omitempty" json:"resolution_type,omitempty" xml:"resolution_type,omitempty"`
+	// Role slug to assign (required when resolution_type=role_assigned).
+	RoleSlug *string `form:"role_slug,omitempty" json:"role_slug,omitempty" xml:"role_slug,omitempty"`
+}
+
 // ListRolesResponseBody is the type of the "access" service "listRoles"
 // endpoint HTTP response body.
 type ListRolesResponseBody struct {
@@ -157,6 +176,40 @@ type UpdateMemberRoleResponseBody struct {
 type GetRBACStatusResponseBody struct {
 	// Whether RBAC enforcement is currently enabled for this organization.
 	RbacEnabled bool `form:"rbac_enabled" json:"rbac_enabled" xml:"rbac_enabled"`
+}
+
+// ListChallengesResponseBody is the type of the "access" service
+// "listChallenges" endpoint HTTP response body.
+type ListChallengesResponseBody struct {
+	// The challenge events.
+	Challenges []*AuthzChallengeResponseBody `form:"challenges" json:"challenges" xml:"challenges"`
+	// Total number of matching challenges for pagination.
+	Total int `form:"total" json:"total" xml:"total"`
+}
+
+// ResolveChallengeResponseBody is the type of the "access" service
+// "resolveChallenge" endpoint HTTP response body.
+type ResolveChallengeResponseBody struct {
+	// Resolution record ID.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Organization ID.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// ClickHouse challenge ID.
+	ChallengeID string `form:"challenge_id" json:"challenge_id" xml:"challenge_id"`
+	// Denied principal.
+	PrincipalUrn string `form:"principal_urn" json:"principal_urn" xml:"principal_urn"`
+	// Denied scope.
+	Scope string `form:"scope" json:"scope" xml:"scope"`
+	// Resource kind.
+	ResourceKind *string `form:"resource_kind,omitempty" json:"resource_kind,omitempty" xml:"resource_kind,omitempty"`
+	// Resource ID.
+	ResourceID     *string `form:"resource_id,omitempty" json:"resource_id,omitempty" xml:"resource_id,omitempty"`
+	ResolutionType string  `form:"resolution_type" json:"resolution_type" xml:"resolution_type"`
+	// Assigned role slug.
+	RoleSlug *string `form:"role_slug,omitempty" json:"role_slug,omitempty" xml:"role_slug,omitempty"`
+	// Admin who resolved.
+	ResolvedBy string `form:"resolved_by" json:"resolved_by" xml:"resolved_by"`
+	CreatedAt  string `form:"created_at" json:"created_at" xml:"created_at"`
 }
 
 // ListRolesUnauthorizedResponseBody is the type of the "access" service
@@ -2325,6 +2378,370 @@ type DisableRBACGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// ListChallengesUnauthorizedResponseBody is the type of the "access" service
+// "listChallenges" endpoint HTTP response body for the "unauthorized" error.
+type ListChallengesUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListChallengesForbiddenResponseBody is the type of the "access" service
+// "listChallenges" endpoint HTTP response body for the "forbidden" error.
+type ListChallengesForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListChallengesBadRequestResponseBody is the type of the "access" service
+// "listChallenges" endpoint HTTP response body for the "bad_request" error.
+type ListChallengesBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListChallengesNotFoundResponseBody is the type of the "access" service
+// "listChallenges" endpoint HTTP response body for the "not_found" error.
+type ListChallengesNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListChallengesConflictResponseBody is the type of the "access" service
+// "listChallenges" endpoint HTTP response body for the "conflict" error.
+type ListChallengesConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListChallengesUnsupportedMediaResponseBody is the type of the "access"
+// service "listChallenges" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ListChallengesUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListChallengesInvalidResponseBody is the type of the "access" service
+// "listChallenges" endpoint HTTP response body for the "invalid" error.
+type ListChallengesInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListChallengesInvariantViolationResponseBody is the type of the "access"
+// service "listChallenges" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ListChallengesInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListChallengesUnexpectedResponseBody is the type of the "access" service
+// "listChallenges" endpoint HTTP response body for the "unexpected" error.
+type ListChallengesUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListChallengesGatewayErrorResponseBody is the type of the "access" service
+// "listChallenges" endpoint HTTP response body for the "gateway_error" error.
+type ListChallengesGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ResolveChallengeUnauthorizedResponseBody is the type of the "access" service
+// "resolveChallenge" endpoint HTTP response body for the "unauthorized" error.
+type ResolveChallengeUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ResolveChallengeForbiddenResponseBody is the type of the "access" service
+// "resolveChallenge" endpoint HTTP response body for the "forbidden" error.
+type ResolveChallengeForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ResolveChallengeBadRequestResponseBody is the type of the "access" service
+// "resolveChallenge" endpoint HTTP response body for the "bad_request" error.
+type ResolveChallengeBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ResolveChallengeNotFoundResponseBody is the type of the "access" service
+// "resolveChallenge" endpoint HTTP response body for the "not_found" error.
+type ResolveChallengeNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ResolveChallengeConflictResponseBody is the type of the "access" service
+// "resolveChallenge" endpoint HTTP response body for the "conflict" error.
+type ResolveChallengeConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ResolveChallengeUnsupportedMediaResponseBody is the type of the "access"
+// service "resolveChallenge" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ResolveChallengeUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ResolveChallengeInvalidResponseBody is the type of the "access" service
+// "resolveChallenge" endpoint HTTP response body for the "invalid" error.
+type ResolveChallengeInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ResolveChallengeInvariantViolationResponseBody is the type of the "access"
+// service "resolveChallenge" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ResolveChallengeInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ResolveChallengeUnexpectedResponseBody is the type of the "access" service
+// "resolveChallenge" endpoint HTTP response body for the "unexpected" error.
+type ResolveChallengeUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ResolveChallengeGatewayErrorResponseBody is the type of the "access" service
+// "resolveChallenge" endpoint HTTP response body for the "gateway_error" error.
+type ResolveChallengeGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // RoleResponseBody is used to define fields on response body types.
 type RoleResponseBody struct {
 	// Unique role identifier.
@@ -2397,6 +2814,49 @@ type ListRoleGrantResponseBody struct {
 	SubScopes []string `form:"sub_scopes,omitempty" json:"sub_scopes,omitempty" xml:"sub_scopes,omitempty"`
 	// Selector constraints. Null means unrestricted.
 	Selectors []*SelectorResponseBody `form:"selectors,omitempty" json:"selectors,omitempty" xml:"selectors,omitempty"`
+}
+
+// AuthzChallengeResponseBody is used to define fields on response body types.
+type AuthzChallengeResponseBody struct {
+	// Unique challenge identifier.
+	ID string `form:"id" json:"id" xml:"id"`
+	// When the authz decision was made.
+	Timestamp string `form:"timestamp" json:"timestamp" xml:"timestamp"`
+	// Organization the principal was acting in.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// Project scope (empty for org-level checks).
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// Principal URN e.g. user:<uuid> or api_key:<id>.
+	PrincipalUrn string `form:"principal_urn" json:"principal_urn" xml:"principal_urn"`
+	// Kind of principal.
+	PrincipalType string `form:"principal_type" json:"principal_type" xml:"principal_type"`
+	// Email when available.
+	UserEmail *string `form:"user_email,omitempty" json:"user_email,omitempty" xml:"user_email,omitempty"`
+	// User avatar URL when available.
+	PhotoURL  *string `form:"photo_url,omitempty" json:"photo_url,omitempty" xml:"photo_url,omitempty"`
+	Operation string  `form:"operation" json:"operation" xml:"operation"`
+	Outcome   string  `form:"outcome" json:"outcome" xml:"outcome"`
+	Reason    string  `form:"reason" json:"reason" xml:"reason"`
+	// Scope that was checked.
+	Scope string `form:"scope" json:"scope" xml:"scope"`
+	// Resource kind of the check.
+	ResourceKind *string `form:"resource_kind,omitempty" json:"resource_kind,omitempty" xml:"resource_kind,omitempty"`
+	// Resource ID of the check.
+	ResourceID *string `form:"resource_id,omitempty" json:"resource_id,omitempty" xml:"resource_id,omitempty"`
+	// Roles the principal had loaded.
+	RoleSlugs []string `form:"role_slugs" json:"role_slugs" xml:"role_slugs"`
+	// Total grants evaluated.
+	EvaluatedGrantCount int `form:"evaluated_grant_count" json:"evaluated_grant_count" xml:"evaluated_grant_count"`
+	// Number of grants that matched.
+	MatchedGrantCount int `form:"matched_grant_count" json:"matched_grant_count" xml:"matched_grant_count"`
+	// When the challenge was resolved by an admin.
+	ResolvedAt *string `form:"resolved_at,omitempty" json:"resolved_at,omitempty" xml:"resolved_at,omitempty"`
+	// How the challenge was resolved.
+	ResolutionType *string `form:"resolution_type,omitempty" json:"resolution_type,omitempty" xml:"resolution_type,omitempty"`
+	// URN of the admin who resolved.
+	ResolvedBy *string `form:"resolved_by,omitempty" json:"resolved_by,omitempty" xml:"resolved_by,omitempty"`
+	// Role slug assigned (when resolution_type=role_assigned).
+	ResolutionRoleSlug *string `form:"resolution_role_slug,omitempty" json:"resolution_role_slug,omitempty" xml:"resolution_role_slug,omitempty"`
 }
 
 // RoleGrantRequestBody is used to define fields on request body types.
@@ -2595,6 +3055,46 @@ func NewUpdateMemberRoleResponseBody(res *access.AccessMember) *UpdateMemberRole
 func NewGetRBACStatusResponseBody(res *access.RBACStatus) *GetRBACStatusResponseBody {
 	body := &GetRBACStatusResponseBody{
 		RbacEnabled: res.RbacEnabled,
+	}
+	return body
+}
+
+// NewListChallengesResponseBody builds the HTTP response body from the result
+// of the "listChallenges" endpoint of the "access" service.
+func NewListChallengesResponseBody(res *access.ListChallengesResult) *ListChallengesResponseBody {
+	body := &ListChallengesResponseBody{
+		Total: res.Total,
+	}
+	if res.Challenges != nil {
+		body.Challenges = make([]*AuthzChallengeResponseBody, len(res.Challenges))
+		for i, val := range res.Challenges {
+			if val == nil {
+				body.Challenges[i] = nil
+				continue
+			}
+			body.Challenges[i] = marshalAccessAuthzChallengeToAuthzChallengeResponseBody(val)
+		}
+	} else {
+		body.Challenges = []*AuthzChallengeResponseBody{}
+	}
+	return body
+}
+
+// NewResolveChallengeResponseBody builds the HTTP response body from the
+// result of the "resolveChallenge" endpoint of the "access" service.
+func NewResolveChallengeResponseBody(res *access.ChallengeResolution) *ResolveChallengeResponseBody {
+	body := &ResolveChallengeResponseBody{
+		ID:             res.ID,
+		OrganizationID: res.OrganizationID,
+		ChallengeID:    res.ChallengeID,
+		PrincipalUrn:   res.PrincipalUrn,
+		Scope:          res.Scope,
+		ResourceKind:   res.ResourceKind,
+		ResourceID:     res.ResourceID,
+		ResolutionType: res.ResolutionType,
+		RoleSlug:       res.RoleSlug,
+		ResolvedBy:     res.ResolvedBy,
+		CreatedAt:      res.CreatedAt,
 	}
 	return body
 }
@@ -4281,6 +4781,289 @@ func NewDisableRBACGatewayErrorResponseBody(res *goa.ServiceError) *DisableRBACG
 	return body
 }
 
+// NewListChallengesUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "listChallenges" endpoint of the "access" service.
+func NewListChallengesUnauthorizedResponseBody(res *goa.ServiceError) *ListChallengesUnauthorizedResponseBody {
+	body := &ListChallengesUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListChallengesForbiddenResponseBody builds the HTTP response body from
+// the result of the "listChallenges" endpoint of the "access" service.
+func NewListChallengesForbiddenResponseBody(res *goa.ServiceError) *ListChallengesForbiddenResponseBody {
+	body := &ListChallengesForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListChallengesBadRequestResponseBody builds the HTTP response body from
+// the result of the "listChallenges" endpoint of the "access" service.
+func NewListChallengesBadRequestResponseBody(res *goa.ServiceError) *ListChallengesBadRequestResponseBody {
+	body := &ListChallengesBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListChallengesNotFoundResponseBody builds the HTTP response body from the
+// result of the "listChallenges" endpoint of the "access" service.
+func NewListChallengesNotFoundResponseBody(res *goa.ServiceError) *ListChallengesNotFoundResponseBody {
+	body := &ListChallengesNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListChallengesConflictResponseBody builds the HTTP response body from the
+// result of the "listChallenges" endpoint of the "access" service.
+func NewListChallengesConflictResponseBody(res *goa.ServiceError) *ListChallengesConflictResponseBody {
+	body := &ListChallengesConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListChallengesUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "listChallenges" endpoint of the "access" service.
+func NewListChallengesUnsupportedMediaResponseBody(res *goa.ServiceError) *ListChallengesUnsupportedMediaResponseBody {
+	body := &ListChallengesUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListChallengesInvalidResponseBody builds the HTTP response body from the
+// result of the "listChallenges" endpoint of the "access" service.
+func NewListChallengesInvalidResponseBody(res *goa.ServiceError) *ListChallengesInvalidResponseBody {
+	body := &ListChallengesInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListChallengesInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "listChallenges" endpoint of the "access"
+// service.
+func NewListChallengesInvariantViolationResponseBody(res *goa.ServiceError) *ListChallengesInvariantViolationResponseBody {
+	body := &ListChallengesInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListChallengesUnexpectedResponseBody builds the HTTP response body from
+// the result of the "listChallenges" endpoint of the "access" service.
+func NewListChallengesUnexpectedResponseBody(res *goa.ServiceError) *ListChallengesUnexpectedResponseBody {
+	body := &ListChallengesUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListChallengesGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "listChallenges" endpoint of the "access" service.
+func NewListChallengesGatewayErrorResponseBody(res *goa.ServiceError) *ListChallengesGatewayErrorResponseBody {
+	body := &ListChallengesGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewResolveChallengeUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "resolveChallenge" endpoint of the "access" service.
+func NewResolveChallengeUnauthorizedResponseBody(res *goa.ServiceError) *ResolveChallengeUnauthorizedResponseBody {
+	body := &ResolveChallengeUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewResolveChallengeForbiddenResponseBody builds the HTTP response body from
+// the result of the "resolveChallenge" endpoint of the "access" service.
+func NewResolveChallengeForbiddenResponseBody(res *goa.ServiceError) *ResolveChallengeForbiddenResponseBody {
+	body := &ResolveChallengeForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewResolveChallengeBadRequestResponseBody builds the HTTP response body from
+// the result of the "resolveChallenge" endpoint of the "access" service.
+func NewResolveChallengeBadRequestResponseBody(res *goa.ServiceError) *ResolveChallengeBadRequestResponseBody {
+	body := &ResolveChallengeBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewResolveChallengeNotFoundResponseBody builds the HTTP response body from
+// the result of the "resolveChallenge" endpoint of the "access" service.
+func NewResolveChallengeNotFoundResponseBody(res *goa.ServiceError) *ResolveChallengeNotFoundResponseBody {
+	body := &ResolveChallengeNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewResolveChallengeConflictResponseBody builds the HTTP response body from
+// the result of the "resolveChallenge" endpoint of the "access" service.
+func NewResolveChallengeConflictResponseBody(res *goa.ServiceError) *ResolveChallengeConflictResponseBody {
+	body := &ResolveChallengeConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewResolveChallengeUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "resolveChallenge" endpoint of the "access"
+// service.
+func NewResolveChallengeUnsupportedMediaResponseBody(res *goa.ServiceError) *ResolveChallengeUnsupportedMediaResponseBody {
+	body := &ResolveChallengeUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewResolveChallengeInvalidResponseBody builds the HTTP response body from
+// the result of the "resolveChallenge" endpoint of the "access" service.
+func NewResolveChallengeInvalidResponseBody(res *goa.ServiceError) *ResolveChallengeInvalidResponseBody {
+	body := &ResolveChallengeInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewResolveChallengeInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "resolveChallenge" endpoint of the "access"
+// service.
+func NewResolveChallengeInvariantViolationResponseBody(res *goa.ServiceError) *ResolveChallengeInvariantViolationResponseBody {
+	body := &ResolveChallengeInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewResolveChallengeUnexpectedResponseBody builds the HTTP response body from
+// the result of the "resolveChallenge" endpoint of the "access" service.
+func NewResolveChallengeUnexpectedResponseBody(res *goa.ServiceError) *ResolveChallengeUnexpectedResponseBody {
+	body := &ResolveChallengeUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewResolveChallengeGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "resolveChallenge" endpoint of the "access" service.
+func NewResolveChallengeGatewayErrorResponseBody(res *goa.ServiceError) *ResolveChallengeGatewayErrorResponseBody {
+	body := &ResolveChallengeGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewListRolesPayload builds a access service listRoles endpoint payload.
 func NewListRolesPayload(apikeyToken *string, sessionToken *string) *access.ListRolesPayload {
 	v := &access.ListRolesPayload{}
@@ -4430,6 +5213,41 @@ func NewDisableRBACPayload(sessionToken *string) *access.DisableRBACPayload {
 	return v
 }
 
+// NewListChallengesPayload builds a access service listChallenges endpoint
+// payload.
+func NewListChallengesPayload(outcome *string, principalUrn *string, scope *string, projectID *string, resolved *bool, limit int, offset int, apikeyToken *string, sessionToken *string) *access.ListChallengesPayload {
+	v := &access.ListChallengesPayload{}
+	v.Outcome = outcome
+	v.PrincipalUrn = principalUrn
+	v.Scope = scope
+	v.ProjectID = projectID
+	v.Resolved = resolved
+	v.Limit = limit
+	v.Offset = offset
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewResolveChallengePayload builds a access service resolveChallenge endpoint
+// payload.
+func NewResolveChallengePayload(body *ResolveChallengeRequestBody, apikeyToken *string, sessionToken *string) *access.ResolveChallengePayload {
+	v := &access.ResolveChallengePayload{
+		ChallengeID:    *body.ChallengeID,
+		PrincipalUrn:   *body.PrincipalUrn,
+		Scope:          *body.Scope,
+		ResourceKind:   body.ResourceKind,
+		ResourceID:     body.ResourceID,
+		ResolutionType: *body.ResolutionType,
+		RoleSlug:       body.RoleSlug,
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+
+	return v
+}
+
 // ValidateCreateRoleRequestBody runs the validations defined on
 // CreateRoleRequestBody
 func ValidateCreateRoleRequestBody(body *CreateRoleRequestBody) (err error) {
@@ -4476,6 +5294,29 @@ func ValidateUpdateMemberRoleRequestBody(body *UpdateMemberRoleRequestBody) (err
 	}
 	if body.RoleID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("role_id", "body"))
+	}
+	return
+}
+
+// ValidateResolveChallengeRequestBody runs the validations defined on
+// ResolveChallengeRequestBody
+func ValidateResolveChallengeRequestBody(body *ResolveChallengeRequestBody) (err error) {
+	if body.ChallengeID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("challenge_id", "body"))
+	}
+	if body.PrincipalUrn == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("principal_urn", "body"))
+	}
+	if body.Scope == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("scope", "body"))
+	}
+	if body.ResolutionType == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("resolution_type", "body"))
+	}
+	if body.ResolutionType != nil {
+		if !(*body.ResolutionType == "role_assigned" || *body.ResolutionType == "dismissed") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.resolution_type", *body.ResolutionType, []any{"role_assigned", "dismissed"}))
+		}
 	}
 	return
 }

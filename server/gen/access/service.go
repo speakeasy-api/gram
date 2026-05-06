@@ -14,7 +14,7 @@ import (
 	"goa.design/goa/v3/security"
 )
 
-// Manage roles and team member access control.
+// Manage roles, team member access control, and authorization challenge events.
 type Service interface {
 	// List all roles for the current organization.
 	ListRoles(context.Context, *ListRolesPayload) (res *ListRolesResult, err error)
@@ -41,6 +41,12 @@ type Service interface {
 	EnableRBAC(context.Context, *EnableRBACPayload) (err error)
 	// Disable RBAC enforcement for the current organization.
 	DisableRBAC(context.Context, *DisableRBACPayload) (err error)
+	// List authz challenge events from ClickHouse, enriched with resolution state
+	// from PostgreSQL.
+	ListChallenges(context.Context, *ListChallengesPayload) (res *ListChallengesResult, err error)
+	// Record a resolution for a denied authz challenge. The caller is responsible
+	// for assigning the role first.
+	ResolveChallenge(context.Context, *ResolveChallengePayload) (res *ChallengeResolution, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -63,7 +69,7 @@ const ServiceName = "access"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [12]string{"listRoles", "getRole", "createRole", "updateRole", "deleteRole", "listScopes", "listMembers", "listGrants", "updateMemberRole", "getRBACStatus", "enableRBAC", "disableRBAC"}
+var MethodNames = [14]string{"listRoles", "getRole", "createRole", "updateRole", "deleteRole", "listScopes", "listMembers", "listGrants", "updateMemberRole", "getRBACStatus", "enableRBAC", "disableRBAC", "listChallenges", "resolveChallenge"}
 
 // AccessMember is the result type of the access service updateMemberRole
 // method.
@@ -80,6 +86,73 @@ type AccessMember struct {
 	RoleID string
 	// When the member joined the organization.
 	JoinedAt string
+}
+
+type AuthzChallenge struct {
+	// Unique challenge identifier.
+	ID string
+	// When the authz decision was made.
+	Timestamp string
+	// Organization the principal was acting in.
+	OrganizationID string
+	// Project scope (empty for org-level checks).
+	ProjectID *string
+	// Principal URN e.g. user:<uuid> or api_key:<id>.
+	PrincipalUrn string
+	// Kind of principal.
+	PrincipalType string
+	// Email when available.
+	UserEmail *string
+	// User avatar URL when available.
+	PhotoURL  *string
+	Operation string
+	Outcome   string
+	Reason    string
+	// Scope that was checked.
+	Scope string
+	// Resource kind of the check.
+	ResourceKind *string
+	// Resource ID of the check.
+	ResourceID *string
+	// Roles the principal had loaded.
+	RoleSlugs []string
+	// Total grants evaluated.
+	EvaluatedGrantCount int
+	// Number of grants that matched.
+	MatchedGrantCount int
+	// When the challenge was resolved by an admin.
+	ResolvedAt *string
+	// How the challenge was resolved.
+	ResolutionType *string
+	// URN of the admin who resolved.
+	ResolvedBy *string
+	// Role slug assigned (when resolution_type=role_assigned).
+	ResolutionRoleSlug *string
+}
+
+// ChallengeResolution is the result type of the access service
+// resolveChallenge method.
+type ChallengeResolution struct {
+	// Resolution record ID.
+	ID string
+	// Organization ID.
+	OrganizationID string
+	// ClickHouse challenge ID.
+	ChallengeID string
+	// Denied principal.
+	PrincipalUrn string
+	// Denied scope.
+	Scope string
+	// Resource kind.
+	ResourceKind *string
+	// Resource ID.
+	ResourceID     *string
+	ResolutionType string
+	// Assigned role slug.
+	RoleSlug *string
+	// Admin who resolved.
+	ResolvedBy string
+	CreatedAt  string
 }
 
 // CreateRolePayload is the payload type of the access service createRole
@@ -130,6 +203,36 @@ type GetRolePayload struct {
 	ID           string
 	ApikeyToken  *string
 	SessionToken *string
+}
+
+// ListChallengesPayload is the payload type of the access service
+// listChallenges method.
+type ListChallengesPayload struct {
+	// Filter by outcome.
+	Outcome *string
+	// Filter by principal URN.
+	PrincipalUrn *string
+	// Filter by scope.
+	Scope *string
+	// Filter to a specific project.
+	ProjectID *string
+	// Filter by resolution state. True = only resolved, false = only unresolved.
+	Resolved *bool
+	// Maximum number of results to return.
+	Limit int
+	// Number of results to skip.
+	Offset       int
+	ApikeyToken  *string
+	SessionToken *string
+}
+
+// ListChallengesResult is the result type of the access service listChallenges
+// method.
+type ListChallengesResult struct {
+	// The challenge events.
+	Challenges []*AuthzChallenge
+	// Total number of matching challenges for pagination.
+	Total int
 }
 
 // ListGrantsPayload is the payload type of the access service listGrants
@@ -198,6 +301,27 @@ type ListUserGrantsResult struct {
 type RBACStatus struct {
 	// Whether RBAC enforcement is currently enabled for this organization.
 	RbacEnabled bool
+}
+
+// ResolveChallengePayload is the payload type of the access service
+// resolveChallenge method.
+type ResolveChallengePayload struct {
+	ApikeyToken  *string
+	SessionToken *string
+	// ID of the challenge in ClickHouse.
+	ChallengeID string
+	// Principal that was denied.
+	PrincipalUrn string
+	// Scope that was denied.
+	Scope string
+	// Resource kind from the challenge.
+	ResourceKind *string
+	// Resource ID from the challenge.
+	ResourceID *string
+	// How the challenge is being resolved.
+	ResolutionType string
+	// Role slug to assign (required when resolution_type=role_assigned).
+	RoleSlug *string
 }
 
 // Role is the result type of the access service getRole method.

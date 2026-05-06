@@ -94,6 +94,106 @@ func (q *Queries) GetPrincipalGrants(ctx context.Context, arg GetPrincipalGrants
 	return items, nil
 }
 
+const insertChallengeResolution = `-- name: InsertChallengeResolution :one
+INSERT INTO authz_challenge_resolutions (
+  organization_id, challenge_id, principal_urn, scope,
+  resource_kind, resource_id, resolution_type, role_slug, resolved_by
+) VALUES (
+  $1, $2, $3, $4,
+  $5, $6, $7, $8, $9
+)
+RETURNING id, organization_id, challenge_id, principal_urn, scope, resource_kind, resource_id, resolution_type, role_slug, resolved_by, created_at
+`
+
+type InsertChallengeResolutionParams struct {
+	OrganizationID string
+	ChallengeID    string
+	PrincipalUrn   string
+	Scope          string
+	ResourceKind   string
+	ResourceID     string
+	ResolutionType string
+	RoleSlug       pgtype.Text
+	ResolvedBy     string
+}
+
+// Creates a resolution record for a denied challenge.
+func (q *Queries) InsertChallengeResolution(ctx context.Context, arg InsertChallengeResolutionParams) (AuthzChallengeResolution, error) {
+	row := q.db.QueryRow(ctx, insertChallengeResolution,
+		arg.OrganizationID,
+		arg.ChallengeID,
+		arg.PrincipalUrn,
+		arg.Scope,
+		arg.ResourceKind,
+		arg.ResourceID,
+		arg.ResolutionType,
+		arg.RoleSlug,
+		arg.ResolvedBy,
+	)
+	var i AuthzChallengeResolution
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ChallengeID,
+		&i.PrincipalUrn,
+		&i.Scope,
+		&i.ResourceKind,
+		&i.ResourceID,
+		&i.ResolutionType,
+		&i.RoleSlug,
+		&i.ResolvedBy,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const listChallengeResolutions = `-- name: ListChallengeResolutions :many
+
+SELECT id, organization_id, challenge_id, principal_urn, scope, resource_kind, resource_id, resolution_type, role_slug, resolved_by, created_at FROM authz_challenge_resolutions
+WHERE organization_id = $1
+  AND challenge_id = ANY($2::text[])
+`
+
+type ListChallengeResolutionsParams struct {
+	OrganizationID string
+	ChallengeIds   []string
+}
+
+// Queries for authz challenge resolutions.
+// authz_challenge_resolutions is org-scoped (no project_id).
+// Returns resolution records for a batch of challenge IDs within an org.
+func (q *Queries) ListChallengeResolutions(ctx context.Context, arg ListChallengeResolutionsParams) ([]AuthzChallengeResolution, error) {
+	rows, err := q.db.Query(ctx, listChallengeResolutions, arg.OrganizationID, arg.ChallengeIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AuthzChallengeResolution
+	for rows.Next() {
+		var i AuthzChallengeResolution
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.ChallengeID,
+			&i.PrincipalUrn,
+			&i.Scope,
+			&i.ResourceKind,
+			&i.ResourceID,
+			&i.ResolutionType,
+			&i.RoleSlug,
+			&i.ResolvedBy,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPrincipalGrantsByOrg = `-- name: ListPrincipalGrantsByOrg :many
 
 SELECT id, organization_id, principal_urn, principal_type, scope, selectors, created_at, updated_at

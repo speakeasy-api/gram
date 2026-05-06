@@ -28,6 +28,8 @@ type Endpoints struct {
 	GetRBACStatus    goa.Endpoint
 	EnableRBAC       goa.Endpoint
 	DisableRBAC      goa.Endpoint
+	ListChallenges   goa.Endpoint
+	ResolveChallenge goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "access" service with endpoints.
@@ -47,6 +49,8 @@ func NewEndpoints(s Service) *Endpoints {
 		GetRBACStatus:    NewGetRBACStatusEndpoint(s, a.APIKeyAuth),
 		EnableRBAC:       NewEnableRBACEndpoint(s, a.APIKeyAuth),
 		DisableRBAC:      NewDisableRBACEndpoint(s, a.APIKeyAuth),
+		ListChallenges:   NewListChallengesEndpoint(s, a.APIKeyAuth),
+		ResolveChallenge: NewResolveChallengeEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -64,6 +68,8 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.GetRBACStatus = m(e.GetRBACStatus)
 	e.EnableRBAC = m(e.EnableRBAC)
 	e.DisableRBAC = m(e.DisableRBAC)
+	e.ListChallenges = m(e.ListChallenges)
+	e.ResolveChallenge = m(e.ResolveChallenge)
 }
 
 // NewListRolesEndpoint returns an endpoint function that calls the method
@@ -447,5 +453,75 @@ func NewDisableRBACEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa
 			return nil, err
 		}
 		return nil, s.DisableRBAC(ctx, p)
+	}
+}
+
+// NewListChallengesEndpoint returns an endpoint function that calls the method
+// "listChallenges" of service "access".
+func NewListChallengesEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListChallengesPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+			RequiredScopes: []string{"consumer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.ListChallenges(ctx, p)
+	}
+}
+
+// NewResolveChallengeEndpoint returns an endpoint function that calls the
+// method "resolveChallenge" of service "access".
+func NewResolveChallengeEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ResolveChallengePayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.ResolveChallenge(ctx, p)
 	}
 }

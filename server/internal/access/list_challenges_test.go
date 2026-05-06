@@ -1,24 +1,28 @@
-package authzapi_test
+package access
 
 import (
+	"context"
 	"fmt"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
-	gen "github.com/speakeasy-api/gram/server/gen/authz"
-	"github.com/speakeasy-api/gram/server/internal/authzapi/repo"
+	gen "github.com/speakeasy-api/gram/server/gen/access"
+	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
 func TestListChallenges_Unauthorized(t *testing.T) {
 	t.Parallel()
 
-	_, ti := newTestService(t)
+	_, ti := newTestAccessService(t)
 
 	// Call with a bare context (no auth context set).
 	_, err := ti.service.ListChallenges(t.Context(), &gen.ListChallengesPayload{
@@ -42,7 +46,7 @@ func TestListChallenges_Unauthorized(t *testing.T) {
 func TestListChallenges_Empty(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestService(t)
+	ctx, ti := newChallengeTestService(t)
 
 	result, err := ti.service.ListChallenges(ctx, &gen.ListChallengesPayload{
 		Outcome:      nil,
@@ -64,8 +68,8 @@ func TestListChallenges_Empty(t *testing.T) {
 func TestListChallenges_ReturnsCHData(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestService(t)
-	authCtx := testAuthContext(t, ctx)
+	ctx, ti := newChallengeTestService(t)
+	authCtx := challengeAuthContext(t, ctx)
 
 	challengeID := uuid.NewString()
 	insertCHChallenge(t, ti, authCtx.ActiveOrganizationID, challengeID, "deny", "user:test-user", "org:admin")
@@ -102,14 +106,14 @@ func TestListChallenges_ReturnsCHData(t *testing.T) {
 func TestListChallenges_EnrichesWithResolution(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestService(t)
-	authCtx := testAuthContext(t, ctx)
+	ctx, ti := newChallengeTestService(t)
+	authCtx := challengeAuthContext(t, ctx)
 
 	challengeID := uuid.NewString()
 	insertCHChallenge(t, ti, authCtx.ActiveOrganizationID, challengeID, "deny", "user:u1", "build:write")
 
 	// Insert a PG resolution for this challenge.
-	_, err := repo.New(ti.conn).InsertChallengeResolution(ctx, repo.InsertChallengeResolutionParams{
+	_, err := accessrepo.New(ti.conn).InsertChallengeResolution(ctx, accessrepo.InsertChallengeResolutionParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		ChallengeID:    challengeID,
 		PrincipalUrn:   "user:u1",
@@ -151,8 +155,8 @@ func TestListChallenges_EnrichesWithResolution(t *testing.T) {
 func TestListChallenges_EnrichesWithUserData(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestService(t)
-	authCtx := testAuthContext(t, ctx)
+	ctx, ti := newChallengeTestService(t)
+	authCtx := challengeAuthContext(t, ctx)
 
 	userID := uuid.NewString()
 	// Seed user in PG.
@@ -192,8 +196,8 @@ func TestListChallenges_EnrichesWithUserData(t *testing.T) {
 func TestListChallenges_FilterByOutcome(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestService(t)
-	authCtx := testAuthContext(t, ctx)
+	ctx, ti := newChallengeTestService(t)
+	authCtx := challengeAuthContext(t, ctx)
 
 	denyID := uuid.NewString()
 	allowID := uuid.NewString()
@@ -220,8 +224,8 @@ func TestListChallenges_FilterByOutcome(t *testing.T) {
 func TestListChallenges_FilterByResolved(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestService(t)
-	authCtx := testAuthContext(t, ctx)
+	ctx, ti := newChallengeTestService(t)
+	authCtx := challengeAuthContext(t, ctx)
 
 	resolvedID := uuid.NewString()
 	unresolvedID := uuid.NewString()
@@ -229,7 +233,7 @@ func TestListChallenges_FilterByResolved(t *testing.T) {
 	insertCHChallenge(t, ti, authCtx.ActiveOrganizationID, unresolvedID, "deny", "user:u2", "org:admin")
 
 	// Resolve only the first challenge.
-	_, err := repo.New(ti.conn).InsertChallengeResolution(ctx, repo.InsertChallengeResolutionParams{
+	_, err := accessrepo.New(ti.conn).InsertChallengeResolution(ctx, accessrepo.InsertChallengeResolutionParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		ChallengeID:    resolvedID,
 		PrincipalUrn:   "user:u1",
@@ -280,8 +284,8 @@ func TestListChallenges_FilterByResolved(t *testing.T) {
 func TestListChallenges_IsolatesByOrganization(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestService(t)
-	authCtx := testAuthContext(t, ctx)
+	ctx, ti := newChallengeTestService(t)
+	authCtx := challengeAuthContext(t, ctx)
 
 	myID := uuid.NewString()
 	otherID := uuid.NewString()
@@ -307,8 +311,8 @@ func TestListChallenges_IsolatesByOrganization(t *testing.T) {
 func TestListChallenges_Pagination(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestService(t)
-	authCtx := testAuthContext(t, ctx)
+	ctx, ti := newChallengeTestService(t)
+	authCtx := challengeAuthContext(t, ctx)
 
 	for i := range 5 {
 		insertCHChallenge(t, ti, authCtx.ActiveOrganizationID, uuid.NewString(), "deny", fmt.Sprintf("user:u%d", i), "org:read")
@@ -330,7 +334,42 @@ func TestListChallenges_Pagination(t *testing.T) {
 	require.Equal(t, 5, result.Total)
 }
 
-// --- helpers ---
+// --- challenge test helpers ---
+
+// newChallengeTestService creates a test service with a unique org ID per test
+// so CH data (shared table) doesn't leak between parallel tests.
+func newChallengeTestService(t *testing.T) (context.Context, *testInstance) {
+	t.Helper()
+
+	ctx, ti := newTestAccessService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	authCtx.ActiveOrganizationID = "test-org-" + uuid.NewString()
+	ctx = contextvalues.SetAuthContext(ctx, authCtx)
+
+	// Seed org in PG so FK on authz_challenge_resolutions is satisfied.
+	_, err := orgrepo.New(ti.conn).UpsertOrganizationMetadata(ctx, orgrepo.UpsertOrganizationMetadataParams{
+		ID:          authCtx.ActiveOrganizationID,
+		Name:        "Test Org",
+		Slug:        "test-org-" + uuid.NewString()[:8],
+		WorkosID:    conv.PtrToPGText(nil),
+		Whitelisted: pgtype.Bool{Bool: false, Valid: false},
+	})
+	require.NoError(t, err)
+
+	return ctx, ti
+}
+
+func challengeAuthContext(t *testing.T, ctx context.Context) *contextvalues.AuthContext {
+	t.Helper()
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+
+	return authCtx
+}
 
 // insertCHChallenge inserts a minimal challenge row into ClickHouse for testing.
 func insertCHChallenge(t *testing.T, ti *testInstance, orgID, challengeID, outcome, principalURN, scope string) {

@@ -593,6 +593,154 @@ paths:
             x-speakeasy-name-override: getRole
             x-speakeasy-react-hook:
                 name: Role
+    /rpc/access.listChallenges:
+        get:
+            description: List authz challenge events from ClickHouse, enriched with resolution state from PostgreSQL.
+            operationId: listChallenges
+            parameters:
+                - allowEmptyValue: true
+                  description: Filter by outcome.
+                  in: query
+                  name: outcome
+                  schema:
+                    description: Filter by outcome.
+                    enum:
+                        - allow
+                        - deny
+                    type: string
+                - allowEmptyValue: true
+                  description: Filter by principal URN.
+                  in: query
+                  name: principal_urn
+                  schema:
+                    description: Filter by principal URN.
+                    type: string
+                - allowEmptyValue: true
+                  description: Filter by scope.
+                  in: query
+                  name: scope
+                  schema:
+                    description: Filter by scope.
+                    type: string
+                - allowEmptyValue: true
+                  description: Filter to a specific project.
+                  in: query
+                  name: project_id
+                  schema:
+                    description: Filter to a specific project.
+                    type: string
+                - allowEmptyValue: true
+                  description: Filter by resolution state. True = only resolved, false = only unresolved.
+                  in: query
+                  name: resolved
+                  schema:
+                    description: Filter by resolution state. True = only resolved, false = only unresolved.
+                    type: boolean
+                - allowEmptyValue: true
+                  description: Maximum number of results to return.
+                  in: query
+                  name: limit
+                  schema:
+                    default: 50
+                    description: Maximum number of results to return.
+                    format: int64
+                    maximum: 200
+                    minimum: 1
+                    type: integer
+                - allowEmptyValue: true
+                  description: Number of results to skip.
+                  in: query
+                  name: offset
+                  schema:
+                    default: 0
+                    description: Number of results to skip.
+                    format: int64
+                    minimum: 0
+                    type: integer
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListChallengesResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                - session_header_Gram-Session: []
+            summary: listChallenges access
+            tags:
+                - access
+            x-speakeasy-name-override: listChallenges
+            x-speakeasy-react-hook:
+                name: Challenges
     /rpc/access.listGrants:
         get:
             description: List the current user's effective grants, including inherited role grants.
@@ -949,6 +1097,101 @@ paths:
             x-speakeasy-name-override: listScopes
             x-speakeasy-react-hook:
                 name: ListScopes
+    /rpc/access.resolveChallenge:
+        post:
+            description: Record a resolution for a denied authz challenge. The caller is responsible for assigning the role first.
+            operationId: resolveChallenge
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ResolveChallengeForm'
+                required: true
+            responses:
+                "201":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ChallengeResolution'
+                    description: Created response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                - session_header_Gram-Session: []
+            summary: resolveChallenge access
+            tags:
+                - access
+            x-speakeasy-name-override: resolveChallenge
+            x-speakeasy-react-hook:
+                name: ResolveChallenge
     /rpc/access.updateMemberRole:
         put:
             description: Change a team member's role assignment.
@@ -3678,249 +3921,6 @@ paths:
             x-speakeasy-name-override: switchScopes
             x-speakeasy-react-hook:
                 name: SwitchScopes
-    /rpc/authz.listChallenges:
-        get:
-            description: List authz challenge events from ClickHouse, enriched with resolution state from PostgreSQL.
-            operationId: listChallenges
-            parameters:
-                - allowEmptyValue: true
-                  description: Filter by outcome.
-                  in: query
-                  name: outcome
-                  schema:
-                    description: Filter by outcome.
-                    enum:
-                        - allow
-                        - deny
-                    type: string
-                - allowEmptyValue: true
-                  description: Filter by principal URN.
-                  in: query
-                  name: principal_urn
-                  schema:
-                    description: Filter by principal URN.
-                    type: string
-                - allowEmptyValue: true
-                  description: Filter by scope.
-                  in: query
-                  name: scope
-                  schema:
-                    description: Filter by scope.
-                    type: string
-                - allowEmptyValue: true
-                  description: Filter to a specific project.
-                  in: query
-                  name: project_id
-                  schema:
-                    description: Filter to a specific project.
-                    type: string
-                - allowEmptyValue: true
-                  description: Filter by resolution state. True = only resolved, false = only unresolved.
-                  in: query
-                  name: resolved
-                  schema:
-                    description: Filter by resolution state. True = only resolved, false = only unresolved.
-                    type: boolean
-                - allowEmptyValue: true
-                  description: Maximum number of results to return.
-                  in: query
-                  name: limit
-                  schema:
-                    default: 50
-                    description: Maximum number of results to return.
-                    format: int64
-                    maximum: 200
-                    minimum: 1
-                    type: integer
-                - allowEmptyValue: true
-                  description: Number of results to skip.
-                  in: query
-                  name: offset
-                  schema:
-                    default: 0
-                    description: Number of results to skip.
-                    format: int64
-                    minimum: 0
-                    type: integer
-                - allowEmptyValue: true
-                  description: API Key header
-                  in: header
-                  name: Gram-Key
-                  schema:
-                    description: API Key header
-                    type: string
-                - allowEmptyValue: true
-                  description: Session header
-                  in: header
-                  name: Gram-Session
-                  schema:
-                    description: Session header
-                    type: string
-            responses:
-                "200":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/ListChallengesResult'
-                    description: OK response.
-                "400":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'bad_request: request is invalid'
-                "401":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unauthorized: unauthorized access'
-                "403":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'forbidden: permission denied'
-                "404":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'not_found: resource not found'
-                "409":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'conflict: resource already exists'
-                "415":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unsupported_media: unsupported media type'
-                "422":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'invalid: request contains one or more invalidation fields'
-                "500":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unexpected: an unexpected error occurred'
-                "502":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'gateway_error: an unexpected error occurred'
-            security:
-                - apikey_header_Gram-Key: []
-                - session_header_Gram-Session: []
-            summary: listChallenges authz
-            tags:
-                - authz
-            x-speakeasy-name-override: listChallenges
-            x-speakeasy-react-hook:
-                name: Challenges
-    /rpc/authz.resolveChallenge:
-        post:
-            description: Record a resolution for a denied authz challenge. The caller is responsible for assigning the role first.
-            operationId: resolveChallenge
-            parameters:
-                - allowEmptyValue: true
-                  description: API Key header
-                  in: header
-                  name: Gram-Key
-                  schema:
-                    description: API Key header
-                    type: string
-                - allowEmptyValue: true
-                  description: Session header
-                  in: header
-                  name: Gram-Session
-                  schema:
-                    description: Session header
-                    type: string
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/ResolveChallengeForm'
-                required: true
-            responses:
-                "201":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/ChallengeResolution'
-                    description: Created response.
-                "400":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'bad_request: request is invalid'
-                "401":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unauthorized: unauthorized access'
-                "403":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'forbidden: permission denied'
-                "404":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'not_found: resource not found'
-                "409":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'conflict: resource already exists'
-                "415":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unsupported_media: unsupported media type'
-                "422":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'invalid: request contains one or more invalidation fields'
-                "500":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unexpected: an unexpected error occurred'
-                "502":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'gateway_error: an unexpected error occurred'
-            security:
-                - apikey_header_Gram-Key: []
-                - session_header_Gram-Session: []
-            summary: resolveChallenge authz
-            tags:
-                - authz
-            x-speakeasy-name-override: resolveChallenge
-            x-speakeasy-react-hook:
-                name: ResolveChallenge
     /rpc/chat.creditUsage:
         get:
             description: Get the total number of chat credits and usage for the current billing period
@@ -30772,7 +30772,7 @@ components:
             in: header
 tags:
     - name: access
-      description: Manage roles and team member access control.
+      description: Manage roles, team member access control, and authorization challenge events.
     - name: admin
       description: Operational endpoints for administrative tasks.
     - name: assets
@@ -30783,8 +30783,6 @@ tags:
       description: Manages audit logs in Gram.
     - name: auth
       description: Managed auth for gram producers and dashboard.
-    - name: authz
-      description: Query and resolve authorization challenge events.
     - name: chat
       description: Managed chats for gram AI consumers.
     - name: chatSessions
