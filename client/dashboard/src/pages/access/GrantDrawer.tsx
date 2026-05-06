@@ -9,8 +9,11 @@ import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { cn } from "@/lib/utils";
 import type { Role } from "@gram/client/models/components/role.js";
+import { invalidateAllChallenges } from "@gram/client/react-query/challenges.js";
+import { useResolveChallengeMutation } from "@gram/client/react-query/resolveChallenge.js";
 import { useRoles } from "@gram/client/react-query/roles.js";
 import { Badge, Button } from "@speakeasy-api/moonshine";
+import { useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Check, ChevronRight, Plus, Users } from "lucide-react";
 import { useState } from "react";
 import type { AuthzChallenge } from "./ChallengesTab";
@@ -32,6 +35,7 @@ export function GrantDrawer({
 }: GrantDrawerProps) {
   const [step, setStep] = useState<Step>("choose");
   const [selectedRole, setSelectedRole] = useState<Role | null>(null);
+  const queryClient = useQueryClient();
   const { data: rolesData } = useRoles();
   const allRoles = rolesData?.roles ?? [];
   const roles = challenge
@@ -39,6 +43,12 @@ export function GrantDrawer({
     : [];
 
   const hasMatchingRoles = roles.length > 0;
+
+  const resolveChallenge = useResolveChallengeMutation({
+    onSuccess: async () => {
+      await invalidateAllChallenges(queryClient);
+    },
+  });
 
   const handleClose = () => {
     onOpenChange(false);
@@ -59,7 +69,24 @@ export function GrantDrawer({
   };
 
   const handleSave = () => {
-    // TODO: call API to assign principal to role
+    if (!challenge || !selectedRole) return;
+    // Derive role slug from name the same way the server does:
+    // slugify(name) → "org-" + lowercase-hyphenated
+    const roleSlug =
+      "org-" + selectedRole.name.toLowerCase().replace(/[\s_]+/g, "-");
+    resolveChallenge.mutate({
+      request: {
+        resolveChallengeForm: {
+          challengeId: challenge.id,
+          principalUrn: challenge.principalUrn,
+          scope: challenge.scope,
+          resolutionType: "role_assigned",
+          roleSlug,
+          resourceKind: challenge.resourceKind,
+          resourceId: challenge.resourceId,
+        },
+      },
+    });
     handleClose();
   };
 

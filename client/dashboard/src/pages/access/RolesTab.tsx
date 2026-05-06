@@ -23,18 +23,15 @@ import {
   Table,
 } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { CreateRoleDialog } from "./CreateRoleDialog";
 import { DeleteRoleDialog } from "./DeleteRoleDialog";
 import { Ellipsis } from "lucide-react";
 import { RequireScope } from "@/components/require-scope";
 import { cn } from "@/lib/utils";
 import { useOrgRoutes } from "@/routes";
-import {
-  MOCK_CHALLENGES,
-  useChallengeRowColumns,
-  type AuthzChallenge,
-} from "./ChallengesTab";
+import { useChallenges } from "@gram/client/react-query/challenges.js";
+import { useChallengeRowColumns, type AuthzChallenge } from "./ChallengesTab";
 import { useGrantFlow } from "./useGrantFlow";
 
 function RoleActionsMenu({
@@ -95,16 +92,8 @@ export function RolesTab() {
   const defaultRole =
     roles.find((r) => r.isSystem && r.name === "Member") ?? null;
 
-  const recentChallenges = useMemo(
-    () =>
-      [...MOCK_CHALLENGES]
-        .sort(
-          (a, b) =>
-            new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
-        )
-        .slice(0, 5),
-    [],
-  );
+  const { data: challengesData } = useChallenges({ limit: 5 });
+  const recentChallenges = challengesData?.challenges ?? [];
 
   const membersOfDeletingRole = deletingRole
     ? members.filter((m) => m.roleId === deletingRole.id)

@@ -15,356 +15,34 @@ import {
 import { Type } from "@/components/ui/type";
 import { HumanizeDateTime } from "@/lib/dates";
 import { cn } from "@/lib/utils";
+import { useSession } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
+import type { AuthzChallenge } from "@gram/client/models/components/authzchallenge.js";
+import { useChallenges } from "@gram/client/react-query/challenges.js";
+import { useMembers } from "@gram/client/react-query/members.js";
 import {
   Badge as MoonshineBadge,
   Column,
   Table,
 } from "@speakeasy-api/moonshine";
-import { ChevronRight, KeyRound } from "lucide-react";
+import {
+  Building2,
+  Check,
+  ChevronRight,
+  FolderOpen,
+  KeyRound,
+  Plug,
+} from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import { useGrantFlow } from "./useGrantFlow";
 
-export type Outcome = "deny" | "allow";
-type Operation = "require" | "require_any" | "filter";
-type Reason =
-  | "grant_matched"
-  | "no_grants"
-  | "scope_unsatisfied"
-  | "rbac_skipped_apikey"
-  | "dev_override";
+export type { AuthzChallenge } from "@gram/client/models/components/authzchallenge.js";
+export { invalidateAllChallenges } from "@gram/client/react-query/challenges.js";
 
-export interface AuthzChallenge {
-  id: string;
-  timestamp: string;
-  organizationId: string;
-  projectId: string;
-  principalUrn: string;
-  principalType: string;
-  userEmail: string | null;
-  photoUrl?: string;
-  operation: Operation;
-  outcome: Outcome;
-  reason: Reason;
-  scope: string;
-  resourceKind: string;
-  resourceId: string;
-  roleSlugs: string[];
-  evaluatedGrantCount: number;
-  matchedGrantCount: number;
-  /** Set when admin resolves the challenge (e.g. grants access). Null = unresolved. */
-  resolvedAt: string | null;
-}
-
-type OutcomeFilter = "all" | Outcome | "resolved";
-
-export const MOCK_CHALLENGES: AuthzChallenge[] = [
-  {
-    id: "01961f3a-0001-7000-8000-000000000001",
-    timestamp: new Date(Date.now() - 2 * 60_000).toISOString(),
-    organizationId: "org-1",
-    projectId: "proj-1",
-    principalUrn: "user:usr_abc123",
-    principalType: "user",
-    userEmail: "alice@acme.com",
-    operation: "require",
-    outcome: "deny",
-    reason: "scope_unsatisfied",
-    scope: "project:write",
-    resourceKind: "project",
-    resourceId: "proj-1",
-    roleSlugs: ["member"],
-    evaluatedGrantCount: 3,
-    matchedGrantCount: 0,
-    resolvedAt: null,
-  },
-  {
-    id: "01961f3a-0002-7000-8000-000000000002",
-    timestamp: new Date(Date.now() - 5 * 60_000).toISOString(),
-    organizationId: "org-1",
-    projectId: "",
-    principalUrn: "api_key:key_xyz789",
-    principalType: "api_key",
-    userEmail: null,
-    operation: "require",
-    outcome: "deny",
-    reason: "no_grants",
-    scope: "org:admin",
-    resourceKind: "",
-    resourceId: "org-1",
-    roleSlugs: [],
-    evaluatedGrantCount: 0,
-    matchedGrantCount: 0,
-    resolvedAt: null,
-  },
-  {
-    id: "01961f3a-0003-7000-8000-000000000003",
-    timestamp: new Date(Date.now() - 8 * 60_000).toISOString(),
-    organizationId: "org-1",
-    projectId: "proj-2",
-    principalUrn: "user:usr_def456",
-    principalType: "user",
-    userEmail: "bob@acme.com",
-    operation: "require_any",
-    outcome: "allow",
-    reason: "grant_matched",
-    scope: "mcp:connect",
-    resourceKind: "project",
-    resourceId: "proj-2",
-    roleSlugs: ["admin"],
-    evaluatedGrantCount: 12,
-    matchedGrantCount: 2,
-    resolvedAt: null,
-  },
-  {
-    id: "01961f3a-0004-7000-8000-000000000004",
-    timestamp: new Date(Date.now() - 12 * 60_000).toISOString(),
-    organizationId: "org-1",
-    projectId: "proj-1",
-    principalUrn: "user:usr_ghi789",
-    principalType: "user",
-    userEmail: "carol@acme.com",
-    operation: "filter",
-    outcome: "allow",
-    reason: "grant_matched",
-    scope: "project:read",
-    resourceKind: "project",
-    resourceId: "proj-1",
-    roleSlugs: ["member"],
-    evaluatedGrantCount: 5,
-    matchedGrantCount: 1,
-    resolvedAt: null,
-  },
-  {
-    id: "01961f3a-0005-7000-8000-000000000005",
-    timestamp: new Date(Date.now() - 15 * 60_000).toISOString(),
-    organizationId: "org-1",
-    projectId: "",
-    principalUrn: "user:usr_jkl012",
-    principalType: "user",
-    userEmail: "dave@acme.com",
-    operation: "require",
-    outcome: "deny",
-    reason: "scope_unsatisfied",
-    scope: "org:admin",
-    resourceKind: "",
-    resourceId: "org-1",
-    roleSlugs: ["member"],
-    evaluatedGrantCount: 3,
-    matchedGrantCount: 0,
-    resolvedAt: new Date(Date.now() - 10 * 60_000).toISOString(),
-  },
-  {
-    id: "01961f3a-0007-7000-8000-000000000007",
-    timestamp: new Date(Date.now() - 30 * 60_000).toISOString(),
-    organizationId: "org-1",
-    projectId: "proj-1",
-    principalUrn: "user:usr_abc123",
-    principalType: "user",
-    userEmail: "alice@acme.com",
-    operation: "require",
-    outcome: "allow",
-    reason: "grant_matched",
-    scope: "project:read",
-    resourceKind: "project",
-    resourceId: "proj-1",
-    roleSlugs: ["member"],
-    evaluatedGrantCount: 3,
-    matchedGrantCount: 1,
-    resolvedAt: null,
-  },
-  {
-    id: "01961f3a-0008-7000-8000-000000000008",
-    timestamp: new Date(Date.now() - 45 * 60_000).toISOString(),
-    organizationId: "org-1",
-    projectId: "",
-    principalUrn: "api_key:key_xyz789",
-    principalType: "api_key",
-    userEmail: null,
-    operation: "require",
-    outcome: "allow",
-    reason: "rbac_skipped_apikey",
-    scope: "project:read",
-    resourceKind: "project",
-    resourceId: "proj-1",
-    roleSlugs: [],
-    evaluatedGrantCount: 0,
-    matchedGrantCount: 0,
-    resolvedAt: null,
-  },
-  {
-    id: "01961f3a-0009-7000-8000-000000000009",
-    timestamp: new Date(Date.now() - 55 * 60_000).toISOString(),
-    organizationId: "org-1",
-    projectId: "proj-3",
-    principalUrn: "user:usr_mno345",
-    principalType: "user",
-    userEmail: "eve@acme.com",
-    operation: "require",
-    outcome: "deny",
-    reason: "scope_unsatisfied",
-    scope: "mcp:write",
-    resourceKind: "mcp",
-    resourceId: "weather-tools",
-    roleSlugs: ["member"],
-    evaluatedGrantCount: 4,
-    matchedGrantCount: 0,
-    resolvedAt: new Date(Date.now() - 50 * 60_000).toISOString(),
-  },
-  {
-    id: "01961f3a-000a-7000-8000-00000000000a",
-    timestamp: new Date(Date.now() - 1.2 * 3600_000).toISOString(),
-    organizationId: "org-1",
-    projectId: "proj-1",
-    principalUrn: "user:usr_pqr678",
-    principalType: "user",
-    userEmail: "frank@acme.com",
-    operation: "require_any",
-    outcome: "allow",
-    reason: "grant_matched",
-    scope: "mcp:read",
-    resourceKind: "mcp",
-    resourceId: "db-connector",
-    roleSlugs: ["member"],
-    evaluatedGrantCount: 6,
-    matchedGrantCount: 1,
-    resolvedAt: null,
-  },
-  {
-    id: "01961f3a-000b-7000-8000-00000000000b",
-    timestamp: new Date(Date.now() - 1.5 * 3600_000).toISOString(),
-    organizationId: "org-1",
-    projectId: "proj-2",
-    principalUrn: "user:usr_stu901",
-    principalType: "user",
-    userEmail: "grace@acme.com",
-    operation: "require",
-    outcome: "deny",
-    reason: "no_grants",
-    scope: "mcp:connect",
-    resourceKind: "mcp",
-    resourceId: "slack-bot",
-    roleSlugs: [],
-    evaluatedGrantCount: 0,
-    matchedGrantCount: 0,
-    resolvedAt: null,
-  },
-  {
-    id: "01961f3a-000c-7000-8000-00000000000c",
-    timestamp: new Date(Date.now() - 2 * 3600_000).toISOString(),
-    organizationId: "org-1",
-    projectId: "proj-1",
-    principalUrn: "api_key:key_deploy_01",
-    principalType: "api_key",
-    userEmail: null,
-    operation: "require",
-    outcome: "allow",
-    reason: "rbac_skipped_apikey",
-    scope: "project:write",
-    resourceKind: "project",
-    resourceId: "proj-1",
-    roleSlugs: [],
-    evaluatedGrantCount: 0,
-    matchedGrantCount: 0,
-    resolvedAt: null,
-  },
-  {
-    id: "01961f3a-000d-7000-8000-00000000000d",
-    timestamp: new Date(Date.now() - 2.5 * 3600_000).toISOString(),
-    organizationId: "org-1",
-    projectId: "",
-    principalUrn: "user:usr_vwx234",
-    principalType: "user",
-    userEmail: "heidi@acme.com",
-    operation: "require",
-    outcome: "allow",
-    reason: "grant_matched",
-    scope: "org:read",
-    resourceKind: "",
-    resourceId: "org-1",
-    roleSlugs: ["member"],
-    evaluatedGrantCount: 3,
-    matchedGrantCount: 1,
-    resolvedAt: null,
-  },
-  {
-    id: "01961f3a-000e-7000-8000-00000000000e",
-    timestamp: new Date(Date.now() - 3 * 3600_000).toISOString(),
-    organizationId: "org-1",
-    projectId: "proj-3",
-    principalUrn: "user:usr_mno345",
-    principalType: "user",
-    userEmail: "eve@acme.com",
-    operation: "require",
-    outcome: "deny",
-    reason: "scope_unsatisfied",
-    scope: "project:write",
-    resourceKind: "project",
-    resourceId: "proj-3",
-    roleSlugs: ["member"],
-    evaluatedGrantCount: 3,
-    matchedGrantCount: 0,
-    resolvedAt: null,
-  },
-  {
-    id: "01961f3a-000f-7000-8000-00000000000f",
-    timestamp: new Date(Date.now() - 3.5 * 3600_000).toISOString(),
-    organizationId: "org-1",
-    projectId: "proj-2",
-    principalUrn: "user:usr_def456",
-    principalType: "user",
-    userEmail: "bob@acme.com",
-    operation: "filter",
-    outcome: "allow",
-    reason: "grant_matched",
-    scope: "mcp:read",
-    resourceKind: "project",
-    resourceId: "proj-2",
-    roleSlugs: ["admin"],
-    evaluatedGrantCount: 8,
-    matchedGrantCount: 3,
-    resolvedAt: null,
-  },
-  {
-    id: "01961f3a-0010-7000-8000-000000000010",
-    timestamp: new Date(Date.now() - 4 * 3600_000).toISOString(),
-    organizationId: "org-1",
-    projectId: "proj-1",
-    principalUrn: "api_key:key_ci_02",
-    principalType: "api_key",
-    userEmail: null,
-    operation: "require",
-    outcome: "deny",
-    reason: "no_grants",
-    scope: "project:write",
-    resourceKind: "project",
-    resourceId: "proj-1",
-    roleSlugs: [],
-    evaluatedGrantCount: 0,
-    matchedGrantCount: 0,
-    resolvedAt: null,
-  },
-  {
-    id: "01961f3a-0011-7000-8000-000000000011",
-    timestamp: new Date(Date.now() - 5 * 3600_000).toISOString(),
-    organizationId: "org-1",
-    projectId: "proj-2",
-    principalUrn: "user:usr_ghi789",
-    principalType: "user",
-    userEmail: "carol@acme.com",
-    operation: "require",
-    outcome: "allow",
-    reason: "grant_matched",
-    scope: "mcp:connect",
-    resourceKind: "mcp",
-    resourceId: "slack-bot",
-    roleSlugs: ["admin"],
-    evaluatedGrantCount: 10,
-    matchedGrantCount: 2,
-    resolvedAt: null,
-  },
-];
+type Outcome = AuthzChallenge["outcome"];
+type Reason = AuthzChallenge["reason"];
+type OutcomeFilter = "all" | "deny" | "allow" | "resolved";
 
 export function OutcomeBadge({
   outcome,
@@ -381,14 +59,19 @@ export function OutcomeBadge({
     );
   }
 
-  const config = {
-    deny: { variant: "destructive" as const, label: "Denied" },
-    allow: { variant: "success" as const, label: "Allowed" },
-  }[outcome];
+  const config: Record<
+    Outcome,
+    { variant: "destructive" | "success" | "neutral"; label: string }
+  > = {
+    deny: { variant: "destructive", label: "Denied" },
+    allow: { variant: "success", label: "Allowed" },
+    error: { variant: "neutral", label: "Error" },
+  };
+  const c = config[outcome];
 
   return (
-    <MoonshineBadge variant={config.variant}>
-      <MoonshineBadge.Text>{config.label}</MoonshineBadge.Text>
+    <MoonshineBadge variant={c.variant}>
+      <MoonshineBadge.Text>{c.label}</MoonshineBadge.Text>
     </MoonshineBadge>
   );
 }
@@ -401,9 +84,11 @@ export function getInitials(identifier: string): string {
 function ResourceLink({
   challenge,
   orgSlug,
+  projectMap,
 }: {
   challenge: AuthzChallenge;
   orgSlug: string;
+  projectMap: Map<string, { slug: string; name: string }>;
 }) {
   const { resourceKind, resourceId, projectId } = challenge;
 
@@ -416,28 +101,43 @@ function ResourceLink({
   }
 
   let to: string | null = null;
-  if (resourceKind === "project" && resourceId) {
-    to = `/${orgSlug}/projects/${resourceId}`;
-  } else if (resourceKind === "mcp" && projectId && resourceId) {
-    to = `/${orgSlug}/projects/${projectId}/mcp/${resourceId}`;
+  let label = resourceId;
+  let IconEl: typeof Building2 | null = null;
+
+  if (resourceKind === "org") {
+    label = "Organization";
+    IconEl = Building2;
+    to = `/${orgSlug}/settings`;
+  } else if (resourceKind === "project") {
+    const proj = projectMap.get(resourceId);
+    label = proj?.name ?? resourceId;
+    IconEl = FolderOpen;
+    to = proj ? `/${orgSlug}/projects/${proj.slug}` : null;
+  } else if (resourceKind === "mcp") {
+    label = resourceId;
+    IconEl = Plug;
+    const proj = projectId ? projectMap.get(projectId) : undefined;
+    to = proj ? `/${orgSlug}/projects/${proj.slug}/mcp/${resourceId}` : null;
   }
 
   if (to) {
     return (
       <Link
         to={to}
-        className="inline-flex items-center gap-1 truncate text-sm text-blue-600 underline underline-offset-4 hover:text-blue-500 dark:text-blue-400 dark:hover:text-blue-300"
+        className="inline-flex items-center gap-1.5 truncate text-sm text-blue-600 underline underline-offset-4 hover:text-blue-500 dark:text-blue-400 dark:hover:text-blue-300"
       >
-        {resourceId}
+        {IconEl && <IconEl className="h-3.5 w-3.5 shrink-0 opacity-60" />}
+        <span className="truncate">{label}</span>
         <ChevronRight className="h-3 w-3 shrink-0" />
       </Link>
     );
   }
 
   return (
-    <Type variant="body" className="text-muted-foreground truncate text-sm">
-      {resourceId}
-    </Type>
+    <span className="text-muted-foreground inline-flex items-center gap-1.5 truncate text-sm">
+      {IconEl && <IconEl className="h-3.5 w-3.5 shrink-0" />}
+      <span className="truncate">{label}</span>
+    </span>
   );
 }
 
@@ -484,6 +184,8 @@ function reasonLabel(reason: Reason): string {
       return "No permissions configured for this identity.";
     case "scope_unsatisfied":
       return "The identity's roles don't include this permission.";
+    case "invalid_check":
+      return "The authorization check was malformed or invalid.";
     case "rbac_skipped_apikey":
       return "API keys bypass role checks — access was allowed directly.";
     case "dev_override":
@@ -493,13 +195,29 @@ function reasonLabel(reason: Reason): string {
 
 export function useChallengeRowColumns(): Column<AuthzChallenge>[] {
   const { orgSlug } = useSlugs();
+  const { organization } = useSession();
+  const { data: membersData } = useMembers();
+  const projectMap = useMemo(() => {
+    const m = new Map<string, { slug: string; name: string }>();
+    for (const p of organization.projects) {
+      m.set(p.id, { slug: p.slug, name: p.name });
+    }
+    return m;
+  }, [organization.projects]);
+  const memberMap = useMemo(() => {
+    const m = new Map<string, { email: string; photoUrl?: string }>();
+    for (const member of membersData?.members ?? []) {
+      m.set(member.id, { email: member.email, photoUrl: member.photoUrl });
+    }
+    return m;
+  }, [membersData]);
 
   return useMemo(
     () => [
       {
         key: "avatar",
         header: "",
-        width: "52px",
+        width: "44px",
         render: (row: AuthzChallenge) => {
           const isApiKey = row.principalType === "api_key";
           const display = row.userEmail ?? row.principalUrn;
@@ -528,7 +246,7 @@ export function useChallengeRowColumns(): Column<AuthzChallenge>[] {
       {
         key: "identity",
         header: "Identity",
-        width: "180px",
+        width: "1fr",
         render: (row: AuthzChallenge) => (
           <Tooltip>
             <TooltipTrigger asChild>
@@ -553,7 +271,7 @@ export function useChallengeRowColumns(): Column<AuthzChallenge>[] {
       {
         key: "outcome",
         header: "Outcome",
-        width: "90px",
+        width: "85px",
         render: (row: AuthzChallenge) => (
           <div
             className={cn(
@@ -593,21 +311,58 @@ export function useChallengeRowColumns(): Column<AuthzChallenge>[] {
       {
         key: "resource",
         header: "Resource",
-        width: "150px",
+        width: "1.5fr",
         render: (row: AuthzChallenge) => (
           <div
             className={cn(
+              "min-w-0 overflow-hidden",
               (row.outcome === "allow" || row.resolvedAt) && "opacity-40",
             )}
           >
-            <ResourceLink challenge={row} orgSlug={orgSlug ?? ""} />
+            <ResourceLink
+              challenge={row}
+              orgSlug={orgSlug ?? ""}
+              projectMap={projectMap}
+            />
           </div>
         ),
       },
       {
+        key: "resolvedBy",
+        header: "Resolved By",
+        width: "90px",
+        render: (row: AuthzChallenge) => {
+          if (!row.resolvedBy) {
+            return (
+              <Type variant="body" className="text-muted-foreground/40 text-sm">
+                —
+              </Type>
+            );
+          }
+          const userId = row.resolvedBy.replace(/^user:/, "");
+          const member = memberMap.get(userId);
+          const display = member?.email ?? row.resolvedBy;
+          return (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Avatar className="h-7 w-7">
+                  {member?.photoUrl && (
+                    <AvatarImage src={member.photoUrl} alt={display} />
+                  )}
+                  <AvatarFallback className="text-[10px]">
+                    {getInitials(display)}
+                  </AvatarFallback>
+                </Avatar>
+              </TooltipTrigger>
+              <TooltipContent>{display}</TooltipContent>
+            </Tooltip>
+          );
+        },
+      },
+      {
         key: "timestamp",
         header: "Time",
-        width: "160px",
+        width: "120px",
         render: (row: AuthzChallenge) => (
           <Tooltip delayDuration={500}>
             <TooltipTrigger asChild>
@@ -618,23 +373,21 @@ export function useChallengeRowColumns(): Column<AuthzChallenge>[] {
                   (row.outcome === "allow" || row.resolvedAt) && "opacity-40",
                 )}
               >
-                <HumanizeDateTime date={new Date(row.timestamp)} />
+                <HumanizeDateTime date={row.timestamp} />
               </Type>
             </TooltipTrigger>
-            <TooltipContent>
-              {new Date(row.timestamp).toLocaleString()}
-            </TooltipContent>
+            <TooltipContent>{row.timestamp.toLocaleString()}</TooltipContent>
           </Tooltip>
         ),
       },
     ],
-    [orgSlug],
+    [orgSlug, projectMap, memberMap],
   );
 }
 
 export function ChallengesTab() {
   const [searchParams] = useSearchParams();
-  const [outcomeFilter, setOutcomeFilter] = useState<OutcomeFilter>("all");
+  const [outcomeFilter, setOutcomeFilter] = useState<OutcomeFilter>("deny");
   const [principalFilter, setPrincipalFilter] = useState(
     searchParams.get("identity") ?? "all",
   );
@@ -642,17 +395,18 @@ export function ChallengesTab() {
   const { actionsColumn, grantFlowPortals } = useGrantFlow();
   const challengeRowColumns = useChallengeRowColumns();
 
-  // TODO: Replace with real API call once backend endpoint is ready
-  const challenges = MOCK_CHALLENGES;
-  const isLoading = false;
+  const { data, isLoading } = useChallenges({ limit: 200 });
+  const challenges = data?.challenges ?? [];
 
   const counts = useMemo(() => {
     const c = { all: challenges.length, deny: 0, allow: 0, resolved: 0 };
     for (const ch of challenges) {
       if (ch.resolvedAt) {
         c.resolved++;
+      } else if (ch.outcome === "deny") {
+        c.deny++;
       } else {
-        c[ch.outcome]++;
+        c.allow++;
       }
     }
     return c;
@@ -684,10 +438,10 @@ export function ChallengesTab() {
       base = base.filter((c) => c.scope === scopeFilter);
     }
     return [...base].sort((a, b) => {
-      const outcomeOrder: Record<Outcome, number> = { deny: 0, allow: 1 };
-      const diff = outcomeOrder[a.outcome] - outcomeOrder[b.outcome];
+      const order = (o: Outcome) => (o === "deny" ? 0 : o === "error" ? 1 : 2);
+      const diff = order(a.outcome) - order(b.outcome);
       if (diff !== 0) return diff;
-      return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
+      return b.timestamp.getTime() - a.timestamp.getTime();
     });
   }, [challenges, outcomeFilter, principalFilter, scopeFilter]);
 
@@ -700,13 +454,6 @@ export function ChallengesTab() {
     <div>
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <FilterPill
-          active={outcomeFilter === "all"}
-          onClick={() => setOutcomeFilter("all")}
-          count={counts.all}
-        >
-          All
-        </FilterPill>
-        <FilterPill
           active={outcomeFilter === "deny"}
           onClick={() => setOutcomeFilter("deny")}
           count={counts.deny}
@@ -714,18 +461,18 @@ export function ChallengesTab() {
           Denied
         </FilterPill>
         <FilterPill
-          active={outcomeFilter === "allow"}
-          onClick={() => setOutcomeFilter("allow")}
-          count={counts.allow}
-        >
-          Allowed
-        </FilterPill>
-        <FilterPill
           active={outcomeFilter === "resolved"}
           onClick={() => setOutcomeFilter("resolved")}
           count={counts.resolved}
         >
           Resolved
+        </FilterPill>
+        <FilterPill
+          active={outcomeFilter === "all"}
+          onClick={() => setOutcomeFilter("all")}
+          count={counts.all}
+        >
+          All
         </FilterPill>
 
         <div className="border-border mx-1 h-6 border-l" />
@@ -762,10 +509,23 @@ export function ChallengesTab() {
       {isLoading ? (
         <SkeletonTable />
       ) : filtered.length === 0 ? (
-        <div className="border-border/50 bg-muted/30 rounded-md border px-6 py-12 text-center">
-          <Type variant="body" className="text-muted-foreground">
-            No challenges found
-            {outcomeFilter !== "all" && ` with outcome "${outcomeFilter}"`}.
+        <div className="border-border/50 bg-muted/20 rounded-lg border px-6 py-16 text-center">
+          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900/30">
+            <Check className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
+          </div>
+          <Type variant="body" className="font-medium">
+            {outcomeFilter === "deny"
+              ? "No denied access attempts"
+              : outcomeFilter === "resolved"
+                ? "No resolved challenges yet"
+                : "No challenges found"}
+          </Type>
+          <Type variant="body" className="text-muted-foreground mt-1 text-sm">
+            {outcomeFilter === "deny"
+              ? "All authorization checks are passing. Your team's permissions look good."
+              : outcomeFilter === "resolved"
+                ? "Denied challenges that are resolved by granting access will appear here."
+                : "Authorization challenges will appear here as your team uses the platform."}
           </Type>
         </div>
       ) : (
