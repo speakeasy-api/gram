@@ -28,3 +28,36 @@ type AuthzChallengeResolution struct {
 	ResolvedBy string
 	CreatedAt  pgtype.Timestamptz
 }
+
+type GlobalRole struct {
+	ID                uuid.UUID
+	WorkosSlug        string
+	WorkosName        string
+	WorkosDescription pgtype.Text
+	WorkosCreatedAt   pgtype.Timestamptz
+	WorkosUpdatedAt   pgtype.Timestamptz
+	WorkosDeletedAt   pgtype.Timestamptz
+	WorkosDeleted     bool
+	WorkosLastEventID pgtype.Text
+	CreatedAt         pgtype.Timestamptz
+	UpdatedAt         pgtype.Timestamptz
+	DeletedAt         pgtype.Timestamptz
+	Deleted           bool
+}
+
+type OrganizationRole struct {
+	ID                uuid.UUID
+	OrganizationID    string
+	WorkosSlug        string
+	WorkosName        string
+	WorkosDescription pgtype.Text
+	WorkosCreatedAt   pgtype.Timestamptz
+	WorkosUpdatedAt   pgtype.Timestamptz
+	WorkosDeletedAt   pgtype.Timestamptz
+	WorkosDeleted     bool
+	WorkosLastEventID pgtype.Text
+	CreatedAt         pgtype.Timestamptz
+	UpdatedAt         pgtype.Timestamptz
+	DeletedAt         pgtype.Timestamptz
+	Deleted           bool
+}

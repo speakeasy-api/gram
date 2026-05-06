@@ -155,3 +155,49 @@ UPDATE organization_metadata SET workos_id = NULL WHERE id = @organization_id;
 -- name: CreateOrganizationMetadata :exec
 INSERT INTO organization_metadata (id, name, slug)
 VALUES (@id, @name, @slug);
+
+-- name: GetOrganizationByWorkosID :one
+SELECT *
+FROM organization_metadata
+WHERE workos_id = @workos_id
+LIMIT 1;
+
+-- name: UpsertOrganizationMetadataFromWorkOS :one
+-- Upsert an organization row from a WorkOS organization event. Caller must
+-- have already passed the row through ShouldProcessEvent. Sets workos_id and
+-- the cursor columns; clears disabled_at so a deleted-then-recreated org
+-- comes back online.
+INSERT INTO organization_metadata (
+    id,
+    name,
+    slug,
+    workos_id,
+    workos_updated_at,
+    workos_last_event_id
+) VALUES (
+    @id,
+    @name,
+    @slug,
+    @workos_id,
+    @workos_updated_at,
+    @workos_last_event_id
+)
+ON CONFLICT (id) DO UPDATE SET
+    name = EXCLUDED.name,
+    slug = EXCLUDED.slug,
+    workos_id = EXCLUDED.workos_id,
+    workos_updated_at = EXCLUDED.workos_updated_at,
+    workos_last_event_id = EXCLUDED.workos_last_event_id,
+    disabled_at = NULL,
+    updated_at = clock_timestamp()
+RETURNING *;
+
+-- name: DisableOrganizationByWorkosID :execrows
+-- Mark a WorkOS-linked organization as disabled. Append-only: keeps
+-- organization_user_relationships intact. Idempotent — disabled_at is only
+-- set on first delete event.
+UPDATE organization_metadata
+SET disabled_at = COALESCE(disabled_at, clock_timestamp()),
+    workos_last_event_id = @workos_last_event_id,
+    updated_at = clock_timestamp()
+WHERE workos_id = @workos_id;

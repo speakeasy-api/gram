@@ -85,23 +85,23 @@ func (q *Queries) DeleteMCPEndpoint(ctx context.Context, arg DeleteMCPEndpointPa
 	return i, err
 }
 
-const getMCPEndpointByCustomDomainIDAndSlug = `-- name: GetMCPEndpointByCustomDomainIDAndSlug :one
+const getMCPEndpointByCustomDomainAndSlug = `-- name: GetMCPEndpointByCustomDomainAndSlug :one
 SELECT id, project_id, custom_domain_id, mcp_server_id, slug, created_at, updated_at, deleted_at, deleted
 FROM mcp_endpoints
-WHERE project_id = $1
-  AND slug = $2
-  AND custom_domain_id IS NOT DISTINCT FROM $3
+WHERE slug = $1
+  AND custom_domain_id IS NOT DISTINCT FROM $2
   AND deleted IS FALSE
 `
 
-type GetMCPEndpointByCustomDomainIDAndSlugParams struct {
-	ProjectID      uuid.UUID
+type GetMCPEndpointByCustomDomainAndSlugParams struct {
 	Slug           string
 	CustomDomainID uuid.NullUUID
 }
 
-func (q *Queries) GetMCPEndpointByCustomDomainIDAndSlug(ctx context.Context, arg GetMCPEndpointByCustomDomainIDAndSlugParams) (McpEndpoint, error) {
-	row := q.db.QueryRow(ctx, getMCPEndpointByCustomDomainIDAndSlug, arg.ProjectID, arg.Slug, arg.CustomDomainID)
+// Resolve an endpoint by its globally-unique (custom_domain_id, slug) pair.
+// This is intended for use in the public-facing endpoint resolution path.
+func (q *Queries) GetMCPEndpointByCustomDomainAndSlug(ctx context.Context, arg GetMCPEndpointByCustomDomainAndSlugParams) (McpEndpoint, error) {
+	row := q.db.QueryRow(ctx, getMCPEndpointByCustomDomainAndSlug, arg.Slug, arg.CustomDomainID)
 	var i McpEndpoint
 	err := row.Scan(
 		&i.ID,
@@ -130,6 +130,41 @@ type GetMCPEndpointByIDParams struct {
 
 func (q *Queries) GetMCPEndpointByID(ctx context.Context, arg GetMCPEndpointByIDParams) (McpEndpoint, error) {
 	row := q.db.QueryRow(ctx, getMCPEndpointByID, arg.ID, arg.ProjectID)
+	var i McpEndpoint
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.CustomDomainID,
+		&i.McpServerID,
+		&i.Slug,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const getMCPEndpointByProjectAndCustomDomainAndSlug = `-- name: GetMCPEndpointByProjectAndCustomDomainAndSlug :one
+SELECT id, project_id, custom_domain_id, mcp_server_id, slug, created_at, updated_at, deleted_at, deleted
+FROM mcp_endpoints
+WHERE project_id = $1
+  AND slug = $2
+  AND custom_domain_id IS NOT DISTINCT FROM $3
+  AND deleted IS FALSE
+`
+
+type GetMCPEndpointByProjectAndCustomDomainAndSlugParams struct {
+	ProjectID      uuid.UUID
+	Slug           string
+	CustomDomainID uuid.NullUUID
+}
+
+// Resolve an endpoint by its (project_id, custom_domain_id, slug) triple.
+// This is intended for management use, to ensure the resolved endpoint belongs
+// to the correct project.
+func (q *Queries) GetMCPEndpointByProjectAndCustomDomainAndSlug(ctx context.Context, arg GetMCPEndpointByProjectAndCustomDomainAndSlugParams) (McpEndpoint, error) {
+	row := q.db.QueryRow(ctx, getMCPEndpointByProjectAndCustomDomainAndSlug, arg.ProjectID, arg.Slug, arg.CustomDomainID)
 	var i McpEndpoint
 	err := row.Scan(
 		&i.ID,

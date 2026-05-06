@@ -74,6 +74,30 @@ func TestClaude_PreToolUse_UsesAuthContextWhenNoCachedMetadata(t *testing.T) {
 		"missing x-gram-toolset-id should be denied once auth-context metadata is in play")
 }
 
+// When plugin auth headers are present but the API key is invalid/expired,
+// Claude() must NOT return a 401 error — that causes the client-side hook
+// script to block ALL tool calls, deadlocking the user. Instead it should
+// continue without auth context (same as the OTEL-only path).
+func TestClaude_ContinuesWhenPluginAuthFails(t *testing.T) {
+	t.Parallel()
+	_, ti := newTestHooksService(t)
+
+	badKey := "gram_key_expired_or_invalid"
+	projectSlug := "some-project"
+	sessionID := uuid.NewString()
+	prompt := "hello"
+
+	result, err := ti.service.Claude(t.Context(), &gen.ClaudePayload{
+		HookEventName:    "UserPromptSubmit",
+		SessionID:        &sessionID,
+		ApikeyToken:      &badKey,
+		ProjectSlugInput: &projectSlug,
+		Prompt:           &prompt,
+	})
+	require.NoError(t, err, "expired plugin auth must not return an error")
+	require.NotNil(t, result)
+}
+
 // Sanity check the OTEL fallback path: with no auth context and no Redis
 // cached metadata, handlePreToolUse should still gracefully allow the call
 // rather than erroring (the buffered hook will be re-persisted later).

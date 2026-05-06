@@ -202,7 +202,7 @@ func (s *Service) GetMcpEndpoint(ctx context.Context, payload *gen.GetMcpEndpoin
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid custom_domain_id").Log(ctx, s.logger)
 	}
 
-	row, err := txRepo.GetMCPEndpointByCustomDomainIDAndSlug(ctx, repo.GetMCPEndpointByCustomDomainIDAndSlugParams{
+	row, err := txRepo.GetMCPEndpointByProjectAndCustomDomainAndSlug(ctx, repo.GetMCPEndpointByProjectAndCustomDomainAndSlugParams{
 		ProjectID:      *authCtx.ProjectID,
 		Slug:           string(*payload.Slug),
 		CustomDomainID: customDomainID,
