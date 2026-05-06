@@ -3,7 +3,7 @@ import { invalidateAllChallenges } from "@gram/client/react-query/challenges.js"
 import { useResolveChallengeMutation } from "@gram/client/react-query/resolveChallenge.js";
 import { Button, type Column } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AuthzChallenge } from "./ChallengesTab";
 import { CreateRoleDialog } from "./CreateRoleDialog";
 import { GrantDrawer } from "./GrantDrawer";
@@ -55,6 +55,16 @@ export function useGrantFlow() {
     timersRef.current.set(id, [fadeTimer, removeTimer]);
   }, []);
 
+  useEffect(() => {
+    const ref = timersRef.current;
+    return () => {
+      for (const timers of ref.values()) {
+        for (const t of timers) clearTimeout(t);
+      }
+      ref.clear();
+    };
+  }, []);
+
   const queryClient = useQueryClient();
   const resolveChallenge = useResolveChallengeMutation({
     onSuccess: async () => {
@@ -62,24 +72,27 @@ export function useGrantFlow() {
     },
   });
 
-  const actionsColumn: Column<AuthzChallenge> = {
-    key: "actions",
-    header: "",
-    width: "100px",
-    render: (row) =>
-      row.outcome === "deny" && !row.resolvedAt ? (
-        <Button
-          variant="primary"
-          size="sm"
-          onClick={() => {
-            setGrantChallenge(row);
-            setIsDrawerOpen(true);
-          }}
-        >
-          <Button.Text>Grant</Button.Text>
-        </Button>
-      ) : null,
-  };
+  const actionsColumn: Column<AuthzChallenge> = useMemo(
+    () => ({
+      key: "actions",
+      header: "",
+      width: "100px",
+      render: (row: AuthzChallenge) =>
+        row.outcome === "deny" && !row.resolvedAt ? (
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={() => {
+              setGrantChallenge(row);
+              setIsDrawerOpen(true);
+            }}
+          >
+            <Button.Text>Grant</Button.Text>
+          </Button>
+        ) : null,
+    }),
+    [],
+  );
 
   const grantFlowPortals = (
     <>

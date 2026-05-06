@@ -6,10 +6,15 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { SkeletonTable } from "@/components/ui/skeleton";
+import { Type } from "@/components/ui/type";
 import { cn } from "@/lib/utils";
 import type { AuthzChallenge } from "@gram/client/models/components/authzchallenge.js";
 import { useChallenges } from "@gram/client/react-query/challenges.js";
-import { Badge as MoonshineBadge, Table } from "@speakeasy-api/moonshine";
+import {
+  Badge as MoonshineBadge,
+  type Column,
+  Table,
+} from "@speakeasy-api/moonshine";
 import { Check } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router";
@@ -101,10 +106,6 @@ export function ChallengesTab() {
     recentlyResolvedIds,
     animatingOutIds,
   } = useGrantFlow();
-  const challengeRowColumns = useChallengeRowColumns(
-    animatingOutIds,
-    groupCounts,
-  );
 
   const { data, isLoading } = useChallenges({ limit: 200 });
   const challenges = useMemo(
@@ -185,6 +186,11 @@ export function ChallengesTab() {
     scopeFilter,
     recentlyResolvedIds,
   ]);
+
+  const challengeRowColumns = useChallengeRowColumns(
+    animatingOutIds,
+    groupCounts,
+  );
 
   const columns: Column<AuthzChallenge>[] = [
     ...challengeRowColumns,

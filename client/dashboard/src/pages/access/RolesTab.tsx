@@ -93,7 +93,9 @@ export function RolesTab() {
     roles.find((r) => r.isSystem && r.name === "Member") ?? null;
 
   const { data: challengesData } = useChallenges({ limit: 5 });
-  const recentChallenges = challengesData?.challenges ?? [];
+  const recentChallenges = (challengesData?.challenges ?? []).filter(
+    (c) => !!c.scope,
+  );
 
   const membersOfDeletingRole = deletingRole
     ? members.filter((m) => m.roleId === deletingRole.id)
