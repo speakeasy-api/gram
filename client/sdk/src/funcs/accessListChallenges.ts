@@ -28,12 +28,12 @@ import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * listChallenges authz
+ * listChallenges access
  *
  * @remarks
  * List authz challenge events from ClickHouse, enriched with resolution state from PostgreSQL.
  */
-export function authzListChallenges(
+export function accessListChallenges(
   client: GramCore,
   request?: operations.ListChallengesRequest | undefined,
   security?: operations.ListChallengesSecurity | undefined,
@@ -97,7 +97,7 @@ async function $do(
   const payload = parsed.value;
   const body = null;
 
-  const path = pathToFunc("/rpc/authz.listChallenges")();
+  const path = pathToFunc("/rpc/access.listChallenges")();
 
   const query = encodeFormQuery({
     "limit": payload?.limit,

@@ -8,7 +8,7 @@ import {
   QueryKey,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { authzListChallenges } from "../funcs/authzListChallenges.js";
+import { accessListChallenges } from "../funcs/accessListChallenges.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
@@ -68,7 +68,7 @@ export function buildChallengesQuery(
         signal: sig,
       };
 
-      return unwrapAsync(authzListChallenges(
+      return unwrapAsync(accessListChallenges(
         client$,
         request,
         security,
@@ -91,5 +91,5 @@ export function queryKeyChallenges(
     gramSession?: string | undefined;
   },
 ): QueryKey {
-  return ["@gram/client", "authz", "listChallenges", parameters];
+  return ["@gram/client", "access", "listChallenges", parameters];
 }

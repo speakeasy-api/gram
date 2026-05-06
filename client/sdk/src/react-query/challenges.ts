@@ -53,7 +53,7 @@ export type ChallengesQueryError =
   | SDKValidationError;
 
 /**
- * listChallenges authz
+ * listChallenges access
  *
  * @remarks
  * List authz challenge events from ClickHouse, enriched with resolution state from PostgreSQL.
@@ -76,7 +76,7 @@ export function useChallenges(
 }
 
 /**
- * listChallenges authz
+ * listChallenges access
  *
  * @remarks
  * List authz challenge events from ClickHouse, enriched with resolution state from PostgreSQL.
@@ -139,7 +139,7 @@ export function invalidateChallenges(
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: ["@gram/client", "authz", "listChallenges", ...queryKeyBase],
+    queryKey: ["@gram/client", "access", "listChallenges", ...queryKeyBase],
   });
 }
 
@@ -149,6 +149,6 @@ export function invalidateAllChallenges(
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: ["@gram/client", "authz", "listChallenges"],
+    queryKey: ["@gram/client", "access", "listChallenges"],
   });
 }

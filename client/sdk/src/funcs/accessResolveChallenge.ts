@@ -28,12 +28,12 @@ import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * resolveChallenge authz
+ * resolveChallenge access
  *
  * @remarks
  * Record a resolution for a denied authz challenge. The caller is responsible for assigning the role first.
  */
-export function authzResolveChallenge(
+export function accessResolveChallenge(
   client: GramCore,
   request: operations.ResolveChallengeRequest,
   security?: operations.ResolveChallengeSecurity | undefined,
@@ -96,7 +96,7 @@ async function $do(
     explode: true,
   });
 
-  const path = pathToFunc("/rpc/authz.resolveChallenge")();
+  const path = pathToFunc("/rpc/access.resolveChallenge")();
 
   const headers = new Headers(compactMap({
     "Content-Type": "application/json",

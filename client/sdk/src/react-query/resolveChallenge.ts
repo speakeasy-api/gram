@@ -8,7 +8,7 @@ import {
   UseMutationResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { authzResolveChallenge } from "../funcs/authzResolveChallenge.js";
+import { accessResolveChallenge } from "../funcs/accessResolveChallenge.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
@@ -48,7 +48,7 @@ export type ResolveChallengeMutationError =
   | SDKValidationError;
 
 /**
- * resolveChallenge authz
+ * resolveChallenge access
  *
  * @remarks
  * Record a resolution for a denied authz challenge. The caller is responsible for assigning the role first.
@@ -72,7 +72,7 @@ export function useResolveChallengeMutation(
 }
 
 export function mutationKeyResolveChallenge(): MutationKey {
-  return ["@gram/client", "authz", "resolveChallenge"];
+  return ["@gram/client", "access", "resolveChallenge"];
 }
 
 export function buildResolveChallengeMutation(
@@ -103,7 +103,7 @@ export function buildResolveChallengeMutation(
           ),
         },
       };
-      return unwrapAsync(authzResolveChallenge(
+      return unwrapAsync(accessResolveChallenge(
         client$,
         request,
         security,
