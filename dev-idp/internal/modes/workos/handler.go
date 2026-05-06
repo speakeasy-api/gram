@@ -505,6 +505,7 @@ func (h *Handler) resolveShadowUserID(ctx context.Context) (uuid.UUID, error) {
 	}
 
 	shadow, err := queries.UpsertUserByEmail(ctx, repo.UpsertUserByEmailParams{
+		ID:          defaultuser.DeterministicUserID(user.Email),
 		Email:       user.Email,
 		DisplayName: strings.TrimSpace(user.FirstName + " " + user.LastName),
 	})
