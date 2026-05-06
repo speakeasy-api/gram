@@ -2,4 +2,4 @@
 "server": minor
 ---
 
-Add authz listChallenges and resolveChallenge endpoints for the challenge resolution UI
+Add listChallenges and resolveChallenge endpoints to the access service for the challenge resolution UI
