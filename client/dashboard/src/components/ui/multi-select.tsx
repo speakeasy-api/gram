@@ -799,8 +799,9 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
                 getAllOptions().length
               } options selected. ${placeholder}`}
               className={cn(
-                "flex h-auto min-h-10 items-center justify-between rounded-md border bg-inherit p-1 hover:bg-inherit [&_svg]:pointer-events-auto",
+                "flex h-auto min-h-[42px] items-center justify-between rounded-md border bg-inherit p-1 hover:bg-inherit [&_svg]:pointer-events-auto",
                 autoSize ? "w-auto" : "w-full",
+                singleLine && "h-[42px] min-h-0",
                 responsiveSettings.compactMode && "min-h-8 text-sm",
                 screenSize === "mobile" && "min-h-12 text-base",
                 disabled && "cursor-not-allowed opacity-50",
@@ -817,17 +818,11 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
                     className={cn(
                       "flex items-center gap-1",
                       singleLine
-                        ? "multiselect-singleline-scroll overflow-x-auto"
+                        ? "multiselect-singleline-scroll overflow-x-auto overflow-y-hidden"
                         : "flex-wrap",
                       responsiveSettings.compactMode && "gap-0.5",
                     )}
-                    style={
-                      singleLine
-                        ? {
-                            paddingBottom: "4px",
-                          }
-                        : {}
-                    }
+                    style={{}}
                   >
                     {selectedValues
                       .slice(0, responsiveSettings.maxCount)
