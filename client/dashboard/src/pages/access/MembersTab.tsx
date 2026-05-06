@@ -36,11 +36,9 @@ function getInitials(name: string) {
 }
 
 function MemberActionsMenu({
-  member,
   onChangeRole,
   onViewChallenges,
 }: {
-  member: AccessMember;
   onChangeRole: () => void;
   onViewChallenges: () => void;
 }) {
@@ -146,7 +144,6 @@ export function MembersTab() {
       width: "60px",
       render: (member) => (
         <MemberActionsMenu
-          member={member}
           onChangeRole={() => setChangingMember(member)}
           onViewChallenges={() => {
             navigate(

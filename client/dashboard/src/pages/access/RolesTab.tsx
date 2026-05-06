@@ -31,7 +31,7 @@ import { RequireScope } from "@/components/require-scope";
 import { cn } from "@/lib/utils";
 import { useOrgRoutes } from "@/routes";
 import { useChallenges } from "@gram/client/react-query/challenges.js";
-import { useChallengeRowColumns, type AuthzChallenge } from "./ChallengesTab";
+import { useChallengeRowColumns } from "./useChallengeRowColumns";
 import { useGrantFlow } from "./useGrantFlow";
 
 function RoleActionsMenu({
