@@ -1,3 +1,5 @@
+import { CardGrid } from "@/components/card-grid";
+import { EmptyStateCard } from "@/components/empty-state-card";
 import { InputField } from "@/components/moon/input-field";
 import { Page } from "@/components/page-layout";
 import { MCPStatusIndicator } from "@/components/mcp/MCPStatusIndicator";
@@ -6,7 +8,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button as UiButton } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { DotCard } from "@/components/ui/dot-card";
-import { Heading } from "@/components/ui/heading";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Type } from "@/components/ui/type";
 import { cn } from "@/lib/utils";
@@ -27,7 +28,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
   Icon,
-  Stack,
 } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { Network, Trash2 } from "lucide-react";
@@ -160,109 +160,98 @@ export default function PluginDetail() {
         />
       </Page.Header>
       <Page.Body>
-        {/* Plugin metadata */}
-        <Stack
-          direction="horizontal"
-          justify="space-between"
-          align="start"
-          className="mb-6"
-        >
-          <div>
-            <Heading variant="h4">{plugin.name}</Heading>
-            <Type muted small className="mt-1">
-              {plugin.description ?? "No description"}
-            </Type>
-            <Type muted small className="mt-1">
-              Slug: <code>{plugin.slug}</code>
-            </Type>
-          </div>
-          <Button variant="secondary" onClick={() => setIsEditOpen(true)}>
-            Edit
-          </Button>
-        </Stack>
+        <Page.Section>
+          <Page.Section.Title>{plugin.name}</Page.Section.Title>
+          <Page.Section.Description>
+            {plugin.description ?? "No description"}
+            {" · Slug: "}
+            <code>{plugin.slug}</code>
+          </Page.Section.Description>
+          <Page.Section.CTA>
+            <Button variant="secondary" onClick={() => setIsEditOpen(true)}>
+              Edit
+            </Button>
+          </Page.Section.CTA>
+        </Page.Section>
 
-        {/* Servers section */}
-        <Stack
-          direction="horizontal"
-          justify="space-between"
-          align="center"
-          className="mb-3"
-        >
-          <Heading variant="h5">MCP Servers</Heading>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => setIsAddServerOpen(true)}
-          >
-            Add Server
-          </Button>
-        </Stack>
-        {servers.length === 0 ? (
-          <Stack
-            gap={2}
-            className="bg-background mb-8 rounded-md border p-8"
-            align="center"
-            justify="center"
-          >
-            <Type variant="body">No servers added yet</Type>
+        <Page.Section>
+          <Page.Section.Title>MCP Servers</Page.Section.Title>
+          <Page.Section.CTA>
             <Button
-              size="sm"
               variant="secondary"
+              size="sm"
               onClick={() => setIsAddServerOpen(true)}
             >
-              <Button.LeftIcon>
-                <Icon name="plus" className="h-4 w-4" />
-              </Button.LeftIcon>
-              <Button.Text>Add Server</Button.Text>
+              Add Server
             </Button>
-          </Stack>
-        ) : (
-          <div className="mb-8 grid grid-cols-1 gap-6 xl:grid-cols-2">
-            {servers.map((server) => (
-              <PluginServerCard
-                key={server.id}
-                server={server}
-                toolset={toolsetById.get(server.toolsetId)}
-                isLoadingToolset={isLoadingToolsets}
-                onRemove={() => handleRemoveServer(server)}
+          </Page.Section.CTA>
+          <Page.Section.Body>
+            {servers.length === 0 ? (
+              <EmptyStateCard
+                icon={<Network />}
+                heading="No servers added yet"
+                description="Add an MCP server to bundle it with this plugin."
+                cta={
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => setIsAddServerOpen(true)}
+                  >
+                    <Button.LeftIcon>
+                      <Icon name="plus" className="h-4 w-4" />
+                    </Button.LeftIcon>
+                    <Button.Text>Add Server</Button.Text>
+                  </Button>
+                }
               />
-            ))}
-          </div>
-        )}
+            ) : (
+              <CardGrid>
+                {servers.map((server) => (
+                  <PluginServerCard
+                    key={server.id}
+                    server={server}
+                    toolset={toolsetById.get(server.toolsetId)}
+                    isLoadingToolset={isLoadingToolsets}
+                    onRemove={() => handleRemoveServer(server)}
+                  />
+                ))}
+              </CardGrid>
+            )}
+          </Page.Section.Body>
+        </Page.Section>
 
-        {/* Download section */}
-        <Heading variant="h5" className="mb-3">
-          Download
-        </Heading>
-        <div>
-          <DropdownMenu
-            open={isDownloadMenuOpen}
-            onOpenChange={setIsDownloadMenuOpen}
-          >
-            <DropdownMenuTrigger asChild>
-              <Button variant="secondary" size="sm">
-                <Button.LeftIcon>
-                  <Icon name="download" className="h-4 w-4" />
-                </Button.LeftIcon>
-                <Button.Text>Download Plugin</Button.Text>
-                <Button.RightIcon>
-                  <Icon name="chevron-down" className="h-4 w-4" />
-                </Button.RightIcon>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start">
-              <DropdownMenuItem onClick={() => handleDownload("claude")}>
-                Claude
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleDownload("cursor")}>
-                Cursor
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleDownload("codex")}>
-                Codex
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
+        <Page.Section>
+          <Page.Section.Title>Download</Page.Section.Title>
+          <Page.Section.Body>
+            <DropdownMenu
+              open={isDownloadMenuOpen}
+              onOpenChange={setIsDownloadMenuOpen}
+            >
+              <DropdownMenuTrigger asChild>
+                <Button variant="secondary" size="sm">
+                  <Button.LeftIcon>
+                    <Icon name="download" className="h-4 w-4" />
+                  </Button.LeftIcon>
+                  <Button.Text>Download Plugin</Button.Text>
+                  <Button.RightIcon>
+                    <Icon name="chevron-down" className="h-4 w-4" />
+                  </Button.RightIcon>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start">
+                <DropdownMenuItem onClick={() => handleDownload("claude")}>
+                  Claude
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => handleDownload("cursor")}>
+                  Cursor
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => handleDownload("codex")}>
+                  Codex
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </Page.Section.Body>
+        </Page.Section>
 
         {/* Edit Dialog */}
         <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>

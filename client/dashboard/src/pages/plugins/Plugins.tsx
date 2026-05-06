@@ -1,3 +1,4 @@
+import { CardGrid } from "@/components/card-grid";
 import { CreateResourceCard } from "@/components/create-resource-card";
 import { InputField } from "@/components/moon/input-field";
 import { Page } from "@/components/page-layout";
@@ -405,19 +406,17 @@ function PluginGrid({
         {searchQuery ? (
           <Type muted>No plugins matching &ldquo;{searchQuery}&rdquo;</Type>
         ) : null}
-        <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-          {createCard}
-        </div>
+        <CardGrid>{createCard}</CardGrid>
       </div>
     );
   }
 
   return (
-    <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+    <CardGrid>
       {plugins.map((plugin) => (
         <PluginCard key={plugin.id} plugin={plugin} onDelete={onDelete} />
       ))}
       {createCard}
-    </div>
+    </CardGrid>
   );
 }

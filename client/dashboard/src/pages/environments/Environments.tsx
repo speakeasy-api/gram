@@ -1,3 +1,5 @@
+import { CardGrid } from "@/components/card-grid";
+import { EmptyStateCard } from "@/components/empty-state-card";
 import { InputDialog } from "@/components/input-dialog";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
@@ -95,35 +97,30 @@ function EnvironmentsInner() {
         </Page.Section.CTA>
         <Page.Section.Body>
           {environments.length === 0 ? (
-            <div className="bg-muted/20 flex flex-col items-center justify-center rounded-xl border border-dashed px-8 py-16">
-              <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
-                <Blocks className="text-muted-foreground h-6 w-6" />
-              </div>
-              <Type variant="subheading" className="mb-1">
-                No environments yet
-              </Type>
-              <Type small muted className="mb-4 max-w-md text-center">
-                Environments let you store configuration and secrets that can be
-                shared across multiple MCP servers.
-              </Type>
-              <RequireScope scope="project:write" level="component">
-                <Button onClick={() => setCreateEnvironmentDialogOpen(true)}>
-                  <Button.LeftIcon>
-                    <Plus className="h-4 w-4" />
-                  </Button.LeftIcon>
-                  <Button.Text>New Environment</Button.Text>
-                </Button>
-              </RequireScope>
-            </div>
+            <EmptyStateCard
+              icon={<Blocks />}
+              heading="No environments yet"
+              description="Environments let you store configuration and secrets that can be shared across multiple MCP servers."
+              cta={
+                <RequireScope scope="project:write" level="component">
+                  <Button onClick={() => setCreateEnvironmentDialogOpen(true)}>
+                    <Button.LeftIcon>
+                      <Plus className="h-4 w-4" />
+                    </Button.LeftIcon>
+                    <Button.Text>New Environment</Button.Text>
+                  </Button>
+                </RequireScope>
+              }
+            />
           ) : (
-            <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+            <CardGrid>
               {environments.map((environment) => (
                 <EnvironmentCard
                   key={environment.id}
                   environment={environment}
                 />
               ))}
-            </div>
+            </CardGrid>
           )}
         </Page.Section.Body>
       </Page.Section>

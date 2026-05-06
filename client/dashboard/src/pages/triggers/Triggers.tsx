@@ -1,3 +1,4 @@
+import { EmptyStateCard } from "@/components/empty-state-card";
 import { Page } from "@/components/page-layout";
 import { Badge } from "@/components/ui/badge";
 import { Dialog } from "@/components/ui/dialog";
@@ -133,24 +134,19 @@ function WebhookUrlPill({ url }: { url: string }) {
 
 function TriggersEmptyState({ onCreate }: { onCreate: () => void }) {
   return (
-    <div className="bg-muted/20 flex flex-col items-center justify-center rounded-xl border border-dashed px-8 py-16">
-      <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
-        <Icon name="zap" className="text-muted-foreground h-6 w-6" />
-      </div>
-      <Type variant="subheading" className="mb-1">
-        No triggers yet
-      </Type>
-      <Type small muted className="mb-4 max-w-md text-center">
-        Triggers let you connect external events to your assistants. Set up a
-        cron schedule or a webhook to get started.
-      </Type>
-      <Button onClick={onCreate}>
-        <Button.LeftIcon>
-          <Icon name="plus" className="h-4 w-4" />
-        </Button.LeftIcon>
-        <Button.Text>Create Trigger</Button.Text>
-      </Button>
-    </div>
+    <EmptyStateCard
+      icon={<Icon name="zap" />}
+      heading="No triggers yet"
+      description="Triggers let you connect external events to your assistants. Set up a cron schedule or a webhook to get started."
+      cta={
+        <Button onClick={onCreate}>
+          <Button.LeftIcon>
+            <Icon name="plus" className="h-4 w-4" />
+          </Button.LeftIcon>
+          <Button.Text>Create Trigger</Button.Text>
+        </Button>
+      }
+    />
   );
 }
 

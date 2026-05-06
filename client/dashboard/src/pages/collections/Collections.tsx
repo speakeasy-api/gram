@@ -1,9 +1,10 @@
+import { CardGrid } from "@/components/card-grid";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { CreateResourceCard } from "@/components/create-resource-card";
+import { SearchBar } from "@/components/ui/search-bar";
 import { Type } from "@/components/ui/type";
-import { Input, Stack } from "@speakeasy-api/moonshine";
-import { Search, X } from "lucide-react";
+import { Stack } from "@speakeasy-api/moonshine";
 import { useState } from "react";
 import { Outlet, useNavigate } from "react-router";
 import { useCollections } from "./hooks";
@@ -35,28 +36,12 @@ export default function Collections() {
             </Page.Section.Description>
             <Page.Section.Body>
               <Stack direction="vertical" gap={4}>
-                <div className="flex items-center gap-3">
-                  <div className="relative w-64">
-                    <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
-                    <Input
-                      placeholder="Search collections..."
-                      value={searchQuery}
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                        setSearchQuery(e.target.value)
-                      }
-                      className="h-10 pr-9 pl-10"
-                    />
-                    {searchQuery && (
-                      <button
-                        onClick={() => setSearchQuery("")}
-                        className="text-muted-foreground hover:text-foreground absolute top-1/2 right-3 -translate-y-1/2 transition-colors"
-                        aria-label="Clear search"
-                      >
-                        <X className="h-4 w-4" />
-                      </button>
-                    )}
-                  </div>
-                </div>
+                <SearchBar
+                  value={searchQuery}
+                  onChange={setSearchQuery}
+                  placeholder="Search collections..."
+                  className="w-64"
+                />
 
                 <CollectionGrid
                   collections={collections}
@@ -95,19 +80,17 @@ function CollectionGrid({
         {searchQuery ? (
           <Type muted>No collections matching &ldquo;{searchQuery}&rdquo;</Type>
         ) : null}
-        <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-          {createCard}
-        </div>
+        <CardGrid>{createCard}</CardGrid>
       </div>
     );
   }
 
   return (
-    <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+    <CardGrid>
       {collections.map((collection) => (
         <CollectionCard key={collection.id} collection={collection} />
       ))}
       {createCard}
-    </div>
+    </CardGrid>
   );
 }

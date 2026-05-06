@@ -1,3 +1,4 @@
+import { CardGrid } from "@/components/card-grid";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { DotTable } from "@/components/ui/dot-table";
@@ -15,8 +16,9 @@ import {
 } from "@/pages/catalog/hooks";
 import { useRoutes } from "@/routes";
 import { useLatestDeployment } from "@gram/client/react-query";
-import { Button, Input, Stack } from "@speakeasy-api/moonshine";
-import { Loader2, Search, SearchXIcon, X } from "lucide-react";
+import { SearchBar } from "@/components/ui/search-bar";
+import { Button, Stack } from "@speakeasy-api/moonshine";
+import { Loader2, SearchXIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Outlet } from "react-router";
 import { FilterChips } from "./FilterChips";
@@ -171,24 +173,12 @@ function CatalogInner() {
                 justify="space-between"
               >
                 <Stack direction="horizontal" gap={3} align="center">
-                  <div className="relative w-64">
-                    <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
-                    <Input
-                      placeholder="Search MCP servers..."
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      className="h-10 pr-9 pl-10"
-                    />
-                    {searchQuery && (
-                      <button
-                        onClick={() => setSearchQuery("")}
-                        className="text-muted-foreground hover:text-foreground absolute top-1/2 right-3 -translate-y-1/2 transition-colors"
-                        aria-label="Clear search"
-                      >
-                        <X className="h-4 w-4" />
-                      </button>
-                    )}
-                  </div>
+                  <SearchBar
+                    value={searchQuery}
+                    onChange={setSearchQuery}
+                    placeholder="Search MCP servers..."
+                    className="w-64"
+                  />
                   <FilterSidebar
                     values={filterState.filters}
                     onChange={filterState.setFilters}
@@ -224,18 +214,15 @@ function CatalogInner() {
 
               {/* Server grid / table */}
               {isLoading ? (
-                <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+                <CardGrid>
                   {Array.from({ length: 6 }, (_, i) => `skeleton-${i}`).map(
                     (id) => (
                       <Skeleton key={id} className="h-[200px]" />
                     ),
                   )}
-                </div>
+                </CardGrid>
               ) : viewMode === "grid" ? (
-                <div
-                  ref={setGridElement}
-                  className="grid grid-cols-1 gap-6 xl:grid-cols-2"
-                >
+                <CardGrid ref={setGridElement}>
                   {filteredServers.map((server) => {
                     const serverKey = `${server.registryId}-${server.registrySpecifier}`;
                     return (
@@ -251,7 +238,7 @@ function CatalogInner() {
                       />
                     );
                   })}
-                </div>
+                </CardGrid>
               ) : (
                 <div ref={setGridElement}>
                   <DotTable

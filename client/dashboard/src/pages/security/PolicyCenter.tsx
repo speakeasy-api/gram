@@ -1,3 +1,4 @@
+import { EmptyStateCard } from "@/components/empty-state-card";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { Badge } from "@/components/ui/badge";
@@ -24,7 +25,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Type } from "@/components/ui/type";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -295,45 +295,40 @@ function PolicyCenterContent() {
           <Page.Header.Breadcrumbs />
         </Page.Header>
         <Page.Body>
-          <div className="bg-muted/20 flex flex-col items-center justify-center rounded-xl border border-dashed px-8 py-16">
-            <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
-              <Shield className="text-muted-foreground h-6 w-6" />
-            </div>
-            <Type variant="subheading" className="mb-1">
-              No Risk Policies
-            </Type>
-            <Type small muted className="mb-4 max-w-md text-center">
-              Risk policies scan your chat messages for secrets and sensitive
-              data. Create your first policy to get started.
-            </Type>
-            <Button
-              onClick={() => {
-                const { sources, presidioEntities } = categoriesToPayload(
-                  new Set<RuleCategory>(["secrets", "pii"]),
-                );
-                createMutation.mutate({
-                  request: {
-                    createRiskPolicyRequestBody: {
-                      name: "Risk Scanner",
-                      enabled: true,
-                      sources,
-                      presidioEntities,
+          <EmptyStateCard
+            icon={<Shield />}
+            heading="No Risk Policies"
+            description="Risk policies scan your chat messages for secrets and sensitive data. Create your first policy to get started."
+            cta={
+              <Button
+                onClick={() => {
+                  const { sources, presidioEntities } = categoriesToPayload(
+                    new Set<RuleCategory>(["secrets", "pii"]),
+                  );
+                  createMutation.mutate({
+                    request: {
+                      createRiskPolicyRequestBody: {
+                        name: "Risk Scanner",
+                        enabled: true,
+                        sources,
+                        presidioEntities,
+                      },
                     },
-                  },
-                });
-              }}
-              disabled={createMutation.isPending}
-            >
-              {createMutation.isPending ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Creating...
-                </>
-              ) : (
-                "Get Started"
-              )}
-            </Button>
-          </div>
+                  });
+                }}
+                disabled={createMutation.isPending}
+              >
+                {createMutation.isPending ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Creating...
+                  </>
+                ) : (
+                  "Get Started"
+                )}
+              </Button>
+            }
+          />
         </Page.Body>
       </Page>
     );

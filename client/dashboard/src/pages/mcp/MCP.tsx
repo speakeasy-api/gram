@@ -1,3 +1,4 @@
+import { CardGrid } from "@/components/card-grid";
 import { InputDialog } from "@/components/input-dialog";
 import { RequireScope } from "@/components/require-scope";
 import { BuiltInMCPCard } from "@/components/mcp/BuiltInMCPCard";
@@ -114,11 +115,11 @@ export function MCPOverview() {
         from Claude Desktop, Cursor, or any MCP client.
       </Page.Section.Description>
       <Page.Section.Body>
-        <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+        <CardGrid>
           {BUILT_IN_SERVERS.map((server) => (
             <BuiltInMCPCard key={server.slug} {...server} />
           ))}
-        </div>
+        </CardGrid>
       </Page.Section.Body>
     </Page.Section>
   );
@@ -148,7 +149,7 @@ export function MCPOverview() {
         </Page.Section.Description>
         <Page.Section.Body>
           {viewMode === "grid" ? (
-            <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+            <CardGrid>
               {isLoading ? (
                 <>
                   <MCPCardSkeleton />
@@ -159,7 +160,7 @@ export function MCPOverview() {
                   <MCPCard key={toolset.id} toolset={toolset} />
                 ))
               )}
-            </div>
+            </CardGrid>
           ) : (
             <DotTable
               headers={[

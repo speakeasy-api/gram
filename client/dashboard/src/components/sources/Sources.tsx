@@ -1,3 +1,4 @@
+import { CardGrid } from "@/components/card-grid";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { DotTable } from "@/components/ui/dot-table";
@@ -303,13 +304,13 @@ export default function Sources() {
         </Page.Section.CTA>
         <Page.Section.Body>
           {isLoading ? (
-            <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+            <CardGrid>
               <SourceCardSkeleton />
               <SourceCardSkeleton />
               <SourceCardSkeleton />
-            </div>
+            </CardGrid>
           ) : viewMode === "grid" ? (
-            <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+            <CardGrid>
               {allSources?.map((asset: NamedAsset) => (
                 <SourceCard
                   key={asset.id}
@@ -323,7 +324,7 @@ export default function Sources() {
                   setChangeDocumentTargetSlug={openUploadOpenApi}
                 />
               ))}
-            </div>
+            </CardGrid>
           ) : (
             <DotTable
               headers={[

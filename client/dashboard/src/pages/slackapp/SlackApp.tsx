@@ -1,4 +1,5 @@
 import { AssetImage } from "@/components/asset-image";
+import { EmptyStateCard } from "@/components/empty-state-card";
 import { EnterpriseGate } from "@/components/enterprise-gate";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
@@ -50,24 +51,19 @@ export function SlackAppsRoot() {
 
 function SlackAppsEmptyState({ onCreate }: { onCreate: () => void }) {
   return (
-    <div className="bg-muted/20 flex flex-col items-center justify-center rounded-xl border border-dashed px-8 py-16">
-      <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
-        <Icon name="bot" className="text-muted-foreground h-6 w-6" />
-      </div>
-      <Type variant="subheading" className="mb-1">
-        No assistants yet
-      </Type>
-      <Type small muted className="mb-4 max-w-md text-center">
-        Create an assistant to let your team interact with Gram MCP servers
-        directly.
-      </Type>
-      <Button onClick={onCreate}>
-        <Button.LeftIcon>
-          <Icon name="plus" className="h-4 w-4" />
-        </Button.LeftIcon>
-        <Button.Text>Create new Assistant</Button.Text>
-      </Button>
-    </div>
+    <EmptyStateCard
+      icon={<Icon name="bot" />}
+      heading="No assistants yet"
+      description="Create an assistant to let your team interact with Gram MCP servers directly."
+      cta={
+        <Button onClick={onCreate}>
+          <Button.LeftIcon>
+            <Icon name="plus" className="h-4 w-4" />
+          </Button.LeftIcon>
+          <Button.Text>Create new Assistant</Button.Text>
+        </Button>
+      }
+    />
   );
 }
 
