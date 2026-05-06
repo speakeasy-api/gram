@@ -420,7 +420,7 @@ func (s *Service) CloneEnvironment(ctx context.Context, payload *gen.CloneEnviro
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to list cloned environment entries").Log(ctx, logger)
 	}
 
-	if err := audit.LogEnvironmentCreate(ctx, dbtx, audit.LogEnvironmentCreateEvent{
+	if err := s.audit.LogEnvironmentCreate(ctx, dbtx, audit.LogEnvironmentCreateEvent{
 		OrganizationID:   authCtx.ActiveOrganizationID,
 		ProjectID:        *authCtx.ProjectID,
 		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
