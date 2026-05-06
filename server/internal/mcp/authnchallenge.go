@@ -1051,7 +1051,7 @@ func (s *Service) handleConsentPost(w http.ResponseWriter, r *http.Request) erro
 		return oops.E(oops.CodeUnexpected, err, "record consent").Log(ctx, logger)
 	}
 
-	code, err := generateAuthorizationCode()
+	code, err := generateOpaqueToken()
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "generate authorization code").Log(ctx, logger)
 	}
@@ -1081,8 +1081,12 @@ func (s *Service) handleConsentPost(w http.ResponseWriter, r *http.Request) erro
 	return nil
 }
 
-// generateAuthorizationCode produces a 32-byte URL-safe authorization code.
-func generateAuthorizationCode() (string, error) {
+// generateOpaqueToken produces a cryptographically random 32-byte URL-safe
+// token. Used as both the OAuth authorization code (HandleConsent's POST) and
+// the refresh token (HandleToken). 32 bytes of entropy from crypto/rand far
+// exceeds RFC 6749 §10.10's 128-bit minimum; base64url makes the value safe
+// to drop in a URL query string or HTTP header without further encoding.
+func generateOpaqueToken() (string, error) {
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {
 		return "", fmt.Errorf("read random bytes: %w", err)
@@ -1125,4 +1129,260 @@ func isUniqueViolation(err error) bool {
 	}
 	// pgx wraps PG errors as *pgconn.PgError with Code "23505".
 	return strings.Contains(err.Error(), "23505")
+}
+
+// tokenResponse is the RFC 6749 §5.1 successful token response shape, plus
+// `refresh_token` since we issue them on every grant.
+type tokenResponse struct {
+	AccessToken  string `json:"access_token"`
+	TokenType    string `json:"token_type"`
+	ExpiresIn    int64  `json:"expires_in"`
+	RefreshToken string `json:"refresh_token,omitempty"`
+	Scope        string `json:"scope,omitempty"`
+}
+
+// HandleToken implements the OAuth 2.1 token endpoint (RFC 6749 §4.1.3) for
+// the authorization_code grant. Mounted at `POST /mcp/{mcpSlug}/token`.
+//
+// Flow:
+//   - parse + cap form
+//   - authenticate the client (Basic or POST credential), bcrypt-verify
+//     against user_session_clients.client_secret_hash
+//   - atomically read+delete the UserSessionGrant (Redis) so a code can't
+//     be redeemed twice
+//   - verify redirect_uri matches the grant + S256 PKCE verifier matches
+//     code_challenge
+//   - mint a SessionClaims JWT (HS256 with GRAM_JWT_SIGNING_KEY) audienced
+//     to the toolset slug, sub = grant.Subject
+//   - persist a user_sessions row keyed on sha256(refresh_token)
+//   - return RFC 6749 §5.1 token JSON with no-store headers
+//
+// Refresh-token grant is intentionally out of scope; lands in milestone #2
+// alongside rotation policy and the chat-session retirement work.
+func (s *Service) HandleToken(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+	mcpSlug := chi.URLParam(r, "mcpSlug")
+	if mcpSlug == "" {
+		return oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided").Log(ctx, s.logger)
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, 16<<10)
+	if err := r.ParseForm(); err != nil {
+		return writeTokenError(ctx, w, s.logger, http.StatusBadRequest, "invalid_request", "failed to parse form")
+	}
+
+	toolset, _, err := s.loadToolsetFromMcpSlug(ctx, mcpSlug)
+	switch {
+	case errors.Is(err, errToolsetNotFound):
+		return oops.E(oops.CodeNotFound, err, "mcp server not found")
+	case err != nil:
+		return oops.E(oops.CodeUnexpected, err, "failed to load MCP server").Log(ctx, s.logger)
+	}
+	if !toolset.UserSessionIssuerID.Valid {
+		return oops.E(oops.CodeNotFound, nil, "not found")
+	}
+
+	logger := s.logger.With(
+		attr.SlogToolsetID(toolset.ID.String()),
+		attr.SlogProjectID(toolset.ProjectID.String()),
+	)
+
+	grantType := r.PostForm.Get("grant_type")
+	switch grantType {
+	case "authorization_code":
+		// fall through
+	case "refresh_token":
+		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "unsupported_grant_type", "refresh_token grant lands in milestone #2")
+		// > booooooo - inaccurate. Just fucking implement it bruv
+	default:
+		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "unsupported_grant_type", "unsupported grant_type")
+	}
+
+	clientID, clientSecret, _ := extractClientCredentials(r)
+	if clientID == "" {
+		return writeTokenError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", "client_id is required")
+	}
+
+	clientRow, err := usersessions_repo.New(s.db).GetUserSessionClientByClientID(ctx, usersessions_repo.GetUserSessionClientByClientIDParams{
+		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
+		ClientID:            clientID,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return writeTokenError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", "unknown client_id")
+		}
+		return oops.E(oops.CodeUnexpected, err, "lookup user session client").Log(ctx, logger)
+	}
+	// Public clients (token_endpoint_auth_method=none) have a NULL hash:
+	// PKCE is the integrity proof, no secret check. Confidential clients
+	// MUST present a matching secret.
+	if clientRow.ClientSecretHash.Valid {
+		if err := bcrypt.CompareHashAndPassword([]byte(clientRow.ClientSecretHash.String), []byte(clientSecret)); err != nil {
+			return writeTokenError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", "client secret mismatch")
+		}
+	}
+
+	code := r.PostForm.Get("code")
+	if code == "" {
+		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_request", "code is required")
+	}
+
+	// Atomically read+delete the grant so a code can't be redeemed twice.
+	grantKey := "userSessionGrant:" + toolset.UserSessionIssuerID.UUID.String() + ":" + code
+	grant, err := s.userSessionGrantCache.Get(ctx, grantKey)
+	if err != nil {
+		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "code not found or expired")
+	}
+	if err := s.userSessionGrantCache.Delete(ctx, grant); err != nil {
+		// Failed to delete -- another process may redeem. Refuse to continue.
+		return oops.E(oops.CodeUnexpected, err, "consume user session grant").Log(ctx, logger)
+	}
+
+	if grant.ClientID != clientID {
+		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "code was issued to a different client")
+	}
+	if grant.RedirectURI != r.PostForm.Get("redirect_uri") {
+		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "redirect_uri does not match the original request")
+	}
+
+	verifier := r.PostForm.Get("code_verifier")
+	if verifier == "" {
+		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_request", "code_verifier is required")
+	}
+	if !verifyPKCES256(verifier, grant.CodeChallenge) {
+		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "code_verifier does not match code_challenge")
+	}
+
+	// No re-check of user_session_consents here: possession of a valid
+	// UserSessionGrant IS proof of consent. The grant was minted by the
+	// HandleConsent POST after writing the consent record, and we just
+	// atomically consumed it (single-use). Re-querying the consent table
+	// would be redundant.
+
+	// Resolve the issuer's session_duration. Microseconds-only: the issuer
+	// create handler stores via conv.PtrToPGInterval which never sets
+	// Months/Days; if we ever see those here, raw SQL bypassed the writer
+	// and the conversion is calendar-dependent — fail with 500 rather than
+	// silently approximate.
+	issuer, err := usersessions_repo.New(s.db).GetUserSessionIssuerByID(ctx, usersessions_repo.GetUserSessionIssuerByIDParams{
+		ID:        toolset.UserSessionIssuerID.UUID,
+		ProjectID: toolset.ProjectID,
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "lookup user session issuer").Log(ctx, logger)
+	}
+	if !issuer.SessionDuration.Valid {
+		return oops.E(oops.CodeUnexpected, nil, "issuer session_duration is not set").Log(ctx, logger)
+	}
+	if issuer.SessionDuration.Months != 0 || issuer.SessionDuration.Days != 0 {
+		return oops.E(oops.CodeUnexpected, nil, "issuer session_duration carries Months/Days; only Microseconds intervals are supported").Log(ctx, logger)
+	}
+	lifetime := time.Duration(issuer.SessionDuration.Microseconds) * time.Microsecond
+	if lifetime <= 0 {
+		return oops.E(oops.CodeUnexpected, nil, "issuer session_duration is non-positive").Log(ctx, logger)
+	}
+
+	issuerURL := s.serverURL.String() + "/mcp/" + mcpSlug
+	access, jti, err := s.userSessionSigner.Mint(grant.Subject, toolset.Slug, issuerURL, lifetime)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "mint session jwt").Log(ctx, logger)
+	}
+
+	refreshTokenRaw, err := generateOpaqueToken()
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "generate refresh token").Log(ctx, logger)
+	}
+	refreshHash := sha256Hex(refreshTokenRaw)
+
+	now := time.Now()
+	expiresAt := now.Add(lifetime)
+	if _, err := usersessions_repo.New(s.db).CreateUserSession(ctx, usersessions_repo.CreateUserSessionParams{
+		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
+		SubjectUrn:          grant.Subject,
+		Jti:                 jti,
+		RefreshTokenHash:    refreshHash,
+		RefreshExpiresAt:    pgtype.Timestamptz{Time: expiresAt, InfinityModifier: 0, Valid: true},
+		ExpiresAt:           pgtype.Timestamptz{Time: expiresAt, InfinityModifier: 0, Valid: true},
+	}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "persist user session").Log(ctx, logger)
+	}
+
+	body, err := json.Marshal(tokenResponse{
+		AccessToken:  access,
+		TokenType:    "Bearer",
+		ExpiresIn:    int64(lifetime.Seconds()),
+		RefreshToken: refreshTokenRaw,
+		Scope:        grant.Scope,
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "marshal token response").Log(ctx, logger)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Pragma", "no-cache")
+	w.WriteHeader(http.StatusOK)
+	if _, err := w.Write(body); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "write token response").Log(ctx, logger)
+	}
+	return nil
+}
+
+// extractClientCredentials returns the client_id + client_secret + ok from
+// either the Authorization header (client_secret_basic) or the form body
+// (client_secret_post). HTTP Basic wins when both are present, per RFC 6749
+// §2.3.1 ("the client MAY use only one authentication method").
+func extractClientCredentials(r *http.Request) (string, string, bool) {
+	if id, secret, ok := r.BasicAuth(); ok && id != "" {
+		return id, secret, true
+	}
+	id := r.PostForm.Get("client_id")
+	secret := r.PostForm.Get("client_secret")
+	if id == "" {
+		return "", "", false
+	}
+	return id, secret, true
+}
+
+// verifyPKCES256 reports whether code_verifier matches the stored
+// code_challenge under the S256 method (RFC 7636 §4.6):
+// BASE64URL-NO-PAD(SHA256(ASCII(code_verifier))) == code_challenge.
+func verifyPKCES256(verifier, challenge string) bool {
+	sum := sha256.Sum256([]byte(verifier))
+	return base64.RawURLEncoding.EncodeToString(sum[:]) == challenge
+}
+
+// sha256Hex returns the hex-encoded SHA-256 of the input.
+func sha256Hex(s string) string {
+	sum := sha256.Sum256([]byte(s))
+	// Use base64url so the hash on the wire matches the format used elsewhere
+	// for token-derived storage keys.
+	return base64.RawURLEncoding.EncodeToString(sum[:])
+}
+
+// writeTokenError emits an RFC 6749 §5.2 token error response: 4xx with a
+// JSON body { "error": "<code>", "error_description": "..." } and the
+// no-store headers required by RFC 6749 §5.1.
+func writeTokenError(ctx context.Context, w http.ResponseWriter, logger *slog.Logger, status int, code, description string) error {
+	body, err := json.Marshal(map[string]string{
+		"error":             code,
+		"error_description": description,
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "marshal token error").Log(ctx, logger)
+	}
+
+	logger.InfoContext(ctx, "token request rejected",
+		attr.SlogOAuthError(code),
+		attr.SlogOAuthErrorDescription(description),
+	)
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Pragma", "no-cache")
+	w.WriteHeader(status)
+	if _, werr := w.Write(body); werr != nil {
+		return oops.E(oops.CodeUnexpected, werr, "write token error body").Log(ctx, logger)
+	}
+	return nil
 }

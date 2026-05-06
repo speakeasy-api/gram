@@ -66,6 +66,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
+	"github.com/speakeasy-api/gram/server/internal/usersessions"
 )
 
 type Service struct {
@@ -107,6 +108,11 @@ type Service struct {
 	// paths share the user-bootstrap side effects (UpsertUser, posthog
 	// signup, WorkOS sync). See auth/speakeasyclient.
 	idpClient *speakeasyclient.Client
+	// userSessionSigner mints the SessionClaims JWT issued at /token.
+	// HS256 with GRAM_JWT_SIGNING_KEY -- same key the chat-session signer
+	// uses, intentionally separate signer code so each path is removable
+	// in isolation (per spike §4.5).
+	userSessionSigner *usersessions.Signer
 }
 
 type oauthTokenInputs struct {
@@ -156,6 +162,7 @@ func NewService(
 	shadowMCPClient *shadowmcp.Client,
 	auditLogger *audit.Logger,
 	idpClient *speakeasyclient.Client,
+	userSessionSigner *usersessions.Signer,
 ) *Service {
 	tracer := tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/mcp")
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/mcp")
@@ -221,7 +228,8 @@ func NewService(
 			cacheImpl,
 			cache.SuffixNone,
 		),
-		idpClient: idpClient,
+		idpClient:         idpClient,
+		userSessionSigner: userSessionSigner,
 	}
 }
 
@@ -244,6 +252,7 @@ func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Se
 	o11y.AttachHandler(mux, "GET", "/mcp/{mcpSlug}/idp_callback", oops.ErrHandle(service.logger, service.HandleIDPCallback).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/{mcpSlug}/connect", oops.ErrHandle(service.logger, service.HandleConsent).ServeHTTP)
 	o11y.AttachHandler(mux, "POST", "/mcp/{mcpSlug}/connect", oops.ErrHandle(service.logger, service.HandleConsent).ServeHTTP)
+	o11y.AttachHandler(mux, "POST", "/mcp/{mcpSlug}/token", oops.ErrHandle(service.logger, service.HandleToken).ServeHTTP)
 }
 
 // HandleGetServer handles GET requests to /mcp/{mcpSlug}, checking for HTML requests

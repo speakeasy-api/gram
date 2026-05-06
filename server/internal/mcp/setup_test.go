@@ -40,6 +40,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
+	"github.com/speakeasy-api/gram/server/internal/usersessions"
 )
 
 var (
@@ -153,7 +154,8 @@ func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
 	shadowMCPClient := shadowmcp.NewClient(logger, conn, cacheAdapter)
 	auditLogger := audit.NewLogger()
 	idpClient := speakeasyclient.NewClient(logger, tracerProvider, guardianPolicy, "http://idp.test", "test-secret-key", conn, nil, posthog)
-	svc := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, serverURL, enc, cacheAdapter, guardianPolicy, funcs, oauthService, billingStub, billingStub, telemLogger, telemService, vectorToolStore, nil, temporalEnv, authzEngine, assistantTokens, shadowMCPClient, auditLogger, idpClient)
+	userSessionSigner := usersessions.NewSigner("test-jwt-secret")
+	svc := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, serverURL, enc, cacheAdapter, guardianPolicy, funcs, oauthService, billingStub, billingStub, telemLogger, telemService, vectorToolStore, nil, temporalEnv, authzEngine, assistantTokens, shadowMCPClient, auditLogger, idpClient, userSessionSigner)
 
 	return ctx, &testInstance{
 		service:        svc,
