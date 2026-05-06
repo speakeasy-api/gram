@@ -1,4 +1,4 @@
-h1:TFlFTyaUOfivCkaRtef73QEhZqtTof5t3WkHoPGV8mM=
+h1:bFxe0dS1qKtQyz0kdydpIpK8WcBktGT129FKOF0B4XU=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -155,3 +155,5 @@ h1:TFlFTyaUOfivCkaRtef73QEhZqtTof5t3WkHoPGV8mM=
 20260504210916_chat_messages_project_id_id_idx.sql h1:kwShq3wLbk1VNIWRsAWDlqJ2apQ5iDnODP81/Vc6VTY=
 20260505134312_authz-challenge-resolutions.sql h1:t6fg2cQEWZrdYYATaJx+7zfdYvmJCUE3zuKJq4E6Zwo=
 20260505150617_mcp-servers-add-fk-indexes.sql h1:XEvL+LK4Km4lIBK4De3ryBk9ug0dSOBakZVIy9juEco=
+20260506173417_usersessions-tables.sql h1:8ZJ/Dq38L+rOWxjlS48BW+NNWResYnw4wYTWbdm77uc=
+20260506230708_add-user-sessions-client-fk.sql h1:W0U7QfiTkw5/5HonGyEQHwC1coFA/38oOs9ZbIPuHmM=
