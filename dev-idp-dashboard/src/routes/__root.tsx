@@ -2,13 +2,11 @@
 import {
   createRootRouteWithContext,
   HeadContent,
-  Link,
   Outlet,
   Scripts,
 } from "@tanstack/react-router";
 import { QueryClientProvider, type QueryClient } from "@tanstack/react-query";
 import type { ReactNode } from "react";
-import { cn } from "@/lib/utils";
 import appCss from "@/styles/app.css?url";
 
 interface RouterContext {
@@ -35,13 +33,13 @@ function RootComponent() {
     <QueryClientProvider client={queryClient}>
       <div className="min-h-screen flex flex-col">
         <header className="border-b border-border px-6 py-4">
-          <div className="flex items-center gap-6 max-w-6xl mx-auto">
-            <nav className="inline-flex items-center gap-1 rounded-full bg-muted p-1">
-              <TopNavLink to="/home">dev-idp</TopNavLink>
-              <TopNavLink to="/providers" matchPrefix>
-                Providers
-              </TopNavLink>
-            </nav>
+          <div className="max-w-6xl mx-auto flex items-baseline gap-3">
+            <h1 className="font-heading text-lg font-semibold tracking-tight">
+              dev-idp
+            </h1>
+            <span className="text-xs text-muted-foreground">
+              local identity provider for Gram development
+            </span>
           </div>
         </header>
         <main className="flex-1 px-6 py-6">
@@ -49,32 +47,6 @@ function RootComponent() {
         </main>
       </div>
     </QueryClientProvider>
-  );
-}
-
-function TopNavLink({
-  to,
-  matchPrefix = false,
-  children,
-}: {
-  to: string;
-  matchPrefix?: boolean;
-  children: ReactNode;
-}) {
-  return (
-    <Link
-      to={to}
-      activeOptions={{ exact: !matchPrefix }}
-      className={cn(
-        "px-3 py-1 text-sm rounded-full transition-colors",
-        "text-foreground/60 hover:text-foreground",
-      )}
-      activeProps={{
-        className: "bg-background text-foreground hover:text-foreground",
-      }}
-    >
-      {children}
-    </Link>
   );
 }
 
