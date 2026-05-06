@@ -250,8 +250,8 @@ export function ToolsetEnvironmentForm({
                 }
                 aria-label={
                   attachedEnvForm.mutation.isPending
-                    ? "Attaching environment to toolset"
-                    : "Attach environment to toolset"
+                    ? "Attaching environment to MCP server"
+                    : "Attach environment to MCP server"
                 }
               >
                 {attachedEnvForm.mutation.isPending ? "Attaching..." : "Attach"}

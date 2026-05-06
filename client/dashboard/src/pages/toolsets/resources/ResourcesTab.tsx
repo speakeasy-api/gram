@@ -141,7 +141,7 @@ function ResourceCard({
   const canWrite = hasScope("mcp:write");
   const actions = [
     {
-      label: "Remove from toolset",
+      label: "Remove from MCP server",
       onClick: onDelete,
       icon: "trash" as const,
       destructive: true,

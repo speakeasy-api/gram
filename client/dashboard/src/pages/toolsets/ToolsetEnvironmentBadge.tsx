@@ -120,7 +120,7 @@ export const ToolsetEnvironmentBadge = ({
         open={envVarsDialogOpen}
         onOpenChange={setEnvVarsDialogOpen}
         title="Environment Variables"
-        description="Enter values for the environment variables in order to use this toolset."
+        description="Enter values for the environment variables in order to use this MCP server."
         onSubmit={submitEnvVars}
         inputs={missingEnvVars!.map((envVar) => ({
           label: envVar,
@@ -141,7 +141,7 @@ export const ToolsetEnvironmentBadge = ({
 
     return (
       <>
-        <SimpleTooltip tooltip="Your environment is missing variables required by this toolset. Click here to set them.">
+        <SimpleTooltip tooltip="Your environment is missing variables required by this MCP server. Click here to set them.">
           <Badge
             size={size}
             variant={"urgent-warning"}
@@ -160,7 +160,7 @@ export const ToolsetEnvironmentBadge = ({
   return (
     envSlug && (
       <routes.environments.environment.Link params={[envSlug]}>
-        <SimpleTooltip tooltip="The environment for this toolset is fully configured.">
+        <SimpleTooltip tooltip="The environment for this MCP server is fully configured.">
           <Badge size={size} variant={variant}>
             <Check className={cn("h-4 w-4 stroke-3", colors.success)} />
             Environment

@@ -86,7 +86,7 @@ export function PromptsTabContent({
             key={prompt.name}
             template={prompt}
             onDelete={() => removePromptFromToolset(prompt.name)}
-            deleteLabel="Remove from toolset"
+            deleteLabel="Remove from MCP server"
           />
         ))}
       </Cards>
