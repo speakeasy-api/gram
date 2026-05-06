@@ -17,7 +17,7 @@ response=$(curl -s -w "\n%{http_code}" -X POST \
   -H "Content-Type: application/json" \
   -d @- \
   --max-time 10 \
-  "${server_url}/rpc/hooks.claude")
+  "${server_url}/rpc/hooks.claude") \ 
 
 http_code=$(echo "$response" | tail -1)
 body=$(echo "$response" | sed '$d')
