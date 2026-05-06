@@ -1361,7 +1361,7 @@ func (s *Service) ListChallenges(ctx context.Context, payload *gen.ListChallenge
 	}
 
 	if len(challenges) == 0 {
-		return &gen.ListChallengesResult{Challenges: []*gen.AuthzChallenge{}, Total: int(total)}, nil //nolint:gosec // count fits int
+		return &gen.ListChallengesResult{Challenges: []*gen.AuthzChallenge{}, Total: int(total)}, nil
 	}
 
 	// Batch-lookup resolutions from PG.
@@ -1394,7 +1394,7 @@ func (s *Service) ListChallenges(ctx context.Context, payload *gen.ListChallenge
 			}
 		}
 		challenges = filtered
-		total = uint64(len(challenges))  //nolint:gosec // count fits int
+		total = uint64(len(challenges))
 		offset := uint64(payload.Offset) //nolint:gosec // Goa validates >= 0
 		limit := uint64(payload.Limit)   //nolint:gosec // Goa validates 1..200
 		if offset >= total {
@@ -1496,7 +1496,7 @@ func (s *Service) ListChallenges(ctx context.Context, payload *gen.ListChallenge
 
 	return &gen.ListChallengesResult{
 		Challenges: result,
-		Total:      int(total), //nolint:gosec // count fits int
+		Total:      int(total),
 	}, nil
 }
 

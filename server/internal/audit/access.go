@@ -223,8 +223,8 @@ type LogAccessChallengeResolveEvent struct {
 	Actor            urn.Principal
 	ActorDisplayName *string
 
-	ChallengeID    string
-	PrincipalURN   string
+	ChallengeID    string //nolint:glint // TODO(AGE-1954): discuss URN treatment for challenge identifiers; pending team discussion
+	PrincipalURN   string //nolint:glint // TODO(AGE-1954): principal URN comes as pre-formatted string from challenge payload
 	Scope          string
 	ResolutionType string
 	RoleSlug       *string
