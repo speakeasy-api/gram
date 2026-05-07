@@ -24,7 +24,7 @@ We commit deepset as-is rather than re-labeling per our own taxonomy because (a)
 
 ## Findings surfaced by the baseline run
 
-The first baseline run surfaced one rule with FPs: `pi.jailbreak-persona`, which used plain substring matching on `DAN` / `STAN` / `AIM` and so fired inside German `dankbar`, English `standard`, `assistant`, `claims`, etc. Resolved by switching the rule to word-boundary regex matching (`(?i)\bDAN\b` and friends). Worth re-checking if the persona list ever expands — short tokens with single-word boundaries can still collide with foreign-language vocabulary.
+The first baseline run surfaced one rule with FPs: `pi.jailbreak-persona`, which used plain substring matching on `DAN` / `STAN` / `AIM` and so fired inside German `dankbar`, English `standard`, `assistant`, `claims`, etc. Switching to word-boundary regex eliminated those FPs but the rule's value was already marginal — most attacks it caught were already covered by `role-hijack.act-as-privileged` or `instruction-override`, and persona names churn fast in the wild ("DAN" → "STAN" → "AIM" → custom names every few months). Removed entirely; `litellm_extended` keeps a few persona-only cases as honest FNs so future contributors can see what was lost.
 
 ## Mutation set behavior
 

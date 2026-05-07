@@ -36,19 +36,6 @@ var (
 	heuristicRules    []heuristicRule
 	overrideKeywords  []string // precomputed combinatorial bank, lowercased
 	delimiterPatterns *regexp.Regexp
-	// jailbreakPersonas pairs each persona with its word-boundary regex.
-	// Substring match would false-positive on "assistant" (STAN), "claims"
-	// (AIM), "standard" (STAN), German "dankbar" (DAN); the boundaries make
-	// the short tokens precise without losing whole-token matches.
-	jailbreakPersonas = []struct {
-		label   string
-		pattern *regexp.Regexp
-	}{
-		{label: "DAN", pattern: regexp.MustCompile(`(?i)\bDAN\b`)},
-		{label: "STAN", pattern: regexp.MustCompile(`(?i)\bSTAN\b`)},
-		{label: "AIM", pattern: regexp.MustCompile(`(?i)\bAIM\b`)},
-		{label: "Developer Mode", pattern: regexp.MustCompile(`(?i)\bDeveloper\s+Mode\b`)},
-	}
 )
 
 func init() {
@@ -178,7 +165,6 @@ func runHeuristics(text string) []Finding {
 	var findings []Finding
 	findings = append(findings, detectInstructionOverrides(text)...)
 	findings = append(findings, runFamily(text, familyRoleHijack)...)
-	findings = append(findings, detectJailbreakPersonas(text)...)
 	findings = append(findings, runFamily(text, familySystemPromptLeak)...)
 	findings = append(findings, detectDelimiterInjection(text)...)
 	findings = append(findings, runFamily(text, familyEncodedPayload)...)
@@ -264,27 +250,4 @@ func detectDelimiterInjection(text string) []Finding {
 		Confidence:  0.8,
 		Tags:        nil,
 	}}
-}
-
-// detectJailbreakPersonas matches well-known jailbreak handles using
-// word-boundary regex so the short tokens (DAN, STAN, AIM) don't fire on
-// substrings inside legitimate words.
-func detectJailbreakPersonas(text string) []Finding {
-	for _, p := range jailbreakPersonas {
-		loc := p.pattern.FindStringIndex(text)
-		if loc == nil {
-			continue
-		}
-		return []Finding{{
-			RuleID:      "pi.jailbreak-persona",
-			Description: "Known jailbreak persona referenced: " + p.label,
-			Match:       text[loc[0]:loc[1]],
-			StartPos:    loc[0],
-			EndPos:      loc[1],
-			Source:      SourcePromptInjection,
-			Confidence:  0.7,
-			Tags:        nil,
-		}}
-	}
-	return nil
 }

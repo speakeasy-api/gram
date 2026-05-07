@@ -3,5 +3,5 @@
   "recall_floor": null,
   "last_updated": "2026-05-07",
   "last_updated_by": "vishal@speakeasy.com",
-  "notes": "Tightened from 0.01 to 0 after switching pi.jailbreak-persona to word-boundary regex matching. The heuristics now produce zero false positives on this corpus (539 benigns). Any new FP fails CI. recall_floor stays null/soft."
+  "notes": "Floor stays at 0 after removing pi.jailbreak-persona entirely. The remaining heuristics produce zero false positives on this corpus (539 benigns). Any new FP fails CI. recall_floor stays null/soft."
 }
