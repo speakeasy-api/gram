@@ -92,6 +92,7 @@ export function OnboardingWizard() {
   // the dedicated assistants onboarding flow.
   useEffect(() => {
     if (disposition === "assistants") {
+      telemetry.setPersonProperties({ onboarding_disposition: "assistants" });
       telemetry.capture("assistants_onboarding_entry", {
         disposition: "assistants",
       });

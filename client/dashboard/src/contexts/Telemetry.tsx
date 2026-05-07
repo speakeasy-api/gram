@@ -4,7 +4,13 @@ import type { User } from "./Auth";
 
 export type Telemetry = Pick<
   PostHog,
-  "isFeatureEnabled" | "capture" | "identify" | "register" | "reset" | "group"
+  | "isFeatureEnabled"
+  | "capture"
+  | "identify"
+  | "register"
+  | "reset"
+  | "group"
+  | "setPersonProperties"
 >;
 
 export const nullTelemetry: Telemetry = {
@@ -14,6 +20,7 @@ export const nullTelemetry: Telemetry = {
   register: () => {},
   reset: () => {},
   group: () => {},
+  setPersonProperties: () => {},
 };
 
 export const devTelemetry: Telemetry = {
@@ -45,6 +52,12 @@ export const testTelemetry: Telemetry = {
   },
   reset: () => {
     console.log("POSTHOG RESET");
+  },
+  setPersonProperties: (
+    set?: Record<string, unknown>,
+    setOnce?: Record<string, unknown>,
+  ) => {
+    console.log("POSTHOG SET_PERSON_PROPERTIES", set, setOnce);
   },
 };
 
