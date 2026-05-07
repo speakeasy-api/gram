@@ -2399,6 +2399,7 @@ CREATE TABLE IF NOT EXISTS risk_policies (
   name TEXT NOT NULL,
   sources TEXT[] NOT NULL,
   presidio_entities TEXT[],
+  prompt_injection_rules TEXT[],
   action TEXT NOT NULL DEFAULT 'flag',
   auto_name BOOLEAN NOT NULL DEFAULT TRUE,
   user_message TEXT,
