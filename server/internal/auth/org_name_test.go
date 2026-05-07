@@ -10,7 +10,7 @@ import (
 func TestGenerateLegibleOrgName_Format(t *testing.T) {
 	t.Parallel()
 
-	pattern := regexp.MustCompile(`^[A-Z][a-z]+ [A-Z][a-z]+ \d{2}$`)
+	pattern := regexp.MustCompile(`^[A-Z][a-z]+ [A-Z][a-z]+ [a-z2-9]{4}$`)
 	for range 100 {
 		name := generateLegibleOrgName()
 		require.True(t, pattern.MatchString(name), "name %q does not match %s", name, pattern)

@@ -579,7 +579,8 @@ func (p *Client) extractCustomerTier(ctx context.Context, customerState *polarCo
 				p.logger.ErrorContext(ctx, "multiple active subscriptions found", attr.SlogOrganizationID(fields.OrganizationID))
 			}
 			activeSubscription := fields.ActiveSubscriptions[0]
-			if activeSubscription.ProductID == p.catalog.ProductIDBase {
+			switch activeSubscription.ProductID {
+			case p.catalog.ProductIDBase, p.catalog.ProductIDAssistants:
 				return new(billing.TierBase), true, nil
 			}
 			// Fallback case for old accounts
@@ -889,8 +890,12 @@ func (p *Client) AttachAssistantsBenefit(ctx context.Context, orgID string, emai
 
 	customerState, getErr := p.polar.Customers.GetStateExternal(ctx, orgID)
 	var notFound *apierrors.ResourceNotFound
+	isNotFound := errors.As(getErr, &notFound) ||
+		(customerState != nil &&
+			customerState.HTTPMeta.Response != nil &&
+			customerState.HTTPMeta.Response.StatusCode == http.StatusNotFound)
 	switch {
-	case errors.As(getErr, &notFound):
+	case isNotFound:
 		// Customer does not exist yet — create it.
 		_, createErr := p.polar.Customers.Create(ctx, polarComponents.CreateCustomerCreateCustomerIndividualCreate(polarComponents.CustomerIndividualCreate{
 			ExternalID: &orgID,
