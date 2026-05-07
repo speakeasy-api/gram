@@ -2,7 +2,10 @@ import { DotRow } from "@/components/ui/dot-row";
 import { MoreActions } from "@/components/ui/more-actions";
 import { Type } from "@/components/ui/type";
 import { useRBAC } from "@/hooks/useRBAC";
-import { sourceTypeToUrnKind } from "@/lib/sources";
+import {
+  formatRemoteMcpUrlForDisplay,
+  sourceTypeToUrnKind,
+} from "@/lib/sources";
 import { useRoutes } from "@/routes";
 import { Badge } from "@speakeasy-api/moonshine";
 import { CircleAlertIcon, FileCode, Network } from "lucide-react";
@@ -106,7 +109,10 @@ export function SourceTableRow({
     return <FileCode className="text-muted-foreground h-5 w-5" />;
   })();
 
-  const displayName = asset.type === "remotemcp" ? asset.url : asset.name;
+  const displayName =
+    asset.type === "remotemcp"
+      ? formatRemoteMcpUrlForDisplay(asset.url)
+      : asset.name;
 
   return (
     <DotRow

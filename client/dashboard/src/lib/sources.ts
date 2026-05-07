@@ -33,3 +33,7 @@ export function urnKindToSourceType(kind: UrnKind): SourceType {
 export function attachmentToURNPrefix(type: SourceType, slug: string): string {
   return `tools:${sourceTypeToUrnKind(type)}:${slug}:`;
 }
+
+export function formatRemoteMcpUrlForDisplay(url: string): string {
+  return url.replace(/^https?:\/\//, "");
+}

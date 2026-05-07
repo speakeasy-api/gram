@@ -9,6 +9,7 @@ import {
   TabsList,
 } from "@/components/ui/tabs";
 import { Type } from "@/components/ui/type";
+import { formatRemoteMcpUrlForDisplay } from "@/lib/sources";
 import { useRoutes } from "@/routes";
 import type { McpServer } from "@gram/client/models/components";
 import {
@@ -96,7 +97,11 @@ export default function RemoteMCPDetails() {
     <Page>
       <Page.Header>
         <Page.Header.Breadcrumbs
-          substitutions={{ [remoteMcpServerId]: remoteMcpServer?.url }}
+          substitutions={{
+            [remoteMcpServerId]: remoteMcpServer?.url
+              ? formatRemoteMcpUrlForDisplay(remoteMcpServer.url)
+              : undefined,
+          }}
           skipSegments={["remotemcp"]}
         />
       </Page.Header>
@@ -184,7 +189,7 @@ function RemoteMcpHero({ url }: { url: string | undefined }) {
               <Network className="h-5 w-5 text-violet-600 dark:text-violet-400" />
             </div>
             <Heading variant="h1" className="break-all normal-case">
-              {url ?? "Remote MCP server"}
+              {url ? formatRemoteMcpUrlForDisplay(url) : "Remote MCP server"}
             </Heading>
             <Badge variant="neutral">
               <Badge.Text>Remote MCP</Badge.Text>
