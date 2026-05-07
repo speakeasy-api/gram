@@ -1,7 +1,6 @@
 import type { AuthzChallenge } from "@gram/client/models/components/authzchallenge.js";
 
 type Reason = AuthzChallenge["reason"];
-type Outcome = AuthzChallenge["outcome"];
 
 export function getInitials(identifier: string): string {
   const name = identifier.split("@")[0] ?? identifier;
