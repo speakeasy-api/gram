@@ -36,6 +36,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -159,7 +160,7 @@ func (c *Client) ExchangeCode(ctx context.Context, code string) (idToken string,
 	if err != nil {
 		return "", fmt.Errorf("perform exchange request: %w", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer o11y.LogDefer(ctx, c.logger, func() error { return resp.Body.Close() })
 
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("exchange failed with status %s", resp.Status)
@@ -197,7 +198,7 @@ func (c *Client) ValidateIDToken(ctx context.Context, idToken string) (token *Va
 	if err != nil {
 		return nil, fmt.Errorf("perform validate request: %w", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer o11y.LogDefer(ctx, c.logger, func() error { return resp.Body.Close() })
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("validate failed with status %s", resp.Status)
