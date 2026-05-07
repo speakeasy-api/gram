@@ -11,6 +11,7 @@ import { useSdkClient, useSlugs } from "@/contexts/Sdk";
 import { RequireScope } from "@/components/require-scope";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useOrgRoutes } from "@/routes";
+import { useRBAC } from "@/hooks/useRBAC";
 import { useChallenges } from "@gram/client/react-query/challenges.js";
 import { useChallengeRowColumns } from "@/pages/access/useChallengeRowColumns";
 import { useGrantFlow } from "@/pages/access/useGrantFlow";
@@ -219,6 +220,8 @@ export function OrgHomeInner() {
 
 function RecentChallenges() {
   const orgRoutes = useOrgRoutes();
+  const { hasScope } = useRBAC();
+  const canAdmin = hasScope("org:admin");
   const { actionsColumn, grantFlowPortals } = useGrantFlow();
   const challengeRowColumns = useChallengeRowColumns();
   const { data: challengesData } = useChallenges({ limit: 5 });
@@ -237,7 +240,11 @@ function RecentChallenges() {
         </orgRoutes.access.challenges.Link>
       </div>
       <Table
-        columns={[...challengeRowColumns, actionsColumn]}
+        columns={
+          canAdmin
+            ? [...challengeRowColumns, actionsColumn]
+            : challengeRowColumns
+        }
         data={recentChallenges}
         rowKey={(row) => row.id}
       />

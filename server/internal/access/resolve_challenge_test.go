@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/access"
+	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
@@ -239,6 +240,86 @@ func TestResolveChallenge_BatchMultipleIds(t *testing.T) {
 	}
 	for _, id := range ids {
 		require.True(t, resolvedIDs[id], "expected challenge %s to be resolved", id)
+	}
+}
+
+func TestResolveChallenge_TransactionPersistsResolutionAndAuditLog(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newChallengeTestService(t)
+	authCtx := challengeAuthContext(t, ctx)
+
+	challengeID := uuid.NewString()
+	roleSlug := "editor"
+
+	// Resolve a challenge via the service (which uses a transaction internally).
+	result, err := ti.service.ResolveChallenge(ctx, &gen.ResolveChallengePayload{
+		ApikeyToken:    nil,
+		SessionToken:   nil,
+		ChallengeIds:   []string{challengeID},
+		PrincipalUrn:   "user:denied-user",
+		Scope:          "org:admin",
+		ResourceKind:   nil,
+		ResourceID:     nil,
+		ResolutionType: "role_assigned",
+		RoleSlug:       &roleSlug,
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Resolutions, 1)
+
+	// Verify the resolution was persisted to the database (proves tx committed).
+	rows, err := accessrepo.New(ti.conn).ListChallengeResolutions(ctx, accessrepo.ListChallengeResolutionsParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ChallengeIds:   []string{challengeID},
+	})
+	require.NoError(t, err)
+	require.Len(t, rows, 1, "resolution must be persisted after transaction commit")
+
+	row := rows[0]
+	require.Equal(t, challengeID, row.ChallengeID)
+	require.Equal(t, "user:denied-user", row.PrincipalUrn)
+	require.Equal(t, "org:admin", row.Scope)
+	require.Equal(t, "role_assigned", row.ResolutionType)
+	require.True(t, row.RoleSlug.Valid)
+	require.Equal(t, "editor", row.RoleSlug.String)
+	require.Equal(t, authCtx.ActiveOrganizationID, row.OrganizationID)
+}
+
+func TestResolveChallenge_BatchPersistsAllResolutions(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newChallengeTestService(t)
+	authCtx := challengeAuthContext(t, ctx)
+
+	ids := []string{uuid.NewString(), uuid.NewString(), uuid.NewString()}
+
+	_, err := ti.service.ResolveChallenge(ctx, &gen.ResolveChallengePayload{
+		ApikeyToken:    nil,
+		SessionToken:   nil,
+		ChallengeIds:   ids,
+		PrincipalUrn:   "user:denied-user",
+		Scope:          "build:read",
+		ResourceKind:   nil,
+		ResourceID:     nil,
+		ResolutionType: "dismissed",
+		RoleSlug:       nil,
+	})
+	require.NoError(t, err)
+
+	// Verify all three resolutions were persisted in a single transaction.
+	rows, err := accessrepo.New(ti.conn).ListChallengeResolutions(ctx, accessrepo.ListChallengeResolutionsParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ChallengeIds:   ids,
+	})
+	require.NoError(t, err)
+	require.Len(t, rows, 3, "all batch resolutions must be persisted atomically")
+
+	persistedIDs := make(map[string]bool, len(rows))
+	for _, r := range rows {
+		persistedIDs[r.ChallengeID] = true
+	}
+	for _, id := range ids {
+		require.True(t, persistedIDs[id], "challenge %s must be persisted", id)
 	}
 }
 
