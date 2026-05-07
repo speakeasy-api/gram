@@ -579,8 +579,8 @@ func (p *Client) extractCustomerTier(ctx context.Context, customerState *polarCo
 				p.logger.ErrorContext(ctx, "multiple active subscriptions found", attr.SlogOrganizationID(fields.OrganizationID))
 			}
 			activeSubscription := fields.ActiveSubscriptions[0]
-			switch activeSubscription.ProductID {
-			case p.catalog.ProductIDBase, p.catalog.ProductIDAssistants:
+			if activeSubscription.ProductID == p.catalog.ProductIDBase ||
+				(p.catalog.ProductIDAssistants != "" && activeSubscription.ProductID == p.catalog.ProductIDAssistants) {
 				return new(billing.TierBase), true, nil
 			}
 			// Fallback case for old accounts
