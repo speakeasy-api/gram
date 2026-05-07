@@ -74,6 +74,7 @@ type Activities struct {
 	signalAssistantCoordinator      *activities.SignalAssistantCoordinator
 	signalAssistantThread           *activities.SignalAssistantThread
 	processWorkOSOrganizationEvents *activities.ProcessWorkOSOrganizationEvents
+	processWorkOSMembershipEvents   *activities.ProcessWorkOSMembershipEvents
 }
 
 func NewActivities(
@@ -113,8 +114,10 @@ func NewActivities(
 	// configured. Local dev without a key passes nil; the wrapper method below
 	// returns a clear error if the activity is invoked unconfigured.
 	var processWorkOSOrgEvents *activities.ProcessWorkOSOrganizationEvents
+	var processWorkOSMembershipEvents *activities.ProcessWorkOSMembershipEvents
 	if workosEventsClient != nil {
 		processWorkOSOrgEvents = activities.NewProcessWorkOSOrganizationEvents(logger, db, workosEventsClient)
+		processWorkOSMembershipEvents = activities.NewProcessWorkOSMembershipEvents(logger, db, workosEventsClient)
 	}
 
 	return &Activities{
@@ -154,6 +157,7 @@ func NewActivities(
 		signalAssistantCoordinator:      activities.NewSignalAssistantCoordinator(&AssistantWorkflowSignaler{TemporalEnv: temporalEnv}),
 		signalAssistantThread:           activities.NewSignalAssistantThread(&AssistantWorkflowSignaler{TemporalEnv: temporalEnv}),
 		processWorkOSOrganizationEvents: processWorkOSOrgEvents,
+		processWorkOSMembershipEvents:   processWorkOSMembershipEvents,
 	}
 }
 
@@ -162,6 +166,13 @@ func (a *Activities) ProcessWorkOSOrganizationEvents(ctx context.Context, params
 		return nil, fmt.Errorf("WorkOS events client is not configured")
 	}
 	return a.processWorkOSOrganizationEvents.Do(ctx, params)
+}
+
+func (a *Activities) ProcessWorkOSMembershipEvents(ctx context.Context, params activities.ProcessWorkOSMembershipEventsParams) (*activities.ProcessWorkOSMembershipEventsResult, error) {
+	if a.processWorkOSMembershipEvents == nil {
+		return nil, fmt.Errorf("WorkOS events client is not configured")
+	}
+	return a.processWorkOSMembershipEvents.Do(ctx, params)
 }
 
 func (a *Activities) TransitionDeployment(ctx context.Context, projectID uuid.UUID, deploymentID uuid.UUID, status string) (*activities.TransitionDeploymentResult, error) {

@@ -260,6 +260,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.SignalAssistantThread)
 	// WorkOS sync activities
 	temporalWorker.RegisterActivity(activities.ProcessWorkOSOrganizationEvents)
+	temporalWorker.RegisterActivity(activities.ProcessWorkOSMembershipEvents)
 
 	temporalWorker.RegisterWorkflow(ProcessDeploymentWorkflow)
 	temporalWorker.RegisterWorkflow(FunctionsReaperWorkflow)
@@ -286,6 +287,8 @@ func NewTemporalWorker(
 	// WorkOS sync workflows
 	temporalWorker.RegisterWorkflow(ProcessWorkOSOrganizationEventsWorkflow)
 	temporalWorker.RegisterWorkflow(ProcessWorkOSOrganizationEventsWorkflowDebounced)
+	temporalWorker.RegisterWorkflow(ProcessWorkOSMembershipEventsWorkflow)
+	temporalWorker.RegisterWorkflow(ProcessWorkOSMembershipEventsWorkflowDebounced)
 
 	if err := AddPlatformUsageMetricsSchedule(context.Background(), env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {

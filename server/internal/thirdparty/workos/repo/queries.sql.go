@@ -24,6 +24,19 @@ func (q *Queries) GetOrganizationSyncLastEventID(ctx context.Context, workosOrga
 	return last_event_id, err
 }
 
+const getUserSyncLastEventID = `-- name: GetUserSyncLastEventID :one
+SELECT last_event_id
+FROM workos_user_syncs
+WHERE id = 1
+`
+
+func (q *Queries) GetUserSyncLastEventID(ctx context.Context) (string, error) {
+	row := q.db.QueryRow(ctx, getUserSyncLastEventID)
+	var last_event_id string
+	err := row.Scan(&last_event_id)
+	return last_event_id, err
+}
+
 const setOrganizationSyncLastEventID = `-- name: SetOrganizationSyncLastEventID :one
 INSERT INTO workos_organization_syncs (workos_organization_id, last_event_id)
 VALUES ($1, $2)
@@ -41,6 +54,22 @@ type SetOrganizationSyncLastEventIDParams struct {
 func (q *Queries) SetOrganizationSyncLastEventID(ctx context.Context, arg SetOrganizationSyncLastEventIDParams) (uuid.UUID, error) {
 	row := q.db.QueryRow(ctx, setOrganizationSyncLastEventID, arg.WorkosOrganizationID, arg.LastEventID)
 	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const setUserSyncLastEventID = `-- name: SetUserSyncLastEventID :one
+INSERT INTO workos_user_syncs (id, last_event_id)
+VALUES (1, $1)
+ON CONFLICT (id) DO UPDATE SET
+    last_event_id = EXCLUDED.last_event_id,
+    updated_at = clock_timestamp()
+RETURNING id
+`
+
+func (q *Queries) SetUserSyncLastEventID(ctx context.Context, lastEventID string) (int64, error) {
+	row := q.db.QueryRow(ctx, setUserSyncLastEventID, lastEventID)
+	var id int64
 	err := row.Scan(&id)
 	return id, err
 }

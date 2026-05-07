@@ -5,6 +5,7 @@
 package repo
 
 import (
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -23,6 +24,19 @@ type OrganizationMetadatum struct {
 	CreatedAt          pgtype.Timestamptz
 	UpdatedAt          pgtype.Timestamptz
 	DisabledAt         pgtype.Timestamptz
+}
+
+type OrganizationRoleAssignment struct {
+	ID                 uuid.UUID
+	OrganizationID     string
+	WorkosUserID       string
+	UserID             pgtype.Text
+	RoleUrn            string
+	WorkosMembershipID pgtype.Text
+	WorkosUpdatedAt    pgtype.Timestamptz
+	WorkosLastEventID  pgtype.Text
+	CreatedAt          pgtype.Timestamptz
+	UpdatedAt          pgtype.Timestamptz
 }
 
 type OrganizationUserRelationship struct {
