@@ -42,6 +42,25 @@ func (q *Queries) AttachWorkOSUserToOrg(ctx context.Context, arg AttachWorkOSUse
 	return err
 }
 
+const backfillRoleAssignmentUserID = `-- name: BackfillRoleAssignmentUserID :exec
+UPDATE organization_role_assignments
+SET user_id = $1,
+    updated_at = clock_timestamp()
+WHERE workos_user_id = $2
+  AND user_id IS NULL
+`
+
+type BackfillRoleAssignmentUserIDParams struct {
+	UserID       pgtype.Text
+	WorkosUserID string
+}
+
+// Backfill user_id on pending role assignments for a newly-linked WorkOS user.
+func (q *Queries) BackfillRoleAssignmentUserID(ctx context.Context, arg BackfillRoleAssignmentUserIDParams) error {
+	_, err := q.db.Exec(ctx, backfillRoleAssignmentUserID, arg.UserID, arg.WorkosUserID)
+	return err
+}
+
 const clearOrganizationWorkosID = `-- name: ClearOrganizationWorkosID :exec
 UPDATE organization_metadata SET workos_id = NULL WHERE id = $1
 `
