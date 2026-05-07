@@ -1,132 +1,56 @@
 //! Token-aware compaction wiring for the assistant runtime.
 //!
-//! The runner reads `gram_metadata.context_window` from completion responses
-//! (decorated by the gram chat service when the URL carries
-//! `?includeContextWindow=1`) and a [`ContextWindowTrigger`] fires once the
-//! provider-reported `usage.input_tokens` crosses a configurable percentage of
-//! that window. The strategy pipeline drops reasoning + failed tool results
-//! and summarises older items through a nested agent loop on the same model.
+//! The model's context window is supplied at `/configure` time
+//! (`RunnerConfig::context_window`) — the gram backend resolves it via
+//! `openrouter.ContextWindowResolver` so the runner doesn't need to parse
+//! provider-specific metadata or make a fresh OpenRouter round-trip. A
+//! [`ContextWindowTrigger`] fires once `usage.input_tokens` (read from
+//! `AgentEvent::UsageUpdated`) crosses a configurable percentage of the window.
+//!
+//! Strategy pipeline: drop reasoning, drop failed tool results, summarise older
+//! items through a nested agent loop on the same model. System + context items
+//! and the most recent few turns are preserved.
 //!
 //! The compactor's adapter is built without the `Gram-Chat-ID` default header
-//! so its calls bypass the chat capture path — capture runs a divergence check
-//! per chat_id and would otherwise persist the compactor's "summarise the
+//! so its calls bypass chat capture — capture runs a divergence check per
+//! chat_id and would otherwise persist the compactor's "summarise this
 //! transcript" turn, polluting the next replay.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use agentkit_adapter_completions::{CompletionsAdapter, CompletionsProvider};
+use agentkit_adapter_completions::CompletionsAdapter;
 use agentkit_compaction::{
     CompactionBackend, CompactionConfig, CompactionError, CompactionPipeline, CompactionReason,
     CompactionTrigger, DropFailedToolResultsStrategy, DropReasoningStrategy,
     SummarizeOlderStrategy, SummaryRequest, SummaryResult,
 };
-use agentkit_core::{
-    Item, ItemKind, MetadataMap, Part, SessionId, TurnCancellation, TurnId, Usage,
-};
-use agentkit_http::{HttpRequestBuilder, StatusCode};
+use agentkit_core::{Item, ItemKind, MetadataMap, Part, SessionId, TurnCancellation, TurnId};
 use agentkit_loop::{
-    Agent, AgentEvent, LoopError, LoopInterrupt, LoopObserver, LoopStep, ModelSession,
-    SessionConfig, TurnRequest,
+    Agent, AgentEvent, LoopInterrupt, LoopObserver, LoopStep, ModelSession, SessionConfig,
 };
 use agentkit_provider_openrouter::OpenRouterProvider;
 use agentkit_tools_core::{PermissionChecker, PermissionDecision, PermissionRequest};
 use async_trait::async_trait;
-use serde_json::{Map, Value};
 
 const COMPACTION_SYSTEM_PROMPT: &str = "You are a compaction agent. Compress the transcript that follows into a durable context note for an assistant that has lost the original messages. Preserve every named person, every year and date, every place, every decision the assistant committed to, every tool the assistant invoked, and every actionable fact in the tool results. Drop chatter, narration, and chain-of-thought. Return only the compacted note as plain text.";
 
 const DEFAULT_PERCENTAGE: u32 = 80;
 const KEEP_RECENT: usize = 4;
 
-/// Wraps [`OpenRouterProvider`] and folds `gram_metadata.context_window` from
-/// the raw response into a shared [`AtomicU64`]. The trigger reads the same
-/// atomic, so the budget tracks whatever the most recent response advertised
-/// (the value is stable per model but cheap to keep refreshing).
-#[derive(Clone)]
-pub struct GramCompletionsProvider {
-    inner: OpenRouterProvider,
-    context_window: Arc<AtomicU64>,
-}
-
-impl GramCompletionsProvider {
-    pub fn new(inner: OpenRouterProvider) -> Self {
-        Self {
-            inner,
-            context_window: Arc::new(AtomicU64::new(0)),
-        }
-    }
-
-    pub fn context_window_handle(&self) -> Arc<AtomicU64> {
-        Arc::clone(&self.context_window)
-    }
-}
-
-impl CompletionsProvider for GramCompletionsProvider {
-    type Config = <OpenRouterProvider as CompletionsProvider>::Config;
-
-    fn provider_name(&self) -> &str {
-        self.inner.provider_name()
-    }
-
-    fn endpoint_url(&self) -> &str {
-        self.inner.endpoint_url()
-    }
-
-    fn config(&self) -> &Self::Config {
-        self.inner.config()
-    }
-
-    fn preprocess_request(&self, builder: HttpRequestBuilder) -> HttpRequestBuilder {
-        self.inner.preprocess_request(builder)
-    }
-
-    fn apply_prompt_cache(
-        &self,
-        body: &mut Map<String, Value>,
-        request: &TurnRequest,
-    ) -> Result<(), LoopError> {
-        self.inner.apply_prompt_cache(body, request)
-    }
-
-    fn requires_alternating_roles(&self) -> bool {
-        self.inner.requires_alternating_roles()
-    }
-
-    fn preprocess_response(&self, status: StatusCode, body: &str) -> Result<(), LoopError> {
-        self.inner.preprocess_response(status, body)
-    }
-
-    fn postprocess_response(
-        &self,
-        usage: &mut Option<Usage>,
-        metadata: &mut MetadataMap,
-        raw: &Value,
-    ) {
-        self.inner.postprocess_response(usage, metadata, raw);
-        if let Some(cw) = raw
-            .pointer("/gram_metadata/context_window")
-            .and_then(Value::as_u64)
-            && cw > 0
-        {
-            self.context_window.store(cw, Ordering::Release);
-        }
-    }
-}
-
 /// Fires compaction once the provider-reported `input_tokens` reaches a
-/// percentage of the model's context window. The window itself is read from
-/// the same atomic that [`GramCompletionsProvider::postprocess_response`]
-/// writes to; until the first response arrives the trigger is dormant.
+/// percentage of the configured context window. The window is static for a
+/// given runtime — the model never changes mid-session — so it lives here as
+/// a plain `u64` rather than an atomic.
 #[derive(Clone)]
 pub struct ContextWindowTrigger {
-    context_window: Arc<AtomicU64>,
+    context_window: u64,
     last_input_tokens: Arc<AtomicU64>,
     percentage: u32,
 }
 
 impl ContextWindowTrigger {
-    pub fn new(context_window: Arc<AtomicU64>, percentage: u32) -> Self {
+    pub fn new(context_window: u64, percentage: u32) -> Self {
         Self {
             context_window,
             last_input_tokens: Arc::new(AtomicU64::new(0)),
@@ -139,8 +63,9 @@ impl ContextWindowTrigger {
     }
 
     fn threshold(&self) -> u64 {
-        let win = self.context_window.load(Ordering::Acquire);
-        win.saturating_mul(self.percentage as u64) / 100
+        self.context_window
+            .saturating_mul(self.percentage as u64)
+            / 100
     }
 }
 
@@ -151,16 +76,15 @@ impl CompactionTrigger for ContextWindowTrigger {
         _turn_id: Option<&TurnId>,
         _transcript: &[Item],
     ) -> Option<CompactionReason> {
-        let win = self.context_window.load(Ordering::Acquire);
-        if win == 0 {
+        if self.context_window == 0 {
             return None;
         }
         let last = self.last_input_tokens.load(Ordering::Acquire);
         let threshold = self.threshold();
         if last >= threshold {
             Some(CompactionReason::Custom(format!(
-                "input_tokens={last} >= threshold={threshold} (window={win}, {}%)",
-                self.percentage
+                "input_tokens={last} >= threshold={threshold} (window={}, {}%)",
+                self.context_window, self.percentage
             )))
         } else {
             None
@@ -169,7 +93,9 @@ impl CompactionTrigger for ContextWindowTrigger {
 }
 
 /// Mirrors [`AgentEvent::UsageUpdated`] into the trigger's `last_input_tokens`
-/// atomic so [`ContextWindowTrigger::should_compact`] sees the freshest count.
+/// atomic; resets to zero on `CompactionFinished` so a subsequent
+/// `should_compact` call (defensive, in case the loop ever evaluates the
+/// trigger more than once per turn) doesn't fire on the pre-compaction count.
 #[derive(Clone)]
 pub struct InputTokenObserver {
     last_input_tokens: Arc<AtomicU64>,
@@ -185,25 +111,28 @@ impl InputTokenObserver {
 
 impl LoopObserver for InputTokenObserver {
     fn handle_event(&mut self, event: AgentEvent) {
-        if let AgentEvent::UsageUpdated(usage) = event
-            && let Some(tokens) = usage.tokens
-        {
-            self.last_input_tokens
-                .store(tokens.input_tokens, Ordering::Release);
+        match event {
+            AgentEvent::UsageUpdated(usage) => {
+                if let Some(tokens) = usage.tokens {
+                    self.last_input_tokens
+                        .store(tokens.input_tokens, Ordering::Release);
+                }
+            }
+            AgentEvent::CompactionFinished { .. } => {
+                self.last_input_tokens.store(0, Ordering::Release);
+            }
+            _ => {}
         }
     }
 }
 
 /// Runs a nested [`Agent`] loop on a sibling adapter to summarise older items.
-///
-/// The adapter must be built without the `Gram-Chat-ID` default header so the
-/// compactor's request bypasses chat capture.
 pub struct NestedLoopCompactionBackend {
-    adapter: CompletionsAdapter<GramCompletionsProvider>,
+    adapter: CompletionsAdapter<OpenRouterProvider>,
 }
 
 impl NestedLoopCompactionBackend {
-    pub fn new(adapter: CompletionsAdapter<GramCompletionsProvider>) -> Self {
+    pub fn new(adapter: CompletionsAdapter<OpenRouterProvider>) -> Self {
         Self { adapter }
     }
 }
@@ -267,7 +196,9 @@ impl CompactionBackend for NestedLoopCompactionBackend {
     }
 }
 
-async fn run_to_completion<S>(driver: &mut agentkit_loop::LoopDriver<S>) -> Result<String, String>
+async fn run_to_completion<S>(
+    driver: &mut agentkit_loop::LoopDriver<S>,
+) -> Result<String, String>
 where
     S: ModelSession,
 {
@@ -330,13 +261,18 @@ fn render_items(items: &[Item]) -> String {
 
 /// Builds the trigger + pipeline + backend, returning the [`CompactionConfig`]
 /// to attach to the agent and the [`InputTokenObserver`] that must be
-/// registered on the same agent so the trigger sees `input_tokens`.
+/// registered on the same agent so the trigger sees `input_tokens`. Returns
+/// `None` when the model's context window is unknown — without a budget the
+/// trigger has nothing to compare against.
 pub fn build_compaction(
-    main_provider: &GramCompletionsProvider,
-    compactor_adapter: CompletionsAdapter<GramCompletionsProvider>,
+    context_window: u64,
+    compactor_adapter: CompletionsAdapter<OpenRouterProvider>,
     percentage: u32,
-) -> (CompactionConfig, InputTokenObserver) {
-    let trigger = ContextWindowTrigger::new(main_provider.context_window_handle(), percentage);
+) -> Option<(CompactionConfig, InputTokenObserver)> {
+    if context_window == 0 {
+        return None;
+    }
+    let trigger = ContextWindowTrigger::new(context_window, percentage);
     let observer = InputTokenObserver::new(trigger.input_tokens_handle());
     let pipeline = CompactionPipeline::new()
         .with_strategy(DropReasoningStrategy::new())
@@ -348,7 +284,7 @@ pub fn build_compaction(
         );
     let backend = NestedLoopCompactionBackend::new(compactor_adapter);
     let config = CompactionConfig::new(trigger, pipeline).with_backend(backend);
-    (config, observer)
+    Some((config, observer))
 }
 
 pub fn percentage_from_env() -> u32 {

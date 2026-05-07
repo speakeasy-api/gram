@@ -280,6 +280,7 @@ type ServiceCore struct {
 	assistantTokens *assistanttokens.Manager
 	serverURL       *url.URL
 	telemetryLogger *telemetry.Logger
+	contextWindow   *openrouter.ContextWindowResolver
 	wakeCanceller   WakeCanceller
 }
 
@@ -292,6 +293,7 @@ func NewServiceCore(
 	assistantTokens *assistanttokens.Manager,
 	serverURL *url.URL,
 	telemetryLogger *telemetry.Logger,
+	contextWindow *openrouter.ContextWindowResolver,
 ) *ServiceCore {
 	return &ServiceCore{
 		logger:          logger,
@@ -302,6 +304,7 @@ func NewServiceCore(
 		assistantTokens: assistantTokens,
 		serverURL:       serverURL,
 		telemetryLogger: telemetryLogger,
+		contextWindow:   contextWindow,
 		wakeCanceller:   nil,
 	}
 }
@@ -310,6 +313,29 @@ func NewServiceCore(
 // assistants must not import triggers.
 func (s *ServiceCore) SetWakeCanceller(c WakeCanceller) {
 	s.wakeCanceller = c
+}
+
+// resolveAssistantContextWindow returns the smallest context_length the gram
+// backend has cached for the assistant's model, or 0 on lookup failure. The
+// runner reads this from `runtimeStartupConfig` and uses it to threshold
+// input-token-aware compaction.
+func (s *ServiceCore) resolveAssistantContextWindow(ctx context.Context, model string) uint64 {
+	if s.contextWindow == nil || model == "" {
+		return 0
+	}
+	resolved := model
+	if alias := openrouter.ResolveModel(model); alias != "" {
+		resolved = alias
+	}
+	tokens, err := s.contextWindow.Resolve(ctx, resolved)
+	if err != nil {
+		s.logger.WarnContext(ctx, "resolve assistant model context window", attr.SlogError(err), attr.SlogGenAIRequestModel(resolved))
+		return 0
+	}
+	if tokens <= 0 {
+		return 0
+	}
+	return uint64(tokens)
 }
 
 // emitAssistantTelemetry writes a single assistant-pipeline log event to the
@@ -1656,11 +1682,11 @@ func (s *ServiceCore) buildRuntimeStartupConfig(
 	completionsEndpoint := runtimeServerURL.JoinPath("chat", "completions")
 	completionsQuery := completionsEndpoint.Query()
 	completionsQuery.Set("unstable_normalizeOutboundMessages", "1")
-	// Opt the runner into the gram_metadata.context_window decoration so the
-	// compaction trigger can read the model's window from completion responses.
-	completionsQuery.Set("includeContextWindow", "1")
 	completionsEndpoint.RawQuery = completionsQuery.Encode()
 	completionsURL := completionsEndpoint.String()
+
+	contextWindow := s.resolveAssistantContextWindow(ctx, assistant.Model)
+
 	return runtimeStartupConfig{
 		Model:          assistant.Model,
 		Instructions:   conv.PtrEmpty(instructions),
@@ -1669,6 +1695,7 @@ func (s *ServiceCore) buildRuntimeStartupConfig(
 		ChatID:         thread.ChatID.String(),
 		MCPServers:     mcpServers,
 		History:        history,
+		ContextWindow:  contextWindow,
 	}, nil
 }
 

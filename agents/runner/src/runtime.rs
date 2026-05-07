@@ -21,7 +21,7 @@ use serde_json::Value;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::sync::{Mutex as AsyncMutex, Notify, oneshot};
 
-use crate::compaction::{GramCompletionsProvider, build_compaction, percentage_from_env};
+use crate::compaction::{build_compaction, percentage_from_env};
 use crate::errors::RunnerError;
 use crate::http_layer::{McpRotatingClient, TokenRegistry, build_http};
 use crate::idempotency::IdempotencyCache;
@@ -179,7 +179,7 @@ pub async fn build_runtime(
         })?;
     let openrouter_config =
         OpenRouterConfig::new(String::new(), config.model.clone()).with_base_url(base_url);
-    let provider = GramCompletionsProvider::new(OpenRouterProvider::from(openrouter_config));
+    let provider = OpenRouterProvider::from(openrouter_config);
 
     let completions_http = build_http(http_client.clone(), tokens.clone());
     let adapter = CompletionsAdapter::with_client(provider.clone(), completions_http);
@@ -193,10 +193,13 @@ pub async fn build_runtime(
         .user_agent(concat!("gram-assistant-runner/", env!("CARGO_PKG_VERSION")))
         .build()?;
     let compactor_http = build_http(compactor_http_client, tokens.clone());
-    let compactor_adapter = CompletionsAdapter::with_client(provider.clone(), compactor_http);
+    let compactor_adapter = CompletionsAdapter::with_client(provider, compactor_http);
 
-    let (compaction_config, input_token_observer) =
-        build_compaction(&provider, compactor_adapter, percentage_from_env());
+    let compaction = build_compaction(
+        config.context_window.unwrap_or(0),
+        compactor_adapter,
+        percentage_from_env(),
+    );
 
     let mut transcript = Vec::new();
     if let Some(instructions) = &config.instructions {
@@ -204,18 +207,23 @@ pub async fn build_runtime(
     }
     transcript.extend(normalize_history(&config.history)?);
 
-    let agent = Agent::builder()
+    let mut builder = Agent::builder()
         .model(adapter)
         .add_tool_source(native_tools)
         .add_tool_source(agentkit_tool_fs::registry())
         .add_tool_source(mcp_source)
         .permissions(permissions)
         .resources(fs_resources)
-        .compaction(compaction_config)
-        .observer(input_token_observer)
         .observer(TracingReporter::new())
-        .transcript(transcript)
-        .build()
+        .transcript(transcript);
+
+    if let Some((compaction_config, input_token_observer)) = compaction {
+        builder = builder
+            .compaction(compaction_config)
+            .observer(input_token_observer);
+    }
+
+    let agent = builder.build()
         .map_err(|e| RunnerError::AgentBuild(e.to_string()))?;
 
     let session = SessionConfig::new(config.chat_id.clone())
