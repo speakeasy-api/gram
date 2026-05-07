@@ -91,7 +91,7 @@ func TestDetectPromptInjection_Heuristics(t *testing.T) {
 			if tc.expectEmpty {
 				assert.Empty(t, findings)
 				return
-			}
+			findings, err := DetectPromptInjection(t.Context(), tc.input)
 			require.NotEmpty(t, findings)
 			ids := make([]string, 0, len(findings))
 			for _, f := range findings {
