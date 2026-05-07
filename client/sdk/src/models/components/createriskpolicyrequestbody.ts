@@ -54,8 +54,9 @@ export type CreateRiskPolicyRequestBody = {
 };
 
 /** @internal */
-export const Action$outboundSchema: z.ZodMiniEnum<typeof Action> =
-  z.enum(Action);
+export const Action$outboundSchema: z.ZodMiniEnum<typeof Action> = z.enum(
+  Action,
+);
 
 /** @internal */
 export type CreateRiskPolicyRequestBody$Outbound = {
