@@ -33,6 +33,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 )
 
 const dispositionAssistants = "assistants"
@@ -68,6 +69,7 @@ type Service struct {
 	authz               *authz.Engine
 	billing             billing.Repository
 	cancelSubsScheduler AssistantsSubscriptionCancelScheduler
+	posthog             *posthog.Posthog
 	projectsRepo        *projectsRepo.Queries
 	envRepo             *envRepo.Queries
 	orgRepo             *orgRepo.Queries
@@ -84,6 +86,7 @@ func NewService(
 	authzEngine *authz.Engine,
 	billingRepo billing.Repository,
 	cancelSubsScheduler AssistantsSubscriptionCancelScheduler,
+	posthogClient *posthog.Posthog,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("auth"))
 
@@ -96,6 +99,7 @@ func NewService(
 		authz:               authzEngine,
 		billing:             billingRepo,
 		cancelSubsScheduler: cancelSubsScheduler,
+		posthog:             posthogClient,
 		projectsRepo:        projectsRepo.New(db),
 		envRepo:             envRepo.New(db),
 		orgRepo:             orgRepo.New(db),
@@ -599,6 +603,16 @@ func (s *Service) autoProvisionForAssistants(ctx context.Context, idToken string
 	session.ActiveOrganizationID = org.ID
 	if err := s.sessions.StoreSession(ctx, *session); err != nil {
 		return "", fmt.Errorf("store session: %w", err)
+	}
+
+	if err := s.posthog.CaptureEvent(ctx, "gram_assistants_signup", userInfo.Email, map[string]any{
+		"email":                       userInfo.Email,
+		"organization_id":             org.ID,
+		"organization_slug":           org.Slug,
+		"disposition":                 dispositionAssistants,
+		"has_assistants_subscription": subID != "",
+	}); err != nil {
+		s.logger.ErrorContext(ctx, "failed to capture gram_assistants_signup event", attr.SlogError(err), attr.SlogOrganizationID(org.ID))
 	}
 
 	return fmt.Sprintf("/%s/projects/%s/assistants/new?disposition=%s", org.Slug, projects[0].Slug, dispositionAssistants), nil
