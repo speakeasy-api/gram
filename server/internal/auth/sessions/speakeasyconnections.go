@@ -432,6 +432,13 @@ func (s *Manager) syncWorkOSMemberships(ctx context.Context, user userRepo.Upser
 		}
 	}
 
+	if err := s.orgRepo.BackfillRoleAssignmentUserID(ctx, orgRepo.BackfillRoleAssignmentUserIDParams{
+		UserID:       conv.ToPGText(user.ID),
+		WorkosUserID: workosUserID,
+	}); err != nil {
+		s.logger.ErrorContext(ctx, "backfill role assignment user ID", attr.SlogError(err))
+	}
+
 	// Load current org membership state directly from WorkOS so we can populate
 	// the workos membership ID in the org membership records
 	memberships, err := s.workos.ListUserMemberships(ctx, workosUserID)

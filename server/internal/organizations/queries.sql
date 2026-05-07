@@ -141,6 +141,14 @@ WHERE organization_user_relationships.user_id = @user_id
       SELECT id FROM organization_metadata WHERE workos_id IS NOT NULL
   );
 
+-- name: BackfillRoleAssignmentUserID :exec
+-- Backfill user_id on pending role assignments for a newly-linked WorkOS user.
+UPDATE organization_role_assignments
+SET user_id = @user_id,
+    updated_at = clock_timestamp()
+WHERE workos_user_id = @workos_user_id
+  AND user_id IS NULL;
+
 -- name: SetOrgWorkosID :one
 UPDATE organization_metadata
 SET workos_id = @workos_id,
