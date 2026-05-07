@@ -979,7 +979,7 @@ func validateSourceAction(sources []string, action string) error {
 	if action != "block" {
 		return nil
 	}
-	for _, src := range []string{shadowmcp.SourceDestructiveTool, risk_analysis.SourceCLIDestructive} {
+	for _, src := range []string{shadowmcp.SourceDestructiveTool, ra.SourceCLIDestructive} {
 		if slices.Contains(sources, src) {
 			return oops.E(oops.CodeInvalid, nil, "source %q supports flagging only", src)
 		}
