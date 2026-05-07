@@ -94,9 +94,6 @@ type MCPError struct {
 	ID      mcpjsonrpc.ID
 	Code    MCPCode
 	Message string
-	Data    any
-
-	HTTPStatus int
 }
 
 func NewMCPErrorFromCause(id mcpjsonrpc.ID, source error) *MCPError {
@@ -111,10 +108,9 @@ func NewMCPErrorFromCause(id mcpjsonrpc.ID, source error) *MCPError {
 		return mcpErr
 	case errors.As(source, &shareableErr):
 		return &MCPError{
-			ID:         id,
-			Code:       shareableErr.Code.MCPCode(),
-			Message:    shareableErr.Error(),
-			HTTPStatus: shareableErr.HTTPStatus(),
+			ID:      id,
+			Code:    shareableErr.Code.MCPCode(),
+			Message: shareableErr.Error(),
 		}
 	default:
 		return &MCPError{
@@ -128,9 +124,6 @@ func NewMCPErrorFromCause(id mcpjsonrpc.ID, source error) *MCPError {
 func (e *MCPError) HTTPStatusCode() int {
 	if e == nil {
 		return MCPCodeInternalError.HTTPStatus()
-	}
-	if e.HTTPStatus != 0 {
-		return e.HTTPStatus
 	}
 	return e.Code.HTTPStatus()
 }
@@ -150,9 +143,6 @@ func (e *MCPError) MarshalJSON() ([]byte, error) {
 	errorBody := map[string]any{
 		"code":    e.Code,
 		"message": e.message(),
-	}
-	if e.Data != nil {
-		errorBody["data"] = e.Data
 	}
 
 	payload := map[string]any{

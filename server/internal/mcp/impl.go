@@ -232,10 +232,7 @@ func (s *Service) HandleGetServer(w http.ResponseWriter, r *http.Request, metada
 		}
 	}
 
-	body, err := json.Marshal(&oops.MCPError{
-		Code:    oops.MCPCodeServerError,
-		Message: "This MCP server uses POST-based Streamable HTTP transport. This GET request is a normal compatibility probe by the MCP client and can be safely ignored. The client will automatically use POST for actual communication.",
-	})
+	body, err := json.Marshal(oops.E(oops.CodeUnexpected, nil, "This MCP server uses POST-based Streamable HTTP transport. This GET request is a normal compatibility probe by the MCP client and can be safely ignored. The client will automatically use POST for actual communication."))
 	if err != nil {
 		s.logger.ErrorContext(r.Context(), "failed to marshal MCP 405 response", attr.SlogError(err))
 		http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
@@ -918,15 +915,7 @@ func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *ra
 	case "resources/read":
 		return handleResourcesRead(ctx, s.logger, s.db, payload, req, s.toolProxy, s.env, s.billingTracker, s.billingRepository, s.telemLogger)
 	default:
-		mcpID := mcpjsonrpc.NullID()
-		if rpcCtx, ok := contextvalues.GetRPCContext(ctx); ok && rpcCtx.ID.IsSet() {
-			mcpID = rpcCtx.ID
-		}
-		return nil, &oops.MCPError{
-			ID:      mcpID,
-			Code:    oops.MCPCodeMethodNotFound,
-			Message: fmt.Sprintf("%s: %s", req.Method, oops.MCPCodeMethodNotFound.Message()),
-		}
+		return nil, oops.E(oops.CodeNotImplemented, nil, fmt.Sprintf("%s: %s", req.Method, oops.MCPCodeMethodNotFound.Message()))
 	}
 }
 
