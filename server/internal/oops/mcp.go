@@ -25,8 +25,11 @@ func MCPErrHandle(logger *slog.Logger, handler func(http.ResponseWriter, *http.R
 			return
 		}
 
+		code := http.StatusInternalServerError
+
 		var shareableErr *ShareableError
 		if !errors.As(err, &shareableErr) {
+			code = shareableErr.HTTPStatus()
 			stack := string(debug.Stack())
 			logger.ErrorContext(r.Context(), "unexpected error", attr.SlogError(err), attr.SlogErrorStack(stack))
 		}
@@ -38,7 +41,7 @@ func MCPErrHandle(logger *slog.Logger, handler func(http.ResponseWriter, *http.R
 		payload := NewMCPErrorFromCause(mcpID, err)
 
 		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(shareableErr.HTTPStatus())
+		w.WriteHeader(code)
 		err = json.NewEncoder(w).Encode(payload)
 		if err != nil {
 			logger.ErrorContext(r.Context(), "failed to encode MCP error response", attr.SlogError(err))
