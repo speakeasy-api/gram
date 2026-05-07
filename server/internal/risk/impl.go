@@ -937,8 +937,10 @@ func (s *Service) fallbackPolicyName(sources []string, action string) string {
 			parts = append(parts, "Shadow MCP")
 		case shadowmcp.SourceDestructiveTool:
 			parts = append(parts, "Destructive Tool")
-		case risk_analysis.SourceCLIDestructive:
+		case ra.SourceCLIDestructive:
 			parts = append(parts, "Destructive CLI Command")
+		case ra.SourcePromptInjection:
+			parts = append(parts, "Prompt Injection")
 		}
 	}
 	if len(parts) == 0 {
