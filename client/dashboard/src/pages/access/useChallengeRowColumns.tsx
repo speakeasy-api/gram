@@ -23,6 +23,7 @@ export function useChallengeRowColumns(
   groupCounts?: Map<string, number>,
   groupKeys?: Map<string, string>,
   onToggleGroup?: (groupKey: string) => void,
+  outcomeFilter?: string,
 ): Column<AuthzChallenge>[] {
   const { orgSlug } = useSlugs();
   const { organization } = useSession();
@@ -46,14 +47,15 @@ export function useChallengeRowColumns(
     const rowFade = (row: AuthzChallenge) =>
       animatingOutIds?.has(row.id)
         ? "opacity-0 transition-opacity duration-1000"
-        : (row.outcome === "allow" || row.resolvedAt) &&
+        : outcomeFilter === "deny" &&
+          (row.outcome === "allow" || row.resolvedAt) &&
           "opacity-40 transition-opacity duration-1000";
 
     return [
       {
         key: "avatar",
         header: "",
-        width: "44px",
+        width: "40px",
         render: (row: AuthzChallenge) => {
           const isApiKey = row.principalType === "api_key";
           const display = row.userEmail ?? row.principalUrn;
@@ -78,13 +80,16 @@ export function useChallengeRowColumns(
       {
         key: "identity",
         header: "Identity",
-        width: "1fr",
+        width: "1.2fr",
         render: (row: AuthzChallenge) => (
           <Tooltip>
             <TooltipTrigger asChild>
               <Type
                 variant="body"
-                className={cn("truncate text-sm font-medium", rowFade(row))}
+                className={cn(
+                  "min-w-0 truncate text-sm font-medium",
+                  rowFade(row),
+                )}
               >
                 {row.userEmail ?? row.principalUrn}
               </Type>
@@ -100,7 +105,7 @@ export function useChallengeRowColumns(
       {
         key: "outcome",
         header: "Outcome",
-        width: "85px",
+        width: "80px",
         render: (row: AuthzChallenge) => (
           <div className={cn(rowFade(row))}>
             <OutcomeBadge outcome={row.outcome} resolved={!!row.resolvedAt} />
@@ -110,13 +115,13 @@ export function useChallengeRowColumns(
       {
         key: "scope",
         header: "Required Scope",
-        width: "140px",
+        width: "1fr",
         render: (row: AuthzChallenge) => (
           <Tooltip>
             <TooltipTrigger asChild>
               <code
                 className={cn(
-                  "bg-muted rounded px-1.5 py-0.5 font-mono text-xs",
+                  "bg-muted min-w-0 truncate rounded px-1.5 py-0.5 font-mono text-xs",
                   rowFade(row),
                 )}
               >
@@ -136,9 +141,9 @@ export function useChallengeRowColumns(
       {
         key: "resource",
         header: "Resource",
-        width: "1fr",
+        width: "1.2fr",
         render: (row: AuthzChallenge) => (
-          <div className={cn("min-w-0 overflow-hidden", rowFade(row))}>
+          <div className={cn("min-w-0 truncate", rowFade(row))}>
             <ResourceLink
               challenge={row}
               orgSlug={orgSlug ?? ""}
@@ -150,7 +155,7 @@ export function useChallengeRowColumns(
       {
         key: "resolvedBy",
         header: "Resolved By",
-        width: "90px",
+        width: "100px",
         render: (row: AuthzChallenge) => {
           if (!row.resolvedBy) {
             return (
@@ -182,7 +187,7 @@ export function useChallengeRowColumns(
       {
         key: "timestamp",
         header: "Time",
-        width: "160px",
+        width: "1fr",
         render: (row: AuthzChallenge) => {
           const count = groupCounts?.get(row.id) ?? 1;
           return (
@@ -225,5 +230,6 @@ export function useChallengeRowColumns(
     groupCounts,
     groupKeys,
     onToggleGroup,
+    outcomeFilter,
   ]);
 }

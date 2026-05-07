@@ -145,8 +145,19 @@ export const useUser = () => {
   return user;
 };
 
+const SUPER_ADMIN_KEY = "gram-dev-super-admin";
+
 export const useIsAdmin = () => {
   const { isAdmin } = useUser();
+  if (import.meta.env.DEV) {
+    try {
+      const override = localStorage.getItem(SUPER_ADMIN_KEY);
+      if (override === "1") return true;
+      if (override === "0") return false;
+    } catch {
+      // ignore
+    }
+  }
   return isAdmin;
 };
 

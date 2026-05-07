@@ -35,8 +35,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/guardian"
 	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
+	"github.com/speakeasy-api/gram/server/internal/marketplace"
 	mcpmetarepo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -69,15 +69,17 @@ type GitHubConfig struct {
 	InstallationID int64
 }
 
-// GitHubConfigInput is the raw deployment-time configuration for plugin
-// GitHub publishing. All fields must be set together (the feature is on)
-// or all must be unset (the feature is off). Pass to NewGitHubConfig.
+// GitHubConfigInput is the deployment-time configuration for plugin
+// GitHub publishing. All fields must be set together (the feature is on) or
+// all must be unset (the feature is off). Pass to NewGitHubConfig.
+//
+// Client is constructed by the caller (typically once in cmd/gram, then
+// shared with other consumers like the marketplace proxy that need to mint
+// installation tokens against the same App).
 type GitHubConfigInput struct {
-	AppID          int64
-	PrivateKey     string
+	Client         *ghclient.Client
 	Org            string
 	InstallationID int64
-	HTTPClient     *guardian.HTTPClient
 }
 
 // NewGitHubConfig validates a GitHubConfigInput holistically and returns:
@@ -86,20 +88,15 @@ type GitHubConfigInput struct {
 //   - (nil, error)      when only some fields are set: deployment is misconfigured
 //
 // The all-or-nothing check prevents the silent-disable footgun where setting
-// three of four env vars (e.g. forgetting GRAM_PLUGINS_GITHUB_APP_ID) leaves
-// the deployment running with publishing inexplicably off.
+// two of three inputs (e.g. forgetting GRAM_PLUGINS_GITHUB_ORG) leaves the
+// deployment running with publishing inexplicably off.
 func NewGitHubConfig(in GitHubConfigInput) (*GitHubConfig, error) {
 	set := 0
 	missing := []string{}
-	if in.AppID != 0 {
+	if in.Client != nil {
 		set++
 	} else {
-		missing = append(missing, "plugins-github-app-id")
-	}
-	if in.PrivateKey != "" {
-		set++
-	} else {
-		missing = append(missing, "plugins-github-private-key")
+		missing = append(missing, "plugins-github-client")
 	}
 	if in.Org != "" {
 		set++
@@ -115,18 +112,14 @@ func NewGitHubConfig(in GitHubConfigInput) (*GitHubConfig, error) {
 	switch set {
 	case 0:
 		return nil, nil
-	case 4:
-		client, err := ghclient.NewClient(in.AppID, []byte(in.PrivateKey), in.HTTPClient)
-		if err != nil {
-			return nil, fmt.Errorf("create github client: %w", err)
-		}
+	case 3:
 		return &GitHubConfig{
-			Client:         client,
+			Client:         in.Client,
 			Org:            in.Org,
 			InstallationID: in.InstallationID,
 		}, nil
 	default:
-		return nil, fmt.Errorf("plugin github publishing requires all of plugins-github-app-id, plugins-github-private-key, plugins-github-org, plugins-github-installation-id; missing: %s", strings.Join(missing, ", "))
+		return nil, fmt.Errorf("plugin github publishing requires client, plugins-github-org, plugins-github-installation-id; missing: %s", strings.Join(missing, ", "))
 	}
 }
 
@@ -1037,11 +1030,12 @@ func (s *Service) GetPublishStatus(ctx context.Context, payload *gen.GetPublishS
 	}
 
 	result := &gen.PublishStatusResult{
-		Configured: s.github != nil,
-		Connected:  false,
-		RepoOwner:  nil,
-		RepoName:   nil,
-		RepoURL:    nil,
+		Configured:     s.github != nil,
+		Connected:      false,
+		RepoOwner:      nil,
+		RepoName:       nil,
+		RepoURL:        nil,
+		MarketplaceURL: nil,
 	}
 
 	if s.github != nil {
@@ -1055,6 +1049,10 @@ func (s *Service) GetPublishStatus(ctx context.Context, payload *gen.GetPublishS
 			result.RepoName = &conn.RepoName
 			repoURL := fmt.Sprintf("https://github.com/%s/%s", conn.RepoOwner, conn.RepoName)
 			result.RepoURL = &repoURL
+			if conn.MarketplaceToken.Valid && s.serverURL != "" {
+				marketplaceURL := fmt.Sprintf("%s%sm/%s/marketplace.json", s.serverURL, marketplace.RoutePrefix, conn.MarketplaceToken.String)
+				result.MarketplaceURL = &marketplaceURL
+			}
 		}
 	}
 
@@ -1251,11 +1249,20 @@ func (s *Service) persistPluginAPIKeys(
 		}
 	}
 
+	// Mint a candidate marketplace token for first-time publishes. The upsert
+	// preserves any existing token via COALESCE, so passing a fresh value on
+	// every publish never overwrites a token that's already minted — token
+	// rotation goes through a dedicated path.
+	candidateToken, err := generateMarketplaceToken()
+	if err != nil {
+		return fmt.Errorf("generate marketplace token: %w", err)
+	}
 	if _, err := s.repo.WithTx(tx).UpsertGitHubConnection(ctx, repo.UpsertGitHubConnectionParams{
-		ProjectID:      *ac.ProjectID,
-		InstallationID: s.github.InstallationID,
-		RepoOwner:      repoOwner,
-		RepoName:       repoName,
+		ProjectID:        *ac.ProjectID,
+		InstallationID:   s.github.InstallationID,
+		RepoOwner:        repoOwner,
+		RepoName:         repoName,
+		MarketplaceToken: pgtype.Text{String: candidateToken, Valid: true},
 	}); err != nil {
 		return fmt.Errorf("upsert github connection: %w", err)
 	}

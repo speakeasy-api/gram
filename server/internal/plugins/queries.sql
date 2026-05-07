@@ -137,12 +137,25 @@ SELECT *
 FROM plugin_github_connections
 WHERE project_id = @project_id;
 
+-- name: GetGitHubConnectionByMarketplaceToken :one
+-- Resolves a marketplace proxy URL token to the upstream connection. The token
+-- is the auth credential — there's no project scope to apply ahead of it.
+SELECT *
+FROM plugin_github_connections
+WHERE marketplace_token = @marketplace_token;
+
 -- name: UpsertGitHubConnection :one
-INSERT INTO plugin_github_connections (project_id, installation_id, repo_owner, repo_name)
-VALUES (@project_id, @installation_id, @repo_owner, @repo_name)
+-- Inserts or refreshes a project's GitHub connection. The marketplace_token
+-- argument is the candidate token to use if no token is currently set; on
+-- conflict the existing token is preserved via COALESCE so callers can pass a
+-- freshly-generated token on every publish without overwriting prior state.
+-- Token rotation goes through a separate query.
+INSERT INTO plugin_github_connections (project_id, installation_id, repo_owner, repo_name, marketplace_token)
+VALUES (@project_id, @installation_id, @repo_owner, @repo_name, @marketplace_token)
 ON CONFLICT (project_id) DO UPDATE
   SET installation_id = EXCLUDED.installation_id,
       repo_owner = EXCLUDED.repo_owner,
       repo_name = EXCLUDED.repo_name,
+      marketplace_token = COALESCE(plugin_github_connections.marketplace_token, EXCLUDED.marketplace_token),
       updated_at = clock_timestamp()
 RETURNING *;

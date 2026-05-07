@@ -23,3 +23,54 @@ export function reasonLabel(reason: Reason): string {
       return "Access allowed via a development override.";
   }
 }
+
+/**
+ * Filter challenges by principal and scope. When a filter is "all", it is
+ * not applied — all challenges pass through.
+ */
+export function scopeChallenges(
+  challenges: AuthzChallenge[],
+  principalFilter: string,
+  scopeFilter: string,
+): AuthzChallenge[] {
+  let base = challenges;
+  if (principalFilter !== "all") {
+    base = base.filter(
+      (c) => (c.userEmail ?? c.principalUrn) === principalFilter,
+    );
+  }
+  if (scopeFilter !== "all") {
+    base = base.filter((c) => c.scope === scopeFilter);
+  }
+  return base;
+}
+
+export type ChallengeCounts = {
+  all: number;
+  deny: number;
+  allow: number;
+  resolved: number;
+};
+
+/**
+ * Compute pill counts from a list of challenges.
+ * Resolved challenges are counted separately regardless of outcome.
+ */
+export function countChallenges(challenges: AuthzChallenge[]): ChallengeCounts {
+  const c: ChallengeCounts = {
+    all: challenges.length,
+    deny: 0,
+    allow: 0,
+    resolved: 0,
+  };
+  for (const ch of challenges) {
+    if (ch.resolvedAt) {
+      c.resolved++;
+    } else if (ch.outcome === "deny") {
+      c.deny++;
+    } else {
+      c.allow++;
+    }
+  }
+  return c;
+}

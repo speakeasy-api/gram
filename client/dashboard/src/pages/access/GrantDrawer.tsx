@@ -85,7 +85,9 @@ export function GrantDrawer({
             principalUrn: challenge.principalUrn,
             scope: challenge.scope,
             resolutionType: ResolveChallengeFormResolutionType.RoleAssigned,
-            roleSlug: toRoleSlug(selectedRole.name),
+            roleSlug: selectedRole.isSystem
+              ? selectedRole.name.toLowerCase()
+              : toRoleSlug(selectedRole.name),
             resourceKind: challenge.resourceKind,
             resourceId: challenge.resourceId,
           },

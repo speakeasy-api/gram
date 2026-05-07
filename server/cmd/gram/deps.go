@@ -417,6 +417,7 @@ func newBillingProvider(
 		catalog := &polar.Catalog{
 			ProductIDBase:    c.String("polar-product-id-free"),
 			ProductIDPro:     c.String("polar-product-id-pro"),
+			ProductIDsTopUp:  c.StringSlice("polar-product-ids-topup"),
 			MeterIDToolCalls: c.String("polar-meter-id-tool-calls"),
 			MeterIDServers:   c.String("polar-meter-id-servers"),
 			MeterIDCredits:   c.String("polar-meter-id-credits"),

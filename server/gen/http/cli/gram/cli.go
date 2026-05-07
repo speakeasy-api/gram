@@ -98,7 +98,7 @@ func UsageCommands() []string {
 		"tools list-tools",
 		"toolsets (create-toolset|list-toolsets|list-toolsets-for-org|update-toolset|delete-toolset|get-toolset|check-mcp-slug-availability|clone-toolset|add-externaloauth-server|removeoauth-server|addoauth-proxy-server|updateoauth-proxy-server)",
 		"triggers (list-trigger-definitions|list-trigger-instances|get-trigger-instance|create-trigger-instance|update-trigger-instance|delete-trigger-instance|pause-trigger-instance|resume-trigger-instance)",
-		"usage (get-period-usage|get-usage-tiers|create-customer-session|create-checkout)",
+		"usage (get-period-usage|get-usage-tiers|create-customer-session|create-checkout|create-top-up-checkout)",
 		"variations (upsert-global|delete-global|list-global)",
 	}
 }
@@ -1321,6 +1321,9 @@ func ParseEndpoint(
 		usageCreateCheckoutFlags            = flag.NewFlagSet("create-checkout", flag.ExitOnError)
 		usageCreateCheckoutSessionTokenFlag = usageCreateCheckoutFlags.String("session-token", "", "")
 
+		usageCreateTopUpCheckoutFlags            = flag.NewFlagSet("create-top-up-checkout", flag.ExitOnError)
+		usageCreateTopUpCheckoutSessionTokenFlag = usageCreateTopUpCheckoutFlags.String("session-token", "", "")
+
 		variationsFlags = flag.NewFlagSet("variations", flag.ContinueOnError)
 
 		variationsUpsertGlobalFlags                = flag.NewFlagSet("upsert-global", flag.ExitOnError)
@@ -1625,6 +1628,7 @@ func ParseEndpoint(
 	usageGetUsageTiersFlags.Usage = usageGetUsageTiersUsage
 	usageCreateCustomerSessionFlags.Usage = usageCreateCustomerSessionUsage
 	usageCreateCheckoutFlags.Usage = usageCreateCheckoutUsage
+	usageCreateTopUpCheckoutFlags.Usage = usageCreateTopUpCheckoutUsage
 
 	variationsFlags.Usage = variationsUsage
 	variationsUpsertGlobalFlags.Usage = variationsUpsertGlobalUsage
@@ -2519,6 +2523,9 @@ func ParseEndpoint(
 			case "create-checkout":
 				epf = usageCreateCheckoutFlags
 
+			case "create-top-up-checkout":
+				epf = usageCreateTopUpCheckoutFlags
+
 			}
 
 		case "variations":
@@ -3344,6 +3351,9 @@ func ParseEndpoint(
 			case "create-checkout":
 				endpoint = c.CreateCheckout()
 				data, err = usagec.BuildCreateCheckoutPayload(*usageCreateCheckoutSessionTokenFlag)
+			case "create-top-up-checkout":
+				endpoint = c.CreateTopUpCheckout()
+				data, err = usagec.BuildCreateTopUpCheckoutPayload(*usageCreateTopUpCheckoutSessionTokenFlag)
 			}
 		case "variations":
 			c := variationsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -8628,6 +8638,7 @@ func usageUsage() {
 	fmt.Fprintln(os.Stderr, `    get-usage-tiers: Get the usage tiers`)
 	fmt.Fprintln(os.Stderr, `    create-customer-session: Create a customer session for the user`)
 	fmt.Fprintln(os.Stderr, `    create-checkout: Create a checkout link for upgrading to the business plan`)
+	fmt.Fprintln(os.Stderr, `    create-top-up-checkout: Create a checkout link for a one-time credit top-up purchase`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s usage COMMAND --help\n", os.Args[0])
@@ -8700,6 +8711,24 @@ func usageCreateCheckoutUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "usage create-checkout --session-token \"abc123\"")
+}
+
+func usageCreateTopUpCheckoutUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] usage create-top-up-checkout", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Create a checkout link for a one-time credit top-up purchase`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "usage create-top-up-checkout --session-token \"abc123\"")
 }
 
 // variationsUsage displays the usage of the variations command and its

@@ -23,6 +23,7 @@ type Server struct {
 	GetUsageTiers         http.Handler
 	CreateCustomerSession http.Handler
 	CreateCheckout        http.Handler
+	CreateTopUpCheckout   http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -56,11 +57,13 @@ func New(
 			{"GetUsageTiers", "GET", "/rpc/usage.getUsageTiers"},
 			{"CreateCustomerSession", "POST", "/rpc/usage.createCustomerSession"},
 			{"CreateCheckout", "POST", "/rpc/usage.createCheckout"},
+			{"CreateTopUpCheckout", "POST", "/rpc/usage.createTopUpCheckout"},
 		},
 		GetPeriodUsage:        NewGetPeriodUsageHandler(e.GetPeriodUsage, mux, decoder, encoder, errhandler, formatter),
 		GetUsageTiers:         NewGetUsageTiersHandler(e.GetUsageTiers, mux, decoder, encoder, errhandler, formatter),
 		CreateCustomerSession: NewCreateCustomerSessionHandler(e.CreateCustomerSession, mux, decoder, encoder, errhandler, formatter),
 		CreateCheckout:        NewCreateCheckoutHandler(e.CreateCheckout, mux, decoder, encoder, errhandler, formatter),
+		CreateTopUpCheckout:   NewCreateTopUpCheckoutHandler(e.CreateTopUpCheckout, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -73,6 +76,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.GetUsageTiers = m(s.GetUsageTiers)
 	s.CreateCustomerSession = m(s.CreateCustomerSession)
 	s.CreateCheckout = m(s.CreateCheckout)
+	s.CreateTopUpCheckout = m(s.CreateTopUpCheckout)
 }
 
 // MethodNames returns the methods served.
@@ -84,6 +88,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountGetUsageTiersHandler(mux, h.GetUsageTiers)
 	MountCreateCustomerSessionHandler(mux, h.CreateCustomerSession)
 	MountCreateCheckoutHandler(mux, h.CreateCheckout)
+	MountCreateTopUpCheckoutHandler(mux, h.CreateTopUpCheckout)
 }
 
 // Mount configures the mux to serve the usage endpoints.
@@ -273,6 +278,59 @@ func NewCreateCheckoutHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "createCheckout")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "usage")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountCreateTopUpCheckoutHandler configures the mux to serve the "usage"
+// service "createTopUpCheckout" endpoint.
+func MountCreateTopUpCheckoutHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/usage.createTopUpCheckout", f)
+}
+
+// NewCreateTopUpCheckoutHandler creates a HTTP handler which loads the HTTP
+// request and calls the "usage" service "createTopUpCheckout" endpoint.
+func NewCreateTopUpCheckoutHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeCreateTopUpCheckoutRequest(mux, decoder)
+		encodeResponse = EncodeCreateTopUpCheckoutResponse(encoder)
+		encodeError    = EncodeCreateTopUpCheckoutError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "createTopUpCheckout")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "usage")
 		payload, err := decodeRequest(r)
 		if err != nil {

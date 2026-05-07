@@ -1,19 +1,25 @@
+import { TopUpCTA, UsageProgress } from "@/components/billing/usage-controls";
 import { Page } from "@/components/page-layout";
+import { RequireScope } from "@/components/require-scope";
 import { Card, Cards } from "@/components/ui/card";
 import { MoreActions } from "@/components/ui/more-actions";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { UpdatedAt } from "@/components/updated-at";
+import { useProductTier } from "@/hooks/useProductTier";
 import { useRoutes } from "@/routes";
 import { Assistant } from "@gram/client/models/components/assistant.js";
 import {
   invalidateAllAssistantsList,
   useAssistantsDeleteMutation,
   useAssistantsList,
+  useGetPeriodUsage,
 } from "@gram/client/react-query/index.js";
 import { Button, Icon, Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
-import { Plus } from "lucide-react";
+import { Info, Plus } from "lucide-react";
 import { Outlet } from "react-router";
 
 export function AssistantsRoot() {
@@ -100,8 +106,57 @@ export default function AssistantsIndex() {
       <Page.Header>
         <Page.Header.Breadcrumbs />
       </Page.Header>
-      <Page.Body>{content}</Page.Body>
+      <Page.Body>
+        <UsageSection />
+        {content}
+      </Page.Body>
     </Page>
+  );
+}
+
+function UsageSection() {
+  const productTier = useProductTier();
+  const { data: periodUsage, isError } = useGetPeriodUsage(
+    undefined,
+    undefined,
+    { throwOnError: false },
+  );
+
+  if (isError) return null;
+
+  return (
+    <Page.Section>
+      <Page.Section.Title>Assistant Credits</Page.Section.Title>
+      <Page.Section.Description>
+        Credits consumed by assistant runs this billing period. Each turn debits
+        credits based on the underlying model's cost.
+      </Page.Section.Description>
+      <RequireScope scope="org:admin" level="section">
+        <TopUpCTA />
+      </RequireScope>
+      <Page.Section.Body>
+        <Stack gap={3} className="mb-6">
+          <Stack direction="horizontal" align="center" gap={1}>
+            <Type variant="body" className="font-medium">
+              Credits
+            </Type>
+            <SimpleTooltip tooltip="Credits track model usage across assistants and chat. 1 credit ≈ $1 of model cost.">
+              <Info className="text-muted-foreground h-4 w-4" />
+            </SimpleTooltip>
+          </Stack>
+          {periodUsage ? (
+            <UsageProgress
+              value={periodUsage.credits}
+              included={periodUsage.includedCredits || 1}
+              overageIncrement={periodUsage.includedCredits || 1}
+              noMax={productTier === "enterprise"}
+            />
+          ) : (
+            <Skeleton className="h-4 w-full" />
+          )}
+        </Stack>
+      </Page.Section.Body>
+    </Page.Section>
   );
 }
 

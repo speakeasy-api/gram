@@ -18,6 +18,10 @@ export type PublishStatusResult = {
    */
   connected: boolean;
   /**
+   * URL-based Claude Code marketplace install URL — the value to pass to `/plugin marketplace add`. Present once a marketplace token has been minted, which happens automatically on the first publish.
+   */
+  marketplaceUrl?: string | undefined;
+  /**
    * GitHub repo name, if connected.
    */
   repoName?: string | undefined;
@@ -39,12 +43,14 @@ export const PublishStatusResult$inboundSchema: z.ZodMiniType<
   z.object({
     configured: z.boolean(),
     connected: z.boolean(),
+    marketplace_url: z.optional(z.string()),
     repo_name: z.optional(z.string()),
     repo_owner: z.optional(z.string()),
     repo_url: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
+      "marketplace_url": "marketplaceUrl",
       "repo_name": "repoName",
       "repo_owner": "repoOwner",
       "repo_url": "repoUrl",

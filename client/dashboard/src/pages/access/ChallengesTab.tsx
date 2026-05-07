@@ -18,6 +18,7 @@ import {
 import { Check } from "lucide-react";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
+import { countChallenges, scopeChallenges } from "./challengeHelpers";
 import { useChallengeRowColumns } from "./useChallengeRowColumns";
 import { useGrantFlow } from "./useGrantFlow";
 
@@ -99,6 +100,14 @@ export function ChallengesTab() {
   const [principalFilter, setPrincipalFilter] = useState(
     searchParams.get("identity") ?? "all",
   );
+
+  // Sync principalFilter during render when URL param changes (no stale frame).
+  const prevIdentityRef = useRef(searchParams.get("identity"));
+  const identity = searchParams.get("identity");
+  if (identity !== prevIdentityRef.current) {
+    prevIdentityRef.current = identity;
+    setPrincipalFilter(identity ?? "all");
+  }
   const [scopeFilter, setScopeFilter] = useState("all");
   const groupSiblingIdsRef = useRef<Map<string, string[]>>(new Map());
   const getGroupChallengeIds = useCallback(
@@ -118,19 +127,15 @@ export function ChallengesTab() {
     [data?.challenges],
   );
 
-  const counts = useMemo(() => {
-    const c = { all: challenges.length, deny: 0, allow: 0, resolved: 0 };
-    for (const ch of challenges) {
-      if (ch.resolvedAt) {
-        c.resolved++;
-      } else if (ch.outcome === "deny") {
-        c.deny++;
-      } else {
-        c.allow++;
-      }
-    }
-    return c;
-  }, [challenges]);
+  const scopedChallenges = useMemo(
+    () => scopeChallenges(challenges, principalFilter, scopeFilter),
+    [challenges, principalFilter, scopeFilter],
+  );
+
+  const counts = useMemo(
+    () => countChallenges(scopedChallenges),
+    [scopedChallenges],
+  );
 
   const uniquePrincipals = useMemo(() => {
     const set = new Set(challenges.map((c) => c.userEmail ?? c.principalUrn));
@@ -155,7 +160,7 @@ export function ChallengesTab() {
   }, []);
 
   const { filtered, groupCounts, groupKeys } = useMemo(() => {
-    let base = challenges;
+    let base = scopedChallenges;
     if (outcomeFilter === "resolved") {
       base = base.filter(
         (c) => !!c.resolvedAt && !recentlyResolvedIds.has(c.id),
@@ -166,14 +171,6 @@ export function ChallengesTab() {
           (c.outcome === outcomeFilter && !c.resolvedAt) ||
           recentlyResolvedIds.has(c.id),
       );
-    }
-    if (principalFilter !== "all") {
-      base = base.filter(
-        (c) => (c.userEmail ?? c.principalUrn) === principalFilter,
-      );
-    }
-    if (scopeFilter !== "all") {
-      base = base.filter((c) => c.scope === scopeFilter);
     }
     const sorted = [...base].sort((a, b) => {
       const order = (o: Outcome) => (o === "deny" ? 0 : o === "error" ? 1 : 2);
@@ -211,20 +208,14 @@ export function ChallengesTab() {
     }
     groupSiblingIdsRef.current = siblingIds;
     return { filtered: result, groupCounts: counts, groupKeys: keys };
-  }, [
-    challenges,
-    outcomeFilter,
-    principalFilter,
-    scopeFilter,
-    recentlyResolvedIds,
-    expandedGroups,
-  ]);
+  }, [scopedChallenges, outcomeFilter, recentlyResolvedIds, expandedGroups]);
 
   const challengeRowColumns = useChallengeRowColumns(
     animatingOutIds,
     groupCounts,
     groupKeys,
     toggleGroup,
+    outcomeFilter,
   );
 
   const columns: Column<AuthzChallenge>[] = [
@@ -292,8 +283,8 @@ export function ChallengesTab() {
         <SkeletonTable />
       ) : filtered.length === 0 ? (
         <div className="border-border/50 bg-muted/20 rounded-lg border px-6 py-16 text-center">
-          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900/30">
-            <Check className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
+          <div className="bg-primary/10 mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full">
+            <Check className="text-primary h-6 w-6" />
           </div>
           <Type variant="body" className="font-medium">
             {outcomeFilter === "deny"
