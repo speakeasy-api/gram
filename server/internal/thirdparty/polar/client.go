@@ -575,12 +575,22 @@ func (p *Client) extractCustomerTier(ctx context.Context, customerState *polarCo
 	if fields != nil {
 		// Active enterprise subscriptions return earlier with the enterprise flag in the DB
 		if len(fields.ActiveSubscriptions) >= 1 {
-			if len(fields.ActiveSubscriptions) > 1 {
-				p.logger.ErrorContext(ctx, "multiple active subscriptions found", attr.SlogOrganizationID(fields.OrganizationID))
+			// Scan every active subscription rather than indexing into [0] —
+			// the assistants signup grant lingers in ActiveSubscriptions for the
+			// remainder of the billing period (cancel_at_period_end), so a
+			// later Pro upgrade would otherwise be masked when the assistants
+			// sub happens to be returned first.
+			hasBaseTier := false
+			for _, sub := range fields.ActiveSubscriptions {
+				if sub.ProductID == p.catalog.ProductIDPro {
+					return new(billing.TierPro), true, nil
+				}
+				if sub.ProductID == p.catalog.ProductIDBase ||
+					(p.catalog.ProductIDAssistants != "" && sub.ProductID == p.catalog.ProductIDAssistants) {
+					hasBaseTier = true
+				}
 			}
-			activeSubscription := fields.ActiveSubscriptions[0]
-			if activeSubscription.ProductID == p.catalog.ProductIDBase ||
-				(p.catalog.ProductIDAssistants != "" && activeSubscription.ProductID == p.catalog.ProductIDAssistants) {
+			if hasBaseTier {
 				return new(billing.TierBase), true, nil
 			}
 			// Fallback case for old accounts
