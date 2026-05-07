@@ -15,17 +15,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/repo"
-)
-
-const (
-	defaultListLimit = 50
-	maxListLimit     = 100
 )
 
 // Creates an issuer. authn_challenge_mode is "chain" (the issuer
@@ -93,16 +89,13 @@ func (s *Service) UpdateUserSessionIssuer(ctx context.Context, payload *gen.Upda
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
 	id, err := uuid.Parse(payload.ID)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid issuer id").Log(ctx, s.logger)
-	}
-
-	if err := s.authz.RequireAny(ctx,
-		authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil},
-		authz.Check{Scope: authz.ScopeMCPWrite, ResourceKind: "", ResourceID: id.String(), Dimensions: nil},
-	); err != nil {
-		return nil, err
 	}
 
 	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
@@ -224,6 +217,10 @@ func (s *Service) GetUserSessionIssuer(ctx context.Context, payload *gen.GetUser
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
 	hasID := payload.ID != nil && *payload.ID != ""
 	hasSlug := payload.Slug != nil && *payload.Slug != ""
 	if hasID == hasSlug {
@@ -237,13 +234,6 @@ func (s *Service) GetUserSessionIssuer(ctx context.Context, payload *gen.GetUser
 			return nil, oops.E(oops.CodeBadRequest, err, "invalid issuer id").Log(ctx, s.logger)
 		}
 
-		if err := s.authz.RequireAny(ctx,
-			authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil},
-			authz.Check{Scope: authz.ScopeMCPRead, ResourceKind: "", ResourceID: id.String(), Dimensions: nil},
-		); err != nil {
-			return nil, err
-		}
-
 		row, err = repo.New(s.db).GetUserSessionIssuerByID(ctx, repo.GetUserSessionIssuerByIDParams{
 			ID:        id,
 			ProjectID: *authCtx.ProjectID,
@@ -255,8 +245,6 @@ func (s *Service) GetUserSessionIssuer(ctx context.Context, payload *gen.GetUser
 			return nil, oops.E(oops.CodeUnexpected, err, "get user session issuer").Log(ctx, s.logger)
 		}
 	} else {
-		// Resolve slug first, then enforce the read scope on the resolved id
-		// so per-issuer grants gate slug lookups too.
 		var err error
 		row, err = repo.New(s.db).GetUserSessionIssuerBySlug(ctx, repo.GetUserSessionIssuerBySlugParams{
 			Slug:      *payload.Slug,
@@ -267,13 +255,6 @@ func (s *Service) GetUserSessionIssuer(ctx context.Context, payload *gen.GetUser
 				return nil, oops.E(oops.CodeNotFound, err, "user session issuer not found").Log(ctx, s.logger)
 			}
 			return nil, oops.E(oops.CodeUnexpected, err, "get user session issuer").Log(ctx, s.logger)
-		}
-
-		if err := s.authz.RequireAny(ctx,
-			authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil},
-			authz.Check{Scope: authz.ScopeMCPRead, ResourceKind: "", ResourceID: row.ID.String(), Dimensions: nil},
-		); err != nil {
-			return nil, err
 		}
 	}
 
@@ -288,16 +269,13 @@ func (s *Service) DeleteUserSessionIssuer(ctx context.Context, payload *gen.Dele
 		return oops.C(oops.CodeUnauthorized)
 	}
 
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+		return err
+	}
+
 	id, err := uuid.Parse(payload.ID)
 	if err != nil {
 		return oops.E(oops.CodeBadRequest, err, "invalid issuer id").Log(ctx, s.logger)
-	}
-
-	if err := s.authz.RequireAny(ctx,
-		authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil},
-		authz.Check{Scope: authz.ScopeMCPWrite, ResourceKind: "", ResourceID: id.String(), Dimensions: nil},
-	); err != nil {
-		return err
 	}
 
 	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
@@ -321,43 +299,12 @@ func (s *Service) DeleteUserSessionIssuer(ctx context.Context, payload *gen.Dele
 		return oops.E(oops.CodeUnexpected, err, "delete user session issuer").Log(ctx, logger)
 	}
 
-	// Cascade: soft-delete every dependent user_session and emit an audit
-	// event per affected row before the parent event.
-	deletedSessions, err := txRepo.SoftDeleteUserSessionsByIssuerID(ctx, deleted.ID)
-	if err != nil {
+	if _, err := txRepo.SoftDeleteUserSessionsByIssuerID(ctx, deleted.ID); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "delete child user sessions").Log(ctx, logger)
 	}
-	for _, sess := range deletedSessions {
-		if err := audit.LogUserSessionRevoke(ctx, dbtx, audit.LogUserSessionRevokeEvent{
-			OrganizationID:   authCtx.ActiveOrganizationID,
-			ProjectID:        *authCtx.ProjectID,
-			Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
-			ActorDisplayName: authCtx.Email,
-			ActorSlug:        nil,
-			UserSessionURN:   urn.NewUserSession(sess.ID),
-			Principal:        sess.SubjectUrn,
-			Jti:              sess.Jti,
-		}); err != nil {
-			return oops.E(oops.CodeUnexpected, err, "log user session revocation").Log(ctx, logger)
-		}
-	}
 
-	deletedConsents, err := txRepo.SoftDeleteUserSessionConsentsByIssuerID(ctx, deleted.ID)
-	if err != nil {
+	if _, err := txRepo.SoftDeleteUserSessionConsentsByIssuerID(ctx, deleted.ID); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "delete child user session consents").Log(ctx, logger)
-	}
-	for _, c := range deletedConsents {
-		if err := audit.LogUserSessionConsentRevoke(ctx, dbtx, audit.LogUserSessionConsentRevokeEvent{
-			OrganizationID:        authCtx.ActiveOrganizationID,
-			ProjectID:             *authCtx.ProjectID,
-			Actor:                 urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
-			ActorDisplayName:      authCtx.Email,
-			ActorSlug:             nil,
-			UserSessionConsentURN: urn.NewUserSessionConsent(c.ID),
-			Principal:             c.SubjectUrn,
-		}); err != nil {
-			return oops.E(oops.CodeUnexpected, err, "log user session consent revocation").Log(ctx, logger)
-		}
 	}
 
 	if err := audit.LogUserSessionIssuerDelete(ctx, dbtx, audit.LogUserSessionIssuerDeleteEvent{
@@ -396,15 +343,15 @@ func userSessionIssuerView(row repo.UserSessionIssuer) *types.UserSessionIssuer 
 // returns it as an int32 ready for sqlc parameters. The clamp guarantees the
 // value stays within int32 range.
 func pageLimit(in *int) int32 {
-	limit := defaultListLimit
+	limit := constants.DefaultPageLimit
 	if in != nil {
 		limit = *in
 	}
 	if limit <= 0 {
-		limit = defaultListLimit
+		limit = constants.DefaultPageLimit
 	}
-	if limit > maxListLimit {
-		limit = maxListLimit
+	if limit > constants.MaxPageLimit {
+		limit = constants.MaxPageLimit
 	}
 	return int32(limit)
 }

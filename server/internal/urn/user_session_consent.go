@@ -9,6 +9,8 @@ import (
 	"github.com/google/uuid"
 )
 
+const userSessionConsentPrefix = "user_session_consent"
+
 type UserSessionConsent struct {
 	ID uuid.UUID
 
@@ -35,12 +37,12 @@ func ParseUserSessionConsent(value string) (UserSessionConsent, error) {
 
 	parts := strings.SplitN(value, delimiter, 2)
 	if len(parts) != 2 || parts[1] == "" || strings.Contains(parts[1], delimiter) {
-		return UserSessionConsent{}, fmt.Errorf("%w: expected two segments (user_session_consent:<uuid>)", ErrInvalid)
+		return UserSessionConsent{}, fmt.Errorf("%w: expected two segments (%s:<uuid>)", ErrInvalid, userSessionConsentPrefix)
 	}
 
-	if parts[0] != "user_session_consent" {
+	if parts[0] != userSessionConsentPrefix {
 		truncated := parts[0][:min(maxSegmentLength, len(parts[0]))]
-		return UserSessionConsent{}, fmt.Errorf("%w: expected user_session_consent urn (got: %q)", ErrInvalid, truncated)
+		return UserSessionConsent{}, fmt.Errorf("%w: expected %s urn (got: %q)", ErrInvalid, userSessionConsentPrefix, truncated)
 	}
 
 	id, err := uuid.Parse(parts[1])
@@ -56,7 +58,7 @@ func (u UserSessionConsent) IsZero() bool {
 }
 
 func (u UserSessionConsent) String() string {
-	return "user_session_consent" + delimiter + u.ID.String()
+	return userSessionConsentPrefix + delimiter + u.ID.String()
 }
 
 func (u UserSessionConsent) MarshalJSON() ([]byte, error) {

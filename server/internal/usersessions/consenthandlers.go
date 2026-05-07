@@ -63,6 +63,7 @@ func (s *Service) ListUserSessionConsents(ctx context.Context, payload *gen.List
 	for i, row := range rows {
 		items[i] = mv.BuildUserSessionConsentView(repo.UserSessionConsent{
 			ID:                  row.ID,
+			ProjectID:           row.ProjectID,
 			SubjectUrn:          row.SubjectUrn,
 			UserSessionClientID: row.UserSessionClientID,
 			RemoteSetHash:       row.RemoteSetHash,

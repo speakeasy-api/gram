@@ -78,6 +78,10 @@ func (s *Service) GetUserSessionClient(ctx context.Context, payload *gen.GetUser
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
 	id, err := uuid.Parse(payload.ID)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid client id").Log(ctx, s.logger)
@@ -94,12 +98,9 @@ func (s *Service) GetUserSessionClient(ctx context.Context, payload *gen.GetUser
 		return nil, oops.E(oops.CodeUnexpected, err, "get user session client").Log(ctx, s.logger)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
-		return nil, err
-	}
-
 	return mv.BuildUserSessionClientView(repo.UserSessionClient{
 		ID:                    row.ID,
+		ProjectID:             row.ProjectID,
 		UserSessionIssuerID:   row.UserSessionIssuerID,
 		ClientID:              row.ClientID,
 		ClientSecretHash:      row.ClientSecretHash,
@@ -122,6 +123,10 @@ func (s *Service) RevokeUserSessionClient(ctx context.Context, payload *gen.Revo
 		return oops.C(oops.CodeUnauthorized)
 	}
 
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+		return err
+	}
+
 	id, err := uuid.Parse(payload.ID)
 	if err != nil {
 		return oops.E(oops.CodeBadRequest, err, "invalid client id").Log(ctx, s.logger)
@@ -137,10 +142,6 @@ func (s *Service) RevokeUserSessionClient(ctx context.Context, payload *gen.Revo
 
 	txRepo := repo.New(dbtx)
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
-		return err
-	}
-
 	revoked, err := txRepo.RevokeUserSessionClient(ctx, repo.RevokeUserSessionClientParams{
 		ID:        id,
 		ProjectID: *authCtx.ProjectID,
@@ -152,25 +153,8 @@ func (s *Service) RevokeUserSessionClient(ctx context.Context, payload *gen.Revo
 		return oops.E(oops.CodeUnexpected, err, "revoke user session client").Log(ctx, logger)
 	}
 
-	// Cascade: soft-delete every dependent user_session and emit an audit
-	// event per affected row before the parent event.
-	deletedSessions, err := txRepo.SoftDeleteUserSessionsByClientID(ctx, uuid.NullUUID{UUID: revoked.ID, Valid: true})
-	if err != nil {
+	if _, err := txRepo.SoftDeleteUserSessionsByClientID(ctx, uuid.NullUUID{UUID: revoked.ID, Valid: true}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "delete child user sessions").Log(ctx, logger)
-	}
-	for _, sess := range deletedSessions {
-		if err := audit.LogUserSessionRevoke(ctx, dbtx, audit.LogUserSessionRevokeEvent{
-			OrganizationID:   authCtx.ActiveOrganizationID,
-			ProjectID:        *authCtx.ProjectID,
-			Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
-			ActorDisplayName: authCtx.Email,
-			ActorSlug:        nil,
-			UserSessionURN:   urn.NewUserSession(sess.ID),
-			Principal:        sess.SubjectUrn,
-			Jti:              sess.Jti,
-		}); err != nil {
-			return oops.E(oops.CodeUnexpected, err, "log user session revocation").Log(ctx, logger)
-		}
 	}
 
 	if err := audit.LogUserSessionClientRevoke(ctx, dbtx, audit.LogUserSessionClientRevokeEvent{

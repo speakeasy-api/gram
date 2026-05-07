@@ -9,6 +9,8 @@ import (
 	"github.com/google/uuid"
 )
 
+const userSessionClientPrefix = "user_session_client"
+
 type UserSessionClient struct {
 	ID uuid.UUID
 
@@ -35,12 +37,12 @@ func ParseUserSessionClient(value string) (UserSessionClient, error) {
 
 	parts := strings.SplitN(value, delimiter, 2)
 	if len(parts) != 2 || parts[1] == "" || strings.Contains(parts[1], delimiter) {
-		return UserSessionClient{}, fmt.Errorf("%w: expected two segments (user_session_client:<uuid>)", ErrInvalid)
+		return UserSessionClient{}, fmt.Errorf("%w: expected two segments (%s:<uuid>)", ErrInvalid, userSessionClientPrefix)
 	}
 
-	if parts[0] != "user_session_client" {
+	if parts[0] != userSessionClientPrefix {
 		truncated := parts[0][:min(maxSegmentLength, len(parts[0]))]
-		return UserSessionClient{}, fmt.Errorf("%w: expected user_session_client urn (got: %q)", ErrInvalid, truncated)
+		return UserSessionClient{}, fmt.Errorf("%w: expected %s urn (got: %q)", ErrInvalid, userSessionClientPrefix, truncated)
 	}
 
 	id, err := uuid.Parse(parts[1])
@@ -56,7 +58,7 @@ func (u UserSessionClient) IsZero() bool {
 }
 
 func (u UserSessionClient) String() string {
-	return "user_session_client" + delimiter + u.ID.String()
+	return userSessionClientPrefix + delimiter + u.ID.String()
 }
 
 func (u UserSessionClient) MarshalJSON() ([]byte, error) {
