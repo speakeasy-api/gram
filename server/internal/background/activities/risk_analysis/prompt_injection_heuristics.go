@@ -36,7 +36,19 @@ var (
 	heuristicRules    []heuristicRule
 	overrideKeywords  []string // precomputed combinatorial bank, lowercased
 	delimiterPatterns *regexp.Regexp
-	jailbreakPersonas = []string{"DAN", "STAN", "AIM", "Developer Mode"}
+	// jailbreakPersonas pairs each persona with its word-boundary regex.
+	// Substring match would false-positive on "assistant" (STAN), "claims"
+	// (AIM), "standard" (STAN), German "dankbar" (DAN); the boundaries make
+	// the short tokens precise without losing whole-token matches.
+	jailbreakPersonas = []struct {
+		label   string
+		pattern *regexp.Regexp
+	}{
+		{label: "DAN", pattern: regexp.MustCompile(`(?i)\bDAN\b`)},
+		{label: "STAN", pattern: regexp.MustCompile(`(?i)\bSTAN\b`)},
+		{label: "AIM", pattern: regexp.MustCompile(`(?i)\bAIM\b`)},
+		{label: "Developer Mode", pattern: regexp.MustCompile(`(?i)\bDeveloper\s+Mode\b`)},
+	}
 )
 
 func init() {
@@ -233,23 +245,21 @@ func detectDelimiterInjection(text string) []Finding {
 	}}
 }
 
-// detectJailbreakPersonas matches well-known jailbreak handles by exact
-// case-insensitive substring; intentional false-positive risk is low
-// because these tokens are rare in legitimate text.
+// detectJailbreakPersonas matches well-known jailbreak handles using
+// word-boundary regex so the short tokens (DAN, STAN, AIM) don't fire on
+// substrings inside legitimate words.
 func detectJailbreakPersonas(text string) []Finding {
-	lower := strings.ToLower(text)
-	for _, persona := range jailbreakPersonas {
-		needle := strings.ToLower(persona)
-		idx := strings.Index(lower, needle)
-		if idx < 0 {
+	for _, p := range jailbreakPersonas {
+		loc := p.pattern.FindStringIndex(text)
+		if loc == nil {
 			continue
 		}
 		return []Finding{{
 			RuleID:      "pi.jailbreak-persona",
-			Description: "Known jailbreak persona referenced: " + persona,
-			Match:       text[idx : idx+len(needle)],
-			StartPos:    idx,
-			EndPos:      idx + len(needle),
+			Description: "Known jailbreak persona referenced: " + p.label,
+			Match:       text[loc[0]:loc[1]],
+			StartPos:    loc[0],
+			EndPos:      loc[1],
 			Source:      SourcePromptInjection,
 			Confidence:  0.7,
 			Tags:        nil,

@@ -24,13 +24,7 @@ We commit deepset as-is rather than re-labeling per our own taxonomy because (a)
 
 ## Findings surfaced by the baseline run
 
-`pi.jailbreak-persona` is the only rule that produces FPs against this corpus. Substring match without word boundaries causes:
-
-- `dan` matches German `dankbar` ("grateful") and `danach` ("after").
-- `stan` matches `standard`, `assistant`, `understand`.
-- `aim` matches `claims`, `aimed`.
-
-This is a known limitation of the rule as written and not addressed in the PR that introduced this suite. Candidate fixes for follow-up: word-boundary regex, allowlist of carrier words, or restrict matching to text where the persona token appears alongside other jailbreak signals.
+The first baseline run surfaced one rule with FPs: `pi.jailbreak-persona`, which used plain substring matching on `DAN` / `STAN` / `AIM` and so fired inside German `dankbar`, English `standard`, `assistant`, `claims`, etc. Resolved by switching the rule to word-boundary regex matching (`(?i)\bDAN\b` and friends). Worth re-checking if the persona list ever expands — short tokens with single-word boundaries can still collide with foreign-language vocabulary.
 
 ## Mutation set behavior
 

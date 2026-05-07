@@ -1,7 +1,7 @@
 {
-  "fp_rate_max": 0.01,
+  "fp_rate_max": 0,
   "recall_floor": null,
   "last_updated": "2026-05-07",
   "last_updated_by": "vishal@speakeasy.com",
-  "notes": "Baseline captured 2026-05-07 from heuristics-only detector. Measured FP-rate was 0.0093 (5 FPs across 539 benigns); floor set at 0.0100 with ~7%% slack. Floor is intentionally tight: any future change that adds even a couple of new false positives will require either fixing the regression or updating this floor with justification. recall_floor left null while the heuristic suite is still being tuned (see corpus_notes.md)."
+  "notes": "Tightened from 0.01 to 0 after switching pi.jailbreak-persona to word-boundary regex matching. The heuristics now produce zero false positives on this corpus (539 benigns). Any new FP fails CI. recall_floor stays null/soft."
 }
