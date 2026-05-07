@@ -1,4 +1,4 @@
-// WorkOS-shaped REST surface served by the local-speakeasy mode. Wire
+// WorkOS-shaped REST surface served by the mock-workos mode. Wire
 // shapes match workos-go/v6 SDK types (see workos_types.go) so Gram-side's
 // `*workos.Client` decodes our responses identically to api.workos.com.
 //
@@ -21,7 +21,7 @@
 //	POST   /authorization/organizations/{id}/roles
 //	PATCH  /authorization/organizations/{id}/roles/{slug}
 //	DELETE /authorization/organizations/{id}/roles/{slug}
-package localspeakeasy
+package mockworkos
 
 import (
 	"database/sql"

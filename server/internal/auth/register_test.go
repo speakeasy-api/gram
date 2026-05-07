@@ -21,6 +21,8 @@ func TestService_Register(t *testing.T) {
 		userInfo.Organizations = []MockOrganizationEntry{} // User has no organizations
 		ctx, instance := newTestAuthService(t, userInfo)
 
+		require.NoError(t, instance.createTestUser(ctx, userInfo))
+
 		// Create and store a session with no active organization
 		session := sessions.Session{
 			SessionID:            "test-session-id",
@@ -206,6 +208,8 @@ func TestService_Register(t *testing.T) {
 		userInfo := defaultMockUserInfo()
 		userInfo.Organizations = []MockOrganizationEntry{} // User has no organizations
 		ctx, instance := newTestAuthService(t, userInfo)
+
+		require.NoError(t, instance.createTestUser(ctx, userInfo))
 
 		// Create and store a session with no active organization
 		session := sessions.Session{

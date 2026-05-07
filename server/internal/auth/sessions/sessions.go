@@ -20,24 +20,21 @@ import (
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/pylon"
-	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	userRepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
 type Manager struct {
-	logger                 *slog.Logger
-	tracer                 trace.Tracer
-	sessionCache           cache.TypedCacheObject[Session]
-	userInfoCache          cache.TypedCacheObject[CachedUserInfo]
-	speakeasyServerAddress string
-	speakeasySecretKey     string
-	speakeasyClient        *guardian.HTTPClient
-	orgRepo                *orgRepo.Queries
-	userRepo               *userRepo.Queries
-	pylon                  *pylon.Pylon
-	posthog                *posthog.Posthog // posthog metrics will no-op if the dependency is not provided
-	billingRepo            billing.Repository
-	workos                 *workos.Client
+	logger        *slog.Logger
+	tracer        trace.Tracer
+	sessionCache  cache.TypedCacheObject[Session]
+	userInfoCache cache.TypedCacheObject[CachedUserInfo]
+	idpBaseURL    string
+	idpHTTPClient *guardian.HTTPClient
+	orgRepo       *orgRepo.Queries
+	userRepo      *userRepo.Queries
+	pylon         *pylon.Pylon
+	posthog       *posthog.Posthog // posthog metrics will no-op if the dependency is not provided
+	billingRepo   billing.Repository
 }
 
 func NewManager(
@@ -47,31 +44,27 @@ func NewManager(
 	db *pgxpool.Pool,
 	redisClient *redis.Client,
 	suffix cache.Suffix,
-	speakeasyServerAddress string,
-	speakeasySecretKey string,
+	idpBaseURL string,
 	pylon *pylon.Pylon,
 	posthog *posthog.Posthog,
 	billingRepo billing.Repository,
-	workos *workos.Client,
 ) *Manager {
 	logger = logger.With(attr.SlogComponent("sessions"))
-	speakeasyClient := guardianPolicy.PooledClient()
-	speakeasyClient.Timeout = 10 * time.Second
+	idpHTTPClient := guardianPolicy.PooledClient()
+	idpHTTPClient.Timeout = 10 * time.Second
 
 	return &Manager{
-		logger:                 logger.With(attr.SlogComponent("sessions")),
-		tracer:                 tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/auth/sessions"),
-		sessionCache:           cache.NewTypedObjectCache[Session](logger.With(attr.SlogCacheNamespace("session")), cache.NewRedisCacheAdapter(redisClient), cache.SuffixNone),
-		userInfoCache:          cache.NewTypedObjectCache[CachedUserInfo](logger.With(attr.SlogCacheNamespace("user_info")), cache.NewRedisCacheAdapter(redisClient), cache.SuffixNone),
-		speakeasyServerAddress: speakeasyServerAddress,
-		speakeasySecretKey:     speakeasySecretKey,
-		speakeasyClient:        speakeasyClient,
-		orgRepo:                orgRepo.New(db),
-		userRepo:               userRepo.New(db),
-		pylon:                  pylon,
-		posthog:                posthog,
-		billingRepo:            billingRepo,
-		workos:                 workos,
+		logger:        logger,
+		tracer:        tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/auth/sessions"),
+		sessionCache:  cache.NewTypedObjectCache[Session](logger.With(attr.SlogCacheNamespace("session")), cache.NewRedisCacheAdapter(redisClient), cache.SuffixNone),
+		userInfoCache: cache.NewTypedObjectCache[CachedUserInfo](logger.With(attr.SlogCacheNamespace("user_info")), cache.NewRedisCacheAdapter(redisClient), cache.SuffixNone),
+		idpBaseURL:    idpBaseURL,
+		idpHTTPClient: idpHTTPClient,
+		orgRepo:       orgRepo.New(db),
+		userRepo:      userRepo.New(db),
+		pylon:         pylon,
+		posthog:       posthog,
+		billingRepo:   billingRepo,
 	}
 }
 
@@ -115,7 +108,7 @@ func (s *Manager) Authenticate(ctx context.Context, key string) (context.Context
 		return ctx, nil
 	}
 
-	_, email, ok := s.HasAccessToOrganization(ctx, session.ActiveOrganizationID, session.UserID, session.SessionID)
+	_, email, ok := s.HasAccessToOrganization(ctx, session.ActiveOrganizationID, session.UserID)
 	if !ok {
 		return ctx, oops.C(oops.CodeForbidden)
 	}

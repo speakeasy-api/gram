@@ -61,216 +61,53 @@ type testInstance struct {
 	authConfigs    auth.AuthConfigurations
 }
 
-// MockUserInfo represents the user info returned by the mock auth server
+// MockUserInfo represents the user info used by the mock OIDC server
 type MockUserInfo struct {
-	UserID          string                  `json:"user_id"`
-	Email           string                  `json:"email"`
-	Admin           bool                    `json:"admin"`
-	UserWhitelisted bool                    `json:"user_whitelisted"`
-	Organizations   []MockOrganizationEntry `json:"organizations"`
+	UserID          string
+	Email           string
+	Admin           bool
+	UserWhitelisted bool
+	Organizations   []MockOrganizationEntry
 }
 
 type MockOrganizationEntry struct {
-	ID                 string   `json:"id"`
-	Name               string   `json:"name"`
-	Slug               string   `json:"slug"`
-	WorkosID           *string  `json:"workos_id"`
-	UserWorkspaceSlugs []string `json:"user_workspace_slugs"`
+	ID                 string
+	Name               string
+	Slug               string
+	WorkosID           *string
+	UserWorkspaceSlugs []string
 }
 
-// createMockAuthServer creates an httptest.Server that serves mock auth responses
-func createMockAuthServer(userInfo *MockUserInfo) *httptest.Server {
+// createMockOIDCServer creates an httptest.Server that serves mock OIDC responses.
+// It returns access tokens that map back to the provided userInfo.
+func createMockOIDCServer(userInfo *MockUserInfo) *httptest.Server {
 	mux := http.NewServeMux()
-	idToken := fmt.Sprintf("mock_id_token_%p", userInfo)
+	accessToken := fmt.Sprintf("mock_access_token_%p", userInfo)
 
-	// Mock the validate endpoint that sessions.GetUserInfoFromSpeakeasy calls
-	mux.HandleFunc("/v1/speakeasy_provider/validate", func(w http.ResponseWriter, r *http.Request) {
+	// Mock OIDC token endpoint
+	mux.HandleFunc("POST /oauth2/token", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-
-		// Convert our mock user info to the expected format
-		validateResp := struct {
-			User struct {
-				ID          string `json:"id"`
-				Email       string `json:"email"`
-				DisplayName string `json:"display_name"`
-				Admin       bool   `json:"admin"`
-				Whitelisted bool   `json:"whitelisted"`
-			} `json:"user"`
-			Organizations []struct {
-				ID                 string   `json:"id"`
-				Name               string   `json:"name"`
-				Slug               string   `json:"slug"`
-				AccountType        string   `json:"account_type"`
-				WorkOSID           *string  `json:"workos_id,omitempty"`
-				UserWorkspaceSlugs []string `json:"user_workspace_slugs"`
-			} `json:"organizations"`
-		}{
-			User: struct {
-				ID          string `json:"id"`
-				Email       string `json:"email"`
-				DisplayName string `json:"display_name"`
-				Admin       bool   `json:"admin"`
-				Whitelisted bool   `json:"whitelisted"`
-			}{
-				ID:          "",
-				Email:       "",
-				DisplayName: "",
-				Admin:       false,
-				Whitelisted: false,
-			},
-			Organizations: []struct {
-				ID                 string   `json:"id"`
-				Name               string   `json:"name"`
-				Slug               string   `json:"slug"`
-				AccountType        string   `json:"account_type"`
-				WorkOSID           *string  `json:"workos_id,omitempty"`
-				UserWorkspaceSlugs []string `json:"user_workspace_slugs"`
-			}{},
+		resp := map[string]string{
+			"access_token": accessToken,
+			"token_type":   "Bearer",
 		}
-
-		validateResp.User.ID = userInfo.UserID
-		validateResp.User.Email = userInfo.Email
-		validateResp.User.DisplayName = userInfo.Email
-		validateResp.User.Admin = userInfo.Admin
-		validateResp.User.Whitelisted = userInfo.UserWhitelisted
-
-		validateResp.Organizations = make([]struct {
-			ID                 string   `json:"id"`
-			Name               string   `json:"name"`
-			Slug               string   `json:"slug"`
-			AccountType        string   `json:"account_type"`
-			WorkOSID           *string  `json:"workos_id,omitempty"`
-			UserWorkspaceSlugs []string `json:"user_workspace_slugs"`
-		}, len(userInfo.Organizations))
-
-		for i, org := range userInfo.Organizations {
-			validateResp.Organizations[i].ID = org.ID
-			validateResp.Organizations[i].Name = org.Name
-			validateResp.Organizations[i].Slug = org.Slug
-			validateResp.Organizations[i].AccountType = "scale-up"
-			validateResp.Organizations[i].WorkOSID = org.WorkosID
-			validateResp.Organizations[i].UserWorkspaceSlugs = org.UserWorkspaceSlugs
-		}
-
-		if err := json.NewEncoder(w).Encode(validateResp); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
+		_ = json.NewEncoder(w).Encode(resp)
 	})
 
-	// Mock the register endpoint that CreateOrgFromSpeakeasy calls
-	mux.HandleFunc("/v1/speakeasy_provider/register", func(w http.ResponseWriter, r *http.Request) {
+	// Mock OIDC userinfo endpoint
+	mux.HandleFunc("GET /oauth2/userinfo", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-
-		// Create a new organization and return updated user info
-		newOrg := MockOrganizationEntry{
-			ID:                 "new-org-123",
-			Name:               "New Organization",
-			Slug:               "new-org",
-			UserWorkspaceSlugs: []string{"new-workspace"},
-		}
-
-		// Add the new organization to the existing user info
-		updatedUserInfo := *userInfo
-		updatedUserInfo.Organizations = append(updatedUserInfo.Organizations, newOrg)
-
-		// Convert to validate response format
-		validateResp := struct {
-			User struct {
-				ID          string `json:"id"`
-				Email       string `json:"email"`
-				DisplayName string `json:"display_name"`
-				Admin       bool   `json:"admin"`
-				Whitelisted bool   `json:"whitelisted"`
-			} `json:"user"`
-			Organizations []struct {
-				ID                 string   `json:"id"`
-				Name               string   `json:"name"`
-				Slug               string   `json:"slug"`
-				AccountType        string   `json:"account_type"`
-				WorkOSID           *string  `json:"workos_id,omitempty"`
-				UserWorkspaceSlugs []string `json:"user_workspace_slugs"`
-			} `json:"organizations"`
+		resp := struct {
+			Sub     string  `json:"sub"`
+			Email   string  `json:"email"`
+			Name    string  `json:"name"`
+			Picture *string `json:"picture,omitempty"`
 		}{
-			User: struct {
-				ID          string `json:"id"`
-				Email       string `json:"email"`
-				DisplayName string `json:"display_name"`
-				Admin       bool   `json:"admin"`
-				Whitelisted bool   `json:"whitelisted"`
-			}{
-				ID:          "",
-				Email:       "",
-				DisplayName: "",
-				Admin:       false,
-				Whitelisted: false,
-			},
-			Organizations: []struct {
-				ID                 string   `json:"id"`
-				Name               string   `json:"name"`
-				Slug               string   `json:"slug"`
-				AccountType        string   `json:"account_type"`
-				WorkOSID           *string  `json:"workos_id,omitempty"`
-				UserWorkspaceSlugs []string `json:"user_workspace_slugs"`
-			}{},
+			Sub:   userInfo.UserID,
+			Email: userInfo.Email,
+			Name:  userInfo.Email,
 		}
-
-		validateResp.User.ID = updatedUserInfo.UserID
-		validateResp.User.Email = updatedUserInfo.Email
-		validateResp.User.DisplayName = updatedUserInfo.Email
-		validateResp.User.Admin = updatedUserInfo.Admin
-		validateResp.User.Whitelisted = updatedUserInfo.UserWhitelisted
-
-		validateResp.Organizations = make([]struct {
-			ID                 string   `json:"id"`
-			Name               string   `json:"name"`
-			Slug               string   `json:"slug"`
-			AccountType        string   `json:"account_type"`
-			WorkOSID           *string  `json:"workos_id,omitempty"`
-			UserWorkspaceSlugs []string `json:"user_workspace_slugs"`
-		}, len(updatedUserInfo.Organizations))
-
-		for i, org := range updatedUserInfo.Organizations {
-			validateResp.Organizations[i].ID = org.ID
-			validateResp.Organizations[i].Name = org.Name
-			validateResp.Organizations[i].Slug = org.Slug
-			validateResp.Organizations[i].AccountType = "free"
-			validateResp.Organizations[i].WorkOSID = org.WorkosID
-			validateResp.Organizations[i].UserWorkspaceSlugs = org.UserWorkspaceSlugs
-		}
-
-		if err := json.NewEncoder(w).Encode(validateResp); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-	})
-
-	// Mock the exchange endpoint for code to token exchange
-	mux.HandleFunc("/v1/speakeasy_provider/exchange", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-
-		// Return a mock token response
-		tokenResp := struct {
-			IDToken string `json:"id_token"`
-		}{
-			IDToken: idToken,
-		}
-
-		if err := json.NewEncoder(w).Encode(tokenResp); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-	})
-
-	// Mock the login endpoint
-	mux.HandleFunc("/v1/speakeasy_provider/login", func(w http.ResponseWriter, r *http.Request) {
-		returnURL := r.URL.Query().Get("return_url")
-		if returnURL == "" {
-			http.Error(w, "missing return_url", http.StatusBadRequest)
-			return
-		}
-		// Simulate redirect to callback with mock auth code
-		http.Redirect(w, r, returnURL+"?code=mock_code", http.StatusFound)
+		_ = json.NewEncoder(w).Encode(resp)
 	})
 
 	return httptest.NewServer(mux)
@@ -291,8 +128,8 @@ func newTestAuthService(t *testing.T, userInfo *MockUserInfo) (context.Context, 
 	redisClient, err := infra.NewRedisClient(t, 0)
 	require.NoError(t, err)
 
-	// Create mock auth server
-	mockServer := createMockAuthServer(userInfo)
+	// Create mock OIDC server
+	mockServer := createMockOIDCServer(userInfo)
 	t.Cleanup(mockServer.Close)
 
 	pylon, err := pylon.NewPylon(logger, "")
@@ -302,13 +139,13 @@ func newTestAuthService(t *testing.T, userInfo *MockUserInfo) (context.Context, 
 
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 
-	sessionManager := sessions.NewManager(logger, testenv.NewTracerProvider(t), guardianPolicy, conn, redisClient, cache.Suffix("gram-test"), mockServer.URL, "test-secret-key", pylon, posthog, billingClient, nil)
+	sessionManager := sessions.NewManager(logger, testenv.NewTracerProvider(t), guardianPolicy, conn, redisClient, cache.Suffix("gram-test"), mockServer.URL+"/oauth2", pylon, posthog, billingClient)
 
 	authConfigs := auth.AuthConfigurations{
-		SpeakeasyServerAddress: mockServer.URL,
-		GramServerURL:          "http://localhost:8080",
-		SignInRedirectURL:      "http://localhost:3000/dashboard",
-		Environment:            "test",
+		IDPBaseURL:        mockServer.URL + "/oauth2",
+		GramServerURL:     "http://localhost:8080",
+		SignInRedirectURL: "http://localhost:3000/dashboard",
+		Environment:       "test",
 	}
 
 	chConn, err := infra.NewClickhouseClient(t)
@@ -335,7 +172,7 @@ func newTestAuthServiceWithAuthz(t *testing.T, userInfo *MockUserInfo) (context.
 	redisClient, err := infra.NewRedisClient(t, 0)
 	require.NoError(t, err)
 
-	mockServer := createMockAuthServer(userInfo)
+	mockServer := createMockOIDCServer(userInfo)
 	t.Cleanup(mockServer.Close)
 
 	pylon, err := pylon.NewPylon(logger, "")
@@ -345,13 +182,13 @@ func newTestAuthServiceWithAuthz(t *testing.T, userInfo *MockUserInfo) (context.
 
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 
-	sessionManager := sessions.NewManager(logger, testenv.NewTracerProvider(t), guardianPolicy, conn, redisClient, cache.Suffix("gram-test"), mockServer.URL, "test-secret-key", pylon, posthog, billingClient, nil)
+	sessionManager := sessions.NewManager(logger, testenv.NewTracerProvider(t), guardianPolicy, conn, redisClient, cache.Suffix("gram-test"), mockServer.URL+"/oauth2", pylon, posthog, billingClient)
 
 	authConfigs := auth.AuthConfigurations{
-		SpeakeasyServerAddress: mockServer.URL,
-		GramServerURL:          "http://localhost:8080",
-		SignInRedirectURL:      "http://localhost:3000/dashboard",
-		Environment:            "test",
+		IDPBaseURL:        mockServer.URL + "/oauth2",
+		GramServerURL:     "http://localhost:8080",
+		SignInRedirectURL: "http://localhost:3000/dashboard",
+		Environment:       "test",
 	}
 
 	chConn, err := infra.NewClickhouseClient(t)
@@ -449,8 +286,8 @@ func (ti *testInstance) createTestUser(ctx context.Context, userInfo *MockUserIn
 	return nil
 }
 
-// createTestOrganization creates an organization record in the database for testing
-func (ti *testInstance) createTestOrganization(ctx context.Context, org MockOrganizationEntry) error {
+// createTestOrganization creates an organization record and org-user membership in the database for testing.
+func (ti *testInstance) createTestOrganization(ctx context.Context, org MockOrganizationEntry, userID string) error {
 	orgQueries := orgRepo.New(ti.conn)
 	_, err := orgQueries.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
 		ID:       org.ID,
@@ -460,6 +297,15 @@ func (ti *testInstance) createTestOrganization(ctx context.Context, org MockOrga
 	})
 	if err != nil {
 		return fmt.Errorf("failed to upsert organization metadata: %w", err)
+	}
+	if userID != "" {
+		_, err = orgQueries.UpsertOrganizationUserRelationship(ctx, orgRepo.UpsertOrganizationUserRelationshipParams{
+			OrganizationID: org.ID,
+			UserID:         userID,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to upsert organization user relationship: %w", err)
+		}
 	}
 	return nil
 }

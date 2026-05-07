@@ -20,10 +20,11 @@ func TestService_SwitchScopes(t *testing.T) {
 		userInfo := speakeasyMockUserInfo() // Has multiple organizations
 		ctx, instance := newTestAuthService(t, userInfo)
 
+		require.NoError(t, instance.createTestUser(ctx, userInfo))
+
 		// Seed org metadata so Authenticate can look it up after the switch
 		for _, org := range userInfo.Organizations {
-			err := instance.createTestOrganization(ctx, org)
-			require.NoError(t, err)
+			require.NoError(t, instance.createTestOrganization(ctx, org, userInfo.UserID))
 		}
 
 		// Create and store a session first
@@ -76,6 +77,9 @@ func TestService_SwitchScopes(t *testing.T) {
 
 		userInfo := defaultMockUserInfo()
 		ctx, instance := newTestAuthService(t, userInfo)
+
+		require.NoError(t, instance.createTestUser(ctx, userInfo))
+		require.NoError(t, instance.createTestOrganization(ctx, userInfo.Organizations[0], userInfo.UserID))
 
 		// Create and store a session first
 		session := sessions.Session{
@@ -145,8 +149,10 @@ func TestService_SwitchScopes(t *testing.T) {
 		userInfo := defaultMockUserInfo()
 		ctx, instance := newTestAuthService(t, userInfo)
 
+		require.NoError(t, instance.createTestUser(ctx, userInfo))
+
 		// Seed org metadata so Authenticate can look it up
-		err := instance.createTestOrganization(ctx, userInfo.Organizations[0])
+		err := instance.createTestOrganization(ctx, userInfo.Organizations[0], userInfo.UserID)
 		require.NoError(t, err)
 
 		// Create and store a session first

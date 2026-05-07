@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -41,13 +42,11 @@ const (
 	authErrInit       authErr = "init_error"
 )
 
-const gramWaitlistTypeForm = "https://speakeasyapi.typeform.com/to/h6WJdwWr"
-
 type AuthConfigurations struct {
-	SpeakeasyServerAddress string
-	GramServerURL          string
-	SignInRedirectURL      string
-	Environment            string
+	IDPBaseURL        string
+	GramServerURL     string
+	SignInRedirectURL string
+	Environment       string
 }
 
 // Service for gram dashboard authentication endpoints
@@ -129,27 +128,31 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		return redirectWithError(authErrCodeLookup, errors.New("code is required"))
 	}
 
-	idToken, err := s.sessions.ExchangeTokenFromSpeakeasy(ctx, payload.Code)
+	callbackURL := s.buildCallbackURL(ctx)
+	accessToken, err := s.sessions.ExchangeCodeForTokens(ctx, payload.Code, callbackURL)
 	if err != nil {
 		return redirectWithError(authErrCodeLookup, err)
 	}
 
-	userInfo, err := s.sessions.GetUserInfoFromSpeakeasy(ctx, idToken)
+	idpUser, err := s.sessions.FetchUserInfoFromIDP(ctx, accessToken)
 	if err != nil {
 		return redirectWithError(authErrCodeLookup, err)
 	}
 
-	if !userInfo.Admin && !userInfo.UserWhitelisted {
-		return &gen.CallbackResult{
-			Location:      gramWaitlistTypeForm,
-			SessionToken:  "",
-			SessionCookie: "",
-		}, nil
+	userID, err := s.sessions.UpsertUserFromIDP(ctx, idpUser)
+	if err != nil {
+		return redirectWithError(authErrInit, err)
 	}
 
+	userInfo, err := s.sessions.BuildUserInfoFromDB(ctx, userID)
+	if err != nil {
+		return redirectWithError(authErrInit, err)
+	}
+
+	sessionID := uuid.New().String()
 	session := sessions.Session{
-		SessionID:            idToken,
-		UserID:               userInfo.UserID,
+		SessionID:            sessionID,
+		UserID:               userID,
 		ActiveOrganizationID: "",
 	}
 
@@ -184,13 +187,7 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		}
 	}
 
-	orgMetadata, err := s.orgRepo.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
-		ID:          activeOrg.ID,
-		Name:        activeOrg.Name,
-		Slug:        activeOrg.Slug,
-		WorkosID:    conv.PtrToPGText(activeOrg.WorkosID),
-		Whitelisted: pgtype.Bool{Bool: false, Valid: false},
-	})
+	orgMetadata, err := s.orgRepo.GetOrganizationMetadata(ctx, activeOrg.ID)
 	if err != nil {
 		return redirectWithError(authErrInit, err)
 	}
@@ -212,29 +209,22 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 }
 
 func (s *Service) Login(ctx context.Context, payload *gen.LoginPayload) (res *gen.LoginResult, err error) {
-	// In local dev, use the site URL so the mock IDP redirects back through
-	// the Vite proxy (which forwards /rpc to the server). In production, use
-	// the server URL directly since the site may not proxy /rpc paths.
-	returnAddress := strings.TrimRight(s.cfg.GramServerURL, "/")
-	if s.cfg.Environment == "local" {
-		returnAddress = strings.TrimRight(s.cfg.SignInRedirectURL, "/")
+	callbackURL := s.buildCallbackURL(ctx)
+	state := encodeStateParam(payload)
+
+	authURL, err := s.sessions.BuildAuthorizationURL(ctx, sessions.AuthURLParams{
+		CallbackURL:     callbackURL,
+		State:           state,
+		Scope:           "",
+		ClientID:        "",
+		ScopesSupported: nil,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error building authorization URL").Log(ctx, s.logger)
 	}
-
-	// Get the request context to access the Host
-	requestCtx, ok := contextvalues.GetRequestContext(ctx)
-	if ok && requestCtx != nil && strings.Contains(requestCtx.Host, "speakeasyapi.vercel.app") && s.cfg.Environment == "dev" {
-		// For preview builds, use the request host with https protocol
-		returnAddress = "https://" + requestCtx.Host
-	}
-
-	values := url.Values{}
-	values.Add("return_url", returnAddress+"/rpc/auth.callback")
-	values.Add("state", encodeStateParam(payload))
-
-	location := s.cfg.SpeakeasyServerAddress + "/v1/speakeasy_provider/login?" + values.Encode()
 
 	return &gen.LoginResult{
-		Location: location,
+		Location: authURL.String(),
 	}, nil
 }
 
@@ -286,7 +276,7 @@ func (s *Service) SwitchScopes(ctx context.Context, payload *gen.SwitchScopesPay
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	userInfo, _, err := s.sessions.GetUserInfo(ctx, authCtx.UserID, *authCtx.SessionID)
+	userInfo, _, err := s.sessions.GetUserInfo(ctx, authCtx.UserID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error getting user info").Log(ctx, s.logger)
 	}
@@ -345,10 +335,6 @@ func (s *Service) Logout(ctx context.Context, payload *gen.LogoutPayload) (res *
 		return nil, oops.E(oops.CodeUnexpected, err, "error invalidating user").Log(ctx, s.logger)
 	}
 
-	if err := s.sessions.RevokeTokenFromSpeakeasy(ctx, *authCtx.SessionID); err != nil {
-		s.logger.ErrorContext(ctx, "error revoking token", attr.SlogError(err))
-	}
-
 	if err := s.sessions.ClearSession(ctx, sessions.Session{
 		SessionID:            *authCtx.SessionID,
 		ActiveOrganizationID: authCtx.ActiveOrganizationID,
@@ -365,7 +351,7 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	userInfo, _, err := s.sessions.GetUserInfo(ctx, authCtx.UserID, *authCtx.SessionID)
+	userInfo, _, err := s.sessions.GetUserInfo(ctx, authCtx.UserID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error getting user info").Log(ctx, s.logger)
 	}
@@ -376,27 +362,6 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 			if org.ID == authCtx.ActiveOrganizationID {
 				userInfo.Organizations = []sessions.Organization{org}
 			}
-		}
-	}
-
-	// Write through the user-org relationship as a backfill mechanism.
-	// For admins, only upsert when the active org is one they actually belong to.
-	// Admins can override their active org to visit customer orgs via the admin
-	// override feature, and we must not insert a relationship row in those cases.
-	belongsToActiveOrg := !userInfo.Admin
-	for _, org := range userInfo.Organizations {
-		if org.ID == authCtx.ActiveOrganizationID {
-			belongsToActiveOrg = true
-			break
-		}
-	}
-
-	if belongsToActiveOrg {
-		if _, err := s.orgRepo.UpsertOrganizationUserRelationship(ctx, orgRepo.UpsertOrganizationUserRelationshipParams{
-			OrganizationID: authCtx.ActiveOrganizationID,
-			UserID:         authCtx.UserID,
-		}); err != nil {
-			s.logger.ErrorContext(ctx, "error upserting organization user relationship", attr.SlogError(err))
 		}
 	}
 
@@ -491,39 +456,38 @@ func (s *Service) Register(ctx context.Context, payload *gen.RegisterPayload) (e
 		return oops.E(oops.CodeInvalid, errors.New("organization name contains invalid characters"), "organization name contains invalid characters")
 	}
 
-	info, err := s.sessions.CreateOrgFromSpeakeasy(ctx, *authCtx.SessionID, payload.OrgName)
-	// invalid to insure we pull in the new org info on the next auth.info call
-	if invalidationErr := s.sessions.InvalidateUserInfoCache(ctx, authCtx.UserID); invalidationErr != nil {
-		return oops.E(oops.CodeUnexpected, invalidationErr, "error invalidating user").Log(ctx, s.logger)
-	}
+	slug := slugify(payload.OrgName)
 
+	org, err := s.orgRepo.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
+		ID:          "org_" + uuid.New().String(),
+		Name:        payload.OrgName,
+		Slug:        slug,
+		WorkosID:    pgtype.Text{String: "", Valid: false},
+		Whitelisted: pgtype.Bool{Bool: true, Valid: true},
+	})
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "error creating org").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "error creating organization").Log(ctx, s.logger)
 	}
 
-	if len(info.Organizations) == 0 {
-		return oops.E(oops.CodeUnexpected, errors.New("no organizations returned from speakeasy"), "no organizations returned from speakeasy")
+	if _, err := s.orgRepo.UpsertOrganizationUserRelationship(ctx, orgRepo.UpsertOrganizationUserRelationshipParams{
+		OrganizationID: org.ID,
+		UserID:         authCtx.UserID,
+	}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "error creating organization user relationship").Log(ctx, s.logger)
+	}
+
+	if err := s.sessions.InvalidateUserInfoCache(ctx, authCtx.UserID); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "error invalidating user info cache").Log(ctx, s.logger)
 	}
 
 	session := sessions.Session{
 		SessionID:            *authCtx.SessionID,
 		UserID:               authCtx.UserID,
-		ActiveOrganizationID: info.Organizations[0].ID,
+		ActiveOrganizationID: org.ID,
 	}
 
 	if err := s.sessions.StoreSession(ctx, session); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "error storing session").Log(ctx, s.logger)
-	}
-
-	whitelisted := false
-	if _, err := s.orgRepo.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
-		ID:          info.Organizations[0].ID,
-		Name:        info.Organizations[0].Name,
-		Slug:        info.Organizations[0].Slug,
-		WorkosID:    conv.PtrToPGText(info.Organizations[0].WorkosID),
-		Whitelisted: conv.PtrToPGBool(&whitelisted),
-	}); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "error upserting organization metadata").Log(ctx, s.logger)
 	}
 
 	return nil
@@ -615,6 +579,30 @@ func decodeStateParam(payload *gen.CallbackPayload) *loginState {
 	}
 
 	return state
+}
+
+// buildCallbackURL constructs the OIDC redirect_uri that the IDP will send the
+// user back to after authentication. Must match what Login passes to
+// BuildAuthorizationURL.
+func (s *Service) buildCallbackURL(ctx context.Context) string {
+	returnAddress := strings.TrimRight(s.cfg.GramServerURL, "/")
+	if s.cfg.Environment == "local" {
+		returnAddress = strings.TrimRight(s.cfg.SignInRedirectURL, "/")
+	}
+
+	if requestCtx, ok := contextvalues.GetRequestContext(ctx); ok && requestCtx != nil && strings.Contains(requestCtx.Host, "speakeasyapi.vercel.app") && s.cfg.Environment == "dev" {
+		returnAddress = "https://" + requestCtx.Host
+	}
+
+	return returnAddress + "/rpc/auth.callback"
+}
+
+// slugify converts a name into a URL-safe slug.
+func slugify(name string) string {
+	s := strings.ToLower(strings.TrimSpace(name))
+	s = regexp.MustCompile(`[^a-z0-9\s-]`).ReplaceAllString(s, "")
+	s = regexp.MustCompile(`[\s]+`).ReplaceAllString(s, "-")
+	return s
 }
 
 // callbackRedirectURL determines the redirect location after authentication. It

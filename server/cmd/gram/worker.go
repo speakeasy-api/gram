@@ -251,15 +251,9 @@ func newWorkerCommand() *cli.Command {
 			Required: false,
 		},
 		&cli.StringFlag{
-			Name:     "speakeasy-server-address",
-			Usage:    "Speakeasy server address",
-			EnvVars:  []string{"SPEAKEASY_SERVER_ADDRESS"},
-			Required: true,
-		},
-		&cli.StringFlag{
-			Name:     "speakeasy-secret-key",
-			Usage:    "Speakeasy secret key",
-			EnvVars:  []string{"SPEAKEASY_SECRET_KEY"},
+			Name:     "idp-base-url",
+			Usage:    "OIDC identity provider base URL (e.g. http://localhost:35291/oauth2)",
+			EnvVars:  []string{"GRAM_IDP_BASE_URL"},
 			Required: true,
 		},
 		&cli.StringFlag{
@@ -282,7 +276,7 @@ func newWorkerCommand() *cli.Command {
 		},
 		&cli.StringFlag{
 			Name:     "workos-endpoint",
-			Usage:    "Base URL for WorkOS API calls. Leave unset for production (defaults to https://api.workos.com); set to the dev-idp's local-speakeasy mode for fully-local development.",
+			Usage:    "Base URL for WorkOS API calls. Leave unset for production (defaults to https://api.workos.com); set to the dev-idp's mock-workos mode for fully-local development.",
 			EnvVars:  []string{"WORKOS_API_URL"},
 			Required: false,
 		},
@@ -538,7 +532,7 @@ func newWorkerCommand() *cli.Command {
 				return fmt.Errorf("failed to create pylon client: %w", err)
 			}
 
-			sessionManager := sessions.NewManager(logger, tracerProvider, guardianPolicy, db, redisClient, cache.SuffixNone, c.String("speakeasy-server-address"), c.String("speakeasy-secret-key"), pylonClient, posthogClient, billingRepo, nil)
+			sessionManager := sessions.NewManager(logger, tracerProvider, guardianPolicy, db, redisClient, cache.SuffixNone, c.String("idp-base-url"), pylonClient, posthogClient, billingRepo)
 
 			chatSessionsManager := chatsessions.NewManager(logger, redisClient, c.String("jwt-signing-key"))
 

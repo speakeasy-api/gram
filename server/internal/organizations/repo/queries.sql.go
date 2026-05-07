@@ -384,6 +384,47 @@ func (q *Queries) ListOrganizationUsers(ctx context.Context, organizationID stri
 	return items, nil
 }
 
+const listOrganizationsForUser = `-- name: ListOrganizationsForUser :many
+SELECT om.id, om.name, om.slug, om.workos_id
+FROM organization_user_relationships our
+JOIN organization_metadata om ON om.id = our.organization_id
+WHERE our.user_id = $1
+  AND our.deleted_at IS NULL
+  AND om.disabled_at IS NULL
+`
+
+type ListOrganizationsForUserRow struct {
+	ID       string
+	Name     string
+	Slug     string
+	WorkosID pgtype.Text
+}
+
+func (q *Queries) ListOrganizationsForUser(ctx context.Context, userID string) ([]ListOrganizationsForUserRow, error) {
+	rows, err := q.db.Query(ctx, listOrganizationsForUser, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOrganizationsForUserRow
+	for rows.Next() {
+		var i ListOrganizationsForUserRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Slug,
+			&i.WorkosID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const markOrganizationUserRelationshipAsDeleted = `-- name: MarkOrganizationUserRelationshipAsDeleted :exec
 INSERT INTO organization_user_relationships (
     organization_id,

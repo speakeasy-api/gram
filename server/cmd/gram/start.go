@@ -153,15 +153,9 @@ func newStartCommand() *cli.Command {
 			Value:   false,
 		},
 		&cli.StringFlag{
-			Name:     "speakeasy-server-address",
-			Usage:    "Speakeasy server address",
-			EnvVars:  []string{"SPEAKEASY_SERVER_ADDRESS"},
-			Required: true,
-		},
-		&cli.StringFlag{
-			Name:     "speakeasy-secret-key",
-			Usage:    "Speakeasy secret key",
-			EnvVars:  []string{"SPEAKEASY_SECRET_KEY"},
+			Name:     "idp-base-url",
+			Usage:    "OIDC identity provider base URL (e.g. http://localhost:35291/oauth2)",
+			EnvVars:  []string{"GRAM_IDP_BASE_URL"},
 			Required: true,
 		},
 		&cli.BoolFlag{
@@ -372,7 +366,7 @@ func newStartCommand() *cli.Command {
 		},
 		&cli.StringFlag{
 			Name:     "workos-endpoint",
-			Usage:    "Base URL for WorkOS API calls. Leave unset for production (defaults to https://api.workos.com); set to the dev-idp's local-speakeasy mode for fully-local development.",
+			Usage:    "Base URL for WorkOS API calls. Leave unset for production (defaults to https://api.workos.com); set to the dev-idp's mock-workos mode for fully-local development.",
 			EnvVars:  []string{"WORKOS_API_URL"},
 			Required: false,
 		},
@@ -482,7 +476,7 @@ func newStartCommand() *cli.Command {
 				featureFlags = newLocalFeatureFlags(ctx, logger, c.String("local-feature-flags-csv"))
 			}
 
-			workosClient, workosAvailable, err := newWorkOSClient(guardianPolicy, c)
+			workosClient, _, err := newWorkOSClient(guardianPolicy, c)
 			if err != nil {
 				return fmt.Errorf("failed to create WorkOS client: %w", err)
 			}
@@ -504,12 +498,10 @@ func newStartCommand() *cli.Command {
 				db,
 				redisClient,
 				cache.SuffixNone,
-				c.String("speakeasy-server-address"),
-				c.String("speakeasy-secret-key"),
+				c.String("idp-base-url"),
 				pylonClient,
 				posthogClient,
 				billingRepo,
-				conv.Ternary(workosAvailable, workosClient, nil),
 			)
 
 			chatSessionsManager := chatsessions.NewManager(logger, redisClient, c.String("jwt-signing-key"))
@@ -829,10 +821,10 @@ func newStartCommand() *cli.Command {
 				db,
 				sessionManager,
 				auth.AuthConfigurations{
-					SpeakeasyServerAddress: c.String("speakeasy-server-address"),
-					GramServerURL:          c.String("server-url"),
-					SignInRedirectURL:      auth.FormSignInRedirectURL(c.String("site-url")),
-					Environment:            c.String("environment"),
+					IDPBaseURL:        c.String("idp-base-url"),
+					GramServerURL:     c.String("server-url"),
+					SignInRedirectURL: auth.FormSignInRedirectURL(c.String("site-url")),
+					Environment:       c.String("environment"),
 				},
 				authzEngine,
 			))

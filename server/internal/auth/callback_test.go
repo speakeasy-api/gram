@@ -19,6 +19,13 @@ func TestService_Callback(t *testing.T) {
 
 		userInfo := defaultMockUserInfo()
 		ctx, instance := newTestAuthService(t, userInfo)
+
+		// Seed user + orgs in DB so BuildUserInfoFromDB can find them
+		require.NoError(t, instance.createTestUser(ctx, userInfo))
+		for _, org := range userInfo.Organizations {
+			require.NoError(t, instance.createTestOrganization(ctx, org, userInfo.UserID))
+		}
+
 		code := "mock_code"
 		payload := &gen.CallbackPayload{
 			Code: code,
@@ -40,6 +47,12 @@ func TestService_Callback(t *testing.T) {
 		userInfo := speakeasyMockUserInfo()
 		userInfo.Organizations[0], userInfo.Organizations[1] = userInfo.Organizations[1], userInfo.Organizations[0]
 		ctx, instance := newTestAuthService(t, userInfo)
+
+		require.NoError(t, instance.createTestUser(ctx, userInfo))
+		for _, org := range userInfo.Organizations {
+			require.NoError(t, instance.createTestOrganization(ctx, org, userInfo.UserID))
+		}
+
 		code := "mock_code"
 		payload := &gen.CallbackPayload{
 			Code: code,
@@ -64,6 +77,12 @@ func TestService_Callback(t *testing.T) {
 
 		userInfo := speakeasyMockUserInfo()
 		ctx, instance := newTestAuthService(t, userInfo)
+
+		require.NoError(t, instance.createTestUser(ctx, userInfo))
+		for _, org := range userInfo.Organizations {
+			require.NoError(t, instance.createTestOrganization(ctx, org, userInfo.UserID))
+		}
+
 		redirectURL := "https://dev.getgram.ai/other-org/projects/default"
 
 		stateJSON, err := json.Marshal(map[string]string{
@@ -104,6 +123,12 @@ func TestService_Callback(t *testing.T) {
 		})
 
 		ctx, instance := newTestAuthService(t, userInfo)
+
+		require.NoError(t, instance.createTestUser(ctx, userInfo))
+		for _, org := range userInfo.Organizations {
+			require.NoError(t, instance.createTestOrganization(ctx, org, userInfo.UserID))
+		}
+
 		ctx = contextvalues.SetAdminOverrideInContext(ctx, "override-org")
 
 		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{Code: "mock_code"})
@@ -131,6 +156,11 @@ func TestService_Callback(t *testing.T) {
 			UserWorkspaceSlugs: []string{"customer-workspace"},
 		})
 		ctx, instance := newTestAuthService(t, userInfo)
+
+		require.NoError(t, instance.createTestUser(ctx, userInfo))
+		for _, org := range userInfo.Organizations {
+			require.NoError(t, instance.createTestOrganization(ctx, org, userInfo.UserID))
+		}
 
 		// Set admin override in context
 		ctx = contextvalues.SetAdminOverrideInContext(ctx, "customer-org")

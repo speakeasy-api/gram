@@ -309,6 +309,14 @@ ON CONFLICT (id) DO UPDATE SET
     updated_at = clock_timestamp()
 RETURNING *;
 
+-- name: ListOrganizationsForUser :many
+SELECT om.id, om.name, om.slug, om.workos_id
+FROM organization_user_relationships our
+JOIN organization_metadata om ON om.id = our.organization_id
+WHERE our.user_id = @user_id
+  AND our.deleted_at IS NULL
+  AND om.disabled_at IS NULL;
+
 -- name: DisableOrganizationByWorkosID :execrows
 -- Mark a WorkOS-linked organization as disabled. Append-only: keeps
 -- organization_user_relationships intact. Idempotent — disabled_at is only

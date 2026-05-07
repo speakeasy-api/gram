@@ -3,7 +3,7 @@
 //
 //   - the Goa management API (under /rpc/...) for /users, /organizations,
 //     /memberships, /organization_roles, /invitations, /devIdp;
-//   - the local-speakeasy mode at /local-speakeasy/;
+//   - the mock-workos mode at /mock-workos/ (mock WorkOS REST surface);
 //   - the oauth2 mode at /oauth2/;
 //   - the oauth2-1 mode at /oauth2-1/;
 //   - the workos mode at /workos/ (only when WORKOS_API_KEY is set).
@@ -38,7 +38,7 @@ import (
 	"github.com/speakeasy-api/gram/dev-idp/internal/config"
 	"github.com/speakeasy-api/gram/dev-idp/internal/keystore"
 	"github.com/speakeasy-api/gram/dev-idp/internal/middleware"
-	"github.com/speakeasy-api/gram/dev-idp/internal/modes/localspeakeasy"
+	"github.com/speakeasy-api/gram/dev-idp/internal/modes/mockworkos"
 	"github.com/speakeasy-api/gram/dev-idp/internal/modes/oauth2"
 	"github.com/speakeasy-api/gram/dev-idp/internal/modes/oauth21"
 	devidpworkos "github.com/speakeasy-api/gram/dev-idp/internal/modes/workos"
@@ -59,7 +59,6 @@ func run() error {
 	controlAddress := flag.String("control-address", envOr("GRAM_DEVIDP_CONTROL_ADDRESS", ":35292"), "HTTP listener address for the health/control server")
 	externalURL := flag.String("external-url", os.Getenv("GRAM_DEVIDP_EXTERNAL_URL"), "Public base URL for discovery docs / redirect URIs (defaults from --address)")
 	dbSpec := flag.String("db", os.Getenv("GRAM_DEVIDP_DB"), "SQLite location: 'memory' or 'file:<path>' (default file:local/devidp/devidp.db)")
-	speakeasySecret := flag.String("speakeasy-secret-key", envOr("SPEAKEASY_SECRET_KEY", "test-secret"), "Header secret for the local-speakeasy provider exchange")
 	rsaKey := flag.String("rsa-private-key", os.Getenv("GRAM_DEVIDP_RSA_PRIVATE_KEY"), "PEM-encoded RSA private key (omit to generate a fresh ephemeral key)")
 	workosKey := flag.String("workos-api-key", os.Getenv("WORKOS_API_KEY"), "When set, mounts /workos/ as a thin proxy over the live WorkOS API")
 	workosHost := flag.String("workos-host", envOr("WORKOS_HOST", "https://api.workos.com"), "Base URL of the WorkOS API")
@@ -121,11 +120,8 @@ func run() error {
 
 	outer := http.NewServeMux()
 
-	mockHandler := localspeakeasy.NewHandler(
-		localspeakeasy.Config{SecretKey: *speakeasySecret},
-		logger, tp, db,
-	)
-	outer.Handle(localspeakeasy.Prefix+"/", http.StripPrefix(localspeakeasy.Prefix, mockHandler.Handler()))
+	mockHandler := mockworkos.NewHandler(logger, tp, db)
+	outer.Handle(mockworkos.Prefix+"/", http.StripPrefix(mockworkos.Prefix, mockHandler.Handler()))
 
 	oauth21Handler := oauth21.NewHandler(
 		oauth21.Config{ExternalURL: pubURL},
@@ -144,7 +140,6 @@ func run() error {
 			Endpoint: *workosHost,
 		})
 		wsHandler := devidpworkos.NewHandler(
-			devidpworkos.Config{SecretKey: *speakeasySecret},
 			wsClient, logger, tp, db,
 		)
 		outer.Handle(devidpworkos.Prefix+"/", http.StripPrefix(devidpworkos.Prefix, wsHandler.Handler()))

@@ -39,8 +39,8 @@ func (p *GramProvider) ExchangeToken(
 	serverURL *url.URL,
 	_ string,
 ) (*TokenExchangeResult, error) {
-	// Exchange code for ID token from Speakeasy
-	idToken, err := p.sessions.ExchangeTokenFromSpeakeasy(ctx, code)
+	callbackURL := serverURL.String()
+	accessToken, err := p.sessions.ExchangeCodeForTokens(ctx, code, callbackURL)
 	if err != nil {
 		p.logger.ErrorContext(ctx, "failed to exchange code for token from oauth gram provider",
 			attr.SlogOAuthProvider(provider.Slug),
@@ -48,13 +48,28 @@ func (p *GramProvider) ExchangeToken(
 		return nil, fmt.Errorf("failed to exchange code for token: %w", err)
 	}
 
-	// Get user info from Speakeasy
-	userInfo, err := p.sessions.GetUserInfoFromSpeakeasy(ctx, idToken)
+	idpUser, err := p.sessions.FetchUserInfoFromIDP(ctx, accessToken)
 	if err != nil {
 		p.logger.ErrorContext(ctx, "failed to get user info from oauth gram provider",
 			attr.SlogOAuthProvider(provider.Slug),
 			attr.SlogError(err))
 		return nil, fmt.Errorf("failed to retrieve user info: %w", err)
+	}
+
+	userID, err := p.sessions.UpsertUserFromIDP(ctx, idpUser)
+	if err != nil {
+		p.logger.ErrorContext(ctx, "failed to upsert user from oauth gram provider",
+			attr.SlogOAuthProvider(provider.Slug),
+			attr.SlogError(err))
+		return nil, fmt.Errorf("failed to upsert user: %w", err)
+	}
+
+	userInfo, err := p.sessions.BuildUserInfoFromDB(ctx, userID)
+	if err != nil {
+		p.logger.ErrorContext(ctx, "failed to build user info from oauth gram provider",
+			attr.SlogOAuthProvider(provider.Slug),
+			attr.SlogError(err))
+		return nil, fmt.Errorf("failed to build user info: %w", err)
 	}
 
 	// Check if user has access to the organization
@@ -74,8 +89,9 @@ func (p *GramProvider) ExchangeToken(
 		return nil, ErrAccessDenied
 	}
 
+	sessionID := fmt.Sprintf("oauth_%s", userID)
 	session := sessions.Session{
-		SessionID:            idToken,
+		SessionID:            sessionID,
 		UserID:               userInfo.UserID,
 		ActiveOrganizationID: toolset.OrganizationID,
 	}
@@ -86,9 +102,8 @@ func (p *GramProvider) ExchangeToken(
 			attr.SlogError(err))
 	}
 
-	// Use idToken as access token for gram providers
 	return &TokenExchangeResult{
-		AccessToken:  idToken,
+		AccessToken:  sessionID,
 		RefreshToken: "",
 		ExpiresAt:    new(time.Now().Add(session.TTL())),
 	}, nil
