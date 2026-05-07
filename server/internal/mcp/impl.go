@@ -232,22 +232,7 @@ func (s *Service) HandleGetServer(w http.ResponseWriter, r *http.Request, metada
 		}
 	}
 
-	body, err := json.Marshal(oops.E(oops.CodeUnexpected, nil, "This MCP server uses POST-based Streamable HTTP transport. This GET request is a normal compatibility probe by the MCP client and can be safely ignored. The client will automatically use POST for actual communication."))
-	if err != nil {
-		s.logger.ErrorContext(r.Context(), "failed to marshal MCP 405 response", attr.SlogError(err))
-		http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
-		return fmt.Errorf("failed to marshal MCP 405 response: %w", err)
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusMethodNotAllowed)
-	_, writeErr := w.Write(body)
-	if writeErr != nil {
-		s.logger.ErrorContext(r.Context(), "failed to write response body", attr.SlogError(writeErr))
-		return fmt.Errorf("failed to write response body: %w", writeErr)
-	}
-
-	return nil
+	return oops.E(oops.CodeMethodNotAllowed, nil, "This MCP server uses POST-based Streamable HTTP transport. This GET request is a normal compatibility probe by the MCP client and can be safely ignored. The client will automatically use POST for actual communication.")
 }
 
 // handleWellKnownMetadata handles OAuth 2.1 authorization server metadata discovery

@@ -8,6 +8,7 @@ const (
 	CodeUnauthorized       Code = "unauthorized"
 	CodeForbidden          Code = "forbidden"
 	CodeBadRequest         Code = "bad_request"
+	CodeMethodNotAllowed   Code = "method_not_allowed"
 	CodeNotFound           Code = "not_found"
 	CodeConflict           Code = "conflict"
 	CodeUnsupportedMedia   Code = "unsupported_media"
@@ -23,6 +24,7 @@ var StatusCodes = map[Code]int{
 	CodeUnauthorized:       http.StatusUnauthorized,
 	CodeForbidden:          http.StatusForbidden,
 	CodeBadRequest:         http.StatusBadRequest,
+	CodeMethodNotAllowed:   http.StatusMethodNotAllowed,
 	CodeNotFound:           http.StatusNotFound,
 	CodeConflict:           http.StatusConflict,
 	CodeUnsupportedMedia:   http.StatusUnsupportedMediaType,
@@ -42,6 +44,8 @@ func (c Code) UserMessage() string {
 		return "permission denied"
 	case CodeBadRequest:
 		return "request is invalid"
+	case CodeMethodNotAllowed:
+		return "method not allowed"
 	case CodeNotFound:
 		return "resource not found"
 	case CodeConflict:
@@ -74,6 +78,8 @@ func (c Code) MCPCode() MCPCode {
 		return MCPCodeParseError
 	case CodeUnauthorized, CodeForbidden, CodeConflict, CodeUnsupportedMedia:
 		return MCPCodeInvalidRequest
+	case CodeMethodNotAllowed:
+		return MCPCodeServerError
 	case CodeNotFound:
 		return MCPCodeResourceNotFound
 	case CodeInvalid:

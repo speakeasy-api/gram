@@ -30,7 +30,7 @@ func TestMCPErrHandle_IncludesMCPID(t *testing.T) {
 
 	handler.ServeHTTP(rec, req)
 
-	require.Equal(t, http.StatusBadRequest, rec.Code)
+	require.Equal(t, http.StatusUnauthorized, rec.Code)
 	require.Equal(t, "application/json", rec.Header().Get("Content-Type"))
 
 	var response map[string]any
@@ -55,7 +55,7 @@ func TestMCPErrHandle_UsesNullMCPIDWhenMissing(t *testing.T) {
 
 	handler.ServeHTTP(rec, req)
 
-	require.Equal(t, http.StatusBadRequest, rec.Code)
+	require.Equal(t, http.StatusUnauthorized, rec.Code)
 
 	var response map[string]any
 	err := json.Unmarshal(rec.Body.Bytes(), &response)
