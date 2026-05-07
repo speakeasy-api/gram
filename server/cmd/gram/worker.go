@@ -257,6 +257,12 @@ func newWorkerCommand() *cli.Command {
 			Required: true,
 		},
 		&cli.StringFlag{
+			Name:     "idp-client-id",
+			Usage:    "OIDC client ID for the identity provider",
+			EnvVars:  []string{"GRAM_IDP_CLIENT_ID"},
+			Required: true,
+		},
+		&cli.StringFlag{
 			Name:     "jwt-signing-key",
 			Usage:    "Key for JWT signing",
 			Required: true,
@@ -532,7 +538,7 @@ func newWorkerCommand() *cli.Command {
 				return fmt.Errorf("failed to create pylon client: %w", err)
 			}
 
-			sessionManager := sessions.NewManager(logger, tracerProvider, guardianPolicy, db, redisClient, cache.SuffixNone, c.String("idp-base-url"), pylonClient, posthogClient, billingRepo)
+			sessionManager := sessions.NewManager(logger, tracerProvider, guardianPolicy, db, redisClient, cache.SuffixNone, c.String("idp-base-url"), c.String("idp-client-id"), pylonClient, posthogClient, billingRepo)
 
 			chatSessionsManager := chatsessions.NewManager(logger, redisClient, c.String("jwt-signing-key"))
 

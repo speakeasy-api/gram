@@ -29,6 +29,7 @@ type Manager struct {
 	sessionCache  cache.TypedCacheObject[Session]
 	userInfoCache cache.TypedCacheObject[CachedUserInfo]
 	idpBaseURL    string
+	idpClientID   string
 	idpHTTPClient *guardian.HTTPClient
 	orgRepo       *orgRepo.Queries
 	userRepo      *userRepo.Queries
@@ -45,6 +46,7 @@ func NewManager(
 	redisClient *redis.Client,
 	suffix cache.Suffix,
 	idpBaseURL string,
+	idpClientID string,
 	pylon *pylon.Pylon,
 	posthog *posthog.Posthog,
 	billingRepo billing.Repository,
@@ -59,6 +61,7 @@ func NewManager(
 		sessionCache:  cache.NewTypedObjectCache[Session](logger.With(attr.SlogCacheNamespace("session")), cache.NewRedisCacheAdapter(redisClient), cache.SuffixNone),
 		userInfoCache: cache.NewTypedObjectCache[CachedUserInfo](logger.With(attr.SlogCacheNamespace("user_info")), cache.NewRedisCacheAdapter(redisClient), cache.SuffixNone),
 		idpBaseURL:    idpBaseURL,
+		idpClientID:   idpClientID,
 		idpHTTPClient: idpHTTPClient,
 		orgRepo:       orgRepo.New(db),
 		userRepo:      userRepo.New(db),

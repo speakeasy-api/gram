@@ -260,6 +260,7 @@ func (s *Manager) InvalidateUserInfoCache(ctx context.Context, userID string) er
 func (s *Manager) BuildAuthorizationURL(ctx context.Context, params AuthURLParams) (*url.URL, error) {
 	q := url.Values{}
 	q.Set("response_type", "code")
+	q.Set("client_id", s.idpClientID)
 	q.Set("redirect_uri", params.CallbackURL)
 	q.Set("state", params.State)
 	q.Set("scope", "openid email profile")

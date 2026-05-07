@@ -158,6 +158,12 @@ func newStartCommand() *cli.Command {
 			EnvVars:  []string{"GRAM_IDP_BASE_URL"},
 			Required: true,
 		},
+		&cli.StringFlag{
+			Name:     "idp-client-id",
+			Usage:    "OIDC client ID for the identity provider",
+			EnvVars:  []string{"GRAM_IDP_CLIENT_ID"},
+			Required: true,
+		},
 		&cli.BoolFlag{
 			Name:    "with-otel-tracing",
 			Usage:   "Enable OpenTelemetry traces",
@@ -499,6 +505,7 @@ func newStartCommand() *cli.Command {
 				redisClient,
 				cache.SuffixNone,
 				c.String("idp-base-url"),
+				c.String("idp-client-id"),
 				pylonClient,
 				posthogClient,
 				billingRepo,
