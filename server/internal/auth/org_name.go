@@ -2,8 +2,8 @@ package auth
 
 import (
 	"crypto/rand"
-	"encoding/binary"
 	"fmt"
+	"math/big"
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
 )
@@ -58,17 +58,19 @@ var orgNameNouns = []string{
 // "Swift Otter h7n2". The suffix gives ~1M+ unique slots per adjective+noun
 // pair so collisions against the Speakeasy register endpoint stay negligible.
 func generateLegibleOrgName() string {
-	var b [8]byte
-	if _, err := rand.Read(b[:]); err != nil {
+	adjIdx, err := rand.Int(rand.Reader, big.NewInt(int64(len(orgNameAdjectives))))
+	if err != nil {
+		panic(fmt.Errorf("crypto/rand failed: %w", err))
+	}
+	nounIdx, err := rand.Int(rand.Reader, big.NewInt(int64(len(orgNameNouns))))
+	if err != nil {
 		panic(fmt.Errorf("crypto/rand failed: %w", err))
 	}
 	suffix, err := conv.GenerateRandomSlug(4)
 	if err != nil {
 		panic(fmt.Errorf("generate random slug: %w", err))
 	}
-	adjIdx := binary.BigEndian.Uint32(b[0:4]) % uint32(len(orgNameAdjectives))
-	nounIdx := binary.BigEndian.Uint32(b[4:8]) % uint32(len(orgNameNouns))
-	adj := orgNameAdjectives[adjIdx]
-	noun := orgNameNouns[nounIdx]
+	adj := orgNameAdjectives[adjIdx.Int64()]
+	noun := orgNameNouns[nounIdx.Int64()]
 	return fmt.Sprintf("%s %s %s", adj, noun, suffix)
 }
