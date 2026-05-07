@@ -77,7 +77,7 @@ func (s *Manager) ExchangeTokenFromSpeakeasy(ctx context.Context, code string) (
 	req.Header.Set("Accept", "application/json")
 
 	// Send the request
-	resp, err := s.speakeasyClient.Do(req)
+	resp, err := s.httpClient.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("failed to perform token exchange: %w", err)
 	}
@@ -120,7 +120,7 @@ func (s *Manager) RevokeTokenFromSpeakeasy(ctx context.Context, idToken string) 
 	req.Header.Set("speakeasy-auth-provider-id-token", idToken)
 
 	// Send the request
-	resp, err := s.speakeasyClient.Do(req)
+	resp, err := s.httpClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("failed to perform token revocation: %w", err)
 	}
@@ -151,12 +151,12 @@ func (s *Manager) GetUserInfoFromSpeakeasy(ctx context.Context, idToken string) 
 	// (UpsertUser, posthog signup event, WorkOS membership sync) via the
 	// shared client. Side effects identical to the prior inline implementation;
 	// the user-session AS path runs the same pair of calls.
-	validated, err := s.speakeasyClientFacade.ValidateIDToken(ctx, idToken)
+	validated, err := s.speakeasyClient.ValidateIDToken(ctx, idToken)
 	if err != nil {
 		return nil, fmt.Errorf("validate id token: %w", err)
 	}
 
-	user, err := s.speakeasyClientFacade.BootstrapUser(ctx, validated)
+	user, err := s.speakeasyClient.BootstrapUser(ctx, validated)
 	if err != nil {
 		return nil, fmt.Errorf("bootstrap user: %w", err)
 	}
@@ -251,7 +251,7 @@ func (s *Manager) CreateOrgFromSpeakeasy(ctx context.Context, idToken string, or
 	req.Header.Set("speakeasy-auth-provider-id-token", idToken)
 	req.Header.Set("speakeasy-auth-provider-key", s.speakeasySecretKey)
 
-	resp, err := s.speakeasyClient.Do(req)
+	resp, err := s.httpClient.Do(req)
 	if err != nil {
 		s.logger.ErrorContext(ctx, "failed to make request", attr.SlogError(err))
 		return nil, fmt.Errorf("failed to make request: %w", err)

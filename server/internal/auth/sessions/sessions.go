@@ -1,16 +1,3 @@
-// DEPRECATED: this package backs Gram's chat-session authentication path
-// (cookie-based, Speakeasy-IDP-mediated). It is being replaced by the
-// user-session JWT path under `server/internal/usersessions/` (per spike §4.5
-// / RFC "Remote OAuth Clients for Private Repos"). New work belongs in the
-// user-sessions package; do NOT extend this manager.
-//
-// The shared post-IDP user bootstrap (UpsertUser, posthog signup event,
-// WorkOS membership sync) lives in `auth/speakeasyclient` so both this
-// package and the user-session AS path get identical baseline treatment for
-// authenticated users — required for downstream RBAC. This Manager retains
-// only chat-session-specific concerns (sessionCache, userInfoCache, pylon,
-// admin-override, nonFreeOrganizations).
-
 package sessions
 
 import (
@@ -45,18 +32,14 @@ type Manager struct {
 	userInfoCache          cache.TypedCacheObject[CachedUserInfo]
 	speakeasyServerAddress string
 	speakeasySecretKey     string
-	speakeasyClient        *guardian.HTTPClient
+	httpClient             *guardian.HTTPClient
 	orgRepo                *orgRepo.Queries
 	userRepo               *userRepo.Queries
 	pylon                  *pylon.Pylon
 	posthog                *posthog.Posthog // posthog metrics will no-op if the dependency is not provided
 	billingRepo            billing.Repository
 	workos                 *workos.Client
-	// speakeasyClientFacade owns shared post-IDP bootstrap (UpsertUser,
-	// posthog signup, WorkOS sync) and the validate wire call. Refactor
-	// target: have it own all four IDP wire calls so the manager-side raw
-	// fields above can be removed entirely. See auth/speakeasyclient.
-	speakeasyClientFacade *speakeasyclient.Client
+	speakeasyClient        *speakeasyclient.Client
 }
 
 func NewManager(
@@ -72,11 +55,11 @@ func NewManager(
 	posthog *posthog.Posthog,
 	billingRepo billing.Repository,
 	workos *workos.Client,
-	speakeasyClientFacade *speakeasyclient.Client,
+	speakeasyClient *speakeasyclient.Client,
 ) *Manager {
 	logger = logger.With(attr.SlogComponent("sessions"))
-	speakeasyClient := guardianPolicy.PooledClient()
-	speakeasyClient.Timeout = 10 * time.Second
+	httpClient := guardianPolicy.PooledClient()
+	httpClient.Timeout = 10 * time.Second
 
 	return &Manager{
 		logger:                 logger.With(attr.SlogComponent("sessions")),
@@ -85,14 +68,14 @@ func NewManager(
 		userInfoCache:          cache.NewTypedObjectCache[CachedUserInfo](logger.With(attr.SlogCacheNamespace("user_info")), cache.NewRedisCacheAdapter(redisClient), cache.SuffixNone),
 		speakeasyServerAddress: speakeasyServerAddress,
 		speakeasySecretKey:     speakeasySecretKey,
-		speakeasyClient:        speakeasyClient,
+		httpClient:             httpClient,
 		orgRepo:                orgRepo.New(db),
 		userRepo:               userRepo.New(db),
 		pylon:                  pylon,
 		posthog:                posthog,
 		billingRepo:            billingRepo,
 		workos:                 workos,
-		speakeasyClientFacade:  speakeasyClientFacade,
+		speakeasyClient:        speakeasyClient,
 	}
 }
 
