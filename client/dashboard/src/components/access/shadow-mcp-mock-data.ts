@@ -1,0 +1,166 @@
+import type {
+  ShadowMCPApprovalRequest,
+  ShadowMCPRoleOption,
+  ShadowMCPServerListEntry,
+} from "./shadow-mcp-types";
+
+export const MOCK_SHADOW_MCP_ROLES: ShadowMCPRoleOption[] = [
+  {
+    id: "role_admin",
+    name: "Admin",
+    description: "Full organization administration",
+    isSystem: true,
+  },
+  {
+    id: "role_member",
+    name: "Member",
+    description: "Default project and MCP access",
+    isSystem: true,
+  },
+  {
+    id: "role_ai_platform",
+    name: "AI Platform",
+    description: "Maintains agent integrations and MCP access",
+  },
+  {
+    id: "role_security",
+    name: "Security Reviewers",
+    description: "Reviews blocked tools and access requests",
+  },
+];
+
+export const MOCK_SHADOW_MCP_REQUESTS: ShadowMCPApprovalRequest[] = [
+  {
+    id: "req-linear-shadow",
+    status: "requested",
+    evidence: {
+      name: "linear",
+      fullUrl: "https://mcp.linear.app/sse",
+      urlHost: "mcp.linear.app",
+      normalizedIdentity: "linear",
+    },
+    requester: {
+      name: "Maya Chen",
+      email: "maya@speakeasyapi.dev",
+    },
+    requestedAt: "2026-05-07T15:38:00.000Z",
+    lastBlockedAt: "2026-05-07T16:04:00.000Z",
+    blockedCount: 12,
+    projectName: "Production Agents",
+    policyName: "Block unapproved Shadow MCP",
+    toolCall: "linear_searchIssues",
+    notes: "Used by product agents to triage customer issues.",
+  },
+  {
+    id: "req-github-shadow",
+    status: "requested",
+    evidence: {
+      name: "github",
+      fullUrl: "https://api.githubcopilot.com/mcp/",
+      urlHost: "api.githubcopilot.com",
+      normalizedIdentity: "github",
+    },
+    requester: {
+      name: "Ben Ortiz",
+      email: "ben@speakeasyapi.dev",
+    },
+    requestedAt: "2026-05-07T13:21:00.000Z",
+    lastBlockedAt: "2026-05-07T15:58:00.000Z",
+    blockedCount: 7,
+    projectName: "Developer Experience",
+    policyName: "Block unapproved Shadow MCP",
+    toolCall: "github_get_pull_request",
+  },
+  {
+    id: "req-notion-shadow",
+    status: "approved",
+    evidence: {
+      name: "notion",
+      fullUrl: "https://mcp.notion.com/mcp",
+      urlHost: "mcp.notion.com",
+      normalizedIdentity: "notion",
+    },
+    requester: {
+      name: "Iris Bell",
+      email: "iris@speakeasyapi.dev",
+    },
+    requestedAt: "2026-05-06T19:12:00.000Z",
+    lastBlockedAt: "2026-05-06T19:12:00.000Z",
+    blockedCount: 3,
+    projectName: "Docs Automation",
+    policyName: "Block unapproved Shadow MCP",
+    toolCall: "notion_search",
+  },
+  {
+    id: "req-random-shadow",
+    status: "denied",
+    evidence: {
+      name: "local-test-server",
+      fullUrl: "http://localhost:7341/mcp",
+      urlHost: "localhost",
+      normalizedIdentity: "local-test-server",
+    },
+    requester: {
+      name: "Noah Singh",
+      email: "noah@speakeasyapi.dev",
+    },
+    requestedAt: "2026-05-05T18:44:00.000Z",
+    lastBlockedAt: "2026-05-05T18:44:00.000Z",
+    blockedCount: 1,
+    projectName: "Sandbox",
+    policyName: "Block unapproved Shadow MCP",
+    toolCall: "debug_eval",
+    notes: "Local server without a stable identity.",
+  },
+];
+
+export const MOCK_SHADOW_MCP_SERVER_LIST: ShadowMCPServerListEntry[] = [
+  {
+    id: "entry-notion-allow",
+    decision: "allowed",
+    evidence: {
+      name: "notion",
+      fullUrl: "https://mcp.notion.com/mcp",
+      urlHost: "mcp.notion.com",
+      normalizedIdentity: "notion",
+    },
+    matchBreadth: "full_url",
+    roleIds: ["role_ai_platform", "role_security"],
+    createdAt: "2026-05-06T20:01:00.000Z",
+    createdBy: "Priya Admin",
+    sourceRequestId: "req-notion-shadow",
+    reason: "Needed for docs automation agents.",
+  },
+  {
+    id: "entry-slack-allow",
+    decision: "allowed",
+    evidence: {
+      name: "slack",
+      fullUrl: "https://mcp.slack.com/sse",
+      urlHost: "mcp.slack.com",
+      normalizedIdentity: "slack",
+    },
+    matchBreadth: "url_host",
+    roleIds: ["role_ai_platform"],
+    createdAt: "2026-05-03T17:15:00.000Z",
+    createdBy: "Priya Admin",
+    reason: "Temporary host-wide allow while catalog server is evaluated.",
+  },
+  {
+    id: "entry-local-deny",
+    decision: "denied",
+    evidence: {
+      name: "local-test-server",
+      fullUrl: "http://localhost:7341/mcp",
+      urlHost: "localhost",
+      normalizedIdentity: "local-test-server",
+    },
+    matchBreadth: "url_host",
+    roleIds: [],
+    createdAt: "2026-05-05T19:02:00.000Z",
+    createdBy: "Priya Admin",
+    sourceRequestId: "req-random-shadow",
+    reason:
+      "Local and development hosts are not approved for shared agent use.",
+  },
+];
