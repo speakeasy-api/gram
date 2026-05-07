@@ -8,7 +8,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Type } from "@/components/ui/type";
 import type { Role } from "@gram/client/models/components/role.js";
 import { useRoles } from "@gram/client/react-query/roles.js";
@@ -23,6 +22,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
   Input,
+  Separator,
   Table,
 } from "@speakeasy-api/moonshine";
 import { Check, Ellipsis, ShieldCheck, ShieldX, X } from "lucide-react";
@@ -45,11 +45,11 @@ import {
   getDecisionLabel,
   getMatchBreadthLabel,
   getMatchValue,
-  getRequestStatusLabel,
   getShadowMCPSummary,
 } from "./shadow-mcp-utils";
 
 type ReviewAction = "approve" | "deny";
+type RuleDecisionFilter = "all" | ShadowMCPServerListEntry["decision"];
 type TextInputChangeEvent = ChangeEvent<HTMLInputElement | HTMLTextAreaElement>;
 
 function handleStringInputChange(onChange: (value: string) => void) {
@@ -85,25 +85,6 @@ function EvidenceCell({ evidence }: { evidence: ShadowMCPEvidence }) {
         Host: {evidence.urlHost}
       </Type>
     </div>
-  );
-}
-
-function RequestStatusBadge({
-  status,
-}: {
-  status: ShadowMCPApprovalRequest["status"];
-}) {
-  const variant =
-    status === "approved"
-      ? "success"
-      : status === "denied"
-        ? "destructive"
-        : "warning";
-
-  return (
-    <Badge variant={variant}>
-      <Badge.Text>{getRequestStatusLabel(status)}</Badge.Text>
-    </Badge>
   );
 }
 
@@ -144,32 +125,6 @@ function RoleBadges({
           </Badge>
         );
       })}
-    </div>
-  );
-}
-
-function SummaryTile({
-  label,
-  value,
-  detail,
-}: {
-  label: string;
-  value: number;
-  detail: string;
-}) {
-  return (
-    <div className="border-border bg-card rounded-md border px-4 py-3">
-      <Type variant="body" className="text-muted-foreground text-xs">
-        {label}
-      </Type>
-      <div className="mt-2 flex items-end gap-2">
-        <Type variant="body" className="text-2xl font-medium">
-          {value}
-        </Type>
-        <Type variant="body" className="text-muted-foreground pb-1 text-xs">
-          {detail}
-        </Type>
-      </div>
     </div>
   );
 }
@@ -481,13 +436,13 @@ function ServerEntryDialog({
         <Dialog.Header>
           <Dialog.Title>
             {isEditing
-              ? "Edit Shadow MCP Entry"
+              ? "Edit Shadow MCP Rule"
               : effectiveDecision === "allowed"
-                ? "Add Allowed Server"
-                : "Add Denied Server"}
+                ? "Add Allow Rule"
+                : "Add Deny Rule"}
           </Dialog.Title>
           <Dialog.Description>
-            Maintain the managed server lists that role permissions use during
+            Maintain the managed access rules that role permissions use during
             Shadow MCP enforcement.
           </Dialog.Description>
         </Dialog.Header>
@@ -615,9 +570,7 @@ function ServerEntryDialog({
               close();
             }}
           >
-            <Button.Text>
-              {isEditing ? "Save Changes" : "Add Entry"}
-            </Button.Text>
+            <Button.Text>{isEditing ? "Save Changes" : "Add Rule"}</Button.Text>
           </Button>
         </Dialog.Footer>
       </Dialog.Content>
@@ -639,6 +592,8 @@ export function ShadowMCPAccessContent() {
   const [entryDialogDecision, setEntryDialogDecision] = useState<
     ShadowMCPServerListEntry["decision"] | null
   >(null);
+  const [ruleDecisionFilter, setRuleDecisionFilter] =
+    useState<RuleDecisionFilter>("all");
   const [editingEntry, setEditingEntry] =
     useState<ShadowMCPServerListEntry | null>(null);
 
@@ -646,6 +601,10 @@ export function ShadowMCPAccessContent() {
   const allowedEntries = entries.filter((e) => e.decision === "allowed");
   const deniedEntries = entries.filter((e) => e.decision === "denied");
   const pendingRequests = requests.filter((r) => r.status === "requested");
+  const filteredEntries =
+    ruleDecisionFilter === "all"
+      ? entries
+      : entries.filter((entry) => entry.decision === ruleDecisionFilter);
 
   const openReview = (
     request: ShadowMCPApprovalRequest,
@@ -726,12 +685,6 @@ export function ShadowMCPAccessContent() {
       ),
     },
     {
-      key: "status",
-      header: "Status",
-      width: "100px",
-      render: (request) => <RequestStatusBadge status={request.status} />,
-    },
-    {
       key: "actions",
       header: "",
       width: "170px",
@@ -764,7 +717,7 @@ export function ShadowMCPAccessContent() {
     },
     {
       key: "decision",
-      header: "List",
+      header: "Rule",
       width: "100px",
       render: (entry) => <DecisionBadge decision={entry.decision} />,
     },
@@ -828,112 +781,90 @@ export function ShadowMCPAccessContent() {
   ];
 
   return (
-    <div>
-      <div className="mb-6 flex items-start justify-between gap-4">
+    <div className="space-y-8">
+      <div className="flex items-start justify-between gap-4">
         <div>
           <Heading variant="h4">Shadow MCP</Heading>
           <Type muted small className="mt-1 max-w-3xl">
-            Review blocked Shadow MCP access requests, maintain managed allow
-            and deny lists, and grant approved external servers to roles through
-            MCP connect permissions.
+            Review blocked Shadow MCP access requests, maintain managed access
+            rules, and grant approved external servers to roles through MCP
+            connect permissions.
           </Type>
         </div>
-        <RequireScope scope="org:admin" level="component">
-          <div className="flex shrink-0 gap-2">
-            <Button
-              variant="secondary"
-              onClick={() => setEntryDialogDecision("denied")}
-            >
-              <Button.LeftIcon>
-                <ShieldX className="h-4 w-4" />
-              </Button.LeftIcon>
-              <Button.Text>Add Deny</Button.Text>
-            </Button>
-            <Button onClick={() => setEntryDialogDecision("allowed")}>
-              <Button.LeftIcon>
-                <ShieldCheck className="h-4 w-4" />
-              </Button.LeftIcon>
-              <Button.Text>Add Allow</Button.Text>
-            </Button>
+      </div>
+
+      <Separator />
+
+      <div className="space-y-12">
+        <section className="space-y-4">
+          <div>
+            <Heading variant="h5">Requests</Heading>
+            <Type muted small className="mt-1">
+              Shadow MCP servers waiting for admin review.
+            </Type>
           </div>
-        </RequireScope>
-      </div>
-
-      <div className="mb-6 grid gap-3 md:grid-cols-4">
-        <SummaryTile
-          label="Pending requests"
-          value={summary.requested}
-          detail="need review"
-        />
-        <SummaryTile
-          label="Allowed servers"
-          value={summary.allowedServers}
-          detail="available to roles"
-        />
-        <SummaryTile
-          label="Denied servers"
-          value={summary.deniedServers}
-          detail="override grants"
-        />
-        <SummaryTile
-          label="Roles granted"
-          value={summary.roleGrantCount}
-          detail="have access"
-        />
-      </div>
-
-      <div className="border-border bg-muted/30 mb-6 rounded-md border px-4 py-3">
-        <div className="flex items-start gap-3">
-          <Badge variant="neutral" className="mt-0.5">
-            <Badge.Text>Enforcement</Badge.Text>
-          </Badge>
-          <Type variant="body" className="text-muted-foreground text-sm">
-            Risk Policy decides whether Shadow MCP is blocked. If blocking
-            applies, denied servers are checked first, then allowed servers plus
-            role access. Creating a Gram-hosted server does not automatically
-            allow the original Shadow MCP server.
-          </Type>
-        </div>
-      </div>
-
-      <Tabs defaultValue="requests">
-        <TabsList className="mb-4">
-          <TabsTrigger value="requests">
-            Requests
-            {pendingRequests.length > 0 ? ` (${pendingRequests.length})` : ""}
-          </TabsTrigger>
-          <TabsTrigger value="allowed">
-            Allowed ({allowedEntries.length})
-          </TabsTrigger>
-          <TabsTrigger value="denied">
-            Denied ({deniedEntries.length})
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="requests">
           <Table
             columns={requestColumns}
-            data={requests}
+            data={pendingRequests}
             rowKey={(row) => row.id}
           />
-        </TabsContent>
+        </section>
 
-        <TabsContent value="allowed">
+        <section className="space-y-4">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <Heading variant="h5">Access Rules</Heading>
+              <Type muted small className="mt-1">
+                Allow and deny access rules available for Shadow MCP role
+                permissions.
+              </Type>
+            </div>
+            <div className="flex shrink-0 flex-wrap justify-end gap-2">
+              <Select
+                value={ruleDecisionFilter}
+                onValueChange={(value) =>
+                  setRuleDecisionFilter(value as RuleDecisionFilter)
+                }
+              >
+                <SelectTrigger className="w-[150px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All access rules</SelectItem>
+                  <SelectItem value="allowed">
+                    Allowed ({allowedEntries.length})
+                  </SelectItem>
+                  <SelectItem value="denied">
+                    Denied ({deniedEntries.length})
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+              <RequireScope scope="org:admin" level="component">
+                <Button
+                  variant="secondary"
+                  onClick={() => setEntryDialogDecision("denied")}
+                >
+                  <Button.LeftIcon>
+                    <ShieldX className="h-4 w-4" />
+                  </Button.LeftIcon>
+                  <Button.Text>Add Deny Rule</Button.Text>
+                </Button>
+                <Button onClick={() => setEntryDialogDecision("allowed")}>
+                  <Button.LeftIcon>
+                    <ShieldCheck className="h-4 w-4" />
+                  </Button.LeftIcon>
+                  <Button.Text>Add Allow Rule</Button.Text>
+                </Button>
+              </RequireScope>
+            </div>
+          </div>
           <Table
             columns={entryColumns}
-            data={allowedEntries}
+            data={filteredEntries}
             rowKey={(row) => row.id}
           />
-        </TabsContent>
-
-        <TabsContent value="denied">
-          <Table
-            columns={entryColumns}
-            data={deniedEntries}
-            rowKey={(row) => row.id}
-          />
-        </TabsContent>
-      </Tabs>
+        </section>
+      </div>
 
       <ReviewRequestDialog
         request={reviewRequest}
