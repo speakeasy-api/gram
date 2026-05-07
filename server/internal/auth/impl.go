@@ -607,7 +607,7 @@ func (s *Service) autoProvisionForAssistants(ctx context.Context, idToken string
 		return "", fmt.Errorf("store session: %w", err)
 	}
 
-	return fmt.Sprintf("/%s/projects/%s/assistants", org.Slug, projects[0].Slug), nil
+	return fmt.Sprintf("/%s/projects/%s/assistants/new", org.Slug, projects[0].Slug), nil
 }
 
 func dispositionFromState(payload *gen.CallbackPayload) string {
