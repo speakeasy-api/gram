@@ -7,9 +7,11 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -233,6 +235,8 @@ func TestDetectPromptInjection_AccuracyBaseline(t *testing.T) {
 	require.NoError(t, err)
 	t.Logf("accuracy baseline:\n%s", string(pretty))
 
+	writeMetricsArtifact(t, summary)
+
 	// Hard floor: FP-rate must not exceed the committed cap.
 	require.LessOrEqualf(t, overallM.FPRate, fl.FPRateMax,
 		"FP-rate %.4f exceeds floor %.4f (floors.json last updated %s by %s). "+
@@ -249,4 +253,54 @@ func TestDetectPromptInjection_AccuracyBaseline(t *testing.T) {
 			t.Logf("recall %.4f meets soft floor %.4f (margin %.4f)", overallM.Recall, *fl.RecallFloor, delta)
 		}
 	}
+}
+
+// writeMetricsArtifact persists the run's summary to a stable repo-relative
+// path (server/risk_accuracy_metrics.json) so CI can upload it as an artifact
+// and the local mise risk:report task can read it back. The path is derived
+// from this file's location via runtime.Caller so it doesn't depend on cwd.
+// Failures are logged but never fail the test.
+func writeMetricsArtifact(t *testing.T, summary any) {
+	t.Helper()
+
+	envelope := struct {
+		GitSHA    string `json:"git_sha"`
+		Ref       string `json:"ref"`
+		Timestamp string `json:"timestamp"`
+		Summary   any    `json:"summary"`
+	}{
+		GitSHA:    envOr("GITHUB_SHA", "local"),
+		Ref:       envOr("GITHUB_REF_NAME", "local"),
+		Timestamp: time.Now().UTC().Format(time.RFC3339),
+		Summary:   summary,
+	}
+
+	body, err := json.MarshalIndent(envelope, "", "  ")
+	require.NoError(t, err)
+
+	path := metricsArtifactPath(t)
+	if err := os.WriteFile(path, body, 0o644); err != nil {
+		t.Logf("failed to write metrics artifact to %s: %v", path, err)
+		return
+	}
+	t.Logf("wrote metrics artifact: %s", path)
+}
+
+// metricsArtifactPath resolves to <repo>/server/risk_accuracy_metrics.json
+// regardless of the test runner's cwd. Anchored on this file's path
+// (server/internal/background/activities/risk_analysis/) — four levels up is
+// the server/ dir.
+func metricsArtifactPath(t *testing.T) string {
+	t.Helper()
+	_, here, _, ok := runtime.Caller(0)
+	require.True(t, ok, "runtime.Caller(0) failed")
+	serverDir := filepath.Join(filepath.Dir(here), "..", "..", "..", "..")
+	return filepath.Clean(filepath.Join(serverDir, "risk_accuracy_metrics.json"))
+}
+
+func envOr(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return fallback
 }
