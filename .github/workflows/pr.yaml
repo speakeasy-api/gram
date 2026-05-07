@@ -28,9 +28,7 @@ jobs:
     outputs:
       server: ${{ steps.gates.outputs.server }}
       client: ${{ steps.gates.outputs.client }}
-      cli: ${{ steps.gates.outputs.cli }}
       functions: ${{ steps.gates.outputs.functions }}
-      tsframework: ${{ steps.gates.outputs.tsframework }}
       elements: ${{ steps.gates.outputs.elements }}
       migrations: ${{ steps.gates.outputs.migrations }}
       plog: ${{ steps.gates.outputs.plog }}
@@ -66,25 +64,11 @@ jobs:
             echo "Client jobs will be skipped."
           fi
 
-          if [[ "${{ steps.filter.outputs.cli }}" == "true" || "${{ github.ref }}" ==  "refs/heads/main" || "${{ github.event_name }}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
-            echo "cli=true" >> $GITHUB_OUTPUT
-            echo "CLI jobs will run."
-          else
-            echo "CLI jobs will be skipped."
-          fi
-
           if [[ "${{ steps.filter.outputs.functions }}" == "true" || "${{ github.ref }}" ==  "refs/heads/main" || "${{ github.event_name }}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
             echo "functions=true" >> $GITHUB_OUTPUT
             echo "Functions jobs will run."
           else
             echo "Functions jobs will be skipped."
-          fi
-
-          if [[ "${{ steps.filter.outputs.tsframework }}" == "true" || "${{ github.ref }}" ==  "refs/heads/main" || "${{ github.event_name }}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
-            echo "tsframework=true" >> $GITHUB_OUTPUT
-            echo "TypeScript framework jobs will run."
-          else
-            echo "TypeScript framework jobs will be skipped."
           fi
 
           if [[ "${{ steps.filter.outputs.elements }}" == "true" || "${{ github.ref }}" ==  "refs/heads/main" || "${{ github.event_name }}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
@@ -521,74 +505,6 @@ jobs:
         run: |
           mise run db:migrate --dry
           mise run git:porcelain
-
-  cli-build-lint:
-    runs-on: blacksmith-4vcpu-ubuntu-2404
-    needs: changes
-    if: needs.changes.outputs.cli == 'true'
-    env:
-      GOMAXPROCS: 4
-    services:
-      postgres:
-        image: pgvector/pgvector:pg17
-        env:
-          POSTGRES_USER: gram
-          POSTGRES_PASSWORD: gram
-          POSTGRES_DB: gram
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        ports:
-          - 5439:5432
-    steps:
-      - name: Checkout
-        uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
-
-      - name: Setup Mise
-        uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
-        with:
-          install: true
-          cache: true
-          env: false
-
-      - name: Prepare GitHub Actions environment
-        run: mise run github
-
-      - name: Cache Go
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
-        with:
-          key: ${{ env.GH_CACHE_GO_KEY }}
-          restore-keys: |
-            ${{ env.GH_CACHE_GO_KEY }}
-            ${{ env.GH_CACHE_GO_KEY_PARTIAL }}
-          path: |
-            ${{ env.GOCACHE }}
-            ${{ env.GOMODCACHE }}
-
-      - name: Build
-        run: mise run build:cli --readonly
-
-      - name: Lint with golangci-lint
-        uses: golangci/golangci-lint-action@1e7e51e771db61008b38414a730f564565cf7c20 # v9.2.0
-        with:
-          install-mode: none
-          working-directory: cli
-
-      - name: Install Go tools
-        run: go install tool
-        working-directory: cli
-
-        # TODO add speakeasy cli so the sdk can be generated
-      - name: Run code generators
-        run: mise run "gen:server"
-
-      - name: Run "go mod tidy"
-        run: mise run go:tidy
-
-      - name: Check for dirty files
-        run: mise run git:porcelain
 
   plog-build-lint:
     runs-on: blacksmith-4vcpu-ubuntu-2404
@@ -1258,47 +1174,6 @@ jobs:
         if: success()
         run: pnpm store prune
 
-  ts-framework-test:
-    runs-on: blacksmith-4vcpu-ubuntu-2404
-    needs: [changes]
-    if: needs.changes.outputs.tsframework == 'true'
-    steps:
-      - name: Checkout
-        uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
-
-      - name: Setup Mise
-        uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
-        with:
-          install: true
-          cache: true
-          env: false
-
-      - name: Prepare GitHub Actions environment
-        run: mise run github
-
-      - name: Cache PNPM
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
-        with:
-          key: ${{ env.GH_CACHE_PNPM_KEY }}
-          restore-keys: |
-            ${{ env.GH_CACHE_PNPM_KEY }}
-            ${{ env.GH_CACHE_PNPM_KEY_PARTIAL }}
-          path: |
-            ${{ env.PNPM_STORE_PATH }}
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Test TypeScript framework
-        run: pnpm --filter "./ts-framework/**" test
-
-      - name: Build TypeScript framework
-        run: pnpm --filter "./ts-framework/**" build
-
-      - name: Prune PNPM store
-        if: success()
-        run: pnpm store prune
-
   elements-build-lint:
     runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: changes
@@ -1456,12 +1331,10 @@ jobs:
       - client-build-lint
       - sdk-gen-check
       - ts-sdk-build-lint
-      - cli-build-lint
       - plog-build-lint
       - functions-build-host
       - functions-image
       - assistant-runtime-image
-      - ts-framework-test
       - elements-build-lint
       - elements-test
       - elements-examples

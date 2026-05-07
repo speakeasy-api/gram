@@ -158,10 +158,8 @@ _We **do not** subscribe to concepts like cyclomatic complexity or lines of code
 
 ## Releases
 
-> [!NOTE]  
-> All CLI updates must follow the [changeset process](./docs/runbooks/version-management-with-changesets.md).
-
-New versions of the CLI are released automatically with [GoReleaser](./.goreleaser.yaml).
+> [!NOTE]
+> Versioned public artifacts are released from their own repositories.
 
 Version bumps are determined by the git commit's prefix:
 

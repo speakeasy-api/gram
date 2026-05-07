@@ -17,16 +17,6 @@ functions:
   - "go.sum"
   - "functions/**"
 
-cli:
-  - "go.mod"
-  - "go.sum"
-  - "cli/**"
-  - "server/design/**"
-  - "server/gen/**"
-
-tsframework:
-  - "ts-framework/**"
-
 sdk:
   - "client/sdk/**"
   - "package.json"

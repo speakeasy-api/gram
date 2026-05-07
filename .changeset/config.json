@@ -7,7 +7,7 @@
       "skipCI": false
     }
   ],
-  "fixed": [["@gram-ai/functions", "@gram-ai/create-function"]],
+  "fixed": [],
   "linked": [],
   "access": "restricted",
   "baseBranch": "origin/main",
