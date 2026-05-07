@@ -146,7 +146,7 @@ func TestDetectPromptInjection_AccuracyBaseline(t *testing.T) {
 	ruleTP := map[string]int{}
 	ruleFP := map[string]int{}
 
-	ctx := context.Background()
+	ctx := t.Context()
 	for _, c := range corpus {
 		findings, err := DetectPromptInjection(ctx, c.Text)
 		require.NoError(t, err)
