@@ -18,7 +18,9 @@ func TestMCPErrHandle_IncludesMCPID(t *testing.T) {
 
 	handler := MCPErrHandle(logger, func(w http.ResponseWriter, r *http.Request) error {
 		rpcCtx, ok := contextvalues.GetRPCContext(r.Context())
-		require.True(t, ok)
+		if !ok {
+			return E(CodeUnexpected, nil, "unexpected error")
+		}
 		rpcCtx.ID = mcpjsonrpc.StringID("req-1")
 		return E(CodeUnauthorized, nil, "unauthorized")
 	})
