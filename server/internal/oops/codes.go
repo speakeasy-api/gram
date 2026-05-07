@@ -19,6 +19,7 @@ const (
 	CodeNotImplemented      Code = "not_implemented"
 	CodeInsufficientCredits Code = "insufficient_credits"
 	CodeRateLimitExceeded   Code = "rate_limit_exceeded"
+	CodeMethodNotAllowed    Code = "method_not_allowed"
 )
 
 var StatusCodes = map[Code]int{
@@ -36,6 +37,7 @@ var StatusCodes = map[Code]int{
 	CodeNotImplemented:      http.StatusNotImplemented,
 	CodeInsufficientCredits: http.StatusPaymentRequired,
 	CodeRateLimitExceeded:   http.StatusTooManyRequests,
+	CodeMethodNotAllowed:    http.StatusMethodNotAllowed,
 }
 
 func (c Code) UserMessage() string {
@@ -46,6 +48,8 @@ func (c Code) UserMessage() string {
 		return "permission denied"
 	case CodeBadRequest:
 		return "request is invalid"
+	case CodeMethodNotAllowed:
+		return "method not allowed"
 	case CodeNotFound:
 		return "resource not found"
 	case CodeConflict:
@@ -82,6 +86,8 @@ func (c Code) MCPCode() MCPCode {
 		return MCPCodeParseError
 	case CodeUnauthorized, CodeForbidden, CodeConflict, CodeUnsupportedMedia:
 		return MCPCodeInvalidRequest
+	case CodeMethodNotAllowed:
+		return MCPCodeServerError
 	case CodeNotFound:
 		return MCPCodeResourceNotFound
 	case CodeInvalid:
