@@ -49,15 +49,6 @@ You also need to register `http://localhost:35291/v1/speakeasy_provider/oidc/cal
 
 When OIDC mode is enabled, clicking "Login" will redirect to WorkOS AuthKit for real authentication instead of auto-approving. The mock IDP translates the OIDC session into the Speakeasy provider format that the Gram server expects.
 
-### CLI development
-
-Quickstart:
-
-```bash
-cd cli
-go run . --help
-```
-
 # Contribution guidelines
 
 Above anything else in this document: we do not perfectly hold to the guidelines below but we do our best to work towards them. Active codebases will readily deteriorate with time unless explicit efforts are made to reverse deterioration.
