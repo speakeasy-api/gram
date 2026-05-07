@@ -293,6 +293,7 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text s
 					Source:      ra.SourcePromptInjection,
 					RuleID:      findings[0].RuleID,
 					Description: findings[0].Description,
+					UserMessage: conv.FromPGText[string](policy.UserMessage),
 				}, nil
 			}
 		}
