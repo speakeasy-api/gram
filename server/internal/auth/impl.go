@@ -25,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	envRepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
@@ -33,6 +34,8 @@ import (
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 )
+
+const dispositionAssistants = "assistants"
 
 type authErr string
 
@@ -59,6 +62,7 @@ type Service struct {
 	sessions     *sessions.Manager
 	cfg          AuthConfigurations
 	authz        *authz.Engine
+	billing      billing.Repository
 	projectsRepo *projectsRepo.Queries
 	envRepo      *envRepo.Queries
 	orgRepo      *orgRepo.Queries
@@ -73,6 +77,7 @@ func NewService(
 	sessions *sessions.Manager,
 	cfg AuthConfigurations,
 	authzEngine *authz.Engine,
+	billingRepo billing.Repository,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("auth"))
 
@@ -83,6 +88,7 @@ func NewService(
 		sessions:     sessions,
 		cfg:          cfg,
 		authz:        authzEngine,
+		billing:      billingRepo,
 		projectsRepo: projectsRepo.New(db),
 		envRepo:      envRepo.New(db),
 		orgRepo:      orgRepo.New(db),
@@ -154,6 +160,18 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 	}
 
 	if len(userInfo.Organizations) == 0 {
+		if dispositionFromState(payload) == dispositionAssistants {
+			location, err := s.autoProvisionForAssistants(ctx, idToken, userInfo, &session)
+			if err != nil {
+				return redirectWithError(authErrInit, err)
+			}
+			return &gen.CallbackResult{
+				Location:      location,
+				SessionToken:  session.SessionID,
+				SessionCookie: session.SessionID,
+			}, nil
+		}
+
 		if err := s.sessions.StoreSession(ctx, session); err != nil {
 			return redirectWithError(authErrInit, err)
 		}
@@ -527,6 +545,65 @@ func (s *Service) Register(ctx context.Context, payload *gen.RegisterPayload) (e
 	}
 
 	return nil
+}
+
+// autoProvisionForAssistants creates a fresh org for an assistants-disposition
+// signup, sets it active on the session, and returns the post-signin redirect.
+func (s *Service) autoProvisionForAssistants(ctx context.Context, idToken string, userInfo *sessions.CachedUserInfo, session *sessions.Session) (string, error) {
+	info, err := s.sessions.CreateOrgFromSpeakeasy(ctx, idToken, generateLegibleOrgName())
+	if err != nil {
+		return "", fmt.Errorf("create org via speakeasy: %w", err)
+	}
+	if invalidationErr := s.sessions.InvalidateUserInfoCache(ctx, userInfo.UserID); invalidationErr != nil {
+		return "", fmt.Errorf("invalidate user info cache: %w", invalidationErr)
+	}
+	if len(info.Organizations) == 0 {
+		return "", errors.New("speakeasy returned no organizations after register")
+	}
+
+	org := info.Organizations[0]
+
+	whitelisted := true
+	if _, err := s.orgRepo.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
+		ID:          org.ID,
+		Name:        org.Name,
+		Slug:        org.Slug,
+		WorkosID:    conv.PtrToPGText(org.WorkosID),
+		Whitelisted: conv.PtrToPGBool(&whitelisted),
+	}); err != nil {
+		return "", fmt.Errorf("upsert organization metadata: %w", err)
+	}
+
+	projects, err := s.getProjectsOrSetupDefaults(ctx, org.ID)
+	if err != nil {
+		return "", fmt.Errorf("setup default project: %w", err)
+	}
+	if len(projects) == 0 {
+		return "", errors.New("default project missing after setup")
+	}
+
+	if benefitErr := s.billing.AttachAssistantsBenefit(ctx, org.ID, userInfo.Email); benefitErr != nil {
+		s.logger.ErrorContext(ctx, "failed to attach assistants benefit", attr.SlogError(benefitErr), attr.SlogOrganizationID(org.ID))
+	}
+
+	session.ActiveOrganizationID = org.ID
+	if err := s.sessions.StoreSession(ctx, *session); err != nil {
+		return "", fmt.Errorf("store session: %w", err)
+	}
+
+	return fmt.Sprintf("/%s/projects/%s/assistants", org.Slug, projects[0].Slug), nil
+}
+
+func dispositionFromState(payload *gen.CallbackPayload) string {
+	state := decodeStateParam(payload)
+	if state == nil {
+		return ""
+	}
+	parsed, err := url.Parse(state.FinalDestinationURL)
+	if err != nil {
+		return ""
+	}
+	return parsed.Query().Get("disposition")
 }
 
 func (s *Service) getProjectsOrSetupDefaults(ctx context.Context, organizationID string) ([]projectsRepo.Project, error) {

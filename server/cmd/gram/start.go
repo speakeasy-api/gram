@@ -835,6 +835,7 @@ func newStartCommand() *cli.Command {
 					Environment:            c.String("environment"),
 				},
 				authzEngine,
+				billingRepo,
 			))
 			organizations.Attach(mux, organizations.NewService(logger, tracerProvider, db, sessionManager, workosClient, productFeatures, authzEngine))
 			projects.Attach(mux, projects.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger))

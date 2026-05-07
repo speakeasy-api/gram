@@ -56,6 +56,11 @@ type Repository interface {
 	CreateTopUpCheckout(ctx context.Context, orgID, serverURL, successURL string) (string, error)
 	IsTopUpProductID(productID string) bool
 	CreateCustomerSession(ctx context.Context, orgID string) (string, error)
+	// AttachAssistantsBenefit ensures a Polar customer record exists for orgID
+	// and is subscribed to the free-tier product so the assistants/credits
+	// benefit grant takes effect immediately. Idempotent against existing
+	// customers and subscriptions.
+	AttachAssistantsBenefit(ctx context.Context, orgID string, email string) error
 	GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error)
 	ValidateAndParseWebhookEvent(ctx context.Context, payload []byte, webhookHeader http.Header) (*PolarWebhookPayload, error)
 	InvalidateBillingCustomerCaches(ctx context.Context, orgID string) error

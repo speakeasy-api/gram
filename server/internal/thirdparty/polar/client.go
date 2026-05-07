@@ -860,6 +860,67 @@ func (p *Client) IsTopUpProductID(productID string) bool {
 	return p.catalog.IsTopUpProductID(productID)
 }
 
+// AttachAssistantsBenefit auto-attaches a fresh org to the free-tier product so
+// the meter-credit benefit grant takes effect without requiring a checkout.
+// Idempotent: returns nil if the customer or a free-tier subscription already
+// exists.
+func (p *Client) AttachAssistantsBenefit(ctx context.Context, orgID string, email string) (err error) {
+	ctx, span := p.tracer.Start(ctx, "polar_client.attach_assistants_benefit", trace.WithAttributes(attr.OrganizationID(orgID)))
+	defer func() {
+		if err != nil {
+			span.SetStatus(codes.Error, err.Error())
+		}
+		span.End()
+	}()
+
+	if orgID == "" {
+		return errors.New("organization ID is required")
+	}
+	if email == "" {
+		return errors.New("email is required")
+	}
+
+	customerState, getErr := p.polar.Customers.GetStateExternal(ctx, orgID)
+	var notFound *apierrors.ResourceNotFound
+	switch {
+	case errors.As(getErr, &notFound):
+		// Customer does not exist yet — create it.
+		_, createErr := p.polar.Customers.Create(ctx, polarComponents.CreateCustomerCreateCustomerIndividualCreate(polarComponents.CustomerIndividualCreate{
+			ExternalID: &orgID,
+			Email:      email,
+		}))
+		if createErr != nil {
+			return fmt.Errorf("create polar customer: %w", createErr)
+		}
+	case getErr != nil:
+		return fmt.Errorf("query polar customer state: %w", getErr)
+	default:
+		fields := unwrapCustomerState(customerState.CustomerState)
+		if fields != nil {
+			for _, sub := range fields.ActiveSubscriptions {
+				if sub.ProductID == p.catalog.ProductIDBase {
+					return nil
+				}
+			}
+		}
+	}
+
+	if _, subErr := p.polar.Subscriptions.Create(ctx, polarOperations.CreateSubscriptionsCreateSubscriptionCreateSubscriptionCreateExternalCustomer(
+		polarComponents.SubscriptionCreateExternalCustomer{
+			ProductID:          p.catalog.ProductIDBase,
+			ExternalCustomerID: orgID,
+		},
+	)); subErr != nil {
+		return fmt.Errorf("create polar subscription: %w", subErr)
+	}
+
+	if err := p.InvalidateBillingCustomerCaches(ctx, orgID); err != nil {
+		p.logger.WarnContext(ctx, "failed to invalidate billing caches after benefit attach", attr.SlogError(err))
+	}
+
+	return nil
+}
+
 func (p *Client) CreateCustomerSession(ctx context.Context, orgID string) (cpu string, err error) {
 	ctx, span := p.tracer.Start(ctx, "polar_client.create_customer_session", trace.WithAttributes(attr.OrganizationID(orgID)))
 	defer func() {

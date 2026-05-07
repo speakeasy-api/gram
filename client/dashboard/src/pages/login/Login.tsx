@@ -11,7 +11,11 @@ export default function Login() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
 
-  const redirectTo = searchParams.get("redirect");
+  const explicitRedirect = searchParams.get("redirect");
+  const disposition = searchParams.get("disposition");
+  const redirectTo =
+    explicitRedirect ??
+    (disposition ? `/?disposition=${encodeURIComponent(disposition)}` : null);
   useEffect(() => {
     if (session.session !== "") {
       if (redirectTo) {

@@ -86,6 +86,14 @@ func (s *StubClient) CreateCustomerSession(ctx context.Context, orgID string) (s
 	return "", fmt.Errorf("not implemented")
 }
 
+func (s *StubClient) AttachAssistantsBenefit(ctx context.Context, orgID string, email string) error {
+	_, span := s.tracer.Start(ctx, "stub_client.attach_assistants_benefit")
+	defer span.End()
+
+	s.logger.InfoContext(ctx, "stub: attach assistants benefit", attr.SlogOrganizationID(orgID))
+	return nil
+}
+
 // GetCustomer implements Repository.
 func (s *StubClient) GetCustomer(ctx context.Context, orgID string) (*Customer, error) {
 	_, span := s.tracer.Start(ctx, "stub_client.get_customer")
