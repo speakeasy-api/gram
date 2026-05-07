@@ -863,9 +863,11 @@ func (p *Client) IsTopUpProductID(productID string) bool {
 
 // AttachAssistantsBenefit subscribes a fresh org to the configured assistants
 // product so its meter-credit benefit grant takes effect without a checkout.
-// No-op (with a warn log) when no assistants product is configured.
-// Idempotent: skips when the org already holds an active subscription to it.
-func (p *Client) AttachAssistantsBenefit(ctx context.Context, orgID string, email string) (err error) {
+// Returns the new subscription ID so the caller can schedule a one-shot
+// cancel-at-period-end via Temporal. Returns empty string + nil when no
+// assistants product is configured, or when the org already holds an active
+// subscription to it.
+func (p *Client) AttachAssistantsBenefit(ctx context.Context, orgID string, email string) (subscriptionID string, err error) {
 	ctx, span := p.tracer.Start(ctx, "polar_client.attach_assistants_benefit", trace.WithAttributes(attr.OrganizationID(orgID)))
 	defer func() {
 		if err != nil {
@@ -875,14 +877,14 @@ func (p *Client) AttachAssistantsBenefit(ctx context.Context, orgID string, emai
 	}()
 
 	if orgID == "" {
-		return errors.New("organization ID is required")
+		return "", errors.New("organization ID is required")
 	}
 	if email == "" {
-		return errors.New("email is required")
+		return "", errors.New("email is required")
 	}
 	if p.catalog.ProductIDAssistants == "" {
 		p.logger.WarnContext(ctx, "skip attach assistants benefit: no assistants product configured", attr.SlogOrganizationID(orgID))
-		return nil
+		return "", nil
 	}
 
 	customerState, getErr := p.polar.Customers.GetStateExternal(ctx, orgID)
@@ -895,16 +897,16 @@ func (p *Client) AttachAssistantsBenefit(ctx context.Context, orgID string, emai
 			Email:      email,
 		}))
 		if createErr != nil {
-			return fmt.Errorf("create polar customer: %w", createErr)
+			return "", fmt.Errorf("create polar customer: %w", createErr)
 		}
 	case getErr != nil:
-		return fmt.Errorf("query polar customer state: %w", getErr)
+		return "", fmt.Errorf("query polar customer state: %w", getErr)
 	default:
 		fields := unwrapCustomerState(customerState.CustomerState)
 		if fields != nil {
 			for _, sub := range fields.ActiveSubscriptions {
 				if sub.ProductID == p.catalog.ProductIDAssistants {
-					return nil
+					return "", nil
 				}
 			}
 		}
@@ -917,25 +919,37 @@ func (p *Client) AttachAssistantsBenefit(ctx context.Context, orgID string, emai
 		},
 	))
 	if subErr != nil {
-		return fmt.Errorf("create polar subscription: %w", subErr)
-	}
-
-	// Mark the subscription to cancel at period end so the benefit grant lands
-	// once and never re-grants on the next cycle. Failure here is logged but
-	// non-fatal — the credits are already granted; an unset cancel just means
-	// they'd renew, which we'd rather avoid but shouldn't fail signup over.
-	if subRes != nil && subRes.Subscription != nil {
-		if _, err := p.polar.Subscriptions.Update(ctx, subRes.Subscription.ID, polarComponents.CreateSubscriptionUpdateSubscriptionCancel(polarComponents.SubscriptionCancel{
-			CancelAtPeriodEnd: true,
-		})); err != nil {
-			p.logger.WarnContext(ctx, "failed to mark assistants subscription cancel-at-period-end", attr.SlogError(err), attr.SlogOrganizationID(orgID))
-		}
+		return "", fmt.Errorf("create polar subscription: %w", subErr)
 	}
 
 	if err := p.InvalidateBillingCustomerCaches(ctx, orgID); err != nil {
 		p.logger.WarnContext(ctx, "failed to invalidate billing caches after benefit attach", attr.SlogError(err))
 	}
 
+	if subRes == nil || subRes.Subscription == nil {
+		return "", nil
+	}
+	return subRes.Subscription.ID, nil
+}
+
+func (p *Client) CancelSubscriptionAtPeriodEnd(ctx context.Context, subscriptionID string) (err error) {
+	ctx, span := p.tracer.Start(ctx, "polar_client.cancel_subscription_at_period_end")
+	defer func() {
+		if err != nil {
+			span.SetStatus(codes.Error, err.Error())
+		}
+		span.End()
+	}()
+
+	if subscriptionID == "" {
+		return errors.New("subscription ID is required")
+	}
+
+	if _, err := p.polar.Subscriptions.Update(ctx, subscriptionID, polarComponents.CreateSubscriptionUpdateSubscriptionCancel(polarComponents.SubscriptionCancel{
+		CancelAtPeriodEnd: true,
+	})); err != nil {
+		return fmt.Errorf("update polar subscription cancel-at-period-end: %w", err)
+	}
 	return nil
 }
 

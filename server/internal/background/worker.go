@@ -297,6 +297,8 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(ProcessWorkOSOrganizationEventsWorkflowDebounced)
 	temporalWorker.RegisterWorkflow(ProcessWorkOSMembershipEventsWorkflow)
 	temporalWorker.RegisterWorkflow(ProcessWorkOSMembershipEventsWorkflowDebounced)
+	// Assistants signup followups
+	temporalWorker.RegisterWorkflow(CancelAssistantsSubscriptionWorkflow)
 
 	if err := AddPlatformUsageMetricsSchedule(context.Background(), env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {

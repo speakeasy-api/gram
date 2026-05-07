@@ -843,6 +843,7 @@ func newStartCommand() *cli.Command {
 				},
 				authzEngine,
 				billingRepo,
+				&background.TemporalAssistantsSubscriptionCancelScheduler{TemporalEnv: temporalEnv},
 			))
 			organizations.Attach(mux, organizations.NewService(logger, tracerProvider, db, sessionManager, workosClient, productFeatures, authzEngine))
 			projects.Attach(mux, projects.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger))

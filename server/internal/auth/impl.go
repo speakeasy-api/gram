@@ -55,17 +55,26 @@ type AuthConfigurations struct {
 
 // Service for gram dashboard authentication endpoints
 
+// AssistantsSubscriptionCancelScheduler schedules a Temporal workflow that
+// marks the assistants signup subscription cancel-at-period-end so the
+// benefit grant fires once and never re-grants. Implementations live in the
+// background package; tests can pass a noop.
+type AssistantsSubscriptionCancelScheduler interface {
+	ScheduleCancelAssistantsSubscription(ctx context.Context, subscriptionID string) error
+}
+
 type Service struct {
-	tracer       trace.Tracer
-	logger       *slog.Logger
-	db           *pgxpool.Pool
-	sessions     *sessions.Manager
-	cfg          AuthConfigurations
-	authz        *authz.Engine
-	billing      billing.Repository
-	projectsRepo *projectsRepo.Queries
-	envRepo      *envRepo.Queries
-	orgRepo      *orgRepo.Queries
+	tracer              trace.Tracer
+	logger              *slog.Logger
+	db                  *pgxpool.Pool
+	sessions            *sessions.Manager
+	cfg                 AuthConfigurations
+	authz               *authz.Engine
+	billing             billing.Repository
+	cancelSubsScheduler AssistantsSubscriptionCancelScheduler
+	projectsRepo        *projectsRepo.Queries
+	envRepo             *envRepo.Queries
+	orgRepo             *orgRepo.Queries
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -78,20 +87,22 @@ func NewService(
 	cfg AuthConfigurations,
 	authzEngine *authz.Engine,
 	billingRepo billing.Repository,
+	cancelSubsScheduler AssistantsSubscriptionCancelScheduler,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("auth"))
 
 	return &Service{
-		tracer:       tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/auth"),
-		logger:       logger,
-		db:           db,
-		sessions:     sessions,
-		cfg:          cfg,
-		authz:        authzEngine,
-		billing:      billingRepo,
-		projectsRepo: projectsRepo.New(db),
-		envRepo:      envRepo.New(db),
-		orgRepo:      orgRepo.New(db),
+		tracer:              tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/auth"),
+		logger:              logger,
+		db:                  db,
+		sessions:            sessions,
+		cfg:                 cfg,
+		authz:               authzEngine,
+		billing:             billingRepo,
+		cancelSubsScheduler: cancelSubsScheduler,
+		projectsRepo:        projectsRepo.New(db),
+		envRepo:             envRepo.New(db),
+		orgRepo:             orgRepo.New(db),
 	}
 }
 
@@ -582,8 +593,13 @@ func (s *Service) autoProvisionForAssistants(ctx context.Context, idToken string
 		return "", errors.New("default project missing after setup")
 	}
 
-	if benefitErr := s.billing.AttachAssistantsBenefit(ctx, org.ID, userInfo.Email); benefitErr != nil {
+	subID, benefitErr := s.billing.AttachAssistantsBenefit(ctx, org.ID, userInfo.Email)
+	if benefitErr != nil {
 		s.logger.ErrorContext(ctx, "failed to attach assistants benefit", attr.SlogError(benefitErr), attr.SlogOrganizationID(org.ID))
+	} else if subID != "" && s.cancelSubsScheduler != nil {
+		if err := s.cancelSubsScheduler.ScheduleCancelAssistantsSubscription(ctx, subID); err != nil {
+			s.logger.ErrorContext(ctx, "failed to schedule assistants subscription cancel-at-period-end", attr.SlogError(err), attr.SlogOrganizationID(org.ID))
+		}
 	}
 
 	session.ActiveOrganizationID = org.ID
