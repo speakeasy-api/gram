@@ -11,6 +11,7 @@ const (
 	CodeNotFound            Code = "not_found"
 	CodeConflict            Code = "conflict"
 	CodeUnsupportedMedia    Code = "unsupported_media"
+	CodeMethodNotAllowed    Code = "method_not_allowed"
 	CodeRequestTooLarge     Code = "request_too_large"
 	CodeInvalid             Code = "invalid"
 	CodeUnexpected          Code = "unexpected"
@@ -27,6 +28,7 @@ var StatusCodes = map[Code]int{
 	CodeNotFound:            http.StatusNotFound,
 	CodeConflict:            http.StatusConflict,
 	CodeUnsupportedMedia:    http.StatusUnsupportedMediaType,
+	CodeMethodNotAllowed:    http.StatusMethodNotAllowed,
 	CodeRequestTooLarge:     http.StatusRequestEntityTooLarge,
 	CodeInvalid:             http.StatusUnprocessableEntity,
 	CodeUnexpected:          http.StatusInternalServerError,
