@@ -915,7 +915,7 @@ func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *ra
 	case "resources/read":
 		return handleResourcesRead(ctx, s.logger, s.db, payload, req, s.toolProxy, s.env, s.billingTracker, s.billingRepository, s.telemLogger)
 	default:
-		return nil, oops.E(oops.CodeNotImplemented, nil, fmt.Sprintf("%s: %s", req.Method, oops.MCPCodeMethodNotFound.Message()))
+		return nil, oops.E(oops.CodeNotImplemented, nil, "%s: %s", req.Method, oops.MCPCodeMethodNotFound.Message())
 	}
 }
 
