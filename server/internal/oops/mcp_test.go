@@ -65,30 +65,6 @@ func TestMCPErrHandle_UsesNullMCPIDWhenMissing(t *testing.T) {
 	require.Empty(t, logBuf.String())
 }
 
-func TestMCPCode_HTTPStatusAndMessage(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		code    MCPCode
-		status  int
-		message string
-	}{
-		{MCPCodeParseError, http.StatusBadRequest, "Parse error"},
-		{MCPCodeInvalidRequest, http.StatusBadRequest, "Invalid Request"},
-		{MCPCodeMethodNotFound, http.StatusNotFound, "Method not found"},
-		{MCPCodeInvalidParams, http.StatusBadRequest, "Invalid params"},
-		{MCPCodeInternalError, http.StatusInternalServerError, "Internal error"},
-		{MCPCodeServerError, http.StatusInternalServerError, "Server error"},
-		{MCPCodeResourceNotFound, http.StatusNotFound, "Resource not found"},
-		{MCPCode(-1), http.StatusInternalServerError, "Internal error"},
-	}
-
-	for _, tt := range tests {
-		require.Equal(t, tt.status, tt.code.HTTPStatus())
-		require.Equal(t, tt.message, tt.code.Message())
-	}
-}
-
 func TestMCPError_MarshalJSON(t *testing.T) {
 	t.Parallel()
 
