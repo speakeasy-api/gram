@@ -36,7 +36,7 @@ type RequestContext struct {
 	UserAgent   string
 }
 
-type MCPContext struct {
+type RPCContext struct {
 	ID mcpjsonrpc.ID
 }
 
@@ -47,7 +47,7 @@ const (
 	RequestContextKey           contextKey = "requestContextKey"
 	RBACScopeOverrideContextKey contextKey = "rbacScopeOverrideKey"
 	AssistantPrincipalKey       contextKey = "assistantPrincipalKey"
-	MCPContextKey               contextKey = "mcpContextKey"
+	RPCContextKey               contextKey = "rpcContextKey"
 )
 
 func SetSessionTokenInContext(ctx context.Context, value string) context.Context {
@@ -86,27 +86,13 @@ func GetRequestContext(ctx context.Context) (*RequestContext, bool) {
 	return value, ok
 }
 
-func SetMCPContext(ctx context.Context, value *MCPContext) context.Context {
-	return context.WithValue(ctx, MCPContextKey, value)
+func SetRPCContext(ctx context.Context, value *RPCContext) context.Context {
+	return context.WithValue(ctx, RPCContextKey, value)
 }
 
-func GetMCPContext(ctx context.Context) (*MCPContext, bool) {
-	value, ok := ctx.Value(MCPContextKey).(*MCPContext)
+func GetRPCContext(ctx context.Context) (*RPCContext, bool) {
+	value, ok := ctx.Value(RPCContextKey).(*RPCContext)
 	return value, ok
-}
-
-func SetMCPID(ctx context.Context, value mcpjsonrpc.ID) {
-	if mcpCtx, ok := GetMCPContext(ctx); ok && value.IsSet() {
-		mcpCtx.ID = value
-	}
-}
-
-func GetMCPID(ctx context.Context) (mcpjsonrpc.ID, bool) {
-	mcpCtx, ok := GetMCPContext(ctx)
-	if !ok || !mcpCtx.ID.IsSet() {
-		return mcpjsonrpc.ID{}, false
-	}
-	return mcpCtx.ID, true
 }
 
 func SetRBACScopeOverride(ctx context.Context, value string) context.Context {
