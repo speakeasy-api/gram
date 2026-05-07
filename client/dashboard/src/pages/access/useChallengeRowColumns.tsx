@@ -23,6 +23,7 @@ export function useChallengeRowColumns(
   groupCounts?: Map<string, number>,
   groupKeys?: Map<string, string>,
   onToggleGroup?: (groupKey: string) => void,
+  outcomeFilter?: string,
 ): Column<AuthzChallenge>[] {
   const { orgSlug } = useSlugs();
   const { organization } = useSession();
@@ -46,7 +47,8 @@ export function useChallengeRowColumns(
     const rowFade = (row: AuthzChallenge) =>
       animatingOutIds?.has(row.id)
         ? "opacity-0 transition-opacity duration-1000"
-        : (row.outcome === "allow" || row.resolvedAt) &&
+        : outcomeFilter === "deny" &&
+          (row.outcome === "allow" || row.resolvedAt) &&
           "opacity-40 transition-opacity duration-1000";
 
     return [
@@ -225,5 +227,6 @@ export function useChallengeRowColumns(
     groupCounts,
     groupKeys,
     onToggleGroup,
+    outcomeFilter,
   ]);
 }

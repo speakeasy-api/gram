@@ -1536,7 +1536,13 @@ func (s *Service) ResolveChallenge(ctx context.Context, payload *gen.ResolveChal
 		resourceID = *payload.ResourceID
 	}
 
-	rows, err := repo.New(s.db).InsertChallengeResolutions(ctx, repo.InsertChallengeResolutionsParams{
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").Log(ctx, s.logger)
+	}
+	defer func() { _ = dbtx.Rollback(ctx) }()
+
+	rows, err := repo.New(dbtx).InsertChallengeResolutions(ctx, repo.InsertChallengeResolutionsParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		ChallengeIds:   payload.ChallengeIds,
 		PrincipalUrn:   payload.PrincipalUrn,
@@ -1567,7 +1573,7 @@ func (s *Service) ResolveChallenge(ctx context.Context, payload *gen.ResolveChal
 			CreatedAt:      row.CreatedAt.Time.Format(time.RFC3339),
 		})
 
-		if err := s.audit.LogAccessChallengeResolve(ctx, s.db, audit.LogAccessChallengeResolveEvent{
+		if err := s.audit.LogAccessChallengeResolve(ctx, dbtx, audit.LogAccessChallengeResolveEvent{
 			OrganizationID:   authCtx.ActiveOrganizationID,
 			Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
 			ActorDisplayName: authCtx.Email,
@@ -1579,6 +1585,10 @@ func (s *Service) ResolveChallenge(ctx context.Context, payload *gen.ResolveChal
 		}); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "log access challenge resolve").Log(ctx, s.logger)
 		}
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").Log(ctx, s.logger)
 	}
 
 	return &gen.ResolveChallengesResult{Resolutions: resolutions}, nil
