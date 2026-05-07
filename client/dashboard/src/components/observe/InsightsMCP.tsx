@@ -562,7 +562,6 @@ export function InsightsOverviewShell({
         "get_project_metrics_summary",
         "get_user_metrics_summary",
         "get_observability_overview",
-        "gram_list_organization_users",
       ].some((tool) => toolName.includes(tool)),
     [],
   );

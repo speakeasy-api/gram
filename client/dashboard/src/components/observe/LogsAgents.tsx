@@ -130,10 +130,12 @@ export function LogsAgentsContent() {
     toolsToInclude: [
       "gram_search_logs",
       "gram_search_chats",
+      "gram_search_users",
       "gram_get_deployment_logs",
       "gram_load_chat",
       "gram_list_chats_with_resolutions",
       "gram_list_chats",
+      "gram_list_organization_users",
     ],
   });
 
@@ -372,6 +374,12 @@ export function LogsAgentsContent() {
             label: "Debug a specific chat",
             prompt:
               "Help me debug an agent session. Search both the chat data and raw logs to understand what happened.",
+          },
+          {
+            title: "User Usage",
+            label: "Show user usage",
+            prompt:
+              "Show me a table of selected organization users' usage for the last 30 days, including each user's hook source breakdown.",
           },
         ]}
       />
