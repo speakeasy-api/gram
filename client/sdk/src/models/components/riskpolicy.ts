@@ -8,6 +8,10 @@ import { safeParse } from "../../lib/schemas.js";
 import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+import {
+  CustomCLIPattern,
+  CustomCLIPattern$inboundSchema,
+} from "./customclipattern.js";
 
 /**
  * Policy action: flag (log only) or block (deny in real-time).
@@ -34,6 +38,10 @@ export type RiskPolicy = {
    * When the policy was created.
    */
   createdAt: Date;
+  /**
+   * Custom destructive CLI patterns to detect in addition to built-in rules. Only evaluated when cli_destructive is in sources.
+   */
+  customCliPatterns?: Array<CustomCLIPattern> | undefined;
   /**
    * Whether the policy is active.
    */
@@ -95,6 +103,7 @@ export const RiskPolicy$inboundSchema: z.ZodMiniType<RiskPolicy, unknown> = z
         z.iso.datetime({ offset: true }),
         z.transform(v => new Date(v)),
       ),
+      custom_cli_patterns: z.optional(z.array(CustomCLIPattern$inboundSchema)),
       enabled: z.boolean(),
       id: z.string(),
       name: z.string(),
@@ -114,6 +123,7 @@ export const RiskPolicy$inboundSchema: z.ZodMiniType<RiskPolicy, unknown> = z
       return remap$(v, {
         "auto_name": "autoName",
         "created_at": "createdAt",
+        "custom_cli_patterns": "customCliPatterns",
         "pending_messages": "pendingMessages",
         "presidio_entities": "presidioEntities",
         "project_id": "projectId",

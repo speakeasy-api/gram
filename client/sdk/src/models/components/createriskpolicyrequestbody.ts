@@ -5,6 +5,11 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { ClosedEnum } from "../../types/enums.js";
+import {
+  CustomCLIPattern,
+  CustomCLIPattern$Outbound,
+  CustomCLIPattern$outboundSchema,
+} from "./customclipattern.js";
 
 /**
  * Policy action: flag or block.
@@ -27,6 +32,10 @@ export type CreateRiskPolicyRequestBody = {
    * Whether the policy name should be auto-generated.
    */
   autoName?: boolean | undefined;
+  /**
+   * Custom destructive CLI patterns.
+   */
+  customCliPatterns?: Array<CustomCLIPattern> | undefined;
   /**
    * Whether the policy is active.
    */
@@ -58,6 +67,7 @@ export const Action$outboundSchema: z.ZodMiniEnum<typeof Action> = z.enum(
 export type CreateRiskPolicyRequestBody$Outbound = {
   action: string;
   auto_name?: boolean | undefined;
+  custom_cli_patterns?: Array<CustomCLIPattern$Outbound> | undefined;
   enabled?: boolean | undefined;
   name?: string | undefined;
   presidio_entities?: Array<string> | undefined;
@@ -73,6 +83,7 @@ export const CreateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
   z.object({
     action: z._default(Action$outboundSchema, "flag"),
     autoName: z.optional(z.boolean()),
+    customCliPatterns: z.optional(z.array(CustomCLIPattern$outboundSchema)),
     enabled: z.optional(z.boolean()),
     name: z.optional(z.string()),
     presidioEntities: z.optional(z.array(z.string())),
@@ -82,6 +93,7 @@ export const CreateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       autoName: "auto_name",
+      customCliPatterns: "custom_cli_patterns",
       presidioEntities: "presidio_entities",
       userMessage: "user_message",
     });

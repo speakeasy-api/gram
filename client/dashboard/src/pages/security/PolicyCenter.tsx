@@ -40,8 +40,10 @@ import {
   Loader2,
   ChevronRight,
   RefreshCw,
+  Trash2,
+  AlertCircle,
 } from "lucide-react";
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useRiskListPolicies,
@@ -59,8 +61,10 @@ import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
 import {
   RULE_CATEGORY_META,
   DETECTION_RULES,
+  CLI_DESTRUCTIVE_BUILTIN_PATTERNS,
   type RuleCategory,
   type PolicyAction,
+  type CustomCLIPattern,
 } from "./policy-data";
 import { cn } from "@/lib/utils";
 
@@ -78,6 +82,7 @@ const AVAILABLE_CATEGORIES: Set<RuleCategory> = new Set([
   ...PRESIDIO_CATEGORIES,
   "shadow_mcp",
   "destructive_tool",
+  "cli_destructive",
 ]);
 
 /** All rule categories in display order */
@@ -86,6 +91,7 @@ const ALL_CATEGORIES: RuleCategory[] = [
   ...PRESIDIO_CATEGORIES,
   "shadow_mcp",
   "destructive_tool",
+  "cli_destructive",
   "prompt_attacks",
   "prompt_injection",
   "off_policy",
@@ -100,6 +106,7 @@ function policyToCategories(
   if (sources.includes("gitleaks")) cats.add("secrets");
   if (sources.includes("shadow_mcp")) cats.add("shadow_mcp");
   if (sources.includes("destructive_tool")) cats.add("destructive_tool");
+  if (sources.includes("cli_destructive")) cats.add("cli_destructive");
   for (const cat of PRESIDIO_CATEGORIES) {
     const catEntityIds = DETECTION_RULES[cat].map((r) => r.id);
     if (catEntityIds.some((id) => presidioEntities?.includes(id))) {
@@ -116,6 +123,7 @@ function categoriesToPayload(cats: Set<RuleCategory>) {
   if (cats.has("secrets")) sources.push("gitleaks");
   if (cats.has("shadow_mcp")) sources.push("shadow_mcp");
   if (cats.has("destructive_tool")) sources.push("destructive_tool");
+  if (cats.has("cli_destructive")) sources.push("cli_destructive");
   for (const cat of PRESIDIO_CATEGORIES) {
     if (cats.has(cat)) {
       for (const rule of DETECTION_RULES[cat]) {
@@ -158,6 +166,9 @@ function PolicyCenterContent() {
   const [formAction, setFormAction] = useState<PolicyAction>("flag");
   const [formAutoName, setFormAutoName] = useState(true);
   const [formUserMessage, setFormUserMessage] = useState("");
+  const [formCustomPatterns, setFormCustomPatterns] = useState<
+    CustomCLIPattern[]
+  >([]);
 
   const [runPanelPolicy, setRunPanelPolicy] = useState<RiskPolicy | null>(null);
 
@@ -196,6 +207,7 @@ function PolicyCenterContent() {
     setFormAction("flag");
     setFormAutoName(true);
     setFormUserMessage("");
+    setFormCustomPatterns([]);
     setSheetOpen(true);
   };
 
@@ -209,6 +221,13 @@ function PolicyCenterContent() {
     setFormAction((policy.action as PolicyAction) ?? "flag");
     setFormAutoName(policy.autoName ?? true);
     setFormUserMessage(policy.userMessage ?? "");
+    setFormCustomPatterns(
+      (policy.customCliPatterns ?? []).map((p) => ({
+        id: crypto.randomUUID(),
+        label: p.label,
+        pattern: p.pattern,
+      })),
+    );
     setSheetOpen(true);
   };
 
@@ -216,9 +235,17 @@ function PolicyCenterContent() {
     const { sources, presidioEntities } =
       categoriesToPayload(selectedCategories);
     const action =
-      sources.includes("destructive_tool") && formAction === "block"
+      (sources.includes("destructive_tool") ||
+        sources.includes("cli_destructive")) &&
+      formAction === "block"
         ? "flag"
         : formAction;
+    const customCliPatterns = sources.includes("cli_destructive")
+      ? formCustomPatterns
+          .filter((p) => p.label.trim() && p.pattern.trim())
+          .map((p) => ({ label: p.label.trim(), pattern: p.pattern.trim() }))
+      : undefined;
+
     if (editingPolicy) {
       updateMutation.mutate({
         request: {
@@ -231,6 +258,7 @@ function PolicyCenterContent() {
             action,
             autoName: formAutoName,
             userMessage: formUserMessage,
+            customCliPatterns,
           },
         },
       });
@@ -245,6 +273,7 @@ function PolicyCenterContent() {
             action,
             autoName: formAutoName,
             ...(formUserMessage.trim() ? { userMessage: formUserMessage } : {}),
+            customCliPatterns,
           },
         },
       });
@@ -477,6 +506,8 @@ function PolicyCenterContent() {
                 setFormAutoName={setFormAutoName}
                 formUserMessage={formUserMessage}
                 setFormUserMessage={setFormUserMessage}
+                formCustomPatterns={formCustomPatterns}
+                setFormCustomPatterns={setFormCustomPatterns}
               />
             </div>
             <SheetFooter className="px-6 pb-6">
@@ -542,6 +573,8 @@ function PolicySheetBody({
   setFormAutoName,
   formUserMessage,
   setFormUserMessage,
+  formCustomPatterns,
+  setFormCustomPatterns,
 }: {
   formName: string;
   setFormName: (v: string) => void;
@@ -555,13 +588,17 @@ function PolicySheetBody({
   setFormAutoName: (v: boolean) => void;
   formUserMessage: string;
   setFormUserMessage: (v: string) => void;
+  formCustomPatterns: CustomCLIPattern[];
+  setFormCustomPatterns: (v: CustomCLIPattern[]) => void;
 }) {
   const [expandedCategory, setExpandedCategory] = useState<RuleCategory | null>(
     null,
   );
-  const destructiveToolsSelected = selectedCategories.has("destructive_tool");
+  const flagOnlySelected =
+    selectedCategories.has("destructive_tool") ||
+    selectedCategories.has("cli_destructive");
   const actionValue =
-    destructiveToolsSelected && formAction === "block" ? "flag" : formAction;
+    flagOnlySelected && formAction === "block" ? "flag" : formAction;
 
   return (
     <div className="space-y-6 py-4">
@@ -597,7 +634,8 @@ function PolicySheetBody({
             const isAvailable = AVAILABLE_CATEGORIES.has(cat);
             const isExpanded = expandedCategory === cat;
             const rules = DETECTION_RULES[cat];
-            const isExpandable = isAvailable && rules.length > 0;
+            const isExpandable =
+              isAvailable && (rules.length > 0 || cat === "cli_destructive");
 
             return (
               <div key={cat}>
@@ -660,7 +698,8 @@ function PolicySheetBody({
                       setSelectedCategories(next);
                       if (
                         checked &&
-                        cat === "destructive_tool" &&
+                        (cat === "destructive_tool" ||
+                          cat === "cli_destructive") &&
                         formAction === "block"
                       ) {
                         setFormAction("flag");
@@ -695,6 +734,16 @@ function PolicySheetBody({
                     </div>
                   </div>
                 )}
+
+                {/* CLI destructive custom patterns panel */}
+                {isAvailable && isExpanded && cat === "cli_destructive" && (
+                  <div className="bg-muted/30 border-border border-t px-4 py-3">
+                    <CLIDestructivePanel
+                      formCustomPatterns={formCustomPatterns}
+                      setFormCustomPatterns={setFormCustomPatterns}
+                    />
+                  </div>
+                )}
               </div>
             );
           })}
@@ -707,7 +756,7 @@ function PolicySheetBody({
         <RadioGroup
           value={actionValue}
           onValueChange={(v) => {
-            if (destructiveToolsSelected && v === "block") {
+            if (flagOnlySelected && v === "block") {
               return;
             }
             setFormAction(v as PolicyAction);
@@ -715,8 +764,7 @@ function PolicySheetBody({
         >
           <div className="border-border divide-border divide-y rounded-lg border">
             {ACTION_OPTIONS.map((opt) => {
-              const disabled =
-                destructiveToolsSelected && opt.value === "block";
+              const disabled = flagOnlySelected && opt.value === "block";
 
               return (
                 <label
@@ -744,7 +792,7 @@ function PolicySheetBody({
                     </div>
                     {disabled && (
                       <div className="text-destructive mt-1 text-xs font-medium">
-                        Destructive Tools supports flagging only.
+                        One or more selected categories supports flagging only.
                       </div>
                     )}
                   </div>
@@ -958,4 +1006,156 @@ const ACTION_OPTIONS: { value: PolicyAction; description: string }[] = [
 function ActionBadge({ action }: { action: PolicyAction }) {
   const config = ACTION_BADGE_CONFIG[action] ?? ACTION_BADGE_CONFIG.flag;
   return <Badge variant={config.variant}>{config.label}</Badge>;
+}
+
+/* -------------------------------------------------------------------------- */
+/*  CLIDestructivePanel                                                        */
+/* -------------------------------------------------------------------------- */
+
+function CLIDestructivePanel({
+  formCustomPatterns,
+  setFormCustomPatterns,
+}: {
+  formCustomPatterns: CustomCLIPattern[];
+  setFormCustomPatterns: (v: CustomCLIPattern[]) => void;
+}) {
+  const [builtinExpanded, setBuiltinExpanded] = useState(false);
+
+  const addPattern = () => {
+    setFormCustomPatterns([
+      ...formCustomPatterns,
+      { id: crypto.randomUUID(), label: "", pattern: "" },
+    ]);
+  };
+
+  const updatePattern = (id: string, updated: CustomCLIPattern) => {
+    setFormCustomPatterns(
+      formCustomPatterns.map((p) => (p.id === id ? updated : p)),
+    );
+  };
+
+  const deletePattern = (id: string) => {
+    setFormCustomPatterns(formCustomPatterns.filter((p) => p.id !== id));
+  };
+
+  return (
+    <div className="space-y-3 py-1">
+      <button
+        type="button"
+        className="text-muted-foreground hover:text-foreground flex items-center gap-1.5 text-xs transition-colors"
+        onClick={() => setBuiltinExpanded(!builtinExpanded)}
+      >
+        <ChevronRight
+          className={cn(
+            "h-3 w-3 transition-transform",
+            builtinExpanded && "rotate-90",
+          )}
+        />
+        Built-in patterns ({CLI_DESTRUCTIVE_BUILTIN_PATTERNS.length})
+      </button>
+
+      {builtinExpanded && (
+        <div className="grid grid-cols-2 gap-x-6 gap-y-0.5 pl-5">
+          {CLI_DESTRUCTIVE_BUILTIN_PATTERNS.map((p) => (
+            <div
+              key={`${p.category}-${p.name}`}
+              className="flex items-center gap-2 py-0.5"
+            >
+              <span className="text-muted-foreground/50 w-14 shrink-0 text-[10px] tracking-wide uppercase">
+                {p.category}
+              </span>
+              <span className="text-muted-foreground truncate text-xs">
+                {p.name}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-medium">Custom Patterns</span>
+          <Button variant="ghost" size="icon-sm" onClick={addPattern}>
+            <Plus className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+        {formCustomPatterns.length === 0 ? (
+          <p className="text-muted-foreground pl-0.5 text-xs">
+            Add patterns to flag additional commands specific to your
+            environment.
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {formCustomPatterns.map((p) => (
+              <CustomPatternRow
+                key={p.id}
+                pattern={p}
+                onChange={(updated) => updatePattern(p.id, updated)}
+                onDelete={() => deletePattern(p.id)}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/*  CustomPatternRow                                                           */
+/* -------------------------------------------------------------------------- */
+
+function CustomPatternRow({
+  pattern,
+  onChange,
+  onDelete,
+}: {
+  pattern: CustomCLIPattern;
+  onChange: (updated: CustomCLIPattern) => void;
+  onDelete: () => void;
+}) {
+  const isValidRegex = useMemo(() => {
+    if (!pattern.pattern) return true;
+    try {
+      new RegExp(pattern.pattern);
+      return true;
+    } catch {
+      return false;
+    }
+  }, [pattern.pattern]);
+
+  return (
+    <div className="flex items-start gap-2">
+      <div className="flex-1 space-y-1">
+        <Input
+          value={pattern.label}
+          onChange={(v) => onChange({ ...pattern, label: v })}
+          placeholder="Name (e.g. nuke-deploy)"
+          className="h-7 text-xs"
+        />
+        <div className="relative">
+          <Input
+            value={pattern.pattern}
+            onChange={(v) => onChange({ ...pattern, pattern: v })}
+            placeholder="Regex (e.g. \bmy-deploy\s+--nuke\b)"
+            className={cn(
+              "h-7 font-mono text-xs",
+              !isValidRegex && "border-destructive pr-7",
+            )}
+          />
+          {!isValidRegex && (
+            <AlertCircle className="text-destructive absolute top-1.5 right-2 h-3.5 w-3.5" />
+          )}
+        </div>
+      </div>
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        onClick={onDelete}
+        className="text-muted-foreground hover:text-destructive mt-0.5 shrink-0"
+      >
+        <Trash2 className="h-3.5 w-3.5" />
+      </Button>
+    </div>
+  );
 }

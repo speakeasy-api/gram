@@ -2180,6 +2180,51 @@ func DecodeTriggerRiskAnalysisResponse(decoder func(*http.Response) goahttp.Deco
 	}
 }
 
+// marshalTypesCustomCLIPatternToCustomCLIPatternRequestBody builds a value of
+// type *CustomCLIPatternRequestBody from a value of type
+// *types.CustomCLIPattern.
+func marshalTypesCustomCLIPatternToCustomCLIPatternRequestBody(v *types.CustomCLIPattern) *CustomCLIPatternRequestBody {
+	if v == nil {
+		return nil
+	}
+	res := &CustomCLIPatternRequestBody{
+		Label:   v.Label,
+		Pattern: v.Pattern,
+	}
+
+	return res
+}
+
+// marshalCustomCLIPatternRequestBodyToTypesCustomCLIPattern builds a value of
+// type *types.CustomCLIPattern from a value of type
+// *CustomCLIPatternRequestBody.
+func marshalCustomCLIPatternRequestBodyToTypesCustomCLIPattern(v *CustomCLIPatternRequestBody) *types.CustomCLIPattern {
+	if v == nil {
+		return nil
+	}
+	res := &types.CustomCLIPattern{
+		Label:   v.Label,
+		Pattern: v.Pattern,
+	}
+
+	return res
+}
+
+// unmarshalCustomCLIPatternResponseBodyToTypesCustomCLIPattern builds a value
+// of type *types.CustomCLIPattern from a value of type
+// *CustomCLIPatternResponseBody.
+func unmarshalCustomCLIPatternResponseBodyToTypesCustomCLIPattern(v *CustomCLIPatternResponseBody) *types.CustomCLIPattern {
+	if v == nil {
+		return nil
+	}
+	res := &types.CustomCLIPattern{
+		Label:   *v.Label,
+		Pattern: *v.Pattern,
+	}
+
+	return res
+}
+
 // unmarshalRiskPolicyResponseBodyToTypesRiskPolicy builds a value of type
 // *types.RiskPolicy from a value of type *RiskPolicyResponseBody.
 func unmarshalRiskPolicyResponseBodyToTypesRiskPolicy(v *RiskPolicyResponseBody) *types.RiskPolicy {
@@ -2205,6 +2250,16 @@ func unmarshalRiskPolicyResponseBodyToTypesRiskPolicy(v *RiskPolicyResponseBody)
 		res.PresidioEntities = make([]string, len(v.PresidioEntities))
 		for i, val := range v.PresidioEntities {
 			res.PresidioEntities[i] = val
+		}
+	}
+	if v.CustomCliPatterns != nil {
+		res.CustomCliPatterns = make([]*types.CustomCLIPattern, len(v.CustomCliPatterns))
+		for i, val := range v.CustomCliPatterns {
+			if val == nil {
+				res.CustomCliPatterns[i] = nil
+				continue
+			}
+			res.CustomCliPatterns[i] = unmarshalCustomCLIPatternResponseBodyToTypesCustomCLIPattern(val)
 		}
 	}
 

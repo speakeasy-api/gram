@@ -2233,6 +2233,7 @@ CREATE TABLE IF NOT EXISTS risk_policies (
   presidio_entities TEXT[],
   action TEXT NOT NULL DEFAULT 'flag',
   auto_name BOOLEAN NOT NULL DEFAULT TRUE,
+  custom_cli_patterns JSONB NOT NULL DEFAULT '[]',
   user_message TEXT,
   version BIGINT NOT NULL,
 

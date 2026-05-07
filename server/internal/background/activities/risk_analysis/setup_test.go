@@ -79,12 +79,13 @@ func seedTestData(t *testing.T, conn *pgxpool.Pool, enabled bool) testData {
 	policyID, err := uuid.NewV7()
 	require.NoError(t, err)
 	policy, err := riskrepo.New(conn).CreateRiskPolicy(ctx, riskrepo.CreateRiskPolicyParams{
-		ID:             policyID,
-		ProjectID:      projectID,
-		OrganizationID: orgID,
-		Name:           "test policy",
-		Sources:        []string{"gitleaks"},
-		Enabled:        enabled,
+		ID:                policyID,
+		ProjectID:         projectID,
+		OrganizationID:    orgID,
+		Name:              "test policy",
+		Sources:           []string{"gitleaks"},
+		Enabled:           enabled,
+		CustomCliPatterns: []byte("[]"),
 	})
 	require.NoError(t, err)
 

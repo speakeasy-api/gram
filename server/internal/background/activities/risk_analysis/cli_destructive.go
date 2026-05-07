@@ -14,6 +14,15 @@ import (
 // happen to carry a destructive payload.
 const SourceCLIDestructive = "cli_destructive"
 
+// CustomCLIPattern is a user-defined regex rule for detecting destructive CLI
+// commands beyond the curated built-in set. Label is a human-readable name
+// used for display; Pattern is a Go RE2-compatible regex matched against every
+// string value in a tool call's arguments JSON.
+type CustomCLIPattern struct {
+	Label   string `json:"label"`
+	Pattern string `json:"pattern"`
+}
+
 // cliDestructivePattern is one curated rule for matching destructive command
 // content inside a recorded tool call's arguments JSON. Patterns are
 // tool-name-agnostic — they run against every string value reachable from
@@ -189,6 +198,51 @@ func matchCLIDestructiveString(s string) (cliDestructivePattern, bool) {
 			continue
 		}
 		return p, true
+	}
+	return cliDestructivePattern{Category: "", Name: "", Regex: nil, Guard: nil}, false
+}
+
+// compileCustomPatterns compiles user-defined CustomCLIPattern values into the
+// internal cliDestructivePattern representation. Patterns that fail to compile
+// are silently skipped — they were validated at write time, so a failure here
+// indicates a regex engine mismatch rather than user error.
+func compileCustomPatterns(patterns []CustomCLIPattern) []cliDestructivePattern {
+	out := make([]cliDestructivePattern, 0, len(patterns))
+	for _, p := range patterns {
+		if p.Pattern == "" {
+			continue
+		}
+		re, err := regexp.Compile("(?i)" + p.Pattern)
+		if err != nil {
+			continue
+		}
+		out = append(out, cliDestructivePattern{
+			Category: "custom",
+			Name:     p.Label,
+			Regex:    re,
+			Guard:    nil,
+		})
+	}
+	return out
+}
+
+// scanForCLIDestructiveWithExtras is like scanForCLIDestructive but also
+// checks the provided compiled extra patterns after the curated set. The
+// curated set always has priority — if both match, the curated rule wins.
+func scanForCLIDestructiveWithExtras(input any, extras []cliDestructivePattern) (cliDestructivePattern, bool) {
+	for _, str := range flattenCLIStrings(input) {
+		if matched, ok := matchCLIDestructiveString(str); ok {
+			return matched, true
+		}
+		for _, p := range extras {
+			if !p.Regex.MatchString(str) {
+				continue
+			}
+			if p.Guard != nil && p.Guard.MatchString(str) {
+				continue
+			}
+			return p, true
+		}
 	}
 	return cliDestructivePattern{Category: "", Name: "", Regex: nil, Guard: nil}, false
 }

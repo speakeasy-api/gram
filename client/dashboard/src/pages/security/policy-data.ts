@@ -50,6 +50,12 @@ export type DlpPolicy = {
   updatedAt: Date;
 };
 
+export type CustomCLIPattern = {
+  id: string;
+  label: string;
+  pattern: string;
+};
+
 export const RULE_CATEGORY_META: Record<
   RuleCategory,
   { label: string; description: string; icon: string }
@@ -1429,6 +1435,34 @@ export const DETECTION_RULES: Record<RuleCategory, DetectionRule[]> = {
   cli_destructive: [],
   custom: [],
 };
+
+export const CLI_DESTRUCTIVE_BUILTIN_PATTERNS: {
+  category: string;
+  name: string;
+}[] = [
+  { category: "Shell", name: "rm -rf" },
+  { category: "Shell", name: "dd disk wipe" },
+  { category: "Shell", name: "mkfs" },
+  { category: "Shell", name: "fork bomb" },
+  { category: "Shell", name: "chmod -R" },
+  { category: "Shell", name: "chown -R" },
+  { category: "Shell", name: "sudo <command>" },
+  { category: "Git", name: "push --force" },
+  { category: "Git", name: "reset --hard" },
+  { category: "Git", name: "clean -f" },
+  { category: "Git", name: "branch -D" },
+  { category: "Database", name: "DROP TABLE" },
+  { category: "Database", name: "DROP DATABASE" },
+  { category: "Database", name: "DROP SCHEMA" },
+  { category: "Database", name: "DROP INDEX" },
+  { category: "Database", name: "TRUNCATE" },
+  { category: "Database", name: "DELETE without WHERE" },
+  { category: "Database", name: "dropdb" },
+  { category: "Cloud", name: "aws ec2 terminate-instances" },
+  { category: "Cloud", name: "aws s3 rb" },
+  { category: "Cloud", name: "gcloud projects delete" },
+  { category: "Cloud", name: "kubectl delete ns/workloads" },
+];
 
 // Mock policies for initial display
 export const MOCK_POLICIES: DlpPolicy[] = [

@@ -82,15 +82,16 @@ func insertPresidioBlockPolicy(t *testing.T, ti *testInstance, ctx context.Conte
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	require.NotNil(t, authCtx.ProjectID)
 	_, err := riskrepo.New(ti.conn).CreateRiskPolicy(ctx, riskrepo.CreateRiskPolicyParams{
-		ID:               uuid.New(),
-		ProjectID:        *authCtx.ProjectID,
-		OrganizationID:   authCtx.ActiveOrganizationID,
-		Name:             name,
-		Sources:          []string{"presidio"},
-		PresidioEntities: entities,
-		Enabled:          true,
-		Action:           "block",
-		AutoName:         false,
+		ID:                uuid.New(),
+		ProjectID:         *authCtx.ProjectID,
+		OrganizationID:    authCtx.ActiveOrganizationID,
+		Name:              name,
+		Sources:           []string{"presidio"},
+		PresidioEntities:  entities,
+		Enabled:           true,
+		Action:            "block",
+		AutoName:          false,
+		CustomCliPatterns: []byte("[]"),
 	})
 	require.NoError(t, err)
 }

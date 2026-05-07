@@ -62,6 +62,7 @@ export * from "./createtriggerinstanceform.js";
 export * from "./creditusageresponsebody.js";
 export * from "./cursorhookpayload.js";
 export * from "./cursorhookresult.js";
+export * from "./customclipattern.js";
 export * from "./customdomain.js";
 export * from "./deleteglobaltoolvariationresult.js";
 export * from "./deleterequestbody.js";

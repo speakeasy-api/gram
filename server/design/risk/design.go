@@ -31,6 +31,7 @@ var _ = Service("risk", func() {
 			})
 			Attribute("auto_name", Boolean, "Whether the policy name should be auto-generated.")
 			Attribute("user_message", String, "Optional message shown to end users when this policy blocks an action or surfaces a flagged finding.")
+			Attribute("custom_cli_patterns", ArrayOf(shared.CustomCLIPatternType), "Custom destructive CLI patterns.")
 		})
 
 		Result(shared.RiskPolicy)
@@ -122,6 +123,7 @@ var _ = Service("risk", func() {
 			})
 			Attribute("auto_name", Boolean, "Whether the policy name should be auto-generated.")
 			Attribute("user_message", String, "Optional message shown to end users when this policy blocks an action or surfaces a flagged finding. Send an empty string to clear.")
+			Attribute("custom_cli_patterns", ArrayOf(shared.CustomCLIPatternType), "Custom destructive CLI patterns.")
 			Required("id", "name")
 		})
 

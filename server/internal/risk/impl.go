@@ -2,8 +2,10 @@ package risk
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -198,6 +200,14 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 		return nil, err
 	}
 
+	if err := validateCustomCLIPatterns(payload.CustomCliPatterns); err != nil {
+		return nil, err
+	}
+	customCLIPatternsJSON, err := marshalCustomCLIPatterns(payload.CustomCliPatterns)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "marshal custom cli patterns").Log(ctx, s.logger)
+	}
+
 	enabled := true
 	if payload.Enabled != nil {
 		enabled = *payload.Enabled
@@ -232,16 +242,17 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	row, err := repo.New(dbtx).CreateRiskPolicy(ctx, repo.CreateRiskPolicyParams{
-		ID:               id,
-		ProjectID:        *authCtx.ProjectID,
-		OrganizationID:   authCtx.ActiveOrganizationID,
-		Name:             name,
-		Sources:          sources,
-		PresidioEntities: payload.PresidioEntities,
-		Enabled:          enabled,
-		Action:           action,
-		AutoName:         autoName,
-		UserMessage:      conv.PtrToPGTextEmpty(payload.UserMessage),
+		ID:                id,
+		ProjectID:         *authCtx.ProjectID,
+		OrganizationID:    authCtx.ActiveOrganizationID,
+		Name:              name,
+		Sources:           sources,
+		PresidioEntities:  payload.PresidioEntities,
+		Enabled:           enabled,
+		Action:            action,
+		AutoName:          autoName,
+		UserMessage:       conv.PtrToPGTextEmpty(payload.UserMessage),
+		CustomCliPatterns: customCLIPatternsJSON,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "create risk policy").Log(ctx, s.logger)
@@ -388,6 +399,18 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		return nil, err
 	}
 
+	customCLIPatterns := unmarshalCustomCLIPatterns(current.CustomCliPatterns)
+	if payload.CustomCliPatterns != nil {
+		if err := validateCustomCLIPatterns(payload.CustomCliPatterns); err != nil {
+			return nil, err
+		}
+		customCLIPatterns = payload.CustomCliPatterns
+	}
+	customCLIPatternsJSON, err := marshalCustomCLIPatterns(customCLIPatterns)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "marshal custom cli patterns").Log(ctx, s.logger)
+	}
+
 	autoName := current.AutoName
 	if payload.AutoName != nil {
 		autoName = *payload.AutoName
@@ -428,15 +451,16 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	row, err := repo.New(dbtx).UpdateRiskPolicy(ctx, repo.UpdateRiskPolicyParams{
-		ID:               id,
-		ProjectID:        *authCtx.ProjectID,
-		Name:             name,
-		Sources:          sources,
-		PresidioEntities: presidioEntities,
-		Enabled:          enabled,
-		Action:           action,
-		AutoName:         autoName,
-		UserMessage:      userMessage,
+		ID:                id,
+		ProjectID:         *authCtx.ProjectID,
+		Name:              name,
+		Sources:           sources,
+		PresidioEntities:  presidioEntities,
+		Enabled:           enabled,
+		Action:            action,
+		AutoName:          autoName,
+		UserMessage:       userMessage,
+		CustomCliPatterns: customCLIPatternsJSON,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "update risk policy").Log(ctx, s.logger)
@@ -825,20 +849,21 @@ func (s *Service) policyToType(ctx context.Context, row repo.RiskPolicy) (*types
 	pendingMessages := max(totalMessages-analyzedMessages, 0)
 
 	return &types.RiskPolicy{
-		ID:               row.ID.String(),
-		ProjectID:        row.ProjectID.String(),
-		Name:             row.Name,
-		Sources:          row.Sources,
-		PresidioEntities: row.PresidioEntities,
-		Enabled:          row.Enabled,
-		Action:           row.Action,
-		AutoName:         row.AutoName,
-		UserMessage:      conv.FromPGText[string](row.UserMessage),
-		Version:          row.Version,
-		CreatedAt:        row.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:        row.UpdatedAt.Time.Format(time.RFC3339),
-		PendingMessages:  pendingMessages,
-		TotalMessages:    totalMessages,
+		ID:                row.ID.String(),
+		ProjectID:         row.ProjectID.String(),
+		Name:              row.Name,
+		Sources:           row.Sources,
+		PresidioEntities:  row.PresidioEntities,
+		Enabled:           row.Enabled,
+		Action:            row.Action,
+		AutoName:          row.AutoName,
+		UserMessage:       conv.FromPGText[string](row.UserMessage),
+		CustomCliPatterns: unmarshalCustomCLIPatterns(row.CustomCliPatterns),
+		Version:           row.Version,
+		CreatedAt:         row.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:         row.UpdatedAt.Time.Format(time.RFC3339),
+		PendingMessages:   pendingMessages,
+		TotalMessages:     totalMessages,
 	}, nil
 }
 
@@ -848,20 +873,21 @@ func (s *Service) policyToType(ctx context.Context, row repo.RiskPolicy) (*types
 // they were not computed.
 func policyRowSnapshot(row repo.RiskPolicy) *types.RiskPolicy {
 	return &types.RiskPolicy{
-		ID:               row.ID.String(),
-		ProjectID:        row.ProjectID.String(),
-		Name:             row.Name,
-		Sources:          row.Sources,
-		PresidioEntities: row.PresidioEntities,
-		Enabled:          row.Enabled,
-		Action:           row.Action,
-		AutoName:         row.AutoName,
-		UserMessage:      conv.FromPGText[string](row.UserMessage),
-		Version:          row.Version,
-		CreatedAt:        row.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:        row.UpdatedAt.Time.Format(time.RFC3339),
-		PendingMessages:  -1,
-		TotalMessages:    -1,
+		ID:                row.ID.String(),
+		ProjectID:         row.ProjectID.String(),
+		Name:              row.Name,
+		Sources:           row.Sources,
+		PresidioEntities:  row.PresidioEntities,
+		Enabled:           row.Enabled,
+		Action:            row.Action,
+		AutoName:          row.AutoName,
+		UserMessage:       conv.FromPGText[string](row.UserMessage),
+		CustomCliPatterns: unmarshalCustomCLIPatterns(row.CustomCliPatterns),
+		Version:           row.Version,
+		CreatedAt:         row.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:         row.UpdatedAt.Time.Format(time.RFC3339),
+		PendingMessages:   -1,
+		TotalMessages:     -1,
 	}
 }
 
@@ -993,6 +1019,71 @@ func validatePolicyName(name string) error {
 		return oops.E(oops.CodeInvalid, nil, "name must be at most 100 characters")
 	}
 	return nil
+}
+
+const maxCustomCLIPatterns = 50
+
+func validateCustomCLIPatterns(patterns []*types.CustomCLIPattern) error {
+	if len(patterns) > maxCustomCLIPatterns {
+		return oops.E(oops.CodeInvalid, nil, "custom_cli_patterns must not exceed %d entries", maxCustomCLIPatterns)
+	}
+	for _, p := range patterns {
+		if p.Label == "" {
+			return oops.E(oops.CodeInvalid, nil, "each custom CLI pattern must have a non-empty label")
+		}
+		if len([]rune(p.Label)) > 100 {
+			return oops.E(oops.CodeInvalid, nil, "custom CLI pattern label must be at most 100 characters")
+		}
+		if p.Pattern == "" {
+			return oops.E(oops.CodeInvalid, nil, "each custom CLI pattern must have a non-empty pattern")
+		}
+		if _, err := regexp.Compile(p.Pattern); err != nil {
+			return oops.E(oops.CodeInvalid, err, "custom CLI pattern %q is not a valid regex", p.Label)
+		}
+	}
+	return nil
+}
+
+// marshalCustomCLIPatterns converts the API-layer custom patterns to JSON
+// bytes for storage in the database JSONB column.
+func marshalCustomCLIPatterns(patterns []*types.CustomCLIPattern) ([]byte, error) {
+	if len(patterns) == 0 {
+		return []byte("[]"), nil
+	}
+	type wirePattern struct {
+		Label   string `json:"label"`
+		Pattern string `json:"pattern"`
+	}
+	wire := make([]wirePattern, len(patterns))
+	for i, p := range patterns {
+		wire[i] = wirePattern{Label: p.Label, Pattern: p.Pattern}
+	}
+	b, err := json.Marshal(wire)
+	if err != nil {
+		return nil, fmt.Errorf("marshal custom cli patterns: %w", err)
+	}
+	return b, nil
+}
+
+// unmarshalCustomCLIPatterns converts JSONB bytes from the database into the
+// API-layer custom pattern slice.
+func unmarshalCustomCLIPatterns(raw []byte) []*types.CustomCLIPattern {
+	if len(raw) == 0 {
+		return nil
+	}
+	type wirePattern struct {
+		Label   string `json:"label"`
+		Pattern string `json:"pattern"`
+	}
+	var wire []wirePattern
+	if err := json.Unmarshal(raw, &wire); err != nil {
+		return nil
+	}
+	out := make([]*types.CustomCLIPattern, len(wire))
+	for i, w := range wire {
+		out[i] = &types.CustomCLIPattern{Label: w.Label, Pattern: w.Pattern}
+	}
+	return out
 }
 
 func foundRowToResult(
