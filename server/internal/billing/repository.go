@@ -56,6 +56,16 @@ type Repository interface {
 	CreateTopUpCheckout(ctx context.Context, orgID, serverURL, successURL string) (string, error)
 	IsTopUpProductID(productID string) bool
 	CreateCustomerSession(ctx context.Context, orgID string) (string, error)
+	// AttachAssistantsBenefit ensures a Polar customer record exists for orgID
+	// and is subscribed to the assistants product so its meter-credit benefit
+	// grant takes effect immediately. Returns the new subscription ID so the
+	// caller can schedule a cancel-at-period-end follow-up. Returns empty
+	// string + nil when no assistants product is configured (best-effort
+	// no-op) or when the org already holds an active subscription to it.
+	AttachAssistantsBenefit(ctx context.Context, orgID string, email string) (subscriptionID string, err error)
+	// CancelSubscriptionAtPeriodEnd marks the subscription as non-renewing so
+	// a one-time benefit grant doesn't re-fire on the next billing cycle.
+	CancelSubscriptionAtPeriodEnd(ctx context.Context, subscriptionID string) error
 	GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error)
 	ValidateAndParseWebhookEvent(ctx context.Context, payload []byte, webhookHeader http.Header) (*PolarWebhookPayload, error)
 	InvalidateBillingCustomerCaches(ctx context.Context, orgID string) error

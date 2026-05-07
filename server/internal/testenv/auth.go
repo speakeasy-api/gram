@@ -16,6 +16,7 @@ import (
 
 	mockidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/auth/speakeasyclient"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -42,6 +43,17 @@ func NewTestManager(t *testing.T, logger *slog.Logger, tracerProvider trace.Trac
 
 	fakePosthog := posthog.New(context.Background(), logger, "test-posthog-key", "test-posthog-host", "")
 
+	speakeasyIDPClient := speakeasyclient.NewClient(
+		logger,
+		tracerProvider,
+		guardianPolicy,
+		srv.URL,
+		mockidp.MockSecretKey,
+		db,
+		nil,
+		fakePosthog,
+	)
+
 	return sessions.NewManager(
 		logger,
 		tracerProvider,
@@ -55,6 +67,7 @@ func NewTestManager(t *testing.T, logger *slog.Logger, tracerProvider trace.Trac
 		fakePosthog,
 		billingRepo,
 		nil,
+		speakeasyIDPClient,
 	)
 }
 

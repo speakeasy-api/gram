@@ -11,6 +11,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/auth/speakeasyclient"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -31,13 +32,14 @@ type Manager struct {
 	userInfoCache          cache.TypedCacheObject[CachedUserInfo]
 	speakeasyServerAddress string
 	speakeasySecretKey     string
-	speakeasyClient        *guardian.HTTPClient
+	httpClient             *guardian.HTTPClient
 	orgRepo                *orgRepo.Queries
 	userRepo               *userRepo.Queries
 	pylon                  *pylon.Pylon
 	posthog                *posthog.Posthog // posthog metrics will no-op if the dependency is not provided
 	billingRepo            billing.Repository
 	workos                 *workos.Client
+	speakeasyClient        *speakeasyclient.Client
 }
 
 func NewManager(
@@ -53,10 +55,11 @@ func NewManager(
 	posthog *posthog.Posthog,
 	billingRepo billing.Repository,
 	workos *workos.Client,
+	speakeasyClient *speakeasyclient.Client,
 ) *Manager {
 	logger = logger.With(attr.SlogComponent("sessions"))
-	speakeasyClient := guardianPolicy.PooledClient()
-	speakeasyClient.Timeout = 10 * time.Second
+	httpClient := guardianPolicy.PooledClient()
+	httpClient.Timeout = 10 * time.Second
 
 	return &Manager{
 		logger:                 logger.With(attr.SlogComponent("sessions")),
@@ -65,13 +68,14 @@ func NewManager(
 		userInfoCache:          cache.NewTypedObjectCache[CachedUserInfo](logger.With(attr.SlogCacheNamespace("user_info")), cache.NewRedisCacheAdapter(redisClient), cache.SuffixNone),
 		speakeasyServerAddress: speakeasyServerAddress,
 		speakeasySecretKey:     speakeasySecretKey,
-		speakeasyClient:        speakeasyClient,
+		httpClient:             httpClient,
 		orgRepo:                orgRepo.New(db),
 		userRepo:               userRepo.New(db),
 		pylon:                  pylon,
 		posthog:                posthog,
 		billingRepo:            billingRepo,
 		workos:                 workos,
+		speakeasyClient:        speakeasyClient,
 	}
 }
 

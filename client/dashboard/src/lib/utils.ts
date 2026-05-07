@@ -14,6 +14,12 @@ export function getServerURL(): string {
   return window.location.origin;
 }
 
+export function buildLoginRedirectURL(redirectTo: string | null): string {
+  let href = `${getServerURL()}/rpc/auth.login`;
+  if (redirectTo) href += `?redirect=${encodeURIComponent(redirectTo)}`;
+  return href;
+}
+
 export function titleCase(str: string) {
   return str.replace(/\b\w/g, (char) => char.toUpperCase());
 }

@@ -38,6 +38,7 @@ function getCategoryForFinding(
 ): RuleCategory | null {
   if (source === "destructive_tool") return "destructive_tool";
   if (source === "shadow_mcp") return "shadow_mcp";
+  if (source === "prompt_injection") return "prompt_injection";
   if (!ruleId) return null;
   return RULE_ID_TO_CATEGORY.get(ruleId) ?? null;
 }

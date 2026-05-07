@@ -37,6 +37,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/auth/speakeasyclient"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/background"
 	risk_analysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
@@ -329,6 +330,13 @@ func newStartCommand() *cli.Command {
 			EnvVars:  []string{"POLAR_METER_ID_CREDITS"},
 			Required: false,
 		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:     "polar-product-id-assistants",
+			Aliases:  []string{"polar.product_id_assistants"},
+			Usage:    "The product ID granting the assistants benefit in Polar (auto-attached on assistants-disposition signup)",
+			EnvVars:  []string{"POLAR_PRODUCT_ID_ASSISTANTS"},
+			Required: false,
+		}),
 		&cli.StringSliceFlag{
 			Name:     "polar-product-ids-topup",
 			Usage:    "Product IDs of one-time credit top-up packs in Polar",
@@ -497,6 +505,17 @@ func newStartCommand() *cli.Command {
 				return fmt.Errorf("failed to create billing provider: %w", err)
 			}
 
+			speakeasyIDPClient := speakeasyclient.NewClient(
+				logger,
+				tracerProvider,
+				guardianPolicy,
+				c.String("speakeasy-server-address"),
+				c.String("speakeasy-secret-key"),
+				db,
+				conv.Ternary(workosAvailable, workosClient, nil),
+				posthogClient,
+			)
+
 			sessionManager := sessions.NewManager(
 				logger,
 				tracerProvider,
@@ -510,6 +529,7 @@ func newStartCommand() *cli.Command {
 				posthogClient,
 				billingRepo,
 				conv.Ternary(workosAvailable, workosClient, nil),
+				speakeasyIDPClient,
 			)
 
 			chatSessionsManager := chatsessions.NewManager(logger, redisClient, c.String("jwt-signing-key"))
@@ -835,6 +855,8 @@ func newStartCommand() *cli.Command {
 					Environment:            c.String("environment"),
 				},
 				authzEngine,
+				billingRepo,
+				&background.TemporalAssistantsSubscriptionCancelScheduler{TemporalEnv: temporalEnv},
 			))
 			organizations.Attach(mux, organizations.NewService(logger, tracerProvider, db, sessionManager, workosClient, productFeatures, authzEngine))
 			projects.Attach(mux, projects.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger))

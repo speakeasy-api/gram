@@ -270,6 +270,8 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.ProcessWorkOSOrganizationEvents)
 	temporalWorker.RegisterActivity(activities.ProcessWorkOSMembershipEvents)
 
+	temporalWorker.RegisterActivity(activities.CancelAssistantsSubscription)
+
 	temporalWorker.RegisterWorkflow(ProcessDeploymentWorkflow)
 	temporalWorker.RegisterWorkflow(FunctionsReaperWorkflow)
 	temporalWorker.RegisterWorkflow(SlackEventWorkflow)
@@ -297,6 +299,8 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(ProcessWorkOSOrganizationEventsWorkflowDebounced)
 	temporalWorker.RegisterWorkflow(ProcessWorkOSMembershipEventsWorkflow)
 	temporalWorker.RegisterWorkflow(ProcessWorkOSMembershipEventsWorkflowDebounced)
+	// Assistants signup followups
+	temporalWorker.RegisterWorkflow(CancelAssistantsSubscriptionWorkflow)
 
 	if err := AddPlatformUsageMetricsSchedule(context.Background(), env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {

@@ -693,6 +693,119 @@ CREATE UNIQUE INDEX IF NOT EXISTS oauth_proxy_providers_project_slug_key
 ON oauth_proxy_providers (project_id, slug)
 WHERE deleted IS FALSE;
 
+-- User Session Issuers house configuration for when Gram acts as an Authorization Server for MCP Clients
+-- See: https://datatracker.ietf.org/doc/html/rfc8414
+CREATE TABLE IF NOT EXISTS user_session_issuers (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+
+  slug TEXT NOT NULL CHECK (slug <> '' AND CHAR_LENGTH(slug) <= 100),
+  authn_challenge_mode TEXT NOT NULL, -- One of ('chain', 'interactive'). chain exists for backwards compatibility and should be phased out. interactive will be the main mode going forward
+  session_duration INTERVAL NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT user_session_issuers_pkey PRIMARY KEY (id),
+  CONSTRAINT user_session_issuers_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS user_session_issuers_project_slug_key
+ON user_session_issuers (project_id, slug)
+WHERE deleted IS FALSE;
+
+-- User Session Clients are MCP Clients that have registered themselves with Gram
+-- See: https://datatracker.ietf.org/doc/html/rfc6749#section-1.1
+CREATE TABLE IF NOT EXISTS user_session_clients (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  user_session_issuer_id uuid NOT NULL,
+
+  client_id TEXT NOT NULL,
+  client_secret_hash TEXT,
+  client_name TEXT NOT NULL,
+  redirect_uris TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+
+  client_id_issued_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  client_secret_expires_at timestamptz,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT user_session_clients_pkey PRIMARY KEY (id),
+  CONSTRAINT user_session_clients_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT user_session_clients_user_session_issuer_id_fkey FOREIGN KEY (user_session_issuer_id) REFERENCES user_session_issuers (id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS user_session_clients_issuer_client_id_key
+ON user_session_clients (user_session_issuer_id, client_id)
+WHERE deleted IS FALSE;
+
+-- User Session Consents track records of consent between Clients and Issuers
+-- Consents are scoped to given sets of underlying credentials so they can be reused between login events
+CREATE TABLE IF NOT EXISTS user_session_consents (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+
+  subject_urn TEXT NOT NULL,
+  user_session_client_id uuid NOT NULL,
+  remote_set_hash TEXT NOT NULL,
+
+  consented_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT user_session_consents_pkey PRIMARY KEY (id),
+  CONSTRAINT user_session_consents_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT user_session_consents_user_session_client_id_fkey FOREIGN KEY (user_session_client_id) REFERENCES user_session_clients (id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS user_session_consents_subject_client_set_key
+ON user_session_consents (subject_urn, user_session_client_id, remote_set_hash)
+WHERE deleted IS FALSE;
+
+-- User Sessions are records representing active Gram sessions for a given Subject
+-- They contain token grant information to allow for validating and exchanging tokens
+CREATE TABLE IF NOT EXISTS user_sessions (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  user_session_issuer_id uuid NOT NULL,
+  user_session_client_id uuid,
+  subject_urn TEXT NOT NULL,
+  jti TEXT NOT NULL,
+  refresh_token_hash TEXT NOT NULL,
+  refresh_expires_at timestamptz NOT NULL,
+  expires_at timestamptz NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT user_sessions_pkey PRIMARY KEY (id),
+  CONSTRAINT user_sessions_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT user_sessions_user_session_issuer_id_fkey FOREIGN KEY (user_session_issuer_id) REFERENCES user_session_issuers (id) ON DELETE CASCADE,
+  CONSTRAINT user_sessions_user_session_client_id_fkey FOREIGN KEY (user_session_client_id) REFERENCES user_session_clients (id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS user_sessions_user_session_client_id_idx
+ON user_sessions (user_session_client_id)
+WHERE deleted IS FALSE;
+
+CREATE UNIQUE INDEX IF NOT EXISTS user_sessions_refresh_token_hash_key
+ON user_sessions (refresh_token_hash)
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS user_sessions_subject_idx
+ON user_sessions (subject_urn, user_session_issuer_id)
+WHERE deleted IS FALSE;
+
 CREATE TABLE IF NOT EXISTS toolsets (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
 
@@ -1961,6 +2074,8 @@ ON audit_logs (organization_id, project_id, seq DESC);
 CREATE TABLE IF NOT EXISTS remote_mcp_servers (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   project_id uuid NOT NULL,
+  name TEXT CHECK (name IS NULL OR name <> ''),
+  slug TEXT CHECK (slug IS NULL OR slug <> ''),
   transport_type TEXT NOT NULL CHECK (transport_type <> ''),
   url TEXT NOT NULL CHECK (url <> ''),
 
@@ -1975,6 +2090,10 @@ CREATE TABLE IF NOT EXISTS remote_mcp_servers (
 
 CREATE INDEX IF NOT EXISTS remote_mcp_servers_project_id_idx
 ON remote_mcp_servers (project_id)
+WHERE deleted IS FALSE;
+
+CREATE UNIQUE INDEX IF NOT EXISTS remote_mcp_servers_project_id_slug_key
+ON remote_mcp_servers (project_id, slug)
 WHERE deleted IS FALSE;
 
 -- Headers sent to a remote MCP server when proxying requests. Either value
@@ -2015,6 +2134,8 @@ WHERE deleted IS FALSE;
 CREATE TABLE IF NOT EXISTS mcp_servers (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   project_id uuid NOT NULL,
+  name TEXT CHECK (name IS NULL OR name <> ''),
+  slug TEXT CHECK (slug IS NULL OR slug <> ''),
 
   environment_id uuid,
   external_oauth_server_id uuid,
@@ -2041,6 +2162,10 @@ CREATE TABLE IF NOT EXISTS mcp_servers (
 
 CREATE INDEX IF NOT EXISTS mcp_servers_project_id_idx
 ON mcp_servers (project_id)
+WHERE deleted IS FALSE;
+
+CREATE UNIQUE INDEX IF NOT EXISTS mcp_servers_project_id_slug_key
+ON mcp_servers (project_id, slug)
 WHERE deleted IS FALSE;
 
 CREATE INDEX IF NOT EXISTS mcp_servers_remote_mcp_server_id_idx

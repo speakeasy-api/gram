@@ -20,6 +20,7 @@ junit-report.xml
 /client/sdk/docs
 /server/goa*
 /server/gram
+/server/risk_accuracy_metrics.json
 # Goa generates OpenAPI v2 specs with non-deterministic examples. Nothing consumes them.
 /server/gen/http/openapi.yaml
 /server/gen/http/openapi.json

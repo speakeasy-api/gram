@@ -11,9 +11,6 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/conv"
-	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
-	userRepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 	"go.opentelemetry.io/otel/codes"
 )
 
@@ -80,7 +77,7 @@ func (s *Manager) ExchangeTokenFromSpeakeasy(ctx context.Context, code string) (
 	req.Header.Set("Accept", "application/json")
 
 	// Send the request
-	resp, err := s.speakeasyClient.Do(req)
+	resp, err := s.httpClient.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("failed to perform token exchange: %w", err)
 	}
@@ -123,7 +120,7 @@ func (s *Manager) RevokeTokenFromSpeakeasy(ctx context.Context, idToken string) 
 	req.Header.Set("speakeasy-auth-provider-id-token", idToken)
 
 	// Send the request
-	resp, err := s.speakeasyClient.Do(req)
+	resp, err := s.httpClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("failed to perform token revocation: %w", err)
 	}
@@ -150,67 +147,31 @@ func (s *Manager) GetUserInfoFromSpeakeasy(ctx context.Context, idToken string) 
 		span.End()
 	}()
 
-	req, err := http.NewRequestWithContext(ctx, "GET", s.speakeasyServerAddress+"/v1/speakeasy_provider/validate", nil)
+	// Validate the IDP id token + run the shared post-IDP user bootstrap
+	// (UpsertUser, posthog signup event, WorkOS membership sync) via the
+	// shared client. Side effects identical to the prior inline implementation;
+	// the user-session AS path runs the same pair of calls.
+	validated, err := s.speakeasyClient.ValidateIDToken(ctx, idToken)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		return nil, fmt.Errorf("validate id token: %w", err)
 	}
 
-	req.Header.Set("speakeasy-auth-provider-id-token", idToken)
-	req.Header.Set("speakeasy-auth-provider-key", s.speakeasySecretKey)
-
-	resp, err := s.speakeasyClient.Do(req)
+	user, err := s.speakeasyClient.BootstrapUser(ctx, validated)
 	if err != nil {
-		s.logger.ErrorContext(context.Background(), "failed to make request", attr.SlogError(err))
-		return nil, fmt.Errorf("failed to make request: %w", err)
-	}
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			s.logger.ErrorContext(context.Background(), "failed to close response body", attr.SlogError(err))
-		}
-	}()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+		return nil, fmt.Errorf("bootstrap user: %w", err)
 	}
 
-	var validateResp validateTokenResponse
-	if err := json.NewDecoder(resp.Body).Decode(&validateResp); err != nil {
-		return nil, fmt.Errorf("failed to decode response: %w", err)
-	}
-
-	user, err := s.userRepo.UpsertUser(ctx, userRepo.UpsertUserParams{
-		ID:          validateResp.User.ID,
-		Email:       validateResp.User.Email,
-		DisplayName: validateResp.User.DisplayName,
-		PhotoUrl:    conv.PtrToPGText(validateResp.User.PhotoURL),
-		Admin:       validateResp.User.Admin,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to upsert user: %w", err)
-	}
-
-	// Check if user was created in this upsert
-	if user.WasCreated {
-		if err := s.posthog.CaptureEvent(ctx, "is_first_time_user_signup", user.Email, map[string]any{
-			"email":        user.Email,
-			"display_name": user.DisplayName,
-		}); err != nil {
-			s.logger.ErrorContext(ctx, "failed to capture is_first_time_user_signup event", attr.SlogError(err))
-		}
-	}
-
-	if err := s.syncWorkOSMemberships(ctx, user, validateResp); err != nil {
-		return nil, fmt.Errorf("sync workos memberships: %w", err)
-	}
-
+	// Chat-session-specific shaping: admin override, non-free org filtering,
+	// pylon signing, then assemble CachedUserInfo. None of this belongs in the
+	// shared client — it's all chat-session-flavored.
 	var adminOverride string
-	if override, _ := contextvalues.GetAdminOverrideFromContext(ctx); override != "" && validateResp.User.Admin {
+	if override, _ := contextvalues.GetAdminOverrideFromContext(ctx); override != "" && validated.Admin {
 		adminOverride = override
 	}
 
-	organizations := make([]Organization, len(validateResp.Organizations))
+	organizations := make([]Organization, len(validated.Organizations))
 	var nonFreeOrganizations []Organization
-	for i, org := range validateResp.Organizations {
+	for i, org := range validated.Organizations {
 		o := Organization{
 			ID:                 org.ID,
 			Name:               org.Name,
@@ -226,7 +187,7 @@ func (s *Manager) GetUserInfoFromSpeakeasy(ctx context.Context, idToken string) 
 		}
 	}
 
-	whitelisted := validateResp.User.Whitelisted
+	whitelisted := validated.Whitelisted
 
 	// If applicable we will only utilize non-free organizations, plus an applied admin override
 	if len(nonFreeOrganizations) > 0 {
@@ -238,19 +199,19 @@ func (s *Manager) GetUserInfoFromSpeakeasy(ctx context.Context, idToken string) 
 	}
 
 	var userPylonSignature *string
-	if pylonSignature, err := s.pylon.Sign(validateResp.User.Email); err != nil {
+	if pylonSignature, err := s.pylon.Sign(validated.Email); err != nil {
 		s.logger.ErrorContext(ctx, "error signing user email", attr.SlogError(err))
 	} else if pylonSignature != "" {
 		userPylonSignature = &pylonSignature
 	}
 
 	return &CachedUserInfo{
-		UserID:             validateResp.User.ID,
+		UserID:             validated.UserID,
 		UserWhitelisted:    whitelisted,
-		Email:              validateResp.User.Email,
-		Admin:              validateResp.User.Admin,
-		DisplayName:        &validateResp.User.DisplayName,
-		PhotoURL:           validateResp.User.PhotoURL,
+		Email:              validated.Email,
+		Admin:              validated.Admin,
+		DisplayName:        &validated.DisplayName,
+		PhotoURL:           validated.PhotoURL,
 		UserPylonSignature: userPylonSignature,
 		Organizations:      organizations,
 	}, nil
@@ -290,7 +251,7 @@ func (s *Manager) CreateOrgFromSpeakeasy(ctx context.Context, idToken string, or
 	req.Header.Set("speakeasy-auth-provider-id-token", idToken)
 	req.Header.Set("speakeasy-auth-provider-key", s.speakeasySecretKey)
 
-	resp, err := s.speakeasyClient.Do(req)
+	resp, err := s.httpClient.Do(req)
 	if err != nil {
 		s.logger.ErrorContext(ctx, "failed to make request", attr.SlogError(err))
 		return nil, fmt.Errorf("failed to make request: %w", err)
@@ -396,64 +357,7 @@ func (p *Manager) BuildAuthorizationURL(ctx context.Context, params AuthURLParam
 	return authURL, nil
 }
 
-// syncWorkOSMemberships reconciles the user's WorkOS identity and membership
-// records against what WorkOS currently reports. Organization metadata upserts
-// are the caller's responsibility and happen at login/switch-scope sites where
-// the active org is known. Failures here are best-effort and logged — they
-// don't block authentication because WorkOS membership data is only used for
-// RBAC features that degrade gracefully without it.
-func (s *Manager) syncWorkOSMemberships(ctx context.Context, user userRepo.UpsertUserRow, validateResp validateTokenResponse) error {
-	if s.workos == nil {
-		return nil
-	}
-
-	var workosUserID string
-
-	if user.WorkosID.Valid && user.WorkosID.String != "" {
-		// Already have the user's WorkOS ID — skip the API lookup
-		workosUserID = user.WorkosID.String
-	} else {
-		workosUser, err := s.workos.GetUserByEmail(ctx, user.Email)
-		if err != nil {
-			s.logger.ErrorContext(ctx, "failed to get workos user by email", attr.SlogError(err))
-			return nil
-		}
-		if workosUser == nil {
-			return nil
-		}
-
-		workosUserID = workosUser.ID
-
-		if err := s.userRepo.SetUserWorkosID(ctx, userRepo.SetUserWorkosIDParams{
-			ID:       user.ID,
-			WorkosID: conv.ToPGText(workosUserID),
-		}); err != nil {
-			s.logger.ErrorContext(ctx, "failed to set user workos ID", attr.SlogError(err))
-		}
-	}
-
-	// Load current org membership state directly from WorkOS so we can populate
-	// the workos membership ID in the org membership records
-	memberships, err := s.workos.ListUserMemberships(ctx, workosUserID)
-	if err != nil {
-		s.logger.ErrorContext(ctx, "failed to list workos user memberships", attr.SlogError(err))
-		return nil
-	}
-
-	workosOrgIDs := make([]string, len(memberships))
-	membershipIDs := make([]string, len(memberships))
-	for i, m := range memberships {
-		workosOrgIDs[i] = m.OrganizationID
-		membershipIDs[i] = m.ID
-	}
-
-	if err := s.orgRepo.SetUserWorkOSMemberships(ctx, orgRepo.SetUserWorkOSMembershipsParams{
-		UserID:              validateResp.User.ID,
-		WorkosOrgIds:        workosOrgIDs,
-		WorkosMembershipIds: membershipIDs,
-	}); err != nil {
-		s.logger.ErrorContext(ctx, "failed to set user workos memberships", attr.SlogError(err))
-	}
-
-	return nil
-}
+// syncWorkOSMemberships moved to auth/speakeasyclient.Client.BootstrapUser as
+// part of the shared post-IDP user bootstrap. Both this manager (via
+// GetUserInfoFromSpeakeasy) and the user-session AS path reach it through the
+// same client.
