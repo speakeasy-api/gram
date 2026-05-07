@@ -521,7 +521,6 @@ func newStartCommand() *cli.Command {
 				pylonClient,
 				posthogClient,
 				billingRepo,
-				conv.Ternary(workosAvailable, workosClient, nil),
 				speakeasyIDPClient,
 			)
 

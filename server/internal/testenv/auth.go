@@ -66,7 +66,6 @@ func NewTestManager(t *testing.T, logger *slog.Logger, tracerProvider trace.Trac
 		fakePylon,
 		fakePosthog,
 		billingRepo,
-		nil,
 		speakeasyIDPClient,
 	)
 }
