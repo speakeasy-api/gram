@@ -160,7 +160,7 @@ func (c *Client) ExchangeCode(ctx context.Context, code string) (idToken string,
 	if err != nil {
 		return "", fmt.Errorf("perform exchange request: %w", err)
 	}
-	defer o11y.LogDefer(ctx, c.logger, func() error { return resp.Body.Close() })
+	defer o11y.NoLogDefer(func() error { return resp.Body.Close() })
 
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("exchange failed with status %s", resp.Status)
@@ -198,7 +198,7 @@ func (c *Client) ValidateIDToken(ctx context.Context, idToken string) (token *Va
 	if err != nil {
 		return nil, fmt.Errorf("perform validate request: %w", err)
 	}
-	defer o11y.LogDefer(ctx, c.logger, func() error { return resp.Body.Close() })
+	defer o11y.NoLogDefer(func() error { return resp.Body.Close() })
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("validate failed with status %s", resp.Status)
