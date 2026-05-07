@@ -399,9 +399,9 @@ function UrlSection({
           placeholder="https://example.com/mcp"
         />
         {validationError && (
-          <Type small className="text-destructive">
+          <Alert variant="error" dismissible={false}>
             {validationError}
-          </Type>
+          </Alert>
         )}
         {update.isError && (
           <Alert variant="error" dismissible={false}>

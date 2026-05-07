@@ -116,9 +116,9 @@ function CreateRemoteMcpForm() {
               onBlur={() => setTouched(true)}
             />
             {validationError && (
-              <Type small className="text-destructive">
+              <Alert variant="error" dismissible={false}>
                 {validationError}
-              </Type>
+              </Alert>
             )}
           </Stack>
 
