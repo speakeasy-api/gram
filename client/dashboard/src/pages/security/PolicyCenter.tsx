@@ -78,6 +78,7 @@ const AVAILABLE_CATEGORIES: Set<RuleCategory> = new Set([
   ...PRESIDIO_CATEGORIES,
   "shadow_mcp",
   "destructive_tool",
+  "prompt_injection",
 ]);
 
 /** All rule categories in display order */
