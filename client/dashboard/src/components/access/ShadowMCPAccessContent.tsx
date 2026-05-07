@@ -1,9 +1,6 @@
 import { RequireScope } from "@/components/require-scope";
-import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Dialog } from "@/components/ui/dialog";
 import { Heading } from "@/components/ui/heading";
-import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -13,20 +10,24 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Type } from "@/components/ui/type";
-import { cn } from "@/lib/utils";
 import type { Role } from "@gram/client/models/components/role.js";
 import { useRoles } from "@gram/client/react-query/roles.js";
 import {
+  Badge,
   Button,
+  cn,
   Column,
+  Dialog,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  Input,
   Table,
 } from "@speakeasy-api/moonshine";
 import { Check, Ellipsis, ShieldCheck, ShieldX, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import type { ChangeEvent } from "react";
 import {
   MOCK_SHADOW_MCP_REQUESTS,
   MOCK_SHADOW_MCP_ROLES,
@@ -49,6 +50,11 @@ import {
 } from "./shadow-mcp-utils";
 
 type ReviewAction = "approve" | "deny";
+type TextInputChangeEvent = ChangeEvent<HTMLInputElement | HTMLTextAreaElement>;
+
+function handleStringInputChange(onChange: (value: string) => void) {
+  return (event: TextInputChangeEvent) => onChange(event.currentTarget.value);
+}
 
 function roleOptionsFromRoles(roles: Role[]): ShadowMCPRoleOption[] {
   if (roles.length === 0) return MOCK_SHADOW_MCP_ROLES;
@@ -68,8 +74,8 @@ function EvidenceCell({ evidence }: { evidence: ShadowMCPEvidence }) {
         <Type variant="body" className="truncate font-medium">
           {evidence.name}
         </Type>
-        <Badge variant="outline" size="sm" className="font-mono">
-          {evidence.normalizedIdentity}
+        <Badge variant="neutral" className="font-mono">
+          <Badge.Text>{evidence.normalizedIdentity}</Badge.Text>
         </Badge>
       </div>
       <Type variant="body" className="text-muted-foreground truncate text-xs">
@@ -89,14 +95,14 @@ function RequestStatusBadge({
 }) {
   const variant =
     status === "approved"
-      ? "default"
+      ? "success"
       : status === "denied"
         ? "destructive"
         : "warning";
 
   return (
-    <Badge variant={variant} size="sm">
-      {getRequestStatusLabel(status)}
+    <Badge variant={variant}>
+      <Badge.Text>{getRequestStatusLabel(status)}</Badge.Text>
     </Badge>
   );
 }
@@ -107,11 +113,8 @@ function DecisionBadge({
   decision: ShadowMCPServerListEntry["decision"];
 }) {
   return (
-    <Badge
-      variant={decision === "allowed" ? "default" : "destructive"}
-      size="sm"
-    >
-      {getDecisionLabel(decision)}
+    <Badge variant={decision === "allowed" ? "success" : "destructive"}>
+      <Badge.Text>{getDecisionLabel(decision)}</Badge.Text>
     </Badge>
   );
 }
@@ -136,8 +139,8 @@ function RoleBadges({
       {roleIds.map((roleId) => {
         const role = roles.find((r) => r.id === roleId);
         return (
-          <Badge key={roleId} variant="outline" size="sm">
-            {role?.name ?? roleId}
+          <Badge key={roleId} variant="neutral">
+            <Badge.Text>{role?.name ?? roleId}</Badge.Text>
           </Badge>
         );
       })}
@@ -206,8 +209,8 @@ function RolePicker({
                 {role.name}
               </Type>
               {role.isSystem && (
-                <Badge variant="outline" size="sm">
-                  System
+                <Badge variant="neutral">
+                  <Badge.Text>System</Badge.Text>
                 </Badge>
               )}
             </div>
@@ -384,7 +387,7 @@ function ReviewRequestDialog({
               </Type>
               <Input
                 value={reason}
-                onChange={setReason}
+                onChange={handleStringInputChange(setReason)}
                 placeholder={
                   isApprove
                     ? "Why is this server approved?"
@@ -494,7 +497,11 @@ function ServerEntryDialog({
             <Type variant="body" className="text-sm font-medium">
               Server name
             </Type>
-            <Input value={name} onChange={setName} placeholder="linear" />
+            <Input
+              value={name}
+              onChange={handleStringInputChange(setName)}
+              placeholder="linear"
+            />
           </div>
           <div className="space-y-2">
             <Type variant="body" className="text-sm font-medium">
@@ -502,7 +509,7 @@ function ServerEntryDialog({
             </Type>
             <Input
               value={normalizedIdentity}
-              onChange={setNormalizedIdentity}
+              onChange={handleStringInputChange(setNormalizedIdentity)}
               placeholder="linear"
             />
           </div>
@@ -512,7 +519,8 @@ function ServerEntryDialog({
             </Type>
             <Input
               value={fullUrl}
-              onChange={(value) => {
+              onChange={(event) => {
+                const value = event.currentTarget.value;
                 setFullUrl(value);
                 try {
                   setUrlHost(new URL(value).host);
@@ -529,7 +537,7 @@ function ServerEntryDialog({
             </Type>
             <Input
               value={urlHost}
-              onChange={setUrlHost}
+              onChange={handleStringInputChange(setUrlHost)}
               placeholder="mcp.example.com"
             />
           </div>
@@ -571,7 +579,11 @@ function ServerEntryDialog({
           <Type variant="body" className="text-sm font-medium">
             Admin note
           </Type>
-          <Input value={reason} onChange={setReason} placeholder="Reason" />
+          <Input
+            value={reason}
+            onChange={handleStringInputChange(setReason)}
+            placeholder="Reason"
+          />
         </div>
 
         <Dialog.Footer>
@@ -762,8 +774,8 @@ export function ShadowMCPAccessContent() {
       width: "1fr",
       render: (entry) => (
         <div className="min-w-0 space-y-1">
-          <Badge variant="outline" size="sm">
-            {getMatchBreadthLabel(entry.matchBreadth)}
+          <Badge variant="neutral">
+            <Badge.Text>{getMatchBreadthLabel(entry.matchBreadth)}</Badge.Text>
           </Badge>
           <Type
             variant="body"
@@ -872,8 +884,8 @@ export function ShadowMCPAccessContent() {
 
       <div className="border-border bg-muted/30 mb-6 rounded-md border px-4 py-3">
         <div className="flex items-start gap-3">
-          <Badge variant="outline" size="sm" className="mt-0.5">
-            Enforcement
+          <Badge variant="neutral" className="mt-0.5">
+            <Badge.Text>Enforcement</Badge.Text>
           </Badge>
           <Type variant="body" className="text-muted-foreground text-sm">
             Risk Policy decides whether Shadow MCP is blocked. If blocking
