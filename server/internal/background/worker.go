@@ -3,6 +3,7 @@ package background
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -117,7 +118,7 @@ func NewTemporalWorker(
 	tracerProvider trace.TracerProvider,
 	meterProvider metric.MeterProvider,
 	options ...*WorkerOptions,
-) worker.Worker {
+) *Workers {
 	opts := &WorkerOptions{
 		GuardianPolicy:      nil,
 		DB:                  nil,
@@ -180,12 +181,19 @@ func NewTemporalWorker(
 		}
 	}
 
+	workerInterceptors := []interceptor.WorkerInterceptor{
+		&interceptors.Recovery{WorkerInterceptorBase: interceptor.WorkerInterceptorBase{}},
+		&interceptors.InjectExecutionInfo{WorkerInterceptorBase: interceptor.WorkerInterceptorBase{}},
+		&interceptors.Logging{WorkerInterceptorBase: interceptor.WorkerInterceptorBase{}},
+	}
+
 	temporalWorker := worker.New(env.Client(), string(env.Queue()), worker.Options{
-		Interceptors: []interceptor.WorkerInterceptor{
-			&interceptors.Recovery{WorkerInterceptorBase: interceptor.WorkerInterceptorBase{}},
-			&interceptors.InjectExecutionInfo{WorkerInterceptorBase: interceptor.WorkerInterceptorBase{}},
-			&interceptors.Logging{WorkerInterceptorBase: interceptor.WorkerInterceptorBase{}},
-		},
+		Interceptors: workerInterceptors,
+	})
+
+	riskWorker := worker.New(env.Client(), RiskAnalysisTaskQueue(env.Queue()), worker.Options{
+		Interceptors:                       workerInterceptors,
+		MaxConcurrentActivityExecutionSize: perPodAnalyzeBatchConcurrency,
 	})
 
 	activities := NewActivities(
@@ -247,9 +255,9 @@ func NewTemporalWorker(
 	// Trigger related activities
 	temporalWorker.RegisterActivity(activities.DispatchTrigger)
 	temporalWorker.RegisterActivity(activities.ProcessScheduledTrigger)
-	// Risk analysis activities
+	// Risk analysis activities — AnalyzeBatch on the dedicated worker.
 	temporalWorker.RegisterActivity(activities.FetchUnanalyzedMessages)
-	temporalWorker.RegisterActivity(activities.AnalyzeBatch)
+	riskWorker.RegisterActivity(activities.AnalyzeBatch)
 	// Assistant activities
 	temporalWorker.RegisterActivity(activities.AdmitAssistantThreads)
 	temporalWorker.RegisterActivity(activities.ProcessAssistantThread)
@@ -260,6 +268,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.SignalAssistantThread)
 	// WorkOS sync activities
 	temporalWorker.RegisterActivity(activities.ProcessWorkOSOrganizationEvents)
+	temporalWorker.RegisterActivity(activities.ProcessWorkOSMembershipEvents)
 
 	temporalWorker.RegisterWorkflow(ProcessDeploymentWorkflow)
 	temporalWorker.RegisterWorkflow(FunctionsReaperWorkflow)
@@ -286,6 +295,8 @@ func NewTemporalWorker(
 	// WorkOS sync workflows
 	temporalWorker.RegisterWorkflow(ProcessWorkOSOrganizationEventsWorkflow)
 	temporalWorker.RegisterWorkflow(ProcessWorkOSOrganizationEventsWorkflowDebounced)
+	temporalWorker.RegisterWorkflow(ProcessWorkOSMembershipEventsWorkflow)
+	temporalWorker.RegisterWorkflow(ProcessWorkOSMembershipEventsWorkflowDebounced)
 
 	if err := AddPlatformUsageMetricsSchedule(context.Background(), env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
@@ -307,5 +318,50 @@ func NewTemporalWorker(
 		logger.ErrorContext(context.Background(), "failed to add assistant runtime janitor schedule", attr.SlogError(err))
 	}
 
-	return temporalWorker
+	return &Workers{main: temporalWorker, riskAnalysis: riskWorker}
+}
+
+// Fleet-wide cap on in-flight AnalyzeBatch per worker pod — the only knob
+// in the chain that doesn't multiply with N policies or N batches.
+const perPodAnalyzeBatchConcurrency = 20
+
+func RiskAnalysisTaskQueue(mainQueue tenv.TaskQueueName) string {
+	return string(mainQueue) + "-risk-analysis"
+}
+
+// Workers bundles the main and risk-analysis Temporal workers.
+type Workers struct {
+	main         worker.Worker
+	riskAnalysis worker.Worker
+}
+
+// Run starts the risk-analysis worker, then blocks running the main worker
+// until interruptCh receives.
+func (w *Workers) Run(interruptCh <-chan any) error {
+	if err := w.riskAnalysis.Start(); err != nil {
+		return fmt.Errorf("start risk analysis worker: %w", err)
+	}
+	defer w.riskAnalysis.Stop()
+
+	if err := w.main.Run(interruptCh); err != nil {
+		return fmt.Errorf("run main worker: %w", err)
+	}
+	return nil
+}
+
+// Start starts both workers without blocking. Pair with Stop (used by tests).
+func (w *Workers) Start() error {
+	if err := w.main.Start(); err != nil {
+		return fmt.Errorf("start main worker: %w", err)
+	}
+	if err := w.riskAnalysis.Start(); err != nil {
+		w.main.Stop()
+		return fmt.Errorf("start risk analysis worker: %w", err)
+	}
+	return nil
+}
+
+func (w *Workers) Stop() {
+	w.riskAnalysis.Stop()
+	w.main.Stop()
 }

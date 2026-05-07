@@ -46,8 +46,8 @@ type presidioResult struct {
 	Score      float64 `json:"score"`
 }
 
-// Tuned to Presidio capacity as-of 2026-05-01.
-const presidioMaxWorkers = 4
+// Tuned to Presidio capacity 2026-05-01. Fleet-wide cap is perPodAnalyzeBatchConcurrency.
+const perBatchRequestConcurrency = 4
 
 // /analyze accepts a string or array; array returns ordered nested list. Bounds blast radius on retry-bisect.
 const presidioHTTPBatchSize = 50
@@ -62,14 +62,14 @@ const presidioRetryBackoffCap = 1 * time.Second
 // unsafe guardian policy with an empty blocklist. The default policy blocks
 // RFC 1918 private ranges (10.0.0.0/8) which Kubernetes ClusterIPs fall into.
 type PresidioClient struct {
-	baseURL         string
-	httpClient      *guardian.HTTPClient
-	tracer          trace.Tracer
-	logger          *slog.Logger
-	maxWorkers      int
-	retryBackoff    time.Duration
-	requestDuration metric.Float64Histogram
-	requestFailures metric.Int64Counter
+	baseURL            string
+	httpClient         *guardian.HTTPClient
+	tracer             trace.Tracer
+	logger             *slog.Logger
+	requestConcurrency int
+	retryBackoff       time.Duration
+	requestDuration    metric.Float64Histogram
+	requestFailures    metric.Int64Counter
 }
 
 // NewPresidioClient creates a client pointing at the given base URL.
@@ -94,23 +94,24 @@ func NewPresidioClient(baseURL string, tracerProvider trace.TracerProvider, mete
 	httpClient := unsafePolicy.PooledClient()
 
 	return &PresidioClient{
-		baseURL:         strings.TrimRight(baseURL, "/"),
-		httpClient:      httpClient,
-		tracer:          tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis/presidio"),
-		logger:          logger,
-		maxWorkers:      presidioMaxWorkers,
-		retryBackoff:    presidioRetryBackoff,
-		requestDuration: requestDuration,
-		requestFailures: requestFailures,
+		baseURL:            strings.TrimRight(baseURL, "/"),
+		httpClient:         httpClient,
+		tracer:             tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis/presidio"),
+		logger:             logger,
+		requestConcurrency: perBatchRequestConcurrency,
+		retryBackoff:       presidioRetryBackoff,
+		requestDuration:    requestDuration,
+		requestFailures:    requestFailures,
 	}
 }
 
-// NewPresidioClientWithWorkers is like NewPresidioClient but allows overriding
-// the concurrency limit. Used for benchmarking and tests; the retry backoff is
-// disabled so test sweeps don't pay 500ms per bisect step.
-func NewPresidioClientWithWorkers(baseURL string, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, logger *slog.Logger, maxWorkers int) *PresidioClient {
+// NewPresidioClientWithConcurrency is like NewPresidioClient but allows
+// overriding the per-batch HTTP request concurrency. Used for benchmarking
+// and tests; the retry backoff is disabled so test sweeps don't pay 500ms
+// per bisect step.
+func NewPresidioClientWithConcurrency(baseURL string, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, logger *slog.Logger, requestConcurrency int) *PresidioClient {
 	c := NewPresidioClient(baseURL, tracerProvider, meterProvider, logger)
-	c.maxWorkers = maxWorkers
+	c.requestConcurrency = requestConcurrency
 	c.retryBackoff = 0
 	return c
 }
@@ -174,7 +175,7 @@ func (p *PresidioClient) AnalyzeBatch(ctx context.Context, texts []string, entit
 
 	results := make([][]Finding, n)
 	batches := chunkTextIndexes(n, presidioHTTPBatchSize)
-	workers := min(max(1, p.maxWorkers), len(batches))
+	workers := min(max(1, p.requestConcurrency), len(batches))
 
 	ch := make(chan indexRange, len(batches))
 	for _, batch := range batches {

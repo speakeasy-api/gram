@@ -64,20 +64,27 @@ func sessionIDToUUID(sessionID string) uuid.UUID {
 	return uuid.NewSHA1(claudeSessionNamespace, []byte(sessionID))
 }
 
-// makeHookResult creates a ClaudeHookResult with the HookSpecificOutput populated.
+// makeHookResult creates a ClaudeHookResult, attaching HookSpecificOutput only
+// for hook events whose Claude Code response schema permits it. Stop, SessionStart,
+// SessionEnd, Notification, and PostToolUseFailure must NOT carry hookSpecificOutput
+// — Claude Code rejects unknown variants with "Hook JSON output validation failed".
 func makeHookResult(hookEventName string) *gen.ClaudeHookResult {
-	return &gen.ClaudeHookResult{
-		HookSpecificOutput: &HookSpecificOutput{
+	result := &gen.ClaudeHookResult{
+		HookSpecificOutput: nil,
+		Continue:           nil,
+		StopReason:         nil,
+		SuppressOutput:     nil,
+		SystemMessage:      nil,
+	}
+	if hookEventName == "PreToolUse" {
+		result.HookSpecificOutput = &HookSpecificOutput{
 			HookEventName:            &hookEventName,
 			AdditionalContext:        nil,
 			PermissionDecision:       nil,
 			PermissionDecisionReason: nil,
-		},
-		Continue:       nil,
-		StopReason:     nil,
-		SuppressOutput: nil,
-		SystemMessage:  nil,
+		}
 	}
+	return result
 }
 
 // handleUserPromptSubmit captures the user's prompt text as a chat message.

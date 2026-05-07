@@ -95,9 +95,9 @@ func TestListServers_FiltersDeletedServers(t *testing.T) {
 	result, err := client.ListServers(ctx, registry, ListServersParams{})
 
 	require.NoError(t, err)
-	require.Len(t, result, 2)
-	require.Equal(t, "active-server", result[0].RegistrySpecifier)
-	require.Equal(t, "another-active", result[1].RegistrySpecifier)
+	require.Len(t, result.Servers, 2)
+	require.Equal(t, "active-server", result.Servers[0].RegistrySpecifier)
+	require.Equal(t, "another-active", result.Servers[1].RegistrySpecifier)
 }
 
 func TestListServers_PreservesRemoteHeadersAndVariables(t *testing.T) {
@@ -171,10 +171,10 @@ func TestListServers_PreservesRemoteHeadersAndVariables(t *testing.T) {
 	result, err := client.ListServers(ctx, registry, ListServersParams{})
 
 	require.NoError(t, err)
-	require.Len(t, result, 1)
-	require.Len(t, result[0].Remotes, 1)
+	require.Len(t, result.Servers, 1)
+	require.Len(t, result.Servers[0].Remotes, 1)
 
-	remote := result[0].Remotes[0]
+	remote := result.Servers[0].Remotes[0]
 	require.Equal(t, "https://api.example.com/{region}/mcp", remote.URL)
 	require.Len(t, remote.Headers, 1)
 	require.Equal(t, "Authorization", remote.Headers[0].Name)

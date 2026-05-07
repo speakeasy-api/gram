@@ -2,12 +2,24 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Heading } from "@/components/ui/heading";
 import { Type } from "@/components/ui/type";
 import { HumanizeDateTime } from "@/lib/dates";
+import { cn } from "@/lib/utils";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useRoles } from "@gram/client/react-query/roles.js";
 import { SkeletonTable } from "@/components/ui/skeleton";
-import { Button, Column, Icon, Table } from "@speakeasy-api/moonshine";
+import {
+  Button,
+  Column,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  Icon,
+  Table,
+} from "@speakeasy-api/moonshine";
+import { Ellipsis } from "lucide-react";
 import { useState } from "react";
+import { useNavigate } from "react-router";
 import { ChangeRoleDialog } from "./ChangeRoleDialog";
 import { RequireScope } from "@/components/require-scope";
 import { useOrganization } from "@/contexts/Auth";
@@ -23,10 +35,47 @@ function getInitials(name: string) {
     .slice(0, 2);
 }
 
+function MemberActionsMenu({
+  onChangeRole,
+  onViewChallenges,
+}: {
+  onChangeRole: () => void;
+  onViewChallenges: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <DropdownMenu open={open} onOpenChange={setOpen} modal={false}>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          className={cn(
+            "text-muted-foreground hover:bg-accent hover:text-foreground flex h-8 w-8 cursor-pointer items-center justify-center rounded-md transition-colors",
+            open && "bg-accent text-foreground",
+          )}
+        >
+          <Ellipsis className="h-4 w-4" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <RequireScope scope="org:admin" level="component">
+          <DropdownMenuItem onSelect={() => setTimeout(onChangeRole, 0)}>
+            Change role
+          </DropdownMenuItem>
+        </RequireScope>
+        <DropdownMenuItem onSelect={() => setTimeout(onViewChallenges, 0)}>
+          View challenges
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 export function MembersTab() {
   const [changingMember, setChangingMember] = useState<AccessMember | null>(
     null,
   );
+  const navigate = useNavigate();
   const organization = useOrganization();
   const telemetry = useTelemetry();
   const orgRoutes = useOrgRoutes();
@@ -92,17 +141,16 @@ export function MembersTab() {
     {
       key: "actions",
       header: "",
-      width: "100px",
+      width: "60px",
       render: (member) => (
-        <RequireScope scope="org:admin" level="component">
-          <Button
-            variant="tertiary"
-            size="sm"
-            onClick={() => setChangingMember(member)}
-          >
-            <Button.Text className="text-primary">Change</Button.Text>
-          </Button>
-        </RequireScope>
+        <MemberActionsMenu
+          onChangeRole={() => setChangingMember(member)}
+          onViewChallenges={() => {
+            navigate(
+              `${orgRoutes.access.challenges.href()}?identity=${encodeURIComponent(member.email)}`,
+            );
+          }}
+        />
       ),
     },
   ];

@@ -29,8 +29,8 @@ const (
 	// drainBatchSize is how many messages each AnalyzeBatch activity processes.
 	drainBatchSize = 1_000
 
-	// Tuned to demand as-of 2026-05-01.
-	drainMaxConcurrency = 1
+	// Tuned 2026-05-01. Fleet-wide cap is perPodAnalyzeBatchConcurrency.
+	perDrainBatchConcurrency = 1
 )
 
 // DrainRiskAnalysisParams identifies the policy this workflow drains.
@@ -60,6 +60,12 @@ func DrainRiskAnalysisWorkflow(ctx workflow.Context, params DrainRiskAnalysisPar
 	}
 	ctx = workflow.WithActivityOptions(ctx, activityOpts)
 
+	// AnalyzeBatch runs on a dedicated, capped queue derived from the
+	// workflow's own queue so each environment stays isolated.
+	analyzeBatchOpts := activityOpts
+	analyzeBatchOpts.TaskQueue = RiskAnalysisTaskQueue(tenv.TaskQueueName(workflow.GetInfo(ctx).TaskQueueName))
+	analyzeBatchCtx := workflow.WithActivityOptions(ctx, analyzeBatchOpts)
+
 	var a *Activities
 
 	// ── Fetch unanalyzed messages ──────────────────────────────────────
@@ -79,17 +85,17 @@ func DrainRiskAnalysisWorkflow(ctx workflow.Context, params DrainRiskAnalysisPar
 	// ── Analyze batches ────────────────────────────────────────────────
 	if len(fetchResult.MessageIDs) > 0 {
 		batches := chunkUUIDs(fetchResult.MessageIDs, drainBatchSize)
-		pending := make([]workflow.Future, 0, min(len(batches), drainMaxConcurrency))
+		pending := make([]workflow.Future, 0, min(len(batches), perDrainBatchConcurrency))
 
 		for _, batch := range batches {
-			if len(pending) >= drainMaxConcurrency {
+			if len(pending) >= perDrainBatchConcurrency {
 				if err := pending[0].Get(ctx, nil); err != nil {
 					logger.Error("analyze batch failed", "error", err.Error())
 				}
 				pending = pending[1:]
 			}
 
-			f := workflow.ExecuteActivity(ctx, a.AnalyzeBatch, risk_analysis.AnalyzeBatchArgs{
+			f := workflow.ExecuteActivity(analyzeBatchCtx, a.AnalyzeBatch, risk_analysis.AnalyzeBatchArgs{
 				ProjectID:        params.ProjectID,
 				OrganizationID:   fetchResult.OrganizationID,
 				RiskPolicyID:     params.RiskPolicyID,

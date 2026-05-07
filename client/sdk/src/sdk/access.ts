@@ -235,13 +235,13 @@ export class Access extends ClientSDK {
    * resolveChallenge access
    *
    * @remarks
-   * Record a resolution for a denied authz challenge. The caller is responsible for assigning the role first.
+   * Record resolutions for one or more denied authz challenges. The caller is responsible for assigning the role first.
    */
   async resolveChallenge(
     request: operations.ResolveChallengeRequest,
     security?: operations.ResolveChallengeSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<components.ChallengeResolution> {
+  ): Promise<components.ResolveChallengesResult> {
     return unwrapAsync(accessResolveChallenge(
       this,
       request,

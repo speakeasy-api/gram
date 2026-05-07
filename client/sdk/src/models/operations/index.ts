@@ -33,6 +33,7 @@ export * from "./createsignedchatattachmenturl.js";
 export * from "./createslackapp.js";
 export * from "./createtemplate.js";
 export * from "./createtoolset.js";
+export * from "./createtopupcheckout.js";
 export * from "./createtriggerinstance.js";
 export * from "./creditusage.js";
 export * from "./deleteassistant.js";

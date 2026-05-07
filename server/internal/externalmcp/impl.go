@@ -170,7 +170,7 @@ func (s *Service) ListCatalog(ctx context.Context, payload *gen.ListCatalogPaylo
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to get registry").Log(ctx, s.logger)
 		}
 
-		servers, err := s.registryClient.ListServers(ctx, Registry{
+		result, err := s.registryClient.ListServers(ctx, Registry{
 			ID:  registry.ID,
 			URL: registry.Url,
 		}, ListServersParams{
@@ -182,8 +182,8 @@ func (s *Service) ListCatalog(ctx context.Context, payload *gen.ListCatalogPaylo
 		}
 
 		return &gen.ListCatalogResult{
-			Servers:    servers,
-			NextCursor: nil, // Pagination not implemented in v0
+			Servers:    result.Servers,
+			NextCursor: result.NextCursor,
 		}, nil
 	}
 
@@ -195,8 +195,9 @@ func (s *Service) ListCatalog(ctx context.Context, payload *gen.ListCatalogPaylo
 
 	// Aggregate servers from all registries
 	var allServers []*types.ExternalMCPServer
+	var registryResults []ListServersResult
 	for _, registry := range registries {
-		servers, err := s.registryClient.ListServers(ctx, Registry{
+		result, err := s.registryClient.ListServers(ctx, Registry{
 			ID:  registry.ID,
 			URL: registry.Url,
 		}, ListServersParams{
@@ -211,7 +212,8 @@ func (s *Service) ListCatalog(ctx context.Context, payload *gen.ListCatalogPaylo
 			)
 			continue
 		}
-		allServers = append(allServers, servers...)
+		allServers = append(allServers, result.Servers...)
+		registryResults = append(registryResults, result)
 	}
 
 	// Cap at 100 servers for v0
@@ -219,9 +221,16 @@ func (s *Service) ListCatalog(ctx context.Context, payload *gen.ListCatalogPaylo
 		allServers = allServers[:100]
 	}
 
+	// Return the cursor only when there is a single registry —
+	// multi-registry composite cursor support is tracked in AGE-2153.
+	var nextCursor *string
+	if len(registryResults) == 1 {
+		nextCursor = registryResults[0].NextCursor
+	}
+
 	return &gen.ListCatalogResult{
 		Servers:    allServers,
-		NextCursor: nil, // Pagination not implemented in v0
+		NextCursor: nextCursor,
 	}, nil
 }
 

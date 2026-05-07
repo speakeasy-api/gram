@@ -1099,7 +1099,7 @@ paths:
                 name: ListScopes
     /rpc/access.resolveChallenge:
         post:
-            description: Record a resolution for a denied authz challenge. The caller is responsible for assigning the role first.
+            description: Record resolutions for one or more denied authz challenges. The caller is responsible for assigning the role first.
             operationId: resolveChallenge
             parameters:
                 - allowEmptyValue: true
@@ -1127,7 +1127,7 @@ paths:
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/ChallengeResolution'
+                                $ref: '#/components/schemas/ResolveChallengesResult'
                     description: Created response.
                 "400":
                     content:
@@ -20490,6 +20490,87 @@ paths:
             x-speakeasy-name-override: createCustomerSession
             x-speakeasy-react-hook:
                 name: createCustomerSession
+    /rpc/usage.createTopUpCheckout:
+        post:
+            description: Create a checkout link for a one-time credit top-up purchase
+            operationId: createTopUpCheckout
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                type: string
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: createTopUpCheckout usage
+            tags:
+                - usage
+            x-speakeasy-name-override: createTopUpCheckout
+            x-speakeasy-react-hook:
+                name: createTopUpCheckout
     /rpc/usage.getPeriodUsage:
         get:
             description: Get the usage for an organization for a given period
@@ -27455,6 +27536,9 @@ components:
                 connected:
                     type: boolean
                     description: Whether this project has a GitHub connection.
+                marketplace_url:
+                    type: string
+                    description: URL-based Claude Code marketplace install URL — the value to pass to `/plugin marketplace add`. Present once a marketplace token has been minted, which happens automatically on the first publish.
                 repo_name:
                     type: string
                     description: GitHub repo name, if connected.
@@ -27623,9 +27707,11 @@ components:
         ResolveChallengeForm:
             type: object
             properties:
-                challenge_id:
-                    type: string
-                    description: ID of the challenge in ClickHouse.
+                challenge_ids:
+                    type: array
+                    items:
+                        type: string
+                    description: IDs of the challenges in ClickHouse to resolve.
                 principal_urn:
                     type: string
                     description: Principal that was denied.
@@ -27648,10 +27734,20 @@ components:
                     type: string
                     description: Scope that was denied.
             required:
-                - challenge_id
+                - challenge_ids
                 - principal_urn
                 - scope
                 - resolution_type
+        ResolveChallengesResult:
+            type: object
+            properties:
+                resolutions:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ChallengeResolution'
+                    description: The created resolution records.
+            required:
+                - resolutions
         Resource:
             type: object
             properties:

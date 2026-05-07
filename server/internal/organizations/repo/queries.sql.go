@@ -67,6 +67,22 @@ func (q *Queries) CreateOrganizationMetadata(ctx context.Context, arg CreateOrga
 	return err
 }
 
+const deleteOrganizationRoleAssignmentsByWorkosUser = `-- name: DeleteOrganizationRoleAssignmentsByWorkosUser :exec
+DELETE FROM organization_role_assignments
+WHERE organization_id = $1
+  AND workos_user_id = $2
+`
+
+type DeleteOrganizationRoleAssignmentsByWorkosUserParams struct {
+	OrganizationID string
+	WorkosUserID   string
+}
+
+func (q *Queries) DeleteOrganizationRoleAssignmentsByWorkosUser(ctx context.Context, arg DeleteOrganizationRoleAssignmentsByWorkosUserParams) error {
+	_, err := q.db.Exec(ctx, deleteOrganizationRoleAssignmentsByWorkosUser, arg.OrganizationID, arg.WorkosUserID)
+	return err
+}
+
 const deleteOrganizationUserRelationship = `-- name: DeleteOrganizationUserRelationship :exec
 UPDATE organization_user_relationships
 SET deleted_at = clock_timestamp()
@@ -179,6 +195,36 @@ func (q *Queries) GetOrganizationNameByWorkosID(ctx context.Context, workosID pg
 	return name, err
 }
 
+const getOrganizationRelationshipForUser = `-- name: GetOrganizationRelationshipForUser :one
+SELECT id, organization_id, user_id, workos_membership_id, workos_updated_at, workos_last_event_id, created_at, updated_at, deleted_at, deleted
+FROM organization_user_relationships
+WHERE organization_id = $1
+  AND user_id = $2
+`
+
+type GetOrganizationRelationshipForUserParams struct {
+	OrganizationID string
+	UserID         string
+}
+
+func (q *Queries) GetOrganizationRelationshipForUser(ctx context.Context, arg GetOrganizationRelationshipForUserParams) (OrganizationUserRelationship, error) {
+	row := q.db.QueryRow(ctx, getOrganizationRelationshipForUser, arg.OrganizationID, arg.UserID)
+	var i OrganizationUserRelationship
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.UserID,
+		&i.WorkosMembershipID,
+		&i.WorkosUpdatedAt,
+		&i.WorkosLastEventID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const getOrganizationUserRelationship = `-- name: GetOrganizationUserRelationship :one
 SELECT id, organization_id, user_id, workos_membership_id, workos_updated_at, workos_last_event_id, created_at, updated_at, deleted_at, deleted
 FROM organization_user_relationships
@@ -230,6 +276,50 @@ func (q *Queries) HasOrganizationUserRelationship(ctx context.Context, arg HasOr
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err
+}
+
+const listOrganizationRoleAssignmentsByWorkOSUser = `-- name: ListOrganizationRoleAssignmentsByWorkOSUser :many
+SELECT id, organization_id, workos_user_id, user_id, role_urn, workos_membership_id, workos_updated_at, workos_last_event_id, created_at, updated_at
+FROM organization_role_assignments
+WHERE organization_id = $1
+  AND workos_user_id = $2
+ORDER BY role_urn
+`
+
+type ListOrganizationRoleAssignmentsByWorkOSUserParams struct {
+	OrganizationID string
+	WorkosUserID   string
+}
+
+func (q *Queries) ListOrganizationRoleAssignmentsByWorkOSUser(ctx context.Context, arg ListOrganizationRoleAssignmentsByWorkOSUserParams) ([]OrganizationRoleAssignment, error) {
+	rows, err := q.db.Query(ctx, listOrganizationRoleAssignmentsByWorkOSUser, arg.OrganizationID, arg.WorkosUserID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []OrganizationRoleAssignment
+	for rows.Next() {
+		var i OrganizationRoleAssignment
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.WorkosUserID,
+			&i.UserID,
+			&i.RoleUrn,
+			&i.WorkosMembershipID,
+			&i.WorkosUpdatedAt,
+			&i.WorkosLastEventID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listOrganizationUsers = `-- name: ListOrganizationUsers :many
@@ -292,6 +382,51 @@ func (q *Queries) ListOrganizationUsers(ctx context.Context, organizationID stri
 		return nil, err
 	}
 	return items, nil
+}
+
+const markOrganizationUserRelationshipAsDeleted = `-- name: MarkOrganizationUserRelationshipAsDeleted :exec
+INSERT INTO organization_user_relationships (
+    organization_id,
+    user_id,
+    workos_membership_id,
+    workos_updated_at,
+    workos_last_event_id,
+    deleted_at
+) VALUES (
+    $1,
+    $2,
+    $3,
+    $4,
+    $5,
+    clock_timestamp()
+)
+ON CONFLICT (organization_id, user_id) DO UPDATE SET
+    workos_membership_id = COALESCE(EXCLUDED.workos_membership_id, organization_user_relationships.workos_membership_id),
+    workos_updated_at = EXCLUDED.workos_updated_at,
+    workos_last_event_id = EXCLUDED.workos_last_event_id,
+    deleted_at = COALESCE(organization_user_relationships.deleted_at, clock_timestamp()),
+    updated_at = clock_timestamp()
+`
+
+type MarkOrganizationUserRelationshipAsDeletedParams struct {
+	OrganizationID     string
+	UserID             string
+	WorkosMembershipID pgtype.Text
+	WorkosUpdatedAt    pgtype.Timestamptz
+	WorkosLastEventID  pgtype.Text
+}
+
+// Record a WorkOS membership delete, inserting a tombstone when the local
+// relationship did not exist so stale replayed creates cannot resurrect it.
+func (q *Queries) MarkOrganizationUserRelationshipAsDeleted(ctx context.Context, arg MarkOrganizationUserRelationshipAsDeletedParams) error {
+	_, err := q.db.Exec(ctx, markOrganizationUserRelationshipAsDeleted,
+		arg.OrganizationID,
+		arg.UserID,
+		arg.WorkosMembershipID,
+		arg.WorkosUpdatedAt,
+		arg.WorkosLastEventID,
+	)
+	return err
 }
 
 const setAccountType = `-- name: SetAccountType :exec
@@ -392,6 +527,81 @@ type SetUserWorkOSMembershipsParams struct {
 // workos_id are unaffected. Other users' memberships are never modified.
 func (q *Queries) SetUserWorkOSMemberships(ctx context.Context, arg SetUserWorkOSMembershipsParams) error {
 	_, err := q.db.Exec(ctx, setUserWorkOSMemberships, arg.UserID, arg.WorkosOrgIds, arg.WorkosMembershipIds)
+	return err
+}
+
+const syncUserOrganizationRoleAssignments = `-- name: SyncUserOrganizationRoleAssignments :exec
+WITH input_role_urns AS (
+    SELECT 'role:organization:' || id::text AS role_urn
+    FROM organization_roles
+    WHERE organization_id = $1
+      AND workos_slug = ANY($3::text[])
+      AND deleted IS FALSE
+      AND workos_deleted IS FALSE
+    UNION ALL
+    SELECT 'role:global:' || id::text AS role_urn
+    FROM global_roles
+    WHERE workos_slug = ANY($3::text[])
+      AND deleted IS FALSE
+      AND workos_deleted IS FALSE
+),
+upserted AS (
+    INSERT INTO organization_role_assignments (
+        organization_id,
+        workos_user_id,
+        user_id,
+        role_urn,
+        workos_membership_id,
+        workos_updated_at,
+        workos_last_event_id
+    )
+    SELECT
+        $1,
+        $2,
+        $4,
+        input_role_urns.role_urn,
+        $5,
+        $6,
+        $7
+    FROM input_role_urns
+    ON CONFLICT (organization_id, workos_user_id, role_urn) DO UPDATE SET
+        -- COALESCE preserves a backfilled user_id if the sync fires before the Gram user exists.
+        user_id = COALESCE(EXCLUDED.user_id, organization_role_assignments.user_id),
+        workos_membership_id = EXCLUDED.workos_membership_id,
+        workos_updated_at = EXCLUDED.workos_updated_at,
+        workos_last_event_id = EXCLUDED.workos_last_event_id,
+        updated_at = clock_timestamp()
+    RETURNING role_urn
+)
+DELETE FROM organization_role_assignments
+WHERE organization_role_assignments.organization_id = $1
+  AND organization_role_assignments.workos_user_id = $2
+  AND organization_role_assignments.role_urn NOT IN (SELECT input_role_urns.role_urn FROM input_role_urns)
+`
+
+type SyncUserOrganizationRoleAssignmentsParams struct {
+	OrganizationID     string
+	WorkosUserID       string
+	WorkosRoleSlugs    []string
+	UserID             pgtype.Text
+	WorkosMembershipID pgtype.Text
+	WorkosUpdatedAt    pgtype.Timestamptz
+	WorkosLastEventID  pgtype.Text
+}
+
+// Declaratively set all WorkOS role assignments for a known Gram user in an
+// org. Role slugs are resolved from role sync tables and stale assignments for
+// this WorkOS user are removed.
+func (q *Queries) SyncUserOrganizationRoleAssignments(ctx context.Context, arg SyncUserOrganizationRoleAssignmentsParams) error {
+	_, err := q.db.Exec(ctx, syncUserOrganizationRoleAssignments,
+		arg.OrganizationID,
+		arg.WorkosUserID,
+		arg.WorkosRoleSlugs,
+		arg.UserID,
+		arg.WorkosMembershipID,
+		arg.WorkosUpdatedAt,
+		arg.WorkosLastEventID,
+	)
 	return err
 }
 
@@ -561,4 +771,47 @@ func (q *Queries) UpsertOrganizationUserRelationship(ctx context.Context, arg Up
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const upsertOrganizationUserRelationshipFromWorkOS = `-- name: UpsertOrganizationUserRelationshipFromWorkOS :exec
+INSERT INTO organization_user_relationships (
+    organization_id,
+    user_id,
+    workos_membership_id,
+    workos_updated_at,
+    workos_last_event_id
+) VALUES (
+    $1,
+    $2,
+    $3,
+    $4,
+    $5
+)
+ON CONFLICT (organization_id, user_id) DO UPDATE SET
+    workos_membership_id = EXCLUDED.workos_membership_id,
+    workos_updated_at = EXCLUDED.workos_updated_at,
+    workos_last_event_id = EXCLUDED.workos_last_event_id,
+    deleted_at = NULL,
+    updated_at = clock_timestamp()
+`
+
+type UpsertOrganizationUserRelationshipFromWorkOSParams struct {
+	OrganizationID     string
+	UserID             string
+	WorkosMembershipID pgtype.Text
+	WorkosUpdatedAt    pgtype.Timestamptz
+	WorkosLastEventID  pgtype.Text
+}
+
+// Upsert a membership row from a WorkOS organization_membership event. Caller
+// must have already passed the row through ShouldProcessEvent.
+func (q *Queries) UpsertOrganizationUserRelationshipFromWorkOS(ctx context.Context, arg UpsertOrganizationUserRelationshipFromWorkOSParams) error {
+	_, err := q.db.Exec(ctx, upsertOrganizationUserRelationshipFromWorkOS,
+		arg.OrganizationID,
+		arg.UserID,
+		arg.WorkosMembershipID,
+		arg.WorkosUpdatedAt,
+		arg.WorkosLastEventID,
+	)
+	return err
 }

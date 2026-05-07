@@ -108,21 +108,28 @@ function useMCPServers(enabled: boolean) {
         ? `${baseUrl}/mcp/${t.mcpSlug}`
         : `${baseUrl}/mcp/${project?.slug ?? ""}/${t.slug}/${t.defaultEnvironmentSlug ?? ""}`;
       const mcpUrl = fullUrl.replace(/^https?:\/\//, "");
+      // Skip external MCP/catalog servers — tool names aren't resolved yet
+      // TODO: re-enable once external server tool names are available
+      const isExternal = t.tools.some((tool) => tool.type === "externalmcp");
+      if (isExternal) continue;
+      const tools = t.tools.map((tool) => ({
+        id: tool.id,
+        name: tool.name,
+        type: tool.type,
+        httpMethod: tool.httpMethod,
+        annotations: tool.annotations,
+      }));
+      // Skip servers with no tools
+      if (tools.length === 0) continue;
       group.servers.push({
         id: t.id,
         name: t.name,
         slug: mcpUrl,
         mcpSlug: t.mcpSlug ?? undefined,
-        tools: t.tools.map((tool) => ({
-          id: tool.id,
-          name: tool.name,
-          type: tool.type,
-          httpMethod: tool.httpMethod,
-          annotations: tool.annotations,
-        })),
+        tools,
       });
     }
-    return [...groups.values()];
+    return [...groups.values()].filter((g) => g.servers.length > 0);
   }, [data, organization.projects]);
 }
 
@@ -269,7 +276,7 @@ export function ScopePickerPopover({
                     name={
                       <>
                         <span className="text-muted-foreground/60">
-                          {group.projectName}/
+                          {group.projectName.toLowerCase()}/
                         </span>
                         {server.name}
                       </>
@@ -428,7 +435,9 @@ export function ScopePickerPopover({
               ? "w-[680px]"
               : activePanel === "collection"
                 ? "w-[360px]"
-                : "w-64",
+                : activePanel === "servers"
+                  ? "w-96"
+                  : "w-64",
           )}
           style={{
             transitionTimingFunction: "cubic-bezier(0.32, 0.72, 0, 1)",
@@ -644,49 +653,57 @@ function ToolSelectionPanel({
           onWheel={handleServerWheel}
           className="min-h-0 flex-1 overflow-y-auto"
         >
-          <div
-            style={{
-              height: `${serverVirtualizer.getTotalSize()}px`,
-              position: "relative",
-            }}
-          >
-            {serverVirtualizer.getVirtualItems().map((virtualItem) => {
-              const server = filteredServers[virtualItem.index];
-              const isActive = selectedServerId === server.id;
-              return (
-                <button
-                  key={server.id}
-                  type="button"
-                  onClick={() => {
-                    setSelectedServerId(server.id);
-                    setSearch("");
-                  }}
-                  style={{
-                    position: "absolute",
-                    top: 0,
-                    left: 0,
-                    width: "100%",
-                    height: `${virtualItem.size}px`,
-                    transform: `translateY(${virtualItem.start}px)`,
-                  }}
-                  className={cn(
-                    "hover:bg-muted/50 flex cursor-pointer items-center justify-between truncate px-3 text-sm",
-                    isActive && "bg-muted font-medium",
-                  )}
-                >
-                  <span className="truncate">
-                    <span className="text-muted-foreground/60">
-                      {server.projectName}/
+          {filteredServers.length === 0 ? (
+            <div className="text-muted-foreground px-3 py-3 text-sm">
+              {allServers.length === 0
+                ? "No servers found"
+                : "No matching servers"}
+            </div>
+          ) : (
+            <div
+              style={{
+                height: `${serverVirtualizer.getTotalSize()}px`,
+                position: "relative",
+              }}
+            >
+              {serverVirtualizer.getVirtualItems().map((virtualItem) => {
+                const server = filteredServers[virtualItem.index];
+                const isActive = selectedServerId === server.id;
+                return (
+                  <button
+                    key={server.id}
+                    type="button"
+                    onClick={() => {
+                      setSelectedServerId(server.id);
+                      setSearch("");
+                    }}
+                    style={{
+                      position: "absolute",
+                      top: 0,
+                      left: 0,
+                      width: "100%",
+                      height: `${virtualItem.size}px`,
+                      transform: `translateY(${virtualItem.start}px)`,
+                    }}
+                    className={cn(
+                      "hover:bg-muted/50 flex cursor-pointer items-center justify-between truncate px-3 text-sm",
+                      isActive && "bg-muted font-medium",
+                    )}
+                  >
+                    <span className="truncate">
+                      <span className="text-muted-foreground/60">
+                        {server.projectName.toLowerCase()}/
+                      </span>
+                      {server.name}
                     </span>
-                    {server.name}
-                  </span>
-                  {isActive && (
-                    <ChevronRight className="text-muted-foreground h-3 w-3 shrink-0" />
-                  )}
-                </button>
-              );
-            })}
-          </div>
+                    {isActive && (
+                      <ChevronRight className="text-muted-foreground h-3 w-3 shrink-0" />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
 

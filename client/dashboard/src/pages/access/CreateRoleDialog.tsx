@@ -48,6 +48,7 @@ interface CreateRoleDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   editingRole?: Role | null;
+  onRoleCreated?: (roleName: string) => void;
 }
 
 function grantsFromRole(role: Role): Record<string, RoleGrant> {
@@ -86,6 +87,7 @@ export function CreateRoleDialog({
   open,
   onOpenChange,
   editingRole,
+  onRoleCreated,
 }: CreateRoleDialogProps) {
   const isEditing = !!editingRole;
   const isSystemRole = !!editingRole?.isSystem;
@@ -174,6 +176,7 @@ export function CreateRoleDialog({
         invalidateAllRoles(queryClient),
         invalidateAllMembers(queryClient),
       ]);
+      onRoleCreated?.(name);
       handleClose();
     },
   });

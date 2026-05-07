@@ -651,6 +651,8 @@ type McpRegistry struct {
 type McpServer struct {
 	ID                    uuid.UUID
 	ProjectID             uuid.UUID
+	Name                  pgtype.Text
+	Slug                  pgtype.Text
 	EnvironmentID         uuid.NullUUID
 	ExternalOauthServerID uuid.NullUUID
 	OauthProxyServerID    uuid.NullUUID
@@ -886,13 +888,14 @@ type PluginAssignment struct {
 }
 
 type PluginGithubConnection struct {
-	ID             uuid.UUID
-	ProjectID      uuid.UUID
-	InstallationID int64
-	RepoOwner      string
-	RepoName       string
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
+	ID               uuid.UUID
+	ProjectID        uuid.UUID
+	InstallationID   int64
+	RepoOwner        string
+	RepoName         string
+	MarketplaceToken pgtype.Text
+	CreatedAt        pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
 }
 
 type PluginServer struct {
@@ -980,6 +983,8 @@ type PromptTemplate struct {
 type RemoteMcpServer struct {
 	ID            uuid.UUID
 	ProjectID     uuid.UUID
+	Name          pgtype.Text
+	Slug          pgtype.Text
 	TransportType string
 	Url           string
 	CreatedAt     pgtype.Timestamptz

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"testing"
 
@@ -87,6 +88,15 @@ func (m *mockBillingRepo) CreateCheckout(ctx context.Context, orgID, serverURL, 
 	return "", fmt.Errorf("not implemented")
 }
 
+func (m *mockBillingRepo) CreateTopUpCheckout(ctx context.Context, orgID, serverURL, successURL string) (string, error) {
+	args := m.Called(ctx, orgID, serverURL, successURL)
+	return args.String(0), args.Error(1)
+}
+
+func (m *mockBillingRepo) IsTopUpProductID(productID string) bool {
+	return false
+}
+
 func (m *mockBillingRepo) CreateCustomerSession(ctx context.Context, orgID string) (string, error) {
 	return "", fmt.Errorf("not implemented")
 }
@@ -108,6 +118,13 @@ var _ billing.Repository = (*mockBillingRepo)(nil)
 // --- test helpers ---
 
 func rbacDisabled(_ context.Context, _ string) (bool, error) { return false, nil }
+
+func mustParseURL(t *testing.T, s string) *url.URL {
+	t.Helper()
+	u, err := url.Parse(s)
+	require.NoError(t, err)
+	return u
+}
 
 func newTestService(t *testing.T, billingRepo billing.Repository, orgID string, serverCount int) *Service {
 	t.Helper()
@@ -263,4 +280,25 @@ func TestGetPeriodUsage_ActualServerCountFromDB(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Equal(t, 7, result.ActualEnabledServerCount, "should use DB count, not cached value")
+}
+
+func TestCreateTopUpCheckout_BillingErrorMapsToCodeUnexpected(t *testing.T) {
+	t.Parallel()
+	orgID := "org-topup"
+
+	billingMock := &mockBillingRepo{}
+	billingMock.On("CreateTopUpCheckout", mock.Anything, orgID, mock.Anything, mock.Anything).
+		Return("", fmt.Errorf("polar API down"))
+
+	svc := newTestService(t, billingMock, orgID, 0)
+	svc.serverURL = mustParseURL(t, "https://example.test")
+
+	ctx := testAuthContext(orgID)
+	_, err := svc.CreateTopUpCheckout(ctx, &gen.CreateTopUpCheckoutPayload{})
+
+	require.Error(t, err)
+	var se *oops.ShareableError
+	require.ErrorAs(t, err, &se)
+	require.Equal(t, oops.CodeUnexpected, se.Code,
+		"billing provider failures (config / Polar API) are server-side, not client errors")
 }

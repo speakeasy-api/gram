@@ -37,6 +37,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/speakeasy-api/gram/dev-idp/internal/database/repo"
+	"github.com/speakeasy-api/gram/dev-idp/internal/defaultuser"
 )
 
 // invitationLifetime is how long an emulated invitation stays in the
@@ -474,7 +475,7 @@ func (h *Handler) handleWorkosAcceptInvitation(w http.ResponseWriter, r *http.Re
 	// Find or create the user by the invited email; the display_name
 	// defaults to the email local-part since we don't have a name yet.
 	user, err := queries.UpsertUserByEmail(ctx, repo.UpsertUserByEmailParams{
-		ID:          uuid.New(),
+		ID:          defaultuser.DeterministicUserID(inv.Email),
 		Email:       inv.Email,
 		DisplayName: emailLocalPart(inv.Email),
 	})

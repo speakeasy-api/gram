@@ -31,7 +31,7 @@ import { Result } from "../types/fp.js";
  * resolveChallenge access
  *
  * @remarks
- * Record a resolution for a denied authz challenge. The caller is responsible for assigning the role first.
+ * Record resolutions for one or more denied authz challenges. The caller is responsible for assigning the role first.
  */
 export function accessResolveChallenge(
   client: GramCore,
@@ -40,7 +40,7 @@ export function accessResolveChallenge(
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    components.ChallengeResolution,
+    components.ResolveChallengesResult,
     | errors.ServiceError
     | GramError
     | ResponseValidationError
@@ -68,7 +68,7 @@ async function $do(
 ): Promise<
   [
     Result<
-      components.ChallengeResolution,
+      components.ResolveChallengesResult,
       | errors.ServiceError
       | GramError
       | ResponseValidationError
@@ -186,7 +186,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    components.ChallengeResolution,
+    components.ResolveChallengesResult,
     | errors.ServiceError
     | GramError
     | ResponseValidationError
@@ -197,7 +197,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(201, components.ChallengeResolution$inboundSchema),
+    M.json(201, components.ResolveChallengesResult$inboundSchema),
     M.jsonErr(
       [400, 401, 403, 404, 409, 415, 422],
       errors.ServiceError$inboundSchema,
