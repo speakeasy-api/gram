@@ -1,7 +1,6 @@
 package risk_analysis
 
 import (
-	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -86,12 +85,12 @@ func TestDetectPromptInjection_Heuristics(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			findings, err := DetectPromptInjection(context.Background(), tc.input)
+			findings, err := DetectPromptInjection(t.Context(), tc.input)
 			require.NoError(t, err)
 			if tc.expectEmpty {
 				assert.Empty(t, findings)
 				return
-			findings, err := DetectPromptInjection(t.Context(), tc.input)
+			}
 			require.NotEmpty(t, findings)
 			ids := make([]string, 0, len(findings))
 			for _, f := range findings {

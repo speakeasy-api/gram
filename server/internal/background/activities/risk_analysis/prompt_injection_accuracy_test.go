@@ -2,7 +2,6 @@ package risk_analysis
 
 import (
 	"bufio"
-	"context"
 	"encoding/json"
 	"math"
 	"os"
