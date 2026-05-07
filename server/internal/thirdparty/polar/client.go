@@ -910,13 +910,26 @@ func (p *Client) AttachAssistantsBenefit(ctx context.Context, orgID string, emai
 		}
 	}
 
-	if _, subErr := p.polar.Subscriptions.Create(ctx, polarOperations.CreateSubscriptionsCreateSubscriptionCreateSubscriptionCreateExternalCustomer(
+	subRes, subErr := p.polar.Subscriptions.Create(ctx, polarOperations.CreateSubscriptionsCreateSubscriptionCreateSubscriptionCreateExternalCustomer(
 		polarComponents.SubscriptionCreateExternalCustomer{
 			ProductID:          p.catalog.ProductIDAssistants,
 			ExternalCustomerID: orgID,
 		},
-	)); subErr != nil {
+	))
+	if subErr != nil {
 		return fmt.Errorf("create polar subscription: %w", subErr)
+	}
+
+	// Mark the subscription to cancel at period end so the benefit grant lands
+	// once and never re-grants on the next cycle. Failure here is logged but
+	// non-fatal — the credits are already granted; an unset cancel just means
+	// they'd renew, which we'd rather avoid but shouldn't fail signup over.
+	if subRes != nil && subRes.Subscription != nil {
+		if _, err := p.polar.Subscriptions.Update(ctx, subRes.Subscription.ID, polarComponents.CreateSubscriptionUpdateSubscriptionCancel(polarComponents.SubscriptionCancel{
+			CancelAtPeriodEnd: true,
+		})); err != nil {
+			p.logger.WarnContext(ctx, "failed to mark assistants subscription cancel-at-period-end", attr.SlogError(err), attr.SlogOrganizationID(orgID))
+		}
 	}
 
 	if err := p.InvalidateBillingCustomerCaches(ctx, orgID); err != nil {
