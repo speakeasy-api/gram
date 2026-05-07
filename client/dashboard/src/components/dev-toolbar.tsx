@@ -2,7 +2,13 @@ import { useIsAdmin, useOrganization, useSession } from "@/contexts/Auth";
 import { useListToolsetsForOrg } from "@gram/client/react-query/listToolsetsForOrg.js";
 import { Switch } from "./ui/switch";
 import { useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, ChevronUp, GripVertical, Shield } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronUp,
+  Crown,
+  GripVertical,
+  Shield,
+} from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -14,6 +20,7 @@ import { createPortal } from "react-dom";
 
 const STORAGE_KEY = "gram-rbac-dev-override";
 const HIDDEN_KEY = "gram-dev-toolbar-hidden";
+const SUPER_ADMIN_KEY = "gram-dev-super-admin";
 
 type ResourceType = "org" | "project" | "mcp";
 
@@ -209,6 +216,9 @@ function RBACDevToolbarInner({ onHide }: { onHide: () => void }) {
   const [collapsed, setCollapsed] = useState(true);
   const [activeTab, setActiveTab] = useState("rbac");
   const [pos, setPos] = useState<{ x: number; y: number } | null>(loadPosition);
+  const [superAdmin, setSuperAdmin] = useState(
+    () => localStorage.getItem(SUPER_ADMIN_KEY) === "1",
+  );
   const queryClient = useQueryClient();
   const organization = useOrganization();
   const liveProjects = (organization?.projects ?? []).map((project) => ({
@@ -325,6 +335,17 @@ function RBACDevToolbarInner({ onHide }: { onHide: () => void }) {
       window.removeEventListener("pointerup", onUp);
     };
   }, []);
+
+  // Collapse when clicking outside
+  useEffect(() => {
+    if (collapsed) return;
+    const onDown = (e: MouseEvent) => {
+      if (rootRef.current?.contains(e.target as Node)) return;
+      setCollapsed(true);
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [collapsed]);
 
   const invalidate = useCallback(() => {
     setTimeout(() => {
@@ -470,9 +491,45 @@ function RBACDevToolbarInner({ onHide }: { onHide: () => void }) {
                   </span>
                 )}
               </button>
+              {import.meta.env.DEV && (
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("superadmin")}
+                  className={`-mb-px flex items-center gap-1.5 border-b-2 px-2 py-2 text-[11px] font-medium transition-colors ${
+                    activeTab === "superadmin"
+                      ? "border-foreground text-foreground"
+                      : "text-muted-foreground hover:text-foreground border-transparent"
+                  }`}
+                >
+                  <Crown className="h-3 w-3" />
+                  Super Admin
+                </button>
+              )}
             </div>
 
             {/* RBAC tab */}
+            {activeTab === "superadmin" && (
+              <div className="flex items-center justify-between px-3.5 py-3">
+                <div className="flex items-center gap-2">
+                  <div
+                    className={`h-1.5 w-1.5 rounded-full ${superAdmin ? "animate-pulse bg-amber-500" : "bg-muted-foreground/30"}`}
+                  />
+                  <span className="text-foreground text-xs font-medium">
+                    {superAdmin ? "Super admin active" : "Super admin off"}
+                  </span>
+                </div>
+                <Switch
+                  checked={superAdmin}
+                  onCheckedChange={(checked) => {
+                    setSuperAdmin(checked);
+                    localStorage.setItem(SUPER_ADMIN_KEY, checked ? "1" : "0");
+                    invalidate();
+                  }}
+                  aria-label="Toggle super admin"
+                />
+              </div>
+            )}
+
             {activeTab === "rbac" && (
               <>
                 {/* Master toggle */}
