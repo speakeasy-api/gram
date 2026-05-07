@@ -1075,15 +1075,21 @@ function CLIDestructivePanel({
       <div className="space-y-2">
         <div className="flex items-center justify-between">
           <span className="text-xs font-medium">Custom Patterns</span>
-          <Button variant="ghost" size="icon-sm" onClick={addPattern}>
-            <Plus className="h-3.5 w-3.5" />
-          </Button>
         </div>
+        <p className="text-muted-foreground text-xs">
+          Each pattern is tested against every string value found in a tool
+          call&apos;s arguments — including nested map values and list elements.
+          Use Go RE2 syntax; matching is case-insensitive.
+        </p>
         {formCustomPatterns.length === 0 ? (
-          <p className="text-muted-foreground pl-0.5 text-xs">
-            Add patterns to flag additional commands specific to your
-            environment.
-          </p>
+          <button
+            type="button"
+            onClick={addPattern}
+            className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-xs transition-colors"
+          >
+            <Plus className="h-3 w-3" />
+            Add a custom pattern
+          </button>
         ) : (
           <div className="space-y-2">
             {formCustomPatterns.map((p) => (
@@ -1094,6 +1100,14 @@ function CLIDestructivePanel({
                 onDelete={() => deletePattern(p.id)}
               />
             ))}
+            <button
+              type="button"
+              onClick={addPattern}
+              className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-xs transition-colors"
+            >
+              <Plus className="h-3 w-3" />
+              Add another pattern
+            </button>
           </div>
         )}
       </div>
@@ -1124,15 +1138,29 @@ function CustomPatternRow({
     }
   }, [pattern.pattern]);
 
+  // A row is incomplete when one field is filled but the other is not.
+  // Both empty is fine (user just added the row); both filled is fine.
+  const hasLabel = pattern.label.trim().length > 0;
+  const hasPattern = pattern.pattern.trim().length > 0;
+  const incomplete = hasLabel !== hasPattern;
+
   return (
     <div className="flex items-start gap-2">
       <div className="flex-1 space-y-1">
-        <Input
-          value={pattern.label}
-          onChange={(v) => onChange({ ...pattern, label: v })}
-          placeholder="Name (e.g. nuke-deploy)"
-          className="h-7 text-xs"
-        />
+        <div className="relative">
+          <Input
+            value={pattern.label}
+            onChange={(v) => onChange({ ...pattern, label: v })}
+            placeholder="Name (e.g. nuke-deploy)"
+            className={cn(
+              "h-7 text-xs",
+              incomplete && !hasLabel && "border-destructive pr-7",
+            )}
+          />
+          {incomplete && !hasLabel && (
+            <AlertCircle className="text-destructive absolute top-1.5 right-2 h-3.5 w-3.5" />
+          )}
+        </div>
         <div className="relative">
           <Input
             value={pattern.pattern}
@@ -1140,13 +1168,20 @@ function CustomPatternRow({
             placeholder="Regex (e.g. \bmy-deploy\s+--nuke\b)"
             className={cn(
               "h-7 font-mono text-xs",
-              !isValidRegex && "border-destructive pr-7",
+              (!isValidRegex || (incomplete && !hasPattern)) &&
+                "border-destructive pr-7",
             )}
           />
-          {!isValidRegex && (
+          {(!isValidRegex || (incomplete && !hasPattern)) && (
             <AlertCircle className="text-destructive absolute top-1.5 right-2 h-3.5 w-3.5" />
           )}
         </div>
+        {incomplete && (
+          <p className="text-destructive text-[11px]">
+            Both a name and a regex are required — this pattern will not be
+            saved.
+          </p>
+        )}
       </div>
       <Button
         variant="ghost"

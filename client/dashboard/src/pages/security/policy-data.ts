@@ -116,7 +116,7 @@ export const RULE_CATEGORY_META: Record<
   cli_destructive: {
     label: "Destructive CLI Commands",
     description:
-      "Tool calls whose arguments match a curated set of destructive shell, git, database, or cloud CLI patterns (rm -rf, git push --force, DROP TABLE, kubectl delete ns, ...). Applies to native Bash / run_terminal_cmd as well as MCP-routed tools whose arguments carry destructive content.",
+      "Tool calls whose arguments match a curated set of destructive shell, git, database, or cloud CLI patterns (rm -rf, git push --force, DROP TABLE, kubectl delete ns, ...). Expand to view built-in patterns or add your own.",
     icon: "terminal",
   },
   custom: {
