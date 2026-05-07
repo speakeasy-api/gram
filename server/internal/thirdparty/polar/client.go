@@ -33,9 +33,10 @@ import (
 )
 
 type Catalog struct {
-	ProductIDBase   string
-	ProductIDPro    string
-	ProductIDsTopUp []string
+	ProductIDBase       string
+	ProductIDPro        string
+	ProductIDsTopUp     []string
+	ProductIDAssistants string
 
 	MeterIDToolCalls string
 	MeterIDServers   string
@@ -860,10 +861,10 @@ func (p *Client) IsTopUpProductID(productID string) bool {
 	return p.catalog.IsTopUpProductID(productID)
 }
 
-// AttachAssistantsBenefit auto-attaches a fresh org to the free-tier product so
-// the meter-credit benefit grant takes effect without requiring a checkout.
-// Idempotent: returns nil if the customer or a free-tier subscription already
-// exists.
+// AttachAssistantsBenefit subscribes a fresh org to the configured assistants
+// product so its meter-credit benefit grant takes effect without a checkout.
+// No-op (with a warn log) when no assistants product is configured.
+// Idempotent: skips when the org already holds an active subscription to it.
 func (p *Client) AttachAssistantsBenefit(ctx context.Context, orgID string, email string) (err error) {
 	ctx, span := p.tracer.Start(ctx, "polar_client.attach_assistants_benefit", trace.WithAttributes(attr.OrganizationID(orgID)))
 	defer func() {
@@ -878,6 +879,10 @@ func (p *Client) AttachAssistantsBenefit(ctx context.Context, orgID string, emai
 	}
 	if email == "" {
 		return errors.New("email is required")
+	}
+	if p.catalog.ProductIDAssistants == "" {
+		p.logger.WarnContext(ctx, "skip attach assistants benefit: no assistants product configured", attr.SlogOrganizationID(orgID))
+		return nil
 	}
 
 	customerState, getErr := p.polar.Customers.GetStateExternal(ctx, orgID)
@@ -898,7 +903,7 @@ func (p *Client) AttachAssistantsBenefit(ctx context.Context, orgID string, emai
 		fields := unwrapCustomerState(customerState.CustomerState)
 		if fields != nil {
 			for _, sub := range fields.ActiveSubscriptions {
-				if sub.ProductID == p.catalog.ProductIDBase {
+				if sub.ProductID == p.catalog.ProductIDAssistants {
 					return nil
 				}
 			}
@@ -907,7 +912,7 @@ func (p *Client) AttachAssistantsBenefit(ctx context.Context, orgID string, emai
 
 	if _, subErr := p.polar.Subscriptions.Create(ctx, polarOperations.CreateSubscriptionsCreateSubscriptionCreateSubscriptionCreateExternalCustomer(
 		polarComponents.SubscriptionCreateExternalCustomer{
-			ProductID:          p.catalog.ProductIDBase,
+			ProductID:          p.catalog.ProductIDAssistants,
 			ExternalCustomerID: orgID,
 		},
 	)); subErr != nil {
