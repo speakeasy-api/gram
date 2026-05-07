@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Switch } from "@/components/ui/switch";
+import { TextArea } from "@/components/ui/textarea";
 import {
   Sheet,
   SheetContent,
@@ -156,6 +157,7 @@ function PolicyCenterContent() {
   >(new Set<RuleCategory>(["secrets", "pii"]));
   const [formAction, setFormAction] = useState<PolicyAction>("flag");
   const [formAutoName, setFormAutoName] = useState(true);
+  const [formUserMessage, setFormUserMessage] = useState("");
 
   const [runPanelPolicy, setRunPanelPolicy] = useState<RiskPolicy | null>(null);
 
@@ -193,6 +195,7 @@ function PolicyCenterContent() {
     setSelectedCategories(new Set<RuleCategory>(["secrets", "pii"]));
     setFormAction("flag");
     setFormAutoName(true);
+    setFormUserMessage("");
     setSheetOpen(true);
   };
 
@@ -205,6 +208,7 @@ function PolicyCenterContent() {
     );
     setFormAction((policy.action as PolicyAction) ?? "flag");
     setFormAutoName(policy.autoName ?? true);
+    setFormUserMessage(policy.userMessage ?? "");
     setSheetOpen(true);
   };
 
@@ -226,6 +230,7 @@ function PolicyCenterContent() {
             presidioEntities,
             action,
             autoName: formAutoName,
+            userMessage: formUserMessage,
           },
         },
       });
@@ -239,6 +244,7 @@ function PolicyCenterContent() {
             presidioEntities,
             action,
             autoName: formAutoName,
+            ...(formUserMessage.trim() ? { userMessage: formUserMessage } : {}),
           },
         },
       });
@@ -469,6 +475,8 @@ function PolicyCenterContent() {
                 setFormAction={setFormAction}
                 formAutoName={formAutoName}
                 setFormAutoName={setFormAutoName}
+                formUserMessage={formUserMessage}
+                setFormUserMessage={setFormUserMessage}
               />
             </div>
             <SheetFooter className="px-6 pb-6">
@@ -532,6 +540,8 @@ function PolicySheetBody({
   setFormAction,
   formAutoName,
   setFormAutoName,
+  formUserMessage,
+  setFormUserMessage,
 }: {
   formName: string;
   setFormName: (v: string) => void;
@@ -543,6 +553,8 @@ function PolicySheetBody({
   setFormAction: (v: PolicyAction) => void;
   formAutoName: boolean;
   setFormAutoName: (v: boolean) => void;
+  formUserMessage: string;
+  setFormUserMessage: (v: string) => void;
 }) {
   const [expandedCategory, setExpandedCategory] = useState<RuleCategory | null>(
     null,
@@ -741,6 +753,22 @@ function PolicySheetBody({
             })}
           </div>
         </RadioGroup>
+      </div>
+
+      {/* Custom message */}
+      <div className="space-y-2">
+        <Label className="text-sm font-medium">Custom Message</Label>
+        <p className="text-muted-foreground text-xs">
+          {formAction === "block"
+            ? "Shown to the user when this policy blocks a tool call or prompt. Leave blank to use the default message."
+            : "Shown alongside flagged findings in the dashboard. Leave blank to use the default message."}
+        </p>
+        <TextArea
+          value={formUserMessage}
+          onChange={setFormUserMessage}
+          placeholder="e.g. This action was blocked by your organization's security policy. Contact your admin for help."
+          rows={3}
+        />
       </div>
 
       {/* Enabled toggle */}

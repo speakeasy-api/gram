@@ -26,7 +26,7 @@ func TestChallengeLogger_skipsWithoutAuthContext(t *testing.T) {
 		Reason:    authzrepo.ReasonGrantMatched,
 		Checks:    []Check{check},
 		Focus:     &check,
-	}.Log(t.Context(), conn, logger)
+	}.Log(t.Context(), conn, logger, staticChallengeLogging(true))
 
 	row, err := conn.Query(t.Context(), `
 		SELECT count() FROM authz_challenges WHERE resource_id = 'proj_1' AND organization_id = ''
@@ -70,7 +70,7 @@ func TestChallengeLogger_writesUserPrincipal(t *testing.T) {
 		Focus:               &check,
 		Matches:             []grantMatch{{Grant: Grant{PrincipalUrn: "role:admin", Scope: ScopeProjectRead, Selector: NewSelector(ScopeProjectRead, WildcardResource)}, ViaCheck: check}},
 		EvaluatedGrantCount: 1,
-	}.Log(ctx, conn, logger)
+	}.Log(ctx, conn, logger, staticChallengeLogging(true))
 
 	require.Eventually(t, func() bool {
 		rows, err := conn.Query(t.Context(), `
@@ -133,7 +133,7 @@ func TestChallengeLogger_writesAPIKeyPrincipal(t *testing.T) {
 		Reason:    authzrepo.ReasonGrantMatched,
 		Checks:    []Check{check},
 		Focus:     &check,
-	}.Log(ctx, conn, logger)
+	}.Log(ctx, conn, logger, staticChallengeLogging(true))
 
 	require.Eventually(t, func() bool {
 		rows, err := conn.Query(t.Context(), `
@@ -185,7 +185,7 @@ func TestChallengeLogger_writesAssistantPrincipal(t *testing.T) {
 		Reason:    authzrepo.ReasonGrantMatched,
 		Checks:    []Check{check},
 		Focus:     &check,
-	}.Log(ctx, conn, logger)
+	}.Log(ctx, conn, logger, staticChallengeLogging(true))
 
 	require.Eventually(t, func() bool {
 		rows, err := conn.Query(t.Context(), `
@@ -229,7 +229,7 @@ func TestChallengeLogger_stampsRequestID(t *testing.T) {
 		Reason:    authzrepo.ReasonNoGrants,
 		Checks:    []Check{check},
 		Focus:     &check,
-	}.Log(ctx, conn, logger)
+	}.Log(ctx, conn, logger, staticChallengeLogging(true))
 
 	require.Eventually(t, func() bool {
 		rows, err := conn.Query(t.Context(), `
@@ -283,7 +283,7 @@ func TestChallengeLogger_persistsNestedAndExpandedFields(t *testing.T) {
 		Focus:               &focus,
 		Matches:             matches,
 		EvaluatedGrantCount: 7,
-	}.Log(ctx, conn, logger)
+	}.Log(ctx, conn, logger, staticChallengeLogging(true))
 
 	require.Eventually(t, func() bool {
 		rows, err := conn.Query(t.Context(), `
@@ -352,7 +352,7 @@ func TestChallengeLogger_persistsFilterCounts(t *testing.T) {
 		Focus:                &focus,
 		FilterCandidateCount: 4,
 		FilterAllowedCount:   1,
-	}.Log(ctx, conn, logger)
+	}.Log(ctx, conn, logger, staticChallengeLogging(true))
 
 	require.Eventually(t, func() bool {
 		rows, err := conn.Query(t.Context(), `

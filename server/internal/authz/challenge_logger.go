@@ -41,12 +41,25 @@ type challengeLogger struct {
 	FilterAllowedCount   uint32
 }
 
-// Log writes the challenge to ClickHouse via the supplied connection. Errors
-// are logged at warn level and never bubble back to the caller — the request
-// path must not break because logging failed.
-func (l challengeLogger) Log(ctx context.Context, conn clickhouse.Conn, logger *slog.Logger) {
+// Log writes the challenge to ClickHouse via the supplied connection. The
+// write is gated behind the ChallengeLoggingEnabled feature check — if the
+// feature is not enabled for the org (or the check fails), the call is a
+// no-op. Errors are logged at warn level and never bubble back to the caller.
+func (l challengeLogger) Log(ctx context.Context, conn clickhouse.Conn, logger *slog.Logger, isEnabled ChallengeLoggingEnabled) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
+		return
+	}
+
+	enabled, err := isEnabled(ctx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		logger.WarnContext(ctx, "failed to check authz challenge logging feature flag",
+			attr.SlogError(err),
+			attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
+		)
+		return
+	}
+	if !enabled {
 		return
 	}
 

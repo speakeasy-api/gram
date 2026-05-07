@@ -4,6 +4,7 @@ import (
 	"log/slog"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/platformtools/core"
@@ -25,6 +26,11 @@ const (
 	ToolNameSearchUsers            = "platform_slack_search_users"
 	ToolNameScheduleMessage        = "platform_slack_schedule_message"
 	ToolNameSendMessage            = "platform_slack_send_message"
+	ToolNameAddReaction            = "platform_slack_add_reaction"
+	ToolNameRemoveReaction         = "platform_slack_remove_reaction"
+	ToolNameGetReactions           = "platform_slack_get_reactions"
+	ToolNameListReactions          = "platform_slack_list_reactions"
+	ToolNameListEmoji              = "platform_slack_list_emoji"
 )
 
 type Dependencies struct {
@@ -33,6 +39,7 @@ type Dependencies struct {
 	TelemetryService TelemetryService
 	TriggerApp       *bgtriggers.App
 	SlackHTTPClient  *guardian.HTTPClient
+	Audit            *audit.Logger
 }
 
 type ToolDescriptor = core.ToolDescriptor

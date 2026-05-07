@@ -5,15 +5,25 @@ import { Input } from "@/components/ui/input";
 import { Type } from "@/components/ui/type";
 import { useIsAdmin, useOrganization } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
+import { FeatureName } from "@gram/client/models/components";
 import {
   useDisableRBACMutation,
   useEnableRBACMutation,
+  useFeaturesGet,
+  useFeaturesSetMutation,
   useRbacStatus,
 } from "@gram/client/react-query";
+import { invalidateAllFeaturesGet } from "@gram/client/react-query/featuresGet.js";
 import { invalidateAllRbacStatus } from "@gram/client/react-query/rbacStatus.js";
 import { Button, Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
-import { ArrowRightLeft, Building2, Loader2, ShieldCheck } from "lucide-react";
+import {
+  ArrowRightLeft,
+  Building2,
+  FileSearch,
+  Loader2,
+  ShieldCheck,
+} from "lucide-react";
 import { useState } from "react";
 
 function RBACManagementSection() {
@@ -158,6 +168,112 @@ function RBACManagementSection() {
   );
 }
 
+function AuthzChallengeLoggingSection() {
+  const queryClient = useQueryClient();
+  const { data: features, isLoading, error } = useFeaturesGet();
+
+  const {
+    mutate,
+    isPending,
+    error: mutError,
+  } = useFeaturesSetMutation({
+    onSuccess: () => {
+      invalidateAllFeaturesGet(queryClient);
+    },
+  });
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center gap-2 py-4">
+        <Loader2 className="text-muted-foreground h-4 w-4 animate-spin" />
+        <Type muted small>
+          Loading...
+        </Type>
+      </div>
+    );
+  }
+
+  if (error || !features) {
+    return (
+      <Type className="text-destructive py-2 text-sm">
+        Failed to load feature status: {error?.message ?? "unknown error"}
+      </Type>
+    );
+  }
+
+  const enabled = features.authzChallengeLoggingEnabled;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-3">
+        <Type variant="body" className="font-medium">
+          Status:
+        </Type>
+        {enabled ? (
+          <span className="inline-flex items-center rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-xs font-medium text-emerald-500">
+            Enabled
+          </span>
+        ) : (
+          <span className="bg-muted text-muted-foreground inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium">
+            Disabled
+          </span>
+        )}
+      </div>
+
+      <div className="flex gap-2 pt-2">
+        {enabled ? (
+          <Button
+            variant="destructive-primary"
+            onClick={() =>
+              mutate({
+                request: {
+                  setProductFeatureRequestBody: {
+                    featureName: FeatureName.AuthzChallengeLogging,
+                    enabled: false,
+                  },
+                },
+              })
+            }
+            disabled={isPending}
+          >
+            {isPending && (
+              <Button.LeftIcon>
+                <Loader2 className="h-4 w-4 animate-spin" />
+              </Button.LeftIcon>
+            )}
+            <Button.Text>Disable Challenge Logging</Button.Text>
+          </Button>
+        ) : (
+          <Button
+            onClick={() =>
+              mutate({
+                request: {
+                  setProductFeatureRequestBody: {
+                    featureName: FeatureName.AuthzChallengeLogging,
+                    enabled: true,
+                  },
+                },
+              })
+            }
+            disabled={isPending}
+          >
+            {isPending && (
+              <Button.LeftIcon>
+                <Loader2 className="h-4 w-4 animate-spin" />
+              </Button.LeftIcon>
+            )}
+            <Button.Text>Enable Challenge Logging</Button.Text>
+          </Button>
+        )}
+      </div>
+
+      {mutError && (
+        <Type className="text-destructive text-sm">{mutError.message}</Type>
+      )}
+    </div>
+  );
+}
+
 export default function OrgAdminSettings() {
   const isAdmin = useIsAdmin();
 
@@ -282,7 +398,7 @@ export function OrgAdminSettingsInner() {
         Manage role-based access control for this organization. Ensure all
         members have roles assigned before enabling.
       </Type>
-      <div className="border-border bg-card rounded-lg border p-4">
+      <div className="border-border bg-card mb-8 rounded-lg border p-4">
         <Stack direction="horizontal" align="center" gap={2} className="mb-4">
           <ShieldCheck className="text-muted-foreground h-4 w-4" />
           <Type variant="body" className="font-medium">
@@ -291,6 +407,25 @@ export function OrgAdminSettingsInner() {
         </Stack>
         <div className="ml-6">
           <RBACManagementSection />
+        </div>
+      </div>
+
+      <Heading variant="h4" className="mb-2">
+        Authz Challenge Logging
+      </Heading>
+      <Type muted small className="mb-4">
+        Log every authorization decision (allow/deny) to ClickHouse. Powers the
+        challenge UI for auditing &ldquo;why did X have access to Y?&rdquo;
+      </Type>
+      <div className="border-border bg-card rounded-lg border p-4">
+        <Stack direction="horizontal" align="center" gap={2} className="mb-4">
+          <FileSearch className="text-muted-foreground h-4 w-4" />
+          <Type variant="body" className="font-medium">
+            Challenge Logging
+          </Type>
+        </Stack>
+        <div className="ml-6">
+          <AuthzChallengeLoggingSection />
         </div>
       </div>
     </>

@@ -12,6 +12,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/assistants"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	resolution_activities "github.com/speakeasy-api/gram/server/internal/background/activities/chat_resolutions"
 	risk_analysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
@@ -33,44 +34,46 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
 	slacktypes "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/types"
+	"github.com/workos/workos-go/v6/pkg/events"
 )
 
 type Activities struct {
-	collectPlatformUsageMetrics   *activities.CollectPlatformUsageMetrics
-	customDomainIngress           *activities.CustomDomainIngress
-	fallbackModelUsageTracking    *activities.FallbackModelUsageTracking
-	firePlatformUsageMetrics      *activities.FirePlatformUsageMetrics
-	freeTierReportingUsageMetrics *activities.FreeTierReportingUsageMetrics
-	generateChatTitle             *activities.GenerateChatTitle
-	getAllOrganizations           *activities.GetAllOrganizations
-	getSlackProjectContext        *activities.GetSlackProjectContext
-	postSlackMessage              *activities.PostSlackMessage
-	processDeployment             *activities.ProcessDeployment
-	provisionFunctionsAccess      *activities.ProvisionFunctionsAccess
-	deployFunctionRunners         *activities.DeployFunctionRunners
-	reapFlyApps                   *activities.ReapFlyApps
-	refreshBillingUsage           *activities.RefreshBillingUsage
-	refreshOpenRouterKey          *activities.RefreshOpenRouterKey
-	slackChatCompletion           *activities.SlackChatCompletion
-	transitionDeployment          *activities.TransitionDeployment
-	validateDeployment            *activities.ValidateDeployment
-	verifyCustomDomain            *activities.VerifyCustomDomain
-	generateToolsetEmbeddings     *activities.GenerateToolsetEmbeddings
-	dispatchTrigger               *activities.DispatchTrigger
-	processScheduledTrigger       *activities.ProcessScheduledTrigger
-	segmentChat                   *resolution_activities.SegmentChat
-	deleteChatResolutions         *resolution_activities.DeleteChatResolutions
-	analyzeSegment                *resolution_activities.AnalyzeSegment
-	getUserFeedbackForChat        *resolution_activities.GetUserFeedbackForChat
-	fetchUnanalyzedMessages       *risk_analysis.FetchUnanalyzed
-	analyzeBatch                  *risk_analysis.AnalyzeBatch
-	admitAssistantThreads         *activities.AdmitAssistantThreads
-	processAssistantThread        *activities.ProcessAssistantThread
-	expireAssistantThreadRuntime  *activities.ExpireAssistantThreadRuntime
-	reapStuckAssistantRuntimes    *activities.ReapStuckAssistantRuntimes
-	reapInactiveAssistantRuntimes *activities.ReapInactiveAssistantRuntimes
-	signalAssistantCoordinator    *activities.SignalAssistantCoordinator
-	signalAssistantThread         *activities.SignalAssistantThread
+	collectPlatformUsageMetrics     *activities.CollectPlatformUsageMetrics
+	customDomainIngress             *activities.CustomDomainIngress
+	fallbackModelUsageTracking      *activities.FallbackModelUsageTracking
+	firePlatformUsageMetrics        *activities.FirePlatformUsageMetrics
+	freeTierReportingUsageMetrics   *activities.FreeTierReportingUsageMetrics
+	generateChatTitle               *activities.GenerateChatTitle
+	getAllOrganizations             *activities.GetAllOrganizations
+	getSlackProjectContext          *activities.GetSlackProjectContext
+	postSlackMessage                *activities.PostSlackMessage
+	processDeployment               *activities.ProcessDeployment
+	provisionFunctionsAccess        *activities.ProvisionFunctionsAccess
+	deployFunctionRunners           *activities.DeployFunctionRunners
+	reapFlyApps                     *activities.ReapFlyApps
+	refreshBillingUsage             *activities.RefreshBillingUsage
+	refreshOpenRouterKey            *activities.RefreshOpenRouterKey
+	slackChatCompletion             *activities.SlackChatCompletion
+	transitionDeployment            *activities.TransitionDeployment
+	validateDeployment              *activities.ValidateDeployment
+	verifyCustomDomain              *activities.VerifyCustomDomain
+	generateToolsetEmbeddings       *activities.GenerateToolsetEmbeddings
+	dispatchTrigger                 *activities.DispatchTrigger
+	processScheduledTrigger         *activities.ProcessScheduledTrigger
+	segmentChat                     *resolution_activities.SegmentChat
+	deleteChatResolutions           *resolution_activities.DeleteChatResolutions
+	analyzeSegment                  *resolution_activities.AnalyzeSegment
+	getUserFeedbackForChat          *resolution_activities.GetUserFeedbackForChat
+	fetchUnanalyzedMessages         *risk_analysis.FetchUnanalyzed
+	analyzeBatch                    *risk_analysis.AnalyzeBatch
+	admitAssistantThreads           *activities.AdmitAssistantThreads
+	processAssistantThread          *activities.ProcessAssistantThread
+	expireAssistantThreadRuntime    *activities.ExpireAssistantThreadRuntime
+	reapStuckAssistantRuntimes      *activities.ReapStuckAssistantRuntimes
+	reapInactiveAssistantRuntimes   *activities.ReapInactiveAssistantRuntimes
+	signalAssistantCoordinator      *activities.SignalAssistantCoordinator
+	signalAssistantThread           *activities.SignalAssistantThread
+	processWorkOSOrganizationEvents *activities.ProcessWorkOSOrganizationEvents
 }
 
 func NewActivities(
@@ -101,46 +104,64 @@ func NewActivities(
 	assistantsCore *assistants.ServiceCore,
 	piiScanner risk_analysis.PIIScanner,
 	shadowMCPClient *shadowmcp.Client,
+	auditLogger *audit.Logger,
+	workosEventsClient *events.Client,
 ) *Activities {
 	usageTrackingStrategy := chat.NewDefaultUsageTrackingStrategy(db, logger, openrouterProvisioner, billingTracker, nil)
 
-	return &Activities{
-		collectPlatformUsageMetrics:   activities.NewCollectPlatformUsageMetrics(logger, db),
-		customDomainIngress:           activities.NewCustomDomainIngress(logger, db, k8sClient),
-		fallbackModelUsageTracking:    activities.NewFallbackModelUsageTracking(usageTrackingStrategy),
-		firePlatformUsageMetrics:      activities.NewFirePlatformUsageMetrics(logger, billingTracker),
-		freeTierReportingUsageMetrics: activities.NewFreeTierReportingMetrics(logger, db, billingRepo, posthogClient),
-		generateChatTitle:             activities.NewGenerateChatTitle(logger, db, chatClient),
-		getAllOrganizations:           activities.NewGetAllOrganizations(logger, db),
-		getSlackProjectContext:        activities.NewSlackProjectContextActivity(logger, db, slackClient),
-		postSlackMessage:              activities.NewPostSlackMessageActivity(logger, slackClient),
-		processDeployment:             activities.NewProcessDeployment(logger, tracerProvider, meterProvider, guardianPolicy, db, features, assetStorage, billingRepo, mcpRegistryClient),
-		provisionFunctionsAccess:      activities.NewProvisionFunctionsAccess(logger, db, encryption),
-		deployFunctionRunners:         activities.NewDeployFunctionRunners(logger, db, functionsDeployer, functionsVersion, encryption),
-		reapFlyApps:                   activities.NewReapFlyApps(logger, meterProvider, db, functionsDeployer, 1),
-		refreshBillingUsage:           activities.NewRefreshBillingUsage(logger, db, billingRepo),
-		refreshOpenRouterKey:          activities.NewRefreshOpenRouterKey(logger, db, openrouterProvisioner),
-		slackChatCompletion:           activities.NewSlackChatCompletionActivity(logger, slackClient, chatClient),
-		transitionDeployment:          activities.NewTransitionDeployment(logger, db),
-		validateDeployment:            activities.NewValidateDeployment(logger, db, billingRepo),
-		verifyCustomDomain:            activities.NewVerifyCustomDomain(logger, db, expectedTargetCNAME),
-		generateToolsetEmbeddings:     activities.NewGenerateToolsetEmbeddingsActivity(tracerProvider, db, ragService, logger),
-		dispatchTrigger:               activities.NewDispatchTrigger(triggerApp),
-		processScheduledTrigger:       activities.NewProcessScheduledTrigger(triggerApp),
-		segmentChat:                   resolution_activities.NewSegmentChat(logger, db, chatClient),
-		deleteChatResolutions:         resolution_activities.NewDeleteChatResolutions(db),
-		analyzeSegment:                resolution_activities.NewAnalyzeSegment(logger, db, chatClient, telemetryLogger),
-		getUserFeedbackForChat:        resolution_activities.NewGetUserFeedbackForChat(db),
-		fetchUnanalyzedMessages:       risk_analysis.NewFetchUnanalyzed(logger, tracerProvider, db),
-		analyzeBatch:                  risk_analysis.NewAnalyzeBatch(logger, tracerProvider, meterProvider, db, piiScanner, shadowMCPClient),
-		admitAssistantThreads:         activities.NewAdmitAssistantThreads(assistantsCore),
-		processAssistantThread:        activities.NewProcessAssistantThread(assistantsCore),
-		expireAssistantThreadRuntime:  activities.NewExpireAssistantThreadRuntime(assistantsCore),
-		reapStuckAssistantRuntimes:    activities.NewReapStuckAssistantRuntimes(assistantsCore),
-		reapInactiveAssistantRuntimes: activities.NewReapInactiveAssistantRuntimes(logger, assistantsCore),
-		signalAssistantCoordinator:    activities.NewSignalAssistantCoordinator(&AssistantWorkflowSignaler{TemporalEnv: temporalEnv}),
-		signalAssistantThread:         activities.NewSignalAssistantThread(&AssistantWorkflowSignaler{TemporalEnv: temporalEnv}),
+	// Only construct the WorkOS sync activity when the events client is
+	// configured. Local dev without a key passes nil; the wrapper method below
+	// returns a clear error if the activity is invoked unconfigured.
+	var processWorkOSOrgEvents *activities.ProcessWorkOSOrganizationEvents
+	if workosEventsClient != nil {
+		processWorkOSOrgEvents = activities.NewProcessWorkOSOrganizationEvents(logger, db, workosEventsClient)
 	}
+
+	return &Activities{
+		collectPlatformUsageMetrics:     activities.NewCollectPlatformUsageMetrics(logger, db),
+		customDomainIngress:             activities.NewCustomDomainIngress(logger, db, k8sClient),
+		fallbackModelUsageTracking:      activities.NewFallbackModelUsageTracking(usageTrackingStrategy),
+		firePlatformUsageMetrics:        activities.NewFirePlatformUsageMetrics(logger, billingTracker),
+		freeTierReportingUsageMetrics:   activities.NewFreeTierReportingMetrics(logger, db, billingRepo, posthogClient),
+		generateChatTitle:               activities.NewGenerateChatTitle(logger, db, chatClient),
+		getAllOrganizations:             activities.NewGetAllOrganizations(logger, db),
+		getSlackProjectContext:          activities.NewSlackProjectContextActivity(logger, db, slackClient),
+		postSlackMessage:                activities.NewPostSlackMessageActivity(logger, slackClient),
+		processDeployment:               activities.NewProcessDeployment(logger, tracerProvider, meterProvider, guardianPolicy, db, features, assetStorage, billingRepo, mcpRegistryClient),
+		provisionFunctionsAccess:        activities.NewProvisionFunctionsAccess(logger, db, encryption),
+		deployFunctionRunners:           activities.NewDeployFunctionRunners(logger, db, functionsDeployer, functionsVersion, encryption),
+		reapFlyApps:                     activities.NewReapFlyApps(logger, meterProvider, db, functionsDeployer, 1),
+		refreshBillingUsage:             activities.NewRefreshBillingUsage(logger, db, billingRepo),
+		refreshOpenRouterKey:            activities.NewRefreshOpenRouterKey(logger, db, openrouterProvisioner),
+		slackChatCompletion:             activities.NewSlackChatCompletionActivity(logger, slackClient, chatClient),
+		transitionDeployment:            activities.NewTransitionDeployment(logger, db),
+		validateDeployment:              activities.NewValidateDeployment(logger, db, billingRepo),
+		verifyCustomDomain:              activities.NewVerifyCustomDomain(logger, db, auditLogger, expectedTargetCNAME),
+		generateToolsetEmbeddings:       activities.NewGenerateToolsetEmbeddingsActivity(tracerProvider, db, ragService, logger),
+		dispatchTrigger:                 activities.NewDispatchTrigger(triggerApp),
+		processScheduledTrigger:         activities.NewProcessScheduledTrigger(triggerApp),
+		segmentChat:                     resolution_activities.NewSegmentChat(logger, db, chatClient),
+		deleteChatResolutions:           resolution_activities.NewDeleteChatResolutions(db),
+		analyzeSegment:                  resolution_activities.NewAnalyzeSegment(logger, db, chatClient, telemetryLogger),
+		getUserFeedbackForChat:          resolution_activities.NewGetUserFeedbackForChat(db),
+		fetchUnanalyzedMessages:         risk_analysis.NewFetchUnanalyzed(logger, tracerProvider, db),
+		analyzeBatch:                    risk_analysis.NewAnalyzeBatch(logger, tracerProvider, meterProvider, db, piiScanner, shadowMCPClient),
+		admitAssistantThreads:           activities.NewAdmitAssistantThreads(assistantsCore),
+		processAssistantThread:          activities.NewProcessAssistantThread(assistantsCore),
+		expireAssistantThreadRuntime:    activities.NewExpireAssistantThreadRuntime(assistantsCore),
+		reapStuckAssistantRuntimes:      activities.NewReapStuckAssistantRuntimes(assistantsCore),
+		reapInactiveAssistantRuntimes:   activities.NewReapInactiveAssistantRuntimes(logger, assistantsCore),
+		signalAssistantCoordinator:      activities.NewSignalAssistantCoordinator(&AssistantWorkflowSignaler{TemporalEnv: temporalEnv}),
+		signalAssistantThread:           activities.NewSignalAssistantThread(&AssistantWorkflowSignaler{TemporalEnv: temporalEnv}),
+		processWorkOSOrganizationEvents: processWorkOSOrgEvents,
+	}
+}
+
+func (a *Activities) ProcessWorkOSOrganizationEvents(ctx context.Context, params activities.ProcessWorkOSOrganizationEventsParams) (*activities.ProcessWorkOSOrganizationEventsResult, error) {
+	if a.processWorkOSOrganizationEvents == nil {
+		return nil, fmt.Errorf("WorkOS events client is not configured")
+	}
+	return a.processWorkOSOrganizationEvents.Do(ctx, params)
 }
 
 func (a *Activities) TransitionDeployment(ctx context.Context, projectID uuid.UUID, deploymentID uuid.UUID, status string) (*activities.TransitionDeploymentResult, error) {
@@ -288,7 +309,7 @@ func (a *Activities) ProcessAssistantThread(ctx context.Context, input activitie
 	return a.processAssistantThread.Do(ctx, input)
 }
 
-func (a *Activities) ExpireAssistantThreadRuntime(ctx context.Context, input activities.ExpireAssistantThreadRuntimeInput) error {
+func (a *Activities) ExpireAssistantThreadRuntime(ctx context.Context, input activities.ExpireAssistantThreadRuntimeInput) (*activities.ExpireAssistantThreadRuntimeResult, error) {
 	return a.expireAssistantThreadRuntime.Do(ctx, input)
 }
 

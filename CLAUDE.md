@@ -122,6 +122,7 @@ Activate a skill when your task falls within its scope.
 | `gram-management-api`         | Designing or modifying management API endpoints (Goa design, impl)         |
 | `gram-audit-logging`          | Recording or exposing audit events via the auditlogs management API        |
 | `gram-rbac`                   | Adding or enforcing authorization scopes, grants, or roles                 |
+| `glint`                       | Authoring or editing analyzers in the `glint/` go/analysis package         |
 | `mise-tasks`                  | Creating or editing mise task scripts in `.mise-tasks/`                    |
 | `jaeger`                      | Testing backend endpoints locally and inspecting traces via Jaeger API     |
 | `datadog`                     | Investigating errors, performance, incidents, or telemetry via Datadog     |

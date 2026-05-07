@@ -22,7 +22,7 @@ var registry = []toolFactory{
 		return platformtriggers.NewListTriggersTool(deps.DB, deps.TriggerApp)
 	},
 	func(deps Dependencies) PlatformToolExecutor {
-		return platformtriggers.NewConfigureTriggerTool(deps.DB, deps.TriggerApp)
+		return platformtriggers.NewConfigureTriggerTool(deps.DB, deps.TriggerApp, deps.Audit)
 	},
 	func(deps Dependencies) PlatformToolExecutor {
 		return platformslack.NewReadChannelMessagesTool(deps.SlackHTTPClient)
@@ -48,6 +48,21 @@ var registry = []toolFactory{
 	func(deps Dependencies) PlatformToolExecutor {
 		return platformslack.NewSendMessageTool(deps.SlackHTTPClient)
 	},
+	func(deps Dependencies) PlatformToolExecutor {
+		return platformslack.NewAddReactionTool(deps.SlackHTTPClient)
+	},
+	func(deps Dependencies) PlatformToolExecutor {
+		return platformslack.NewRemoveReactionTool(deps.SlackHTTPClient)
+	},
+	func(deps Dependencies) PlatformToolExecutor {
+		return platformslack.NewGetReactionsTool(deps.SlackHTTPClient)
+	},
+	func(deps Dependencies) PlatformToolExecutor {
+		return platformslack.NewListReactionsTool(deps.SlackHTTPClient)
+	},
+	func(deps Dependencies) PlatformToolExecutor {
+		return platformslack.NewListEmojiTool(deps.SlackHTTPClient)
+	},
 }
 
 func BuildExecutors(deps Dependencies) map[string]PlatformToolExecutor {
@@ -67,6 +82,7 @@ func ListPlatformTools() []ToolDescriptor {
 		TelemetryService: nil,
 		TriggerApp:       nil,
 		SlackHTTPClient:  nil,
+		Audit:            nil,
 	}
 	for _, factory := range registry {
 		tools = append(tools, factory(deps).Descriptor())

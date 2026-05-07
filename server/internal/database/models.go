@@ -157,6 +157,26 @@ type AuditLog struct {
 	CreatedAt          pgtype.Timestamptz
 }
 
+// Tracks admin resolutions of authz challenge denials. challenge_id references authz_challenges.id in ClickHouse (soft cross-DB reference).
+type AuthzChallengeResolution struct {
+	ID             uuid.UUID
+	OrganizationID string
+	// UUID of the denied challenge in the ClickHouse authz_challenges table.
+	ChallengeID string
+	// The principal that was denied, copied from the challenge for query convenience.
+	PrincipalUrn string
+	Scope        string
+	ResourceKind string
+	ResourceID   string
+	// How the challenge was resolved: role_assigned, dismissed.
+	ResolutionType string
+	// When resolution_type=role_assigned, the role slug that was assigned to the principal.
+	RoleSlug pgtype.Text
+	// URN of the admin who resolved the challenge.
+	ResolvedBy string
+	CreatedAt  pgtype.Timestamptz
+}
+
 type Chat struct {
 	ID             uuid.UUID
 	ProjectID      uuid.UUID
@@ -756,6 +776,8 @@ type OrganizationMetadatum struct {
 	GramAccountType    string
 	SsoConnectionID    pgtype.Text
 	WorkosID           pgtype.Text
+	WorkosUpdatedAt    pgtype.Timestamptz
+	WorkosLastEventID  pgtype.Text
 	Whitelisted        bool
 	FreeTrialStartedAt pgtype.Timestamptz
 	FreeTrialEndsAt    pgtype.Timestamptz
@@ -799,6 +821,8 @@ type OrganizationUserRelationship struct {
 	OrganizationID     string
 	UserID             string
 	WorkosMembershipID pgtype.Text
+	WorkosUpdatedAt    pgtype.Timestamptz
+	WorkosLastEventID  pgtype.Text
 	CreatedAt          pgtype.Timestamptz
 	UpdatedAt          pgtype.Timestamptz
 	DeletedAt          pgtype.Timestamptz
@@ -862,13 +886,14 @@ type PluginAssignment struct {
 }
 
 type PluginGithubConnection struct {
-	ID             uuid.UUID
-	ProjectID      uuid.UUID
-	InstallationID int64
-	RepoOwner      string
-	RepoName       string
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
+	ID               uuid.UUID
+	ProjectID        uuid.UUID
+	InstallationID   int64
+	RepoOwner        string
+	RepoName         string
+	MarketplaceToken pgtype.Text
+	CreatedAt        pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
 }
 
 type PluginServer struct {

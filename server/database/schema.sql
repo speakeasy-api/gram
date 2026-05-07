@@ -53,6 +53,8 @@ CREATE TABLE IF NOT EXISTS organization_metadata (
   gram_account_type TEXT NOT NULL DEFAULT 'free',
   sso_connection_id TEXT, -- links to an organization in the oidc provider to understand if a user is JIT provisioned via SSO. Will be replaced by workos_org_id.
   workos_id TEXT, -- links to an organization in WorkOS to sync metadata like users and groups
+  workos_updated_at timestamptz,
+  workos_last_event_id TEXT,
 
   whitelisted boolean NOT NULL DEFAULT TRUE,
   free_trial_started_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -1428,6 +1430,8 @@ CREATE TABLE IF NOT EXISTS organization_user_relationships (
   organization_id TEXT NOT NULL,
   user_id TEXT NOT NULL,
   workos_membership_id TEXT,
+  workos_updated_at timestamptz,
+  workos_last_event_id TEXT,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -2039,6 +2043,14 @@ CREATE INDEX IF NOT EXISTS mcp_servers_project_id_idx
 ON mcp_servers (project_id)
 WHERE deleted IS FALSE;
 
+CREATE INDEX IF NOT EXISTS mcp_servers_remote_mcp_server_id_idx
+ON mcp_servers (remote_mcp_server_id)
+WHERE remote_mcp_server_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS mcp_servers_toolset_id_idx
+ON mcp_servers (toolset_id)
+WHERE toolset_id IS NOT NULL;
+
 -- MCP Endpoints: addressable slugs for an MCP server. A NULL custom_domain_id
 -- represents a Gram-hosted endpoint (resolved by slug alone); a non-NULL
 -- custom_domain_id represents a custom-domain endpoint (resolved by the
@@ -2164,6 +2176,12 @@ CREATE TABLE IF NOT EXISTS plugin_github_connections (
   installation_id BIGINT NOT NULL,
   repo_owner TEXT NOT NULL CHECK (repo_owner <> ''),
   repo_name TEXT NOT NULL CHECK (repo_name <> ''),
+  -- Opaque URL token issued at marketplace setup. The marketplace proxy uses
+  -- it to resolve a Claude Code install URL back to this connection, whose
+  -- installation_id + owner/repo locate the upstream content. Nullable so
+  -- existing connections (and any future connection without the marketplace
+  -- surface enabled) are unconstrained.
+  marketplace_token TEXT,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -2182,6 +2200,13 @@ CREATE UNIQUE INDEX IF NOT EXISTS plugin_github_connections_project_id_key
 -- "Octocat/Hello-World" and "octocat/hello-world" collide as expected.
 CREATE UNIQUE INDEX IF NOT EXISTS plugin_github_connections_installation_repo_key
   ON plugin_github_connections (installation_id, LOWER(repo_owner), LOWER(repo_name));
+
+-- Lookup index for the marketplace proxy. Partial so existing rows without a
+-- token (and any future rows where the marketplace surface isn't enabled)
+-- aren't constrained against each other.
+CREATE UNIQUE INDEX IF NOT EXISTS plugin_github_connections_marketplace_token_key
+  ON plugin_github_connections (marketplace_token)
+  WHERE marketplace_token IS NOT NULL;
 
 -- Risk analysis policies for scanning chat messages against configurable rules.
 -- One workflow per policy drains unanalyzed messages and produces risk_results.
@@ -2251,3 +2276,37 @@ ON risk_results (project_id, chat_message_id);
 CREATE INDEX IF NOT EXISTS risk_results_project_found_idx
 ON risk_results (project_id, created_at DESC)
 WHERE found IS TRUE;
+
+CREATE TABLE IF NOT EXISTS authz_challenge_resolutions (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  challenge_id TEXT NOT NULL,
+
+  principal_urn TEXT NOT NULL,
+  scope TEXT NOT NULL,
+  resource_kind TEXT NOT NULL DEFAULT '',
+  resource_id TEXT NOT NULL DEFAULT '',
+
+  resolution_type TEXT NOT NULL,
+  role_slug TEXT,
+
+  resolved_by TEXT NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT authz_challenge_resolutions_pkey PRIMARY KEY (id),
+  CONSTRAINT authz_challenge_resolutions_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
+);
+
+COMMENT ON TABLE authz_challenge_resolutions IS 'Tracks admin resolutions of authz challenge denials. challenge_id references authz_challenges.id in ClickHouse (soft cross-DB reference).';
+COMMENT ON COLUMN authz_challenge_resolutions.challenge_id IS 'UUID of the denied challenge in the ClickHouse authz_challenges table.';
+COMMENT ON COLUMN authz_challenge_resolutions.principal_urn IS 'The principal that was denied, copied from the challenge for query convenience.';
+COMMENT ON COLUMN authz_challenge_resolutions.resolution_type IS 'How the challenge was resolved: role_assigned, dismissed.';
+COMMENT ON COLUMN authz_challenge_resolutions.role_slug IS 'When resolution_type=role_assigned, the role slug that was assigned to the principal.';
+COMMENT ON COLUMN authz_challenge_resolutions.resolved_by IS 'URN of the admin who resolved the challenge.';
+
+CREATE UNIQUE INDEX IF NOT EXISTS authz_challenge_resolutions_org_challenge_key
+ON authz_challenge_resolutions (organization_id, challenge_id);
+
+CREATE INDEX IF NOT EXISTS authz_challenge_resolutions_org_principal_idx
+ON authz_challenge_resolutions (organization_id, principal_urn);

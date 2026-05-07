@@ -69,7 +69,7 @@ export function EnvironmentEntriesFormFields({
     return (
       <div className="py-8 text-center">
         <p className="text-muted-foreground text-sm">
-          No authentication required for this toolset
+          No authentication required for this MCP server
         </p>
       </div>
     );

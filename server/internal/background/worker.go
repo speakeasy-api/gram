@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/assistants"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	risk_analysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/background/interceptors"
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
@@ -36,6 +37,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
+	"github.com/workos/workos-go/v6/pkg/events"
 )
 
 type WorkerOptions struct {
@@ -64,6 +66,8 @@ type WorkerOptions struct {
 	TemporalEnv         *tenv.Environment
 	PIIScanner          risk_analysis.PIIScanner
 	ShadowMCPClient     *shadowmcp.Client
+	AuditLogger         *audit.Logger
+	WorkOSEventsClient  *events.Client
 }
 
 func ForDeploymentProcessing(
@@ -74,6 +78,7 @@ func ForDeploymentProcessing(
 	enc *encryption.Client,
 	deployer functions.Deployer,
 	mcpRegistryClient *externalmcp.RegistryClient,
+	auditLogger *audit.Logger,
 ) *WorkerOptions {
 	return &WorkerOptions{
 		DB:                  db,
@@ -84,6 +89,7 @@ func ForDeploymentProcessing(
 		FunctionsDeployer:   deployer,
 		FunctionsVersion:    "local", // Test deployers don't use baked versions
 		MCPRegistryClient:   mcpRegistryClient,
+		AuditLogger:         auditLogger,
 		SlackClient:         nil,
 		ChatClient:          nil,
 		OpenRouter:          nil,
@@ -101,6 +107,7 @@ func ForDeploymentProcessing(
 		TemporalEnv:         nil,
 		PIIScanner:          nil,
 		ShadowMCPClient:     nil,
+		WorkOSEventsClient:  nil,
 	}
 }
 
@@ -137,6 +144,8 @@ func NewTemporalWorker(
 		TemporalEnv:         env,
 		PIIScanner:          nil,
 		ShadowMCPClient:     nil,
+		AuditLogger:         nil,
+		WorkOSEventsClient:  nil,
 	}
 
 	for _, o := range options {
@@ -166,6 +175,8 @@ func NewTemporalWorker(
 			TemporalEnv:         conv.Default(o.TemporalEnv, opts.TemporalEnv),
 			PIIScanner:          conv.Default(o.PIIScanner, opts.PIIScanner),
 			ShadowMCPClient:     conv.Default(o.ShadowMCPClient, opts.ShadowMCPClient),
+			AuditLogger:         conv.Default(o.AuditLogger, opts.AuditLogger),
+			WorkOSEventsClient:  conv.Default(o.WorkOSEventsClient, opts.WorkOSEventsClient),
 		}
 	}
 
@@ -205,6 +216,8 @@ func NewTemporalWorker(
 		opts.AssistantsCore,
 		opts.PIIScanner,
 		opts.ShadowMCPClient,
+		opts.AuditLogger,
+		opts.WorkOSEventsClient,
 	)
 
 	temporalWorker.RegisterActivity(activities.ProcessDeployment)
@@ -245,6 +258,8 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.ReapInactiveAssistantRuntimes)
 	temporalWorker.RegisterActivity(activities.SignalAssistantCoordinator)
 	temporalWorker.RegisterActivity(activities.SignalAssistantThread)
+	// WorkOS sync activities
+	temporalWorker.RegisterActivity(activities.ProcessWorkOSOrganizationEvents)
 
 	temporalWorker.RegisterWorkflow(ProcessDeploymentWorkflow)
 	temporalWorker.RegisterWorkflow(FunctionsReaperWorkflow)
@@ -268,6 +283,9 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(AssistantThreadWorkflow)
 	temporalWorker.RegisterWorkflow(AssistantReaperWorkflow)
 	temporalWorker.RegisterWorkflow(AssistantRuntimeJanitorWorkflow)
+	// WorkOS sync workflows
+	temporalWorker.RegisterWorkflow(ProcessWorkOSOrganizationEventsWorkflow)
+	temporalWorker.RegisterWorkflow(ProcessWorkOSOrganizationEventsWorkflowDebounced)
 
 	if err := AddPlatformUsageMetricsSchedule(context.Background(), env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {

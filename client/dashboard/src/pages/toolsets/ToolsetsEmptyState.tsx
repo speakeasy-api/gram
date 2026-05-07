@@ -11,14 +11,14 @@ export function ToolsetsEmptyState({
 }) {
   const cta = (
     <Button size="sm" onClick={onCreateToolset}>
-      CREATE A TOOLSET
+      CREATE AN MCP SERVER
     </Button>
   );
 
   return (
     <EmptyState
-      heading="No toolsets yet"
-      description="Toolsets are a way to organize your tools into groupings of appropriate size for an LLM to use effectively."
+      heading="No MCP servers yet"
+      description="MCP servers are a way to organize your tools into groupings of appropriate size for an LLM to use effectively."
       nonEmptyProjectCTA={cta}
       graphic={<ToolsetsGraphic />}
       graphicClassName="scale-90"

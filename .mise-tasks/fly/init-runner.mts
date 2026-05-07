@@ -6,7 +6,35 @@
 //USAGE flag "--image <image>" required=#false help="The image repository to use e.g. registry.fly.io/my-app"
 //USAGE flag "--force" default="false" help="Exit with success code if app already exists"
 
-import { $, chalk, fs } from "zx";
+import { $, chalk, fs, sleep } from "zx";
+import type { ProcessOutput } from "zx";
+
+const MAX_ATTEMPTS = 5;
+const BASE_DELAY_MS = 2000;
+const MAX_DELAY_MS = 30000;
+
+const TRANSIENT_PATTERNS = [
+  /non-200 status code: 5\d{2}/i,
+  /context deadline exceeded/i,
+  /i\/o timeout/i,
+  /connection (reset|refused|closed)/i,
+  /unexpected EOF/i,
+  /no such host/i,
+  /TLS handshake/i,
+  /temporarily unavailable/i,
+  /bad gateway/i,
+  /gateway timeout/i,
+  /service unavailable/i,
+];
+
+function isTransient(output: string): boolean {
+  return TRANSIENT_PATTERNS.some((p) => p.test(output));
+}
+
+function backoffMs(attempt: number): number {
+  const exp = Math.min(BASE_DELAY_MS * 2 ** (attempt - 1), MAX_DELAY_MS);
+  return exp + Math.floor(Math.random() * 500);
+}
 
 function yn(val: string | undefined) {
   const y = new Set(["1", "t", "T", "true", "TRUE", "True"]);
@@ -60,8 +88,32 @@ async function main() {
   const [, appName] = parseImageName(image);
 
   console.log(`ℹ️ Creating fly app in ${org}: ${appName}`);
-  const proc = await $`fly apps create --org ${org} ${appName}`.nothrow();
-  const exists = proc.stderr.includes("Name has already been taken");
+
+  let proc: ProcessOutput | undefined;
+  let combined = "";
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    proc = await $`fly apps create --org ${org} ${appName}`.nothrow();
+    combined = `${proc.stderr}\n${proc.stdout}`;
+    if (proc.exitCode === 0) break;
+    if (combined.includes("Name has already been taken")) break;
+
+    if (attempt < MAX_ATTEMPTS && isTransient(combined)) {
+      const delay = backoffMs(attempt);
+      console.warn(
+        chalk.yellow(
+          `⚠️ Attempt ${attempt}/${MAX_ATTEMPTS} failed with transient error; retrying in ${delay}ms.`,
+        ),
+      );
+      await sleep(delay);
+      continue;
+    }
+
+    break;
+  }
+
+  halt(proc, "fly apps create did not run");
+
+  const exists = combined.includes("Name has already been taken");
   const fail = proc.exitCode !== 0;
   switch (true) {
     case fail && exists && yn(process.env["usage_force"]):
@@ -71,7 +123,7 @@ async function main() {
       break;
     case fail:
       console.error("❌ Failed to create fly app:");
-      console.error(proc.stderr);
+      console.error(combined);
       return process.exit(1);
     default:
       console.log(`✅ Fly app ${appName} created in ${org}.`);

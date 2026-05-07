@@ -33,6 +33,17 @@ const (
 	DefaultOrgSlug = "speakeasy"
 )
 
+// userIDNamespace is a fixed UUID v5 namespace used to derive deterministic
+// user IDs from email addresses. This ensures the same email always maps to
+// the same UUID, surviving dev-idp SQLite resets without colliding with the
+// Gram server's users_email_key unique constraint.
+var userIDNamespace = uuid.MustParse("a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d")
+
+// DeterministicUserID returns a stable UUID v5 derived from the given email.
+func DeterministicUserID(email string) uuid.UUID {
+	return uuid.NewSHA1(userIDNamespace, []byte(email))
+}
+
 // Committer holds the values read from `git config user.{email,name}`.
 type Committer struct {
 	Email string
@@ -76,7 +87,7 @@ func BootstrapLocalUser(ctx context.Context, db *sql.DB, mode string) (uuid.UUID
 	now := time.Now()
 
 	user, err := queries.UpsertUserByEmail(ctx, repo.UpsertUserByEmailParams{
-		ID:          uuid.New(),
+		ID:          DeterministicUserID(committer.Email),
 		Email:       committer.Email,
 		DisplayName: committer.Name,
 	})

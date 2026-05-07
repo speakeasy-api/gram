@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+
 # Send a Claude Code hook event to Gram. The server is the sole authority on
 # whether to block:
 #   HTTP 2xx -> allow (exit 0). The JSON body is forwarded to Claude as-is;

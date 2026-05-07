@@ -42,12 +42,22 @@ type Service struct {
 	authz   *authz.Engine
 	headers *Headers
 	policy  *guardian.Policy
+	audit   *audit.Logger
 }
 
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, enc *encryption.Client, authzEngine *authz.Engine, policy *guardian.Policy) *Service {
+func NewService(
+	logger *slog.Logger,
+	tracerProvider trace.TracerProvider,
+	db *pgxpool.Pool,
+	sessions *sessions.Manager,
+	enc *encryption.Client,
+	authzEngine *authz.Engine,
+	policy *guardian.Policy,
+	auditLogger *audit.Logger,
+) *Service {
 	logger = logger.With(attr.SlogComponent("remotemcp"))
 
 	return &Service{
@@ -58,6 +68,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		authz:   authzEngine,
 		headers: NewHeaders(logger, db, enc),
 		policy:  policy,
+		audit:   auditLogger,
 	}
 }
 
@@ -130,7 +141,7 @@ func (s *Service) CreateServer(ctx context.Context, payload *gen.CreateServerPay
 		headerRows = append(headerRows, row)
 	}
 
-	if err := audit.LogRemoteMcpServerCreate(ctx, dbtx, audit.LogRemoteMcpServerCreateEvent{
+	if err := s.audit.LogRemoteMcpServerCreate(ctx, dbtx, audit.LogRemoteMcpServerCreateEvent{
 		OrganizationID:     authCtx.ActiveOrganizationID,
 		ProjectID:          *authCtx.ProjectID,
 		Actor:              urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
@@ -385,7 +396,7 @@ func (s *Service) UpdateServer(ctx context.Context, payload *gen.UpdateServerPay
 
 	afterView := mv.BuildRemoteMcpServerView(updatedServer, afterHeaders)
 
-	if err := audit.LogRemoteMcpServerUpdate(ctx, dbtx, audit.LogRemoteMcpServerUpdateEvent{
+	if err := s.audit.LogRemoteMcpServerUpdate(ctx, dbtx, audit.LogRemoteMcpServerUpdateEvent{
 		OrganizationID:     authCtx.ActiveOrganizationID,
 		ProjectID:          *authCtx.ProjectID,
 		Actor:              urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
@@ -447,7 +458,7 @@ func (s *Service) DeleteServer(ctx context.Context, payload *gen.DeleteServerPay
 		return oops.E(oops.CodeUnexpected, err, "delete remote mcp server").Log(ctx, logger)
 	}
 
-	if err := audit.LogRemoteMcpServerDelete(ctx, dbtx, audit.LogRemoteMcpServerDeleteEvent{
+	if err := s.audit.LogRemoteMcpServerDelete(ctx, dbtx, audit.LogRemoteMcpServerDeleteEvent{
 		OrganizationID:     authCtx.ActiveOrganizationID,
 		ProjectID:          *authCtx.ProjectID,
 		Actor:              urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),

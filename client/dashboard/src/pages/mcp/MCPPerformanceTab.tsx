@@ -132,10 +132,10 @@ export function MCPPerformanceTab({ toolset }: { toolset: Toolset }) {
           title="Static"
           description="Every tool schema is loaded into the LLM's context window upfront. Simple and predictable — the model sees all available tools immediately."
           bestFor={[
-            "Small toolsets (under ~20 tools)",
+            "Small MCP servers (under ~20 tools)",
             "Predictable, fixed token budget per request",
           ]}
-          tradeoff="Token cost scales linearly with tool count — large toolsets can consume 200k+ tokens"
+          tradeoff="Token cost scales linearly with tool count — large MCP servers can consume 200k+ tokens"
         />
         <ModeCard
           selected={toolSelectionMode === "dynamic"}
@@ -144,7 +144,7 @@ export function MCPPerformanceTab({ toolset }: { toolset: Toolset }) {
           title="Dynamic"
           description="Tools are discovered on demand through a three-step workflow: search available tools, describe the ones needed, then execute. Only relevant tool schemas enter the context window."
           bestFor={[
-            "Large toolsets (20+ tools, scales to 400+)",
+            "Large MCP servers (20+ tools, scales to 400+)",
             "Token-constrained environments — up to 96% fewer input tokens",
           ]}
           tradeoff="Requires 2–3x more tool calls (typically 6–8 vs 3 for complex tasks) and slight additional latency from the discovery steps"

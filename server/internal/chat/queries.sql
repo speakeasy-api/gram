@@ -510,3 +510,10 @@ SELECT
   COALESCE(AVG(duration_ms), 0)::double precision as avg_session_duration_ms,
   COALESCE(AVG(CASE WHEN resolution_status != '' THEN duration_ms END), 0)::double precision as avg_resolution_time_ms
 FROM chat_stats;
+
+-- name: CreateChatMessageWithToolCalls :exec
+-- Inserts a single chat_messages row with optional tool_calls JSON,
+-- tool_call_id, and generation, for callers seeding tool-turn history without
+-- the full CreateChatMessage :copyfrom batch shape.
+INSERT INTO chat_messages (chat_id, project_id, role, content, tool_calls, tool_call_id, generation)
+VALUES (@chat_id, @project_id, @role, @content, @tool_calls, @tool_call_id, @generation);

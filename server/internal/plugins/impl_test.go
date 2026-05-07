@@ -417,6 +417,7 @@ func TestPluginsService_GetPublishStatus_NotConfigured(t *testing.T) {
 	require.Nil(t, result.RepoOwner)
 	require.Nil(t, result.RepoName)
 	require.Nil(t, result.RepoURL)
+	require.Nil(t, result.MarketplaceURL)
 }
 
 func TestPluginsService_PublishPlugins_NotConfigured(t *testing.T) {
@@ -442,21 +443,6 @@ func TestPluginsService_GetPublishStatus_Configured(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, result.Configured)
 	require.False(t, result.Connected)
-}
-
-func TestPluginsService_PublishPlugins_NoPlugins(t *testing.T) {
-	t.Parallel()
-
-	mock := &mockGitHubPublisher{}
-	ctx, ti := newTestPluginsServiceWithGitHub(t, mock)
-
-	_, err := ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
-	require.Error(t, err)
-
-	var oopsErr *oops.ShareableError
-	require.ErrorAs(t, err, &oopsErr)
-	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
-	require.False(t, mock.createRepoCalled)
 }
 
 func TestPluginsService_PublishPlugins_HappyPath(t *testing.T) {
@@ -489,6 +475,11 @@ func TestPluginsService_PublishPlugins_HappyPath(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, status.Connected)
 	require.NotNil(t, status.RepoURL)
+	// Publish auto-mints a marketplace token, so the URL must be present
+	// and shaped like <server-url>/marketplace/m/<token>/marketplace.json.
+	require.NotNil(t, status.MarketplaceURL)
+	require.Contains(t, *status.MarketplaceURL, "/marketplace/m/")
+	require.Contains(t, *status.MarketplaceURL, "/marketplace.json")
 }
 
 func TestPluginsService_PublishPlugins_WithCollaborator(t *testing.T) {
@@ -668,7 +659,11 @@ func TestPluginsService_PublishPlugins_PublicToolsetEnvConfigs(t *testing.T) {
 
 	// Create a toolset and make it public.
 	toolset := createTestToolset(t, ctx, ti.conn, "public-toolset")
-	_, err = ti.conn.Exec(ctx, "UPDATE toolsets SET mcp_is_public = TRUE WHERE id = $1", toolset.ID)
+	err = toolsetsrepo.New(ti.conn).SetToolsetMCPPublicByID(ctx, toolsetsrepo.SetToolsetMCPPublicByIDParams{
+		McpIsPublic: true,
+		ID:          toolset.ID,
+		ProjectID:   toolset.ProjectID,
+	})
 	require.NoError(t, err)
 
 	// Create MCP metadata + environment config for the public toolset.
@@ -746,7 +741,11 @@ func TestPluginsService_PublishPlugins_SkipsUserEnvConfigsWithoutHeaderName(t *t
 	require.NoError(t, err)
 
 	toolset := createTestToolset(t, ctx, ti.conn, "headerless-toolset")
-	_, err = ti.conn.Exec(ctx, "UPDATE toolsets SET mcp_is_public = TRUE WHERE id = $1", toolset.ID)
+	err = toolsetsrepo.New(ti.conn).SetToolsetMCPPublicByID(ctx, toolsetsrepo.SetToolsetMCPPublicByIDParams{
+		McpIsPublic: true,
+		ID:          toolset.ID,
+		ProjectID:   toolset.ProjectID,
+	})
 	require.NoError(t, err)
 
 	mcpRepo := mcpmetarepo.New(ti.conn)
@@ -842,7 +841,11 @@ func TestPluginsService_PublishPlugins_SkipsDisabledMCPToolsets(t *testing.T) {
 	}
 
 	// Disable MCP after the server was added (slug stays persisted).
-	_, err = ti.conn.Exec(ctx, "UPDATE toolsets SET mcp_enabled = FALSE WHERE id = $1", disabled.ID)
+	err = toolsetsrepo.New(ti.conn).SetToolsetMCPEnabledByID(ctx, toolsetsrepo.SetToolsetMCPEnabledByIDParams{
+		McpEnabled: false,
+		ID:         disabled.ID,
+		ProjectID:  disabled.ProjectID,
+	})
 	require.NoError(t, err)
 
 	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
@@ -873,7 +876,11 @@ func TestPluginsService_PublishPlugins_PublicToolsetWithoutMetadata(t *testing.T
 	require.NoError(t, err)
 
 	toolset := createTestToolset(t, ctx, ti.conn, "public-no-meta")
-	_, err = ti.conn.Exec(ctx, "UPDATE toolsets SET mcp_is_public = TRUE WHERE id = $1", toolset.ID)
+	err = toolsetsrepo.New(ti.conn).SetToolsetMCPPublicByID(ctx, toolsetsrepo.SetToolsetMCPPublicByIDParams{
+		McpIsPublic: true,
+		ID:          toolset.ID,
+		ProjectID:   toolset.ProjectID,
+	})
 	require.NoError(t, err)
 
 	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
@@ -916,14 +923,53 @@ func TestPluginsService_PublishPlugins_EmitsObservabilityPlugin(t *testing.T) {
 
 	claudeObservability, cursorObservability := orgObservabilitySlugs(t, ctx, ti)
 
-	// Both Claude and Cursor observability plugins must be present.
+	// Both Claude and Cursor observability plugins must be present, with
+	// hooks living under hooks/ per the Claude Code plugins reference. Files
+	// at the plugin root register the plugin but never wire the hooks up.
 	require.NotNil(t, mock.lastPushedFiles[claudeObservability+"/.claude-plugin/plugin.json"], "claude observability plugin.json missing")
-	require.NotNil(t, mock.lastPushedFiles[claudeObservability+"/hooks.json"], "claude observability hooks.json missing")
-	require.NotNil(t, mock.lastPushedFiles[claudeObservability+"/hook.sh"], "claude observability hook.sh missing")
+	require.NotNil(t, mock.lastPushedFiles[claudeObservability+"/hooks/hooks.json"], "claude observability hooks/hooks.json missing")
+	require.NotNil(t, mock.lastPushedFiles[claudeObservability+"/hooks/hook.sh"], "claude observability hooks/hook.sh missing")
 
 	require.NotNil(t, mock.lastPushedFiles[cursorObservability+"/.cursor-plugin/plugin.json"], "cursor observability plugin.json missing")
-	require.NotNil(t, mock.lastPushedFiles[cursorObservability+"/hooks.json"], "cursor observability hooks.json missing")
-	require.NotNil(t, mock.lastPushedFiles[cursorObservability+"/hook.sh"], "cursor observability hook.sh missing")
+	require.NotNil(t, mock.lastPushedFiles[cursorObservability+"/hooks/hooks.json"], "cursor observability hooks/hooks.json missing")
+	require.NotNil(t, mock.lastPushedFiles[cursorObservability+"/hooks/hook.sh"], "cursor observability hooks/hook.sh missing")
+}
+
+// PublishPlugins must succeed when the org has no custom plugins — the
+// observability plugin alone is enough to ship a marketplace, since it's
+// always emitted on publish.
+func TestPluginsService_PublishPlugins_ObservabilityOnly(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockGitHubPublisher{}
+	ctx, ti := newTestPluginsServiceWithGitHub(t, mock)
+
+	_, err := ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
+	require.NoError(t, err)
+
+	claudeObservability, cursorObservability := orgObservabilitySlugs(t, ctx, ti)
+
+	require.NotNil(t, mock.lastPushedFiles[claudeObservability+"/hooks/hook.sh"], "claude observability hooks/hook.sh missing")
+	require.NotNil(t, mock.lastPushedFiles[cursorObservability+"/hooks/hook.sh"], "cursor observability hooks/hook.sh missing")
+
+	for _, p := range []struct {
+		path     string
+		expected string
+	}{
+		{".claude-plugin/marketplace.json", claudeObservability},
+		{".cursor-plugin/marketplace.json", cursorObservability},
+	} {
+		raw := mock.lastPushedFiles[p.path]
+		require.NotNil(t, raw, p.path+" missing")
+		var market struct {
+			Plugins []struct {
+				Name string `json:"name"`
+			} `json:"plugins"`
+		}
+		require.NoError(t, json.Unmarshal(raw, &market))
+		require.Len(t, market.Plugins, 1, "expected only observability plugin in %s", p.path)
+		require.Equal(t, p.expected, market.Plugins[0].Name, "%s", p.path)
+	}
 }
 
 // The observability hook script must contain the freshly-minted hooks-scoped
@@ -966,7 +1012,7 @@ func TestPluginsService_PublishPlugins_ObservabilityHookScriptContainsAPIKey(t *
 	claudeObservability, cursorObservability := orgObservabilitySlugs(t, ctx, ti)
 	// Both endpoints accept Gram-Key (Cursor requires it via Security; Claude
 	// accepts it as an optional header for plugin-driven attribution).
-	for _, path := range []string{claudeObservability + "/hook.sh", cursorObservability + "/hook.sh"} {
+	for _, path := range []string{claudeObservability + "/hooks/hook.sh", cursorObservability + "/hooks/hook.sh"} {
 		script := string(mock.lastPushedFiles[path])
 		require.NotEmpty(t, script, path+" missing")
 		require.Contains(t, script, "Gram-Key: "+hooksKeyPrefix, "%s does not embed hooks key in Gram-Key", path)
@@ -1118,7 +1164,11 @@ func TestPluginsService_PublishPlugins_CodexPublicToolsetEnvHeaders(t *testing.T
 	require.NoError(t, err)
 
 	toolset := createTestToolset(t, ctx, ti.conn, "codex-public-toolset")
-	_, err = ti.conn.Exec(ctx, "UPDATE toolsets SET mcp_is_public = TRUE WHERE id = $1", toolset.ID)
+	err = toolsetsrepo.New(ti.conn).SetToolsetMCPPublicByID(ctx, toolsetsrepo.SetToolsetMCPPublicByIDParams{
+		McpIsPublic: true,
+		ID:          toolset.ID,
+		ProjectID:   toolset.ProjectID,
+	})
 	require.NoError(t, err)
 
 	mcpRepo := mcpmetarepo.New(ti.conn)
@@ -1200,7 +1250,11 @@ func TestPluginsService_PublishPlugins_CodexSkipsDisabledMCPToolsets(t *testing.
 		require.NoError(t, err)
 	}
 
-	_, err = ti.conn.Exec(ctx, "UPDATE toolsets SET mcp_enabled = FALSE WHERE id = $1", disabled.ID)
+	err = toolsetsrepo.New(ti.conn).SetToolsetMCPEnabledByID(ctx, toolsetsrepo.SetToolsetMCPEnabledByIDParams{
+		McpEnabled: false,
+		ID:         disabled.ID,
+		ProjectID:  disabled.ProjectID,
+	})
 	require.NoError(t, err)
 
 	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})

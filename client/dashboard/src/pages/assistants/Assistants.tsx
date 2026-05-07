@@ -42,7 +42,7 @@ function AssistantsEmptyState({ onCreate }: { onCreate: () => void }) {
         No assistants yet
       </Type>
       <Type small muted className="mb-4 max-w-md text-center">
-        Create an assistant to wire a model up to your toolsets.
+        Create an assistant to wire a model up to your MCP servers.
       </Type>
       <Button onClick={onCreate}>
         <Button.LeftIcon>
@@ -72,7 +72,7 @@ export default function AssistantsIndex() {
       <Page.Section>
         <Page.Section.Title>Assistants</Page.Section.Title>
         <Page.Section.Description>
-          Configure model, instructions, and toolsets for each assistant.
+          Configure model, instructions, and MCP servers for each assistant.
         </Page.Section.Description>
         <Page.Section.CTA>
           <Button onClick={() => routes.assistants.newAssistant.goTo()}>
@@ -170,7 +170,7 @@ function AssistantCard({ assistant }: { assistant: Assistant }) {
     },
   });
 
-  const toolsetLabel = `${assistant.toolsets.length} toolset${
+  const toolsetLabel = `${assistant.toolsets.length} MCP server${
     assistant.toolsets.length !== 1 ? "s" : ""
   }`;
 

@@ -58,10 +58,11 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.
 		// the risk scanner first (block-only today), then fall through to the
 		// shadow-MCP guard so unapproved toolsets are still blocked.
 		if scanResult := s.scanCursorForEnforcement(ctx, payload, orgID, projectID); scanResult != nil {
-			msg := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
-			blockReason = msg
+			auditReason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
+			userReason := renderUserBlockReason(scanResult.UserMessage, auditReason)
+			blockReason = auditReason
 			result.Permission = new("deny")
-			result.UserMessage = &msg
+			result.UserMessage = &userReason
 			break
 		}
 		policy := s.lookupShadowMCPBlockingPolicy(ctx, projectID)
@@ -81,11 +82,12 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.
 					"policyName":    policy.Name,
 				}),
 			)
-			reason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", policy.Name, detail)
-			blockReason = reason
+			auditReason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", policy.Name, detail)
+			userReason := renderUserBlockReason(policy.UserMessage, auditReason)
+			blockReason = auditReason
 			result.Permission = new("deny")
-			result.UserMessage = &reason
-			result.AgentMessage = &reason
+			result.UserMessage = &userReason
+			result.AgentMessage = &userReason
 		} else {
 			result.Permission = new("allow")
 		}
@@ -102,19 +104,21 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.
 			break
 		}
 		if scanResult := s.scanCursorForEnforcement(ctx, payload, orgID, projectID); scanResult != nil {
-			msg := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
-			blockReason = msg
+			auditReason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
+			userReason := renderUserBlockReason(scanResult.UserMessage, auditReason)
+			blockReason = auditReason
 			result.Permission = new("deny")
-			result.UserMessage = &msg
+			result.UserMessage = &userReason
 		} else {
 			result.Permission = new("allow")
 		}
 	case "beforeSubmitPrompt":
 		if scanResult := s.scanCursorForEnforcement(ctx, payload, orgID, projectID); scanResult != nil {
-			msg := fmt.Sprintf("Speakeasy blocked this prompt: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
-			blockReason = msg
+			auditReason := fmt.Sprintf("Speakeasy blocked this prompt: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
+			userReason := renderUserBlockReason(scanResult.UserMessage, auditReason)
+			blockReason = auditReason
 			result.Permission = new("deny")
-			result.UserMessage = &msg
+			result.UserMessage = &userReason
 		}
 	default:
 		// nothing to do

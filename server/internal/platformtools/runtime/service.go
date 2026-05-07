@@ -10,6 +10,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
@@ -44,12 +45,14 @@ func NewService(
 	logger *slog.Logger,
 	db *pgxpool.Pool,
 	telemetrySvc platformtools.TelemetryService,
+	auditLogger *audit.Logger,
 	options ...Option,
 ) *Service {
 	deps := platformtools.Dependencies{
 		Logger:           logger,
 		DB:               db,
 		TelemetryService: telemetrySvc,
+		Audit:            auditLogger,
 		TriggerApp:       nil,
 		SlackHTTPClient:  nil,
 	}

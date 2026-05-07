@@ -33,7 +33,7 @@ type LogTriggerInstanceCreateEvent struct {
 	DefinitionSlug     string
 }
 
-func LogTriggerInstanceCreate(ctx context.Context, dbtx repo.DBTX, event LogTriggerInstanceCreateEvent) error {
+func (l *Logger) LogTriggerInstanceCreate(ctx context.Context, dbtx repo.DBTX, event LogTriggerInstanceCreateEvent) error {
 	action := ActionTriggerInstanceCreate
 	entry := repo.InsertAuditLogParams{
 		OrganizationID: event.OrganizationID,
@@ -78,7 +78,7 @@ type LogTriggerInstanceUpdateEvent struct {
 	TriggerInstanceSnapshotAfter  *types.TriggerInstance
 }
 
-func LogTriggerInstanceUpdate(ctx context.Context, dbtx repo.DBTX, event LogTriggerInstanceUpdateEvent) error {
+func (l *Logger) LogTriggerInstanceUpdate(ctx context.Context, dbtx repo.DBTX, event LogTriggerInstanceUpdateEvent) error {
 	action := ActionTriggerInstanceUpdate
 
 	beforeSnapshot, err := marshalAuditPayload(event.TriggerInstanceSnapshotBefore)
@@ -132,7 +132,7 @@ type LogTriggerInstanceDeleteEvent struct {
 	DefinitionSlug     string
 }
 
-func LogTriggerInstanceDelete(ctx context.Context, dbtx repo.DBTX, event LogTriggerInstanceDeleteEvent) error {
+func (l *Logger) LogTriggerInstanceDelete(ctx context.Context, dbtx repo.DBTX, event LogTriggerInstanceDeleteEvent) error {
 	action := ActionTriggerInstanceDelete
 	entry := repo.InsertAuditLogParams{
 		OrganizationID: event.OrganizationID,
@@ -175,7 +175,7 @@ type LogTriggerInstancePauseEvent struct {
 	DefinitionSlug     string
 }
 
-func LogTriggerInstancePause(ctx context.Context, dbtx repo.DBTX, event LogTriggerInstancePauseEvent) error {
+func (l *Logger) LogTriggerInstancePause(ctx context.Context, dbtx repo.DBTX, event LogTriggerInstancePauseEvent) error {
 	action := ActionTriggerInstancePause
 	entry := repo.InsertAuditLogParams{
 		OrganizationID: event.OrganizationID,
@@ -218,7 +218,7 @@ type LogTriggerInstanceResumeEvent struct {
 	DefinitionSlug     string
 }
 
-func LogTriggerInstanceResume(ctx context.Context, dbtx repo.DBTX, event LogTriggerInstanceResumeEvent) error {
+func (l *Logger) LogTriggerInstanceResume(ctx context.Context, dbtx repo.DBTX, event LogTriggerInstanceResumeEvent) error {
 	action := ActionTriggerInstanceResume
 	entry := repo.InsertAuditLogParams{
 		OrganizationID: event.OrganizationID,

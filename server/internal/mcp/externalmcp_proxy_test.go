@@ -14,11 +14,14 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	deployments_repo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	externalmcp_repo "github.com/speakeasy-api/gram/server/internal/externalmcp/repo"
 	externalmcp_types "github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types"
 	"github.com/speakeasy-api/gram/server/internal/testmcp"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 // newMockExternalMCPServer creates an httptest server that speaks the MCP protocol
@@ -96,29 +99,24 @@ func setupToolsetWithExternalMCP(
 	})
 	require.NoError(t, err)
 
-	// Create deployment
-	var deploymentID uuid.UUID
-	err = ti.conn.QueryRow(ctx, `
-		INSERT INTO deployments (project_id, organization_id, user_id, idempotency_key)
-		VALUES ($1, $2, $3, $4)
-		RETURNING id
-	`, projectID, orgID, "test-user", uuid.New().String()).Scan(&deploymentID)
+	deploymentID, err := deployments_repo.New(ti.conn).InsertDeployment(ctx, deployments_repo.InsertDeploymentParams{
+		ProjectID:      projectID,
+		OrganizationID: orgID,
+		UserID:         "test-user",
+		IdempotencyKey: uuid.New().String(),
+	})
 	require.NoError(t, err)
 
-	// Mark deployment as completed (active)
-	_, err = ti.conn.Exec(ctx, `
-		INSERT INTO deployment_statuses (deployment_id, status)
-		VALUES ($1, 'completed')
-	`, deploymentID)
+	err = deployments_repo.New(ti.conn).CreateDeploymentStatus(ctx, deployments_repo.CreateDeploymentStatusParams{
+		DeploymentID: deploymentID,
+		Status:       "completed",
+	})
 	require.NoError(t, err)
 
-	// Create MCP registry
-	var registryID uuid.UUID
-	err = ti.conn.QueryRow(ctx, `
-		INSERT INTO mcp_registries (name, url)
-		VALUES ($1, $2)
-		RETURNING id
-	`, "test-registry-"+slug, mockServerURL).Scan(&registryID)
+	registryID, err := externalmcpRepo.CreateMCPRegistry(ctx, externalmcp_repo.CreateMCPRegistryParams{
+		Name: "test-registry-" + slug,
+		Url:  mockServerURL,
+	})
 	require.NoError(t, err)
 
 	// Create external MCP attachment
@@ -132,10 +130,10 @@ func setupToolsetWithExternalMCP(
 	require.NoError(t, err)
 
 	// Create tool definition with the external MCP tool URN
-	toolURN := "tools:externalmcp:" + slug + ":proxy"
+	toolURNString := "tools:externalmcp:" + slug + ":proxy"
 	toolDef, err := externalmcpRepo.CreateExternalMCPToolDefinition(ctx, externalmcp_repo.CreateExternalMCPToolDefinitionParams{
 		ExternalMcpAttachmentID:    attachment.ID,
-		ToolUrn:                    toolURN,
+		ToolUrn:                    toolURNString,
 		Type:                       "proxy",
 		RemoteUrl:                  mockServerURL,
 		TransportType:              transportType,
@@ -149,10 +147,15 @@ func setupToolsetWithExternalMCP(
 	require.NoError(t, err)
 
 	// Create toolset version with the tool URN
-	_, err = ti.conn.Exec(ctx, `
-		INSERT INTO toolset_versions (toolset_id, version, tool_urns, resource_urns)
-		VALUES ($1, 1, $2, '{}')
-	`, toolset.ID, []string{toolURN})
+	toolURN, err := urn.ParseTool(toolURNString)
+	require.NoError(t, err)
+	_, err = toolsets_repo.New(ti.conn).CreateToolsetVersion(ctx, toolsets_repo.CreateToolsetVersionParams{
+		ToolsetID:     toolset.ID,
+		Version:       1,
+		ToolUrns:      []urn.Tool{toolURN},
+		ResourceUrns:  []urn.Resource{},
+		PredecessorID: uuid.NullUUID{Valid: false},
+	})
 	require.NoError(t, err)
 
 	return &externalMCPConfig{
@@ -160,24 +163,21 @@ func setupToolsetWithExternalMCP(
 		deploymentID: deploymentID,
 		attachmentID: attachment.ID,
 		toolDefID:    toolDef.ID,
-		toolURN:      toolURN,
+		toolURN:      toolURNString,
 		slug:         slug,
 	}
 }
 
-// getTestProjectAndOrg extracts project and org IDs from the test context
-func getTestProjectAndOrg(t *testing.T, ctx context.Context, ti *testInstance) (uuid.UUID, string) {
+// getTestProjectAndOrg extracts project and org IDs from the auth context
+// populated by testenv.InitAuthContext.
+func getTestProjectAndOrg(t *testing.T, ctx context.Context, _ *testInstance) (uuid.UUID, string) {
 	t.Helper()
 
-	// Query for an existing project created by testenv.InitAuthContext
-	var projectID uuid.UUID
-	var orgID string
-	err := ti.conn.QueryRow(ctx, `
-		SELECT id, organization_id FROM projects LIMIT 1
-	`).Scan(&projectID, &orgID)
-	require.NoError(t, err)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok, "auth context should be populated by testenv.InitAuthContext")
+	require.NotNil(t, authCtx.ProjectID, "auth context should carry a project ID")
 
-	return projectID, orgID
+	return *authCtx.ProjectID, authCtx.ActiveOrganizationID
 }
 
 // sendMCPRequest sends an MCP request to the service and returns the response

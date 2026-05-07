@@ -53,17 +53,22 @@ func (r roleSlugCache) AdditionalCacheKeys() []string {
 	return nil
 }
 
+// ChallengeLoggingEnabled checks whether authz challenge logging to ClickHouse
+// is enabled for a given organization. Same signature as IsRBACEnabled.
+type ChallengeLoggingEnabled func(ctx context.Context, organizationID string) (bool, error)
+
 type Engine struct {
-	logger     *slog.Logger
-	db         *pgxpool.Pool
-	chDB       clickhouse.Conn
-	isEnabled  IsRBACEnabled
-	isDev      bool
-	membership MembershipFetcher
-	roleCache  cache.TypedCacheObject[roleSlugCache]
+	logger                  *slog.Logger
+	db                      *pgxpool.Pool
+	chDB                    clickhouse.Conn
+	isEnabled               IsRBACEnabled
+	challengeLoggingEnabled ChallengeLoggingEnabled
+	isDev                   bool
+	membership              MembershipFetcher
+	roleCache               cache.TypedCacheObject[roleSlugCache]
 }
 
-func NewEngine(logger *slog.Logger, db *pgxpool.Pool, chDB clickhouse.Conn, isEnabled IsRBACEnabled, membership MembershipFetcher, roleCache cache.Cache, opts ...EngineOpts) *Engine {
+func NewEngine(logger *slog.Logger, db *pgxpool.Pool, chDB clickhouse.Conn, isEnabled IsRBACEnabled, challengeLogging ChallengeLoggingEnabled, membership MembershipFetcher, roleCache cache.Cache, opts ...EngineOpts) *Engine {
 	var devMode bool
 	if len(opts) > 0 {
 		devMode = opts[0].DevMode
@@ -72,13 +77,14 @@ func NewEngine(logger *slog.Logger, db *pgxpool.Pool, chDB clickhouse.Conn, isEn
 	authzLogger := logger.With(attr.SlogComponent("authz"))
 
 	return &Engine{
-		logger:     authzLogger,
-		db:         db,
-		chDB:       chDB,
-		isEnabled:  isEnabled,
-		isDev:      devMode,
-		membership: membership,
-		roleCache:  cache.NewTypedObjectCache[roleSlugCache](logger.With(attr.SlogCacheNamespace("authz-role-slug")), roleCache, cache.SuffixNone),
+		logger:                  authzLogger,
+		db:                      db,
+		chDB:                    chDB,
+		isEnabled:               isEnabled,
+		challengeLoggingEnabled: challengeLogging,
+		isDev:                   devMode,
+		membership:              membership,
+		roleCache:               cache.NewTypedObjectCache[roleSlugCache](logger.With(attr.SlogCacheNamespace("authz-role-slug")), roleCache, cache.SuffixNone),
 	}
 }
 
@@ -275,7 +281,7 @@ func (e *Engine) Require(ctx context.Context, checks ...Check) error {
 				EvaluatedGrantCount:  uint32(len(grants)), //nolint:gosec // grant count is small
 				FilterCandidateCount: 0,
 				FilterAllowedCount:   0,
-			}.Log(ctx, e.chDB, e.logger)
+			}.Log(ctx, e.chDB, e.logger, e.challengeLoggingEnabled)
 			return e.mapError(ctx, err)
 		}
 
@@ -297,7 +303,7 @@ func (e *Engine) Require(ctx context.Context, checks ...Check) error {
 				EvaluatedGrantCount:  uint32(len(grants)), //nolint:gosec // grant count is small
 				FilterCandidateCount: 0,
 				FilterAllowedCount:   0,
-			}.Log(ctx, e.chDB, e.logger)
+			}.Log(ctx, e.chDB, e.logger, e.challengeLoggingEnabled)
 			return e.mapError(ctx, Denied(check.Scope, check.selector()))
 		}
 		matches = append(matches, grantMatch{Grant: *matchedGrant, ViaCheck: *matchedCheck})
@@ -313,7 +319,7 @@ func (e *Engine) Require(ctx context.Context, checks ...Check) error {
 		EvaluatedGrantCount:  uint32(len(grants)), //nolint:gosec // grant count is small
 		FilterCandidateCount: 0,
 		FilterAllowedCount:   0,
-	}.Log(ctx, e.chDB, e.logger)
+	}.Log(ctx, e.chDB, e.logger, e.challengeLoggingEnabled)
 	return nil
 }
 
@@ -346,7 +352,7 @@ func (e *Engine) RequireAny(ctx context.Context, checks ...Check) error {
 				EvaluatedGrantCount:  uint32(len(grants)), //nolint:gosec // grant count is small
 				FilterCandidateCount: 0,
 				FilterAllowedCount:   0,
-			}.Log(ctx, e.chDB, e.logger)
+			}.Log(ctx, e.chDB, e.logger, e.challengeLoggingEnabled)
 			return e.mapError(ctx, err)
 		}
 	}
@@ -363,7 +369,7 @@ func (e *Engine) RequireAny(ctx context.Context, checks ...Check) error {
 				EvaluatedGrantCount:  uint32(len(grants)), //nolint:gosec // grant count is small
 				FilterCandidateCount: 0,
 				FilterAllowedCount:   0,
-			}.Log(ctx, e.chDB, e.logger)
+			}.Log(ctx, e.chDB, e.logger, e.challengeLoggingEnabled)
 			return nil
 		}
 	}
@@ -382,7 +388,7 @@ func (e *Engine) RequireAny(ctx context.Context, checks ...Check) error {
 		EvaluatedGrantCount:  uint32(len(grants)), //nolint:gosec // grant count is small
 		FilterCandidateCount: 0,
 		FilterAllowedCount:   0,
-	}.Log(ctx, e.chDB, e.logger)
+	}.Log(ctx, e.chDB, e.logger, e.challengeLoggingEnabled)
 	return e.mapError(ctx, Denied(checks[0].Scope, checks[0].selector()))
 }
 
@@ -408,6 +414,7 @@ func (e *Engine) Filter(ctx context.Context, checks []Check) ([]string, error) {
 	}
 
 	allowed := make([]string, 0, len(checks))
+	matches := make([]grantMatch, 0, len(checks))
 	for _, c := range checks {
 		if err := validateInput(c); err != nil {
 			focus := c
@@ -421,43 +428,37 @@ func (e *Engine) Filter(ctx context.Context, checks []Check) ([]string, error) {
 				EvaluatedGrantCount:  uint32(len(grants)), //nolint:gosec // grant count is small
 				FilterCandidateCount: uint32(len(checks)), //nolint:gosec // candidate count is small
 				FilterAllowedCount:   0,
-			}.Log(ctx, e.chDB, e.logger)
+			}.Log(ctx, e.chDB, e.logger, e.challengeLoggingEnabled)
 			return nil, e.mapError(ctx, err)
 		}
 
 		if matchedGrant, matchedCheck := findMatchingGrant(grants, c.expand()); matchedGrant != nil {
 			allowed = append(allowed, c.ResourceID)
-			focus := c
-			challengeLogger{
-				Operation:            authzrepo.OperationFilter,
-				Outcome:              authzrepo.OutcomeAllow,
-				Reason:               authzrepo.ReasonGrantMatched,
-				Checks:               checks,
-				Focus:                &focus,
-				Matches:              []grantMatch{{Grant: *matchedGrant, ViaCheck: *matchedCheck}},
-				EvaluatedGrantCount:  uint32(len(grants)), //nolint:gosec // grant count is small
-				FilterCandidateCount: uint32(len(checks)), //nolint:gosec // candidate count is small
-				FilterAllowedCount:   1,
-			}.Log(ctx, e.chDB, e.logger)
-			continue
+			matches = append(matches, grantMatch{Grant: *matchedGrant, ViaCheck: *matchedCheck})
 		}
+	}
 
+	if len(checks) > 0 {
+		outcome := authzrepo.OutcomeDeny
 		reason := authzrepo.ReasonScopeUnsatisfied
-		if len(grants) == 0 {
+		switch {
+		case len(allowed) > 0:
+			outcome = authzrepo.OutcomeAllow
+			reason = authzrepo.ReasonGrantMatched
+		case len(grants) == 0:
 			reason = authzrepo.ReasonNoGrants
 		}
-		focus := c
 		challengeLogger{
 			Operation:            authzrepo.OperationFilter,
-			Outcome:              authzrepo.OutcomeDeny,
+			Outcome:              outcome,
 			Reason:               reason,
 			Checks:               checks,
-			Focus:                &focus,
-			Matches:              nil,
-			EvaluatedGrantCount:  uint32(len(grants)), //nolint:gosec // grant count is small
-			FilterCandidateCount: uint32(len(checks)), //nolint:gosec // candidate count is small
-			FilterAllowedCount:   0,
-		}.Log(ctx, e.chDB, e.logger)
+			Focus:                nil,
+			Matches:              matches,
+			EvaluatedGrantCount:  uint32(len(grants)),  //nolint:gosec // grant count is small
+			FilterCandidateCount: uint32(len(checks)),  //nolint:gosec // candidate count is small
+			FilterAllowedCount:   uint32(len(allowed)), //nolint:gosec // allowed count is small
+		}.Log(ctx, e.chDB, e.logger, e.challengeLoggingEnabled)
 	}
 
 	return allowed, nil

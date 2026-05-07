@@ -4,13 +4,14 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/stretchr/testify/require"
 )
 
 func TestConfigureTriggerToolDescriptor(t *testing.T) {
 	t.Parallel()
 
-	descriptor := NewConfigureTriggerTool(nil, nil).Descriptor()
+	descriptor := NewConfigureTriggerTool(nil, nil, audit.NewLogger()).Descriptor()
 
 	require.Equal(t, toolNameConfigure, descriptor.Name)
 	require.Equal(t, sourceTriggers, descriptor.SourceSlug)

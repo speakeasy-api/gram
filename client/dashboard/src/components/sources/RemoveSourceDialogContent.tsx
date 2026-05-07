@@ -77,7 +77,7 @@ export function RemoveSourceDialogContent({
         <Dialog.Title>Delete {sourceLabel}</Dialog.Title>
         <Dialog.Description>
           This will permanently delete the {sourceTypeDescription} source and
-          related resources such as tools within toolsets.
+          related resources such as tools within MCP servers.
         </Dialog.Description>
       </Dialog.Header>
       <div className="grid gap-2">

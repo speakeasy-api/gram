@@ -66,3 +66,13 @@ func EnableRBACAccessPath() string {
 func DisableRBACAccessPath() string {
 	return "/rpc/access.disableRBAC"
 }
+
+// ListChallengesAccessPath returns the URL path to the access service listChallenges HTTP endpoint.
+func ListChallengesAccessPath() string {
+	return "/rpc/access.listChallenges"
+}
+
+// ResolveChallengeAccessPath returns the URL path to the access service resolveChallenge HTTP endpoint.
+func ResolveChallengeAccessPath() string {
+	return "/rpc/access.resolveChallenge"
+}

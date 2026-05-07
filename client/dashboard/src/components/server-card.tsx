@@ -202,7 +202,7 @@ export function ServerCard({
       <Card.Content className="cursor-pointer" onClick={handleCardClick}>
         <Card.Description>
           {toolset.description ||
-            "A toolset created from your OpenAPI document"}
+            "An MCP server created from your OpenAPI document"}
         </Card.Description>
       </Card.Content>
       <Card.Footer>

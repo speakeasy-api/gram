@@ -64,20 +64,27 @@ func sessionIDToUUID(sessionID string) uuid.UUID {
 	return uuid.NewSHA1(claudeSessionNamespace, []byte(sessionID))
 }
 
-// makeHookResult creates a ClaudeHookResult with the HookSpecificOutput populated.
+// makeHookResult creates a ClaudeHookResult, attaching HookSpecificOutput only
+// for hook events whose Claude Code response schema permits it. Stop, SessionStart,
+// SessionEnd, Notification, and PostToolUseFailure must NOT carry hookSpecificOutput
+// — Claude Code rejects unknown variants with "Hook JSON output validation failed".
 func makeHookResult(hookEventName string) *gen.ClaudeHookResult {
-	return &gen.ClaudeHookResult{
-		HookSpecificOutput: &HookSpecificOutput{
+	result := &gen.ClaudeHookResult{
+		HookSpecificOutput: nil,
+		Continue:           nil,
+		StopReason:         nil,
+		SuppressOutput:     nil,
+		SystemMessage:      nil,
+	}
+	if hookEventName == "PreToolUse" {
+		result.HookSpecificOutput = &HookSpecificOutput{
 			HookEventName:            &hookEventName,
 			AdditionalContext:        nil,
 			PermissionDecision:       nil,
 			PermissionDecisionReason: nil,
-		},
-		Continue:       nil,
-		StopReason:     nil,
-		SuppressOutput: nil,
-		SystemMessage:  nil,
+		}
 	}
+	return result
 }
 
 // handleUserPromptSubmit captures the user's prompt text as a chat message.
@@ -86,11 +93,14 @@ func makeHookResult(hookEventName string) *gen.ClaudeHookResult {
 func (s *Service) handleUserPromptSubmit(ctx context.Context, payload *gen.ClaudePayload) (*gen.ClaudeHookResult, error) {
 	if s.riskScanner != nil && payload.Prompt != nil && payload.SessionID != nil {
 		if scanResult := s.scanClaudeForEnforcement(ctx, payload); scanResult != nil {
-			reason := fmt.Sprintf("Speakeasy blocked this prompt: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
+			auditReason := fmt.Sprintf("Speakeasy blocked this prompt: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
+			userReason := renderUserBlockReason(scanResult.UserMessage, auditReason)
+			// ClickHouse always gets the technical reason; the user_message
+			// override only changes what the agent / end user sees.
 			if metadata, err := s.getSessionMetadata(ctx, *payload.SessionID); err == nil {
-				s.writeClaudeBlockToClickHouse(ctx, payload, &metadata, reason)
+				s.writeClaudeBlockToClickHouse(ctx, payload, &metadata, auditReason)
 			}
-			return nil, oops.E(oops.CodeForbidden, nil, "%s", reason)
+			return nil, oops.E(oops.CodeForbidden, nil, "%s", userReason)
 		}
 	}
 	return makeHookResult(payload.HookEventName), nil

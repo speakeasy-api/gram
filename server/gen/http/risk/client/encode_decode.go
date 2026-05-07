@@ -2190,6 +2190,7 @@ func unmarshalRiskPolicyResponseBodyToTypesRiskPolicy(v *RiskPolicyResponseBody)
 		Enabled:         *v.Enabled,
 		Action:          *v.Action,
 		AutoName:        *v.AutoName,
+		UserMessage:     v.UserMessage,
 		Version:         *v.Version,
 		CreatedAt:       *v.CreatedAt,
 		UpdatedAt:       *v.UpdatedAt,

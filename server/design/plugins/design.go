@@ -505,6 +505,7 @@ var PublishStatusResult = Type("PublishStatusResult", func() {
 	Attribute("repo_owner", String, "GitHub repo owner, if connected.")
 	Attribute("repo_name", String, "GitHub repo name, if connected.")
 	Attribute("repo_url", String, "Full GitHub repository URL, if connected.")
+	Attribute("marketplace_url", String, "URL-based Claude Code marketplace install URL — the value to pass to `/plugin marketplace add`. Present once a marketplace token has been minted, which happens automatically on the first publish.")
 })
 
 var PublishPluginsResult = Type("PublishPluginsResult", func() {

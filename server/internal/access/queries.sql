@@ -38,3 +38,113 @@ WHERE id = @id
 DELETE FROM principal_grants
 WHERE organization_id = @organization_id
   AND principal_urn = @principal_urn;
+
+-- Queries for authz challenge resolutions.
+-- authz_challenge_resolutions is org-scoped (no project_id).
+
+-- name: ListChallengeResolutions :many
+-- Returns resolution records for a batch of challenge IDs within an org.
+SELECT * FROM authz_challenge_resolutions
+WHERE organization_id = @organization_id
+  AND challenge_id = ANY(@challenge_ids::text[]);
+
+-- name: InsertChallengeResolutions :many
+-- Creates resolution records for one or more denied challenges.
+-- Silently skips challenges that are already resolved (ON CONFLICT DO NOTHING).
+INSERT INTO authz_challenge_resolutions (
+  organization_id, challenge_id, principal_urn, scope,
+  resource_kind, resource_id, resolution_type, role_slug, resolved_by
+)
+SELECT
+  @organization_id, unnest(@challenge_ids::text[]), @principal_urn, @scope,
+  @resource_kind, @resource_id, @resolution_type, @role_slug, @resolved_by
+ON CONFLICT (organization_id, challenge_id) DO NOTHING
+RETURNING *;
+
+-- name: GetGlobalRoleBySlug :one
+SELECT *
+FROM global_roles
+WHERE workos_slug = @workos_slug;
+
+-- name: UpsertGlobalRole :exec
+-- Upsert an environment-level WorkOS role. Caller must have already passed
+-- the row through ShouldProcessEvent. Resurrects a previously soft-deleted
+-- role on conflict.
+INSERT INTO global_roles (
+    workos_slug,
+    workos_name,
+    workos_description,
+    workos_created_at,
+    workos_updated_at,
+    workos_last_event_id
+) VALUES (
+    @workos_slug,
+    @workos_name,
+    @workos_description,
+    @workos_created_at,
+    @workos_updated_at,
+    @workos_last_event_id
+)
+ON CONFLICT (workos_slug) DO UPDATE SET
+    workos_name = EXCLUDED.workos_name,
+    workos_description = EXCLUDED.workos_description,
+    workos_updated_at = EXCLUDED.workos_updated_at,
+    workos_last_event_id = EXCLUDED.workos_last_event_id,
+    deleted_at = NULL,
+    workos_deleted_at = NULL,
+    updated_at = clock_timestamp();
+
+-- name: MarkGlobalRoleDeleted :execrows
+UPDATE global_roles
+SET workos_deleted_at = @workos_deleted_at,
+    workos_last_event_id = @workos_last_event_id,
+    deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE workos_slug = @workos_slug
+  AND deleted_at IS NULL;
+
+-- name: GetOrganizationRoleBySlug :one
+SELECT *
+FROM organization_roles
+WHERE organization_id = @organization_id
+  AND workos_slug = @workos_slug;
+
+-- name: UpsertOrganizationRole :exec
+-- Upsert an org-scoped WorkOS role. Caller must have already passed the row
+-- through ShouldProcessEvent. Resurrects a previously soft-deleted role on
+-- conflict.
+INSERT INTO organization_roles (
+    organization_id,
+    workos_slug,
+    workos_name,
+    workos_description,
+    workos_created_at,
+    workos_updated_at,
+    workos_last_event_id
+) VALUES (
+    @organization_id,
+    @workos_slug,
+    @workos_name,
+    @workos_description,
+    @workos_created_at,
+    @workos_updated_at,
+    @workos_last_event_id
+)
+ON CONFLICT (organization_id, workos_slug) DO UPDATE SET
+    workos_name = EXCLUDED.workos_name,
+    workos_description = EXCLUDED.workos_description,
+    workos_updated_at = EXCLUDED.workos_updated_at,
+    workos_last_event_id = EXCLUDED.workos_last_event_id,
+    deleted_at = NULL,
+    workos_deleted_at = NULL,
+    updated_at = clock_timestamp();
+
+-- name: MarkOrganizationRoleDeleted :execrows
+UPDATE organization_roles
+SET workos_deleted_at = @workos_deleted_at,
+    workos_last_event_id = @workos_last_event_id,
+    deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND workos_slug = @workos_slug
+  AND deleted_at IS NULL;

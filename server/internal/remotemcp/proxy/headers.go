@@ -16,9 +16,11 @@ const (
 
 // isSkippedRequestHeader returns true for headers that should never be
 // forwarded verbatim from the user request to the remote MCP server:
-// hop-by-hop headers (RFC 7230 § 6.1), Host (set by the HTTP client from the
-// remote URL), and Authorization (carries the Gram API key, which is not
-// valid upstream).
+// hop-by-hop headers (RFC 7230 § 6.1) and Host (set by the HTTP client
+// from the remote URL).
+//
+// Authorization is end-to-end and is handled separately by
+// [Proxy.applyRequestHeaders] based on [Proxy.AuthorizationOverride].
 func isSkippedRequestHeader(name string) bool {
 	switch strings.ToLower(name) {
 	case
@@ -81,6 +83,12 @@ func applyResponseHeaders(w http.ResponseWriter, remoteResp *http.Response) {
 // applyRequestHeaders populates the upstream request headers by copying forward-safe
 // headers from the user request and overlaying the configured static and
 // pass-through headers. Configured headers win on conflict.
+//
+// The user's Authorization header is always dropped — Gram-issued
+// credentials (API keys, Gram-managed OAuth tokens, chat-session JWTs)
+// are not meaningful upstream. When [Proxy.AuthorizationOverride] is
+// non-empty, the proxy emits its own "Authorization: Bearer <override>"
+// upstream; configured headers may further override that.
 func (p *Proxy) applyRequestHeaders(ctx context.Context, userReq *http.Request, remoteReq *http.Request) error {
 	for name, values := range userReq.Header {
 		if isSkippedRequestHeader(name) {
@@ -89,6 +97,10 @@ func (p *Proxy) applyRequestHeaders(ctx context.Context, userReq *http.Request, 
 		for _, v := range values {
 			remoteReq.Header.Add(name, v)
 		}
+	}
+
+	if p.AuthorizationOverride != "" {
+		remoteReq.Header.Set("Authorization", "Bearer "+p.AuthorizationOverride)
 	}
 
 	for _, h := range p.Headers {

@@ -58,7 +58,7 @@ function SlackAppsEmptyState({ onCreate }: { onCreate: () => void }) {
         No assistants yet
       </Type>
       <Type small muted className="mb-4 max-w-md text-center">
-        Create an assistant to let your team interact with Gram toolsets
+        Create an assistant to let your team interact with Gram MCP servers
         directly.
       </Type>
       <Button onClick={onCreate}>
@@ -92,7 +92,7 @@ function SlackAppCard({ app }: { app: SlackAppResult }) {
           </Type>
           <div className="flex items-center justify-between">
             <Type muted small>
-              {app.toolsetIds.length} toolset
+              {app.toolsetIds.length} MCP server
               {app.toolsetIds.length !== 1 ? "s" : ""}
             </Type>
             <Type muted small>
@@ -168,7 +168,7 @@ function CreateSlackAppDialog({
         <Dialog.Header>
           <Dialog.Title>Create Assistant</Dialog.Title>
           <Dialog.Description>
-            Name your assistant and choose which MCP toolsets it can access.
+            Name your assistant and choose which MCP servers it can access.
           </Dialog.Description>
         </Dialog.Header>
 
@@ -208,11 +208,12 @@ function CreateSlackAppDialog({
 
           <div>
             <Type variant="body" className="mb-2 font-medium">
-              Toolsets
+              MCP Servers
             </Type>
             {toolsets.length === 0 ? (
               <Type muted small>
-                No toolsets available. Create a toolset in this project first.
+                No MCP servers available. Create an MCP server in this project
+                first.
               </Type>
             ) : (
               <div className="grid max-h-60 grid-cols-2 gap-2 overflow-y-auto">
@@ -307,8 +308,8 @@ function SlackAppsInner() {
       <Page.Section>
         <Page.Section.Title>Assistants</Page.Section.Title>
         <Page.Section.Description>
-          Create and manage assistants that connect your team to Gram toolsets
-          in Slack.
+          Create and manage assistants that connect your team to Gram MCP
+          servers in Slack.
         </Page.Section.Description>
         <Page.Section.CTA>
           {apps.length > 0 && (

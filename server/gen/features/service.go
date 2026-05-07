@@ -60,6 +60,8 @@ type GramProductFeatures struct {
 	ToolIoLogsEnabled bool
 	// Whether Claude Code session capture is enabled
 	SessionCaptureEnabled bool
+	// Whether authz challenge logging to ClickHouse is enabled
+	AuthzChallengeLoggingEnabled bool
 }
 
 // SetProductFeaturePayload is the payload type of the features service
@@ -149,6 +151,9 @@ func newGramProductFeatures(vres *featuresviews.GramProductFeaturesView) *GramPr
 	if vres.SessionCaptureEnabled != nil {
 		res.SessionCaptureEnabled = *vres.SessionCaptureEnabled
 	}
+	if vres.AuthzChallengeLoggingEnabled != nil {
+		res.AuthzChallengeLoggingEnabled = *vres.AuthzChallengeLoggingEnabled
+	}
 	return res
 }
 
@@ -156,9 +161,10 @@ func newGramProductFeatures(vres *featuresviews.GramProductFeaturesView) *GramPr
 // projected type GramProductFeaturesView using the "default" view.
 func newGramProductFeaturesView(res *GramProductFeatures) *featuresviews.GramProductFeaturesView {
 	vres := &featuresviews.GramProductFeaturesView{
-		LogsEnabled:           &res.LogsEnabled,
-		ToolIoLogsEnabled:     &res.ToolIoLogsEnabled,
-		SessionCaptureEnabled: &res.SessionCaptureEnabled,
+		LogsEnabled:                  &res.LogsEnabled,
+		ToolIoLogsEnabled:            &res.ToolIoLogsEnabled,
+		SessionCaptureEnabled:        &res.SessionCaptureEnabled,
+		AuthzChallengeLoggingEnabled: &res.AuthzChallengeLoggingEnabled,
 	}
 	return vres
 }

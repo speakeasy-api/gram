@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	customdomainsRepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/dns"
@@ -53,7 +54,7 @@ func newActivity(t *testing.T, ti *testInstance) *activities.VerifyCustomDomain 
 	t.Helper()
 
 	logger := testenv.NewLogger(t)
-	activity := activities.NewVerifyCustomDomain(logger, ti.conn, testTargetCNAME)
+	activity := activities.NewVerifyCustomDomain(logger, ti.conn, audit.NewLogger(), testTargetCNAME)
 	activity.SetResolver(ti.resolver)
 
 	return activity

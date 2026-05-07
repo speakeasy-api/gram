@@ -17,6 +17,7 @@ import (
 	srv "github.com/speakeasy-api/gram/dev-idp/gen/http/invitations/server"
 	gen "github.com/speakeasy-api/gram/dev-idp/gen/invitations"
 	"github.com/speakeasy-api/gram/dev-idp/internal/database/repo"
+	"github.com/speakeasy-api/gram/dev-idp/internal/defaultuser"
 	"github.com/speakeasy-api/gram/dev-idp/internal/middleware"
 	"github.com/speakeasy-api/gram/dev-idp/internal/oops"
 )
@@ -199,7 +200,7 @@ func (s *InvitationsService) Accept(ctx context.Context, p *gen.AcceptPayload) (
 	}
 
 	user, err := queries.UpsertUserByEmail(ctx, repo.UpsertUserByEmailParams{
-		ID:          uuid.New(),
+		ID:          defaultuser.DeterministicUserID(inv.Email),
 		Email:       inv.Email,
 		DisplayName: emailLocalPart(inv.Email),
 	})

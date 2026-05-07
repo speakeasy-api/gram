@@ -1,17 +1,22 @@
-// Package xmcp implements the experimental Remote MCP Server runtime endpoint
-// at /x/mcp/{remoteMcpServerId}. It is a temporary path used to prove out the
-// Remote MCP Server proxy plumbing; once the MCP Frontend work lands, Remote
-// MCP Server runtime handling will move under /mcp/... and use slug-based
-// routing.
+// Package xmcp implements the experimental MCP runtime endpoint at
+// /x/mcp/{slug}. It is a temporary path used to prove out the
+// MCP Servers / MCP Endpoints fronting model — slug + optional custom
+// domain → mcp_endpoint → mcp_server → backend dispatch (Remote MCP proxy
+// vs. existing toolset-backed serving). Once the model is exercised here,
+// runtime handling will move under /mcp/... per AGE-1902.
 //
-// This package owns the HTTP lifecycle (routing, auth, DB load, header
-// decryption) and delegates the actual forwarding work to
-// [github.com/speakeasy-api/gram/server/internal/remotemcp/proxy].
+// This package owns the HTTP lifecycle (routing, slug resolution, auth, DB
+// loads) for the experimental endpoint and delegates the actual serving
+// work to either [github.com/speakeasy-api/gram/server/internal/remotemcp/proxy]
+// (Remote MCP backend) or
+// [github.com/speakeasy-api/gram/server/internal/mcp.Service.ServeToolsetResolved]
+// (toolset backend).
 package xmcp
 
 import (
 	"log/slog"
 	"net/http"
+	"net/url"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/metric"
@@ -19,8 +24,6 @@ import (
 	goahttp "goa.design/goa/v3/http"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/auth"
-	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
@@ -28,22 +31,24 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 )
 
 // RuntimePath is the experimental runtime path served by this package.
-const RuntimePath = "/x/mcp/{remoteMcpServerId}"
+const RuntimePath = "/x/mcp/{slug}"
 
-// Service owns dependencies for the Remote MCP Server runtime endpoint.
+// Service owns dependencies for the experimental MCP runtime endpoint.
 type Service struct {
 	logger                       *slog.Logger
 	tracer                       trace.Tracer
 	db                           *pgxpool.Pool
 	enc                          *encryption.Client
-	auth                         *auth.Auth
 	authz                        *authz.Engine
+	mcpService                   *mcp.Service
+	serverURL                    *url.URL
 	guardianPolicy               *guardian.Policy
 	proxyMetrics                 *proxy.Metrics
 	toolUsageLimitsInterceptor   *ToolUsageLimitsInterceptor
@@ -56,12 +61,13 @@ func NewService(
 	tracerProvider trace.TracerProvider,
 	meterProvider metric.MeterProvider,
 	db *pgxpool.Pool,
-	sessionManager *sessions.Manager,
 	enc *encryption.Client,
 	authzEngine *authz.Engine,
 	guardianPolicy *guardian.Policy,
 	billingRepo billing.Repository,
 	billingTracker billing.Tracker,
+	mcpService *mcp.Service,
+	serverURL *url.URL,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("xmcp"))
 
@@ -72,8 +78,9 @@ func NewService(
 		tracer:                       tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/xmcp"),
 		db:                           db,
 		enc:                          enc,
-		auth:                         auth.New(logger, db, sessionManager, authzEngine),
 		authz:                        authzEngine,
+		mcpService:                   mcpService,
+		serverURL:                    serverURL,
 		guardianPolicy:               guardianPolicy,
 		proxyMetrics:                 proxy.NewMetrics(meter, logger),
 		toolUsageLimitsInterceptor:   NewToolUsageLimitsInterceptor(billingRepo, logger),
@@ -81,15 +88,16 @@ func NewService(
 	}
 }
 
-// Attach registers the experimental Remote MCP Server runtime handler for all
-// supported HTTP methods. DELETE, GET, and POST are required by the MCP
-// Streamable HTTP transport (see spec § Session Management for DELETE and
-// § Listening for Messages from the Server for GET).
+// Attach registers the experimental MCP runtime handler for all supported
+// HTTP methods. DELETE, GET, and POST are required by the MCP Streamable
+// HTTP transport (see spec § Session Management for DELETE and § Listening
+// for Messages from the Server for GET).
 //
 // Attach also registers /x/mcp aliases for the install page and OAuth
-// .well-known metadata routes, delegating to the existing mcp and mcpmetadata
-// service handlers so the experimental endpoint has parity with /mcp.
-func Attach(mux goahttp.Muxer, service *Service, mcpService *mcp.Service, metadataService *mcpmetadata.Service) {
+// .well-known metadata routes. The install page delegates to mcpmetadata
+// for parity with /mcp; the .well-known routes are owned by xmcp directly
+// so they can dispatch per-backend (see [Service.HandleWellKnownOAuthServerMetadata]).
+func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Service) {
 	handler := oops.ErrHandle(service.logger, service.ServeMCP).ServeHTTP
 	o11y.AttachHandler(mux, http.MethodDelete, RuntimePath, handler)
 	o11y.AttachHandler(mux, http.MethodGet, RuntimePath, handler)
@@ -104,8 +112,8 @@ func Attach(mux goahttp.Muxer, service *Service, mcpService *mcp.Service, metada
 	// from /x/mcp to /mcp.
 	// o11y.AttachHandler(mux, http.MethodGet, "/mcp/install-page-{hash}.js", oops.ErrHandle(service.logger, metadataService.ServeInstallPageScript).ServeHTTP)
 
-	o11y.AttachHandler(mux, http.MethodGet, "/.well-known/oauth-authorization-server/x/mcp/{mcpSlug}", oops.ErrHandle(service.logger, mcpService.HandleWellKnownOAuthServerMetadata).ServeHTTP)
-	o11y.AttachHandler(mux, http.MethodGet, "/.well-known/oauth-protected-resource/x/mcp/{mcpSlug}", oops.ErrHandle(service.logger, mcpService.HandleWellKnownOAuthProtectedResourceMetadata).ServeHTTP)
+	o11y.AttachHandler(mux, http.MethodGet, wellknown.OAuthAuthorizationServerPath+"/x/mcp/{mcpSlug}", oops.ErrHandle(service.logger, service.HandleWellKnownOAuthServerMetadata).ServeHTTP)
+	o11y.AttachHandler(mux, http.MethodGet, wellknown.OAuthProtectedResourcePath+"/x/mcp/{mcpSlug}", oops.ErrHandle(service.logger, service.HandleWellKnownOAuthProtectedResourceMetadata).ServeHTTP)
 }
 
 // newHeadersRepo returns a per-request headers wrapper bound to the service

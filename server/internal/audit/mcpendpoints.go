@@ -30,7 +30,7 @@ type LogMcpEndpointCreateEvent struct {
 	Slug           string
 }
 
-func LogMcpEndpointCreate(ctx context.Context, dbtx repo.DBTX, event LogMcpEndpointCreateEvent) error {
+func (l *Logger) LogMcpEndpointCreate(ctx context.Context, dbtx repo.DBTX, event LogMcpEndpointCreateEvent) error {
 	action := ActionMcpEndpointCreate
 	entry := repo.InsertAuditLogParams{
 		OrganizationID: event.OrganizationID,
@@ -74,7 +74,7 @@ type LogMcpEndpointUpdateEvent struct {
 	McpEndpointSnapshotAfter  *types.McpEndpoint
 }
 
-func LogMcpEndpointUpdate(ctx context.Context, dbtx repo.DBTX, event LogMcpEndpointUpdateEvent) error {
+func (l *Logger) LogMcpEndpointUpdate(ctx context.Context, dbtx repo.DBTX, event LogMcpEndpointUpdateEvent) error {
 	action := ActionMcpEndpointUpdate
 
 	beforeSnapshot, err := marshalAuditPayload(event.McpEndpointSnapshotBefore)
@@ -127,7 +127,7 @@ type LogMcpEndpointDeleteEvent struct {
 	Slug           string
 }
 
-func LogMcpEndpointDelete(ctx context.Context, dbtx repo.DBTX, event LogMcpEndpointDeleteEvent) error {
+func (l *Logger) LogMcpEndpointDelete(ctx context.Context, dbtx repo.DBTX, event LogMcpEndpointDeleteEvent) error {
 	action := ActionMcpEndpointDelete
 	entry := repo.InsertAuditLogParams{
 		OrganizationID: event.OrganizationID,

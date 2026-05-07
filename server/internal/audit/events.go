@@ -25,6 +25,7 @@ const (
 	subjectTypeTriggerInstance subjectType = "trigger_instance"
 	subjectTypeVariation       subjectType = "variation"
 	subjectTypeRiskPolicy      subjectType = "risk_policy"
+	subjectTypeAccessChallenge subjectType = "access_challenge"
 )
 
 type Action string

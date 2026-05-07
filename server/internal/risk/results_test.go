@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
 // seedChatMessage creates a chat and message for the given project, returning the chat ID and message ID.
@@ -30,14 +31,12 @@ func seedChatMessage(t *testing.T, ti *testInstance, projectID uuid.UUID, orgID 
 	})
 	require.NoError(t, err)
 
-	// Insert message directly so we can control the ID.
-	msgID, err := uuid.NewV7()
-	require.NoError(t, err)
-
-	_, err = ti.conn.Exec(ctx,
-		`INSERT INTO chat_messages (id, chat_id, project_id, role, content) VALUES ($1, $2, $3, $4, $5)`,
-		msgID, chatID, projectID, "user", "test message with a secret",
-	)
+	msgID, err := testrepo.New(ti.conn).InsertChatMessage(ctx, testrepo.InsertChatMessageParams{
+		ChatID:    chatID,
+		ProjectID: uuid.NullUUID{UUID: projectID, Valid: true},
+		Role:      "user",
+		Content:   "test message with a secret",
+	})
 	require.NoError(t, err)
 
 	return chatID, msgID

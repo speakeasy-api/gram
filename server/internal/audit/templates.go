@@ -29,7 +29,7 @@ type LogTemplateCreateEvent struct {
 	TemplateName string
 }
 
-func LogTemplateCreate(ctx context.Context, dbtx repo.DBTX, event LogTemplateCreateEvent) error {
+func (l *Logger) LogTemplateCreate(ctx context.Context, dbtx repo.DBTX, event LogTemplateCreateEvent) error {
 	action := ActionTemplateCreate
 
 	metadata, err := marshalAuditPayload(map[string]any{
@@ -79,7 +79,7 @@ type LogTemplateUpdateEvent struct {
 	TemplateName string
 }
 
-func LogTemplateUpdate(ctx context.Context, dbtx repo.DBTX, event LogTemplateUpdateEvent) error {
+func (l *Logger) LogTemplateUpdate(ctx context.Context, dbtx repo.DBTX, event LogTemplateUpdateEvent) error {
 	action := ActionTemplateUpdate
 
 	metadata, err := marshalAuditPayload(map[string]any{
@@ -129,7 +129,7 @@ type LogTemplateDeleteEvent struct {
 	TemplateName string
 }
 
-func LogTemplateDelete(ctx context.Context, dbtx repo.DBTX, event LogTemplateDeleteEvent) error {
+func (l *Logger) LogTemplateDelete(ctx context.Context, dbtx repo.DBTX, event LogTemplateDeleteEvent) error {
 	action := ActionTemplateDelete
 
 	metadata, err := marshalAuditPayload(map[string]any{

@@ -54,6 +54,67 @@ func (q *Queries) DeletePrincipalGrantsByPrincipal(ctx context.Context, arg Dele
 	return result.RowsAffected(), nil
 }
 
+const getGlobalRoleBySlug = `-- name: GetGlobalRoleBySlug :one
+SELECT id, workos_slug, workos_name, workos_description, workos_created_at, workos_updated_at, workos_deleted_at, workos_deleted, workos_last_event_id, created_at, updated_at, deleted_at, deleted
+FROM global_roles
+WHERE workos_slug = $1
+`
+
+func (q *Queries) GetGlobalRoleBySlug(ctx context.Context, workosSlug string) (GlobalRole, error) {
+	row := q.db.QueryRow(ctx, getGlobalRoleBySlug, workosSlug)
+	var i GlobalRole
+	err := row.Scan(
+		&i.ID,
+		&i.WorkosSlug,
+		&i.WorkosName,
+		&i.WorkosDescription,
+		&i.WorkosCreatedAt,
+		&i.WorkosUpdatedAt,
+		&i.WorkosDeletedAt,
+		&i.WorkosDeleted,
+		&i.WorkosLastEventID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const getOrganizationRoleBySlug = `-- name: GetOrganizationRoleBySlug :one
+SELECT id, organization_id, workos_slug, workos_name, workos_description, workos_created_at, workos_updated_at, workos_deleted_at, workos_deleted, workos_last_event_id, created_at, updated_at, deleted_at, deleted
+FROM organization_roles
+WHERE organization_id = $1
+  AND workos_slug = $2
+`
+
+type GetOrganizationRoleBySlugParams struct {
+	OrganizationID string
+	WorkosSlug     string
+}
+
+func (q *Queries) GetOrganizationRoleBySlug(ctx context.Context, arg GetOrganizationRoleBySlugParams) (OrganizationRole, error) {
+	row := q.db.QueryRow(ctx, getOrganizationRoleBySlug, arg.OrganizationID, arg.WorkosSlug)
+	var i OrganizationRole
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.WorkosSlug,
+		&i.WorkosName,
+		&i.WorkosDescription,
+		&i.WorkosCreatedAt,
+		&i.WorkosUpdatedAt,
+		&i.WorkosDeletedAt,
+		&i.WorkosDeleted,
+		&i.WorkosLastEventID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const getPrincipalGrants = `-- name: GetPrincipalGrants :many
 SELECT principal_urn, scope, selectors
 FROM principal_grants
@@ -84,6 +145,121 @@ func (q *Queries) GetPrincipalGrants(ctx context.Context, arg GetPrincipalGrants
 	for rows.Next() {
 		var i GetPrincipalGrantsRow
 		if err := rows.Scan(&i.PrincipalUrn, &i.Scope, &i.Selectors); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const insertChallengeResolutions = `-- name: InsertChallengeResolutions :many
+INSERT INTO authz_challenge_resolutions (
+  organization_id, challenge_id, principal_urn, scope,
+  resource_kind, resource_id, resolution_type, role_slug, resolved_by
+)
+SELECT
+  $1, unnest($2::text[]), $3, $4,
+  $5, $6, $7, $8, $9
+ON CONFLICT (organization_id, challenge_id) DO NOTHING
+RETURNING id, organization_id, challenge_id, principal_urn, scope, resource_kind, resource_id, resolution_type, role_slug, resolved_by, created_at
+`
+
+type InsertChallengeResolutionsParams struct {
+	OrganizationID string
+	ChallengeIds   []string
+	PrincipalUrn   string
+	Scope          string
+	ResourceKind   string
+	ResourceID     string
+	ResolutionType string
+	RoleSlug       pgtype.Text
+	ResolvedBy     string
+}
+
+// Creates resolution records for one or more denied challenges.
+// Silently skips challenges that are already resolved (ON CONFLICT DO NOTHING).
+func (q *Queries) InsertChallengeResolutions(ctx context.Context, arg InsertChallengeResolutionsParams) ([]AuthzChallengeResolution, error) {
+	rows, err := q.db.Query(ctx, insertChallengeResolutions,
+		arg.OrganizationID,
+		arg.ChallengeIds,
+		arg.PrincipalUrn,
+		arg.Scope,
+		arg.ResourceKind,
+		arg.ResourceID,
+		arg.ResolutionType,
+		arg.RoleSlug,
+		arg.ResolvedBy,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AuthzChallengeResolution
+	for rows.Next() {
+		var i AuthzChallengeResolution
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.ChallengeID,
+			&i.PrincipalUrn,
+			&i.Scope,
+			&i.ResourceKind,
+			&i.ResourceID,
+			&i.ResolutionType,
+			&i.RoleSlug,
+			&i.ResolvedBy,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listChallengeResolutions = `-- name: ListChallengeResolutions :many
+
+SELECT id, organization_id, challenge_id, principal_urn, scope, resource_kind, resource_id, resolution_type, role_slug, resolved_by, created_at FROM authz_challenge_resolutions
+WHERE organization_id = $1
+  AND challenge_id = ANY($2::text[])
+`
+
+type ListChallengeResolutionsParams struct {
+	OrganizationID string
+	ChallengeIds   []string
+}
+
+// Queries for authz challenge resolutions.
+// authz_challenge_resolutions is org-scoped (no project_id).
+// Returns resolution records for a batch of challenge IDs within an org.
+func (q *Queries) ListChallengeResolutions(ctx context.Context, arg ListChallengeResolutionsParams) ([]AuthzChallengeResolution, error) {
+	rows, err := q.db.Query(ctx, listChallengeResolutions, arg.OrganizationID, arg.ChallengeIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AuthzChallengeResolution
+	for rows.Next() {
+		var i AuthzChallengeResolution
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.ChallengeID,
+			&i.PrincipalUrn,
+			&i.Scope,
+			&i.ResourceKind,
+			&i.ResourceID,
+			&i.ResolutionType,
+			&i.RoleSlug,
+			&i.ResolvedBy,
+			&i.CreatedAt,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -149,6 +325,165 @@ func (q *Queries) ListPrincipalGrantsByOrg(ctx context.Context, arg ListPrincipa
 		return nil, err
 	}
 	return items, nil
+}
+
+const markGlobalRoleDeleted = `-- name: MarkGlobalRoleDeleted :execrows
+UPDATE global_roles
+SET workos_deleted_at = $1,
+    workos_last_event_id = $2,
+    deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE workos_slug = $3
+  AND deleted_at IS NULL
+`
+
+type MarkGlobalRoleDeletedParams struct {
+	WorkosDeletedAt   pgtype.Timestamptz
+	WorkosLastEventID pgtype.Text
+	WorkosSlug        string
+}
+
+func (q *Queries) MarkGlobalRoleDeleted(ctx context.Context, arg MarkGlobalRoleDeletedParams) (int64, error) {
+	result, err := q.db.Exec(ctx, markGlobalRoleDeleted, arg.WorkosDeletedAt, arg.WorkosLastEventID, arg.WorkosSlug)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const markOrganizationRoleDeleted = `-- name: MarkOrganizationRoleDeleted :execrows
+UPDATE organization_roles
+SET workos_deleted_at = $1,
+    workos_last_event_id = $2,
+    deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE organization_id = $3
+  AND workos_slug = $4
+  AND deleted_at IS NULL
+`
+
+type MarkOrganizationRoleDeletedParams struct {
+	WorkosDeletedAt   pgtype.Timestamptz
+	WorkosLastEventID pgtype.Text
+	OrganizationID    string
+	WorkosSlug        string
+}
+
+func (q *Queries) MarkOrganizationRoleDeleted(ctx context.Context, arg MarkOrganizationRoleDeletedParams) (int64, error) {
+	result, err := q.db.Exec(ctx, markOrganizationRoleDeleted,
+		arg.WorkosDeletedAt,
+		arg.WorkosLastEventID,
+		arg.OrganizationID,
+		arg.WorkosSlug,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const upsertGlobalRole = `-- name: UpsertGlobalRole :exec
+INSERT INTO global_roles (
+    workos_slug,
+    workos_name,
+    workos_description,
+    workos_created_at,
+    workos_updated_at,
+    workos_last_event_id
+) VALUES (
+    $1,
+    $2,
+    $3,
+    $4,
+    $5,
+    $6
+)
+ON CONFLICT (workos_slug) DO UPDATE SET
+    workos_name = EXCLUDED.workos_name,
+    workos_description = EXCLUDED.workos_description,
+    workos_updated_at = EXCLUDED.workos_updated_at,
+    workos_last_event_id = EXCLUDED.workos_last_event_id,
+    deleted_at = NULL,
+    workos_deleted_at = NULL,
+    updated_at = clock_timestamp()
+`
+
+type UpsertGlobalRoleParams struct {
+	WorkosSlug        string
+	WorkosName        string
+	WorkosDescription pgtype.Text
+	WorkosCreatedAt   pgtype.Timestamptz
+	WorkosUpdatedAt   pgtype.Timestamptz
+	WorkosLastEventID pgtype.Text
+}
+
+// Upsert an environment-level WorkOS role. Caller must have already passed
+// the row through ShouldProcessEvent. Resurrects a previously soft-deleted
+// role on conflict.
+func (q *Queries) UpsertGlobalRole(ctx context.Context, arg UpsertGlobalRoleParams) error {
+	_, err := q.db.Exec(ctx, upsertGlobalRole,
+		arg.WorkosSlug,
+		arg.WorkosName,
+		arg.WorkosDescription,
+		arg.WorkosCreatedAt,
+		arg.WorkosUpdatedAt,
+		arg.WorkosLastEventID,
+	)
+	return err
+}
+
+const upsertOrganizationRole = `-- name: UpsertOrganizationRole :exec
+INSERT INTO organization_roles (
+    organization_id,
+    workos_slug,
+    workos_name,
+    workos_description,
+    workos_created_at,
+    workos_updated_at,
+    workos_last_event_id
+) VALUES (
+    $1,
+    $2,
+    $3,
+    $4,
+    $5,
+    $6,
+    $7
+)
+ON CONFLICT (organization_id, workos_slug) DO UPDATE SET
+    workos_name = EXCLUDED.workos_name,
+    workos_description = EXCLUDED.workos_description,
+    workos_updated_at = EXCLUDED.workos_updated_at,
+    workos_last_event_id = EXCLUDED.workos_last_event_id,
+    deleted_at = NULL,
+    workos_deleted_at = NULL,
+    updated_at = clock_timestamp()
+`
+
+type UpsertOrganizationRoleParams struct {
+	OrganizationID    string
+	WorkosSlug        string
+	WorkosName        string
+	WorkosDescription pgtype.Text
+	WorkosCreatedAt   pgtype.Timestamptz
+	WorkosUpdatedAt   pgtype.Timestamptz
+	WorkosLastEventID pgtype.Text
+}
+
+// Upsert an org-scoped WorkOS role. Caller must have already passed the row
+// through ShouldProcessEvent. Resurrects a previously soft-deleted role on
+// conflict.
+func (q *Queries) UpsertOrganizationRole(ctx context.Context, arg UpsertOrganizationRoleParams) error {
+	_, err := q.db.Exec(ctx, upsertOrganizationRole,
+		arg.OrganizationID,
+		arg.WorkosSlug,
+		arg.WorkosName,
+		arg.WorkosDescription,
+		arg.WorkosCreatedAt,
+		arg.WorkosUpdatedAt,
+		arg.WorkosLastEventID,
+	)
+	return err
 }
 
 const upsertPrincipalGrant = `-- name: UpsertPrincipalGrant :one

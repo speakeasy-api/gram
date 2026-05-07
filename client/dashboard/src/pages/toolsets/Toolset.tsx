@@ -67,7 +67,7 @@ function AddToToolsetDialog({
         target_toolset: selectedToolsetSlug,
         tool_count: toolUrns.length,
       });
-      toast.success(`Added ${toolUrns.length} tool(s) to toolset`);
+      toast.success(`Added ${toolUrns.length} tool(s) to MCP server`);
       onOpenChange(false);
       setSelectedToolsetSlug("");
     },
@@ -94,20 +94,20 @@ function AddToToolsetDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <Dialog.Content>
         <Dialog.Header>
-          <Dialog.Title>Add to Toolset</Dialog.Title>
+          <Dialog.Title>Add to MCP Server</Dialog.Title>
           <Dialog.Description>
-            Add {toolUrns.length} selected tool(s) to another toolset
+            Add {toolUrns.length} selected tool(s) to another MCP server
           </Dialog.Description>
         </Dialog.Header>
         <div className="flex flex-col gap-4 py-4">
           <div className="flex flex-col gap-2">
-            <label className="text-sm font-medium">Select Toolset</label>
+            <label className="text-sm font-medium">Select MCP Server</label>
             <select
               className="w-full rounded-md border border-neutral-200 px-3 py-2"
               value={selectedToolsetSlug}
               onChange={(e) => setSelectedToolsetSlug(e.target.value)}
             >
-              <option value="">Choose a toolset...</option>
+              <option value="">Choose an MCP server...</option>
               {availableToolsets.map((toolset) => (
                 <option key={toolset.slug} value={toolset.slug}>
                   {toolset.name}
@@ -138,7 +138,7 @@ export function ToolsetRoot() {
   });
 
   if (!toolsetSlug) {
-    return <div>Toolset not found</div>;
+    return <div>MCP server not found</div>;
   }
 
   return (
@@ -158,7 +158,7 @@ export function ToolsetRoot() {
 export default function ToolsetPage() {
   const { toolsetSlug } = useParams();
   if (!toolsetSlug) {
-    return <div>Toolset not found</div>;
+    return <div>MCP server not found</div>;
   }
 
   return <ToolsetView toolsetSlug={toolsetSlug} />;
@@ -277,7 +277,7 @@ export function ToolsetView({
               label: "Add tools",
               icon: "plus",
               onSelect: () => setAddToolsDialogOpen(true),
-              group: "Toolset",
+              group: "MCP Server",
             },
           ]
         : []),
@@ -286,14 +286,14 @@ export function ToolsetView({
         label: "Open in playground",
         icon: "message-circle",
         onSelect: () => routes.playground.goTo(toolsetSlug),
-        group: "Toolset",
+        group: "MCP Server",
       },
       {
         id: "toolset-clone",
-        label: "Clone toolset",
+        label: "Clone MCP server",
         icon: "copy",
         onSelect: () => cloneToolset(toolsetSlug),
-        group: "Toolset",
+        group: "MCP Server",
       },
     ];
 
@@ -446,7 +446,7 @@ export function ToolsetView({
       });
 
       toast.success(
-        `Toolset "${data.name}" created with ${selectedToolUrns.length} tools`,
+        `MCP server "${data.name}" created with ${selectedToolUrns.length} tools`,
       );
       setCreateToolsetDialogOpen(false);
       setNewToolsetName("");
@@ -459,7 +459,7 @@ export function ToolsetView({
       request: {
         createToolsetRequestBody: {
           name: newToolsetName,
-          description: "New Toolset",
+          description: "New MCP Server",
         },
       },
     });
@@ -498,7 +498,7 @@ export function ToolsetView({
             icon: "message-circle",
           },
           {
-            label: "Delete Toolset",
+            label: "Delete MCP Server",
             onClick: () => {
               deleteToolset(toolsetSlug);
             },
@@ -657,12 +657,12 @@ export function ToolsetView({
       <InputDialog
         open={createToolsetDialogOpen}
         onOpenChange={setCreateToolsetDialogOpen}
-        title="Create Toolset"
-        description={`Create a new toolset with ${selectedToolUrns.length} selected tool(s)`}
+        title="Create MCP Server"
+        description={`Create a new MCP server with ${selectedToolUrns.length} selected tool(s)`}
         submitButtonText="Create"
         inputs={{
-          label: "Toolset name",
-          placeholder: "My new toolset",
+          label: "MCP server name",
+          placeholder: "My new MCP server",
           value: newToolsetName,
           onChange: setNewToolsetName,
           onSubmit: handleCreateToolsetSubmit,
