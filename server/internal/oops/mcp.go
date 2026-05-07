@@ -3,19 +3,21 @@ package oops
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"runtime/debug"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
 )
 
 // MCPErrHandle wraps an MCP/JSON-RPC HTTP handler and serializes returned
 // errors as JSON-RPC error responses instead of the generic HTTP error shape.
 func MCPErrHandle(logger *slog.Logger, handler func(http.ResponseWriter, *http.Request) error) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		mcpCtx := &contextvalues.MCPContext{ID: json.RawMessage("null")}
+		mcpCtx := &contextvalues.MCPContext{ID: mcpjsonrpc.NullID()}
 		r = r.WithContext(contextvalues.SetMCPContext(r.Context(), mcpCtx))
 
 		err := handler(w, r)
@@ -23,29 +25,20 @@ func MCPErrHandle(logger *slog.Logger, handler func(http.ResponseWriter, *http.R
 			return
 		}
 
-		code := MCPCodeInternalError
-		httpCode := code.HTTPStatus()
-		message := code.Message()
-
-		var se *ShareableError
-		switch {
-		case errors.As(err, &se):
-			code = se.Code.MCPCode()
-			httpCode = se.HTTPStatus()
-			message = se.Error()
-		default:
+		var shareableErr *ShareableError
+		if !errors.As(err, &shareableErr) {
 			stack := string(debug.Stack())
 			logger.ErrorContext(r.Context(), "unexpected error", attr.SlogError(err), attr.SlogErrorStack(stack))
 		}
 
 		mcpID, ok := contextvalues.GetMCPID(r.Context())
 		if !ok {
-			mcpID = json.RawMessage("null")
+			mcpID = mcpjsonrpc.NullID()
 		}
-		payload := mcpErrorPayload(mcpID, code, message)
+		payload := NewMCPErrorFromCause(mcpID, err)
 
 		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(httpCode)
+		w.WriteHeader(payload.HTTPStatusCode())
 		err = json.NewEncoder(w).Encode(payload)
 		if err != nil {
 			logger.ErrorContext(r.Context(), "failed to encode MCP error response", attr.SlogError(err))
@@ -97,24 +90,90 @@ func (c MCPCode) HTTPStatus() int {
 	}
 }
 
-type mcpErrorResponse struct {
-	JSONRPC string          `json:"jsonrpc"`
-	ID      json.RawMessage `json:"id,omitempty"`
-	Error   mcpError        `json:"error"`
+type MCPError struct {
+	ID      mcpjsonrpc.ID
+	Code    MCPCode
+	Message string
+	Data    any
+
+	HTTPStatus int
 }
 
-type mcpError struct {
-	Code    MCPCode `json:"code"`
-	Message string  `json:"message"`
-}
+func NewMCPErrorFromCause(id mcpjsonrpc.ID, source error) *MCPError {
+	var mcpErr *MCPError
+	var shareableErr *ShareableError
 
-func mcpErrorPayload(id json.RawMessage, code MCPCode, message string) mcpErrorResponse {
-	return mcpErrorResponse{
-		JSONRPC: "2.0",
-		ID:      id,
-		Error: mcpError{
-			Code:    code,
-			Message: message,
-		},
+	switch {
+	case errors.As(source, &mcpErr):
+		if !mcpErr.ID.IsSet() {
+			mcpErr.ID = id
+		}
+		return mcpErr
+	case errors.As(source, &shareableErr):
+		return &MCPError{
+			ID:         id,
+			Code:       shareableErr.Code.MCPCode(),
+			Message:    shareableErr.Error(),
+			HTTPStatus: shareableErr.HTTPStatus(),
+		}
+	default:
+		return &MCPError{
+			ID:      id,
+			Code:    MCPCodeInternalError,
+			Message: MCPCodeInternalError.Message(),
+		}
 	}
+}
+
+func (e *MCPError) HTTPStatusCode() int {
+	if e == nil {
+		return MCPCodeInternalError.HTTPStatus()
+	}
+	if e.HTTPStatus != 0 {
+		return e.HTTPStatus
+	}
+	return e.Code.HTTPStatus()
+}
+
+func (e *MCPError) Error() string {
+	if e == nil {
+		return ""
+	}
+	return fmt.Sprintf("%d: %s", e.Code, e.message())
+}
+
+func (e *MCPError) MarshalJSON() ([]byte, error) {
+	if e == nil {
+		return nil, nil
+	}
+
+	errorBody := map[string]any{
+		"code":    e.Code,
+		"message": e.message(),
+	}
+	if e.Data != nil {
+		errorBody["data"] = e.Data
+	}
+
+	payload := map[string]any{
+		"jsonrpc": "2.0",
+		"error":   errorBody,
+	}
+	if e.ID.IsSet() {
+		payload["id"] = e.ID
+	}
+
+	bs, err := json.Marshal(payload)
+	if err != nil {
+		return nil, fmt.Errorf("marshal mcp error: %w", err)
+	}
+
+	return bs, nil
+}
+
+func (e *MCPError) message() string {
+	if e.Message != "" {
+		return e.Message
+	}
+	return e.Code.Message()
 }
