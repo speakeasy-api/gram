@@ -38,7 +38,7 @@ func MCPErrHandle(logger *slog.Logger, handler func(http.ResponseWriter, *http.R
 		payload := NewMCPErrorFromCause(mcpID, err)
 
 		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(payload.HTTPStatusCode())
+		w.WriteHeader(shareableErr.HTTPStatus())
 		err = json.NewEncoder(w).Encode(payload)
 		if err != nil {
 			logger.ErrorContext(r.Context(), "failed to encode MCP error response", attr.SlogError(err))
