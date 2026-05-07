@@ -2207,6 +2207,12 @@ func unmarshalRiskPolicyResponseBodyToTypesRiskPolicy(v *RiskPolicyResponseBody)
 			res.PresidioEntities[i] = val
 		}
 	}
+	if v.PromptInjectionRules != nil {
+		res.PromptInjectionRules = make([]string, len(v.PromptInjectionRules))
+		for i, val := range v.PromptInjectionRules {
+			res.PromptInjectionRules[i] = val
+		}
+	}
 
 	return res
 }

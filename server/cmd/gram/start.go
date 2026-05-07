@@ -399,6 +399,17 @@ func newStartCommand() *cli.Command {
 			EnvVars:  []string{"WORKOS_WEBHOOK_SECRET"},
 			Required: false,
 		},
+		&cli.StringFlag{
+			Name:    "pi-classifier-url",
+			Usage:   "Base URL of the gram-pi-classifier sidecar (e.g. http://gram-pi-classifier:8000). Empty disables L1 ML prompt-injection detection; L0 heuristics still run when a policy enables the prompt_injection source.",
+			EnvVars: []string{"PI_CLASSIFIER_URL"},
+		},
+		&cli.Float64Flag{
+			Name:    "pi-classifier-threshold",
+			Usage:   "Minimum INJECTION-class probability to emit an L1 finding. Tunable in prod without redeploying the sidecar.",
+			EnvVars: []string{"PI_CLASSIFIER_THRESHOLD"},
+			Value:   0.9,
+		},
 	}
 
 	flags = append(flags, redisFlags...)
@@ -859,7 +870,16 @@ func newStartCommand() *cli.Command {
 				hookPIIScanner = risk_analysis.NewPresidioClient(presidioURL, tracerProvider, meterProvider, logger)
 			}
 
-			riskScanner, err := risk.NewScanner(logger, db, hookPIIScanner, meterProvider)
+			// Same shape for the L1 prompt-injection classifier sidecar. Empty URL
+			// → stub classifier (L1 disabled; L0 heuristics still run when a policy
+			// has the prompt_injection source enabled).
+			var hookPIClassifier risk_analysis.PromptInjectionClassifier = risk_analysis.StubClassifier{}
+			if piURL := c.String("pi-classifier-url"); piURL != "" {
+				hookPIClassifier = risk_analysis.NewPromptInjectionClassifier(piURL, tracerProvider, meterProvider, logger)
+			}
+			hookPIScanner := risk_analysis.NewPromptInjectionScanner(logger, hookPIClassifier, c.Float64("pi-classifier-threshold"))
+
+			riskScanner, err := risk.NewScanner(logger, db, hookPIIScanner, hookPIScanner, meterProvider)
 			if err != nil {
 				return fmt.Errorf("create risk scanner: %w", err)
 			}
@@ -986,6 +1006,12 @@ func newStartCommand() *cli.Command {
 						piiScanner = risk_analysis.NewPresidioClient(presidioURL, tracerProvider, meterProvider, logger)
 					}
 
+					var piClassifier risk_analysis.PromptInjectionClassifier = risk_analysis.StubClassifier{}
+					if piURL := c.String("pi-classifier-url"); piURL != "" {
+						piClassifier = risk_analysis.NewPromptInjectionClassifier(piURL, tracerProvider, meterProvider, logger)
+					}
+					piScanner := risk_analysis.NewPromptInjectionScanner(logger, piClassifier, c.Float64("pi-classifier-threshold"))
+
 					temporalWorker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, &background.WorkerOptions{
 						GuardianPolicy:      guardianPolicy,
 						DB:                  db,
@@ -1011,6 +1037,7 @@ func newStartCommand() *cli.Command {
 						AssistantsCore:      assistantsCore,
 						TemporalEnv:         temporalEnv,
 						PIIScanner:          piiScanner,
+						PIScanner:           piScanner,
 						ShadowMCPClient:     shadowMCPClient,
 						AuditLogger:         auditLogger,
 						WorkOSEventsClient:  workosEventsClient,

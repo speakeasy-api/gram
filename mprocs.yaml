@@ -13,6 +13,10 @@ procs:
     cmd: ["docker", "compose", "logs", "-f", "prometheus"]
     stop:
       send-keys: ["<C-c>"]
+  pi-classifier:
+    cmd: ["docker", "compose", "logs", "-f", "gram-pi-classifier"]
+    stop:
+      send-keys: ["<C-c>"]
   dev-idp:
     cmd: ["mise", "run", "start:dev-idp"]
     stop: SIGTERM

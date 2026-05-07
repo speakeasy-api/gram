@@ -37,6 +37,7 @@ jobs:
       sdk: ${{ steps.gates.outputs.sdk }}
       sdk-gen: ${{ steps.gates.outputs.sdk-gen }}
       risk_accuracy: ${{ steps.gates.outputs.risk_accuracy }}
+      pi_classifier: ${{ steps.gates.outputs.pi_classifier }}
       elements-examples: ${{ steps.list-elements-examples.outputs.examples }}
     steps:
       - name: Checkout source code
@@ -128,6 +129,13 @@ jobs:
           else
             echo "Risk accuracy comment job will be skipped."
           fi
+
+          if [[ "${{ steps.filter.outputs.pi_classifier }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "${{ github.event_name }}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
+            echo "pi_classifier=true" >> $GITHUB_OUTPUT
+            echo "Prompt-injection classifier image build will run."
+          else
+            echo "Prompt-injection classifier image build will be skipped."
+          fi
       - id: list-elements-examples
         name: List elements examples
         run: |
@@ -194,6 +202,51 @@ jobs:
           docker pull ${{ steps.build.outputs.image-tag }}
           echo "Running image..."
           docker run --rm ${{ steps.build.outputs.image-tag }} version
+
+  docker-build-pi-classifier:
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    needs: [changes]
+    if: needs.changes.outputs.pi_classifier == 'true'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@ff7abcd0c3c05ccf6adc123a8cd1fd4fb30fb493 # v5.0.0
+
+      - id: "auth"
+        name: "Authenticate to Google Cloud"
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          token_format: "access_token"
+          workload_identity_provider: "projects/409661704476/locations/global/workloadIdentityPools/ga-pool/providers/github-oidc-provider"
+          service_account: "speakeasy-registry-ga-ci@linen-analyst-344721.iam.gserviceaccount.com"
+      - name: Login to GCR
+        env:
+          GCR_TOKEN: ${{ steps.auth.outputs.access_token }}
+        run: |
+          max_attempts=3
+          for ((i=1; i<=max_attempts; i++)); do
+            echo "Docker login attempt $i/$max_attempts..."
+            if docker login -u oauth2accesstoken --password-stdin gcr.io/linen-analyst-344721 <<< "$GCR_TOKEN"; then
+              echo "Login successful"
+              exit 0
+            fi
+            if [ $i -lt $max_attempts ]; then
+              echo "Login failed, waiting 5s before retry..."
+              sleep 5
+            fi
+          done
+          echo "All login attempts failed"
+          exit 1
+      - name: Build and Push Registry image to GCR
+        id: build
+        uses: ./.github/workflows/composite/build-push
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: oauth2accesstoken
+          password: ${{ steps.auth.outputs.access_token }}
+          image: ${{ env.DOCKER_REPOSITORY_OWNER }}/gram-pi-classifier
+          context: ./services/pi-classifier
+          file: services/pi-classifier/Dockerfile
+          git-auth-token: ${{ secrets.BOT_REPO_TOKEN }}
 
   assistant-runtime-image:
     runs-on: blacksmith-4vcpu-ubuntu-2404

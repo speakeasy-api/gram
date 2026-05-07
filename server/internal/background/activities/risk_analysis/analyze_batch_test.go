@@ -26,7 +26,7 @@ import (
 
 func TestAnalyzeBatch_EmptyMessageIDs(t *testing.T) {
 	t.Parallel()
-	ab := risk_analysis.NewAnalyzeBatch(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), nil, &risk_analysis.StubPIIScanner{}, nil)
+	ab := risk_analysis.NewAnalyzeBatch(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), nil, &risk_analysis.StubPIIScanner{}, nil, nil)
 	require.NotNil(t, ab)
 
 	result, err := ab.Do(t.Context(), risk_analysis.AnalyzeBatchArgs{
@@ -66,6 +66,7 @@ func TestAnalyzeBatch_GracefulDegradationWhenPresidioDown(t *testing.T) {
 		testenv.NewMeterProvider(t),
 		conn,
 		deadClient,
+		nil,
 		nil,
 	)
 
@@ -367,6 +368,7 @@ func executeAnalyzeBatch(t *testing.T, conn *pgxpool.Pool, td testData, messageI
 		testenv.NewMeterProvider(t),
 		conn,
 		&risk_analysis.StubPIIScanner{},
+		nil,
 		shadowMCPClient,
 	)
 

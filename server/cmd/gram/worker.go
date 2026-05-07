@@ -630,6 +630,13 @@ func newWorkerCommand() *cli.Command {
 				logger.InfoContext(ctx, "presidio PII scanner enabled", attr.SlogURL(presidioURL))
 			}
 
+			var piClassifier risk_analysis.PromptInjectionClassifier = risk_analysis.StubClassifier{}
+			if piURL := c.String("pi-classifier-url"); piURL != "" {
+				piClassifier = risk_analysis.NewPromptInjectionClassifier(piURL, tracerProvider, meterProvider, logger)
+				logger.InfoContext(ctx, "pi_classifier L1 prompt-injection scanner enabled", attr.SlogURL(piURL))
+			}
+			piScanner := risk_analysis.NewPromptInjectionScanner(logger, piClassifier, c.Float64("pi-classifier-threshold"))
+
 			temporalWorker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, &background.WorkerOptions{
 				GuardianPolicy:      guardianPolicy,
 				DB:                  db,
@@ -655,6 +662,7 @@ func newWorkerCommand() *cli.Command {
 				AssistantsCore:      assistantsCore,
 				TemporalEnv:         temporalEnv,
 				PIIScanner:          piiScanner,
+				PIScanner:           piScanner,
 				ShadowMCPClient:     shadowMCPClient,
 				AuditLogger:         auditLogger,
 				WorkOSEventsClient:  workosEventsClient,

@@ -96,13 +96,14 @@ func DrainRiskAnalysisWorkflow(ctx workflow.Context, params DrainRiskAnalysisPar
 			}
 
 			f := workflow.ExecuteActivity(analyzeBatchCtx, a.AnalyzeBatch, risk_analysis.AnalyzeBatchArgs{
-				ProjectID:        params.ProjectID,
-				OrganizationID:   fetchResult.OrganizationID,
-				RiskPolicyID:     params.RiskPolicyID,
-				PolicyVersion:    fetchResult.PolicyVersion,
-				MessageIDs:       batch,
-				Sources:          fetchResult.Sources,
-				PresidioEntities: fetchResult.PresidioEntities,
+				ProjectID:            params.ProjectID,
+				OrganizationID:       fetchResult.OrganizationID,
+				RiskPolicyID:         params.RiskPolicyID,
+				PolicyVersion:        fetchResult.PolicyVersion,
+				MessageIDs:           batch,
+				Sources:              fetchResult.Sources,
+				PresidioEntities:     fetchResult.PresidioEntities,
+				PromptInjectionRules: fetchResult.PromptInjectionRules,
 			})
 			pending = append(pending, f)
 		}

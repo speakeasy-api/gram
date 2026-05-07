@@ -22,6 +22,9 @@ type CreateRiskPolicyRequestBody struct {
 	Sources []string `form:"sources,omitempty" json:"sources,omitempty" xml:"sources,omitempty"`
 	// Presidio entity types to detect.
 	PresidioEntities []string `form:"presidio_entities,omitempty" json:"presidio_entities,omitempty" xml:"presidio_entities,omitempty"`
+	// Prompt-injection detection rule ids to enable in addition to the heuristic
+	// baseline (e.g. 'deberta-v3-classifier').
+	PromptInjectionRules []string `form:"prompt_injection_rules,omitempty" json:"prompt_injection_rules,omitempty" xml:"prompt_injection_rules,omitempty"`
 	// Whether the policy is active.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Policy action: flag or block.
@@ -44,6 +47,9 @@ type UpdateRiskPolicyRequestBody struct {
 	Sources []string `form:"sources,omitempty" json:"sources,omitempty" xml:"sources,omitempty"`
 	// Presidio entity types to detect.
 	PresidioEntities []string `form:"presidio_entities,omitempty" json:"presidio_entities,omitempty" xml:"presidio_entities,omitempty"`
+	// Prompt-injection detection rule ids to enable in addition to the heuristic
+	// baseline (e.g. 'deberta-v3-classifier').
+	PromptInjectionRules []string `form:"prompt_injection_rules,omitempty" json:"prompt_injection_rules,omitempty" xml:"prompt_injection_rules,omitempty"`
 	// Whether the policy is active.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Policy action: flag or block.
@@ -75,6 +81,9 @@ type CreateRiskPolicyResponseBody struct {
 	Sources []string `form:"sources,omitempty" json:"sources,omitempty" xml:"sources,omitempty"`
 	// Presidio entity types to scan for. When empty, scans all entities.
 	PresidioEntities []string `form:"presidio_entities,omitempty" json:"presidio_entities,omitempty" xml:"presidio_entities,omitempty"`
+	// Prompt-injection detection rule ids enabled in addition to the heuristic
+	// baseline (e.g. 'deberta-v3-classifier'). When empty, only heuristics run.
+	PromptInjectionRules []string `form:"prompt_injection_rules,omitempty" json:"prompt_injection_rules,omitempty" xml:"prompt_injection_rules,omitempty"`
 	// Whether the policy is active.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Policy action: flag (log only) or block (deny in real-time).
@@ -117,6 +126,9 @@ type GetRiskPolicyResponseBody struct {
 	Sources []string `form:"sources,omitempty" json:"sources,omitempty" xml:"sources,omitempty"`
 	// Presidio entity types to scan for. When empty, scans all entities.
 	PresidioEntities []string `form:"presidio_entities,omitempty" json:"presidio_entities,omitempty" xml:"presidio_entities,omitempty"`
+	// Prompt-injection detection rule ids enabled in addition to the heuristic
+	// baseline (e.g. 'deberta-v3-classifier'). When empty, only heuristics run.
+	PromptInjectionRules []string `form:"prompt_injection_rules,omitempty" json:"prompt_injection_rules,omitempty" xml:"prompt_injection_rules,omitempty"`
 	// Whether the policy is active.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Policy action: flag (log only) or block (deny in real-time).
@@ -152,6 +164,9 @@ type UpdateRiskPolicyResponseBody struct {
 	Sources []string `form:"sources,omitempty" json:"sources,omitempty" xml:"sources,omitempty"`
 	// Presidio entity types to scan for. When empty, scans all entities.
 	PresidioEntities []string `form:"presidio_entities,omitempty" json:"presidio_entities,omitempty" xml:"presidio_entities,omitempty"`
+	// Prompt-injection detection rule ids enabled in addition to the heuristic
+	// baseline (e.g. 'deberta-v3-classifier'). When empty, only heuristics run.
+	PromptInjectionRules []string `form:"prompt_injection_rules,omitempty" json:"prompt_injection_rules,omitempty" xml:"prompt_injection_rules,omitempty"`
 	// Whether the policy is active.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Policy action: flag (log only) or block (deny in real-time).
@@ -1875,6 +1890,9 @@ type RiskPolicyResponseBody struct {
 	Sources []string `form:"sources,omitempty" json:"sources,omitempty" xml:"sources,omitempty"`
 	// Presidio entity types to scan for. When empty, scans all entities.
 	PresidioEntities []string `form:"presidio_entities,omitempty" json:"presidio_entities,omitempty" xml:"presidio_entities,omitempty"`
+	// Prompt-injection detection rule ids enabled in addition to the heuristic
+	// baseline (e.g. 'deberta-v3-classifier'). When empty, only heuristics run.
+	PromptInjectionRules []string `form:"prompt_injection_rules,omitempty" json:"prompt_injection_rules,omitempty" xml:"prompt_injection_rules,omitempty"`
 	// Whether the policy is active.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Policy action: flag (log only) or block (deny in real-time).
@@ -1969,6 +1987,12 @@ func NewCreateRiskPolicyRequestBody(p *risk.CreateRiskPolicyPayload) *CreateRisk
 			body.PresidioEntities[i] = val
 		}
 	}
+	if p.PromptInjectionRules != nil {
+		body.PromptInjectionRules = make([]string, len(p.PromptInjectionRules))
+		for i, val := range p.PromptInjectionRules {
+			body.PromptInjectionRules[i] = val
+		}
+	}
 	{
 		var zero string
 		if body.Action == zero {
@@ -1999,6 +2023,12 @@ func NewUpdateRiskPolicyRequestBody(p *risk.UpdateRiskPolicyPayload) *UpdateRisk
 		body.PresidioEntities = make([]string, len(p.PresidioEntities))
 		for i, val := range p.PresidioEntities {
 			body.PresidioEntities[i] = val
+		}
+	}
+	if p.PromptInjectionRules != nil {
+		body.PromptInjectionRules = make([]string, len(p.PromptInjectionRules))
+		for i, val := range p.PromptInjectionRules {
+			body.PromptInjectionRules[i] = val
 		}
 	}
 	return body
@@ -2038,6 +2068,12 @@ func NewCreateRiskPolicyRiskPolicyOK(body *CreateRiskPolicyResponseBody) *types.
 		v.PresidioEntities = make([]string, len(body.PresidioEntities))
 		for i, val := range body.PresidioEntities {
 			v.PresidioEntities[i] = val
+		}
+	}
+	if body.PromptInjectionRules != nil {
+		v.PromptInjectionRules = make([]string, len(body.PromptInjectionRules))
+		for i, val := range body.PromptInjectionRules {
+			v.PromptInjectionRules[i] = val
 		}
 	}
 
@@ -2387,6 +2423,12 @@ func NewGetRiskPolicyRiskPolicyOK(body *GetRiskPolicyResponseBody) *types.RiskPo
 			v.PresidioEntities[i] = val
 		}
 	}
+	if body.PromptInjectionRules != nil {
+		v.PromptInjectionRules = make([]string, len(body.PromptInjectionRules))
+		for i, val := range body.PromptInjectionRules {
+			v.PromptInjectionRules[i] = val
+		}
+	}
 
 	return v
 }
@@ -2566,6 +2608,12 @@ func NewUpdateRiskPolicyRiskPolicyOK(body *UpdateRiskPolicyResponseBody) *types.
 		v.PresidioEntities = make([]string, len(body.PresidioEntities))
 		for i, val := range body.PresidioEntities {
 			v.PresidioEntities[i] = val
+		}
+	}
+	if body.PromptInjectionRules != nil {
+		v.PromptInjectionRules = make([]string, len(body.PromptInjectionRules))
+		for i, val := range body.PromptInjectionRules {
+			v.PromptInjectionRules[i] = val
 		}
 	}
 

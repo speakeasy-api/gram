@@ -38,12 +38,16 @@ type AnalyzeBatch struct {
 	db              *pgxpool.Pool
 	scanner         *Scanner
 	piiScanner      PIIScanner
+	piScanner       *PromptInjectionScanner
 	shadowMCPClient *shadowmcp.Client
 }
 
-func NewAnalyzeBatch(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, piiScanner PIIScanner, shadowMCPClient *shadowmcp.Client) *AnalyzeBatch {
+func NewAnalyzeBatch(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, piiScanner PIIScanner, piScanner *PromptInjectionScanner, shadowMCPClient *shadowmcp.Client) *AnalyzeBatch {
 	if piiScanner == nil {
 		piiScanner = &StubPIIScanner{}
+	}
+	if piScanner == nil {
+		piScanner = NewPromptInjectionScanner(logger, StubClassifier{}, 0.9)
 	}
 	return &AnalyzeBatch{
 		logger:          logger,
@@ -52,18 +56,20 @@ func NewAnalyzeBatch(logger *slog.Logger, tracerProvider trace.TracerProvider, m
 		db:              db,
 		scanner:         NewScanner(),
 		piiScanner:      piiScanner,
+		piScanner:       piScanner,
 		shadowMCPClient: shadowMCPClient,
 	}
 }
 
 type AnalyzeBatchArgs struct {
-	ProjectID        uuid.UUID
-	OrganizationID   string
-	RiskPolicyID     uuid.UUID
-	PolicyVersion    int64
-	MessageIDs       []uuid.UUID
-	Sources          []string
-	PresidioEntities []string
+	ProjectID            uuid.UUID
+	OrganizationID       string
+	RiskPolicyID         uuid.UUID
+	PolicyVersion        int64
+	MessageIDs           []uuid.UUID
+	Sources              []string
+	PresidioEntities     []string
+	PromptInjectionRules []string
 }
 
 type AnalyzeBatchResult struct {
@@ -226,14 +232,12 @@ func (a *AnalyzeBatch) scan(ctx context.Context, args AnalyzeBatchArgs, messages
 
 	if slices.Contains(args.Sources, SourcePromptInjection) {
 		wg.Go(func() {
-			for i, content := range contents {
-				f, err := DetectPromptInjection(ctx, content)
-				if err != nil {
-					a.logger.WarnContext(ctx, "prompt injection scan failed", attr.SlogError(err))
-					continue
-				}
-				promptInjectionFindings[i] = f
+			results, err := a.piScanner.ScanBatch(ctx, contents, args.PromptInjectionRules)
+			if err != nil {
+				a.logger.WarnContext(ctx, "prompt injection scan failed", attr.SlogError(err))
+				return
 			}
+			promptInjectionFindings = results
 			activity.RecordHeartbeat(ctx, "prompt_injection")
 		})
 	}
