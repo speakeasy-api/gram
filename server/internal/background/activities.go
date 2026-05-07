@@ -78,6 +78,7 @@ type Activities struct {
 	signalAssistantThread           *activities.SignalAssistantThread
 	processWorkOSOrganizationEvents *activities.ProcessWorkOSOrganizationEvents
 	processWorkOSMembershipEvents   *activities.ProcessWorkOSMembershipEvents
+	processWorkOSGlobalRoleEvents   *activities.ProcessWorkOSGlobalRoleEvents
 	cancelAssistantsSubscription    *activities.CancelAssistantsSubscription
 }
 
@@ -119,9 +120,11 @@ func NewActivities(
 	// returns a clear error if the activity is invoked unconfigured.
 	var processWorkOSOrgEvents *activities.ProcessWorkOSOrganizationEvents
 	var processWorkOSMembershipEvents *activities.ProcessWorkOSMembershipEvents
+	var processWorkOSGlobalRoleEvents *activities.ProcessWorkOSGlobalRoleEvents
 	if workosEventsClient != nil {
 		processWorkOSOrgEvents = activities.NewProcessWorkOSOrganizationEvents(logger, db, workosEventsClient)
 		processWorkOSMembershipEvents = activities.NewProcessWorkOSMembershipEvents(logger, db, workosEventsClient)
+		processWorkOSGlobalRoleEvents = activities.NewProcessWorkOSGlobalRoleEvents(logger, db, workosEventsClient)
 	}
 
 	return &Activities{
@@ -164,6 +167,7 @@ func NewActivities(
 		signalAssistantThread:           activities.NewSignalAssistantThread(&AssistantWorkflowSignaler{TemporalEnv: temporalEnv}),
 		processWorkOSOrganizationEvents: processWorkOSOrgEvents,
 		processWorkOSMembershipEvents:   processWorkOSMembershipEvents,
+		processWorkOSGlobalRoleEvents:   processWorkOSGlobalRoleEvents,
 		cancelAssistantsSubscription:    activities.NewCancelAssistantsSubscription(logger, billingRepo),
 	}
 }
@@ -180,6 +184,13 @@ func (a *Activities) ProcessWorkOSMembershipEvents(ctx context.Context, params a
 		return nil, fmt.Errorf("WorkOS events client is not configured")
 	}
 	return a.processWorkOSMembershipEvents.Do(ctx, params)
+}
+
+func (a *Activities) ProcessWorkOSGlobalRoleEvents(ctx context.Context, params activities.ProcessWorkOSGlobalRoleEventsParams) (*activities.ProcessWorkOSGlobalRoleEventsResult, error) {
+	if a.processWorkOSGlobalRoleEvents == nil {
+		return nil, fmt.Errorf("WorkOS events client is not configured")
+	}
+	return a.processWorkOSGlobalRoleEvents.Do(ctx, params)
 }
 
 func (a *Activities) TransitionDeployment(ctx context.Context, projectID uuid.UUID, deploymentID uuid.UUID, status string) (*activities.TransitionDeploymentResult, error) {

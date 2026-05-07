@@ -8019,6 +8019,25 @@ paths:
             x-speakeasy-name-override: updateBySlug
             x-speakeasy-react-hook:
                 name: UpdateEnvironment
+    /rpc/external.receiveWorkOSWebhook:
+        post:
+            description: Receive and enqueue a WorkOS webhook event.
+            operationId: receiveWorkOSWebhook
+            parameters:
+                - allowEmptyValue: true
+                  description: WorkOS webhook signature header
+                  in: header
+                  name: WorkOS-Signature
+                  schema:
+                    description: WorkOS webhook signature header
+                    type: string
+            responses:
+                "204":
+                    description: No Content response.
+            summary: receiveWorkOSWebhook workos
+            tags:
+                - workos
+            x-speakeasy-name-override: receiveWorkOSWebhook
     /rpc/hooks.claude:
         post:
             tags:
@@ -33318,3 +33337,5 @@ tags:
       description: Operator visibility into issued user_sessions. List + revoke; sessions are written by /mcp/{slug}/token.
     - name: variations
       description: Manage variations of tools.
+    - name: workos
+      description: WorkOS webhook ingestion endpoints.

@@ -265,6 +265,81 @@ func TestProcessWorkOSMembershipEvents_UnknownUserSyncsRolesAndAdvancesCursor(t 
 	require.Equal(t, "event_01HZMEMUNK", cursor)
 }
 
+func TestProcessWorkOSMembershipEvents_PrefersGramOrganizationWhenUserCreatedAfterMembership(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn := newMembershipEventsTestConn(t, "workos_membership_events_shadow_org")
+	logger := testenv.NewLogger(t)
+
+	const organizationID = "gram_org_mem_shadow"
+	const workosOrgID = "org_01HZMEMSHADOW"
+	const userID = "user_mem_shadow"
+	const workosUserID = "user_01HZMEMSHADOW"
+	const membershipID = "mem_01HZSHADOW"
+
+	// Simulate a WorkOS-shaped shadow row that was created before the real Gram
+	// organization row was linked to the same WorkOS organization.
+	seedWorkOSOrganization(t, ctx, conn, workosOrgID, workosOrgID)
+	seedWorkOSOrganization(t, ctx, conn, organizationID, workosOrgID)
+	memberRole := seedOrganizationRole(t, ctx, conn, organizationID, "member")
+
+	activity := activities.NewProcessWorkOSMembershipEvents(logger, conn, &stubWorkOSEventsClient{
+		pages: [][]events.Event{{
+			newWorkOSMembershipEvent(t, "organization_membership.created", "event_01HZSHADOW1", membershipID, workosOrgID, workosUserID, time.Date(2026, 5, 6, 12, 0, 0, 0, time.UTC), "member"),
+		}},
+	})
+	res, err := activity.Do(ctx, activities.ProcessWorkOSMembershipEventsParams{})
+	require.NoError(t, err)
+	require.Equal(t, "event_01HZSHADOW1", res.LastEventID)
+
+	_, err = orgrepo.New(conn).GetOrganizationRelationshipForUser(ctx, orgrepo.GetOrganizationRelationshipForUserParams{
+		OrganizationID: workosOrgID,
+		UserID:         userID,
+	})
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+
+	assignments, err := orgrepo.New(conn).ListOrganizationRoleAssignmentsByWorkOSUser(ctx, orgrepo.ListOrganizationRoleAssignmentsByWorkOSUserParams{
+		OrganizationID: organizationID,
+		WorkosUserID:   workosUserID,
+	})
+	require.NoError(t, err)
+	require.Len(t, assignments, 1)
+	require.Equal(t, fmt.Sprintf("role:organization:%s", memberRole.ID.String()), assignments[0].RoleUrn)
+	require.False(t, assignments[0].UserID.Valid)
+
+	shadowAssignments, err := orgrepo.New(conn).ListOrganizationRoleAssignmentsByWorkOSUser(ctx, orgrepo.ListOrganizationRoleAssignmentsByWorkOSUserParams{
+		OrganizationID: workosOrgID,
+		WorkosUserID:   workosUserID,
+	})
+	require.NoError(t, err)
+	require.Empty(t, shadowAssignments)
+
+	seedWorkOSUser(t, ctx, conn, userID, workosUserID)
+	activity = activities.NewProcessWorkOSMembershipEvents(logger, conn, &stubWorkOSEventsClient{
+		pages: [][]events.Event{{
+			newWorkOSMembershipEvent(t, "organization_membership.updated", "event_01HZSHADOW2", membershipID, workosOrgID, workosUserID, time.Date(2026, 5, 6, 13, 0, 0, 0, time.UTC), "member"),
+		}},
+	})
+	res, err = activity.Do(ctx, activities.ProcessWorkOSMembershipEventsParams{})
+	require.NoError(t, err)
+	require.Equal(t, "event_01HZSHADOW2", res.LastEventID)
+
+	relationship, err := orgrepo.New(conn).GetOrganizationRelationshipForUser(ctx, orgrepo.GetOrganizationRelationshipForUserParams{
+		OrganizationID: organizationID,
+		UserID:         userID,
+	})
+	require.NoError(t, err)
+	require.False(t, relationship.Deleted)
+	require.Equal(t, membershipID, relationship.WorkosMembershipID.String)
+
+	_, err = orgrepo.New(conn).GetOrganizationRelationshipForUser(ctx, orgrepo.GetOrganizationRelationshipForUserParams{
+		OrganizationID: workosOrgID,
+		UserID:         userID,
+	})
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+}
+
 func TestProcessWorkOSMembershipEvents_StaleUpdateSkipped(t *testing.T) {
 	t.Parallel()
 
