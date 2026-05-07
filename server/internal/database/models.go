@@ -651,6 +651,8 @@ type McpRegistry struct {
 type McpServer struct {
 	ID                    uuid.UUID
 	ProjectID             uuid.UUID
+	Name                  pgtype.Text
+	Slug                  pgtype.Text
 	EnvironmentID         uuid.NullUUID
 	ExternalOauthServerID uuid.NullUUID
 	OauthProxyServerID    uuid.NullUUID
@@ -981,6 +983,8 @@ type PromptTemplate struct {
 type RemoteMcpServer struct {
 	ID            uuid.UUID
 	ProjectID     uuid.UUID
+	Name          pgtype.Text
+	Slug          pgtype.Text
 	TransportType string
 	Url           string
 	CreatedAt     pgtype.Timestamptz
@@ -1005,21 +1009,22 @@ type RemoteMcpServerHeader struct {
 }
 
 type RiskPolicy struct {
-	ID               uuid.UUID
-	ProjectID        uuid.UUID
-	OrganizationID   string
-	Enabled          bool
-	Name             string
-	Sources          []string
-	PresidioEntities []string
-	Action           string
-	AutoName         bool
-	UserMessage      pgtype.Text
-	Version          int64
-	CreatedAt        pgtype.Timestamptz
-	UpdatedAt        pgtype.Timestamptz
-	DeletedAt        pgtype.Timestamptz
-	Deleted          bool
+	ID                uuid.UUID
+	ProjectID         uuid.UUID
+	OrganizationID    string
+	Enabled           bool
+	Name              string
+	Sources           []string
+	PresidioEntities  []string
+	Action            string
+	AutoName          bool
+	CustomCliPatterns []byte
+	UserMessage       pgtype.Text
+	Version           int64
+	CreatedAt         pgtype.Timestamptz
+	UpdatedAt         pgtype.Timestamptz
+	DeletedAt         pgtype.Timestamptz
+	Deleted           bool
 }
 
 type RiskResult struct {
