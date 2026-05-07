@@ -73,7 +73,10 @@ func init() {
 			description: "Instruction to invoke shell or destructive command",
 			family:      familyToolAbuse,
 			confidence:  0.8,
-			pattern:     regexp.MustCompile(`(?i)\b(call|invoke|execute|run)\b.{0,20}\b(shell|bash|/bin/sh|exec|rm\s+-rf|curl\s+http)`),
+			// `/bin/sh` lives outside the leading `\b` group: a space-then-slash
+			// transition is non-word-to-non-word, which `\b` doesn't satisfy, so
+			// the literal needs its own no-boundary alternative.
+			pattern: regexp.MustCompile(`(?i)\b(call|invoke|execute|run)\b.{0,20}(?:/bin/sh|\b(?:shell|bash|exec|rm\s+-rf|curl\s+http))`),
 		},
 	}
 
@@ -157,6 +160,13 @@ func asciiToLower(s string) string {
 
 // runHeuristics applies every rule family to text and returns one Finding
 // per match.
+//
+// Only detectInstructionOverrides applies fuzzyMatchInputCap — it does an
+// O(N×M) substring scan against ~1,100 keywords, so unbounded input is the
+// real CPU risk on the realtime hook path. The regex-based detectors run on
+// the full input but rely on Go RE2 with bounded `.{0,N}` quantifiers, which
+// are linear-time; capping them would just trade defense-in-depth coverage
+// (delimiters near the end of long messages) for no measurable CPU win.
 func runHeuristics(text string) []Finding {
 	if text == "" {
 		return nil
