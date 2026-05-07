@@ -16,7 +16,7 @@ import {
   Table,
 } from "@speakeasy-api/moonshine";
 import { Check } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
 import { useChallengeRowColumns } from "./useChallengeRowColumns";
 import { useGrantFlow } from "./useGrantFlow";
@@ -100,12 +100,13 @@ export function ChallengesTab() {
     searchParams.get("identity") ?? "all",
   );
 
-  // Sync principalFilter when URL search params change (e.g. re-navigation
-  // with a different ?identity= value).
-  useEffect(() => {
-    const identity = searchParams.get("identity");
-    if (identity) setPrincipalFilter(identity);
-  }, [searchParams]);
+  // Sync principalFilter during render when URL param changes (no stale frame).
+  const prevIdentityRef = useRef(searchParams.get("identity"));
+  const identity = searchParams.get("identity");
+  if (identity !== prevIdentityRef.current) {
+    prevIdentityRef.current = identity;
+    setPrincipalFilter(identity ?? "all");
+  }
   const [scopeFilter, setScopeFilter] = useState("all");
   const groupSiblingIdsRef = useRef<Map<string, string[]>>(new Map());
   const getGroupChallengeIds = useCallback(
