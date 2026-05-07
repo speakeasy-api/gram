@@ -13,13 +13,6 @@ import (
 	"go.temporal.io/sdk/workflow"
 )
 
-// AssistantsSubscriptionCancelScheduler schedules a cancel-at-period-end
-// follow-up for a Polar subscription that just granted assistants credits.
-// Implemented by Temporal in production; auth tests can swap a no-op.
-type AssistantsSubscriptionCancelScheduler interface {
-	ScheduleCancelAssistantsSubscription(ctx context.Context, subscriptionID string) error
-}
-
 type TemporalAssistantsSubscriptionCancelScheduler struct {
 	TemporalEnv *tenv.Environment
 }
@@ -32,7 +25,7 @@ func (t *TemporalAssistantsSubscriptionCancelScheduler) ScheduleCancelAssistants
 	_, err := t.TemporalEnv.Client().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		ID:                    id,
 		TaskQueue:             string(t.TemporalEnv.Queue()),
-		WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
+		WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE_FAILED_ONLY,
 		WorkflowRunTimeout:    10 * time.Minute,
 	}, CancelAssistantsSubscriptionWorkflow, activities.CancelAssistantsSubscriptionArgs{
 		SubscriptionID: subscriptionID,
@@ -46,10 +39,9 @@ func (t *TemporalAssistantsSubscriptionCancelScheduler) ScheduleCancelAssistants
 func CancelAssistantsSubscriptionWorkflow(ctx workflow.Context, args activities.CancelAssistantsSubscriptionArgs) error {
 	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 		StartToCloseTimeout: 30 * time.Second,
-		// Persistent failures escalate after ~5 attempts over ~5 minutes —
-		// surfaced to Temporal monitoring so on-call sees a stuck workflow
-		// rather than a silent never-cancelled subscription that would re-grant
-		// 20 credits next cycle.
+		// Cap retries so a stuck workflow surfaces in Temporal monitoring
+		// instead of silently failing — a never-cancelled sub would re-grant
+		// the assistants benefit on the next billing cycle.
 		RetryPolicy: &temporal.RetryPolicy{
 			MaximumAttempts:    5,
 			InitialInterval:    10 * time.Second,

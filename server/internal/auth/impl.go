@@ -55,10 +55,6 @@ type AuthConfigurations struct {
 
 // Service for gram dashboard authentication endpoints
 
-// AssistantsSubscriptionCancelScheduler schedules a Temporal workflow that
-// marks the assistants signup subscription cancel-at-period-end so the
-// benefit grant fires once and never re-grants. Implementations live in the
-// background package; tests can pass a noop.
 type AssistantsSubscriptionCancelScheduler interface {
 	ScheduleCancelAssistantsSubscription(ctx context.Context, subscriptionID string) error
 }
@@ -558,8 +554,6 @@ func (s *Service) Register(ctx context.Context, payload *gen.RegisterPayload) (e
 	return nil
 }
 
-// autoProvisionForAssistants creates a fresh org for an assistants-disposition
-// signup, sets it active on the session, and returns the post-signin redirect.
 func (s *Service) autoProvisionForAssistants(ctx context.Context, idToken string, userInfo *sessions.CachedUserInfo, session *sessions.Session) (string, error) {
 	info, err := s.sessions.CreateOrgFromSpeakeasy(ctx, idToken, generateLegibleOrgName())
 	if err != nil {
@@ -596,7 +590,7 @@ func (s *Service) autoProvisionForAssistants(ctx context.Context, idToken string
 	subID, benefitErr := s.billing.AttachAssistantsBenefit(ctx, org.ID, userInfo.Email)
 	if benefitErr != nil {
 		s.logger.ErrorContext(ctx, "failed to attach assistants benefit", attr.SlogError(benefitErr), attr.SlogOrganizationID(org.ID))
-	} else if subID != "" && s.cancelSubsScheduler != nil {
+	} else if subID != "" {
 		if err := s.cancelSubsScheduler.ScheduleCancelAssistantsSubscription(ctx, subID); err != nil {
 			s.logger.ErrorContext(ctx, "failed to schedule assistants subscription cancel-at-period-end", attr.SlogError(err), attr.SlogOrganizationID(org.ID))
 		}
@@ -615,7 +609,7 @@ func dispositionFromState(payload *gen.CallbackPayload) string {
 	if state == nil {
 		return ""
 	}
-	parsed, err := url.Parse(state.FinalDestinationURL)
+	parsed, err := url.Parse(relativeURL(state.FinalDestinationURL))
 	if err != nil {
 		return ""
 	}

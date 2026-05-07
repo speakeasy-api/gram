@@ -2,8 +2,9 @@ package auth
 
 import (
 	"crypto/rand"
-	"encoding/binary"
 	"fmt"
+
+	"github.com/speakeasy-api/gram/server/internal/conv"
 )
 
 var orgNameAdjectives = []string{
@@ -52,29 +53,19 @@ var orgNameNouns = []string{
 	"Walrus", "Willow", "Wolf", "Wren", "Yarrow", "Zephyr",
 }
 
-const orgNameSuffixAlphabet = "abcdefghijkmnpqrstuvwxyz23456789" // base32 minus look-alikes (l/1, o/0)
-
 // generateLegibleOrgName returns a slug-friendly random org name like
-// "Swift Otter h7n2". The 4-char base32 suffix gives ~1M unique slots per
-// adjective+noun pair, keeping collision risk negligible against the
-// Speakeasy register endpoint without sacrificing legibility.
+// "Swift Otter h7n2". The suffix gives ~1M+ unique slots per adjective+noun
+// pair so collisions against the Speakeasy register endpoint stay negligible.
 func generateLegibleOrgName() string {
-	adj := orgNameAdjectives[randIndex(len(orgNameAdjectives))]
-	noun := orgNameNouns[randIndex(len(orgNameNouns))]
-	suffix := make([]byte, 4)
-	for i := range suffix {
-		suffix[i] = orgNameSuffixAlphabet[randIndex(len(orgNameSuffixAlphabet))]
-	}
-	return fmt.Sprintf("%s %s %s", adj, noun, suffix)
-}
-
-func randIndex(n int) int {
-	if n <= 0 {
-		return 0
-	}
-	var b [8]byte
+	var b [2]byte
 	if _, err := rand.Read(b[:]); err != nil {
 		panic(fmt.Errorf("crypto/rand failed: %w", err))
 	}
-	return int(binary.BigEndian.Uint64(b[:]) % uint64(n)) //nolint:gosec // bounded by `n`, caller-validated
+	suffix, err := conv.GenerateRandomSlug(4)
+	if err != nil {
+		panic(fmt.Errorf("generate random slug: %w", err))
+	}
+	adj := orgNameAdjectives[int(b[0])%len(orgNameAdjectives)]
+	noun := orgNameNouns[int(b[1])%len(orgNameNouns)]
+	return fmt.Sprintf("%s %s %s", adj, noun, suffix)
 }

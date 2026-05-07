@@ -1,6 +1,6 @@
 import { useSession } from "@/contexts/Auth";
 import { useRoutes } from "@/routes";
-import { getServerURL } from "@/lib/utils";
+import { buildLoginRedirectURL } from "@/lib/utils";
 import { JourneyDemo } from "./components/journey-demo";
 import { LoginSection } from "./components/login-section";
 import { useSearchParams, useNavigate } from "react-router";
@@ -23,9 +23,7 @@ export default function Login() {
       // auto-provision can run for users with zero orgs. Force an IDP
       // round-trip even when a session already exists.
       if (disposition && redirectTo) {
-        window.location.href = `${getServerURL()}/rpc/auth.login?redirect=${encodeURIComponent(
-          redirectTo,
-        )}`;
+        window.location.href = buildLoginRedirectURL(redirectTo);
         return;
       }
       if (redirectTo) {

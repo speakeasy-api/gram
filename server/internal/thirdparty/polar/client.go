@@ -898,31 +898,21 @@ func (p *Client) AttachAssistantsBenefit(ctx context.Context, orgID string, emai
 		return "", nil
 	}
 
-	customerState, getErr := p.polar.Customers.GetStateExternal(ctx, orgID)
-	var notFound *apierrors.ResourceNotFound
-	isNotFound := errors.As(getErr, &notFound) ||
-		(customerState != nil &&
-			customerState.HTTPMeta.Response != nil &&
-			customerState.HTTPMeta.Response.StatusCode == http.StatusNotFound)
-	switch {
-	case isNotFound:
-		// Customer does not exist yet — create it.
-		_, createErr := p.polar.Customers.Create(ctx, polarComponents.CreateCustomerCreateCustomerIndividualCreate(polarComponents.CustomerIndividualCreate{
+	customerState, err := p.getCustomerState(ctx, orgID)
+	if err != nil {
+		return "", fmt.Errorf("query polar customer state: %w", err)
+	}
+	if customerState == nil {
+		if _, createErr := p.polar.Customers.Create(ctx, polarComponents.CreateCustomerCreateCustomerIndividualCreate(polarComponents.CustomerIndividualCreate{
 			ExternalID: &orgID,
 			Email:      email,
-		}))
-		if createErr != nil {
+		})); createErr != nil {
 			return "", fmt.Errorf("create polar customer: %w", createErr)
 		}
-	case getErr != nil:
-		return "", fmt.Errorf("query polar customer state: %w", getErr)
-	default:
-		fields := unwrapCustomerState(customerState.CustomerState)
-		if fields != nil {
-			for _, sub := range fields.ActiveSubscriptions {
-				if sub.ProductID == p.catalog.ProductIDAssistants {
-					return "", nil
-				}
+	} else if fields := unwrapCustomerState(customerState); fields != nil {
+		for _, sub := range fields.ActiveSubscriptions {
+			if sub.ProductID == p.catalog.ProductIDAssistants {
+				return "", nil
 			}
 		}
 	}
