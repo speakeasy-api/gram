@@ -2,9 +2,9 @@ package contextvalues
 
 import (
 	"context"
-	"encoding/json"
 
 	"github.com/google/uuid"
+	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
 )
 
 type contextKey string
@@ -37,7 +37,7 @@ type RequestContext struct {
 }
 
 type MCPContext struct {
-	ID json.RawMessage
+	ID mcpjsonrpc.ID
 }
 
 const (
@@ -95,16 +95,16 @@ func GetMCPContext(ctx context.Context) (*MCPContext, bool) {
 	return value, ok
 }
 
-func SetMCPID(ctx context.Context, value json.RawMessage) {
-	if mcpCtx, ok := GetMCPContext(ctx); ok && len(value) > 0 {
+func SetMCPID(ctx context.Context, value mcpjsonrpc.ID) {
+	if mcpCtx, ok := GetMCPContext(ctx); ok && value.IsSet() {
 		mcpCtx.ID = value
 	}
 }
 
-func GetMCPID(ctx context.Context) (json.RawMessage, bool) {
+func GetMCPID(ctx context.Context) (mcpjsonrpc.ID, bool) {
 	mcpCtx, ok := GetMCPContext(ctx)
-	if !ok || len(mcpCtx.ID) == 0 {
-		return nil, false
+	if !ok || !mcpCtx.ID.IsSet() {
+		return mcpjsonrpc.ID{}, false
 	}
 	return mcpCtx.ID, true
 }

@@ -97,15 +97,15 @@ func TestHandleGetServer_ContentNegotiation(t *testing.T) {
 
 				// Verify it's valid JSON with the expected structure
 				var response struct {
-					ID      any    `json:"id"`
-					Code    int    `json:"code"`
-					Message string `json:"message"`
-					Data    any    `json:"data"`
+					Error struct {
+						Code    int    `json:"code"`
+						Message string `json:"message"`
+					} `json:"error"`
 				}
 				unmarshalErr := json.Unmarshal(rr.Body.Bytes(), &response)
 				require.NoError(t, unmarshalErr, "Response should be valid JSON")
-				assert.Equal(t, -32000, response.Code) // methodNotAllowed errorCode value
-				assert.NotEmpty(t, response.Message)
+				assert.Equal(t, -32000, response.Error.Code)
+				assert.NotEmpty(t, response.Error.Message)
 			} else {
 				// For HTML responses, we expect delegation to metadata service
 				// The key test here is content negotiation - we should NOT return JSON

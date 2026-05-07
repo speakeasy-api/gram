@@ -52,6 +52,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/inv"
+	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
 	metadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/mv"
@@ -231,11 +232,9 @@ func (s *Service) HandleGetServer(w http.ResponseWriter, r *http.Request, metada
 		}
 	}
 
-	body, err := json.Marshal(rpcError{
-		ID:      msgID{format: 0, String: "", Number: 0},
-		Code:    methodNotAllowed,
+	body, err := json.Marshal(&oops.MCPError{
+		Code:    oops.MCPCodeServerError,
 		Message: "This MCP server uses POST-based Streamable HTTP transport. This GET request is a normal compatibility probe by the MCP client and can be safely ignored. The client will automatically use POST for actual communication.",
-		Data:    nil,
 	})
 	if err != nil {
 		s.logger.ErrorContext(r.Context(), "failed to marshal MCP 405 response", attr.SlogError(err))
@@ -451,7 +450,7 @@ func (s *Service) ServeToolsetResolved(w http.ResponseWriter, r *http.Request, t
 	bodyBytes, bodyReadErr := io.ReadAll(r.Body)
 	if bodyReadErr == nil {
 		var req struct {
-			ID json.RawMessage `json:"id"`
+			ID mcpjsonrpc.ID `json:"id"`
 		}
 		if err := json.Unmarshal(bodyBytes, &req); err == nil {
 			contextvalues.SetMCPID(ctx, req.ID)
@@ -682,7 +681,11 @@ func (s *Service) ServeToolsetResolved(w http.ResponseWriter, r *http.Request, t
 	case body == nil && err == nil:
 		return respondWithNoContent(true, w)
 	case err != nil:
-		bs, merr := json.Marshal(NewErrorFromCause(req.ID, err))
+		mcpID, ok := contextvalues.GetMCPID(ctx)
+		if !ok {
+			mcpID = mcpjsonrpc.NullID()
+		}
+		bs, merr := json.Marshal(oops.NewMCPErrorFromCause(mcpID, err))
 		if merr != nil {
 			return oops.E(oops.CodeUnexpected, merr, "failed to serialize error response").Log(ctx, s.logger)
 		}
@@ -913,11 +916,14 @@ func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *ra
 	case "resources/read":
 		return handleResourcesRead(ctx, s.logger, s.db, payload, req, s.toolProxy, s.env, s.billingTracker, s.billingRepository, s.telemLogger)
 	default:
-		return nil, &rpcError{
-			ID:      req.ID,
-			Code:    methodNotFound,
-			Message: fmt.Sprintf("%s: %s", req.Method, methodNotFound.UserMessage()),
-			Data:    nil,
+		mcpID, ok := contextvalues.GetMCPID(ctx)
+		if !ok {
+			mcpID = mcpjsonrpc.NullID()
+		}
+		return nil, &oops.MCPError{
+			ID:      mcpID,
+			Code:    oops.MCPCodeMethodNotFound,
+			Message: fmt.Sprintf("%s: %s", req.Method, oops.MCPCodeMethodNotFound.Message()),
 		}
 	}
 }
@@ -1130,7 +1136,7 @@ func (s *Service) HandleToolsList(
 	// Create a dummy rawRequest for the internal handler
 	req := &rawRequest{
 		JSONRPC: "2.0",
-		ID:      msgID{format: 1, Number: 1, String: ""},
+		ID:      mcpjsonrpc.NumberID(1),
 		Method:  "tools/list",
 		Params:  json.RawMessage("{}"),
 	}
@@ -1200,7 +1206,7 @@ func (s *Service) HandleToolsCall(
 
 	req := &rawRequest{
 		JSONRPC: "2.0",
-		ID:      msgID{format: 1, Number: 1, String: ""},
+		ID:      mcpjsonrpc.NumberID(1),
 		Method:  "tools/call",
 		Params:  params,
 	}
