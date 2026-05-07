@@ -35,7 +35,7 @@ use async_trait::async_trait;
 
 const COMPACTION_SYSTEM_PROMPT: &str = "You are a compaction agent. Compress the transcript that follows into a durable context note for an assistant that has lost the original messages. Preserve every named person, every year and date, every place, every decision the assistant committed to, every tool the assistant invoked, and every actionable fact in the tool results. Drop chatter, narration, and chain-of-thought. Return only the compacted note as plain text.";
 
-const DEFAULT_PERCENTAGE: u32 = 80;
+const TRIGGER_PERCENTAGE: u32 = 80;
 const KEEP_RECENT: usize = 4;
 
 /// Fires compaction once the provider-reported `input_tokens` reaches a
@@ -267,12 +267,11 @@ fn render_items(items: &[Item]) -> String {
 pub fn build_compaction(
     context_window: u64,
     compactor_adapter: CompletionsAdapter<OpenRouterProvider>,
-    percentage: u32,
 ) -> Option<(CompactionConfig, InputTokenObserver)> {
     if context_window == 0 {
         return None;
     }
-    let trigger = ContextWindowTrigger::new(context_window, percentage);
+    let trigger = ContextWindowTrigger::new(context_window, TRIGGER_PERCENTAGE);
     let observer = InputTokenObserver::new(trigger.input_tokens_handle());
     let pipeline = CompactionPipeline::new()
         .with_strategy(DropReasoningStrategy::new())
@@ -285,12 +284,4 @@ pub fn build_compaction(
     let backend = NestedLoopCompactionBackend::new(compactor_adapter);
     let config = CompactionConfig::new(trigger, pipeline).with_backend(backend);
     Some((config, observer))
-}
-
-pub fn percentage_from_env() -> u32 {
-    std::env::var("ASSISTANT_CONTEXT_PERCENTAGE")
-        .ok()
-        .and_then(|s| s.parse::<u32>().ok())
-        .map(|v| v.clamp(1, 100))
-        .unwrap_or(DEFAULT_PERCENTAGE)
 }

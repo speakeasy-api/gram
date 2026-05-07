@@ -21,7 +21,7 @@ use serde_json::Value;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::sync::{Mutex as AsyncMutex, Notify, oneshot};
 
-use crate::compaction::{build_compaction, percentage_from_env};
+use crate::compaction::build_compaction;
 use crate::errors::RunnerError;
 use crate::http_layer::{McpRotatingClient, TokenRegistry, build_http};
 use crate::idempotency::IdempotencyCache;
@@ -195,11 +195,7 @@ pub async fn build_runtime(
     let compactor_http = build_http(compactor_http_client, tokens.clone());
     let compactor_adapter = CompletionsAdapter::with_client(provider, compactor_http);
 
-    let compaction = build_compaction(
-        config.context_window.unwrap_or(0),
-        compactor_adapter,
-        percentage_from_env(),
-    );
+    let compaction = build_compaction(config.context_window.unwrap_or(0), compactor_adapter);
 
     let mut transcript = Vec::new();
     if let Some(instructions) = &config.instructions {
