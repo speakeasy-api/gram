@@ -118,25 +118,25 @@ export const SLACK_EVENT_BINDINGS: Record<string, SlackEventBinding> = {
   user_change: { bot_events: ["user_change"], scopes: ["users:read"] },
 };
 
-const BASELINE_BOT_SCOPES: readonly string[] = [
-  "chat:write",
-  "im:write",
-  "users:read",
-];
-
-// Slack manifests are static and the user can't easily edit them after
-// install, so subscribe to every event the trigger service supports up
-// front. The trigger config's `event_types` filters at delivery time.
+// Slack manifests are effectively static post-install: adding a scope or
+// event after the user has clicked Create requires deleting the app and
+// going through OAuth again. So we always grant the full bot-token
+// superset — every scope referenced by any platform tool or trigger event
+// — at install time. Per-tool gating saves nothing and locks future
+// capabilities behind a forced re-install. The trigger config's
+// `event_types` still filters delivery, so over-subscribing to events is
+// harmless.
+const ALL_BOT_SCOPES: readonly string[] = Array.from(
+  new Set([
+    ...Object.values(SLACK_TOOL_SCOPES).flatMap((s) => Array.from(s)),
+    ...Object.values(SLACK_EVENT_BINDINGS).flatMap((b) => Array.from(b.scopes)),
+  ]),
+).sort();
 const ALL_EVENT_BOT_EVENTS: readonly string[] = Array.from(
   new Set(
     Object.values(SLACK_EVENT_BINDINGS).flatMap((b) =>
       Array.from(b.bot_events),
     ),
-  ),
-).sort();
-const ALL_EVENT_SCOPES: readonly string[] = Array.from(
-  new Set(
-    Object.values(SLACK_EVENT_BINDINGS).flatMap((b) => Array.from(b.scopes)),
   ),
 ).sort();
 
@@ -157,17 +157,11 @@ export type SlackManifestResult = {
   displayName: string;
   scopes: string[];
   botEvents: string[];
-  unmappedToolUrns: string[];
   searchToolNeedsUserToken: boolean;
 };
 
 function uniqueSorted(values: Iterable<string>): string[] {
   return Array.from(new Set(values)).sort();
-}
-
-function handlerFromUrn(urn: string): string | null {
-  if (!urn.startsWith(SLACK_TOOL_URN_PREFIX)) return null;
-  return urn.slice(SLACK_TOOL_URN_PREFIX.length);
 }
 
 export function buildSlackManifest(
@@ -178,25 +172,10 @@ export function buildSlackManifest(
     SLACK_DISPLAY_NAME_LIMIT,
   );
 
-  const scopes = new Set<string>([...BASELINE_BOT_SCOPES, ...ALL_EVENT_SCOPES]);
+  const scopes = new Set<string>(ALL_BOT_SCOPES);
   const botEvents = new Set<string>(ALL_EVENT_BOT_EVENTS);
-  const unmappedToolUrns: string[] = [];
-  let searchToolNeedsUserToken = false;
-
-  for (const urn of input.toolUrns ?? []) {
-    const handler = handlerFromUrn(urn);
-    if (!handler) continue;
-    const mapped = SLACK_TOOL_SCOPES[handler];
-    if (mapped) {
-      for (const s of mapped) scopes.add(s);
-      continue;
-    }
-    if (handler === "search_messages_and_files") {
-      searchToolNeedsUserToken = true;
-      continue;
-    }
-    unmappedToolUrns.push(urn);
-  }
+  const searchUrn = `${SLACK_TOOL_URN_PREFIX}search_messages_and_files`;
+  const searchToolNeedsUserToken = (input.toolUrns ?? []).includes(searchUrn);
 
   for (const s of input.extraScopes ?? []) scopes.add(s);
   for (const e of input.extraBotEvents ?? []) botEvents.add(e);
@@ -235,7 +214,6 @@ export function buildSlackManifest(
     displayName,
     scopes: sortedScopes,
     botEvents: sortedEvents,
-    unmappedToolUrns,
     searchToolNeedsUserToken,
   };
 }
