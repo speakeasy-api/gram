@@ -65,6 +65,7 @@ func newRedisClientFunc(container *tcr.RedisContainer) RedisClientFunc {
 			DialTimeout:  1 * time.Second,
 			ReadTimeout:  300 * time.Millisecond,
 			WriteTimeout: 1 * time.Second,
+			Protocol:     2,
 		})
 
 		// Verify the connection is alive before returning. Without this,
