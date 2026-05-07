@@ -151,6 +151,23 @@ func filterEmpty(in []string) []string {
 	return out
 }
 
+// asciiToLower folds ASCII A-Z to a-z while preserving byte length, so a byte
+// index found in the result is valid as an offset into the original string.
+// Non-ASCII bytes pass through unchanged. Required because strings.ToLower
+// performs Unicode case folding that can expand byte length (e.g. Ⱥ → ⱥ goes
+// from 2 to 3 bytes).
+func asciiToLower(s string) string {
+	b := make([]byte, len(s))
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if 'A' <= c && c <= 'Z' {
+			c += 'a' - 'A'
+		}
+		b[i] = c
+	}
+	return string(b)
+}
+
 // runHeuristics applies every rule family to text and returns one Finding
 // per match.
 func runHeuristics(text string) []Finding {
@@ -196,13 +213,17 @@ func runFamily(text string, fam ruleFamily) []Finding {
 
 // detectInstructionOverrides scans for any phrase from the combinatorial
 // keyword bank as a lowercased substring. Length-capped to bound work on
-// the realtime path.
+// the realtime path. Uses asciiToLower (not strings.ToLower) so byte indices
+// found in the lowered copy stay valid as offsets into the original — some
+// Unicode runes expand under Unicode-aware lowercasing (e.g. U+023A → U+2C65,
+// 2 bytes → 3 bytes), which would let an attacker craft input that panics on
+// the substring slice.
 func detectInstructionOverrides(text string) []Finding {
 	scan := text
 	if len(scan) > fuzzyMatchInputCap {
 		scan = scan[:fuzzyMatchInputCap]
 	}
-	lower := strings.ToLower(scan)
+	lower := asciiToLower(scan)
 
 	var out []Finding
 	for _, kw := range overrideKeywords {
