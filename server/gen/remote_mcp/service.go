@@ -25,6 +25,11 @@ type Service interface {
 	GetServer(context.Context, *GetServerPayload) (res *types.RemoteMcpServer, err error)
 	// Update a remote MCP server
 	UpdateServer(context.Context, *UpdateServerPayload) (res *types.RemoteMcpServer, err error)
+	// Probe a candidate remote MCP server URL by issuing an MCP initialize request
+	// and reporting the outcome. Used to give users a reachability signal before
+	// they save a new or updated remote MCP server. Treats reachable-but-401/403
+	// responses as verified — auth verification is intentionally out of scope.
+	VerifyURL(context.Context, *VerifyURLPayload) (res *VerifyURLResult, err error)
 	// Delete a remote MCP server
 	DeleteServer(context.Context, *DeleteServerPayload) (err error)
 }
@@ -49,7 +54,7 @@ const ServiceName = "remoteMcp"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [5]string{"createServer", "listServers", "getServer", "updateServer", "deleteServer"}
+var MethodNames = [6]string{"createServer", "listServers", "getServer", "updateServer", "verifyURL", "deleteServer"}
 
 // CreateServerPayload is the payload type of the remoteMcp service
 // createServer method.
@@ -131,6 +136,28 @@ type UpdateServerPayload struct {
 	// The complete desired set of headers. Omit to leave headers unchanged.
 	// Provide an empty array to remove all headers.
 	Headers []*HeaderInput
+}
+
+// VerifyURLPayload is the payload type of the remoteMcp service verifyURL
+// method.
+type VerifyURLPayload struct {
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+	// The URL of the remote MCP server to probe
+	URL string
+	// The transport type for the remote MCP server (e.g. streamable-http)
+	TransportType string
+}
+
+// VerifyURLResult is the result type of the remoteMcp service verifyURL method.
+type VerifyURLResult struct {
+	// Whether the URL responded in a way consistent with a remote MCP server
+	Verified bool
+	// HTTP status code returned by the URL, if any
+	HTTPStatus *int
+	// Human-readable summary of the verification outcome
+	Message string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

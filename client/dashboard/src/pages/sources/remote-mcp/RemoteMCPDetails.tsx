@@ -26,6 +26,11 @@ import { useEffect, useMemo, useState } from "react";
 import { Navigate, useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
 import { RemoveRemoteMcpDialogContent } from "./RemoveRemoteMcpDialog";
+import { useVerifyRemoteMcpUrl } from "./useVerifyRemoteMcpUrl";
+import {
+  VerifyRemoteMcpUrlAlert,
+  VerifyRemoteMcpUrlButton,
+} from "./VerifyRemoteMcpUrlButton";
 
 const VALID_TABS = ["overview", "mcp-servers", "settings"] as const;
 type TabValue = (typeof VALID_TABS)[number];
@@ -349,11 +354,14 @@ function UrlSection({
 
   const queryClient = useQueryClient();
   const update = useUpdateRemoteMcpServerMutation();
+  const verify = useVerifyRemoteMcpUrl(draft);
 
   const validationError = touched ? validateRemoteMcpUrl(draft) : null;
   const dirty = draft.trim() !== initialUrl;
   const saveDisabled =
     !dirty || update.isPending || validateRemoteMcpUrl(draft) !== null;
+  const verifyDisabled =
+    update.isPending || !draft.trim() || validateRemoteMcpUrl(draft) !== null;
 
   const handleSave = async () => {
     setTouched(true);
@@ -413,7 +421,15 @@ function UrlSection({
             {update.error.message}
           </Alert>
         )}
+        <VerifyRemoteMcpUrlAlert state={verify} />
         <Stack direction="horizontal" gap={2}>
+          <RequireScope scope="mcp:write" level="component">
+            <VerifyRemoteMcpUrlButton
+              state={verify}
+              url={draft}
+              disabled={verifyDisabled}
+            />
+          </RequireScope>
           <RequireScope scope="mcp:write" level="component">
             <Button
               variant="primary"

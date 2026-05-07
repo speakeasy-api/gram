@@ -9,6 +9,11 @@ import { Loader2, Network } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { useCreateRemoteMcpSource } from "./hooks";
+import { useVerifyRemoteMcpUrl } from "./useVerifyRemoteMcpUrl";
+import {
+  VerifyRemoteMcpUrlAlert,
+  VerifyRemoteMcpUrlButton,
+} from "./VerifyRemoteMcpUrlButton";
 
 // Mirrors server-side url.Parse: must be absolute, http(s), with a non-empty
 // host. We surface this client-side so the user gets feedback before the round
@@ -55,8 +60,12 @@ function CreateRemoteMcpForm() {
   // required" the moment the page renders.
   const [touched, setTouched] = useState(false);
 
+  const verify = useVerifyRemoteMcpUrl(url);
+
   const validationError = touched ? validateRemoteMcpUrl(url) : null;
   const submitDisabled =
+    createSource.isPending || !url.trim() || validateRemoteMcpUrl(url) !== null;
+  const verifyDisabled =
     createSource.isPending || !url.trim() || validateRemoteMcpUrl(url) !== null;
 
   const handleSubmit = async (event: React.FormEvent) => {
@@ -120,6 +129,7 @@ function CreateRemoteMcpForm() {
                 {validationError}
               </Alert>
             )}
+            <VerifyRemoteMcpUrlAlert state={verify} />
           </Stack>
 
           <Stack gap={1}>
@@ -138,6 +148,11 @@ function CreateRemoteMcpForm() {
           )}
 
           <Stack direction="horizontal" gap={2}>
+            <VerifyRemoteMcpUrlButton
+              state={verify}
+              url={url}
+              disabled={verifyDisabled}
+            />
             <Button type="submit" variant="primary" disabled={submitDisabled}>
               {createSource.isPending ? (
                 <>

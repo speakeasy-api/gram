@@ -417,6 +417,34 @@ func (s *Service) UpdateServer(ctx context.Context, payload *gen.UpdateServerPay
 	return afterView, nil
 }
 
+func (s *Service) VerifyURL(ctx context.Context, payload *gen.VerifyURLPayload) (*gen.VerifyURLResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
+
+	if err := validateURL(ctx, s.policy, payload.URL); err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid url").Log(ctx, logger)
+	}
+
+	probeCtx, cancel := context.WithTimeout(ctx, verifyURLTimeout)
+	defer cancel()
+
+	verified, status, message := VerifyRemoteMcpURL(probeCtx, s.policy, payload.URL)
+
+	return &gen.VerifyURLResult{
+		Verified:   verified,
+		HTTPStatus: status,
+		Message:    message,
+	}, nil
+}
+
 func (s *Service) DeleteServer(ctx context.Context, payload *gen.DeleteServerPayload) error {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {

@@ -7,6 +7,7 @@ import { remoteMcpDeleteServer } from "../funcs/remoteMcpDeleteServer.js";
 import { remoteMcpGetServer } from "../funcs/remoteMcpGetServer.js";
 import { remoteMcpListServers } from "../funcs/remoteMcpListServers.js";
 import { remoteMcpUpdateServer } from "../funcs/remoteMcpUpdateServer.js";
+import { remoteMcpVerifyURL } from "../funcs/remoteMcpVerifyURL.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
 import * as operations from "../models/operations/index.js";
@@ -101,6 +102,25 @@ export class RemoteMcp extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.RemoteMcpServer> {
     return unwrapAsync(remoteMcpUpdateServer(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * verifyURL remoteMcp
+   *
+   * @remarks
+   * Probe a candidate remote MCP server URL by issuing an MCP initialize request and reporting the outcome. Used to give users a reachability signal before they save a new or updated remote MCP server. Treats reachable-but-401/403 responses as verified — auth verification is intentionally out of scope.
+   */
+  async verifyURL(
+    request: operations.VerifyRemoteMcpURLRequest,
+    security?: operations.VerifyRemoteMcpURLSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.VerifyURLResult> {
+    return unwrapAsync(remoteMcpVerifyURL(
       this,
       request,
       security,

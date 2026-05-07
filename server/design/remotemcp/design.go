@@ -116,6 +116,31 @@ var _ = Service("remoteMcp", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpdateRemoteMcpServer"}`)
 	})
 
+	Method("verifyURL", func() {
+		Description("Probe a candidate remote MCP server URL by issuing an MCP initialize request and reporting the outcome. Used to give users a reachability signal before they save a new or updated remote MCP server. Treats reachable-but-401/403 responses as verified — auth verification is intentionally out of scope.")
+
+		Payload(func() {
+			Extend(VerifyURLForm)
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(VerifyURLResult)
+
+		HTTP(func() {
+			POST("/rpc/remoteMcp.verifyURL")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "verifyRemoteMcpURL")
+		Meta("openapi:extension:x-speakeasy-name-override", "verifyURL")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "VerifyRemoteMcpURL"}`)
+	})
+
 	Method("deleteServer", func() {
 		Description("Delete a remote MCP server")
 
@@ -178,6 +203,27 @@ var UpdateServerForm = Type("UpdateServerForm", func() {
 	Attribute("headers", ArrayOf(HeaderInput), "The complete desired set of headers. Omit to leave headers unchanged. Provide an empty array to remove all headers.")
 
 	Required("id")
+})
+
+var VerifyURLForm = Type("VerifyURLForm", func() {
+	Description("Form for probing a remote MCP server URL")
+
+	Attribute("url", String, "The URL of the remote MCP server to probe", func() {
+		Format(FormatURI)
+	})
+	Attribute("transport_type", String, "The transport type for the remote MCP server (e.g. streamable-http)")
+
+	Required("url", "transport_type")
+})
+
+var VerifyURLResult = Type("VerifyURLResult", func() {
+	Description("Outcome of a remote MCP server URL verification")
+
+	Attribute("verified", Boolean, "Whether the URL responded in a way consistent with a remote MCP server")
+	Attribute("http_status", Int, "HTTP status code returned by the URL, if any")
+	Attribute("message", String, "Human-readable summary of the verification outcome")
+
+	Required("verified", "message")
 })
 
 var RemoteMcpServer = Type("RemoteMcpServer", func() {

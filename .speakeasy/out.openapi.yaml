@@ -14630,6 +14630,111 @@ paths:
       x-speakeasy-name-override: updateServer
       x-speakeasy-react-hook:
         name: UpdateRemoteMcpServer
+  /rpc/remoteMcp.verifyURL:
+    post:
+      description: Probe a candidate remote MCP server URL by issuing an MCP initialize request and reporting the outcome. Used to give users a reachability signal before they save a new or updated remote MCP server. Treats reachable-but-401/403 responses as verified — auth verification is intentionally out of scope.
+      operationId: verifyRemoteMcpURL
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifyURLForm'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerifyURLResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: verifyURL remoteMcp
+      tags:
+        - remoteMcp
+      x-speakeasy-name-override: verifyURL
+      x-speakeasy-react-hook:
+        name: VerifyRemoteMcpURL
   /rpc/resources.list:
     get:
       description: List all resources for a project
@@ -32812,6 +32917,37 @@ components:
         - organization
         - projects
         - scopes
+    VerifyURLForm:
+      type: object
+      properties:
+        transport_type:
+          type: string
+          description: The transport type for the remote MCP server (e.g. streamable-http)
+        url:
+          type: string
+          description: The URL of the remote MCP server to probe
+          format: uri
+      description: Form for probing a remote MCP server URL
+      required:
+        - url
+        - transport_type
+    VerifyURLResult:
+      type: object
+      properties:
+        http_status:
+          type: integer
+          description: HTTP status code returned by the URL, if any
+          format: int64
+        message:
+          type: string
+          description: Human-readable summary of the verification outcome
+        verified:
+          type: boolean
+          description: Whether the URL responded in a way consistent with a remote MCP server
+      description: Outcome of a remote MCP server URL verification
+      required:
+        - verified
+        - message
   securitySchemes:
     apikey_header_Authorization:
       type: apiKey
