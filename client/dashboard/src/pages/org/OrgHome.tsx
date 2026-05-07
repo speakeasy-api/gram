@@ -229,6 +229,12 @@ function RecentChallenges() {
     (c) => !!c.scope,
   );
 
+  const columns = useMemo(
+    () =>
+      canAdmin ? [...challengeRowColumns, actionsColumn] : challengeRowColumns,
+    [canAdmin, challengeRowColumns, actionsColumn],
+  );
+
   if (recentChallenges.length === 0) return null;
 
   return (
@@ -240,11 +246,7 @@ function RecentChallenges() {
         </orgRoutes.access.challenges.Link>
       </div>
       <Table
-        columns={
-          canAdmin
-            ? [...challengeRowColumns, actionsColumn]
-            : challengeRowColumns
-        }
+        columns={columns}
         data={recentChallenges}
         rowKey={(row) => row.id}
       />
