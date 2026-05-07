@@ -77,6 +77,13 @@ TEMPORAL_ADDRESS = "{{env.TEMPORAL_HOST}}:{{env.TEMPORAL_PORT}}"
 PRESIDIO_PORT = "5050"
 PRESIDIO_ANALYZER_URL = "http://127.0.0.1:{{env.PRESIDIO_PORT}}"
 
+###########################################
+## Prompt-injection ML classifier (L1)   ##
+###########################################
+PI_CLASSIFIER_PORT = "5051"
+PI_CLASSIFIER_URL = "http://127.0.0.1:{{env.PI_CLASSIFIER_PORT}}"
+PI_CLASSIFIER_THRESHOLD = "0.9"
+
 ##########################################
 ## Gram server, admin and worker config ##
 ##########################################

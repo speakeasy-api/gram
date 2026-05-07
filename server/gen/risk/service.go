@@ -73,6 +73,9 @@ type CreateRiskPolicyPayload struct {
 	Sources []string
 	// Presidio entity types to detect.
 	PresidioEntities []string
+	// Prompt-injection detection rule ids to enable in addition to the heuristic
+	// baseline (e.g. 'deberta-v3-classifier').
+	PromptInjectionRules []string
 	// Whether the policy is active.
 	Enabled *bool
 	// Policy action: flag or block.
@@ -201,6 +204,9 @@ type UpdateRiskPolicyPayload struct {
 	Sources []string
 	// Presidio entity types to detect.
 	PresidioEntities []string
+	// Prompt-injection detection rule ids to enable in addition to the heuristic
+	// baseline (e.g. 'deberta-v3-classifier').
+	PromptInjectionRules []string
 	// Whether the policy is active.
 	Enabled *bool
 	// Policy action: flag or block.

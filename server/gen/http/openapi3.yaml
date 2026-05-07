@@ -25564,6 +25564,11 @@ components:
                     items:
                         type: string
                     description: Presidio entity types to detect.
+                prompt_injection_rules:
+                    type: array
+                    items:
+                        type: string
+                    description: Prompt-injection detection rule ids to enable in addition to the heuristic baseline (e.g. 'deberta-v3-classifier').
                 sources:
                     type: array
                     items:
@@ -30915,6 +30920,11 @@ components:
                     type: string
                     description: The project ID.
                     format: uuid
+                prompt_injection_rules:
+                    type: array
+                    items:
+                        type: string
+                    description: Prompt-injection detection rule ids enabled in addition to the heuristic baseline (e.g. 'deberta-v3-classifier'). When empty, only heuristics run.
                 sources:
                     type: array
                     items:
@@ -33324,6 +33334,11 @@ components:
                     items:
                         type: string
                     description: Presidio entity types to detect.
+                prompt_injection_rules:
+                    type: array
+                    items:
+                        type: string
+                    description: Prompt-injection detection rule ids to enable in addition to the heuristic baseline (e.g. 'deberta-v3-classifier').
                 sources:
                     type: array
                     items:

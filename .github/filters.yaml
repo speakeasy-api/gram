@@ -27,6 +27,9 @@ cli:
 tsframework:
   - "ts-framework/**"
 
+pi_classifier:
+  - "services/pi-classifier/**"
+
 sdk:
   - "client/sdk/**"
   - "package.json"

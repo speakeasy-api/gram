@@ -55,6 +55,10 @@ export type RiskPolicy = {
    */
   presidioEntities?: Array<string> | undefined;
   /**
+   * Prompt-injection detection rule ids enabled in addition to the heuristic baseline (e.g. 'deberta-v3-classifier'). When empty, only heuristics run.
+   */
+  promptInjectionRules?: Array<string> | undefined;
+  /**
    * The project ID.
    */
   projectId: string;
@@ -86,40 +90,42 @@ export const RiskPolicyAction$inboundSchema: z.ZodMiniEnum<
 > = z.enum(RiskPolicyAction);
 
 /** @internal */
-export const RiskPolicy$inboundSchema: z.ZodMiniType<RiskPolicy, unknown> = z
-  .pipe(
+export const RiskPolicy$inboundSchema: z.ZodMiniType<RiskPolicy, unknown> =
+  z.pipe(
     z.object({
       action: z._default(RiskPolicyAction$inboundSchema, "flag"),
       auto_name: z.boolean(),
       created_at: z.pipe(
         z.iso.datetime({ offset: true }),
-        z.transform(v => new Date(v)),
+        z.transform((v) => new Date(v)),
       ),
       enabled: z.boolean(),
       id: z.string(),
       name: z.string(),
       pending_messages: z.int(),
       presidio_entities: z.optional(z.array(z.string())),
+      prompt_injection_rules: z.optional(z.array(z.string())),
       project_id: z.string(),
       sources: z.array(z.string()),
       total_messages: z.int(),
       updated_at: z.pipe(
         z.iso.datetime({ offset: true }),
-        z.transform(v => new Date(v)),
+        z.transform((v) => new Date(v)),
       ),
       user_message: z.optional(z.string()),
       version: z.int(),
     }),
     z.transform((v) => {
       return remap$(v, {
-        "auto_name": "autoName",
-        "created_at": "createdAt",
-        "pending_messages": "pendingMessages",
-        "presidio_entities": "presidioEntities",
-        "project_id": "projectId",
-        "total_messages": "totalMessages",
-        "updated_at": "updatedAt",
-        "user_message": "userMessage",
+        auto_name: "autoName",
+        created_at: "createdAt",
+        pending_messages: "pendingMessages",
+        presidio_entities: "presidioEntities",
+        prompt_injection_rules: "promptInjectionRules",
+        project_id: "projectId",
+        total_messages: "totalMessages",
+        updated_at: "updatedAt",
+        user_message: "userMessage",
       });
     }),
   );
