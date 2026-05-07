@@ -77,19 +77,6 @@ func (c MCPCode) Message() string {
 	}
 }
 
-func (c MCPCode) HTTPStatus() int {
-	switch c {
-	case MCPCodeParseError, MCPCodeInvalidRequest, MCPCodeInvalidParams:
-		return http.StatusBadRequest
-	case MCPCodeMethodNotFound, MCPCodeResourceNotFound:
-		return http.StatusNotFound
-	case MCPCodeInternalError, MCPCodeServerError:
-		return http.StatusInternalServerError
-	default:
-		return http.StatusInternalServerError
-	}
-}
-
 type MCPError struct {
 	ID      mcpjsonrpc.ID
 	Code    MCPCode
@@ -119,13 +106,6 @@ func NewMCPErrorFromCause(id mcpjsonrpc.ID, source error) *MCPError {
 			Message: MCPCodeInternalError.Message(),
 		}
 	}
-}
-
-func (e *MCPError) HTTPStatusCode() int {
-	if e == nil {
-		return MCPCodeInternalError.HTTPStatus()
-	}
-	return e.Code.HTTPStatus()
 }
 
 func (e *MCPError) Error() string {
