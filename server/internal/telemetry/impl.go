@@ -379,6 +379,7 @@ func (s *Service) SearchUsers(ctx context.Context, payload *telem_gen.SearchUser
 		TimeEnd:          params.timeEnd,
 		GramDeploymentID: deploymentID,
 		GroupBy:          groupBy,
+		UserIDs:          payload.Filter.UserIds,
 		SortOrder:        params.sortOrder,
 		Cursor:           params.cursor,
 		Limit:            params.limit + 1,
@@ -406,6 +407,17 @@ func (s *Service) SearchUsers(ctx context.Context, payload *telem_gen.SearchUser
 			})
 		}
 
+		hookSources := make([]*telem_gen.HookSourceUsage, 0, len(item.HookSourceCounts))
+		for hookSource, count := range item.HookSourceCounts {
+			hookSources = append(hookSources, &telem_gen.HookSourceUsage{
+				Source:     hookSource,
+				EventCount: int64(count), //nolint:gosec // Bounded count
+			})
+		}
+		sort.Slice(hookSources, func(i, j int) bool {
+			return hookSources[i].Source < hookSources[j].Source
+		})
+
 		//nolint:gosec // Values are bounded counts that won't overflow int64
 		users[i] = &telem_gen.UserSummary{
 			UserID:                   item.UserID,
@@ -424,6 +436,7 @@ func (s *Service) SearchUsers(ctx context.Context, payload *telem_gen.SearchUser
 			ToolCallSuccess:          int64(item.ToolCallSuccess),
 			ToolCallFailure:          int64(item.ToolCallFailure),
 			Tools:                    tools,
+			HookSources:              hookSources,
 		}
 	}
 

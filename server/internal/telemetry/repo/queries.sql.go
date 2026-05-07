@@ -1049,6 +1049,7 @@ type SearchUsersParams struct {
 	TimeEnd          int64
 	GramDeploymentID string // optional
 	GroupBy          string // "user_id" or "external_user_id"
+	UserIDs          []string
 	SortOrder        string // "asc" or "desc"
 	Cursor           string // user identifier to paginate from
 	Limit            int
@@ -1096,6 +1097,9 @@ func (q *Queries) SearchUsers(ctx context.Context, arg SearchUsersParams) ([]Use
 		"sumMapIf(map(gram_urn, toUInt64(1)), startsWith(gram_urn, 'tools:')) AS tool_counts",
 		"sumMapIf(map(gram_urn, toUInt64(1)), startsWith(gram_urn, 'tools:') AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 200 AND toInt32OrZero(toString(attributes.http.response.status_code)) < 300) AS tool_success_counts",
 		"sumMapIf(map(gram_urn, toUInt64(1)), startsWith(gram_urn, 'tools:') AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 400) AS tool_failure_counts",
+
+		// Hook source breakdowns (maps of hook source -> count)
+		"sumMapIf(map(hook_source, toUInt64(1)), hook_source != '') AS hook_source_counts",
 	).
 		From("telemetry_logs").
 		Where("gram_project_id = ?", arg.GramProjectID).
@@ -1107,6 +1111,9 @@ func (q *Queries) SearchUsers(ctx context.Context, arg SearchUsersParams) ([]Use
 	// Optional deployment filter
 	if arg.GramDeploymentID != "" {
 		sb = sb.Where("gram_deployment_id = toUUIDOrNull(?)", arg.GramDeploymentID)
+	}
+	if len(arg.UserIDs) > 0 {
+		sb = sb.Where(squirrel.Eq{groupCol: arg.UserIDs})
 	}
 
 	sb = sb.GroupBy(groupCol)

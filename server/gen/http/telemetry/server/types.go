@@ -2849,6 +2849,8 @@ type UserSummaryResponseBody struct {
 	ToolCallFailure int64 `form:"tool_call_failure" json:"tool_call_failure" xml:"tool_call_failure"`
 	// Per-tool usage breakdown
 	Tools []*ToolUsageResponseBody `form:"tools" json:"tools" xml:"tools"`
+	// Per-hook-source usage breakdown
+	HookSources []*HookSourceUsageResponseBody `form:"hook_sources" json:"hook_sources" xml:"hook_sources"`
 }
 
 // ToolUsageResponseBody is used to define fields on response body types.
@@ -2861,6 +2863,14 @@ type ToolUsageResponseBody struct {
 	SuccessCount int64 `form:"success_count" json:"success_count" xml:"success_count"`
 	// Failed calls (4xx/5xx status)
 	FailureCount int64 `form:"failure_count" json:"failure_count" xml:"failure_count"`
+}
+
+// HookSourceUsageResponseBody is used to define fields on response body types.
+type HookSourceUsageResponseBody struct {
+	// Hook source (from attributes.gram.hook.source)
+	Source string `form:"source" json:"source" xml:"source"`
+	// Total hook events for this source
+	EventCount int64 `form:"event_count" json:"event_count" xml:"event_count"`
 }
 
 // ProjectSummaryResponseBody is used to define fields on response body types.
@@ -3291,6 +3301,9 @@ type SearchUsersFilterRequestBody struct {
 	To *string `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
 	// Deployment ID filter
 	DeploymentID *string `form:"deployment_id,omitempty" json:"deployment_id,omitempty" xml:"deployment_id,omitempty"`
+	// Optional list of user identifiers to include. Matches user_id for internal
+	// searches and external_user_id for external searches.
+	UserIds []string `form:"user_ids,omitempty" json:"user_ids,omitempty" xml:"user_ids,omitempty"`
 }
 
 // NewSearchLogsResponseBody builds the HTTP response body from the result of

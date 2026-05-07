@@ -677,6 +677,7 @@ var SearchUsersFilter = Type("SearchUsersFilter", func() {
 	Attribute("deployment_id", String, "Deployment ID filter", func() {
 		Format(FormatUUID)
 	})
+	Attribute("user_ids", ArrayOf(String), "Optional list of user identifiers to include. Matches user_id for internal searches and external_user_id for external searches.")
 
 	Required("from", "to")
 })
@@ -742,6 +743,7 @@ var UserSummaryType = Type("UserSummary", func() {
 
 	// Per-tool breakdown
 	Attribute("tools", ArrayOf(ToolUsage), "Per-tool usage breakdown")
+	Attribute("hook_sources", ArrayOf(HookSourceUsage), "Per-hook-source usage breakdown")
 
 	Required(
 		"user_id",
@@ -760,6 +762,7 @@ var UserSummaryType = Type("UserSummary", func() {
 		"tool_call_success",
 		"tool_call_failure",
 		"tools",
+		"hook_sources",
 	)
 })
 
@@ -811,6 +814,15 @@ var ToolUsage = Type("ToolUsage", func() {
 	Attribute("failure_count", Int64, "Failed calls (4xx/5xx status)")
 
 	Required("urn", "count", "success_count", "failure_count")
+})
+
+var HookSourceUsage = Type("HookSourceUsage", func() {
+	Description("Hook source usage statistics")
+
+	Attribute("source", String, "Hook source (from attributes.gram.hook.source)")
+	Attribute("event_count", Int64, "Total hook events for this source")
+
+	Required("source", "event_count")
 })
 
 var ProjectSummaryType = Type("ProjectSummary", func() {

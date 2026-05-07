@@ -114,6 +114,7 @@ export * from "./getusermetricssummaryresult.js";
 export * from "./gramproductfeatures.js";
 export * from "./headerinput.js";
 export * from "./hooksbreakdownrow.js";
+export * from "./hooksourceusage.js";
 export * from "./hooksserversummary.js";
 export * from "./hookstimeseriespoint.js";
 export * from "./hooksusersummary.js";

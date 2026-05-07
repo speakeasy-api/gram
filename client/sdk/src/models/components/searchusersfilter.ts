@@ -21,6 +21,10 @@ export type SearchUsersFilter = {
    * End time in ISO 8601 format (e.g., '2025-12-19T11:00:00Z')
    */
   to: Date;
+  /**
+   * Optional list of user identifiers to include. Matches user_id for internal searches and external_user_id for external searches.
+   */
+  userIds?: Array<string> | undefined;
 };
 
 /** @internal */
@@ -28,6 +32,7 @@ export type SearchUsersFilter$Outbound = {
   deployment_id?: string | undefined;
   from: string;
   to: string;
+  user_ids?: Array<string> | undefined;
 };
 
 /** @internal */
@@ -39,10 +44,12 @@ export const SearchUsersFilter$outboundSchema: z.ZodMiniType<
     deploymentId: z.optional(z.string()),
     from: z.pipe(z.date(), z.transform(v => v.toISOString())),
     to: z.pipe(z.date(), z.transform(v => v.toISOString())),
+    userIds: z.optional(z.array(z.string())),
   }),
   z.transform((v) => {
     return remap$(v, {
       deploymentId: "deployment_id",
+      userIds: "user_ids",
     });
   }),
 );

@@ -24933,6 +24933,20 @@ components:
       description: Input for a remote MCP server header
       required:
         - name
+    HookSourceUsage:
+      type: object
+      properties:
+        event_count:
+          type: integer
+          description: Total hook events for this source
+          format: int64
+        source:
+          type: string
+          description: Hook source (from attributes.gram.hook.source)
+      description: Hook source usage statistics
+      required:
+        - source
+        - event_count
     HookTraceSummary:
       type: object
       properties:
@@ -28530,6 +28544,11 @@ components:
           description: End time in ISO 8601 format (e.g., '2025-12-19T11:00:00Z')
           example: "2025-12-19T11:00:00Z"
           format: date-time
+        user_ids:
+          type: array
+          items:
+            type: string
+          description: Optional list of user identifiers to include. Matches user_id for internal searches and external_user_id for external searches.
       description: Filter criteria for searching user usage summaries
       required:
         - from
@@ -30880,6 +30899,11 @@ components:
         first_seen_unix_nano:
           type: string
           description: Earliest activity timestamp in Unix nanoseconds
+        hook_sources:
+          type: array
+          items:
+            $ref: '#/components/schemas/HookSourceUsage'
+          description: Per-hook-source usage breakdown
         last_seen_unix_nano:
           type: string
           description: Latest activity timestamp in Unix nanoseconds
@@ -30945,6 +30969,7 @@ components:
         - tool_call_success
         - tool_call_failure
         - tools
+        - hook_sources
     ValidateKeyOrganization:
       type: object
       properties:
