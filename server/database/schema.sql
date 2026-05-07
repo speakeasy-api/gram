@@ -1961,6 +1961,8 @@ ON audit_logs (organization_id, project_id, seq DESC);
 CREATE TABLE IF NOT EXISTS remote_mcp_servers (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   project_id uuid NOT NULL,
+  name TEXT CHECK (name IS NULL OR name <> ''),
+  slug TEXT CHECK (slug IS NULL OR slug <> ''),
   transport_type TEXT NOT NULL CHECK (transport_type <> ''),
   url TEXT NOT NULL CHECK (url <> ''),
 
@@ -1975,6 +1977,10 @@ CREATE TABLE IF NOT EXISTS remote_mcp_servers (
 
 CREATE INDEX IF NOT EXISTS remote_mcp_servers_project_id_idx
 ON remote_mcp_servers (project_id)
+WHERE deleted IS FALSE;
+
+CREATE UNIQUE INDEX IF NOT EXISTS remote_mcp_servers_project_id_slug_key
+ON remote_mcp_servers (project_id, slug)
 WHERE deleted IS FALSE;
 
 -- Headers sent to a remote MCP server when proxying requests. Either value
@@ -2015,6 +2021,8 @@ WHERE deleted IS FALSE;
 CREATE TABLE IF NOT EXISTS mcp_servers (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   project_id uuid NOT NULL,
+  name TEXT CHECK (name IS NULL OR name <> ''),
+  slug TEXT CHECK (slug IS NULL OR slug <> ''),
 
   environment_id uuid,
   external_oauth_server_id uuid,
@@ -2041,6 +2049,10 @@ CREATE TABLE IF NOT EXISTS mcp_servers (
 
 CREATE INDEX IF NOT EXISTS mcp_servers_project_id_idx
 ON mcp_servers (project_id)
+WHERE deleted IS FALSE;
+
+CREATE UNIQUE INDEX IF NOT EXISTS mcp_servers_project_id_slug_key
+ON mcp_servers (project_id, slug)
 WHERE deleted IS FALSE;
 
 CREATE INDEX IF NOT EXISTS mcp_servers_remote_mcp_server_id_idx

@@ -651,6 +651,8 @@ type McpRegistry struct {
 type McpServer struct {
 	ID                    uuid.UUID
 	ProjectID             uuid.UUID
+	Name                  pgtype.Text
+	Slug                  pgtype.Text
 	EnvironmentID         uuid.NullUUID
 	ExternalOauthServerID uuid.NullUUID
 	OauthProxyServerID    uuid.NullUUID
@@ -981,6 +983,8 @@ type PromptTemplate struct {
 type RemoteMcpServer struct {
 	ID            uuid.UUID
 	ProjectID     uuid.UUID
+	Name          pgtype.Text
+	Slug          pgtype.Text
 	TransportType string
 	Url           string
 	CreatedAt     pgtype.Timestamptz
