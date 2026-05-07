@@ -66,7 +66,7 @@ func (p *ProcessWorkOSMembershipEvents) Do(ctx context.Context, params ProcessWo
 		case errors.Is(err, pgx.ErrNoRows):
 			// No cursor yet: full sync from the beginning.
 		case err != nil:
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to get user sync last event ID").Log(ctx, logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "get user sync last event ID").Log(ctx, logger)
 		default:
 			sinceEventID = cursor
 		}
@@ -85,7 +85,7 @@ func (p *ProcessWorkOSMembershipEvents) Do(ctx context.Context, params ProcessWo
 		RangeEnd:       "",
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to list WorkOS membership events").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list WorkOS membership events").Log(ctx, logger)
 	}
 
 	lastEventID, err := p.handlePage(ctx, logger, resp.Data)
@@ -110,7 +110,7 @@ func (p *ProcessWorkOSMembershipEvents) handlePage(ctx context.Context, logger *
 
 		eventID, err := p.handleEvent(ctx, eventLogger, event)
 		if err != nil {
-			return lastEventID, oops.E(oops.CodeUnexpected, err, "failed to handle WorkOS membership event").Log(ctx, eventLogger)
+			return lastEventID, oops.E(oops.CodeUnexpected, err, "handle WorkOS membership event").Log(ctx, eventLogger)
 		}
 		if eventID != "" {
 			lastEventID = eventID

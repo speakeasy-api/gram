@@ -148,7 +148,7 @@ func seedGlobalRole(t *testing.T, ctx context.Context, conn *pgxpool.Pool, slug 
 func TestProcessWorkOSMembershipEvents_CursorResumesFromDB(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := t.Context()
 	conn := newMembershipEventsTestConn(t, "workos_membership_events_cursor")
 	logger := testenv.NewLogger(t)
 
@@ -175,7 +175,7 @@ func TestProcessWorkOSMembershipEvents_CursorResumesFromDB(t *testing.T) {
 func TestProcessWorkOSMembershipEvents_KnownUserSyncsMembershipAndRoles(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := t.Context()
 	conn := newMembershipEventsTestConn(t, "workos_membership_events_known_user")
 	logger := testenv.NewLogger(t)
 
@@ -229,7 +229,7 @@ func TestProcessWorkOSMembershipEvents_KnownUserSyncsMembershipAndRoles(t *testi
 func TestProcessWorkOSMembershipEvents_UnknownUserSyncsRolesAndAdvancesCursor(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := t.Context()
 	conn := newMembershipEventsTestConn(t, "workos_membership_events_unknown_user")
 	logger := testenv.NewLogger(t)
 
@@ -268,7 +268,7 @@ func TestProcessWorkOSMembershipEvents_UnknownUserSyncsRolesAndAdvancesCursor(t 
 func TestProcessWorkOSMembershipEvents_StaleUpdateSkipped(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := t.Context()
 	conn := newMembershipEventsTestConn(t, "workos_membership_events_stale")
 	logger := testenv.NewLogger(t)
 
@@ -331,7 +331,7 @@ func TestProcessWorkOSMembershipEvents_StaleUpdateSkipped(t *testing.T) {
 func TestProcessWorkOSMembershipEvents_DeleteSoftDeletesRelationshipAndAssignments(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := t.Context()
 	conn := newMembershipEventsTestConn(t, "workos_membership_events_delete")
 	logger := testenv.NewLogger(t)
 
@@ -383,7 +383,7 @@ func TestProcessWorkOSMembershipEvents_DeleteSoftDeletesRelationshipAndAssignmen
 func TestProcessWorkOSMembershipEvents_UnknownOrganizationSkips(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := t.Context()
 	conn := newMembershipEventsTestConn(t, "workos_membership_events_unknown_org")
 	logger := testenv.NewLogger(t)
 

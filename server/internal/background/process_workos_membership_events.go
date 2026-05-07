@@ -81,7 +81,7 @@ func ProcessWorkOSMembershipEventsWorkflow(ctx workflow.Context, _ ProcessWorkOS
 	if err := workflow.ExecuteActivity(ctx, a.ProcessWorkOSMembershipEvents, activities.ProcessWorkOSMembershipEventsParams{
 		SinceEventID: nil,
 	}).Get(ctx, &processRes); err != nil {
-		return nil, fmt.Errorf("failed to process WorkOS membership events: %w", err)
+		return nil, fmt.Errorf("process WorkOS membership events: %w", err)
 	}
 
 	return &activities.ProcessWorkOSMembershipEventsResult{
