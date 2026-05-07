@@ -10,6 +10,7 @@ INSERT INTO risk_policies (
   , action
   , auto_name
   , user_message
+  , custom_cli_patterns
   , version
 )
 VALUES (
@@ -23,6 +24,7 @@ VALUES (
   , @action
   , @auto_name
   , @user_message
+  , @custom_cli_patterns
   , 1
 )
 RETURNING *;
@@ -57,11 +59,14 @@ SET name = @name
   , action = @action
   , auto_name = @auto_name
   , user_message = @user_message
+  , custom_cli_patterns = @custom_cli_patterns
   , version = CASE
       WHEN sources IS DISTINCT FROM @sources
         OR presidio_entities IS DISTINCT FROM @presidio_entities
         OR enabled IS DISTINCT FROM @enabled
         OR action IS DISTINCT FROM @action
+        OR custom_cli_patterns IS DISTINCT FROM @custom_cli_patterns
+        OR user_message IS DISTINCT FROM @user_message
       THEN version + 1
       ELSE version
     END
@@ -260,6 +265,7 @@ WHERE project_id = @project_id
   AND (
     'shadow_mcp' = ANY(sources)
     OR 'destructive_tool' = ANY(sources)
+    OR 'cli_destructive' = ANY(sources)
   )
 ORDER BY id;
 

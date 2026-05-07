@@ -2138,6 +2138,36 @@ func EncodeTriggerRiskAnalysisError(encoder func(context.Context, http.ResponseW
 	}
 }
 
+// unmarshalCustomCLIPatternRequestBodyToTypesCustomCLIPattern builds a value
+// of type *types.CustomCLIPattern from a value of type
+// *CustomCLIPatternRequestBody.
+func unmarshalCustomCLIPatternRequestBodyToTypesCustomCLIPattern(v *CustomCLIPatternRequestBody) *types.CustomCLIPattern {
+	if v == nil {
+		return nil
+	}
+	res := &types.CustomCLIPattern{
+		Label:   *v.Label,
+		Pattern: *v.Pattern,
+	}
+
+	return res
+}
+
+// marshalTypesCustomCLIPatternToCustomCLIPatternResponseBody builds a value of
+// type *CustomCLIPatternResponseBody from a value of type
+// *types.CustomCLIPattern.
+func marshalTypesCustomCLIPatternToCustomCLIPatternResponseBody(v *types.CustomCLIPattern) *CustomCLIPatternResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &CustomCLIPatternResponseBody{
+		Label:   v.Label,
+		Pattern: v.Pattern,
+	}
+
+	return res
+}
+
 // marshalTypesRiskPolicyToRiskPolicyResponseBody builds a value of type
 // *RiskPolicyResponseBody from a value of type *types.RiskPolicy.
 func marshalTypesRiskPolicyToRiskPolicyResponseBody(v *types.RiskPolicy) *RiskPolicyResponseBody {
@@ -2167,6 +2197,16 @@ func marshalTypesRiskPolicyToRiskPolicyResponseBody(v *types.RiskPolicy) *RiskPo
 		res.PresidioEntities = make([]string, len(v.PresidioEntities))
 		for i, val := range v.PresidioEntities {
 			res.PresidioEntities[i] = val
+		}
+	}
+	if v.CustomCliPatterns != nil {
+		res.CustomCliPatterns = make([]*CustomCLIPatternResponseBody, len(v.CustomCliPatterns))
+		for i, val := range v.CustomCliPatterns {
+			if val == nil {
+				res.CustomCliPatterns[i] = nil
+				continue
+			}
+			res.CustomCliPatterns[i] = marshalTypesCustomCLIPatternToCustomCLIPatternResponseBody(val)
 		}
 	}
 

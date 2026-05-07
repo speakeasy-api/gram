@@ -50,6 +50,12 @@ export type DlpPolicy = {
   updatedAt: Date;
 };
 
+export type CustomCLIPattern = {
+  id: string;
+  label: string;
+  pattern: string;
+};
+
 export const RULE_CATEGORY_META: Record<
   RuleCategory,
   { label: string; description: string; icon: string }
@@ -110,7 +116,7 @@ export const RULE_CATEGORY_META: Record<
   cli_destructive: {
     label: "Destructive CLI Commands",
     description:
-      "Tool calls whose arguments match a curated set of destructive shell, git, database, or cloud CLI patterns (rm -rf, git push --force, DROP TABLE, kubectl delete ns, ...). Applies to native Bash / run_terminal_cmd as well as MCP-routed tools whose arguments carry destructive content.",
+      "Tool calls whose arguments match a curated set of destructive shell, git, database, or cloud CLI patterns (rm -rf, git push --force, DROP TABLE, kubectl delete ns, ...). Expand to view built-in patterns or add your own.",
     icon: "terminal",
   },
   custom: {
@@ -1429,6 +1435,34 @@ export const DETECTION_RULES: Record<RuleCategory, DetectionRule[]> = {
   cli_destructive: [],
   custom: [],
 };
+
+export const CLI_DESTRUCTIVE_BUILTIN_PATTERNS: {
+  category: string;
+  name: string;
+}[] = [
+  { category: "Shell", name: "rm -rf" },
+  { category: "Shell", name: "dd disk wipe" },
+  { category: "Shell", name: "mkfs" },
+  { category: "Shell", name: "fork bomb" },
+  { category: "Shell", name: "chmod -R" },
+  { category: "Shell", name: "chown -R" },
+  { category: "Shell", name: "sudo <command>" },
+  { category: "Git", name: "push --force" },
+  { category: "Git", name: "reset --hard" },
+  { category: "Git", name: "clean -f" },
+  { category: "Git", name: "branch -D" },
+  { category: "Database", name: "DROP TABLE" },
+  { category: "Database", name: "DROP DATABASE" },
+  { category: "Database", name: "DROP SCHEMA" },
+  { category: "Database", name: "DROP INDEX" },
+  { category: "Database", name: "TRUNCATE" },
+  { category: "Database", name: "DELETE without WHERE" },
+  { category: "Database", name: "dropdb" },
+  { category: "Cloud", name: "aws ec2 terminate-instances" },
+  { category: "Cloud", name: "aws s3 rb" },
+  { category: "Cloud", name: "gcloud projects delete" },
+  { category: "Cloud", name: "kubectl delete ns/workloads" },
+];
 
 // Mock policies for initial display
 export const MOCK_POLICIES: DlpPolicy[] = [

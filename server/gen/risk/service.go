@@ -82,6 +82,8 @@ type CreateRiskPolicyPayload struct {
 	// Optional message shown to end users when this policy blocks an action or
 	// surfaces a flagged finding.
 	UserMessage *string
+	// Custom destructive CLI patterns.
+	CustomCliPatterns []*types.CustomCLIPattern
 }
 
 // DeleteRiskPolicyPayload is the payload type of the risk service
@@ -210,6 +212,8 @@ type UpdateRiskPolicyPayload struct {
 	// Optional message shown to end users when this policy blocks an action or
 	// surfaces a flagged finding. Send an empty string to clear.
 	UserMessage *string
+	// Custom destructive CLI patterns.
+	CustomCliPatterns []*types.CustomCLIPattern
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

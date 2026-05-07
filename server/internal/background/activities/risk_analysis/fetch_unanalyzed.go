@@ -2,6 +2,7 @@ package risk_analysis
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 
@@ -37,11 +38,12 @@ type FetchUnanalyzedArgs struct {
 }
 
 type FetchUnanalyzedResult struct {
-	MessageIDs       []uuid.UUID
-	OrganizationID   string
-	PolicyVersion    int64
-	Sources          []string
-	PresidioEntities []string
+	MessageIDs        []uuid.UUID
+	OrganizationID    string
+	PolicyVersion     int64
+	Sources           []string
+	PresidioEntities  []string
+	CustomCLIPatterns []CustomCLIPattern
 }
 
 func (a *FetchUnanalyzed) Do(ctx context.Context, args FetchUnanalyzedArgs) (_ *FetchUnanalyzedResult, err error) {
@@ -68,16 +70,22 @@ func (a *FetchUnanalyzed) Do(ctx context.Context, args FetchUnanalyzedArgs) (_ *
 
 	span.SetAttributes(attribute.Int64("risk.policy_version", policy.Version))
 
+	var customCLIPatterns []CustomCLIPattern
+	if len(policy.CustomCliPatterns) > 0 {
+		_ = json.Unmarshal(policy.CustomCliPatterns, &customCLIPatterns)
+	}
+
 	if !policy.Enabled {
 		// No work to do — results for disabled policies are already hidden
 		// by the list queries (JOIN rp.enabled IS TRUE).
 		span.SetAttributes(attribute.Bool("risk.policy_disabled", true))
 		return &FetchUnanalyzedResult{
-			MessageIDs:       nil,
-			OrganizationID:   policy.OrganizationID,
-			PolicyVersion:    policy.Version,
-			Sources:          policy.Sources,
-			PresidioEntities: policy.PresidioEntities,
+			MessageIDs:        nil,
+			OrganizationID:    policy.OrganizationID,
+			PolicyVersion:     policy.Version,
+			Sources:           policy.Sources,
+			PresidioEntities:  policy.PresidioEntities,
+			CustomCLIPatterns: customCLIPatterns,
 		}, nil
 	}
 
@@ -94,10 +102,11 @@ func (a *FetchUnanalyzed) Do(ctx context.Context, args FetchUnanalyzedArgs) (_ *
 	span.SetAttributes(attribute.Int("risk.unanalyzed_count", len(ids)))
 
 	return &FetchUnanalyzedResult{
-		MessageIDs:       ids,
-		OrganizationID:   policy.OrganizationID,
-		PolicyVersion:    policy.Version,
-		Sources:          policy.Sources,
-		PresidioEntities: policy.PresidioEntities,
+		MessageIDs:        ids,
+		OrganizationID:    policy.OrganizationID,
+		PolicyVersion:     policy.Version,
+		Sources:           policy.Sources,
+		PresidioEntities:  policy.PresidioEntities,
+		CustomCLIPatterns: customCLIPatterns,
 	}, nil
 }

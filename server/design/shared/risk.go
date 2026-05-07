@@ -28,6 +28,14 @@ func RiskPolicyActionEnum() {
 	Enum("flag", "block")
 }
 
+var CustomCLIPatternType = Type("CustomCLIPattern", func() {
+	Meta("struct:pkg:path", "types")
+
+	Attribute("label", String, "Display name for this pattern.")
+	Attribute("pattern", String, "Go RE2-compatible regex to match against tool call argument values.")
+	Required("label", "pattern")
+})
+
 var RiskPolicy = Type("RiskPolicy", func() {
 	Meta("struct:pkg:path", "types")
 
@@ -47,6 +55,7 @@ var RiskPolicy = Type("RiskPolicy", func() {
 	})
 	Attribute("auto_name", Boolean, "Whether the policy name is auto-generated. When true, the name is regenerated on each update.")
 	Attribute("user_message", String, "Optional message shown to the end user when this policy blocks an action or surfaces a flagged finding. When unset, a default message is rendered.")
+	Attribute("custom_cli_patterns", ArrayOf(CustomCLIPatternType), "Custom destructive CLI patterns to detect in addition to built-in rules. Only evaluated when cli_destructive is in sources.")
 	Attribute("version", Int64, "Policy version, incremented on each update.")
 	Attribute("created_at", String, "When the policy was created.", func() {
 		Format(FormatDateTime)

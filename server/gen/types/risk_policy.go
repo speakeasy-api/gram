@@ -29,6 +29,9 @@ type RiskPolicy struct {
 	// Optional message shown to the end user when this policy blocks an action or
 	// surfaces a flagged finding. When unset, a default message is rendered.
 	UserMessage *string
+	// Custom destructive CLI patterns to detect in addition to built-in rules.
+	// Only evaluated when cli_destructive is in sources.
+	CustomCliPatterns []*CustomCLIPattern
 	// Policy version, incremented on each update.
 	Version int64
 	// When the policy was created.

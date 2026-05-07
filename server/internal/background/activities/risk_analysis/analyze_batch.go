@@ -57,13 +57,14 @@ func NewAnalyzeBatch(logger *slog.Logger, tracerProvider trace.TracerProvider, m
 }
 
 type AnalyzeBatchArgs struct {
-	ProjectID        uuid.UUID
-	OrganizationID   string
-	RiskPolicyID     uuid.UUID
-	PolicyVersion    int64
-	MessageIDs       []uuid.UUID
-	Sources          []string
-	PresidioEntities []string
+	ProjectID         uuid.UUID
+	OrganizationID    string
+	RiskPolicyID      uuid.UUID
+	PolicyVersion     int64
+	MessageIDs        []uuid.UUID
+	Sources           []string
+	PresidioEntities  []string
+	CustomCLIPatterns []CustomCLIPattern
 }
 
 type AnalyzeBatchResult struct {
@@ -240,7 +241,8 @@ func (a *AnalyzeBatch) scan(ctx context.Context, args AnalyzeBatchArgs, messages
 	}
 
 	if slices.Contains(args.Sources, SourceCLIDestructive) {
-		cliDestructiveFindings = a.scanDestructiveCLICommands(ctx, messages)
+		compiled := compileCustomPatterns(args.CustomCLIPatterns)
+		cliDestructiveFindings = a.scanDestructiveCLICommands(ctx, messages, compiled)
 		activity.RecordHeartbeat(ctx, "cli_destructive")
 	}
 
@@ -397,18 +399,18 @@ func (a *AnalyzeBatch) scanMessageDestructiveToolCalls(ctx context.Context, orgI
 // path can overlap with destructive_tool annotations; rule_id distinguishes
 // them and the dedup pass at the merge boundary is non-overlapping (start/end
 // positions are zero on tool-call findings).
-func (a *AnalyzeBatch) scanDestructiveCLICommands(ctx context.Context, messages []repo.GetMessageContentBatchRow) [][]Finding {
+func (a *AnalyzeBatch) scanDestructiveCLICommands(ctx context.Context, messages []repo.GetMessageContentBatchRow, extras []cliDestructivePattern) [][]Finding {
 	out := make([][]Finding, len(messages))
 	for i, msg := range messages {
 		if len(msg.ToolCalls) == 0 {
 			continue
 		}
-		out[i] = a.scanMessageDestructiveCLICalls(ctx, msg.ToolCalls)
+		out[i] = a.scanMessageDestructiveCLICalls(ctx, msg.ToolCalls, extras)
 	}
 	return out
 }
 
-func (a *AnalyzeBatch) scanMessageDestructiveCLICalls(ctx context.Context, raw []byte) []Finding {
+func (a *AnalyzeBatch) scanMessageDestructiveCLICalls(ctx context.Context, raw []byte, extras []cliDestructivePattern) []Finding {
 	calls := a.parseRecordedToolCalls(ctx, SourceCLIDestructive, raw)
 
 	var findings []Finding
@@ -425,7 +427,7 @@ func (a *AnalyzeBatch) scanMessageDestructiveCLICalls(ctx context.Context, raw [
 			}
 		}
 
-		matched, ok := scanForCLIDestructive(toolInput)
+		matched, ok := scanForCLIDestructiveWithExtras(toolInput, extras)
 		if !ok {
 			continue
 		}

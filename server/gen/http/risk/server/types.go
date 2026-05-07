@@ -31,6 +31,8 @@ type CreateRiskPolicyRequestBody struct {
 	// Optional message shown to end users when this policy blocks an action or
 	// surfaces a flagged finding.
 	UserMessage *string `form:"user_message,omitempty" json:"user_message,omitempty" xml:"user_message,omitempty"`
+	// Custom destructive CLI patterns.
+	CustomCliPatterns []*CustomCLIPatternRequestBody `form:"custom_cli_patterns,omitempty" json:"custom_cli_patterns,omitempty" xml:"custom_cli_patterns,omitempty"`
 }
 
 // UpdateRiskPolicyRequestBody is the type of the "risk" service
@@ -53,6 +55,8 @@ type UpdateRiskPolicyRequestBody struct {
 	// Optional message shown to end users when this policy blocks an action or
 	// surfaces a flagged finding. Send an empty string to clear.
 	UserMessage *string `form:"user_message,omitempty" json:"user_message,omitempty" xml:"user_message,omitempty"`
+	// Custom destructive CLI patterns.
+	CustomCliPatterns []*CustomCLIPatternRequestBody `form:"custom_cli_patterns,omitempty" json:"custom_cli_patterns,omitempty" xml:"custom_cli_patterns,omitempty"`
 }
 
 // TriggerRiskAnalysisRequestBody is the type of the "risk" service
@@ -85,6 +89,9 @@ type CreateRiskPolicyResponseBody struct {
 	// Optional message shown to the end user when this policy blocks an action or
 	// surfaces a flagged finding. When unset, a default message is rendered.
 	UserMessage *string `form:"user_message,omitempty" json:"user_message,omitempty" xml:"user_message,omitempty"`
+	// Custom destructive CLI patterns to detect in addition to built-in rules.
+	// Only evaluated when cli_destructive is in sources.
+	CustomCliPatterns []*CustomCLIPatternResponseBody `form:"custom_cli_patterns,omitempty" json:"custom_cli_patterns,omitempty" xml:"custom_cli_patterns,omitempty"`
 	// Policy version, incremented on each update.
 	Version int64 `form:"version" json:"version" xml:"version"`
 	// When the policy was created.
@@ -127,6 +134,9 @@ type GetRiskPolicyResponseBody struct {
 	// Optional message shown to the end user when this policy blocks an action or
 	// surfaces a flagged finding. When unset, a default message is rendered.
 	UserMessage *string `form:"user_message,omitempty" json:"user_message,omitempty" xml:"user_message,omitempty"`
+	// Custom destructive CLI patterns to detect in addition to built-in rules.
+	// Only evaluated when cli_destructive is in sources.
+	CustomCliPatterns []*CustomCLIPatternResponseBody `form:"custom_cli_patterns,omitempty" json:"custom_cli_patterns,omitempty" xml:"custom_cli_patterns,omitempty"`
 	// Policy version, incremented on each update.
 	Version int64 `form:"version" json:"version" xml:"version"`
 	// When the policy was created.
@@ -162,6 +172,9 @@ type UpdateRiskPolicyResponseBody struct {
 	// Optional message shown to the end user when this policy blocks an action or
 	// surfaces a flagged finding. When unset, a default message is rendered.
 	UserMessage *string `form:"user_message,omitempty" json:"user_message,omitempty" xml:"user_message,omitempty"`
+	// Custom destructive CLI patterns to detect in addition to built-in rules.
+	// Only evaluated when cli_destructive is in sources.
+	CustomCliPatterns []*CustomCLIPatternResponseBody `form:"custom_cli_patterns,omitempty" json:"custom_cli_patterns,omitempty" xml:"custom_cli_patterns,omitempty"`
 	// Policy version, incremented on each update.
 	Version int64 `form:"version" json:"version" xml:"version"`
 	// When the policy was created.
@@ -1863,6 +1876,14 @@ type TriggerRiskAnalysisGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// CustomCLIPatternResponseBody is used to define fields on response body types.
+type CustomCLIPatternResponseBody struct {
+	// Display name for this pattern.
+	Label string `form:"label" json:"label" xml:"label"`
+	// Go RE2-compatible regex to match against tool call argument values.
+	Pattern string `form:"pattern" json:"pattern" xml:"pattern"`
+}
+
 // RiskPolicyResponseBody is used to define fields on response body types.
 type RiskPolicyResponseBody struct {
 	// The risk policy ID.
@@ -1885,6 +1906,9 @@ type RiskPolicyResponseBody struct {
 	// Optional message shown to the end user when this policy blocks an action or
 	// surfaces a flagged finding. When unset, a default message is rendered.
 	UserMessage *string `form:"user_message,omitempty" json:"user_message,omitempty" xml:"user_message,omitempty"`
+	// Custom destructive CLI patterns to detect in addition to built-in rules.
+	// Only evaluated when cli_destructive is in sources.
+	CustomCliPatterns []*CustomCLIPatternResponseBody `form:"custom_cli_patterns,omitempty" json:"custom_cli_patterns,omitempty" xml:"custom_cli_patterns,omitempty"`
 	// Policy version, incremented on each update.
 	Version int64 `form:"version" json:"version" xml:"version"`
 	// When the policy was created.
@@ -1947,6 +1971,14 @@ type RiskChatSummaryResponseBody struct {
 	LatestDetected string `form:"latest_detected" json:"latest_detected" xml:"latest_detected"`
 }
 
+// CustomCLIPatternRequestBody is used to define fields on request body types.
+type CustomCLIPatternRequestBody struct {
+	// Display name for this pattern.
+	Label *string `form:"label,omitempty" json:"label,omitempty" xml:"label,omitempty"`
+	// Go RE2-compatible regex to match against tool call argument values.
+	Pattern *string `form:"pattern,omitempty" json:"pattern,omitempty" xml:"pattern,omitempty"`
+}
+
 // NewCreateRiskPolicyResponseBody builds the HTTP response body from the
 // result of the "createRiskPolicy" endpoint of the "risk" service.
 func NewCreateRiskPolicyResponseBody(res *types.RiskPolicy) *CreateRiskPolicyResponseBody {
@@ -1976,6 +2008,16 @@ func NewCreateRiskPolicyResponseBody(res *types.RiskPolicy) *CreateRiskPolicyRes
 		body.PresidioEntities = make([]string, len(res.PresidioEntities))
 		for i, val := range res.PresidioEntities {
 			body.PresidioEntities[i] = val
+		}
+	}
+	if res.CustomCliPatterns != nil {
+		body.CustomCliPatterns = make([]*CustomCLIPatternResponseBody, len(res.CustomCliPatterns))
+		for i, val := range res.CustomCliPatterns {
+			if val == nil {
+				body.CustomCliPatterns[i] = nil
+				continue
+			}
+			body.CustomCliPatterns[i] = marshalTypesCustomCLIPatternToCustomCLIPatternResponseBody(val)
 		}
 	}
 	return body
@@ -2031,6 +2073,16 @@ func NewGetRiskPolicyResponseBody(res *types.RiskPolicy) *GetRiskPolicyResponseB
 			body.PresidioEntities[i] = val
 		}
 	}
+	if res.CustomCliPatterns != nil {
+		body.CustomCliPatterns = make([]*CustomCLIPatternResponseBody, len(res.CustomCliPatterns))
+		for i, val := range res.CustomCliPatterns {
+			if val == nil {
+				body.CustomCliPatterns[i] = nil
+				continue
+			}
+			body.CustomCliPatterns[i] = marshalTypesCustomCLIPatternToCustomCLIPatternResponseBody(val)
+		}
+	}
 	return body
 }
 
@@ -2063,6 +2115,16 @@ func NewUpdateRiskPolicyResponseBody(res *types.RiskPolicy) *UpdateRiskPolicyRes
 		body.PresidioEntities = make([]string, len(res.PresidioEntities))
 		for i, val := range res.PresidioEntities {
 			body.PresidioEntities[i] = val
+		}
+	}
+	if res.CustomCliPatterns != nil {
+		body.CustomCliPatterns = make([]*CustomCLIPatternResponseBody, len(res.CustomCliPatterns))
+		for i, val := range res.CustomCliPatterns {
+			if val == nil {
+				body.CustomCliPatterns[i] = nil
+				continue
+			}
+			body.CustomCliPatterns[i] = marshalTypesCustomCLIPatternToCustomCLIPatternResponseBody(val)
 		}
 	}
 	return body
@@ -3435,6 +3497,16 @@ func NewCreateRiskPolicyPayload(body *CreateRiskPolicyRequestBody, apikeyToken *
 	if body.Action == nil {
 		v.Action = "flag"
 	}
+	if body.CustomCliPatterns != nil {
+		v.CustomCliPatterns = make([]*types.CustomCLIPattern, len(body.CustomCliPatterns))
+		for i, val := range body.CustomCliPatterns {
+			if val == nil {
+				v.CustomCliPatterns[i] = nil
+				continue
+			}
+			v.CustomCliPatterns[i] = unmarshalCustomCLIPatternRequestBodyToTypesCustomCLIPattern(val)
+		}
+	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
@@ -3485,6 +3557,16 @@ func NewUpdateRiskPolicyPayload(body *UpdateRiskPolicyRequestBody, apikeyToken *
 		v.PresidioEntities = make([]string, len(body.PresidioEntities))
 		for i, val := range body.PresidioEntities {
 			v.PresidioEntities[i] = val
+		}
+	}
+	if body.CustomCliPatterns != nil {
+		v.CustomCliPatterns = make([]*types.CustomCLIPattern, len(body.CustomCliPatterns))
+		for i, val := range body.CustomCliPatterns {
+			if val == nil {
+				v.CustomCliPatterns[i] = nil
+				continue
+			}
+			v.CustomCliPatterns[i] = unmarshalCustomCLIPatternRequestBodyToTypesCustomCLIPattern(val)
 		}
 	}
 	v.ApikeyToken = apikeyToken
@@ -3567,6 +3649,13 @@ func ValidateCreateRiskPolicyRequestBody(body *CreateRiskPolicyRequestBody) (err
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "block"}))
 		}
 	}
+	for _, e := range body.CustomCliPatterns {
+		if e != nil {
+			if err2 := ValidateCustomCLIPatternRequestBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
 	return
 }
 
@@ -3587,6 +3676,13 @@ func ValidateUpdateRiskPolicyRequestBody(body *UpdateRiskPolicyRequestBody) (err
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "block"}))
 		}
 	}
+	for _, e := range body.CustomCliPatterns {
+		if e != nil {
+			if err2 := ValidateCustomCLIPatternRequestBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
 	return
 }
 
@@ -3598,6 +3694,18 @@ func ValidateTriggerRiskAnalysisRequestBody(body *TriggerRiskAnalysisRequestBody
 	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateCustomCLIPatternRequestBody runs the validations defined on
+// CustomCLIPatternRequestBody
+func ValidateCustomCLIPatternRequestBody(body *CustomCLIPatternRequestBody) (err error) {
+	if body.Label == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("label", "body"))
+	}
+	if body.Pattern == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("pattern", "body"))
 	}
 	return
 }

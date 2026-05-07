@@ -22714,6 +22714,11 @@ components:
                 auto_name:
                     type: boolean
                     description: Whether the policy name should be auto-generated.
+                custom_cli_patterns:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/CustomCLIPattern'
+                    description: Custom destructive CLI patterns.
                 enabled:
                     type: boolean
                     description: Whether the policy is active.
@@ -23087,6 +23092,18 @@ components:
                     type: string
                     description: Message to display to the user
             description: Result for Cursor hook events
+        CustomCLIPattern:
+            type: object
+            properties:
+                label:
+                    type: string
+                    description: Display name for this pattern.
+                pattern:
+                    type: string
+                    description: Go RE2-compatible regex to match against tool call argument values.
+            required:
+                - label
+                - pattern
         CustomDomain:
             type: object
             properties:
@@ -27842,6 +27859,11 @@ components:
                     type: string
                     description: When the policy was created.
                     format: date-time
+                custom_cli_patterns:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/CustomCLIPattern'
+                    description: Custom destructive CLI patterns to detect in addition to built-in rules. Only evaluated when cli_destructive is in sources.
                 enabled:
                     type: boolean
                     description: Whether the policy is active.
@@ -30238,6 +30260,11 @@ components:
                 auto_name:
                     type: boolean
                     description: Whether the policy name should be auto-generated.
+                custom_cli_patterns:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/CustomCLIPattern'
+                    description: Custom destructive CLI patterns.
                 enabled:
                     type: boolean
                     description: Whether the policy is active.
