@@ -17,8 +17,8 @@ import (
 // errors as JSON-RPC error responses instead of the generic HTTP error shape.
 func MCPErrHandle(logger *slog.Logger, handler func(http.ResponseWriter, *http.Request) error) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		mcpCtx := &contextvalues.MCPContext{ID: mcpjsonrpc.NullID()}
-		r = r.WithContext(contextvalues.SetMCPContext(r.Context(), mcpCtx))
+		rpcCtx := &contextvalues.RPCContext{ID: mcpjsonrpc.NullID()}
+		r = r.WithContext(contextvalues.SetRPCContext(r.Context(), rpcCtx))
 
 		err := handler(w, r)
 		if err == nil {
@@ -31,9 +31,9 @@ func MCPErrHandle(logger *slog.Logger, handler func(http.ResponseWriter, *http.R
 			logger.ErrorContext(r.Context(), "unexpected error", attr.SlogError(err), attr.SlogErrorStack(stack))
 		}
 
-		mcpID, ok := contextvalues.GetMCPID(r.Context())
-		if !ok {
-			mcpID = mcpjsonrpc.NullID()
+		mcpID := mcpjsonrpc.NullID()
+		if rpcCtx, ok := contextvalues.GetRPCContext(r.Context()); ok && rpcCtx.ID.IsSet() {
+			mcpID = rpcCtx.ID
 		}
 		payload := NewMCPErrorFromCause(mcpID, err)
 

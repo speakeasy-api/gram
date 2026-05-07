@@ -480,7 +480,9 @@ func (s *Service) ServeToolsetResolved(w http.ResponseWriter, r *http.Request, t
 			ID mcpjsonrpc.ID `json:"id"`
 		}
 		if err := json.Unmarshal(bodyBytes, &req); err == nil {
-			contextvalues.SetMCPID(ctx, req.ID)
+			if rpcCtx, ok := contextvalues.GetRPCContext(ctx); ok && req.ID.IsSet() {
+				rpcCtx.ID = req.ID
+			}
 		}
 	}
 
@@ -752,9 +754,9 @@ func (s *Service) ServeToolsetResolved(w http.ResponseWriter, r *http.Request, t
 	case body == nil && err == nil:
 		return respondWithNoContent(true, w)
 	case err != nil:
-		mcpID, ok := contextvalues.GetMCPID(ctx)
-		if !ok {
-			mcpID = mcpjsonrpc.NullID()
+		mcpID := mcpjsonrpc.NullID()
+		if rpcCtx, ok := contextvalues.GetRPCContext(ctx); ok && rpcCtx.ID.IsSet() {
+			mcpID = rpcCtx.ID
 		}
 		bs, merr := json.Marshal(oops.NewMCPErrorFromCause(mcpID, err))
 		if merr != nil {
@@ -1005,9 +1007,9 @@ func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *ra
 	case "resources/read":
 		return handleResourcesRead(ctx, s.logger, s.db, payload, req, s.toolProxy, s.env, s.billingTracker, s.billingRepository, s.telemLogger, s.platformExtras)
 	default:
-		mcpID, ok := contextvalues.GetMCPID(ctx)
-		if !ok {
-			mcpID = mcpjsonrpc.NullID()
+		mcpID := mcpjsonrpc.NullID()
+		if rpcCtx, ok := contextvalues.GetRPCContext(ctx); ok && rpcCtx.ID.IsSet() {
+			mcpID = rpcCtx.ID
 		}
 		return nil, &oops.MCPError{
 			ID:      mcpID,
