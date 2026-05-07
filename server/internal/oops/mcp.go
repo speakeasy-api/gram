@@ -25,20 +25,29 @@ func MCPErrHandle(logger *slog.Logger, handler func(http.ResponseWriter, *http.R
 			return
 		}
 
-		code := http.StatusInternalServerError
-
-		var shareableErr *ShareableError
-		if !errors.As(err, &shareableErr) {
-			code = shareableErr.HTTPStatus()
-			stack := string(debug.Stack())
-			logger.ErrorContext(r.Context(), "unexpected error", attr.SlogError(err), attr.SlogErrorStack(stack))
-		}
-
 		mcpID := mcpjsonrpc.NullID()
 		if rpcCtx, ok := contextvalues.GetRPCContext(r.Context()); ok && rpcCtx.ID.IsSet() {
 			mcpID = rpcCtx.ID
 		}
-		payload := NewMCPErrorFromCause(mcpID, err)
+
+		code := http.StatusInternalServerError
+
+		payload := &MCPError{
+			ID:      mcpID,
+			Code:    MCPCodeInternalError,
+			Message: MCPCodeInternalError.Message(),
+		}
+
+		var shareableErr *ShareableError
+		switch {
+		case errors.As(err, &shareableErr):
+			code = shareableErr.HTTPStatus()
+			payload.Code = shareableErr.Code.MCPCode()
+			payload.Message = shareableErr.Error()
+		default:
+			stack := string(debug.Stack())
+			logger.ErrorContext(r.Context(), "unexpected error", attr.SlogError(err), attr.SlogErrorStack(stack))
+		}
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(code)
