@@ -1656,6 +1656,9 @@ func (s *ServiceCore) buildRuntimeStartupConfig(
 	completionsEndpoint := runtimeServerURL.JoinPath("chat", "completions")
 	completionsQuery := completionsEndpoint.Query()
 	completionsQuery.Set("unstable_normalizeOutboundMessages", "1")
+	// Opt the runner into the gram_metadata.context_window decoration so the
+	// compaction trigger can read the model's window from completion responses.
+	completionsQuery.Set("includeContextWindow", "1")
 	completionsEndpoint.RawQuery = completionsQuery.Encode()
 	completionsURL := completionsEndpoint.String()
 	return runtimeStartupConfig{

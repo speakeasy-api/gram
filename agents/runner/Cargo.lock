@@ -901,6 +901,7 @@ name = "gram-assistant-runner"
 version = "0.1.0"
 dependencies = [
  "agentkit-adapter-completions",
+ "agentkit-compaction",
  "agentkit-core",
  "agentkit-http",
  "agentkit-loop",
