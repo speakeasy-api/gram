@@ -28,7 +28,7 @@ func TestMCPErrHandle_IncludesMCPID(t *testing.T) {
 
 	handler.ServeHTTP(rec, req)
 
-	require.Equal(t, http.StatusUnauthorized, rec.Code)
+	require.Equal(t, http.StatusBadRequest, rec.Code)
 	require.Equal(t, "application/json", rec.Header().Get("Content-Type"))
 
 	var response map[string]any
@@ -53,7 +53,7 @@ func TestMCPErrHandle_UsesNullMCPIDWhenMissing(t *testing.T) {
 
 	handler.ServeHTTP(rec, req)
 
-	require.Equal(t, http.StatusUnauthorized, rec.Code)
+	require.Equal(t, http.StatusBadRequest, rec.Code)
 
 	var response map[string]any
 	err := json.Unmarshal(rec.Body.Bytes(), &response)
@@ -94,7 +94,6 @@ func TestMCPError_MarshalJSON(t *testing.T) {
 		ID:      mcpjsonrpc.NumberID(1),
 		Code:    MCPCodeMethodNotFound,
 		Message: "tools/unknown: Method not found",
-		Data:    json.RawMessage(`{"detail":"extra info"}`),
 	}
 
 	data, marshalErr := json.Marshal(err)
@@ -110,7 +109,7 @@ func TestMCPError_MarshalJSON(t *testing.T) {
 	require.True(t, ok)
 	require.InDelta(t, -32601, errorBody["code"], 0)
 	require.Equal(t, "tools/unknown: Method not found", errorBody["message"])
-	require.NotNil(t, errorBody["data"])
+	require.NotContains(t, errorBody, "data")
 }
 
 func TestNewMCPErrorFromCause(t *testing.T) {

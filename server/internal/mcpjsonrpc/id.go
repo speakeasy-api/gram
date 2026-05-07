@@ -19,15 +19,15 @@ type ID struct {
 }
 
 func NullID() ID {
-	return ID{format: idFormatNull}
+	return ID{format: idFormatNull, Number: 0, String: ""}
 }
 
 func NumberID(value int64) ID {
-	return ID{format: idFormatNumber, Number: value}
+	return ID{format: idFormatNumber, Number: value, String: ""}
 }
 
 func StringID(value string) ID {
-	return ID{format: idFormatString, String: value}
+	return ID{format: idFormatString, Number: 0, String: value}
 }
 
 func (id ID) IsSet() bool {
