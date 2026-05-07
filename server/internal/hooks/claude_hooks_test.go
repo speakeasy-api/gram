@@ -138,3 +138,48 @@ func TestClaude_PreToolUse_AllowsWhenNoAuthAndNoCachedMetadata(t *testing.T) {
 	assert.Equal(t, "allow", *output.PermissionDecision,
 		"OTEL path with no metadata should default to allow so first call isn't blocked")
 }
+
+// Claude Code's hook output schema only permits hookSpecificOutput for
+// PreToolUse, PostToolUse, UserPromptSubmit, and PostToolBatch — and even
+// those variants need their own required fields. For Stop, SessionStart,
+// SessionEnd, Notification, and PostToolUseFailure, including any
+// hookSpecificOutput object causes Claude Code to reject the response with
+// "Hook JSON output validation failed — (root): Invalid input", which the
+// user sees as a Stop hook error. Make sure makeHookResult omits it for those.
+func TestClaude_OmitsHookSpecificOutputForNonPreToolUseEvents(t *testing.T) {
+	t.Parallel()
+	_, ti := newTestHooksService(t)
+
+	sessionID := uuid.NewString()
+	for _, event := range []string{"Stop", "SessionEnd", "Notification", "PostToolUse", "PostToolUseFailure", "UserPromptSubmit"} {
+		t.Run(event, func(t *testing.T) {
+			t.Parallel()
+			result, err := ti.service.Claude(t.Context(), &gen.ClaudePayload{
+				HookEventName: event,
+				SessionID:     &sessionID,
+			})
+			require.NoError(t, err)
+			require.NotNil(t, result)
+			assert.Nil(t, result.HookSpecificOutput,
+				"%s response must not include hookSpecificOutput — Claude Code rejects unknown variants", event)
+		})
+	}
+}
+
+// SessionStart is the one non-PreToolUse event that has a meaningful response
+// shape (Continue), but it still must NOT carry hookSpecificOutput.
+func TestClaude_SessionStart_OmitsHookSpecificOutput(t *testing.T) {
+	t.Parallel()
+	_, ti := newTestHooksService(t)
+
+	sessionID := uuid.NewString()
+	result, err := ti.service.Claude(t.Context(), &gen.ClaudePayload{
+		HookEventName: "SessionStart",
+		SessionID:     &sessionID,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Nil(t, result.HookSpecificOutput)
+	require.NotNil(t, result.Continue)
+	assert.True(t, *result.Continue, "SessionStart should always allow the session to continue")
+}

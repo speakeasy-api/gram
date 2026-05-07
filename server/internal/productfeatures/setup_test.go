@@ -6,6 +6,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
@@ -14,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -70,6 +72,20 @@ func newTestProductFeaturesService(t *testing.T) (context.Context, *testInstance
 	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, guardianPolicy, conn, redisClient, cache.Suffix("gram-local"), billingClient)
 
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
+
+	// The mock IDP returns the same organization for every test, so parallel
+	// subtests would otherwise share the cache key feature:<orgID>:<feature>
+	// in the shared redis db. One test enabling and another disabling the
+	// same feature races on that key and produces flaky failures (e.g.
+	// "returns true for enabled feature" reading a `false` written by
+	// "returns false after feature is disabled"). Override the org ID with
+	// a fresh UUID per test so cache keys are unique. organization_features
+	// has no FK on organization_id, and ShouldEnforce skips RBAC for the
+	// non-enterprise account type used in tests, so this needs no extra setup.
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok, "auth context not found")
+	authCtx.ActiveOrganizationID = uuid.NewString()
+	ctx = contextvalues.SetAuthContext(ctx, authCtx)
 
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
