@@ -23,10 +23,15 @@ In production, Gram relies on two external services for identity:
 
 For local development, both of these are replaced by **dev-idp** — a lightweight Go server in the `dev-idp/` directory that runs as a process in madprocs. It uses SQLite for storage and requires no external accounts or API keys.
 
-dev-idp handles both concerns through different URL prefixes:
+dev-idp mounts several protocol handlers, all sharing the same SQLite database:
 
-- **`/oauth2`** — A standard OIDC provider (authorize, token, userinfo, JWKS). The Gram server's login flow talks to this. When you click "Login" in the dashboard, the browser redirects here, dev-idp issues tokens, and the server creates a session.
-- **`/mock-workos`** — A mock implementation of the WorkOS REST API. Any part of the Gram server that calls WorkOS directly (e.g. the Roles & Permissions page listing organization roles, sending team invitations, or checking membership status) hits this mock instead. It returns synthetic data from dev-idp's SQLite store.
+| Prefix         | Always mounted              | Purpose                                                                                                                                                                                                                                                                                      |
+| -------------- | --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/oauth2`      | ✅                          | Standard OIDC provider (authorize, token, userinfo, JWKS). The Gram server's login flow talks to this — when you click "Login" in the dashboard, the browser redirects here, dev-idp issues tokens, and the server creates a session.                                                        |
+| `/oauth2-1`    | ✅                          | OAuth 2.1 authorization server with PKCE (S256) and stateless Dynamic Client Registration. Used by MCP remote session tests and any OAuth 2.1 flows. Shares the same user/org data as `/oauth2`.                                                                                             |
+| `/mock-workos` | ✅                          | Mock implementation of the WorkOS REST API. Any part of the Gram server that calls WorkOS directly (e.g. the Roles & Permissions page listing organization roles, sending team invitations, or checking membership status) hits this mock instead. Returns data from dev-idp's SQLite store. |
+| `/workos`      | ❌ (needs `WORKOS_API_KEY`) | Thin proxy to the real WorkOS API. Forwards requests using your API key. Only mounted when `WORKOS_API_KEY` is set.                                                                                                                                                                          |
+| `/rpc/*`       | ✅                          | Goa management API for dev-idp itself — CRUD for users, organizations, memberships, roles, and invitations. Powers the dev-idp dashboard UI at `http://localhost:35293`.                                                                                                                     |
 
 The Gram server doesn't know or care that these are mocked — it uses the same code paths as production. The only difference is that `GRAM_IDP_BASE_URL` and `WORKOS_API_URL` point to `localhost` instead of external services.
 
