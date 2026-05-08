@@ -182,6 +182,38 @@ export function ScopePickerPopover({
   // selectors have content, so clearing it eagerly only causes the UI to
   // jump back to "servers" when the user deselects all items.
 
+  const projectList = organization.projects.map((p) => ({
+    id: p.id,
+    name: p.name,
+  }));
+
+  const resourceKind = resourceType === "project" ? "project" : "mcp";
+
+  const filteredProjectList = useMemo(
+    () =>
+      resourceSearch
+        ? projectList.filter((p) =>
+            p.name.toLowerCase().includes(resourceSearch.toLowerCase()),
+          )
+        : projectList,
+    [projectList, resourceSearch],
+  );
+
+  const filteredMcpServers = useMemo(() => {
+    if (!resourceSearch) return mcpServers;
+    const q = resourceSearch.toLowerCase();
+    return mcpServers
+      .map((group) => ({
+        ...group,
+        servers: group.servers.filter(
+          (s) =>
+            s.name.toLowerCase().includes(q) ||
+            group.projectName.toLowerCase().includes(q),
+        ),
+      }))
+      .filter((g) => g.servers.length > 0);
+  }, [mcpServers, resourceSearch]);
+
   // Fixed-scope permissions have no resource picker — their granularity is
   // baked into the scope definition. Org scopes are always org-wide;
   // environment scopes apply to every environment in the project.
@@ -192,30 +224,6 @@ export function ScopePickerPopover({
       </span>
     );
   }
-
-  const projectList = organization.projects.map((p) => ({
-    id: p.id,
-    name: p.name,
-  }));
-
-  // TODO: TEMP — remove after testing scroll
-  const fakeMcpServers: ServerGroup[] = [
-    {
-      projectId: "fake-project",
-      projectName: "test-project",
-      servers: Array.from({ length: 30 }, (_, i) => ({
-        id: `fake-server-${i}`,
-        name: `test-server-${i}`,
-        slug: `test-project/test-server-${i}`,
-        tools: [{ id: `tool-${i}`, name: `tool-${i}`, type: "http" }],
-      })),
-    },
-  ];
-  const _realMcpServers = mcpServers;
-  const mcpServersOverride =
-    mcpServers.length === 0 ? fakeMcpServers : mcpServers;
-
-  const resourceKind = resourceType === "project" ? "project" : "mcp";
 
   const toggleResource = (id: string) => {
     if (selectors === null) return;
@@ -284,31 +292,6 @@ export function ScopePickerPopover({
     </div>
   );
 
-  const filteredProjectList = useMemo(
-    () =>
-      resourceSearch
-        ? projectList.filter((p) =>
-            p.name.toLowerCase().includes(resourceSearch.toLowerCase()),
-          )
-        : projectList,
-    [projectList, resourceSearch],
-  );
-
-  const filteredMcpServers = useMemo(() => {
-    if (!resourceSearch) return mcpServersOverride;
-    const q = resourceSearch.toLowerCase();
-    return mcpServersOverride
-      .map((group) => ({
-        ...group,
-        servers: group.servers.filter(
-          (s) =>
-            s.name.toLowerCase().includes(q) ||
-            group.projectName.toLowerCase().includes(q),
-        ),
-      }))
-      .filter((g) => g.servers.length > 0);
-  }, [mcpServersOverride, resourceSearch]);
-
   const resourceList = activePanel === "servers" && (
     <>
       <div className="bg-border mt-1 h-px" />
@@ -358,7 +341,7 @@ export function ScopePickerPopover({
           )
         ) : filteredMcpServers.length === 0 ? (
           <div className="text-muted-foreground px-3 py-3 text-sm">
-            {mcpServersOverride.length === 0
+            {mcpServers.length === 0
               ? "No servers found"
               : "No matching servers"}
           </div>
