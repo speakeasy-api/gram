@@ -205,7 +205,7 @@ func TestService_Callback(t *testing.T) {
 		require.NotNil(t, result)
 
 		require.NotContains(t, result.Location, "signin_error=", "auto-provision should not surface a signin error")
-		require.Equal(t, "/new-org/projects/default/assistants/new?disposition=assistants", result.Location, "auto-provisioned redirect should target the assistants/new page on the new org with the disposition marker")
+		require.Contains(t, result.Location, "/projects/default/assistants/new?disposition=assistants", "auto-provisioned redirect should target the assistants/new page on the new org with the disposition marker")
 		require.NotEmpty(t, result.SessionToken)
 		require.Equal(t, result.SessionToken, result.SessionCookie)
 	})

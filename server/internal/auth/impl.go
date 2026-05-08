@@ -528,7 +528,7 @@ func (s *Service) autoProvisionForAssistants(ctx context.Context, userInfo *sess
 		ID:          "org_" + uuid.New().String(),
 		Name:        orgName,
 		Slug:        slugify(orgName),
-		WorkosID:    pgtype.Text{Valid: false},
+		WorkosID:    pgtype.Text{String: "", Valid: false},
 		Whitelisted: pgtype.Bool{Bool: true, Valid: true},
 	})
 	if err != nil {
