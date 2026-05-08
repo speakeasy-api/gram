@@ -228,7 +228,7 @@ echo "Gram: settings applied to $SETTINGS"
 // config into the relevant keys, and returns the patched JSON. All existing settings
 // are preserved — only the specific Gram keys are written.
 func (s *Service) PatchClaudeSettings(ctx context.Context, payload *gen.PatchClaudeSettingsPayload, body io.ReadCloser) (io.ReadCloser, error) {
-	defer body.Close()
+	defer o11y.NoLogDefer(func() error { return body.Close() })
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
