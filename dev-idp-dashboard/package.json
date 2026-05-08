@@ -12,7 +12,7 @@
   "dependencies": {
     "@base-ui/react": "^1.4.1",
     "@fontsource-variable/space-grotesk": "^5.2.10",
-    "@tailwindcss/vite": "^4.1.17",
+    "@tailwindcss/vite": "^4.2.4",
     "@tanstack/match-sorter-utils": "^8.19.4",
     "@tanstack/react-form": "^1.29.1",
     "@tanstack/react-query": "catalog:",
@@ -25,8 +25,8 @@
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "shadcn": "^4.5.0",
-    "tailwind-merge": "^3.4.0",
-    "tailwindcss": "^4.1.17",
+    "tailwind-merge": "^3.5.0",
+    "tailwindcss": "^4.2.4",
     "ts-pattern": "^5.5.0",
     "tw-animate-css": "^1.4.0"
   },

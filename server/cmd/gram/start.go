@@ -789,7 +789,6 @@ func newStartCommand() *cli.Command {
 				marketplaceServer = marketplace.NewServer(
 					marketplace.NewDBResolver(db, ghClient),
 					guardianPolicy.Client(),
-					c.String("server-url"),
 					logger,
 				)
 				marketplaceRoutes = middleware.NewRecovery(logger)(marketplaceServer.Routes())
