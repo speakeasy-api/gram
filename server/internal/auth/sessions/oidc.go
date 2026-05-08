@@ -215,8 +215,8 @@ func (s *Manager) GetUserInfo(ctx context.Context, userID string) (*CachedUserIn
 	}
 
 	if err = s.userInfoCache.Store(ctx, *userInfo); err != nil {
+		// Cache store failure is non-fatal — data was fetched successfully from DB.
 		s.logger.ErrorContext(ctx, "failed to store user info in cache", attr.SlogError(err))
-		return userInfo, false, fmt.Errorf("cache user info: %w", err)
 	}
 
 	return userInfo, false, nil
