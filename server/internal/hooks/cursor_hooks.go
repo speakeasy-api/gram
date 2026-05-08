@@ -182,7 +182,7 @@ func (s *Service) persistCursorHook(ctx context.Context, payload *gen.CursorPayl
 		case "afterAgentResponse":
 			err = s.persistCursorAgentResponse(ctx, payload, metadata)
 			// afterAgentResponse also carries token usage — record a metrics entry in ClickHouse
-			s.writeCursorMetricsToClickHouse(ctx, payload, metadata.GramOrgID, metadata.ProjectID)
+			s.writeCursorMetricsToClickHouse(ctx, payload, metadata.GramOrgID, metadata.ProjectID, metadata.UserID)
 		}
 		if err != nil {
 			s.logger.ErrorContext(ctx, "Failed to persist Cursor conversation event", attr.SlogError(err))
@@ -198,7 +198,7 @@ func (s *Service) persistCursorHook(ctx context.Context, payload *gen.CursorPayl
 // persistCursorToolCallEvent writes tool call events to both ClickHouse and PostgreSQL
 func (s *Service) persistCursorToolCallEvent(ctx context.Context, payload *gen.CursorPayload, metadata *SessionMetadata, blockReason string) error {
 	// Write to ClickHouse for telemetry
-	s.writeCursorHookToClickHouse(ctx, payload, metadata.GramOrgID, metadata.ProjectID, blockReason)
+	s.writeCursorHookToClickHouse(ctx, payload, metadata.GramOrgID, metadata.ProjectID, metadata.UserID, blockReason)
 
 	// Write to PostgreSQL for chat history
 	switch payload.HookEventName {
@@ -223,8 +223,8 @@ func isCursorConversationEvent(eventName string) bool {
 // writeCursorHookToClickHouse writes a Cursor hook event directly to ClickHouse
 // Unlike Claude hooks, Cursor payloads are already authenticated and include user_email,
 // so no Redis buffering is needed.
-func (s *Service) writeCursorHookToClickHouse(ctx context.Context, payload *gen.CursorPayload, orgID string, projectID string, blockReason string) {
-	attrs := s.buildCursorTelemetryAttributes(ctx, payload, orgID, projectID)
+func (s *Service) writeCursorHookToClickHouse(ctx context.Context, payload *gen.CursorPayload, orgID string, projectID string, userID string, blockReason string) {
+	attrs := s.buildCursorTelemetryAttributes(ctx, payload, orgID, projectID, userID)
 	if blockReason != "" {
 		attrs[attr.HookBlockReasonKey] = blockReason
 	}
@@ -263,7 +263,7 @@ func (s *Service) writeCursorHookToClickHouse(ctx context.Context, payload *gen.
 // telemetry_logs. Mirrors writeMetricsToClickHouse for Claude Code: a separate
 // log entry with a `cursor:usage:metrics` URN so usage can be aggregated
 // independently of tool-call events.
-func (s *Service) writeCursorMetricsToClickHouse(ctx context.Context, payload *gen.CursorPayload, orgID string, projectID string) {
+func (s *Service) writeCursorMetricsToClickHouse(ctx context.Context, payload *gen.CursorPayload, orgID string, projectID string, userID string) {
 	if s.telemetryLogger == nil {
 		return
 	}
@@ -313,19 +313,9 @@ func (s *Service) writeCursorMetricsToClickHouse(ctx context.Context, payload *g
 	}
 	if payload.UserEmail != nil && *payload.UserEmail != "" {
 		attrs[attr.UserEmailKey] = *payload.UserEmail
-		user, err := usersrepo.New(s.db).GetConnectedUserByEmail(ctx, usersrepo.GetConnectedUserByEmailParams{
-			Email:          strings.TrimSpace(*payload.UserEmail),
-			OrganizationID: orgID,
-		})
-		if err == nil {
-			attrs[attr.UserIDKey] = user.ID
-		} else if !errors.Is(err, pgx.ErrNoRows) {
-			s.logger.WarnContext(ctx, "failed to resolve hook user by email",
-				attr.SlogError(err),
-				attr.SlogOrganizationID(orgID),
-				attr.SlogAuthUserEmail(*payload.UserEmail),
-			)
-		}
+	}
+	if userID != "" {
+		attrs[attr.UserIDKey] = userID
 	}
 	switch {
 	case payload.ConversationID != nil && *payload.ConversationID != "":
@@ -356,7 +346,7 @@ func (s *Service) writeCursorMetricsToClickHouse(ctx context.Context, payload *g
 }
 
 // buildCursorTelemetryAttributes creates attributes for a Cursor hook event
-func (s *Service) buildCursorTelemetryAttributes(ctx context.Context, payload *gen.CursorPayload, orgID string, projectID string) map[attr.Key]any {
+func (s *Service) buildCursorTelemetryAttributes(ctx context.Context, payload *gen.CursorPayload, orgID string, projectID string, userID string) map[attr.Key]any {
 	toolName := ""
 	if payload.ToolName != nil {
 		toolName = *payload.ToolName
@@ -400,20 +390,8 @@ func (s *Service) buildCursorTelemetryAttributes(ctx context.Context, payload *g
 		attr.OrganizationIDKey: orgID,
 		attr.HookSourceKey:     "cursor",
 	}
-	if userEmail != "" {
-		user, err := usersrepo.New(s.db).GetConnectedUserByEmail(ctx, usersrepo.GetConnectedUserByEmailParams{
-			Email:          strings.TrimSpace(userEmail),
-			OrganizationID: orgID,
-		})
-		if err == nil {
-			attrs[attr.UserIDKey] = user.ID
-		} else if !errors.Is(err, pgx.ErrNoRows) {
-			s.logger.WarnContext(ctx, "failed to resolve hook user by email",
-				attr.SlogError(err),
-				attr.SlogOrganizationID(orgID),
-				attr.SlogAuthUserEmail(userEmail),
-			)
-		}
+	if userID != "" {
+		attrs[attr.UserIDKey] = userID
 	}
 
 	if payload.Error != nil {
