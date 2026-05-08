@@ -160,7 +160,7 @@ func (s *Service) renderDeployScript(apiKey string) []byte {
 # Speakeasy MDM Deploy Script
 #
 # Works with any MDM that supports arbitrary shell scripts (Jamf, Kandji, Mosyle, etc.)
-# Set policy trigger to "Login" or "Recurring check-in" for idempotent rollout.
+# Set execution frequency to recurring, daily minimum (Jamf: trigger "Recurring Check-in", frequency "Ongoing").
 set -euo pipefail
 
 SPEAKEASY_API_KEY="%s"
