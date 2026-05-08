@@ -35,10 +35,13 @@ func TestBuildTelemetryAttributesWithMetadata_ResolvesUserIDFromEmail(t *testing
 	seedHookUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, userID, userEmail)
 
 	metadata := &SessionMetadata{
-		SessionID: uuid.NewString(),
-		UserEmail: userEmail,
-		GramOrgID: authCtx.ActiveOrganizationID,
-		ProjectID: authCtx.ProjectID.String(),
+		SessionID:   uuid.NewString(),
+		ServiceName: "",
+		UserEmail:   userEmail,
+		UserID:      "",
+		ClaudeOrgID: "",
+		GramOrgID:   authCtx.ActiveOrganizationID,
+		ProjectID:   authCtx.ProjectID.String(),
 	}
 	attrs := ti.service.buildTelemetryAttributesWithMetadata(ctx, &hooks.ClaudePayload{
 		HookEventName: "PreToolUse",
@@ -169,11 +172,12 @@ func TestFlushPendingHooks_DirectCall(t *testing.T) {
 	// Create session metadata
 	metadata := SessionMetadata{
 		SessionID:   sessionID,
+		ServiceName: "test-service",
 		UserEmail:   "test@example.com",
+		UserID:      "",
+		ClaudeOrgID: "claude-org-123",
 		GramOrgID:   uuid.NewString(),
 		ProjectID:   uuid.NewString(),
-		ServiceName: "test-service",
-		ClaudeOrgID: "claude-org-123",
 	}
 
 	// Call flushPendingHooks directly
@@ -195,11 +199,12 @@ func TestFlushPendingHooks_EmptyList(t *testing.T) {
 	// Create session metadata
 	metadata := SessionMetadata{
 		SessionID:   sessionID,
+		ServiceName: "test-service",
 		UserEmail:   "test@example.com",
+		UserID:      "",
+		ClaudeOrgID: "claude-org-123",
 		GramOrgID:   uuid.NewString(),
 		ProjectID:   uuid.NewString(),
-		ServiceName: "test-service",
-		ClaudeOrgID: "claude-org-123",
 	}
 
 	// Call flushPendingHooks with no buffered hooks (should not error)
@@ -266,11 +271,12 @@ func TestSessionMetadata_CacheSetGet(t *testing.T) {
 	sessionID := uuid.NewString()
 	metadata := SessionMetadata{
 		SessionID:   sessionID,
+		ServiceName: "test-service",
 		UserEmail:   "user@example.com",
+		UserID:      "",
+		ClaudeOrgID: "claude-org-456",
 		GramOrgID:   uuid.NewString(),
 		ProjectID:   uuid.NewString(),
-		ServiceName: "test-service",
-		ClaudeOrgID: "claude-org-456",
 	}
 
 	cacheAdapter := cache.NewRedisCacheAdapter(ti.redisClient)

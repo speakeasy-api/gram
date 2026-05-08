@@ -49,6 +49,7 @@ func TestClaudeHookSource_ConsistentAcrossAllWrites(t *testing.T) {
 		ServiceName: wantSource,
 		UserEmail:   wantUserEmail,
 		UserID:      wantUserID,
+		ClaudeOrgID: "",
 		GramOrgID:   authCtx.ActiveOrganizationID,
 		ProjectID:   authCtx.ProjectID.String(),
 	}
