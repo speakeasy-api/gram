@@ -4,9 +4,11 @@
 # starting with a marker comment so the workflow can find and update the
 # sticky comment idempotently.
 #
-# Comment is intentionally compact: status line, regressions vs main (when any),
-# and a one-line overall summary. Full per-source / per-rule breakdown is in
-# the workflow run's `risk-accuracy-metrics` artifact.
+# Comment is intentionally compact: status line, changes vs main (when any),
+# and a one-line overall summary. Any non-zero delta surfaces in the changes
+# block — direction (improvement vs regression) is left for the reader. Full
+# per-source / per-rule breakdown is in the workflow run's
+# `risk-accuracy-metrics` artifact.
 #
 # usage: risk-metrics-comment.sh <pr.json> [main.json]
 #   pr.json   — required; the current PR run's metrics envelope.
@@ -62,11 +64,11 @@ else
 fi
 echo
 
-# Compute regression bullets when a baseline is available.
+# Compute change bullets when a baseline is available.
 OVERALL_BULLETS=""
 RULE_BULLETS=""
 SOURCE_BULLETS=""
-REG_TOTAL=0
+CHANGE_TOTAL=0
 
 if [ "$HAS_MAIN" -eq 1 ]; then
   OVERALL_BULLETS=$(jq -r --slurpfile main "$MAIN_FILE" '
@@ -124,23 +126,23 @@ if [ "$HAS_MAIN" -eq 1 ]; then
   OVERALL_N=$(printf '%s\n' "$OVERALL_BULLETS" | grep -c '^- ' || true)
   RULE_N=$(printf '%s\n' "$RULE_BULLETS"   | grep -c '^- ' || true)
   SOURCE_N=$(printf '%s\n' "$SOURCE_BULLETS" | grep -c '^- ' || true)
-  REG_TOTAL=$((OVERALL_N + RULE_N + SOURCE_N))
+  CHANGE_TOTAL=$((OVERALL_N + RULE_N + SOURCE_N))
 fi
 
 if [ "$HAS_MAIN" -eq 0 ]; then
   echo "_No baseline yet — main has no recorded run for this artifact. Tracking starts on the next merge._"
-elif [ "$REG_TOTAL" -eq 0 ]; then
-  echo "✅ No regressions vs main."
+elif [ "$CHANGE_TOTAL" -eq 0 ]; then
+  echo "✅ No changes vs main."
 else
-  if [ "$REG_TOTAL" -eq 1 ]; then
-    echo "⚠️ 1 regression vs main."
+  if [ "$CHANGE_TOTAL" -eq 1 ]; then
+    echo "📊 1 change vs main."
   else
-    echo "⚠️ $REG_TOTAL regressions vs main."
+    echo "📊 $CHANGE_TOTAL changes vs main."
   fi
 fi
 echo
 
-if [ "$HAS_MAIN" -eq 1 ] && [ "$REG_TOTAL" -gt 0 ]; then
+if [ "$HAS_MAIN" -eq 1 ] && [ "$CHANGE_TOTAL" -gt 0 ]; then
   if [ "$OVERALL_N" -gt 0 ]; then
     echo '**Overall**'
     echo
