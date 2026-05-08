@@ -15,9 +15,8 @@ import (
 	"log/slog"
 	"net/http"
 
-	retryablehttp "github.com/hashicorp/go-retryablehttp"
-
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
 
@@ -48,17 +47,17 @@ type SendTransactionalInput struct {
 // When apiKey is empty or the placeholder value "unset", the returned client
 // is a no-op that logs at debug level and returns nil for every send. This
 // keeps configuration-gated behavior out of every call site.
-func New(logger *slog.Logger, apiKey string) Client {
+func New(ctx context.Context, logger *slog.Logger, guardianPolicy *guardian.Policy, apiKey string) Client {
 	logger = logger.With(attr.SlogComponent("loops"))
 
 	if apiKey == "" || apiKey == "unset" {
-		logger.Info("loops API key not configured, transactional emails will be dropped")
+		logger.InfoContext(ctx, "loops API key not configured, transactional emails will be dropped")
 		return &noopClient{logger: logger}
 	}
 
 	return &httpClient{
 		logger:     logger,
-		httpClient: retryablehttp.NewClient().StandardClient(),
+		httpClient: guardianPolicy.PooledClient(),
 		baseURL:    defaultBaseURL,
 		apiKey:     apiKey,
 	}
@@ -66,7 +65,7 @@ func New(logger *slog.Logger, apiKey string) Client {
 
 type httpClient struct {
 	logger     *slog.Logger
-	httpClient *http.Client
+	httpClient *guardian.HTTPClient
 	baseURL    string
 	apiKey     string
 }
@@ -84,14 +83,7 @@ type transactionalResponse struct {
 }
 
 func (c *httpClient) SendTransactional(ctx context.Context, input SendTransactionalInput) error {
-	body := transactionalRequest{
-		TransactionalID: input.TransactionalID,
-		Email:           input.Email,
-		DataVariables:   input.DataVariables,
-		AddToAudience:   input.AddToAudience,
-	}
-
-	payload, err := json.Marshal(body)
+	payload, err := json.Marshal(transactionalRequest(input))
 	if err != nil {
 		return fmt.Errorf("marshal transactional request: %w", err)
 	}
@@ -137,7 +129,7 @@ type noopClient struct {
 
 func (c *noopClient) SendTransactional(ctx context.Context, input SendTransactionalInput) error {
 	c.logger.DebugContext(ctx, "loops disabled, dropping transactional email",
-		slog.String("transactional_id", input.TransactionalID),
+		attr.SlogName(input.TransactionalID),
 	)
 	return nil
 }

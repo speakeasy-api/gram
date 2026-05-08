@@ -70,10 +70,10 @@ func TestTeamInvite_Variables_PassesEmptyFieldsThrough(t *testing.T) {
 
 	vars := tmpl.Variables()
 	require.Len(t, vars, 4, "all merge keys should still be present even if values are empty")
-	require.Equal(t, "", vars["invite_link"])
-	require.Equal(t, "", vars["teammate_fn"])
-	require.Equal(t, "", vars["teammate_email"])
-	require.Equal(t, "", vars["workspace_name"])
+	require.Empty(t, vars["invite_link"])
+	require.Empty(t, vars["teammate_fn"])
+	require.Empty(t, vars["teammate_email"])
+	require.Empty(t, vars["workspace_name"])
 }
 
 func TestTeamInvite_AddToAudience(t *testing.T) {

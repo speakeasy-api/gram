@@ -43,6 +43,15 @@ type Template interface {
 // RegisteredTemplates is the canonical list of templates the application is
 // allowed to send. Tests assert that every entry maps to a non-empty,
 // non-duplicated transactional ID so misconfigured templates fail fast.
+//
+// The entries hold zero-valued instances of each template type — they are
+// only used to look up the template's metadata (TransactionalID,
+// AddToAudience), never to render an actual email.
 var RegisteredTemplates = []Template{
-	TeamInvite{},
+	TeamInvite{
+		InviteLink:    "",
+		InviterName:   "",
+		InviterEmail:  "",
+		WorkspaceName: "",
+	},
 }
