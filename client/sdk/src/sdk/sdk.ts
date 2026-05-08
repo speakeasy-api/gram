@@ -44,6 +44,7 @@ import { UserSessionConsents } from "./usersessionconsents.js";
 import { UserSessionIssuers } from "./usersessionissuers.js";
 import { UserSessions } from "./usersessions.js";
 import { Variations } from "./variations.js";
+import { Workos } from "./workos.js";
 
 export class Gram extends ClientSDK {
   private _access?: Access;
@@ -104,6 +105,11 @@ export class Gram extends ClientSDK {
   private _environments?: Environments;
   get environments(): Environments {
     return (this._environments ??= new Environments(this._options));
+  }
+
+  private _workos?: Workos;
+  get workos(): Workos {
+    return (this._workos ??= new Workos(this._options));
   }
 
   private _hooks?: Hooks;

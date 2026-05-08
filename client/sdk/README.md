@@ -486,6 +486,10 @@ run();
 * [listGlobal](docs/sdks/variations/README.md#listglobal) - listGlobal variations
 * [upsertGlobal](docs/sdks/variations/README.md#upsertglobal) - upsertGlobal variations
 
+### [Workos](docs/sdks/workos/README.md)
+
+* [receiveWorkOSWebhook](docs/sdks/workos/README.md#receiveworkoswebhook) - receiveWorkOSWebhook workos
+
 </details>
 <!-- End Available Resources and Operations [operations] -->
 
@@ -732,6 +736,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`variationsDeleteGlobal`](docs/sdks/variations/README.md#deleteglobal) - deleteGlobal variations
 - [`variationsListGlobal`](docs/sdks/variations/README.md#listglobal) - listGlobal variations
 - [`variationsUpsertGlobal`](docs/sdks/variations/README.md#upsertglobal) - upsertGlobal variations
+- [`workosReceiveWorkOSWebhook`](docs/sdks/workos/README.md#receiveworkoswebhook) - receiveWorkOSWebhook workos
 
 </details>
 <!-- End Standalone functions [standalone-funcs] -->
@@ -1201,7 +1206,7 @@ run();
 ### Error Classes
 **Primary errors:**
 * [`GramError`](./src/models/errors/gramerror.ts): The base class for HTTP error responses.
-  * [`ServiceError`](./src/models/errors/serviceerror.ts): unauthorized access.
+  * [`ServiceError`](./src/models/errors/serviceerror.ts): unauthorized access. *
 
 <details><summary>Less common errors (6)</summary>
 
@@ -1219,6 +1224,8 @@ run();
 * [`ResponseValidationError`](./src/models/errors/responsevalidationerror.ts): Type mismatch between the data returned from the server and the structure expected by the SDK. See `error.rawValue` for the raw value and `error.pretty()` for a nicely formatted multi-line string.
 
 </details>
+
+\* Check [the method documentation](#available-resources-and-operations) to see if the error is applicable.
 <!-- End Error Handling [errors] -->
 
 <!-- Start Server Selection [server] -->
