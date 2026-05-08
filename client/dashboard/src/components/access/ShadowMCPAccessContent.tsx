@@ -112,19 +112,11 @@ function roleOptionsFromRoles(roles: Role[]): ShadowMCPRoleOption[] {
 function EvidenceCell({ evidence }: { evidence: ShadowMCPEvidence }) {
   return (
     <div className="min-w-0 space-y-1">
-      <div className="flex min-w-0 items-center gap-2">
-        <Type variant="body" className="truncate font-medium">
-          {evidence.name}
-        </Type>
-        <Badge variant="neutral" className="font-mono">
-          <Badge.Text>{evidence.normalizedIdentity}</Badge.Text>
-        </Badge>
-      </div>
-      <Type variant="body" className="text-muted-foreground truncate text-xs">
-        {evidence.fullUrl}
+      <Type variant="body" className="truncate font-medium">
+        {evidence.name}
       </Type>
       <Type variant="body" className="text-muted-foreground truncate text-xs">
-        Host: {evidence.urlHost}
+        {evidence.fullUrl}
       </Type>
     </div>
   );
@@ -790,9 +782,9 @@ export function ShadowMCPAccessContent() {
 
   const requestColumns: Column<ShadowMCPApprovalRequest>[] = [
     {
-      key: "server",
-      header: "Server",
-      width: "1.4fr",
+      key: "name",
+      header: "Name",
+      width: "1.2fr",
       render: (request) => <EvidenceCell evidence={request.evidence} />,
     },
     {
@@ -834,7 +826,7 @@ export function ShadowMCPAccessContent() {
     {
       key: "activity",
       header: "Activity",
-      width: "130px",
+      width: "0.5fr",
       render: (request) => (
         <div>
           <Type variant="body" className="text-sm">
@@ -849,7 +841,7 @@ export function ShadowMCPAccessContent() {
     {
       key: "actions",
       header: "",
-      width: "110px",
+      width: "120px",
       render: (request) =>
         request.status === "requested" ? (
           <RequireScope scope="org:admin" level="component">
@@ -865,20 +857,20 @@ export function ShadowMCPAccessContent() {
 
   const entryColumns: Column<ShadowMCPServerListEntry>[] = [
     {
-      key: "server",
-      header: "Server",
-      width: "1.4fr",
-      render: (entry) => <EvidenceCell evidence={entry.evidence} />,
-    },
-    {
-      key: "decision",
-      header: "Rule",
+      key: "status",
+      header: "Status",
       width: "100px",
       render: (entry) => <DecisionBadge decision={entry.decision} />,
     },
     {
+      key: "name",
+      header: "Name",
+      width: "1.2fr",
+      render: (entry) => <EvidenceCell evidence={entry.evidence} />,
+    },
+    {
       key: "match",
-      header: "Match",
+      header: "Match Rule",
       width: "1fr",
       render: (entry) => (
         <div className="min-w-0 space-y-1">
@@ -903,7 +895,7 @@ export function ShadowMCPAccessContent() {
     {
       key: "created",
       header: "Created",
-      width: "150px",
+      width: "0.6fr",
       render: (entry) => (
         <div>
           <Type variant="body" className="text-sm">
@@ -918,7 +910,7 @@ export function ShadowMCPAccessContent() {
     {
       key: "actions",
       header: "",
-      width: "70px",
+      width: "96px",
       render: (entry) => (
         <div className="flex justify-end">
           <EntryActionsMenu
@@ -962,6 +954,7 @@ export function ShadowMCPAccessContent() {
             columns={requestColumns}
             data={pendingRequests}
             rowKey={(row) => row.id}
+            className="[&_thead]:bg-background max-h-128 overflow-y-auto [&_thead]:sticky [&_thead]:top-0 [&_thead]:z-10"
           />
         </section>
 
@@ -1008,6 +1001,7 @@ export function ShadowMCPAccessContent() {
             columns={entryColumns}
             data={filteredEntries}
             rowKey={(row) => row.id}
+            className="[&_thead]:bg-background max-h-128 overflow-y-auto [&_thead]:sticky [&_thead]:top-0 [&_thead]:z-10"
           />
         </section>
       </div>
