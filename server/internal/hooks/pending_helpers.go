@@ -207,6 +207,32 @@ func (s *Service) writeMetricsToClickHouse(ctx context.Context, payload *gen.Met
 		return
 	}
 
+	// Resolve each unique email to a userID once before the loop so multiple
+	// data points sharing the same email don't each trigger a DB round-trip.
+	emailToUserID := make(map[string]string)
+	for _, m := range metrics {
+		email := strings.ToLower(strings.TrimSpace(m.UserEmail))
+		if email == "" {
+			continue
+		}
+		if _, seen := emailToUserID[email]; seen {
+			continue
+		}
+		user, err := usersrepo.New(s.db).GetConnectedUserByEmail(ctx, usersrepo.GetConnectedUserByEmailParams{
+			Email:          email,
+			OrganizationID: orgID,
+		})
+		if err == nil {
+			emailToUserID[email] = user.ID
+		} else if !errors.Is(err, pgx.ErrNoRows) {
+			s.logger.WarnContext(ctx, "failed to resolve hook user by email",
+				attr.SlogError(err),
+				attr.SlogOrganizationID(orgID),
+				attr.SlogAuthUserEmail(m.UserEmail),
+			)
+		}
+	}
+
 	// Write each metric data point as a separate log entry
 	for _, m := range metrics {
 		urn := "claude-code:usage:metrics"
@@ -239,21 +265,8 @@ func (s *Service) writeMetricsToClickHouse(ctx context.Context, payload *gen.Met
 		}
 		if m.UserEmail != "" {
 			attrs[attr.UserEmailKey] = m.UserEmail
-			userLookupEmail := strings.ToLower(strings.TrimSpace(m.UserEmail))
-			if userLookupEmail != "" {
-				user, err := usersrepo.New(s.db).GetConnectedUserByEmail(ctx, usersrepo.GetConnectedUserByEmailParams{
-					Email:          userLookupEmail,
-					OrganizationID: orgID,
-				})
-				if err == nil {
-					attrs[attr.UserIDKey] = user.ID
-				} else if !errors.Is(err, pgx.ErrNoRows) {
-					s.logger.WarnContext(ctx, "failed to resolve hook user by email",
-						attr.SlogError(err),
-						attr.SlogOrganizationID(orgID),
-						attr.SlogAuthUserEmail(m.UserEmail),
-					)
-				}
+			if userID := emailToUserID[strings.ToLower(strings.TrimSpace(m.UserEmail))]; userID != "" {
+				attrs[attr.UserIDKey] = userID
 			}
 		}
 		if m.SessionID != "" {
