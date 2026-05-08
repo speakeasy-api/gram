@@ -253,18 +253,6 @@ export function InsightsEmployeesContent() {
 function EmployeeTable({ employees }: { employees: Employee[] }) {
   return (
     <section className="bg-card rounded-xl border">
-      <div className="flex flex-col gap-2 border-b p-5 md:flex-row md:items-start md:justify-between">
-        <div>
-          <h2 className="text-lg font-semibold">Employee Compliance</h2>
-          <p className="text-muted-foreground mt-1 text-sm">
-            Live project-scoped compliance based on member roles and Gram token
-            usage.
-          </p>
-        </div>
-        <span className="border-border bg-muted text-muted-foreground inline-flex w-fit items-center rounded-full border px-2.5 py-1 text-xs font-medium">
-          Last {LOOKBACK_DAYS} days
-        </span>
-      </div>
       <Table>
         <TableHeader>
           <TableRow>

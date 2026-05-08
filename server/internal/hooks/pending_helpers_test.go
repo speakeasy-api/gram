@@ -52,6 +52,7 @@ func TestBuildTelemetryAttributesWithMetadata_ResolvesUserIDFromEmail(t *testing
 
 	assert.Equal(t, userEmail, attrs[attr.UserEmailKey])
 	assert.Equal(t, userID, attrs[attr.UserIDKey])
+	assert.Equal(t, userID, metadata.UserID)
 }
 
 var (
