@@ -29,9 +29,17 @@ export type RemoteMcpServer = {
    */
   id: string;
   /**
+   * Optional human-readable name for the remote MCP server
+   */
+  name?: string | undefined;
+  /**
    * The project ID this remote MCP server belongs to
    */
   projectId: string;
+  /**
+   * URL-friendly slug derived from the URL and ID.
+   */
+  slug?: string | undefined;
   /**
    * The transport type for the remote MCP server
    */
@@ -58,7 +66,9 @@ export const RemoteMcpServer$inboundSchema: z.ZodMiniType<
     ),
     headers: z.array(RemoteMcpServerHeader$inboundSchema),
     id: z.string(),
+    name: z.optional(z.string()),
     project_id: z.string(),
+    slug: z.optional(z.string()),
     transport_type: z.string(),
     updated_at: z.pipe(
       z.iso.datetime({ offset: true }),

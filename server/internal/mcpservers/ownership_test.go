@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	"github.com/speakeasy-api/gram/server/internal/remotemcp/remotemcptest"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
@@ -32,12 +33,11 @@ func seedOtherProjectRemoteMcpServer(t *testing.T, ctx context.Context, conn *pg
 	})
 	require.NoError(t, err)
 
-	server, err := remotemcprepo.New(conn).CreateServer(ctx, remotemcprepo.CreateServerParams{
+	server := remotemcptest.SeedServer(t, ctx, conn, remotemcprepo.CreateServerParams{
 		ProjectID:     otherProject.ID,
 		TransportType: "streamable-http",
 		Url:           "https://other.example.com/mcp/" + uuid.NewString(),
 	})
-	require.NoError(t, err)
 
 	return server.ID
 }

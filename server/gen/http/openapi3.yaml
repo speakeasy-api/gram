@@ -10593,9 +10593,25 @@ paths:
                 name: GetMcpServer
     /rpc/mcpServers.list:
         get:
-            description: List all MCP servers for a project
+            description: List MCP servers for a project. Accepts optional remote_mcp_server_id or toolset_id filters to scope the result to a single backend; at most one filter may be supplied since the two backends are mutually exclusive.
             operationId: listMcpServers
             parameters:
+                - allowEmptyValue: true
+                  description: Filter to MCP servers backed by this remote MCP server
+                  in: query
+                  name: remote_mcp_server_id
+                  schema:
+                    description: Filter to MCP servers backed by this remote MCP server
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Filter to MCP servers backed by this toolset
+                  in: query
+                  name: toolset_id
+                  schema:
+                    description: Filter to MCP servers backed by this toolset
+                    format: uuid
+                    type: string
                 - allowEmptyValue: true
                   description: Session header
                   in: header
@@ -14213,16 +14229,23 @@ paths:
                 name: DeleteRemoteMcpServer
     /rpc/remoteMcp.getServer:
         get:
-            description: Get a remote MCP server by ID
+            description: Get a remote MCP server by ID or slug. Exactly one of id or slug must be provided.
             operationId: getRemoteMcpServer
             parameters:
                 - allowEmptyValue: true
-                  description: The ID of the remote MCP server
+                  description: The ID of the remote MCP server. Mutually exclusive with slug.
                   in: query
                   name: id
-                  required: true
                   schema:
-                    description: The ID of the remote MCP server
+                    description: The ID of the remote MCP server. Mutually exclusive with slug.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: The slug of the remote MCP server. Mutually exclusive with id.
+                  in: query
+                  name: slug
+                  schema:
+                    description: The slug of the remote MCP server. Mutually exclusive with id.
                     type: string
                 - allowEmptyValue: true
                   description: Session header
@@ -14519,6 +14542,110 @@ paths:
             x-speakeasy-name-override: updateServer
             x-speakeasy-react-hook:
                 name: UpdateRemoteMcpServer
+    /rpc/remoteMcp.verifyURL:
+        post:
+            description: Probe a candidate remote MCP server URL by issuing an MCP initialize request and reporting the outcome. Used to give users a reachability signal before they save a new or updated remote MCP server. Treats reachable-but-401/403 responses as verified — auth verification is intentionally out of scope.
+            operationId: verifyRemoteMcpURL
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/VerifyURLForm'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/VerifyURLResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: verifyURL remoteMcp
+            tags:
+                - remoteMcp
+            x-speakeasy-name-override: verifyURL
+            x-speakeasy-react-hook:
+                name: VerifyRemoteMcpURL
     /rpc/resources.list:
         get:
             description: List all resources for a project
@@ -24263,6 +24390,9 @@ components:
                     items:
                         $ref: '#/components/schemas/HeaderInput'
                     description: Headers to send when proxying requests to the remote server
+                name:
+                    type: string
+                    description: Optional human-readable name for the remote MCP server. Empty values are stored as null.
                 transport_type:
                     type: string
                     description: The transport type for the remote MCP server (e.g. streamable-http)
@@ -29186,10 +29316,16 @@ components:
                     type: string
                     description: The ID of the remote MCP server
                     format: uuid
+                name:
+                    type: string
+                    description: Optional human-readable name for the remote MCP server
                 project_id:
                     type: string
                     description: The project ID this remote MCP server belongs to
                     format: uuid
+                slug:
+                    type: string
+                    description: URL-friendly slug derived from the URL and ID.
                 transport_type:
                     type: string
                     description: The transport type for the remote MCP server
@@ -31922,6 +32058,9 @@ components:
                 id:
                     type: string
                     description: The ID of the remote MCP server to update
+                name:
+                    type: string
+                    description: Optional human-readable name. Pass an empty string to clear the existing name.
                 transport_type:
                     type: string
                     description: The transport type for the remote MCP server
@@ -32624,6 +32763,37 @@ components:
                 - organization
                 - projects
                 - scopes
+        VerifyURLForm:
+            type: object
+            properties:
+                transport_type:
+                    type: string
+                    description: The transport type for the remote MCP server (e.g. streamable-http)
+                url:
+                    type: string
+                    description: The URL of the remote MCP server to probe
+                    format: uri
+            description: Form for probing a remote MCP server URL
+            required:
+                - url
+                - transport_type
+        VerifyURLResult:
+            type: object
+            properties:
+                http_status:
+                    type: integer
+                    description: HTTP status code returned by the URL, if any
+                    format: int64
+                message:
+                    type: string
+                    description: Human-readable summary of the verification outcome
+                verified:
+                    type: boolean
+                    description: Whether the URL responded in a way consistent with a remote MCP server
+            description: Outcome of a remote MCP server URL verification
+            required:
+                - verified
+                - message
     securitySchemes:
         apikey_header_Authorization:
             type: apiKey

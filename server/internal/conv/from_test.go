@@ -44,3 +44,53 @@ func TestPtrInt32ToInt_Nil(t *testing.T) {
 
 	require.Nil(t, result)
 }
+
+func TestURLToSlug_HostAndPath(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, "api-example-com-mcp", conv.URLToSlug("api.example.com/mcp"))
+}
+
+func TestURLToSlug_HostOnly(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, "api-example-com", conv.URLToSlug("api.example.com"))
+}
+
+func TestURLToSlug_Lowercase(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, "api-example-com-mcp", conv.URLToSlug("API.Example.COM/MCP"))
+}
+
+func TestURLToSlug_HostWithPort(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, "example-com-8080-mcp", conv.URLToSlug("example.com:8080/mcp"))
+}
+
+func TestURLToSlug_TrailingSlashTrimmed(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, "example-com-mcp", conv.URLToSlug("example.com/mcp/"))
+}
+
+func TestURLToSlug_RunsCollapse(t *testing.T) {
+	t.Parallel()
+
+	// Adjacent separators collapse to a single hyphen rather than producing
+	// double-hyphens.
+	require.Equal(t, "example-com-mcp", conv.URLToSlug("example.com//mcp"))
+}
+
+func TestURLToSlug_Empty(t *testing.T) {
+	t.Parallel()
+
+	require.Empty(t, conv.URLToSlug(""))
+}
+
+func TestURLToSlug_OnlySeparators(t *testing.T) {
+	t.Parallel()
+
+	require.Empty(t, conv.URLToSlug("///..."))
+}

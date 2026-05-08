@@ -56,10 +56,10 @@ export type GetRemoteMcpServerQueryError =
  * getServer remoteMcp
  *
  * @remarks
- * Get a remote MCP server by ID
+ * Get a remote MCP server by ID or slug. Exactly one of id or slug must be provided.
  */
 export function useGetRemoteMcpServer(
-  request: operations.GetRemoteMcpServerRequest,
+  request?: operations.GetRemoteMcpServerRequest | undefined,
   security?: operations.GetRemoteMcpServerSecurity | undefined,
   options?: QueryHookOptions<
     GetRemoteMcpServerQueryData,
@@ -82,10 +82,10 @@ export function useGetRemoteMcpServer(
  * getServer remoteMcp
  *
  * @remarks
- * Get a remote MCP server by ID
+ * Get a remote MCP server by ID or slug. Exactly one of id or slug must be provided.
  */
 export function useGetRemoteMcpServerSuspense(
-  request: operations.GetRemoteMcpServerRequest,
+  request?: operations.GetRemoteMcpServerRequest | undefined,
   security?: operations.GetRemoteMcpServerSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     GetRemoteMcpServerQueryData,
@@ -111,7 +111,8 @@ export function setGetRemoteMcpServerData(
   client: QueryClient,
   queryKeyBase: [
     parameters: {
-      id: string;
+      id?: string | undefined;
+      slug?: string | undefined;
       gramSession?: string | undefined;
       gramKey?: string | undefined;
       gramProject?: string | undefined;
@@ -128,7 +129,8 @@ export function invalidateGetRemoteMcpServer(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
     [parameters: {
-      id: string;
+      id?: string | undefined;
+      slug?: string | undefined;
       gramSession?: string | undefined;
       gramKey?: string | undefined;
       gramProject?: string | undefined;

@@ -2,7 +2,7 @@ import { DotRow } from "@/components/ui/dot-row";
 import { MoreActions } from "@/components/ui/more-actions";
 import { Type } from "@/components/ui/type";
 import { useRBAC } from "@/hooks/useRBAC";
-import { sourceTypeToUrnKind } from "@/lib/sources";
+import { formatRemoteMcpDisplay, sourceTypeToUrnKind } from "@/lib/sources";
 import { useRoutes } from "@/routes";
 import { Badge } from "@speakeasy-api/moonshine";
 import { CircleAlertIcon, FileCode, Network } from "lucide-react";
@@ -12,6 +12,7 @@ const sourceTypeConfig = {
   openapi: { label: "OpenAPI" },
   function: { label: "Function" },
   externalmcp: { label: "Catalog" },
+  remotemcp: { label: "Remote MCP" },
 };
 
 function formatDate(date: Date | undefined) {
@@ -49,39 +50,45 @@ export function SourceTableRow({
   const createdAt = "createdAt" in asset ? asset.createdAt : undefined;
   const updatedAt = "updatedAt" in asset ? asset.updatedAt : undefined;
 
-  const actions = [
-    ...(asset.type === "openapi"
-      ? [
+  // See SourceCard.tsx for why remotemcp delegates management actions to its
+  // detail page Settings tab.
+  const actions =
+    asset.type === "remotemcp"
+      ? []
+      : [
+          ...(asset.type === "openapi"
+            ? [
+                {
+                  label: "View",
+                  onClick: () => handleViewAsset(asset.id),
+                  icon: "eye" as const,
+                },
+                {
+                  label: "Update",
+                  onClick: () => setChangeDocumentTargetSlug(asset.slug),
+                  icon: "upload" as const,
+                  disabled: !canWrite,
+                },
+              ]
+            : []),
+          ...(deploymentId
+            ? [
+                {
+                  label: "Deployment",
+                  onClick: () =>
+                    routes.deployments.deployment.goTo(deploymentId),
+                  icon: "history" as const,
+                },
+              ]
+            : []),
           {
-            label: "View",
-            onClick: () => handleViewAsset(asset.id),
-            icon: "eye" as const,
-          },
-          {
-            label: "Update",
-            onClick: () => setChangeDocumentTargetSlug(asset.slug),
-            icon: "upload" as const,
+            label: "Delete",
+            onClick: () => handleRemove(asset.id),
+            icon: "trash" as const,
+            destructive: true,
             disabled: !canWrite,
           },
-        ]
-      : []),
-    ...(deploymentId
-      ? [
-          {
-            label: "Deployment",
-            onClick: () => routes.deployments.deployment.goTo(deploymentId),
-            icon: "history" as const,
-          },
-        ]
-      : []),
-    {
-      label: "Delete",
-      onClick: () => handleRemove(asset.id),
-      icon: "trash" as const,
-      destructive: true,
-      disabled: !canWrite,
-    },
-  ];
+        ];
 
   const iconContent = (() => {
     if (asset.type === "externalmcp" && asset.iconUrl) {
@@ -93,11 +100,14 @@ export function SourceTableRow({
         />
       );
     }
-    if (asset.type === "externalmcp") {
+    if (asset.type === "externalmcp" || asset.type === "remotemcp") {
       return <Network className="text-muted-foreground h-5 w-5" />;
     }
     return <FileCode className="text-muted-foreground h-5 w-5" />;
   })();
+
+  const displayName =
+    asset.type === "remotemcp" ? formatRemoteMcpDisplay(asset) : asset.name;
 
   return (
     <DotRow
@@ -110,9 +120,9 @@ export function SourceTableRow({
           variant="subheading"
           as="div"
           className="group-hover:text-primary truncate text-sm transition-colors"
-          title={asset.name}
+          title={displayName}
         >
-          {asset.name}
+          {displayName}
         </Type>
       </td>
 
@@ -156,12 +166,14 @@ export function SourceTableRow({
 
       {/* Actions */}
       <td className="px-3 py-3">
-        <div
-          className="flex items-center justify-end"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <MoreActions actions={actions} />
-        </div>
+        {actions.length > 0 && (
+          <div
+            className="flex items-center justify-end"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <MoreActions actions={actions} />
+          </div>
+        )}
       </td>
     </DotRow>
   );

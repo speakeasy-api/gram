@@ -193,9 +193,27 @@ func (s *Service) ListMcpServers(ctx context.Context, payload *gen.ListMcpServer
 		return nil, err
 	}
 
-	servers, err := repo.New(s.db).ListMCPServersByProjectID(ctx, *authCtx.ProjectID)
+	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
+
+	remoteMcpServerID, err := conv.PtrToNullUUID(payload.RemoteMcpServerID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list mcp servers").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid remote_mcp_server_id").Log(ctx, logger)
+	}
+	toolsetID, err := conv.PtrToNullUUID(payload.ToolsetID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid toolset_id").Log(ctx, logger)
+	}
+	if remoteMcpServerID.Valid && toolsetID.Valid {
+		return nil, oops.E(oops.CodeInvalid, nil, "at most one of remote_mcp_server_id or toolset_id may be provided").Log(ctx, logger)
+	}
+
+	servers, err := repo.New(s.db).ListMCPServersByProjectID(ctx, repo.ListMCPServersByProjectIDParams{
+		ProjectID:         *authCtx.ProjectID,
+		RemoteMcpServerID: remoteMcpServerID,
+		ToolsetID:         toolsetID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list mcp servers").Log(ctx, logger)
 	}
 
 	return &gen.ListMcpServersResult{McpServers: mv.BuildMcpServerListView(servers)}, nil

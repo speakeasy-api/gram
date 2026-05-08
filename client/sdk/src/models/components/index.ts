@@ -352,3 +352,5 @@ export * from "./usersummary.js";
 export * from "./validatekeyorganization.js";
 export * from "./validatekeyproject.js";
 export * from "./validatekeyresult.js";
+export * from "./verifyurlform.js";
+export * from "./verifyurlresult.js";

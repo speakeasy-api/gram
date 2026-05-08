@@ -502,10 +502,28 @@ func DecodeListMcpServersRequest(mux goahttp.Muxer, decoder func(*http.Request) 
 	return func(r *http.Request) (*mcpservers.ListMcpServersPayload, error) {
 		var payload *mcpservers.ListMcpServersPayload
 		var (
-			sessionToken     *string
-			apikeyToken      *string
-			projectSlugInput *string
+			remoteMcpServerID *string
+			toolsetID         *string
+			sessionToken      *string
+			apikeyToken       *string
+			projectSlugInput  *string
+			err               error
 		)
+		qp := r.URL.Query()
+		remoteMcpServerIDRaw := qp.Get("remote_mcp_server_id")
+		if remoteMcpServerIDRaw != "" {
+			remoteMcpServerID = &remoteMcpServerIDRaw
+		}
+		if remoteMcpServerID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("remote_mcp_server_id", *remoteMcpServerID, goa.FormatUUID))
+		}
+		toolsetIDRaw := qp.Get("toolset_id")
+		if toolsetIDRaw != "" {
+			toolsetID = &toolsetIDRaw
+		}
+		if toolsetID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("toolset_id", *toolsetID, goa.FormatUUID))
+		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
@@ -518,7 +536,10 @@ func DecodeListMcpServersRequest(mux goahttp.Muxer, decoder func(*http.Request) 
 		if projectSlugInputRaw != "" {
 			projectSlugInput = &projectSlugInputRaw
 		}
-		payload = NewListMcpServersPayload(sessionToken, apikeyToken, projectSlugInput)
+		if err != nil {
+			return payload, err
+		}
+		payload = NewListMcpServersPayload(remoteMcpServerID, toolsetID, sessionToken, apikeyToken, projectSlugInput)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
