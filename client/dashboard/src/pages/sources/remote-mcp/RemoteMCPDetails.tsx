@@ -1,5 +1,10 @@
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
+import {
+  SourceInfoRow,
+  SourceInfoTable,
+} from "@/components/sources/SourceInfoTable";
+import { CopyButton } from "@/components/ui/copy-button";
 import { Heading } from "@/components/ui/heading";
 import { Input } from "@/components/ui/input";
 import {
@@ -9,6 +14,7 @@ import {
   TabsList,
 } from "@/components/ui/tabs";
 import { Type } from "@/components/ui/type";
+import { dateTimeFormatters } from "@/lib/dates";
 import {
   formatRemoteMcpDisplay,
   getRemoteMcpServerArgs,
@@ -28,6 +34,7 @@ import {
 } from "@gram/client/react-query/index.js";
 import { Alert, Badge, Button, Dialog, Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
+import { formatDistanceToNow } from "date-fns";
 import { Loader2, Network, Server, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Navigate, useNavigate, useParams } from "react-router";
@@ -150,8 +157,10 @@ export default function RemoteMCPDetails() {
 
           <TabsContent value="overview" className="mt-0 flex-1">
             <OverviewTab
-              url={remoteMcpServer?.url}
-              transportType={remoteMcpServer?.transportType}
+              remoteMcpServer={remoteMcpServer}
+              linkedMcpServersCount={linkedMcpServers.length}
+              isLoadingMcpServers={isLoadingMcpServers}
+              onShowLinkedMcpServers={() => handleTabChange("mcp-servers")}
             />
           </TabsContent>
 
@@ -217,25 +226,102 @@ function RemoteMcpHero({ server }: { server: RemoteMcpServer | undefined }) {
 }
 
 function OverviewTab({
-  url,
-  transportType,
+  remoteMcpServer,
+  linkedMcpServersCount,
+  isLoadingMcpServers,
+  onShowLinkedMcpServers,
 }: {
-  url: string | undefined;
-  transportType: string | undefined;
+  remoteMcpServer: RemoteMcpServer | undefined;
+  linkedMcpServersCount: number;
+  isLoadingMcpServers: boolean;
+  onShowLinkedMcpServers: () => void;
 }) {
+  const createdAt = remoteMcpServer?.createdAt
+    ? dateTimeFormatters.humanize(new Date(remoteMcpServer.createdAt))
+    : "—";
+  const updatedAt = remoteMcpServer?.updatedAt
+    ? formatDistanceToNow(new Date(remoteMcpServer.updatedAt), {
+        addSuffix: true,
+      })
+    : "—";
+  const showLinkedCount = remoteMcpServer != null && !isLoadingMcpServers;
+
   return (
-    <div className="mx-auto w-full max-w-[1270px] space-y-6 px-8 py-8">
-      <div>
-        <Type muted small className="mb-1">
-          URL
-        </Type>
-        <Type className="font-mono break-all">{url ?? "—"}</Type>
-      </div>
-      <div>
-        <Type muted small className="mb-1">
-          Transport Type
-        </Type>
-        <Type className="font-mono">{transportType ?? "—"}</Type>
+    <div className="mx-auto w-full max-w-[1270px] px-8 py-8">
+      <div className="grid grid-cols-[280px_1fr] items-start gap-8">
+        {/* Source Information */}
+        <div className="flex flex-col">
+          <Heading variant="h4" className="mb-3">
+            Source Information
+          </Heading>
+          <SourceInfoTable>
+            <SourceInfoRow label="Name">
+              <Type className="font-medium">
+                {remoteMcpServer?.name || "—"}
+              </Type>
+            </SourceInfoRow>
+            <SourceInfoRow label="URL">
+              <Type className="font-mono text-sm break-all">
+                {remoteMcpServer?.url ?? "—"}
+              </Type>
+            </SourceInfoRow>
+            <SourceInfoRow label="Transport Type">
+              <Type className="font-mono text-sm">
+                {remoteMcpServer?.transportType ?? "—"}
+              </Type>
+            </SourceInfoRow>
+            <SourceInfoRow label="Source ID">
+              <span className="flex items-center gap-1">
+                <Type className="font-mono text-sm">
+                  {remoteMcpServer?.id
+                    ? `${remoteMcpServer.id.slice(0, 8)}…`
+                    : "—"}
+                </Type>
+                {remoteMcpServer?.id && (
+                  <CopyButton text={remoteMcpServer.id} size="inline" />
+                )}
+              </span>
+            </SourceInfoRow>
+            <SourceInfoRow label="Created">
+              <Type className="text-sm">{createdAt}</Type>
+            </SourceInfoRow>
+            <SourceInfoRow label="Updated">
+              <Type className="text-sm">{updatedAt}</Type>
+            </SourceInfoRow>
+            <SourceInfoRow label="Linked MCP servers">
+              {showLinkedCount ? (
+                <button
+                  type="button"
+                  onClick={onShowLinkedMcpServers}
+                  className="text-primary text-sm hover:underline"
+                >
+                  {linkedMcpServersCount}
+                </button>
+              ) : (
+                <Type className="text-muted-foreground text-sm">—</Type>
+              )}
+            </SourceInfoRow>
+          </SourceInfoTable>
+        </div>
+
+        {/* Source Activity */}
+        <div className="flex flex-col">
+          <div className="mb-3 flex items-center justify-between">
+            <Heading variant="h4">Source Activity</Heading>
+            <Type muted small>
+              Last 7 days
+            </Type>
+          </div>
+          <div className="flex flex-col items-center justify-center rounded-lg border p-12 text-center">
+            <Type muted className="mb-1 block">
+              No invocation data yet
+            </Type>
+            <Type muted small>
+              Telemetry will appear here once tools from this source are called
+              via an MCP server.
+            </Type>
+          </div>
+        </div>
       </div>
     </div>
   );

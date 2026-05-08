@@ -1,3 +1,7 @@
+import {
+  SourceInfoRow,
+  SourceInfoTable,
+} from "@/components/sources/SourceInfoTable";
 import { CopyButton } from "@/components/ui/copy-button";
 import { Heading } from "@/components/ui/heading";
 import { Type } from "@/components/ui/type";
@@ -38,23 +42,6 @@ function formatMemory(mib: number) {
 const DEFAULT_FUNCTION_MEMORY_MIB = 1024;
 const DEFAULT_FUNCTION_SCALE = 2;
 
-function OverviewRow({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="flex items-center justify-between px-3 py-2.5">
-      <Type muted small>
-        {label}
-      </Type>
-      <div className="text-right">{children}</div>
-    </div>
-  );
-}
-
 export function SourceOverviewTab({
   source,
   isOpenAPI,
@@ -91,20 +78,20 @@ export function SourceOverviewTab({
           <Heading variant="h4" className="mb-3">
             Source Information
           </Heading>
-          <div className="divide-y rounded-lg border">
-            <OverviewRow label={isOpenAPI ? "API name" : "Function name"}>
+          <SourceInfoTable>
+            <SourceInfoRow label={isOpenAPI ? "API name" : "Function name"}>
               <Type className="font-medium">{source?.name || "—"}</Type>
-            </OverviewRow>
-            <OverviewRow label="Source ID">
+            </SourceInfoRow>
+            <SourceInfoRow label="Source ID">
               <span className="flex items-center gap-1">
                 <Type className="font-mono text-sm">
                   {source?.id ? `${source.id.slice(0, 8)}…` : "—"}
                 </Type>
                 {source?.id && <CopyButton text={source.id} size="inline" />}
               </span>
-            </OverviewRow>
+            </SourceInfoRow>
             {isOpenAPI ? (
-              <OverviewRow label="Format">
+              <SourceInfoRow label="Format">
                 <Type className="font-mono text-sm">
                   {underlyingAsset?.contentType?.includes("yaml")
                     ? "YAML"
@@ -112,15 +99,15 @@ export function SourceOverviewTab({
                       ? "JSON"
                       : underlyingAsset?.contentType || "—"}
                 </Type>
-              </OverviewRow>
+              </SourceInfoRow>
             ) : (
               <>
-                <OverviewRow label="Runtime">
+                <SourceInfoRow label="Runtime">
                   <Type className="text-sm">
                     {functionSource ? functionSource.runtime : "—"}
                   </Type>
-                </OverviewRow>
-                <OverviewRow label="Memory">
+                </SourceInfoRow>
+                <SourceInfoRow label="Memory">
                   <Type className="text-sm">
                     {formatMemory(
                       functionSource?.memoryMib ?? DEFAULT_FUNCTION_MEMORY_MIB,
@@ -131,8 +118,8 @@ export function SourceOverviewTab({
                       </Type>
                     )}
                   </Type>
-                </OverviewRow>
-                <OverviewRow label="Instances">
+                </SourceInfoRow>
+                <SourceInfoRow label="Instances">
                   <Type className="text-sm">
                     {functionSource?.scale ?? DEFAULT_FUNCTION_SCALE}
                     {functionSource?.scale == null && (
@@ -141,17 +128,17 @@ export function SourceOverviewTab({
                       </Type>
                     )}
                   </Type>
-                </OverviewRow>
+                </SourceInfoRow>
               </>
             )}
-            <OverviewRow label="File size">
+            <SourceInfoRow label="File size">
               <Type className="text-sm">
                 {underlyingAsset?.contentLength
                   ? formatFileSize(underlyingAsset.contentLength)
                   : "—"}
               </Type>
-            </OverviewRow>
-            <OverviewRow label="Created">
+            </SourceInfoRow>
+            <SourceInfoRow label="Created">
               <Type className="text-sm">
                 {underlyingAsset?.createdAt
                   ? dateTimeFormatters.humanize(
@@ -159,11 +146,11 @@ export function SourceOverviewTab({
                     )
                   : "—"}
               </Type>
-            </OverviewRow>
-            <OverviewRow label="Updated">
+            </SourceInfoRow>
+            <SourceInfoRow label="Updated">
               <Type className="text-sm">{lastUpdated}</Type>
-            </OverviewRow>
-            <OverviewRow label="Active deployment">
+            </SourceInfoRow>
+            <SourceInfoRow label="Active deployment">
               {activeDeploymentItem ? (
                 <routes.deployments.deployment.Link
                   params={[activeDeploymentItem.id]}
@@ -176,8 +163,8 @@ export function SourceOverviewTab({
               ) : (
                 <Type className="text-muted-foreground text-sm">—</Type>
               )}
-            </OverviewRow>
-          </div>
+            </SourceInfoRow>
+          </SourceInfoTable>
         </div>
 
         {/* Source Activity */}
