@@ -18,7 +18,8 @@ import (
 
 func newClient(t *testing.T) (*presidiotest.MockServer, *risk_analysis.PresidioClient) {
 	t.Helper()
-	server := presidiotest.NewMockServer(t, nil)
+	server := presidiotest.NewMockServer(nil)
+	t.Cleanup(server.Close)
 	client := risk_analysis.NewPresidioClient(
 		server.URL(),
 		testenv.NewTracerProvider(t),
@@ -208,7 +209,8 @@ func TestMockServer_AnalyzeRequestCount(t *testing.T) {
 
 func TestMockServer_HealthEndpointReturnsOK(t *testing.T) {
 	t.Parallel()
-	server := presidiotest.NewMockServer(t, nil)
+	server := presidiotest.NewMockServer(nil)
+	t.Cleanup(server.Close)
 
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, server.URL()+"/health", nil)
 	require.NoError(t, err)
@@ -224,7 +226,8 @@ func TestMockServer_HealthEndpointReturnsOK(t *testing.T) {
 
 func TestMockServer_ScoreThresholdFiltersResults(t *testing.T) {
 	t.Parallel()
-	server := presidiotest.NewMockServer(t, nil)
+	server := presidiotest.NewMockServer(nil)
+	t.Cleanup(server.Close)
 
 	// PHONE_NUMBER scores 0.75 in the default detector; threshold 0.9 drops it.
 	high := postAnalyze(t, server.URL(), `{"text":["call 425-882-8080"],"language":"en","score_threshold":0.9}`)

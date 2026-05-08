@@ -8,7 +8,6 @@ package presidiotest
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -18,7 +17,6 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
-	"testing"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 )
@@ -50,13 +48,14 @@ type MockServer struct {
 	analyzeReqs atomic.Int64
 }
 
-// NewMockServer starts an httptest server bound to a random localhost port
-// and registers tb.Cleanup to shut it down at the end of the test. Pass
-// nil for *testing.T outside of a test (e.g. testenv.Launch) and call Close
-// manually.
-func NewMockServer(tb *testing.T, logger *slog.Logger) *MockServer {
+// NewMockServer starts an httptest server bound to a random localhost port.
+// Callers are responsible for calling Close (or registering t.Cleanup) when
+// the server is no longer needed.
+func NewMockServer(logger *slog.Logger) *MockServer {
 	if logger == nil {
-		logger = slog.New(slog.NewTextHandler(io.Discard, nil))
+		// Import cycle (testenv → presidiotest → testenv) prevents calling
+		// testenv.NewLogger here, so we use slog.DiscardHandler directly.
+		logger = slog.New(slog.DiscardHandler) //nolint:forbidigo // import cycle prevents testenv.NewLogger
 	}
 
 	m := &MockServer{
@@ -71,10 +70,6 @@ func NewMockServer(tb *testing.T, logger *slog.Logger) *MockServer {
 	mux.HandleFunc("GET /health", m.handleHealth)
 	mux.HandleFunc("POST /analyze", m.handleAnalyze)
 	m.srv = httptest.NewServer(mux)
-
-	if tb != nil {
-		tb.Cleanup(m.Close)
-	}
 
 	return m
 }

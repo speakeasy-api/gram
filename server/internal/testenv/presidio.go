@@ -14,7 +14,7 @@ type PresidioClientFunc func(t *testing.T) *risk_analysis.PresidioClient
 // the same HTTP API the real Presidio Analyzer exposes, so tests skip the
 // 60s+ container boot and avoid CI flakes from the ML image.
 func NewTestPresidio() (*presidiotest.MockServer, PresidioClientFunc) {
-	server := presidiotest.NewMockServer(nil, nil)
+	server := presidiotest.NewMockServer(nil)
 	return server, newPresidioClientFunc(server)
 }
 
