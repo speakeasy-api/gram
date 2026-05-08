@@ -47,6 +47,8 @@ func ResourceKindForScope(scope Scope) string {
 		return "mcp"
 	case strings.HasPrefix(s, "org:"):
 		return "org"
+	case strings.HasPrefix(s, "environment:"):
+		return "environment"
 	default:
 		return "*"
 	}
@@ -72,7 +74,8 @@ var validDispositions = map[string]bool{
 // resource_id) are valid for each scope family. Scope families not listed here
 // allow no extra keys.
 var allowedSelectorKeys = map[string]map[string]bool{
-	"mcp": {"tool": true, "disposition": true},
+	"mcp":         {"tool": true, "disposition": true},
+	"environment": {"project_id": true},
 }
 
 // ValidateSelector checks that a selector is well-formed for the given scope.

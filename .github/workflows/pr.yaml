@@ -674,11 +674,8 @@ jobs:
             ${{ env.GOCACHE }}
             ${{ env.GOMODCACHE }}
 
-      - name: Install Go deps & pre-pull test images
-        run: |
-          docker pull mcr.microsoft.com/presidio-analyzer:2.2.362 &
-          mise run install:go
-          wait
+      - name: Install Go deps
+        run: mise run install:go
 
       - name: Test
         run: mise run test:server
