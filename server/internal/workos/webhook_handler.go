@@ -1,4 +1,4 @@
-package workossvc
+package workos
 
 import (
 	"context"
@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"strings"
 
 	"github.com/workos/workos-go/v6/pkg/webhooks"
 	"go.opentelemetry.io/otel/trace"
@@ -72,6 +73,9 @@ func AttachWebhookHandler(mux goahttp.Muxer, h *WebhookHandler) {
 	srv.Mount(mux, srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, oopsFormatter))
 }
 
+// webhookEventData is the relevant subset of the `data` field on a WorkOS
+// webhook payload. ID and OrganizationID are populated differently per event
+// type; see workOSOrganizationIDFromWebhook for the mapping.
 type webhookEventData struct {
 	ID             string `json:"id"`
 	OrganizationID string `json:"organization_id"`
@@ -107,53 +111,59 @@ func (h *WebhookHandler) ReceiveWorkOSWebhook(ctx context.Context, payload *gen.
 		return oops.E(oops.CodeBadRequest, err, "invalid webhook payload").Log(ctx, h.logger)
 	}
 
-	switch workos.EventKind(event.Event) {
-	case workos.EventKindOrganizationMembershipCreated,
-		workos.EventKindOrganizationMembershipUpdated,
-		workos.EventKindOrganizationMembershipDeleted:
-		if _, err := background.ExecuteProcessWorkOSMembershipEventsWorkflowDebounced(ctx, h.temporalEnv); err != nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to enqueue membership sync").Log(ctx, h.logger)
-		}
-		return nil
+	logger := h.logger.With(attr.SlogWorkOSEventType(event.Event))
 
-	case workos.EventKindOrganizationCreated,
-		workos.EventKindOrganizationUpdated,
-		workos.EventKindOrganizationDeleted:
-		if event.Data.ID == "" {
-			return oops.E(oops.CodeBadRequest, errors.New("missing organization id"), "invalid organization event payload").Log(ctx, h.logger)
-		}
+	return h.dispatch(ctx, logger, event)
+}
+
+// dispatch routes a verified webhook to the per-domain Temporal workflow that
+// owns the relevant cursor. Webhooks only nudge sync; each workflow's activity
+// fetches authoritative pages from the Events API using its own cursor.
+func (h *WebhookHandler) dispatch(ctx context.Context, logger *slog.Logger, event webhookEvent) error {
+	switch event.Event {
+	case string(workos.EventKindOrganizationCreated),
+		string(workos.EventKindOrganizationUpdated),
+		string(workos.EventKindOrganizationDeleted),
+		string(workos.EventKindOrganizationRoleCreated),
+		string(workos.EventKindOrganizationRoleUpdated),
+		string(workos.EventKindOrganizationRoleDeleted),
+		string(workos.EventKindOrganizationMembershipCreated),
+		string(workos.EventKindOrganizationMembershipUpdated),
+		string(workos.EventKindOrganizationMembershipDeleted):
+
+		orgID := parseOrganizationID(event)
 		if _, err := background.ExecuteProcessWorkOSOrganizationEventsWorkflowDebounced(ctx, h.temporalEnv, background.ProcessWorkOSEventsParams{
-			WorkOSOrganizationID: event.Data.ID,
+			WorkOSOrganizationID: orgID,
 		}); err != nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to enqueue org event sync").Log(ctx, h.logger)
+			return oops.E(oops.CodeUnexpected, err, "failed to enqueue WorkOS organization sync").Log(ctx, logger)
 		}
 		return nil
 
-	case workos.EventKindOrganizationRoleCreated,
-		workos.EventKindOrganizationRoleUpdated,
-		workos.EventKindOrganizationRoleDeleted:
-		if event.Data.OrganizationID == "" {
-			return oops.E(oops.CodeBadRequest, errors.New("missing organization id"), "invalid organization role event payload").Log(ctx, h.logger)
-		}
-		if _, err := background.ExecuteProcessWorkOSOrganizationEventsWorkflowDebounced(ctx, h.temporalEnv, background.ProcessWorkOSEventsParams{
-			WorkOSOrganizationID: event.Data.OrganizationID,
-		}); err != nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to enqueue org role sync").Log(ctx, h.logger)
-		}
-		return nil
-
-	case workos.EventKindRoleCreated,
-		workos.EventKindRoleUpdated,
-		workos.EventKindRoleDeleted:
+	case string(workos.EventKindRoleCreated),
+		string(workos.EventKindRoleUpdated),
+		string(workos.EventKindRoleDeleted):
 		if _, err := background.ExecuteProcessWorkOSGlobalRoleEventsWorkflowDebounced(ctx, h.temporalEnv); err != nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to enqueue global role sync").Log(ctx, h.logger)
+			return oops.E(oops.CodeUnexpected, err, "failed to enqueue WorkOS global role sync").Log(ctx, logger)
 		}
 		return nil
 
 	default:
-		h.logger.InfoContext(ctx, "WorkOS webhook event type not handled, skipping",
-			attr.SlogWorkOSEventType(event.Event),
-		)
+		// user.*, dsync.*, and any new event types are accepted (so WorkOS
+		// stops retrying) but not yet processed. Add a workflow before
+		// enabling those subscriptions in the WorkOS dashboard.
 		return nil
 	}
+}
+
+// parseOrganizationID returns the WorkOS organization ID associated
+// with the event, or "" if the event does not carry one (e.g. role.* and
+// user.* are environment-scoped).
+//
+// `organization.*` events carry the org id on `data.id`; everything else org-
+// scoped carries it on `data.organization_id`.
+func parseOrganizationID(event webhookEvent) string {
+	if strings.HasPrefix(event.Event, "organization.") {
+		return event.Data.ID
+	}
+	return event.Data.OrganizationID
 }
