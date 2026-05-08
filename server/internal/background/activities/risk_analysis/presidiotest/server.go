@@ -150,7 +150,7 @@ func (m *MockServer) handleAnalyze(w http.ResponseWriter, r *http.Request) {
 	for i, text := range req.Text {
 		findings := detector(text, req.Entities)
 		// Apply the request's score threshold, matching real Presidio.
-		filtered := findings[:0]
+		var filtered []Result
 		for _, f := range findings {
 			if f.Score >= req.ScoreMin {
 				filtered = append(filtered, f)

@@ -8,7 +8,6 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	risk_analysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
@@ -48,11 +47,11 @@ func TestMockServer_DetectsEmail(t *testing.T) {
 	require.Len(t, results, 1)
 
 	ids := ruleIDs(results[0])
-	assert.Contains(t, ids, "EMAIL_ADDRESS")
+	require.Contains(t, ids, "EMAIL_ADDRESS")
 	for _, f := range results[0] {
 		if f.RuleID == "EMAIL_ADDRESS" {
-			assert.Equal(t, "john.smith@acmecorp.com", f.Match)
-			assert.Equal(t, "presidio", f.Source)
+			require.Equal(t, "john.smith@acmecorp.com", f.Match)
+			require.Equal(t, "presidio", f.Source)
 		}
 	}
 }
@@ -69,9 +68,9 @@ func TestMockServer_DetectsCreditCardWithLuhnCheck(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, results, 3)
 
-	assert.Contains(t, ruleIDs(results[0]), "CREDIT_CARD")
-	assert.Contains(t, ruleIDs(results[1]), "CREDIT_CARD")
-	assert.NotContains(t, ruleIDs(results[2]), "CREDIT_CARD")
+	require.Contains(t, ruleIDs(results[0]), "CREDIT_CARD")
+	require.Contains(t, ruleIDs(results[1]), "CREDIT_CARD")
+	require.NotContains(t, ruleIDs(results[2]), "CREDIT_CARD")
 }
 
 func TestMockServer_DetectsPhoneNumber(t *testing.T) {
@@ -83,7 +82,7 @@ func TestMockServer_DetectsPhoneNumber(t *testing.T) {
 	}, nil, nil)
 	require.NoError(t, err)
 	require.Len(t, results, 1)
-	assert.Contains(t, ruleIDs(results[0]), "PHONE_NUMBER")
+	require.Contains(t, ruleIDs(results[0]), "PHONE_NUMBER")
 }
 
 func TestMockServer_DetectsPersonName(t *testing.T) {
@@ -95,7 +94,7 @@ func TestMockServer_DetectsPersonName(t *testing.T) {
 	}, nil, nil)
 	require.NoError(t, err)
 	require.Len(t, results, 1)
-	assert.Contains(t, ruleIDs(results[0]), "PERSON")
+	require.Contains(t, ruleIDs(results[0]), "PERSON")
 }
 
 func TestMockServer_NoFalsePositiveOnVersionString(t *testing.T) {
@@ -109,7 +108,7 @@ func TestMockServer_NoFalsePositiveOnVersionString(t *testing.T) {
 	require.Len(t, results, 1)
 
 	for _, f := range results[0] {
-		assert.NotEqual(t, "PHONE_NUMBER", f.RuleID, "version string should not match phone regex")
+		require.NotEqual(t, "PHONE_NUMBER", f.RuleID, "version string should not match phone regex")
 	}
 }
 
@@ -124,7 +123,7 @@ func TestMockServer_NoFalsePositiveOnUUID(t *testing.T) {
 	require.Len(t, results, 1)
 
 	for _, f := range results[0] {
-		assert.NotEqual(t, "CREDIT_CARD", f.RuleID)
+		require.NotEqual(t, "CREDIT_CARD", f.RuleID)
 	}
 }
 
@@ -139,8 +138,8 @@ func TestMockServer_EntityFilterRespected(t *testing.T) {
 	require.Len(t, results, 1)
 
 	ids := ruleIDs(results[0])
-	assert.Contains(t, ids, "EMAIL_ADDRESS")
-	assert.NotContains(t, ids, "PHONE_NUMBER")
+	require.Contains(t, ids, "EMAIL_ADDRESS")
+	require.NotContains(t, ids, "PHONE_NUMBER")
 }
 
 func TestMockServer_BatchResultsMapBackToInputIndexes(t *testing.T) {
@@ -167,7 +166,7 @@ func TestMockServer_BatchResultsMapBackToInputIndexes(t *testing.T) {
 				break
 			}
 		}
-		assert.Equal(t, emails[i], got, "message %d mapped to wrong finding", i)
+		require.Equal(t, emails[i], got, "message %d mapped to wrong finding", i)
 	}
 }
 
@@ -188,8 +187,8 @@ func TestMockServer_CustomDetectorOverride(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, results, 1)
 	require.Len(t, results[0], 1)
-	assert.Equal(t, "CUSTOM_ENTITY", results[0][0].RuleID)
-	assert.Equal(t, "anything", results[0][0].Match)
+	require.Equal(t, "CUSTOM_ENTITY", results[0][0].RuleID)
+	require.Equal(t, "anything", results[0][0].Match)
 }
 
 func TestMockServer_AnalyzeRequestCount(t *testing.T) {
@@ -204,7 +203,7 @@ func TestMockServer_AnalyzeRequestCount(t *testing.T) {
 	_, err := client.AnalyzeBatch(t.Context(), messages, nil, nil)
 	require.NoError(t, err)
 
-	assert.Equal(t, int64(2), server.AnalyzeRequestCount())
+	require.Equal(t, int64(2), server.AnalyzeRequestCount())
 }
 
 func TestMockServer_HealthEndpointReturnsOK(t *testing.T) {
@@ -218,10 +217,10 @@ func TestMockServer_HealthEndpointReturnsOK(t *testing.T) {
 	require.NoError(t, err)
 	defer func() { _ = resp.Body.Close() }()
 
-	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
 	body, err := io.ReadAll(resp.Body)
 	require.NoError(t, err)
-	assert.Contains(t, string(body), "Presidio Analyzer")
+	require.Contains(t, string(body), "Presidio Analyzer")
 }
 
 func TestMockServer_ScoreThresholdFiltersResults(t *testing.T) {
@@ -233,7 +232,7 @@ func TestMockServer_ScoreThresholdFiltersResults(t *testing.T) {
 	high := postAnalyze(t, server.URL(), `{"text":["call 425-882-8080"],"language":"en","score_threshold":0.9}`)
 	require.Len(t, high, 1)
 	for _, r := range high[0] {
-		assert.NotEqual(t, "PHONE_NUMBER", r.EntityType)
+		require.NotEqual(t, "PHONE_NUMBER", r.EntityType)
 	}
 
 	low := postAnalyze(t, server.URL(), `{"text":["call 425-882-8080"],"language":"en","score_threshold":0.5}`)
@@ -244,7 +243,7 @@ func TestMockServer_ScoreThresholdFiltersResults(t *testing.T) {
 			hasPhone = true
 		}
 	}
-	assert.True(t, hasPhone)
+	require.True(t, hasPhone)
 }
 
 func postAnalyze(t *testing.T, baseURL, body string) [][]presidiotest.Result {
