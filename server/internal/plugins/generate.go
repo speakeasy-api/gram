@@ -455,7 +455,7 @@ func generateClaudeObservabilityPluginInDir(files map[string][]byte, subdir stri
 	hookEvents := make(map[string][]claudeHookMatcher, len(ClaudeObservabilityHookEvents))
 	for _, event := range ClaudeObservabilityHookEvents {
 		hookEvents[event] = []claudeHookMatcher{
-			{Hooks: []claudeHookCommand{{Type: "command", Command: `bash "$CLAUDE_PLUGIN_ROOT/hooks/hook.sh"`, Async: claudeHookAsyncFlag(event)}}},
+			{Matcher: "", Hooks: []claudeHookCommand{{Type: "command", Command: `bash "$CLAUDE_PLUGIN_ROOT/hooks/hook.sh"`, Async: claudeHookAsyncFlag(event)}}},
 		}
 	}
 	hooksJSON, err := marshalJSON(claudeHooksConfig{Hooks: hookEvents})
