@@ -40,6 +40,42 @@ func TestChallengeLogger_skipsWithoutAuthContext(t *testing.T) {
 	require.Equal(t, uint64(0), n)
 }
 
+func TestChallengeLogger_skipsWhenImpersonating(t *testing.T) {
+	t.Parallel()
+
+	orgID := "org_" + uuid.NewString()
+	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{
+		ActiveOrganizationID: orgID,
+		UserID:               "user_admin",
+		AccountType:          "enterprise",
+	})
+	ctx = contextvalues.SetAdminOverrideInContext(ctx, orgID)
+
+	conn, err := newClickhouseClient(t)
+	require.NoError(t, err)
+	logger := testenv.NewLogger(t)
+
+	check := Check{Scope: ScopeProjectRead, ResourceID: "proj_impersonated"}
+	challengeLogger{
+		Operation: authzrepo.OperationRequire,
+		Outcome:   authzrepo.OutcomeAllow,
+		Reason:    authzrepo.ReasonGrantMatched,
+		Checks:    []Check{check},
+		Focus:     &check,
+	}.Log(ctx, conn, logger, staticChallengeLogging(true))
+
+	row, err := conn.Query(t.Context(), `
+		SELECT count() FROM authz_challenges WHERE organization_id = ?
+	`, orgID)
+	require.NoError(t, err)
+	defer func() { _ = row.Close() }()
+
+	var n uint64
+	require.True(t, row.Next())
+	require.NoError(t, row.Scan(&n))
+	require.Equal(t, uint64(0), n)
+}
+
 func TestChallengeLogger_writesUserPrincipal(t *testing.T) {
 	t.Parallel()
 
