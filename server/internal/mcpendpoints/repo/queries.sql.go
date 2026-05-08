@@ -9,7 +9,53 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
+
+const checkSlugAvailability = `-- name: CheckSlugAvailability :one
+SELECT (
+  $1::uuid IS NULL
+  OR EXISTS (
+    SELECT 1
+    FROM custom_domains
+    WHERE id = $1::uuid
+      AND organization_id = $2
+      AND deleted IS FALSE
+  )
+) AND NOT EXISTS (
+  SELECT 1
+  FROM mcp_endpoints
+  WHERE slug = $3
+    AND custom_domain_id IS NOT DISTINCT FROM $1::uuid
+    AND deleted IS FALSE
+)
+`
+
+type CheckSlugAvailabilityParams struct {
+	CustomDomainID uuid.NullUUID
+	OrganizationID string
+	Slug           string
+}
+
+// Returns true when the slug is available for an mcp_endpoint in the given
+// uniqueness namespace. Platform-domain endpoints (custom_domain_id IS NULL)
+// and custom-domain endpoints live in separate namespaces enforced by partial
+// unique indexes; this query mirrors that scoping by treating NULL as a valid
+// match value via IS NOT DISTINCT FROM. Soft-deleted rows are ignored. The
+// slug-existence check is intentionally not project-scoped because the
+// uniqueness indexes it mirrors span all projects within their namespace.
+//
+// When custom_domain_id is supplied, the domain must also belong to the
+// caller's organization. Foreign or unknown domains short-circuit to
+// "unavailable" (returns false) so callers can't probe slug-existence under
+// domains they don't own. organization_id is ignored on the platform-domain
+// branch (custom_domain_id IS NULL).
+func (q *Queries) CheckSlugAvailability(ctx context.Context, arg CheckSlugAvailabilityParams) (pgtype.Bool, error) {
+	row := q.db.QueryRow(ctx, checkSlugAvailability, arg.CustomDomainID, arg.OrganizationID, arg.Slug)
+	var column_1 pgtype.Bool
+	err := row.Scan(&column_1)
+	return column_1, err
+}
 
 const createMCPEndpoint = `-- name: CreateMCPEndpoint :one
 INSERT INTO mcp_endpoints (

@@ -10,6 +10,7 @@ export * from "./attachservertocollection.js";
 export * from "./authcallback.js";
 export * from "./authlogin.js";
 export * from "./captureevent.js";
+export * from "./checkmcpendpointslugavailability.js";
 export * from "./checkmcpslugavailability.js";
 export * from "./clearmcpregistrycache.js";
 export * from "./cloneclientfromoauthproxyprovider.js";

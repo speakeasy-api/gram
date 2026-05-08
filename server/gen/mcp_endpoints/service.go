@@ -30,6 +30,12 @@ type Service interface {
 	// the request become null on the stored record. The id, mcp_server_id, and
 	// slug fields are required.
 	UpdateMcpEndpoint(context.Context, *UpdateMcpEndpointPayload) (res *types.McpEndpoint, err error)
+	// Check whether an MCP endpoint slug is available. The uniqueness scope
+	// depends on whether a custom_domain_id is provided: platform-domain slugs are
+	// checked across all platform-domain endpoints (custom_domain_id IS NULL);
+	// custom-domain slugs are checked within the (custom_domain_id, slug) pair.
+	// Returns true when the slug is free.
+	CheckMcpEndpointSlugAvailability(context.Context, *CheckMcpEndpointSlugAvailabilityPayload) (res bool, err error)
 	// Delete an MCP endpoint
 	DeleteMcpEndpoint(context.Context, *DeleteMcpEndpointPayload) (err error)
 }
@@ -54,7 +60,19 @@ const ServiceName = "mcpEndpoints"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [5]string{"createMcpEndpoint", "getMcpEndpoint", "listMcpEndpoints", "updateMcpEndpoint", "deleteMcpEndpoint"}
+var MethodNames = [6]string{"createMcpEndpoint", "getMcpEndpoint", "listMcpEndpoints", "updateMcpEndpoint", "checkMcpEndpointSlugAvailability", "deleteMcpEndpoint"}
+
+// CheckMcpEndpointSlugAvailabilityPayload is the payload type of the
+// mcpEndpoints service checkMcpEndpointSlugAvailability method.
+type CheckMcpEndpointSlugAvailabilityPayload struct {
+	// The slug to check
+	Slug types.McpEndpointSlug
+	// Optional custom domain ID. Omit to check platform-domain slug availability.
+	CustomDomainID   *string
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+}
 
 // CreateMcpEndpointPayload is the payload type of the mcpEndpoints service
 // createMcpEndpoint method.

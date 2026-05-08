@@ -68,6 +68,37 @@ SET deleted_at = clock_timestamp()
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
 RETURNING *;
 
+-- name: CheckSlugAvailability :one
+-- Returns true when the slug is available for an mcp_endpoint in the given
+-- uniqueness namespace. Platform-domain endpoints (custom_domain_id IS NULL)
+-- and custom-domain endpoints live in separate namespaces enforced by partial
+-- unique indexes; this query mirrors that scoping by treating NULL as a valid
+-- match value via IS NOT DISTINCT FROM. Soft-deleted rows are ignored. The
+-- slug-existence check is intentionally not project-scoped because the
+-- uniqueness indexes it mirrors span all projects within their namespace.
+--
+-- When custom_domain_id is supplied, the domain must also belong to the
+-- caller's organization. Foreign or unknown domains short-circuit to
+-- "unavailable" (returns false) so callers can't probe slug-existence under
+-- domains they don't own. organization_id is ignored on the platform-domain
+-- branch (custom_domain_id IS NULL).
+SELECT (
+  sqlc.narg('custom_domain_id')::uuid IS NULL
+  OR EXISTS (
+    SELECT 1
+    FROM custom_domains
+    WHERE id = sqlc.narg('custom_domain_id')::uuid
+      AND organization_id = @organization_id
+      AND deleted IS FALSE
+  )
+) AND NOT EXISTS (
+  SELECT 1
+  FROM mcp_endpoints
+  WHERE slug = @slug
+    AND custom_domain_id IS NOT DISTINCT FROM sqlc.narg('custom_domain_id')::uuid
+    AND deleted IS FALSE
+);
+
 -- name: SoftDeleteMCPEndpointsByMCPServerID :many
 -- Soft-delete all endpoints that point at a given mcp server. Used when the
 -- parent server is soft-deleted so callers don't end up with endpoints pointing
