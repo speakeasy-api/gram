@@ -168,9 +168,9 @@ export function InsightsEmployeesContent() {
             <div className="flex min-w-0 flex-col gap-1">
               <h1 className="text-xl font-semibold">Employee Compliance</h1>
               <p className="text-muted-foreground text-sm">
-                Compliance is project-scoped: if an employee has Gram token
-                usage in the selected project during the last {LOOKBACK_DAYS}{" "}
-                days, they are compliant. If no data is present, they are not
+                Track Gram uptake for organization members in this project over
+                the last {LOOKBACK_DAYS} days. Employees with token usage are
+                marked compliant; employees without usage are marked not
                 compliant.
               </p>
             </div>
