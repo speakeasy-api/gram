@@ -1,5 +1,49 @@
 # server
 
+## 0.48.0
+
+### Minor Changes
+
+- 0168857: Decorate `/chat/completions` responses with the upstream model's context window via a `gram_metadata` extension. The size is fetched from OpenRouter's per-model endpoints listing (smallest `context_length` across providers) and cached for 72h. The streaming path injects the value into the final SSE frame.
+- 658ff47: Auto-provision an org and attach the free-tier Polar subscription when an unauthenticated user lands on Gram with `?disposition=assistants` and has no org after IDP signin. Generates a legible random org name (e.g. `Swift Otter 42`), eagerly materializes the default project and environment, marks the org as whitelisted so it bypasses the BookDemo gate, and redirects to `/<org>/projects/default/assistants` so the credit benefit is in place before the user reaches the assistants page.
+- 9dcc221: Add `cli_destructive` risk-policy source for flagging destructive CLI commands.
+
+  Mirrors the existing `destructive_tool` shape (post-hoc batch scan, flag-only,
+  no live blocking) but is content-driven instead of annotation-driven. A
+  curated regex set covers shell (`rm -rf`, `dd`, `mkfs`, fork-bomb,
+  `chmod -R`, `chown -R`, `sudo <arg>`), git (`push --force`, `reset --hard`,
+  `clean -f`, `branch -D`), database (`DROP`, `TRUNCATE`, unguarded
+  `DELETE FROM`, `dropdb`), and cloud (`aws ec2 terminate-instances`,
+  `aws s3 rb`, `gcloud projects delete`, `kubectl delete ns/workloads`).
+
+  The scanner walks every recorded tool call's parsed arguments — no MCP
+  filter — so native Bash and `run_terminal_cmd` are now in scope alongside
+  MCP-routed calls whose arguments happen to carry destructive content.
+  First-match-wins iteration over map keys is sorted so rule_ids are
+  deterministic across runs.
+
+  PolicyCenter exposes the new source as a "Destructive CLI Commands" rule
+  category (category-toggle UX matching `destructive_tool`).
+
+- 188e614: Add a credit-balance gate on `/chat/completions` for **free-tier** orgs: pre-request check returns HTTP 402 `insufficient_credits` once the cached Polar Chat Credits balance is exhausted. Pro and enterprise stay bounded by the existing OpenRouter monthly key cap; unifying the two limit sources is tracked separately. Speakeasy-internal orgs (`specialLimitOrgs`) bypass; cache misses fail open. Self-serve top-up checkout (`usage.createTopUpCheckout`) opens a one-time Polar product configured via `POLAR_PRODUCT_IDS_TOPUP`.
+- 3547f8e: Add management APIs for user sessions:
+
+  - **userSessionIssuers**: configure the authorization servers that mint user sessions for your MCP servers.
+  - **userSessionClients**: inspect and revoke the OAuth clients that have dynamically registered against those issuers.
+  - **userSessions**: list the sessions minted for end users and revoke any that should no longer be honored.
+  - **userSessionConsents**: list and withdraw the consent records that gate which (subject, client) pairs skip the consent prompt.
+
+### Patch Changes
+
+- b29be67: Capture a `gram_assistants_signup` PostHog event when the auth callback auto-provisions an org for a user landing with `?disposition=assistants`. The event is keyed on the user's email (matches `is_first_time_user_signup`) and carries `organization_id`, `organization_slug`, `disposition`, and `has_assistants_subscription` so the funnel from signup → benefit attach is observable.
+- 6b4b80d: Fix OAuth discovery for MCP servers that host well-known metadata at the origin root regardless of endpoint path (e.g. Atlassian). When the remote URL has a path and prior discovery strategies find no authorization server metadata, the discovery chain now retries both `/.well-known/oauth-protected-resource` and `/.well-known/oauth-authorization-server` probes against the origin root with the path stripped.
+- ce6603e: Fix catalog registry pagination so infinite scroll fetches all entries beyond the first page.
+
+  `ListServers` now returns the upstream registry's `nextCursor` alongside the server list. `ListCatalog` passes that cursor through to the API response so the frontend's `getNextPageParam` receives a non-null value and `hasNextPage` becomes `true`. Previously `NextCursor` was always `nil`, causing the intersection observer to never trigger a second fetch and silently dropping any entries past the first 50.
+
+- 5bafa07: Fix private Claude Code plugins showing "not cached at (not recorded)" after restarting Claude Code. The marketplace proxy now fetches the current HEAD commit SHA and embeds it alongside `ref` in each `git-subdir` plugin source, giving Claude Code a stable cache key that survives restarts.
+- 8ce7444: scan risk policies for prompt injection. enable the new "Prompt Injection" category in the policy editor to flag or block instruction overrides, role hijacks, system-prompt leaks, encoded payloads, delimiter injection, and shell tool-abuse attempts
+
 ## 0.47.0
 
 ### Minor Changes
