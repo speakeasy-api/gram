@@ -35,6 +35,7 @@ import { MCPDetailPage, MCPDetailsRoot } from "./pages/mcp/MCPDetails";
 import { MCPPage, MCPRoot } from "./pages/mcp/MCP";
 import {
   InsightsAgentsPage,
+  InsightsEmployeesPage,
   InsightsHooksPage,
   InsightsMCPPage,
   InsightsRoot,
@@ -372,6 +373,11 @@ const ROUTE_STRUCTURE = {
         title: "Agents",
         url: "agents",
         component: InsightsAgentsPage,
+      },
+      employees: {
+        title: "Employees",
+        url: "employees",
+        component: InsightsEmployeesPage,
       },
     },
   },

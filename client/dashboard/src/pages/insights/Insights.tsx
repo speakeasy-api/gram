@@ -1,5 +1,6 @@
 import { Outlet } from "react-router";
 import { InsightsAgentsContent } from "@/components/observe/InsightsAgents";
+import { InsightsEmployeesContent } from "@/components/observe/InsightsEmployees";
 import { InsightsToolsContent } from "@/components/observe/InsightsTools";
 import { InsightsMCPContent } from "@/components/observe/InsightsMCP";
 import { Page } from "@/components/page-layout";
@@ -43,6 +44,14 @@ export function InsightsAgentsPage() {
   return (
     <RequireScope scope="project:read" level="page">
       <InsightsAgentsContent />
+    </RequireScope>
+  );
+}
+
+export function InsightsEmployeesPage() {
+  return (
+    <RequireScope scope="project:read" level="page">
+      <InsightsEmployeesContent />
     </RequireScope>
   );
 }
