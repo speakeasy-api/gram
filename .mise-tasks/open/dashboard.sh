@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-#MISE description="Open the dashboard site"
+#MISE description="Open the dashboard app"
 
 set -e
 
