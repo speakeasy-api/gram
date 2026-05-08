@@ -2699,337 +2699,6 @@ paths:
             x-speakeasy-name-override: uploadOpenAPIv3
             x-speakeasy-react-hook:
                 name: UploadOpenAPIv3
-    /rpc/assistantMemories.delete:
-        delete:
-            description: Delete an assistant memory by ID.
-            operationId: deleteAssistantMemory
-            parameters:
-                - allowEmptyValue: true
-                  description: The assistant memory ID.
-                  in: query
-                  name: id
-                  required: true
-                  schema:
-                    description: The assistant memory ID.
-                    format: uuid
-                    type: string
-                - allowEmptyValue: true
-                  description: Session header
-                  in: header
-                  name: Gram-Session
-                  schema:
-                    description: Session header
-                    type: string
-                - allowEmptyValue: true
-                  description: project header
-                  in: header
-                  name: Gram-Project
-                  schema:
-                    description: project header
-                    type: string
-            responses:
-                "200":
-                    description: OK response.
-                "400":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'bad_request: request is invalid'
-                "401":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unauthorized: unauthorized access'
-                "403":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'forbidden: permission denied'
-                "404":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'not_found: resource not found'
-                "409":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'conflict: resource already exists'
-                "415":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unsupported_media: unsupported media type'
-                "422":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'invalid: request contains one or more invalidation fields'
-                "500":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unexpected: an unexpected error occurred'
-                "502":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'gateway_error: an unexpected error occurred'
-            security:
-                - project_slug_header_Gram-Project: []
-                  session_header_Gram-Session: []
-            summary: deleteAssistantMemory assistantMemories
-            tags:
-                - assistantMemories
-            x-speakeasy-name-override: delete
-    /rpc/assistantMemories.get:
-        get:
-            description: Get an assistant memory by ID.
-            operationId: getAssistantMemory
-            parameters:
-                - allowEmptyValue: true
-                  description: The assistant memory ID.
-                  in: query
-                  name: id
-                  required: true
-                  schema:
-                    description: The assistant memory ID.
-                    format: uuid
-                    type: string
-                - allowEmptyValue: true
-                  description: Session header
-                  in: header
-                  name: Gram-Session
-                  schema:
-                    description: Session header
-                    type: string
-                - allowEmptyValue: true
-                  description: project header
-                  in: header
-                  name: Gram-Project
-                  schema:
-                    description: project header
-                    type: string
-            responses:
-                "200":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/AssistantMemory'
-                    description: OK response.
-                "400":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'bad_request: request is invalid'
-                "401":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unauthorized: unauthorized access'
-                "403":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'forbidden: permission denied'
-                "404":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'not_found: resource not found'
-                "409":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'conflict: resource already exists'
-                "415":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unsupported_media: unsupported media type'
-                "422":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'invalid: request contains one or more invalidation fields'
-                "500":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unexpected: an unexpected error occurred'
-                "502":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'gateway_error: an unexpected error occurred'
-            security:
-                - project_slug_header_Gram-Project: []
-                  session_header_Gram-Session: []
-            summary: getAssistantMemory assistantMemories
-            tags:
-                - assistantMemories
-            x-speakeasy-name-override: get
-            x-speakeasy-react-hook:
-                name: GetAssistantMemory
-    /rpc/assistantMemories.list:
-        get:
-            description: List assistant memories for an assistant.
-            operationId: listAssistantMemories
-            parameters:
-                - allowEmptyValue: true
-                  description: The assistant ID.
-                  in: query
-                  name: assistant_id
-                  required: true
-                  schema:
-                    description: The assistant ID.
-                    format: uuid
-                    type: string
-                - allowEmptyValue: true
-                  description: Optional tags to filter memories by.
-                  in: query
-                  name: tags
-                  schema:
-                    description: Optional tags to filter memories by.
-                    items:
-                        type: string
-                    type: array
-                - allowEmptyValue: true
-                  description: Whether to include soft-deleted memories.
-                  in: query
-                  name: include_deleted
-                  schema:
-                    default: false
-                    description: Whether to include soft-deleted memories.
-                    type: boolean
-                - allowEmptyValue: true
-                  description: The cursor to fetch results from.
-                  in: query
-                  name: cursor
-                  schema:
-                    description: The cursor to fetch results from.
-                    type: string
-                - allowEmptyValue: true
-                  description: The number of memories to return per page.
-                  in: query
-                  name: limit
-                  schema:
-                    default: 50
-                    description: The number of memories to return per page.
-                    format: int64
-                    maximum: 200
-                    minimum: 1
-                    type: integer
-                - allowEmptyValue: true
-                  description: Session header
-                  in: header
-                  name: Gram-Session
-                  schema:
-                    description: Session header
-                    type: string
-                - allowEmptyValue: true
-                  description: project header
-                  in: header
-                  name: Gram-Project
-                  schema:
-                    description: project header
-                    type: string
-            responses:
-                "200":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/ListAssistantMemoriesResult'
-                    description: OK response.
-                "400":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'bad_request: request is invalid'
-                "401":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unauthorized: unauthorized access'
-                "403":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'forbidden: permission denied'
-                "404":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'not_found: resource not found'
-                "409":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'conflict: resource already exists'
-                "415":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unsupported_media: unsupported media type'
-                "422":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'invalid: request contains one or more invalidation fields'
-                "500":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unexpected: an unexpected error occurred'
-                "502":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'gateway_error: an unexpected error occurred'
-            security:
-                - project_slug_header_Gram-Project: []
-                  session_header_Gram-Session: []
-            summary: listAssistantMemories assistantMemories
-            tags:
-                - assistantMemories
-            x-speakeasy-name-override: list
-            x-speakeasy-pagination:
-                inputs:
-                    - in: parameters
-                      name: cursor
-                      type: cursor
-                outputs:
-                    nextCursor: $.next_cursor
-                type: cursor
-            x-speakeasy-react-hook:
-                name: ListAssistantMemories
     /rpc/assistants.create:
         post:
             description: Create an assistant.
@@ -8038,6 +7707,8 @@ paths:
             tags:
                 - workos
             x-speakeasy-name-override: receiveWorkOSWebhook
+            x-speakeasy-react-hook:
+                disabled: true
     /rpc/hooks.claude:
         post:
             tags:
@@ -23344,62 +23015,6 @@ components:
                 - status
                 - created_at
                 - updated_at
-        AssistantMemory:
-            type: object
-            properties:
-                assistant_id:
-                    type: string
-                    description: The assistant ID owning the memory.
-                    format: uuid
-                content:
-                    type: string
-                    description: The memory content.
-                created_at:
-                    type: string
-                    description: Creation timestamp.
-                    format: date-time
-                deleted_at:
-                    type: string
-                    description: Timestamp at which the memory was soft-deleted.
-                    format: date-time
-                id:
-                    type: string
-                    description: The assistant memory ID.
-                    format: uuid
-                last_access:
-                    type: string
-                    description: Timestamp of the most recent access.
-                    format: date-time
-                superseded_at:
-                    type: string
-                    description: Timestamp at which the memory was superseded by another memory.
-                    format: date-time
-                supersedes_id:
-                    type: string
-                    description: The ID of the memory this one supersedes, if any.
-                    format: uuid
-                tags:
-                    type: array
-                    items:
-                        type: string
-                    description: Tags associated with the memory.
-                updated_at:
-                    type: string
-                    description: Last update timestamp.
-                    format: date-time
-                valid_at:
-                    type: string
-                    description: Timestamp at which the memory becomes valid.
-                    format: date-time
-            required:
-                - id
-                - assistant_id
-                - content
-                - tags
-                - created_at
-                - updated_at
-                - last_access
-                - valid_at
         AssistantToolsetRef:
             type: object
             properties:
@@ -26684,9 +26299,6 @@ components:
         GramProductFeatures:
             type: object
             properties:
-                assistant_memory_enabled:
-                    type: boolean
-                    description: Whether assistant memory is enabled
                 authz_challenge_logging_enabled:
                     type: boolean
                     description: Whether authz challenge logging to ClickHouse is enabled
@@ -26705,7 +26317,6 @@ components:
                 - tool_io_logs_enabled
                 - session_capture_enabled
                 - authz_challenge_logging_enabled
-                - assistant_memory_enabled
         HTTPToolDefinition:
             type: object
             properties:
@@ -27246,19 +26857,6 @@ components:
                     description: The list of assets
             required:
                 - assets
-        ListAssistantMemoriesResult:
-            type: object
-            properties:
-                memories:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/AssistantMemory'
-                    description: Assistant memories matching the query.
-                next_cursor:
-                    type: string
-                    description: The cursor to be used for the next page of results.
-            required:
-                - memories
         ListAssistantsResult:
             type: object
             properties:
@@ -29681,7 +29279,7 @@ components:
                     description: Whether this project has a GitHub connection.
                 marketplace_url:
                     type: string
-                    description: Git-based Claude Code marketplace URL — the value to pass to `/plugin marketplace add` or set as the source URL in `extraKnownMarketplaces`. Present once a marketplace token has been minted, which happens automatically on the first publish.
+                    description: URL-based Claude Code marketplace install URL — the value to pass to `/plugin marketplace add`. Present once a marketplace token has been minted, which happens automatically on the first publish.
                 repo_name:
                     type: string
                     description: GitHub repo name, if connected.
@@ -30515,9 +30113,6 @@ components:
                     type: string
                     description: Deployment ID filter
                     format: uuid
-                event_source:
-                    type: string
-                    description: Optional event source filter (e.g. 'hook'). When set, only rows with a matching event_source are included.
                 from:
                     type: string
                     description: Start time in ISO 8601 format (e.g., '2025-12-19T10:00:00Z')
@@ -30936,7 +30531,6 @@ components:
                         - tool_io_logs
                         - session_capture
                         - authz_challenge_logging
-                        - assistant_memory
                     maxLength: 60
             required:
                 - feature_name
@@ -33257,8 +32851,6 @@ tags:
       description: Operational endpoints for administrative tasks.
     - name: assets
       description: Manages assets used by Gram projects.
-    - name: assistantMemories
-      description: Manage assistant memory records.
     - name: assistants
       description: Manage assistants and their runtime configuration.
     - name: auditlogs

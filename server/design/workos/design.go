@@ -23,5 +23,6 @@ var _ = Service("workos", func() {
 
 		Meta("openapi:operationId", "receiveWorkOSWebhook")
 		Meta("openapi:extension:x-speakeasy-name-override", "receiveWorkOSWebhook")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"disabled": true}`)
 	})
 })
