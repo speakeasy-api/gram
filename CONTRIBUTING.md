@@ -14,40 +14,40 @@ mise seed
 
 This populates the database with projects, deployments, API keys, and other resources so you have something to work with in the dashboard. The seed script authenticates against the running server, so make sure the services are up before running it.
 
-### Local auth (Mock IDP)
+### Local auth (dev-idp)
 
-Local development uses a mock Speakeasy identity provider that runs alongside the server. When you click "Login" in the dashboard, the mock IDP auto-approves instantly — no credentials needed.
+Gram uses a local development identity provider called **dev-idp** (`dev-idp/`) for authentication. It runs as a process in madprocs and exposes standard OIDC endpoints that the Gram server authenticates against — the same code paths used in production, just backed by a local SQLite database instead of an external identity service.
 
-To customize the mock user identity, add the following to `mise.local.toml` (create it if it doesn't exist):
+dev-idp serves multiple protocol handlers on different URL prefixes:
+
+| Prefix         | Purpose                                                                                                     |
+| -------------- | ----------------------------------------------------------------------------------------------------------- |
+| `/oauth2`      | Standard OIDC provider (authorize, token, userinfo, JWKS). This is what the Gram server talks to for login. |
+| `/mock-workos` | Emulates the WorkOS REST API (organizations, roles, memberships). Used by the Gram server's WorkOS client.  |
+| `/workos`      | Thin proxy to the real WorkOS API. Only mounted when `WORKOS_API_KEY` is set.                               |
+
+#### Mode: mock-workos (default — zero config)
+
+Out of the box, `./zero` sets up everything you need. Clicking "Login" in the dashboard authenticates instantly with a hardcoded test user. The Gram server's WorkOS client calls hit the mock-workos emulator, which returns synthetic organizations, roles, and memberships from dev-idp's SQLite store.
+
+No env vars are required beyond the defaults in `mise.toml`.
+
+To customize the mock user identity, open the dev-idp dashboard at `http://localhost:35293` and edit users/organizations there. Changes take effect on next login.
+
+#### Mode: real WorkOS (opt-in)
+
+For Speakeasy employees who need to test with real WorkOS AuthKit login and real organization data. The `./zero` script will prompt you to choose a mode during setup. You can also switch manually by adding the following to `mise.local.toml`:
 
 ```toml
 [env]
-MOCK_IDP_USER_EMAIL = "you@example.com"
-MOCK_IDP_USER_DISPLAY_NAME = "Your Name"
-MOCK_IDP_ORG_NAME = "My Workspace"
-MOCK_IDP_ORG_SLUG = "my-workspace"
+WORKOS_API_KEY = "sk_test_..."
+WORKOS_API_URL = "{{env.GRAM_DEVIDP_EXTERNAL_URL}}/workos"
+GRAM_IDP_CLIENT_ID = "client_..."
 ```
 
-After changing these values, restart the `mock-idp` process in [madprocs](https://github.com/speakeasy-api/madprocs) (select it and press `r`), then log out and back in.
+When `WORKOS_API_KEY` is set, dev-idp mounts a `/workos/` proxy that forwards API requests to the real WorkOS API. The Gram server's WorkOS client is pointed at this proxy via `WORKOS_API_URL`. The OIDC login flow still goes through dev-idp's `/oauth2` endpoints.
 
-See [`mock-speakeasy-idp/README.md`](./mock-speakeasy-idp/README.md) for the full list of configurable variables.
-
-### WorkOS AuthKit OIDC mode
-
-For Speakeasy employees only: the mock IDP also supports authenticating against a real OIDC provider (WorkOS AuthKit) instead of using the hardcoded test user. This is useful if you want to test with real user identities and organizations.
-
-The `./zero` script will prompt you to configure this during setup. If you skip it, the mock IDP runs in mock mode with instant auto-login. You can configure it later by adding the following to `mise.local.toml`:
-
-```toml
-[env]
-OIDC_ISSUER = "https://convenient-daydream-57-development.authkit.app/"
-OIDC_CLIENT_ID = "<your-client-id>"
-OIDC_CLIENT_SECRET = "<your-client-secret>"
-```
-
-You also need to register `http://localhost:35291/v1/speakeasy_provider/oidc/callback` as a redirect URI in your WorkOS AuthKit dashboard.
-
-When OIDC mode is enabled, clicking "Login" will redirect to WorkOS AuthKit for real authentication instead of auto-approving. The mock IDP translates the OIDC session into the Speakeasy provider format that the Gram server expects.
+After switching modes, restart madprocs for changes to take effect.
 
 ### CLI development
 
