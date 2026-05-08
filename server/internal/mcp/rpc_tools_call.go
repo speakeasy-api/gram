@@ -3,7 +3,6 @@ package mcp
 import (
 	"bytes"
 	"context"
-	"database/sql"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -17,6 +16,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -650,7 +650,7 @@ func filterOmittedEnvVars(
 	rawMetadata, err := repo.GetMetadataForToolset(ctx, toolsetID)
 	if err != nil {
 		// Fallback behavior for backwards compatibility
-		if errors.Is(err, sql.ErrNoRows) {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return nil
 		}
 		return fmt.Errorf("get metadata for toolset: %w", err)

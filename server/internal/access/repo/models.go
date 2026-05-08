@@ -7,22 +7,57 @@ package repo
 import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-// RBAC grants. One row per (org, principal, scope, selectors). Selectors define resource constraints.
-type PrincipalGrant struct {
-	ID uuid.UUID
-	// The organization this grant belongs to. Grants are always org-scoped.
+// Tracks admin resolutions of authz challenge denials. challenge_id references authz_challenges.id in ClickHouse (soft cross-DB reference).
+type AuthzChallengeResolution struct {
+	ID             uuid.UUID
 	OrganizationID string
-	// URN identifying the principal, e.g. "user:user_abc", "role:admin". Format is type:id.
-	PrincipalUrn urn.Principal
-	// Derived from principal_urn. The type prefix, e.g. "user", "role".
-	PrincipalType string
-	// The scope being granted, e.g. "build:read". Validated in application code, not via FK.
-	Scope string
-	// JSON selector constraints defining what the grant applies to, e.g. {"resource_kind":"project","resource_id":"proj_123"}.
-	Selectors []byte
-	CreatedAt pgtype.Timestamptz
-	UpdatedAt pgtype.Timestamptz
+	// UUID of the denied challenge in the ClickHouse authz_challenges table.
+	ChallengeID string
+	// The principal that was denied, copied from the challenge for query convenience.
+	PrincipalUrn string
+	Scope        string
+	ResourceKind string
+	ResourceID   string
+	// How the challenge was resolved: role_assigned, dismissed.
+	ResolutionType string
+	// When resolution_type=role_assigned, the role slug that was assigned to the principal.
+	RoleSlug pgtype.Text
+	// URN of the admin who resolved the challenge.
+	ResolvedBy string
+	CreatedAt  pgtype.Timestamptz
+}
+
+type GlobalRole struct {
+	ID                uuid.UUID
+	WorkosSlug        string
+	WorkosName        string
+	WorkosDescription pgtype.Text
+	WorkosCreatedAt   pgtype.Timestamptz
+	WorkosUpdatedAt   pgtype.Timestamptz
+	WorkosDeletedAt   pgtype.Timestamptz
+	WorkosDeleted     bool
+	WorkosLastEventID pgtype.Text
+	CreatedAt         pgtype.Timestamptz
+	UpdatedAt         pgtype.Timestamptz
+	DeletedAt         pgtype.Timestamptz
+	Deleted           bool
+}
+
+type OrganizationRole struct {
+	ID                uuid.UUID
+	OrganizationID    string
+	WorkosSlug        string
+	WorkosName        string
+	WorkosDescription pgtype.Text
+	WorkosCreatedAt   pgtype.Timestamptz
+	WorkosUpdatedAt   pgtype.Timestamptz
+	WorkosDeletedAt   pgtype.Timestamptz
+	WorkosDeleted     bool
+	WorkosLastEventID pgtype.Text
+	CreatedAt         pgtype.Timestamptz
+	UpdatedAt         pgtype.Timestamptz
+	DeletedAt         pgtype.Timestamptz
+	Deleted           bool
 }

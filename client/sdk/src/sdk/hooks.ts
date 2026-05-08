@@ -19,7 +19,7 @@ export class Hooks extends ClientSDK {
    * Unified endpoint for all Claude Code hook events. Handles SessionStart, PreToolUse, PostToolUse, and PostToolUseFailure.
    */
   async hooksNumberClaude(
-    request: components.ClaudeHookPayload,
+    request: operations.HooksNumberClaudeRequest,
     options?: RequestOptions,
   ): Promise<components.ClaudeHookResult> {
     return unwrapAsync(hooksHooksNumberClaude(

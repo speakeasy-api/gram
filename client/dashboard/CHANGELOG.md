@@ -1,5 +1,81 @@
 # dashboard
 
+## 0.46.0
+
+### Minor Changes
+
+- f65466b: Add a marketplace proxy and end-to-end install UX so users can install Gram-published plugins in Claude Code, Claude Cowork, and Cursor without making the upstream GitHub repo public.
+
+  - **Server routes**: `GET /marketplace/m/{token}/marketplace.json` (URL-based Claude Code marketplace) and `/marketplace/p/{token}.git/...` (git Smart HTTP proxy for plugin source clones). Both stream directly from GitHub via the same GitHub App installation token used for publishing — no local mirror state, stateless. Proxy is mounted on the existing `gram start` server and wrapped with the recovery middleware so panics don't crash the process.
+  - **Token-as-secret model**: `plugin_github_connections` gains a nullable `marketplace_token` column with a partial unique index. Tokens are auto-minted on first publish and preserved across subsequent publishes; rotation is a separate (deferred) admin path. Handler-level format precheck rejects malformed tokens before the DB lookup.
+  - **Hook layout fix**: the publish flow now writes generated observability hooks at `hooks/hooks.json` (with the script alongside) instead of at the plugin root. Without the `hooks/` subdir, Claude Code and Cursor register the plugin successfully but never wire the hook events up — silently dropping every PreToolUse / PostToolUse signal.
+  - **Plugin source rewrite**: rewritten manifests use the `git-subdir` source type per the official Claude Code marketplace schema (the only valid types are `npm`, `url`, `github`, `git-subdir`; plain `"git"` produces a confusing "source type your version does not support" install error).
+  - **Dashboard**: the Plugins page surfaces the marketplace as a labeled panel with an "Install instructions" button that opens a HooksSetupDialog-styled modal. Three working provider tabs:
+    - **Claude Code** — per-user `/plugin marketplace add` plus an org-wide rollout section with a copy-paste `extraKnownMarketplaces` snippet for Claude.ai's Managed Settings.
+    - **Claude Cowork** — three-step admin walkthrough for adding the GitHub repo on Claude.ai's Plugins page.
+    - **Cursor** — three-step team-admin walkthrough for cursor.com/dashboard, mirroring what's already documented in the published repo's README.
+  - **Management API**: `plugins.getPublishStatus` now returns a `marketplace_url` field once a token has been minted; the dashboard reads from that. SDK regenerated.
+
+- 0978641: Default-attach Slack reaction tools during assistant onboarding and inject reaction etiquette guidance into the assistant's `# Behavior` section. Slack manifest builder now maps the reaction tool handlers to the `reactions:write`, `reactions:read`, and `emoji:read` bot scopes.
+
+### Patch Changes
+
+- b27c6bd: Allow publishing to GitHub when the org has only the observability plugin (no custom plugins required)
+- 504c815: Allow setting custom policy messages to be shown to end users
+
+## 0.45.2
+
+### Patch Changes
+
+- 485e9fa: Tag chat sessions started from the Assistants page with `X-Gram-Source: assistant` (was `assistant-onboarding`). Agent session logs now show `assistant` as the source for these sessions instead of conflating ongoing assistant chats with the onboarding flow.
+- abf9f59: fix certain agent session side panel failing to load conversation history
+- 07819a8: Show function memory and instances on source overview
+- 8701c12: Redesign the MCP servers list on the plugin detail page so each entry
+  matches the card pattern from the MCP list page: the Network icon in
+  the dot-pattern sidebar, name plus tool-count badge in the header, and
+  the Public / Private / Disabled status indicator on the footer left.
+  The footer right has a trash icon button that removes the server from
+  the plugin, and servers whose toolset has been deleted are flagged
+  inline. Also extracts the shared status indicator from MCPCard,
+  MCPTableRow, and the new card into a reusable
+  `MCPStatusIndicator` component.
+
+## 0.45.1
+
+### Patch Changes
+
+- 02712dc: Teams installing Gram-published plugins now get observability automatically.
+  Each org's published marketplace ships a `base` plugin containing the team's
+  hooks with credentials embedded — no manual SessionStart configuration, no
+  credential paste, no risk of forgetting the setup step. Install once per
+  machine and tool events flow into the Gram dashboard for the org regardless
+  of how many feature plugins a team member also installs.
+- ceaf5a8: Switch the Plugins list from a table to a card grid that matches the Collections
+  page. Each plugin card surfaces name, slug, description, server count, and last
+  updated time, and the existing delete action moves into a per-card menu. The
+  empty state is replaced by the shared "create resource" tile so the layout stays
+  consistent with Collections.
+- b0726b5: Normalized observe component filenames to (section)(feature) pattern
+
+## 0.45.0
+
+### Minor Changes
+
+- cc00be4: Assistants v0: server-side service, Temporal workflows + reaper, Fly.io / local Firecracker runtime providers, per-thread token manager, and the dashboard create/edit/onboarding UI for assistants with model, instructions, toolset and environment bindings.
+- fb726e1: Reorganized Observe into tabbed Insights and Logs sections
+
+### Patch Changes
+
+- c44959b: Handle missing deployment and MCP detail routes with a not-found state instead of surfacing raw errors
+- 745d0b2: feat(access): reassign members to the default role on role deletion and surface the affected members in the dashboard delete dialog
+- 04c2dbf: Improve automatic setup of OAuth Settings for Remote MCP servers
+- f32d4e2: Edit log filter chips on click instead of deleting
+- 7721e8e: Add a one-click "Auto-Configure" path on the OAuth wizard's path selection step for OAuth 2.1 MCP servers, and drop the requirement that custom OAuth proxy configurations supply scopes.
+- 2fa84af: click-to-reveal for sensitive data in risk findings
+- 7c3be05: Support for shadow mcp blocking (block unapproved MCP servers org-wide)
+- Updated dependencies [cc00be4]
+  - @gram-ai/elements@1.30.1
+
 ## 0.44.0
 
 ### Minor Changes

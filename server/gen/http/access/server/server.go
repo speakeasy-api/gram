@@ -31,6 +31,8 @@ type Server struct {
 	GetRBACStatus    http.Handler
 	EnableRBAC       http.Handler
 	DisableRBAC      http.Handler
+	ListChallenges   http.Handler
+	ResolveChallenge http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -72,6 +74,8 @@ func New(
 			{"GetRBACStatus", "GET", "/rpc/access.getRBACStatus"},
 			{"EnableRBAC", "POST", "/rpc/access.enableRBAC"},
 			{"DisableRBAC", "POST", "/rpc/access.disableRBAC"},
+			{"ListChallenges", "GET", "/rpc/access.listChallenges"},
+			{"ResolveChallenge", "POST", "/rpc/access.resolveChallenge"},
 		},
 		ListRoles:        NewListRolesHandler(e.ListRoles, mux, decoder, encoder, errhandler, formatter),
 		GetRole:          NewGetRoleHandler(e.GetRole, mux, decoder, encoder, errhandler, formatter),
@@ -85,6 +89,8 @@ func New(
 		GetRBACStatus:    NewGetRBACStatusHandler(e.GetRBACStatus, mux, decoder, encoder, errhandler, formatter),
 		EnableRBAC:       NewEnableRBACHandler(e.EnableRBAC, mux, decoder, encoder, errhandler, formatter),
 		DisableRBAC:      NewDisableRBACHandler(e.DisableRBAC, mux, decoder, encoder, errhandler, formatter),
+		ListChallenges:   NewListChallengesHandler(e.ListChallenges, mux, decoder, encoder, errhandler, formatter),
+		ResolveChallenge: NewResolveChallengeHandler(e.ResolveChallenge, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -105,6 +111,8 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.GetRBACStatus = m(s.GetRBACStatus)
 	s.EnableRBAC = m(s.EnableRBAC)
 	s.DisableRBAC = m(s.DisableRBAC)
+	s.ListChallenges = m(s.ListChallenges)
+	s.ResolveChallenge = m(s.ResolveChallenge)
 }
 
 // MethodNames returns the methods served.
@@ -124,6 +132,8 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountGetRBACStatusHandler(mux, h.GetRBACStatus)
 	MountEnableRBACHandler(mux, h.EnableRBAC)
 	MountDisableRBACHandler(mux, h.DisableRBAC)
+	MountListChallengesHandler(mux, h.ListChallenges)
+	MountResolveChallengeHandler(mux, h.ResolveChallenge)
 }
 
 // Mount configures the mux to serve the access endpoints.
@@ -744,6 +754,112 @@ func NewDisableRBACHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "disableRBAC")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListChallengesHandler configures the mux to serve the "access" service
+// "listChallenges" endpoint.
+func MountListChallengesHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/access.listChallenges", f)
+}
+
+// NewListChallengesHandler creates a HTTP handler which loads the HTTP request
+// and calls the "access" service "listChallenges" endpoint.
+func NewListChallengesHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListChallengesRequest(mux, decoder)
+		encodeResponse = EncodeListChallengesResponse(encoder)
+		encodeError    = EncodeListChallengesError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listChallenges")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountResolveChallengeHandler configures the mux to serve the "access"
+// service "resolveChallenge" endpoint.
+func MountResolveChallengeHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/access.resolveChallenge", f)
+}
+
+// NewResolveChallengeHandler creates a HTTP handler which loads the HTTP
+// request and calls the "access" service "resolveChallenge" endpoint.
+func NewResolveChallengeHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeResolveChallengeRequest(mux, decoder)
+		encodeResponse = EncodeResolveChallengeResponse(encoder)
+		encodeError    = EncodeResolveChallengeError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "resolveChallenge")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
 		payload, err := decodeRequest(r)
 		if err != nil {

@@ -1,10 +1,10 @@
 package chat
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"crypto/sha256"
-	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -15,9 +15,11 @@ import (
 	"net/url"
 	"path"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
@@ -63,6 +65,7 @@ type Service struct {
 	tracer           trace.Tracer
 	openRouter       openrouter.Provisioner
 	completionClient openrouter.CompletionClient
+	contextWindow    *openrouter.ContextWindowResolver
 	logger           *slog.Logger
 	sessions         *sessions.Manager
 	chatSessions     *chatsessions.Manager
@@ -70,6 +73,7 @@ type Service struct {
 	assetStorage     assets.BlobStore
 	posthog          *posthog.Posthog
 	telemetryService *telemetry.Service
+	billingRepo      billing.Repository
 }
 
 func NewService(
@@ -80,11 +84,13 @@ func NewService(
 	chatSessions *chatsessions.Manager,
 	openRouter openrouter.Provisioner,
 	completionClient openrouter.CompletionClient,
+	contextWindow *openrouter.ContextWindowResolver,
 	posthog *posthog.Posthog,
 	telemetryService *telemetry.Service,
 	assetStorage assets.BlobStore,
 	authzEngine *authz.Engine,
 	assistantTokens *assistanttokens.Manager,
+	billingRepo billing.Repository,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("chat"))
 
@@ -99,9 +105,11 @@ func NewService(
 		tracer:           tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/chat"),
 		openRouter:       openRouter,
 		completionClient: completionClient,
+		contextWindow:    contextWindow,
 		assetStorage:     assetStorage,
 		posthog:          posthog,
 		telemetryService: telemetryService,
+		billingRepo:      billingRepo,
 	}
 }
 
@@ -497,7 +505,7 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 
 	chat, err := s.repo.GetChat(ctx, chatID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.C(oops.CodeNotFound)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to load chat").Log(ctx, s.logger)
@@ -526,14 +534,13 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 	resultMessages := make([]*gen.ChatMessage, len(messages))
 	for i, msg := range messages {
 		toolCalls := string(msg.ToolCalls)
-		content := s.loadMessageContent(ctx, msg)
 		resultMessages[i] = &gen.ChatMessage{
 			ID:             msg.ID.String(),
 			Role:           msg.Role,
 			Model:          msg.Model.String,
 			UserID:         &msg.UserID.String,
 			ExternalUserID: &msg.ExternalUserID.String,
-			Content:        &content,
+			Content:        s.loadMessageContent(ctx, msg),
 			ToolCalls:      &toolCalls,
 			ToolCallID:     &msg.ToolCallID.String,
 			FinishReason:   &msg.FinishReason.String,
@@ -619,10 +626,50 @@ func extractHTTPMetadata(r *http.Request) httpMetadata {
 	}
 }
 
+// checkCreditBalance rejects the request when the org has consumed its granted
+// credits. Reads only the cached period usage so the gate stays cheap; on
+// cache miss we fail open and rely on the OpenRouter per-key monthly limit as
+// the hard backstop. Speakeasy-internal orgs (specialLimitOrgs) bypass.
+//
+// Phase 0: only enforce the hard gate on free-tier orgs. Pro/enterprise stay
+// bounded by the OpenRouter monthly key cap (creditsAccountTypeMap) until the
+// two limit sources are unified — see AGE-2122.
+func (s *Service) checkCreditBalance(ctx context.Context, orgID, accountType string) error {
+	if openrouter.IsSpecialLimitOrg(orgID) {
+		return nil
+	}
+
+	if accountType != string(billing.TierBase) && accountType != "" {
+		return nil
+	}
+
+	pu, err := s.billingRepo.GetStoredPeriodUsage(ctx, orgID)
+	if err != nil {
+		s.logger.WarnContext(ctx, "credit balance cache miss; allowing request",
+			attr.SlogError(err),
+			attr.SlogOrganizationID(orgID),
+		)
+		return nil
+	}
+
+	if pu.IncludedCredits > 0 && pu.Credits >= pu.IncludedCredits {
+		return oops.C(oops.CodeInsufficientCredits).Log(
+			ctx, s.logger,
+			attr.SlogOrganizationID(orgID),
+		)
+	}
+
+	return nil
+}
+
 // HandleCompletion is a proxy to the OpenAI API that logs request and response data.
 func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error {
 	ctx, authCtx, err := s.directAuthorize(r.Context(), r)
 	if err != nil {
+		return err
+	}
+
+	if err := s.checkCreditBalance(ctx, authCtx.ActiveOrganizationID, authCtx.AccountType); err != nil {
 		return err
 	}
 
@@ -760,45 +807,37 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 			UserAgent: metadata.UserAgent,
 			IPAddress: metadata.IPAddress,
 		},
-		APIKeyID:   authCtx.APIKeyID,
-		JSONSchema: jsonSchema,
+		APIKeyID:                  authCtx.APIKeyID,
+		JSONSchema:                jsonSchema,
+		NormalizeOutboundMessages: r.URL.Query().Get("unstable_normalizeOutboundMessages") == "1",
+	}
+
+	// Opt-in: callers must pass includeContextWindow=1 to receive the
+	// gram_metadata.context_window decoration. When off, the resolver
+	// (and its OpenRouter round trip on cache miss) is never called.
+	getContextWindow := func() int { return 0 }
+	if r.URL.Query().Get("includeContextWindow") == "1" {
+		resolved := sync.OnceValue(func() int {
+			return s.resolveContextWindow(ctx, completionReq.Model)
+		})
+		go resolved()
+		getContextWindow = resolved
 	}
 
 	isStreaming := chatRequest.Stream
 	if isStreaming {
-		// The streamingResponseReader automatically parses SSE and triggers capture/tracking on close
 		streamBody, err := s.completionClient.GetCompletionStream(ctx, completionReq)
 		if err != nil {
 			return oops.E(oops.CodeGatewayError, err, "get completion stream").Log(ctx, s.logger)
 		}
 		defer o11y.NoLogDefer(func() error { return streamBody.Close() })
 
-		// Set response headers for SSE
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.Header().Set("Cache-Control", "no-cache")
 		w.Header().Set("Connection", "keep-alive")
 
-		// Copy stream directly to response writer
-		// UnifiedClient's streamingResponseReader handles SSE parsing and message capture
-		flusher, canFlush := w.(http.Flusher)
-		buf := make([]byte, 4096)
-		for {
-			n, readErr := streamBody.Read(buf)
-			if n > 0 {
-				if _, writeErr := w.Write(buf[:n]); writeErr != nil {
-					s.logger.ErrorContext(ctx, "stream write error", attr.SlogError(writeErr))
-					return oops.E(oops.CodeGatewayError, writeErr, "stream write failed").Log(ctx, s.logger)
-				}
-				if canFlush {
-					flusher.Flush()
-				}
-			}
-			if readErr != nil {
-				if !errors.Is(readErr, io.EOF) {
-					s.logger.ErrorContext(ctx, "stream read error", attr.SlogError(readErr))
-				}
-				break
-			}
+		if err := s.streamCompletion(ctx, w, streamBody, getContextWindow); err != nil {
+			return err
 		}
 
 		eventProperties["success"] = true
@@ -811,6 +850,11 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 	response, err := s.completionClient.GetCompletion(ctx, completionReq)
 	if err != nil {
 		return oops.E(oops.CodeGatewayError, err, "completion failed").Log(ctx, s.logger)
+	}
+
+	var gramMetadata *openrouter.GramMetadata
+	if cw := getContextWindow(); cw > 0 {
+		gramMetadata = &openrouter.GramMetadata{ContextWindow: cw}
 	}
 
 	// Build OpenAI-compatible response
@@ -828,7 +872,8 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 				FinishReason: conv.PtrValOr(response.FinishReason, "stop"),
 			},
 		},
-		Usage: &response.Usage,
+		Usage:        &response.Usage,
+		GramMetadata: gramMetadata,
 	}
 
 	// Write response
@@ -839,6 +884,147 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 
 	eventProperties["success"] = true
 	return nil
+}
+
+func (s *Service) resolveContextWindow(ctx context.Context, requestedModel string) int {
+	model := requestedModel
+	if model == "" {
+		model = openrouter.DefaultChatModel
+	}
+	if resolved := openrouter.ResolveModel(model); resolved != "" {
+		model = resolved
+	}
+
+	tokens, err := s.contextWindow.Resolve(ctx, model)
+	if err != nil {
+		s.logger.WarnContext(ctx, "resolve model context window", attr.SlogError(err), attr.SlogGenAIRequestModel(model))
+		return 0
+	}
+	return tokens
+}
+
+func (s *Service) streamCompletion(ctx context.Context, w http.ResponseWriter, src io.Reader, getContextWindow func() int) error {
+	flusher, canFlush := w.(http.Flusher)
+	br := bufio.NewReader(src)
+
+	var event strings.Builder
+	injected := false
+
+	flush := func() error {
+		text := event.String()
+		event.Reset()
+
+		if !injected {
+			if rewritten, ok := maybeInjectContextWindow(text, getContextWindow); ok {
+				text = rewritten
+				injected = true
+			}
+		}
+
+		if _, err := io.WriteString(w, text); err != nil {
+			return oops.E(oops.CodeGatewayError, err, "stream write failed").Log(ctx, s.logger)
+		}
+		if canFlush {
+			flusher.Flush()
+		}
+		return nil
+	}
+
+	for {
+		line, err := br.ReadString('\n')
+		if line != "" {
+			isBlank := line == "\n" || line == "\r\n"
+			if isBlank && event.Len() == 0 {
+				// Skip leading/inter-event blank lines so we don't emit empty events.
+			} else {
+				event.WriteString(line)
+				if isBlank {
+					if flushErr := flush(); flushErr != nil {
+						return flushErr
+					}
+				}
+			}
+		}
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				if event.Len() > 0 {
+					if flushErr := flush(); flushErr != nil {
+						return flushErr
+					}
+				}
+				return nil
+			}
+			s.logger.ErrorContext(ctx, "stream read error", attr.SlogError(err))
+			return oops.E(oops.CodeGatewayError, err, "stream read failed").Log(ctx, s.logger)
+		}
+	}
+}
+
+func maybeInjectContextWindow(eventText string, getContextWindow func() int) (string, bool) {
+	dataLine, payload, ok := extractDataPayload(eventText)
+	if !ok || payload == "" || payload == "[DONE]" {
+		return eventText, false
+	}
+
+	var obj map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(payload), &obj); err != nil {
+		return eventText, false
+	}
+
+	if !isFinalFrame(obj) {
+		return eventText, false
+	}
+
+	cw := getContextWindow()
+	if cw <= 0 {
+		return eventText, false
+	}
+
+	metadata, err := json.Marshal(openrouter.GramMetadata{ContextWindow: cw})
+	if err != nil {
+		return eventText, false
+	}
+	obj["gram_metadata"] = metadata
+
+	rewritten, err := json.Marshal(obj)
+	if err != nil {
+		return eventText, false
+	}
+
+	return strings.Replace(eventText, dataLine, "data: "+string(rewritten), 1), true
+}
+
+// isFinalFrame reports whether an SSE chunk is OpenRouter's metadata/usage
+// frame — the trailing data event that carries the `usage` block before
+// `[DONE]`. We inject Gram metadata next to OpenRouter's so the two travel
+// together rather than landing on the earlier finish_reason chunk.
+func isFinalFrame(obj map[string]json.RawMessage) bool {
+	usage, ok := obj["usage"]
+	return ok && len(usage) > 0 && string(usage) != "null"
+}
+
+// extractDataPayload returns the original `data: <payload>` line and its
+// trimmed payload. OpenRouter does not emit multi-line data frames so the
+// first match wins.
+func extractDataPayload(eventText string) (line string, payload string, ok bool) {
+	const prefix = "data: "
+	rest := eventText
+	for rest != "" {
+		end := strings.IndexByte(rest, '\n')
+		var raw string
+		if end < 0 {
+			raw = rest
+			rest = ""
+		} else {
+			raw = rest[:end]
+			rest = rest[end+1:]
+		}
+		trimmed := strings.TrimRight(raw, "\r")
+		if strings.HasPrefix(trimmed, prefix) {
+			return trimmed, trimmed[len(prefix):], true
+		}
+	}
+	return "", "", false
 }
 
 func (s *Service) CreditUsage(ctx context.Context, payload *gen.CreditUsagePayload) (*gen.CreditUsageResult, error) {
@@ -872,7 +1058,7 @@ func (s *Service) GenerateTitle(ctx context.Context, payload *gen.GenerateTitleP
 	// Load the chat to verify access
 	chat, err := s.repo.GetChat(ctx, chatID)
 	switch {
-	case errors.Is(err, sql.ErrNoRows):
+	case errors.Is(err, pgx.ErrNoRows):
 		return nil, oops.C(oops.CodeNotFound)
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to load chat").Log(ctx, s.logger)
@@ -927,7 +1113,7 @@ func (s *Service) SubmitFeedback(ctx context.Context, payload *gen.SubmitFeedbac
 	// Load the chat to verify access
 	chat, err := s.repo.GetChat(ctx, chatID)
 	switch {
-	case errors.Is(err, sql.ErrNoRows):
+	case errors.Is(err, pgx.ErrNoRows):
 		return nil, oops.C(oops.CodeNotFound)
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to load chat").Log(ctx, s.logger)
@@ -942,8 +1128,7 @@ func (s *Service) SubmitFeedback(ctx context.Context, payload *gen.SubmitFeedbac
 		return nil, oops.E(oops.CodeInvalid, nil, "feedback must be 'success' or 'failure'")
 	}
 
-	// Get the most recent message ID to track where user gave feedback
-	messages, err := s.repo.ListChatMessages(ctx, repo.ListChatMessagesParams{
+	messages, err := s.repo.ListLatestGenerationChatMessages(ctx, repo.ListLatestGenerationChatMessagesParams{
 		ChatID:    chatID,
 		ProjectID: *authCtx.ProjectID,
 	})
@@ -1039,17 +1224,19 @@ type chatMessageRow struct {
 	messageID      string
 	toolCallID     string
 
-	role             string
-	model            string
-	content          or.ChatMessages
-	finishReason     *string
-	toolCalls        []string
+	role         string
+	model        string
+	content      or.ChatMessages
+	finishReason *string
+	// toolCalls is the replay JSONB blob written to chat_messages.tool_calls.
+	// The content hash is computed from a typed projection instead of these raw
+	// bytes so equivalent tool calls can arrive through different wire shapes.
+	toolCalls        []byte
 	promptTokens     int64
 	completionTokens int64
 	totalTokens      int64
 
-	contentHash []byte
-	generation  int32
+	generation int32
 
 	metadata httpMetadata
 }
@@ -1151,12 +1338,6 @@ func storeMessages(ctx context.Context, logger *slog.Logger, tx repo.DBTX, asset
 			contentRaw = res.jsonData
 		}
 
-		// Marshal tool calls to JSON if present.
-		var toolCallsJSON []byte
-		if len(row.toolCalls) > 0 {
-			toolCallsJSON, _ = json.Marshal(row.toolCalls)
-		}
-
 		dbrows[i] = repo.CreateChatMessageParams{
 			ChatID:           row.chatID,
 			ProjectID:        row.projectID,
@@ -1171,7 +1352,7 @@ func storeMessages(ctx context.Context, logger *slog.Logger, tx repo.DBTX, asset
 			UserID:           conv.ToPGText(row.userID),
 			ExternalUserID:   conv.ToPGText(row.externalUserID),
 			FinishReason:     conv.PtrToPGText(row.finishReason),
-			ToolCalls:        toolCallsJSON,
+			ToolCalls:        row.toolCalls,
 			PromptTokens:     row.promptTokens,
 			CompletionTokens: row.completionTokens,
 			TotalTokens:      row.totalTokens,
@@ -1179,7 +1360,7 @@ func storeMessages(ctx context.Context, logger *slog.Logger, tx repo.DBTX, asset
 			UserAgent:        conv.ToPGText(row.metadata.UserAgent),
 			IpAddress:        conv.ToPGText(row.metadata.IPAddress),
 			Source:           conv.ToPGText(row.metadata.Source),
-			ContentHash:      row.contentHash,
+			ContentHash:      nil,
 			Generation:       row.generation,
 		}
 	}

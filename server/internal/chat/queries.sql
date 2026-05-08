@@ -158,23 +158,22 @@ ORDER BY seq ASC;
 SELECT COUNT(*) FROM chat_messages
 WHERE chat_id = @chat_id AND (project_id IS NULL OR project_id = @project_id::uuid);
 
+-- name: ListLatestGenerationChatMessages :many
+-- Returns only the latest-generation rows; older generations are audit-only.
+SELECT cm.* FROM chat_messages cm
+WHERE cm.chat_id = @chat_id
+  AND (cm.project_id IS NULL OR cm.project_id = @project_id::uuid)
+  AND cm.generation = (SELECT MAX(generation) FROM chat_messages WHERE chat_id = @chat_id)
+ORDER BY cm.seq ASC;
+
 -- name: GetMaxGenerationForChat :one
 SELECT COALESCE(MAX(generation), 0)::integer AS generation FROM chat_messages WHERE chat_id = @chat_id;
 
 -- name: ListChatMessagesForMatch :many
-SELECT id, role, content, tool_call_id, content_hash
+SELECT id, role, content, tool_call_id, tool_calls
 FROM chat_messages
 WHERE chat_id = @chat_id AND generation = @generation
 ORDER BY seq ASC;
-
--- name: BackfillChatMessageHash :exec
-UPDATE chat_messages SET content_hash = @content_hash WHERE id = @id AND content_hash IS NULL;
-
--- name: GetChatChainTip :one
-SELECT generation, content_hash FROM chat_messages
-WHERE chat_id = @chat_id
-ORDER BY seq DESC
-LIMIT 1;
 
 -- name: UpdateChatTitle :exec
 UPDATE chats SET title = @title, updated_at = NOW() WHERE id = @id;
@@ -511,3 +510,10 @@ SELECT
   COALESCE(AVG(duration_ms), 0)::double precision as avg_session_duration_ms,
   COALESCE(AVG(CASE WHEN resolution_status != '' THEN duration_ms END), 0)::double precision as avg_resolution_time_ms
 FROM chat_stats;
+
+-- name: CreateChatMessageWithToolCalls :exec
+-- Inserts a single chat_messages row with optional tool_calls JSON,
+-- tool_call_id, and generation, for callers seeding tool-turn history without
+-- the full CreateChatMessage :copyfrom batch shape.
+INSERT INTO chat_messages (chat_id, project_id, role, content, tool_calls, tool_call_id, generation)
+VALUES (@chat_id, @project_id, @role, @content, @tool_calls, @tool_call_id, @generation);

@@ -306,6 +306,7 @@ SELECT
 FROM deployments_openapiv3_assets as current
 WHERE current.deployment_id = @original_deployment_id
   AND current.asset_id <> ALL (@excluded_ids::uuid[])
+  AND current.id <> ALL (@excluded_ids::uuid[])
 RETURNING id;
 
 -- name: CloneDeploymentFunctionsAssets :many
@@ -329,6 +330,7 @@ SELECT
 FROM deployments_functions as current
 WHERE current.deployment_id = @original_deployment_id
   AND current.asset_id <> ALL (@excluded_ids::uuid[])
+  AND current.id <> ALL (@excluded_ids::uuid[])
 RETURNING id;
 
 -- name: CloneDeploymentToolFunctions :many
@@ -752,3 +754,14 @@ WHERE current.deployment_id = @original_deployment_id
   AND current.deleted IS FALSE
   AND current.slug <> ALL (@excluded_slugs::text[])
 RETURNING id, deployment_id, registry_id, organization_mcp_collection_registry_id, name, slug, registry_server_specifier, selected_remotes;
+
+-- name: InsertDeployment :one
+-- Inserts a minimal deployment row and returns its ID without the conflict
+-- handling of CreateDeployment.
+INSERT INTO deployments (project_id, organization_id, user_id, idempotency_key)
+VALUES (@project_id, @organization_id, @user_id, @idempotency_key)
+RETURNING id;
+
+-- name: CreateDeploymentStatus :exec
+INSERT INTO deployment_statuses (deployment_id, status)
+VALUES (@deployment_id, @status);

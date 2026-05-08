@@ -18,7 +18,7 @@ import (
 type Service interface {
 	// Unified endpoint for all Claude Code hook events. Handles SessionStart,
 	// PreToolUse, PostToolUse, and PostToolUseFailure.
-	Claude(context.Context, *ClaudeHookPayload) (res *ClaudeHookResult, err error)
+	Claude(context.Context, *ClaudePayload) (res *ClaudeHookResult, err error)
 	// Endpoint for Cursor hook events. Handles beforeSubmitPrompt, stop,
 	// afterAgentResponse, afterAgentThought, preToolUse, postToolUse,
 	// postToolUseFailure, beforeMCPExecution, and afterMCPExecution.
@@ -53,8 +53,26 @@ const ServiceName = "hooks"
 // MethodKey key.
 var MethodNames = [4]string{"claude", "cursor", "logs", "metrics"}
 
-// ClaudeHookPayload is the payload type of the hooks service claude method.
-type ClaudeHookPayload struct {
+// ClaudeHookResult is the result type of the hooks service claude method.
+type ClaudeHookResult struct {
+	// Whether to continue (SessionStart only)
+	Continue *bool
+	// Reason if blocked (SessionStart only)
+	StopReason *string
+	// Whether to suppress the hook's output
+	SuppressOutput *bool
+	// Warning message shown to the user in the terminal
+	SystemMessage *string
+	// Hook-specific output as JSON object
+	HookSpecificOutput any
+}
+
+// ClaudePayload is the payload type of the hooks service claude method.
+type ClaudePayload struct {
+	// Optional API key for plugin-driven attribution.
+	ApikeyToken *string
+	// Optional project slug for plugin-driven attribution.
+	ProjectSlugInput *string
 	// The type of hook event
 	HookEventName string
 	// The name of the tool (for tool-related events)
@@ -96,20 +114,6 @@ type ClaudeHookPayload struct {
 	Message *string
 	// Notification title (Notification only)
 	Title *string
-}
-
-// ClaudeHookResult is the result type of the hooks service claude method.
-type ClaudeHookResult struct {
-	// Whether to continue (SessionStart only)
-	Continue *bool
-	// Reason if blocked (SessionStart only)
-	StopReason *string
-	// Whether to suppress the hook's output
-	SuppressOutput *bool
-	// Warning message shown to the user in the terminal
-	SystemMessage *string
-	// Hook-specific output as JSON object
-	HookSpecificOutput any
 }
 
 // CursorHookResult is the result type of the hooks service cursor method.

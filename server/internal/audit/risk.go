@@ -31,7 +31,7 @@ type LogRiskPolicyCreateEvent struct {
 	RiskPolicyName string
 }
 
-func LogRiskPolicyCreate(ctx context.Context, dbtx repo.DBTX, event LogRiskPolicyCreateEvent) error {
+func (l *Logger) LogRiskPolicyCreate(ctx context.Context, dbtx repo.DBTX, event LogRiskPolicyCreateEvent) error {
 	action := ActionRiskPolicyCreate
 	entry := repo.InsertAuditLogParams{
 		OrganizationID: event.OrganizationID,
@@ -76,7 +76,7 @@ type LogRiskPolicyUpdateEvent struct {
 	SnapshotAfter  *types.RiskPolicy
 }
 
-func LogRiskPolicyUpdate(ctx context.Context, dbtx repo.DBTX, event LogRiskPolicyUpdateEvent) error {
+func (l *Logger) LogRiskPolicyUpdate(ctx context.Context, dbtx repo.DBTX, event LogRiskPolicyUpdateEvent) error {
 	action := ActionRiskPolicyUpdate
 
 	beforeSnapshot, err := marshalAuditPayload(event.SnapshotBefore)
@@ -129,7 +129,7 @@ type LogRiskPolicyDeleteEvent struct {
 	RiskPolicyName string
 }
 
-func LogRiskPolicyDelete(ctx context.Context, dbtx repo.DBTX, event LogRiskPolicyDeleteEvent) error {
+func (l *Logger) LogRiskPolicyDelete(ctx context.Context, dbtx repo.DBTX, event LogRiskPolicyDeleteEvent) error {
 	action := ActionRiskPolicyDelete
 	entry := repo.InsertAuditLogParams{
 		OrganizationID: event.OrganizationID,
@@ -171,7 +171,7 @@ type LogRiskPolicyTriggerEvent struct {
 	RiskPolicyName string
 }
 
-func LogRiskPolicyTrigger(ctx context.Context, dbtx repo.DBTX, event LogRiskPolicyTriggerEvent) error {
+func (l *Logger) LogRiskPolicyTrigger(ctx context.Context, dbtx repo.DBTX, event LogRiskPolicyTriggerEvent) error {
 	action := ActionRiskPolicyTrigger
 	entry := repo.InsertAuditLogParams{
 		OrganizationID: event.OrganizationID,

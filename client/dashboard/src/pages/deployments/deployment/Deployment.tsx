@@ -1,9 +1,15 @@
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
+import {
+  RouteNotFoundState,
+  SecondaryRouteAction,
+} from "@/components/route-not-found-state";
 import { Heading } from "@/components/ui/heading";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { dateTimeFormatters } from "@/lib/dates";
+import { isNotFoundError, isUuidRouteParam } from "@/lib/route-errors";
 import { cn } from "@/lib/utils";
+import { useRoutes } from "@/routes";
 import { useDeployment, useDeploymentSuspense } from "@gram/client/react-query";
 import { Button, Separator, Skeleton } from "@speakeasy-api/moonshine";
 import {
@@ -32,8 +38,47 @@ import {
 
 export default function DeploymentPage() {
   const { deploymentId } = useParams();
-  if (!deploymentId) {
-    return <p className="text-destructive">Error: Deployment ID is required</p>;
+
+  if (!isUuidRouteParam(deploymentId)) {
+    return <DeploymentRouteNotFound />;
+  }
+
+  return <DeploymentPageContent deploymentId={deploymentId} />;
+}
+
+function DeploymentPageContent({ deploymentId }: { deploymentId: string }) {
+  const {
+    data: deployment,
+    error,
+    isLoading,
+  } = useDeployment({ id: deploymentId }, undefined, {
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    throwOnError: false,
+  });
+
+  if (isNotFoundError(error)) {
+    return <DeploymentRouteNotFound />;
+  }
+
+  if (error) {
+    throw error;
+  }
+
+  if (isLoading || !deployment) {
+    return (
+      <Page>
+        <Page.Header>
+          <Page.Header.Breadcrumbs />
+        </Page.Header>
+        <Page.Body>
+          <Skeleton>
+            <div className="h-4 w-1/3" />
+          </Skeleton>
+        </Page.Body>
+      </Page>
+    );
   }
 
   return (
@@ -45,6 +90,29 @@ export default function DeploymentPage() {
         <Suspense fallback={<div>Loading logs...</div>}>
           <DeploymentLogs deploymentId={deploymentId} />
         </Suspense>
+      </Page.Body>
+    </Page>
+  );
+}
+
+function DeploymentRouteNotFound() {
+  const routes = useRoutes();
+
+  return (
+    <Page>
+      <Page.Header>
+        <Page.Header.Breadcrumbs />
+      </Page.Header>
+      <Page.Body>
+        <RouteNotFoundState
+          title="Deployment not found"
+          description="This deployment may have been deleted, or the link may be incomplete."
+          action={
+            <routes.deployments.Link>
+              <SecondaryRouteAction>Back to deployments</SecondaryRouteAction>
+            </routes.deployments.Link>
+          }
+        />
       </Page.Body>
     </Page>
   );

@@ -59,40 +59,65 @@ func Launch(ctx context.Context, opts LaunchOptions) (*Environment, func() error
 		NewPresidioClient:   unsupportedPresidioClientFunc(),
 	}
 
+	var launchEg errgroup.Group
+
 	if opts.Postgres {
-		container, cloner, err := NewTestPostgres(ctx)
-		if err != nil {
-			return nil, nil, fmt.Errorf("start postgres container: %w", err)
-		}
-		pgcontainer = container
-		res.CloneTestDatabase = cloner
+		launchEg.Go(func() error {
+			container, cloner, err := NewTestPostgres(ctx)
+			if err != nil {
+				return fmt.Errorf("start postgres container: %w", err)
+			}
+			pgcontainer = container
+			res.CloneTestDatabase = cloner
+			return nil
+		})
 	}
 
 	if opts.Redis {
-		container, rcFactory, err := NewTestRedis(ctx)
-		if err != nil {
-			return nil, nil, fmt.Errorf("start redis container: %w", err)
-		}
-		rediscontainer = container
-		res.NewRedisClient = rcFactory
+		launchEg.Go(func() error {
+			container, rcFactory, err := NewTestRedis(ctx)
+			if err != nil {
+				return fmt.Errorf("start redis container: %w", err)
+			}
+			rediscontainer = container
+			res.NewRedisClient = rcFactory
+			return nil
+		})
 	}
 
 	if opts.ClickHouse {
-		container, chFactory, err := NewTestClickhouse(ctx)
-		if err != nil {
-			return nil, nil, fmt.Errorf("start clickhouse container: %w", err)
-		}
-		clickhousecontainer = container
-		res.NewClickhouseClient = chFactory
+		launchEg.Go(func() error {
+			container, chFactory, err := NewTestClickhouse(ctx)
+			if err != nil {
+				return fmt.Errorf("start clickhouse container: %w", err)
+			}
+			clickhousecontainer = container
+			res.NewClickhouseClient = chFactory
+			return nil
+		})
 	}
 
 	if opts.Presidio {
-		container, pcFactory, err := NewTestPresidio(ctx)
-		if err != nil {
-			return nil, nil, fmt.Errorf("start presidio container: %w", err)
+		launchEg.Go(func() error {
+			container, pcFactory, err := NewTestPresidio(ctx)
+			if err != nil {
+				return fmt.Errorf("start presidio container: %w", err)
+			}
+			presidiocontainer = container
+			res.NewPresidioClient = pcFactory
+			return nil
+		})
+	}
+
+	if err := launchEg.Wait(); err != nil {
+		for _, c := range []terminateable{pgcontainer, rediscontainer, clickhousecontainer, presidiocontainer} {
+			if c != nil {
+				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+				_ = c.Terminate(ctx)
+				cancel()
+			}
 		}
-		presidiocontainer = container
-		res.NewPresidioClient = pcFactory
+		return nil, nil, fmt.Errorf("start containers: %w", err)
 	}
 
 	if opts.Temporal {

@@ -2,11 +2,12 @@ package openrouter
 
 import (
 	"context"
-	"log/slog"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func TestResponseCaptor_LineBuffering(t *testing.T) {
@@ -82,7 +83,7 @@ func TestResponseCaptor_LineBuffering(t *testing.T) {
 
 			reader := &streamingResponseReader{
 				ctx:                  context.Background(),
-				logger:               slog.Default(),
+				logger:               testenv.NewLogger(t),
 				messageContent:       &strings.Builder{},
 				lineBuf:              &strings.Builder{},
 				accumulatedToolCalls: make(map[int]ToolCall),
@@ -112,7 +113,7 @@ func TestResponseCaptor_ToolCallAccumulation(t *testing.T) {
 
 	reader := &streamingResponseReader{
 		ctx:                  context.Background(),
-		logger:               slog.Default(),
+		logger:               testenv.NewLogger(t),
 		lineBuf:              &strings.Builder{},
 		messageContent:       &strings.Builder{},
 		accumulatedToolCalls: make(map[int]ToolCall),
@@ -144,7 +145,7 @@ func TestResponseCaptor_MultipleToolCalls(t *testing.T) {
 
 	reader := &streamingResponseReader{
 		ctx:                  context.Background(),
-		logger:               slog.Default(),
+		logger:               testenv.NewLogger(t),
 		lineBuf:              &strings.Builder{},
 		messageContent:       &strings.Builder{},
 		accumulatedToolCalls: make(map[int]ToolCall),
@@ -180,7 +181,7 @@ func TestResponseCaptor_UsageTracking(t *testing.T) {
 
 	reader := &streamingResponseReader{
 		ctx:                  context.Background(),
-		logger:               slog.Default(),
+		logger:               testenv.NewLogger(t),
 		lineBuf:              &strings.Builder{},
 		messageContent:       &strings.Builder{},
 		accumulatedToolCalls: make(map[int]ToolCall),
@@ -216,7 +217,7 @@ func TestResponseCaptor_MixedContentAndToolCalls(t *testing.T) {
 
 	reader := &streamingResponseReader{
 		ctx:                  context.Background(),
-		logger:               slog.Default(),
+		logger:               testenv.NewLogger(t),
 		lineBuf:              &strings.Builder{},
 		messageContent:       &strings.Builder{},
 		accumulatedToolCalls: make(map[int]ToolCall),
@@ -287,7 +288,7 @@ func TestResponseCaptor_EdgeCases(t *testing.T) {
 
 			reader := &streamingResponseReader{
 				ctx:                  context.Background(),
-				logger:               slog.Default(),
+				logger:               testenv.NewLogger(t),
 				lineBuf:              &strings.Builder{},
 				messageContent:       &strings.Builder{},
 				accumulatedToolCalls: make(map[int]ToolCall),
@@ -317,7 +318,7 @@ func TestResponseCaptor_ToolCallFieldUpdates(t *testing.T) {
 
 	reader := &streamingResponseReader{
 		ctx:                  context.Background(),
-		logger:               slog.Default(),
+		logger:               testenv.NewLogger(t),
 		lineBuf:              &strings.Builder{},
 		messageContent:       &strings.Builder{},
 		accumulatedToolCalls: make(map[int]ToolCall),

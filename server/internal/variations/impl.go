@@ -2,12 +2,12 @@ package variations
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -37,11 +37,19 @@ type Service struct {
 	repo   *repo.Queries
 	auth   *auth.Auth
 	authz  *authz.Engine
+	audit  *audit.Logger
 }
 
 var _ gen.Service = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, authzEngine *authz.Engine) *Service {
+func NewService(
+	logger *slog.Logger,
+	tracerProvider trace.TracerProvider,
+	db *pgxpool.Pool,
+	sessions *sessions.Manager,
+	authzEngine *authz.Engine,
+	auditLogger *audit.Logger,
+) *Service {
 	logger = logger.With(attr.SlogComponent("variations"))
 
 	return &Service{
@@ -51,6 +59,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		repo:   repo.New(db),
 		auth:   auth.New(logger, db, sessions, authzEngine),
 		authz:  authzEngine,
+		audit:  auditLogger,
 	}
 }
 
@@ -134,11 +143,11 @@ func (s *Service) UpsertGlobal(ctx context.Context, payload *gen.UpsertGlobalPay
 	tx := s.repo.WithTx(dbtx)
 
 	groupID, err := tx.PokeGlobalToolVariationsGroup(ctx, projectID)
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return nil, oops.E(oops.CodeUnexpected, err, "error poking global tool variations group").Log(ctx, logger)
 	}
 
-	if errors.Is(err, sql.ErrNoRows) || groupID == uuid.Nil {
+	if errors.Is(err, pgx.ErrNoRows) || groupID == uuid.Nil {
 		groupID, err = tx.InitGlobalToolVariationsGroup(ctx, repo.InitGlobalToolVariationsGroupParams{
 			ProjectID:   projectID,
 			Name:        "Global tool variations",
@@ -203,7 +212,7 @@ func (s *Service) UpsertGlobal(ctx context.Context, payload *gen.UpsertGlobalPay
 
 	result := toVariation(row)
 
-	if err := audit.LogVariationUpdateGlobal(ctx, dbtx, audit.LogVariationUpdateGlobalEvent{
+	if err := s.audit.LogVariationUpdateGlobal(ctx, dbtx, audit.LogVariationUpdateGlobalEvent{
 		OrganizationID:          authCtx.ActiveOrganizationID,
 		ProjectID:               uuid.NullUUID{UUID: projectID, Valid: true},
 		Actor:                   urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
@@ -252,13 +261,13 @@ func (s *Service) DeleteGlobal(ctx context.Context, payload *gen.DeleteGlobalPay
 		ProjectID: *authCtx.ProjectID,
 	})
 	switch {
-	case errors.Is(err, sql.ErrNoRows):
+	case errors.Is(err, pgx.ErrNoRows):
 		return nil, oops.E(oops.CodeNotFound, err, "global tool variation not found").Log(ctx, s.logger)
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "error deleting global tool variation").Log(ctx, s.logger)
 	}
 
-	if err := audit.LogVariationDeleteGlobal(ctx, dbtx, audit.LogVariationDeleteGlobalEvent{
+	if err := s.audit.LogVariationDeleteGlobal(ctx, dbtx, audit.LogVariationDeleteGlobalEvent{
 		OrganizationID:   authCtx.ActiveOrganizationID,
 		ProjectID:        uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
 		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),

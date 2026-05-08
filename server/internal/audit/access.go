@@ -17,6 +17,7 @@ const (
 	ActionAccessRoleUpdate       Action = "access_role:update"
 	ActionAccessRoleDelete       Action = "access_role:delete"
 	ActionAccessMemberRoleUpdate Action = "access_member:update_role"
+	ActionAccessChallengeResolve Action = "access_challenge:resolve"
 )
 
 type LogAccessRoleCreateEvent struct {
@@ -31,7 +32,7 @@ type LogAccessRoleCreateEvent struct {
 	RoleSlug string
 }
 
-func LogAccessRoleCreate(ctx context.Context, dbtx repo.DBTX, event LogAccessRoleCreateEvent) error {
+func (l *Logger) LogAccessRoleCreate(ctx context.Context, dbtx repo.DBTX, event LogAccessRoleCreateEvent) error {
 	action := ActionAccessRoleCreate
 
 	entry := repo.InsertAuditLogParams{
@@ -77,7 +78,7 @@ type LogAccessRoleUpdateEvent struct {
 	RoleSnapshotAfter  *accessgen.Role
 }
 
-func LogAccessRoleUpdate(ctx context.Context, dbtx repo.DBTX, event LogAccessRoleUpdateEvent) error {
+func (l *Logger) LogAccessRoleUpdate(ctx context.Context, dbtx repo.DBTX, event LogAccessRoleUpdateEvent) error {
 	action := ActionAccessRoleUpdate
 
 	beforeSnapshot, err := marshalAuditPayload(event.RoleSnapshotBefore)
@@ -130,7 +131,7 @@ type LogAccessRoleDeleteEvent struct {
 	RoleSlug string
 }
 
-func LogAccessRoleDelete(ctx context.Context, dbtx repo.DBTX, event LogAccessRoleDeleteEvent) error {
+func (l *Logger) LogAccessRoleDelete(ctx context.Context, dbtx repo.DBTX, event LogAccessRoleDeleteEvent) error {
 	action := ActionAccessRoleDelete
 	entry := repo.InsertAuditLogParams{
 		OrganizationID: event.OrganizationID,
@@ -175,7 +176,7 @@ type LogAccessMemberRoleUpdateEvent struct {
 	MemberSnapshotAfter  *accessgen.AccessMember
 }
 
-func LogAccessMemberRoleUpdate(ctx context.Context, dbtx repo.DBTX, event LogAccessMemberRoleUpdateEvent) error {
+func (l *Logger) LogAccessMemberRoleUpdate(ctx context.Context, dbtx repo.DBTX, event LogAccessMemberRoleUpdateEvent) error {
 	action := ActionAccessMemberRoleUpdate
 
 	beforeSnapshot, err := marshalAuditPayload(event.MemberSnapshotBefore)
@@ -206,6 +207,50 @@ func LogAccessMemberRoleUpdate(ctx context.Context, dbtx repo.DBTX, event LogAcc
 
 		BeforeSnapshot: beforeSnapshot,
 		AfterSnapshot:  afterSnapshot,
+		Metadata:       nil,
+	}
+
+	if _, err := repo.New(dbtx).InsertAuditLog(ctx, entry); err != nil {
+		return fmt.Errorf("log %s: %w", action, err)
+	}
+
+	return nil
+}
+
+type LogAccessChallengeResolveEvent struct {
+	OrganizationID string
+
+	Actor            urn.Principal
+	ActorDisplayName *string
+
+	ChallengeID    string //nolint:glint // TODO(AGE-1954): discuss URN treatment for challenge identifiers; pending team discussion
+	PrincipalURN   string //nolint:glint // TODO(AGE-1954): principal URN comes as pre-formatted string from challenge payload
+	Scope          string
+	ResolutionType string
+	RoleSlug       *string
+}
+
+func (l *Logger) LogAccessChallengeResolve(ctx context.Context, dbtx repo.DBTX, event LogAccessChallengeResolveEvent) error {
+	action := ActionAccessChallengeResolve
+
+	entry := repo.InsertAuditLogParams{
+		OrganizationID: event.OrganizationID,
+		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+
+		ActorID:          event.Actor.ID,
+		ActorType:        string(event.Actor.Type),
+		ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName),
+		ActorSlug:        conv.PtrToPGTextEmpty(nil),
+
+		Action: string(action),
+
+		SubjectID:          event.ChallengeID,
+		SubjectType:        string(subjectTypeAccessChallenge),
+		SubjectDisplayName: conv.ToPGTextEmpty(event.PrincipalURN),
+		SubjectSlug:        conv.ToPGTextEmpty(event.ResolutionType),
+
+		BeforeSnapshot: nil,
+		AfterSnapshot:  nil,
 		Metadata:       nil,
 	}
 

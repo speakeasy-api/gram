@@ -2,13 +2,13 @@ package environments
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments/repo"
@@ -45,7 +45,7 @@ func (e *EnvironmentEntries) Load(ctx context.Context, projectID uuid.UUID, envI
 			Slug:      strings.ToLower(envIDOrSlug.Slug),
 		})
 		switch {
-		case errors.Is(err, sql.ErrNoRows):
+		case errors.Is(err, pgx.ErrNoRows):
 			return nil, toolconfig.ErrNotFound
 		case err != nil:
 			return nil, fmt.Errorf("get environment by slug: %w", err)
@@ -77,7 +77,7 @@ func (e *EnvironmentEntries) LoadSourceEnv(ctx context.Context, projectID uuid.U
 		ProjectID:  projectID,
 	})
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return map[string]string{}, nil
 		}
 		return nil, fmt.Errorf("get environment for source: %w", err)
@@ -101,7 +101,7 @@ func (e *EnvironmentEntries) LoadToolsetEnv(ctx context.Context, projectID uuid.
 		ProjectID: projectID,
 	})
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
 		}
 		return nil, fmt.Errorf("get environment for toolset: %w", err)
@@ -128,7 +128,7 @@ func (e *EnvironmentEntries) LoadMCPAttachedEnvironment(
 ) (map[string]string, error) {
 	mcpMetadata, err := e.mcpMetadataRepo.GetMetadataForToolset(ctx, toolsetID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return map[string]string{}, nil
 		}
 		return nil, fmt.Errorf("get metadata for toolset: %w", err)

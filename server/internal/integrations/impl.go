@@ -2,13 +2,13 @@ package integrations
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"log/slog"
 	"slices"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -92,7 +92,7 @@ func (s *Service) Get(ctx context.Context, form *gen.GetPayload) (res *gen.GetIn
 		PackageName: pname,
 	})
 	switch {
-	case errors.Is(err, sql.ErrNoRows):
+	case errors.Is(err, pgx.ErrNoRows):
 		return nil, oops.C(oops.CodeNotFound)
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "error getting integration").Log(ctx, s.logger)
@@ -111,7 +111,7 @@ func (s *Service) Get(ctx context.Context, form *gen.GetPayload) (res *gen.GetIn
 		PackageID:   pid,
 		PackageName: pname,
 	})
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return nil, oops.E(oops.CodeUnexpected, err, "error listing integration versions").Log(ctx, s.logger)
 	}
 

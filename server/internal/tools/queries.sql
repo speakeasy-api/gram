@@ -117,7 +117,7 @@ external_deployments AS (
   WHERE deployments_packages.deployment_id = (SELECT id FROM deployment)
 )
 SELECT
-  htd.id, htd.tool_urn, htd.deployment_id, htd.name, htd.security, htd.server_env_var,
+  htd.id, htd.tool_urn, htd.deployment_id, htd.openapiv3_document_id, htd.name, htd.security, htd.server_env_var,
   htd.read_only_hint, htd.destructive_hint, htd.idempotent_hint, htd.open_world_hint,
   htd.http_method
 FROM http_tool_definitions htd
@@ -363,3 +363,52 @@ SELECT
     (SELECT id FROM third_party),
     (SELECT id FROM function_tools)
   ) AS id;
+
+-- name: CreateHTTPToolDefinition :exec
+-- Inserts an http_tool_definition row. The production tool-ingestion path
+-- lives in the deployments service.
+INSERT INTO http_tool_definitions (
+    project_id
+  , deployment_id
+  , tool_urn
+  , name
+  , untruncated_name
+  , summary
+  , description
+  , tags
+  , http_method
+  , path
+  , schema_version
+  , schema
+  , server_env_var
+  , security
+  , header_settings
+  , query_settings
+  , path_settings
+  , read_only_hint
+  , destructive_hint
+  , idempotent_hint
+  , open_world_hint
+) VALUES (
+    @project_id
+  , @deployment_id
+  , @tool_urn
+  , @name
+  , @untruncated_name
+  , @summary
+  , @description
+  , @tags
+  , @http_method
+  , @path
+  , @schema_version
+  , @schema
+  , @server_env_var
+  , @security
+  , @header_settings
+  , @query_settings
+  , @path_settings
+  , @read_only_hint
+  , @destructive_hint
+  , @idempotent_hint
+  , @open_world_hint
+);

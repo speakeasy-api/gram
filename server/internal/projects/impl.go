@@ -2,7 +2,6 @@ package projects
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -45,11 +44,19 @@ type Service struct {
 	sessions *sessions.Manager
 	auth     *auth.Auth
 	authz    *authz.Engine
+	audit    *audit.Logger
 }
 
 var _ gen.Service = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, authzEngine *authz.Engine) *Service {
+func NewService(
+	logger *slog.Logger,
+	tracerProvider trace.TracerProvider,
+	db *pgxpool.Pool,
+	sessions *sessions.Manager,
+	authzEngine *authz.Engine,
+	auditLogger *audit.Logger,
+) *Service {
 	logger = logger.With(attr.SlogComponent("projects"))
 
 	return &Service{
@@ -61,6 +68,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		sessions: sessions,
 		auth:     auth.New(logger, db, sessions, authzEngine),
 		authz:    authzEngine,
+		audit:    auditLogger,
 	}
 }
 
@@ -90,7 +98,7 @@ func (s *Service) GetProject(ctx context.Context, payload *gen.GetProjectPayload
 		OrganizationID: authCtx.ActiveOrganizationID,
 	})
 	switch {
-	case errors.Is(err, sql.ErrNoRows):
+	case errors.Is(err, pgx.ErrNoRows):
 		return nil, oops.C(oops.CodeNotFound)
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "error getting project by slug").Log(ctx, s.logger, attr.SlogProjectSlug(slug), attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
@@ -178,7 +186,7 @@ func (s *Service) CreateProject(ctx context.Context, payload *gen.CreateProjectP
 		return nil, oops.E(oops.CodeUnexpected, err, "error creating default environment").Log(ctx, s.logger)
 	}
 
-	if err := audit.LogProjectCreate(ctx, dbtx, audit.LogProjectCreateEvent{
+	if err := s.audit.LogProjectCreate(ctx, dbtx, audit.LogProjectCreateEvent{
 		OrganizationID: payload.OrganizationID,
 		ProjectID:      prj.ID,
 
@@ -246,7 +254,11 @@ func (s *Service) ListProjects(ctx context.Context, payload *gen.ListProjectsPay
 		projectIDs = append(projectIDs, project.ID.String())
 	}
 
-	allowedProjectIDs, err := s.authz.Filter(ctx, authz.ScopeProjectRead, projectIDs)
+	checks := make([]authz.Check, len(projectIDs))
+	for i, id := range projectIDs {
+		checks[i] = authz.Check{Scope: authz.ScopeProjectRead, ResourceID: id, ResourceKind: "", Dimensions: nil}
+	}
+	allowedProjectIDs, err := s.authz.Filter(ctx, checks)
 	if err != nil {
 		return nil, err
 	}
@@ -314,7 +326,7 @@ func (s *Service) SetLogo(ctx context.Context, payload *gen.SetLogoPayload) (res
 
 	projectResponse := toProject(updatedProject)
 
-	if err := audit.LogProjectUpdate(ctx, dbtx, audit.LogProjectUpdateEvent{
+	if err := s.audit.LogProjectUpdate(ctx, dbtx, audit.LogProjectUpdateEvent{
 		OrganizationID: updatedProject.OrganizationID,
 		ProjectID:      updatedProject.ID,
 
@@ -452,13 +464,13 @@ func (s *Service) DeleteProject(ctx context.Context, payload *gen.DeleteProjectP
 
 	_, err = pr.DeleteProject(ctx, projectID)
 	switch {
-	case errors.Is(err, sql.ErrNoRows):
+	case errors.Is(err, pgx.ErrNoRows):
 		return nil // Return successfully even if the project was already deleted
 	case err != nil:
 		return oops.E(oops.CodeUnexpected, err, "error deleting project").Log(ctx, s.logger, attr.SlogProjectID(payload.ID))
 	}
 
-	if err := audit.LogProjectDelete(ctx, dbtx, audit.LogProjectDeleteEvent{
+	if err := s.audit.LogProjectDelete(ctx, dbtx, audit.LogProjectDeleteEvent{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		ProjectID:      projectID,
 

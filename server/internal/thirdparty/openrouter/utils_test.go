@@ -30,9 +30,10 @@ func combinedAssistant(text string, toolID string) or.ChatMessages {
 }
 
 func toolOnlyAssistant(toolID string) or.ChatMessages {
+	empty := or.CreateChatAssistantMessageContentStr("")
 	return or.CreateChatMessagesAssistant(or.ChatAssistantMessage{
 		Role:    or.ChatAssistantMessageRoleAssistant,
-		Content: optionalnullable.From[or.ChatAssistantMessageContent](nil),
+		Content: optionalnullable.From(&empty),
 		Name:    nil,
 		ToolCalls: []or.ChatToolCall{{
 			ID:       toolID,
@@ -47,7 +48,7 @@ func toolOnlyAssistant(toolID string) or.ChatMessages {
 	})
 }
 
-func TestNormalizeAssistantMessages_SplitsCombinedIntoTextThenToolOnly(t *testing.T) {
+func TestNormalizeAssistantMessages_DropsTextFromCombinedToolCallMessage(t *testing.T) {
 	t.Parallel()
 
 	msgs := []or.ChatMessages{
@@ -56,16 +57,12 @@ func TestNormalizeAssistantMessages_SplitsCombinedIntoTextThenToolOnly(t *testin
 	}
 
 	out := slices.Collect(NormalizeAssistantMessages(msgs))
-	require.Len(t, out, 3)
+	require.Len(t, out, 2)
 
 	require.Equal(t, or.ChatMessagesTypeUser, out[0].Type)
 
 	require.Equal(t, or.ChatMessagesTypeAssistant, out[1].Type)
-	require.Equal(t, "I'll check the weather.", GetText(out[1]))
-	require.Empty(t, out[1].ChatAssistantMessage.ToolCalls)
-
-	require.Equal(t, or.ChatMessagesTypeAssistant, out[2].Type)
-	body, err := json.Marshal(out[2])
+	body, err := json.Marshal(out[1])
 	require.NoError(t, err)
 	var decoded struct {
 		Role      string          `json:"role"`
@@ -76,12 +73,12 @@ func TestNormalizeAssistantMessages_SplitsCombinedIntoTextThenToolOnly(t *testin
 	}
 	require.NoError(t, json.Unmarshal(body, &decoded))
 	require.Equal(t, "assistant", decoded.Role)
-	require.Equal(t, "null", string(decoded.Content))
+	require.Equal(t, `""`, string(decoded.Content))
 	require.Len(t, decoded.ToolCalls, 1)
 	require.Equal(t, "toolu_bdrk_abc", decoded.ToolCalls[0].ID)
 }
 
-func TestNormalizeAssistantMessages_NullsContentOnToolOnlyWhenTextBlank(t *testing.T) {
+func TestNormalizeAssistantMessages_EmptiesContentOnToolOnlyWhenTextBlank(t *testing.T) {
 	t.Parallel()
 
 	blank := or.CreateChatAssistantMessageContentStr("   ")
@@ -112,7 +109,7 @@ func TestNormalizeAssistantMessages_NullsContentOnToolOnlyWhenTextBlank(t *testi
 		Content json.RawMessage `json:"content"`
 	}
 	require.NoError(t, json.Unmarshal(body, &decoded))
-	require.Equal(t, "null", string(decoded.Content))
+	require.Equal(t, `""`, string(decoded.Content))
 }
 
 func TestNormalizeAssistantMessages_PassesThroughToolCallFreeAssistant(t *testing.T) {
@@ -171,13 +168,11 @@ func TestNormalizeAssistantMessages_PreservesOrderAndPassThroughShapes(t *testin
 	}
 
 	out := slices.Collect(NormalizeAssistantMessages(msgs))
-	require.Len(t, out, 5)
+	require.Len(t, out, 4)
 	require.Equal(t, or.ChatMessagesTypeUser, out[0].Type)
-	require.Equal(t, "a1", GetText(out[1]))
-	require.Empty(t, out[1].ChatAssistantMessage.ToolCalls)
+	require.Empty(t, GetText(out[1]))
+	require.Len(t, out[1].ChatAssistantMessage.ToolCalls, 1)
 	require.Empty(t, GetText(out[2]))
 	require.Len(t, out[2].ChatAssistantMessage.ToolCalls, 1)
-	require.Empty(t, GetText(out[3]))
-	require.Len(t, out[3].ChatAssistantMessage.ToolCalls, 1)
-	require.Equal(t, "a2", GetText(out[4]))
+	require.Equal(t, "a2", GetText(out[3]))
 }

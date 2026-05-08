@@ -489,7 +489,7 @@ func TestToolsetsService_UpdateOAuthProxyServer_EnvironmentSlugNotFound(t *testi
 	require.Equal(t, beforeCount, afterCount, "no audit row should be written on validation failure")
 }
 
-func TestToolsetsService_UpdateOAuthProxyServer_EmptyScopesRejected(t *testing.T) {
+func TestToolsetsService_UpdateOAuthProxyServer_EmptyScopesAccepted(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestToolsetsService(t)
@@ -502,13 +502,10 @@ func TestToolsetsService_UpdateOAuthProxyServer_EmptyScopesRejected(t *testing.T
 		"empty-scopes-proxy",
 	)
 
-	beforeCount, auditErr := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetUpdateOAuthProxy)
-	require.NoError(t, auditErr)
-
-	// An explicit empty (non-nil) slice should be rejected — the create path
-	// requires at least one scope for custom providers, and the update path
-	// should not allow putting the proxy into an invalid scopeless state.
-	_, err := ti.service.UpdateOAuthProxyServer(ctx, &gen.UpdateOAuthProxyServerPayload{
+	// Many MCP servers don't advertise scopes in their well-known doc, so
+	// scope-less proxies are a supported configuration. An explicit empty
+	// slice should clear any previously-set scopes.
+	updated, err := ti.service.UpdateOAuthProxyServer(ctx, &gen.UpdateOAuthProxyServerPayload{
 		SessionToken: nil,
 		ApikeyToken:  nil,
 		Slug:         attached.Slug,
@@ -517,12 +514,10 @@ func TestToolsetsService_UpdateOAuthProxyServer_EmptyScopesRejected(t *testing.T
 		},
 		ProjectSlugInput: nil,
 	})
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "scopes_supported cannot be empty")
-
-	afterCount, auditErr := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetUpdateOAuthProxy)
-	require.NoError(t, auditErr)
-	require.Equal(t, beforeCount, afterCount, "no audit row should be written on validation failure")
+	require.NoError(t, err)
+	require.NotNil(t, updated.OauthProxyServer)
+	require.Len(t, updated.OauthProxyServer.OauthProxyProviders, 1)
+	require.Empty(t, updated.OauthProxyServer.OauthProxyProviders[0].ScopesSupported)
 }
 
 func TestToolsetsService_UpdateOAuthProxyServer_EmptyAuthMethodsRejected(t *testing.T) {

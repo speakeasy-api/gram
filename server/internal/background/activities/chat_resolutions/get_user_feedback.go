@@ -2,11 +2,11 @@ package resolution_activities
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
@@ -42,7 +42,7 @@ type GetUserFeedbackForChatResult struct {
 func (g *GetUserFeedbackForChat) Do(ctx context.Context, args GetUserFeedbackForChatArgs) (*GetUserFeedbackForChatResult, error) {
 	feedback, err := g.repo.ListUserFeedbackForChat(ctx, args.ChatID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if errors.Is(err, pgx.ErrNoRows) {
 			// No user feedback exists
 			return &GetUserFeedbackForChatResult{
 				UserFeedback: []UserFeedback{},
@@ -51,7 +51,7 @@ func (g *GetUserFeedbackForChat) Do(ctx context.Context, args GetUserFeedbackFor
 		return nil, fmt.Errorf("failed to list user feedback message IDs: %w", err)
 	}
 
-	messages, err := g.repo.ListChatMessages(ctx, repo.ListChatMessagesParams{
+	messages, err := g.repo.ListLatestGenerationChatMessages(ctx, repo.ListLatestGenerationChatMessagesParams{
 		ChatID:    args.ChatID,
 		ProjectID: args.ProjectID,
 	})

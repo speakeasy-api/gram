@@ -33,6 +33,7 @@ import { EnvironmentSwitcher } from "./EnvironmentSwitcher";
 import { EnvironmentVariableRow } from "./EnvironmentVariableRow";
 import {
   ConnectOAuthModal,
+  EditOAuthProxyModal,
   GramOAuthProxyModal,
   OAuthDetailsModal,
   PageSection,
@@ -889,7 +890,7 @@ type OAuthSectionProps = {
 
 function OAuthSection({ toolset }: OAuthSectionProps) {
   const [isOAuthModalOpen, setIsOAuthModalOpen] = useState(false);
-  const [isOAuthModalEditMode, setIsOAuthModalEditMode] = useState(false);
+  const [isEditOAuthModalOpen, setIsEditOAuthModalOpen] = useState(false);
   const [isGramOAuthModalOpen, setIsGramOAuthModalOpen] = useState(false);
   const [isOAuthDetailsModalOpen, setIsOAuthDetailsModalOpen] = useState(false);
 
@@ -978,25 +979,24 @@ function OAuthSection({ toolset }: OAuthSectionProps) {
         onClose={() => setIsOAuthDetailsModalOpen(false)}
         toolset={toolset}
         onEditRequest={() => {
-          setIsOAuthModalEditMode(true);
-          setIsOAuthModalOpen(true);
+          setIsOAuthDetailsModalOpen(false);
+          setIsEditOAuthModalOpen(true);
         }}
       />
       <ConnectOAuthModal
-        key={isOAuthModalEditMode ? "edit" : "create"}
         isOpen={isOAuthModalOpen}
-        onClose={() => {
-          setIsOAuthModalOpen(false);
-          setIsOAuthModalEditMode(false);
-        }}
+        onClose={() => setIsOAuthModalOpen(false)}
         toolsetSlug={toolset.slug}
         toolset={toolset}
-        editMode={
-          isOAuthModalEditMode && toolset.oauthProxyServer
-            ? { proxyServer: toolset.oauthProxyServer }
-            : undefined
-        }
       />
+      {toolset.oauthProxyServer && (
+        <EditOAuthProxyModal
+          isOpen={isEditOAuthModalOpen}
+          onClose={() => setIsEditOAuthModalOpen(false)}
+          toolsetSlug={toolset.slug}
+          proxyServer={toolset.oauthProxyServer}
+        />
+      )}
     </PageSection>
   );
 }

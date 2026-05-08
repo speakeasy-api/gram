@@ -507,6 +507,80 @@ func TestDeploymentsService_Evolve_ExcludeOpenAPIv3(t *testing.T) {
 	require.Equal(t, "doc-2", evolved.Deployment.Openapiv3Assets[0].Name, "wrong asset remained")
 }
 
+func TestDeploymentsService_Evolve_ExcludeSingleOpenAPIv3SourceSharingAsset(t *testing.T) {
+	t.Parallel()
+
+	assetStorage := assetstest.NewTestBlobStore(t)
+	ctx, ti := newTestDeploymentService(t, assetStorage)
+
+	bs := bytes.NewBuffer(testenv.ReadFixture(t, "fixtures/todo-valid.yaml"))
+	ares, err := ti.assets.UploadOpenAPIv3(ctx, &agen.UploadOpenAPIv3Form{
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		ContentType:      "application/x-yaml",
+		ContentLength:    int64(bs.Len()),
+	}, io.NopCloser(bs))
+	require.NoError(t, err, "upload openapi v3 asset")
+
+	initial, err := ti.service.CreateDeployment(ctx, &gen.CreateDeploymentPayload{
+		IdempotencyKey: "test-initial-deployment-exclude-shared-openapi-source",
+		Openapiv3Assets: []*gen.AddOpenAPIv3DeploymentAssetForm{
+			{
+				AssetID: ares.Asset.ID,
+				Name:    "doc-1",
+				Slug:    "doc-1",
+			},
+			{
+				AssetID: ares.Asset.ID,
+				Name:    "doc-2",
+				Slug:    "doc-2",
+			},
+		},
+		Functions:        []*gen.AddFunctionsForm{},
+		Packages:         []*gen.AddDeploymentPackageForm{},
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		GithubRepo:       nil,
+		GithubPr:         nil,
+		GithubSha:        nil,
+		ExternalID:       nil,
+		ExternalURL:      nil,
+	})
+	require.NoError(t, err, "create initial deployment")
+	require.Len(t, initial.Deployment.Openapiv3Assets, 2, "expected 2 sources in initial deployment")
+
+	var excludeSourceID string
+	for _, source := range initial.Deployment.Openapiv3Assets {
+		require.Equal(t, ares.Asset.ID, source.AssetID, "expected sources to share the same underlying asset")
+		if source.Name == "doc-1" {
+			excludeSourceID = source.ID
+		}
+	}
+	require.NotEmpty(t, excludeSourceID, "could not find source ID to exclude")
+
+	evolved, err := ti.service.Evolve(ctx, &gen.EvolvePayload{
+		ApikeyToken:            nil,
+		SessionToken:           nil,
+		ProjectSlugInput:       nil,
+		DeploymentID:           nil,
+		UpsertOpenapiv3Assets:  []*gen.AddOpenAPIv3DeploymentAssetForm{},
+		UpsertFunctions:        []*gen.AddFunctionsForm{},
+		UpsertPackages:         []*gen.AddPackageForm{},
+		ExcludeOpenapiv3Assets: []string{excludeSourceID},
+		ExcludeFunctions:       []string{},
+		ExcludePackages:        []string{},
+	})
+	require.NoError(t, err, "evolve deployment")
+
+	require.NotEqual(t, initial.Deployment.ID, evolved.Deployment.ID, "evolved deployment should have different ID")
+	require.Equal(t, "completed", evolved.Deployment.Status, "deployment status is not completed")
+	require.Len(t, evolved.Deployment.Openapiv3Assets, 1, "expected only the selected source to be excluded")
+	require.Equal(t, "doc-2", evolved.Deployment.Openapiv3Assets[0].Name, "wrong source remained")
+	require.Equal(t, ares.Asset.ID, evolved.Deployment.Openapiv3Assets[0].AssetID, "remaining source should keep the shared asset")
+}
+
 func TestDeploymentsService_Evolve_ExcludeAllOpenAPIv3(t *testing.T) {
 	t.Parallel()
 

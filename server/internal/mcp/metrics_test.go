@@ -2,12 +2,12 @@ package mcp
 
 import (
 	"context"
-	"log/slog"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"go.opentelemetry.io/otel/metric/noop"
+
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func TestNewMetrics(t *testing.T) {
@@ -15,8 +15,8 @@ func TestNewMetrics(t *testing.T) {
 
 	t.Run("creates_metrics_with_valid_meter", func(t *testing.T) {
 		t.Parallel()
-		meter := noop.NewMeterProvider().Meter("test")
-		logger := slog.New(slog.DiscardHandler)
+		meter := testenv.NewMeterProvider(t).Meter("test")
+		logger := testenv.NewLogger(t)
 
 		m := newMetrics(meter, logger)
 		require.NotNil(t, m)
@@ -30,8 +30,8 @@ func TestMetrics_RecordMCPToolCall(t *testing.T) {
 
 	t.Run("records_tool_call_with_valid_counter", func(t *testing.T) {
 		t.Parallel()
-		meter := noop.NewMeterProvider().Meter("test")
-		logger := slog.New(slog.DiscardHandler)
+		meter := testenv.NewMeterProvider(t).Meter("test")
+		logger := testenv.NewLogger(t)
 		m := newMetrics(meter, logger)
 
 		// Should not panic
@@ -54,8 +54,8 @@ func TestMetrics_RecordMCPRequestDuration(t *testing.T) {
 
 	t.Run("records_duration_with_valid_histogram", func(t *testing.T) {
 		t.Parallel()
-		meter := noop.NewMeterProvider().Meter("test")
-		logger := slog.New(slog.DiscardHandler)
+		meter := testenv.NewMeterProvider(t).Meter("test")
+		logger := testenv.NewLogger(t)
 		m := newMetrics(meter, logger)
 
 		// Should not panic

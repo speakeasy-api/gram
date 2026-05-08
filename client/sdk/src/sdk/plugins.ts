@@ -5,6 +5,7 @@
 import { pluginsAddPluginServer } from "../funcs/pluginsAddPluginServer.js";
 import { pluginsCreatePlugin } from "../funcs/pluginsCreatePlugin.js";
 import { pluginsDeletePlugin } from "../funcs/pluginsDeletePlugin.js";
+import { pluginsDownloadObservabilityPlugin } from "../funcs/pluginsDownloadObservabilityPlugin.js";
 import { pluginsDownloadPluginPackage } from "../funcs/pluginsDownloadPluginPackage.js";
 import { pluginsGetPlugin } from "../funcs/pluginsGetPlugin.js";
 import { pluginsGetPublishStatus } from "../funcs/pluginsGetPublishStatus.js";
@@ -70,6 +71,25 @@ export class Plugins extends ClientSDK {
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(pluginsDeletePlugin(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * downloadObservabilityPlugin plugins
+   *
+   * @remarks
+   * Download a ZIP of the per-org observability plugin (Gram hooks). Mints a fresh hooks-scoped API key on each download and embeds it in the plugin's hook script.
+   */
+  async downloadObservabilityPlugin(
+    request: operations.DownloadObservabilityPluginRequest,
+    security?: operations.DownloadObservabilityPluginSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<operations.DownloadObservabilityPluginResponse> {
+    return unwrapAsync(pluginsDownloadObservabilityPlugin(
       this,
       request,
       security,

@@ -14,6 +14,10 @@ services:
       - "${DB_PORT}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      # Init scripts run only on FIRST container start (empty data volume).
+      # Currently used to create the gram_devidp database for the dev-idp
+      # binary; see local/postgres-init/01-create-gram-devidp.sql.
+      - ./local/postgres-init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER}"]
       interval: 5s
@@ -56,12 +60,32 @@ services:
       timeout: 30s
       retries: 5
 
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.127.0
+    restart: unless-stopped
+    volumes:
+      - ./local/otel-collector/config.yaml:/etc/otelcol-contrib/config.yaml:ro
+    ports:
+      - "${OTLP_GRPC_PORT}:4317"
+    depends_on:
+      - jaeger
+
   jaeger:
     image: jaegertracing/jaeger:2.17.0
     restart: unless-stopped
     ports:
-      - "${OTLP_GRPC_PORT}:4317"
       - "${JAEGER_WEB_PORT}:16686"
+
+  prometheus:
+    image: prom/prometheus:v3.4.0
+    restart: unless-stopped
+    volumes:
+      - ./local/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "${PROMETHEUS_PORT}:9090"
+    depends_on:
+      - otel-collector
 
   clickhouse:
     build:
@@ -138,6 +162,8 @@ volumes:
   temporal_data:
     driver: local
   clickhouse_data:
+    driver: local
+  prometheus_data:
     driver: local
   mcp_registry_data:
     driver: local

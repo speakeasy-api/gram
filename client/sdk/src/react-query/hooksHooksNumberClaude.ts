@@ -23,12 +23,13 @@ import {
 import * as errors from "../models/errors/index.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
+import * as operations from "../models/operations/index.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type HooksHooksNumberClaudeMutationVariables = {
-  request: components.ClaudeHookPayload;
+  request: operations.HooksNumberClaudeRequest;
   options?: RequestOptions;
 };
 

@@ -3,7 +3,6 @@ package openrouter
 import (
 	"bytes"
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -15,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 
@@ -115,6 +115,11 @@ var specialLimitOrgs = []string{
 	"5a25158b-24dc-4d49-b03d-e85acfbea59c", // speakeasy-team
 }
 
+// IsSpecialLimitOrg reports whether the org bypasses standard credit limits.
+func IsSpecialLimitOrg(orgID string) bool {
+	return slices.Contains(specialLimitOrgs, orgID)
+}
+
 type Provisioner interface {
 	ProvisionAPIKey(ctx context.Context, orgID string) (string, error)
 	RefreshAPIKeyLimit(ctx context.Context, orgID string, limit *int) (int, error)
@@ -157,7 +162,7 @@ func (o *OpenRouter) ProvisionAPIKey(ctx context.Context, orgID string) (string,
 
 	key, err := o.repo.GetOpenRouterAPIKey(ctx, orgID)
 	switch {
-	case errors.Is(err, sql.ErrNoRows), key.Key == "":
+	case errors.Is(err, pgx.ErrNoRows), key.Key == "":
 		org, err := o.orgRepo.GetOrganizationMetadata(ctx, orgID)
 		if err != nil {
 			return "", oops.E(oops.CodeUnexpected, err, "failed to get organization").Log(ctx, o.logger)

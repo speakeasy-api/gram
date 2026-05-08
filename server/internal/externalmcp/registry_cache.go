@@ -16,8 +16,9 @@ const registryCacheTTL = 24 * time.Hour
 
 // CachedListServersResponse wraps a list of external MCP servers for caching.
 type CachedListServersResponse struct {
-	Key     string
-	Servers []*types.ExternalMCPServer
+	Key        string
+	Servers    []*types.ExternalMCPServer
+	NextCursor *string
 }
 
 var _ cache.CacheableObject[CachedListServersResponse] = (*CachedListServersResponse)(nil)

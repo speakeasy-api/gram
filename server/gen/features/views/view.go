@@ -28,9 +28,8 @@ type GramProductFeaturesView struct {
 	ToolIoLogsEnabled *bool
 	// Whether Claude Code session capture is enabled
 	SessionCaptureEnabled *bool
-	// Whether shadow-MCP guarding is enabled (injects required toolset id and
-	// rejects unsigned tool calls)
-	BlockShadowMcpEnabled *bool
+	// Whether authz challenge logging to ClickHouse is enabled
+	AuthzChallengeLoggingEnabled *bool
 }
 
 var (
@@ -41,7 +40,7 @@ var (
 			"logs_enabled",
 			"tool_io_logs_enabled",
 			"session_capture_enabled",
-			"block_shadow_mcp_enabled",
+			"authz_challenge_logging_enabled",
 		},
 	}
 )
@@ -70,8 +69,8 @@ func ValidateGramProductFeaturesView(result *GramProductFeaturesView) (err error
 	if result.SessionCaptureEnabled == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("session_capture_enabled", "result"))
 	}
-	if result.BlockShadowMcpEnabled == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("block_shadow_mcp_enabled", "result"))
+	if result.AuthzChallengeLoggingEnabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("authz_challenge_logging_enabled", "result"))
 	}
 	return
 }

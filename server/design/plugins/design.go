@@ -246,7 +246,7 @@ var _ = Service("plugins", func() {
 			})
 			Attribute("platform", String, func() {
 				Description("Target platform to download plugins for.")
-				Enum("claude", "cursor")
+				Enum("claude", "cursor", "codex")
 			})
 			Required("plugin_id", "platform")
 			security.SessionPayload()
@@ -266,6 +266,7 @@ var _ = Service("plugins", func() {
 			security.SessionHeader()
 			security.ProjectHeader()
 			Response(StatusOK, func() {
+				ContentType("application/zip")
 				Header("content_type:Content-Type")
 				Header("content_disposition:Content-Disposition")
 			})
@@ -274,6 +275,42 @@ var _ = Service("plugins", func() {
 
 		Meta("openapi:operationId", "downloadPluginPackage")
 		Meta("openapi:extension:x-speakeasy-name-override", "downloadPluginPackage")
+	})
+
+	Method("downloadObservabilityPlugin", func() {
+		Description("Download a ZIP of the per-org observability plugin (Gram hooks). Mints a fresh hooks-scoped API key on each download and embeds it in the plugin's hook script.")
+
+		Payload(func() {
+			Attribute("platform", String, func() {
+				Description("Target platform.")
+				Enum("claude", "cursor")
+			})
+			Required("platform")
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(func() {
+			Attribute("content_type", String)
+			Attribute("content_disposition", String)
+			Required("content_type", "content_disposition")
+		})
+
+		HTTP(func() {
+			GET("/rpc/plugins.downloadObservabilityPlugin")
+			Param("platform")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK, func() {
+				ContentType("application/zip")
+				Header("content_type:Content-Type")
+				Header("content_disposition:Content-Disposition")
+			})
+			SkipResponseBodyEncodeDecode()
+		})
+
+		Meta("openapi:operationId", "downloadObservabilityPlugin")
+		Meta("openapi:extension:x-speakeasy-name-override", "downloadObservabilityPlugin")
 	})
 
 	Method("getPublishStatus", func() {
@@ -468,6 +505,7 @@ var PublishStatusResult = Type("PublishStatusResult", func() {
 	Attribute("repo_owner", String, "GitHub repo owner, if connected.")
 	Attribute("repo_name", String, "GitHub repo name, if connected.")
 	Attribute("repo_url", String, "Full GitHub repository URL, if connected.")
+	Attribute("marketplace_url", String, "URL-based Claude Code marketplace install URL — the value to pass to `/plugin marketplace add`. Present once a marketplace token has been minted, which happens automatically on the first publish.")
 })
 
 var PublishPluginsResult = Type("PublishPluginsResult", func() {

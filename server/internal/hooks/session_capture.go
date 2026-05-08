@@ -16,6 +16,7 @@ import (
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 )
 
@@ -63,41 +64,62 @@ func sessionIDToUUID(sessionID string) uuid.UUID {
 	return uuid.NewSHA1(claudeSessionNamespace, []byte(sessionID))
 }
 
-// makeHookResult creates a ClaudeHookResult with the HookSpecificOutput populated.
+// makeHookResult creates a ClaudeHookResult, attaching HookSpecificOutput only
+// for hook events whose Claude Code response schema permits it. Stop, SessionStart,
+// SessionEnd, Notification, and PostToolUseFailure must NOT carry hookSpecificOutput
+// — Claude Code rejects unknown variants with "Hook JSON output validation failed".
 func makeHookResult(hookEventName string) *gen.ClaudeHookResult {
-	return &gen.ClaudeHookResult{
-		HookSpecificOutput: &HookSpecificOutput{
+	result := &gen.ClaudeHookResult{
+		HookSpecificOutput: nil,
+		Continue:           nil,
+		StopReason:         nil,
+		SuppressOutput:     nil,
+		SystemMessage:      nil,
+	}
+	if hookEventName == "PreToolUse" {
+		result.HookSpecificOutput = &HookSpecificOutput{
 			HookEventName:            &hookEventName,
 			AdditionalContext:        nil,
 			PermissionDecision:       nil,
 			PermissionDecisionReason: nil,
-		},
-		Continue:       nil,
-		StopReason:     nil,
-		SuppressOutput: nil,
-		SystemMessage:  nil,
+		}
 	}
+	return result
 }
 
 // handleUserPromptSubmit captures the user's prompt text as a chat message.
-func (s *Service) handleUserPromptSubmit(ctx context.Context, payload *gen.ClaudeHookPayload) (*gen.ClaudeHookResult, error) {
+// When a blocking risk policy matches, it denies the prompt with HTTP 403.
+// The send_hook.sh script converts 4xx responses to exit code 2 (block).
+func (s *Service) handleUserPromptSubmit(ctx context.Context, payload *gen.ClaudePayload) (*gen.ClaudeHookResult, error) {
+	if s.riskScanner != nil && payload.Prompt != nil && payload.SessionID != nil {
+		if scanResult := s.scanClaudeForEnforcement(ctx, payload); scanResult != nil {
+			auditReason := fmt.Sprintf("Speakeasy blocked this prompt: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
+			userReason := renderUserBlockReason(scanResult.UserMessage, auditReason)
+			// ClickHouse always gets the technical reason; the user_message
+			// override only changes what the agent / end user sees.
+			if metadata, err := s.getSessionMetadata(ctx, *payload.SessionID); err == nil {
+				s.writeClaudeBlockToClickHouse(ctx, payload, &metadata, auditReason)
+			}
+			return nil, oops.E(oops.CodeForbidden, nil, "%s", userReason)
+		}
+	}
 	return makeHookResult(payload.HookEventName), nil
 }
 
 // handleStop captures the assistant's final response text.
 // Note: If the Stop event includes tool calls, those are handled separately by PreToolUse events,
 // so we skip creating duplicate messages here.
-func (s *Service) handleStop(ctx context.Context, payload *gen.ClaudeHookPayload) (*gen.ClaudeHookResult, error) {
+func (s *Service) handleStop(ctx context.Context, payload *gen.ClaudePayload) (*gen.ClaudeHookResult, error) {
 	return makeHookResult(payload.HookEventName), nil
 }
 
 // handleSessionEnd finalizes the session by updating the timestamp.
-func (s *Service) handleSessionEnd(ctx context.Context, payload *gen.ClaudeHookPayload) (*gen.ClaudeHookResult, error) {
+func (s *Service) handleSessionEnd(ctx context.Context, payload *gen.ClaudePayload) (*gen.ClaudeHookResult, error) {
 	return makeHookResult(payload.HookEventName), nil
 }
 
 // handleNotification handles notification events (permission_prompt, idle_prompt, etc.)
-func (s *Service) handleNotification(ctx context.Context, payload *gen.ClaudeHookPayload) (*gen.ClaudeHookResult, error) {
+func (s *Service) handleNotification(ctx context.Context, payload *gen.ClaudePayload) (*gen.ClaudeHookResult, error) {
 	return makeHookResult(payload.HookEventName), nil
 }
 
@@ -124,41 +146,38 @@ func (s *Service) insertMessageWithFallbackUpsert(
 		return nil
 	}
 
-	chatRepoQueries := chatRepo.New(s.db)
-
-	// Try to insert the message
-	_, err = chatRepoQueries.CreateChatMessage(ctx, []chatRepo.CreateChatMessageParams{msgParams})
-	if err != nil {
-		// Check if this is a foreign key violation (chat doesn't exist)
-		if isForeignKeyViolation(err) {
-			// Create the chat and retry
-			_, upsertErr := s.repo.UpsertClaudeCodeSession(ctx, repo.UpsertClaudeCodeSessionParams{
-				ID:             chatID,
-				ProjectID:      projectID,
-				OrganizationID: metadata.GramOrgID,
-				UserID:         conv.ToPGTextEmpty(""),
-				ExternalUserID: conv.ToPGTextEmpty(metadata.UserEmail),
-				Title:          conv.ToPGText(defaultTitle),
-			})
-			if upsertErr != nil {
-				return fmt.Errorf("upsert claude code session after FK violation: %w", upsertErr)
-			}
-
-			// Retry message creation
-			_, err = chatRepoQueries.CreateChatMessage(ctx, []chatRepo.CreateChatMessageParams{msgParams})
-			if err != nil {
-				return fmt.Errorf("insert chat message after creating chat: %w", err)
-			}
-		} else {
-			return fmt.Errorf("insert chat message: %w", err)
-		}
+	// Try to insert the message (Write handles notification on success).
+	_, err = s.writer.Write(ctx, projectID, []chatRepo.CreateChatMessageParams{msgParams})
+	if err == nil {
+		return nil
 	}
 
+	// If this is not a foreign key violation (chat doesn't exist), fail.
+	if !isForeignKeyViolation(err) {
+		return fmt.Errorf("insert chat message: %w", err)
+	}
+
+	// Create the chat and retry.
+	_, upsertErr := s.repo.UpsertClaudeCodeSession(ctx, repo.UpsertClaudeCodeSessionParams{
+		ID:             chatID,
+		ProjectID:      projectID,
+		OrganizationID: metadata.GramOrgID,
+		UserID:         conv.ToPGTextEmpty(""),
+		ExternalUserID: conv.ToPGTextEmpty(metadata.UserEmail),
+		Title:          conv.ToPGText(defaultTitle),
+	})
+	if upsertErr != nil {
+		return fmt.Errorf("upsert claude code session after FK violation: %w", upsertErr)
+	}
+
+	if _, err = s.writer.Write(ctx, projectID, []chatRepo.CreateChatMessageParams{msgParams}); err != nil {
+		return fmt.Errorf("insert chat message after creating chat: %w", err)
+	}
 	return nil
 }
 
 // persistConversationEvent writes a conversation event (user prompt or assistant response) to PostgreSQL.
-func (s *Service) persistConversationEvent(ctx context.Context, payload *gen.ClaudeHookPayload, metadata *SessionMetadata) error {
+func (s *Service) persistConversationEvent(ctx context.Context, payload *gen.ClaudePayload, metadata *SessionMetadata) error {
 	projectID, err := uuid.Parse(metadata.ProjectID)
 	if err != nil {
 		return fmt.Errorf("invalid project ID in session metadata: %w", err)
@@ -232,7 +251,7 @@ func (s *Service) persistConversationEvent(ctx context.Context, payload *gen.Cla
 }
 
 // writeToolCallRequestToPG writes an assistant message with tool_calls to PostgreSQL.
-func (s *Service) writeToolCallRequestToPG(ctx context.Context, payload *gen.ClaudeHookPayload, metadata *SessionMetadata) error {
+func (s *Service) writeToolCallRequestToPG(ctx context.Context, payload *gen.ClaudePayload, metadata *SessionMetadata) error {
 	projectID, err := uuid.Parse(metadata.ProjectID)
 	if err != nil {
 		return fmt.Errorf("invalid project ID: %w", err)
@@ -285,7 +304,7 @@ func (s *Service) writeToolCallRequestToPG(ctx context.Context, payload *gen.Cla
 }
 
 // writeToolCallResultToPG writes a tool result message to PostgreSQL.
-func (s *Service) writeToolCallResultToPG(ctx context.Context, payload *gen.ClaudeHookPayload, metadata *SessionMetadata) error {
+func (s *Service) writeToolCallResultToPG(ctx context.Context, payload *gen.ClaudePayload, metadata *SessionMetadata) error {
 	projectID, err := uuid.Parse(metadata.ProjectID)
 	if err != nil {
 		return fmt.Errorf("invalid project ID: %w", err)

@@ -2,17 +2,16 @@ package triggers
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
-	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -22,6 +21,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/triggers"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -29,9 +29,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
+	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	triggerrepo "github.com/speakeasy-api/gram/server/internal/triggers/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 type Service struct {
@@ -39,6 +41,7 @@ type Service struct {
 	logger *slog.Logger
 	auth   *auth.Auth
 	app    *bgtriggers.App
+	audit  *audit.Logger
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -51,6 +54,7 @@ func NewService(
 	sessions *sessions.Manager,
 	authzEngine *authz.Engine,
 	app *bgtriggers.App,
+	auditLogger *audit.Logger,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("triggers"))
 	return &Service{
@@ -58,6 +62,7 @@ func NewService(
 		logger: logger,
 		auth:   auth.New(logger, db, sessions, authzEngine),
 		app:    app,
+		audit:  auditLogger,
 	}
 }
 
@@ -160,6 +165,17 @@ func (s *Service) CreateTriggerInstance(ctx context.Context, payload *gen.Create
 		TargetDisplay:  payload.TargetDisplay,
 		Config:         payload.Config,
 		Status:         normalizeTriggerStatus(payload.Status),
+	}, func(ctx context.Context, dbtx pgx.Tx, instance triggerrepo.TriggerInstance) error {
+		return s.audit.LogTriggerInstanceCreate(ctx, dbtx, audit.LogTriggerInstanceCreateEvent{
+			OrganizationID:     authCtx.ActiveOrganizationID,
+			ProjectID:          *authCtx.ProjectID,
+			Actor:              urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+			ActorDisplayName:   authCtx.Email,
+			ActorSlug:          nil,
+			TriggerInstanceURN: urn.NewTriggerInstance(instance.ID),
+			Name:               instance.Name,
+			DefinitionSlug:     instance.DefinitionSlug,
+		})
 	})
 	if err != nil {
 		return nil, toTriggerError(ctx, s.logger, err, "create trigger instance")
@@ -204,6 +220,11 @@ func (s *Service) UpdateTriggerInstance(ctx context.Context, payload *gen.Update
 		configMap = payload.Config
 	}
 
+	beforeView, err := buildTriggerView(existing, s.app.WebhookURL(existing))
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "build trigger instance view").Log(ctx, s.logger)
+	}
+
 	item, err := s.app.Update(ctx, bgtriggers.UpdateParams{
 		ID:             triggerID,
 		ProjectID:      *authCtx.ProjectID,
@@ -215,6 +236,23 @@ func (s *Service) UpdateTriggerInstance(ctx context.Context, payload *gen.Update
 		TargetDisplay:  valueOrDefault(payload.TargetDisplay, existing.TargetDisplay),
 		Config:         configMap,
 		Status:         valueOrDefault(payload.Status, existing.Status),
+	}, func(ctx context.Context, dbtx pgx.Tx, instance triggerrepo.TriggerInstance) error {
+		afterView, err := buildTriggerView(instance, s.app.WebhookURL(instance))
+		if err != nil {
+			return fmt.Errorf("build trigger instance after-snapshot: %w", err)
+		}
+		return s.audit.LogTriggerInstanceUpdate(ctx, dbtx, audit.LogTriggerInstanceUpdateEvent{
+			OrganizationID:                authCtx.ActiveOrganizationID,
+			ProjectID:                     *authCtx.ProjectID,
+			Actor:                         urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+			ActorDisplayName:              authCtx.Email,
+			ActorSlug:                     nil,
+			TriggerInstanceURN:            urn.NewTriggerInstance(instance.ID),
+			Name:                          instance.Name,
+			DefinitionSlug:                instance.DefinitionSlug,
+			TriggerInstanceSnapshotBefore: beforeView,
+			TriggerInstanceSnapshotAfter:  afterView,
+		})
 	})
 	if err != nil {
 		return nil, toTriggerError(ctx, s.logger, err, "update trigger instance")
@@ -238,7 +276,18 @@ func (s *Service) DeleteTriggerInstance(ctx context.Context, payload *gen.Delete
 		return oops.E(oops.CodeBadRequest, err, "invalid trigger id").Log(ctx, s.logger)
 	}
 
-	if err := s.app.Delete(ctx, *authCtx.ProjectID, triggerID); err != nil {
+	if err := s.app.Delete(ctx, *authCtx.ProjectID, triggerID, func(ctx context.Context, dbtx pgx.Tx, instance triggerrepo.TriggerInstance) error {
+		return s.audit.LogTriggerInstanceDelete(ctx, dbtx, audit.LogTriggerInstanceDeleteEvent{
+			OrganizationID:     authCtx.ActiveOrganizationID,
+			ProjectID:          *authCtx.ProjectID,
+			Actor:              urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+			ActorDisplayName:   authCtx.Email,
+			ActorSlug:          nil,
+			TriggerInstanceURN: urn.NewTriggerInstance(instance.ID),
+			Name:               instance.Name,
+			DefinitionSlug:     instance.DefinitionSlug,
+		})
+	}); err != nil {
 		return toTriggerError(ctx, s.logger, err, "delete trigger instance")
 	}
 
@@ -246,25 +295,52 @@ func (s *Service) DeleteTriggerInstance(ctx context.Context, payload *gen.Delete
 }
 
 func (s *Service) PauseTriggerInstance(ctx context.Context, payload *gen.PauseTriggerInstancePayload) (*types.TriggerInstance, error) {
-	return s.setTriggerStatus(ctx, payload.ID, bgtriggers.StatusPaused)
-}
-
-func (s *Service) ResumeTriggerInstance(ctx context.Context, payload *gen.ResumeTriggerInstancePayload) (*types.TriggerInstance, error) {
-	return s.setTriggerStatus(ctx, payload.ID, bgtriggers.StatusActive)
-}
-
-func (s *Service) setTriggerStatus(ctx context.Context, id string, status string) (*types.TriggerInstance, error) {
 	authCtx, err := requireProjectAuthContext(ctx)
 	if err != nil {
 		return nil, err
 	}
 
+	return s.setTriggerStatus(ctx, authCtx, payload.ID, bgtriggers.StatusPaused, func(ctx context.Context, dbtx pgx.Tx, instance triggerrepo.TriggerInstance) error {
+		return s.audit.LogTriggerInstancePause(ctx, dbtx, audit.LogTriggerInstancePauseEvent{
+			OrganizationID:     authCtx.ActiveOrganizationID,
+			ProjectID:          *authCtx.ProjectID,
+			Actor:              urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+			ActorDisplayName:   authCtx.Email,
+			ActorSlug:          nil,
+			TriggerInstanceURN: urn.NewTriggerInstance(instance.ID),
+			Name:               instance.Name,
+			DefinitionSlug:     instance.DefinitionSlug,
+		})
+	})
+}
+
+func (s *Service) ResumeTriggerInstance(ctx context.Context, payload *gen.ResumeTriggerInstancePayload) (*types.TriggerInstance, error) {
+	authCtx, err := requireProjectAuthContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return s.setTriggerStatus(ctx, authCtx, payload.ID, bgtriggers.StatusActive, func(ctx context.Context, dbtx pgx.Tx, instance triggerrepo.TriggerInstance) error {
+		return s.audit.LogTriggerInstanceResume(ctx, dbtx, audit.LogTriggerInstanceResumeEvent{
+			OrganizationID:     authCtx.ActiveOrganizationID,
+			ProjectID:          *authCtx.ProjectID,
+			Actor:              urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+			ActorDisplayName:   authCtx.Email,
+			ActorSlug:          nil,
+			TriggerInstanceURN: urn.NewTriggerInstance(instance.ID),
+			Name:               instance.Name,
+			DefinitionSlug:     instance.DefinitionSlug,
+		})
+	})
+}
+
+func (s *Service) setTriggerStatus(ctx context.Context, authCtx *contextvalues.AuthContext, id string, status string, hooks ...bgtriggers.InstanceDBHook) (*types.TriggerInstance, error) {
 	triggerID, err := uuid.Parse(id)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid trigger id").Log(ctx, s.logger)
 	}
 
-	item, err := s.app.SetStatus(ctx, *authCtx.ProjectID, triggerID, status)
+	item, err := s.app.SetStatus(ctx, *authCtx.ProjectID, triggerID, status, hooks...)
 	if err != nil {
 		return nil, toTriggerError(ctx, s.logger, err, "set trigger status")
 	}
@@ -345,26 +421,11 @@ func configJSONToMap(raw []byte) (map[string]any, error) {
 }
 
 func buildTriggerView(instance triggerrepo.TriggerInstance, webhookURL *string) (*types.TriggerInstance, error) {
-	config, err := configJSONToMap(instance.ConfigJson)
+	view, err := mv.BuildTriggerInstanceView(instance, webhookURL)
 	if err != nil {
-		return nil, fmt.Errorf("decode trigger config: %w", err)
+		return nil, fmt.Errorf("build trigger instance view: %w", err)
 	}
-
-	return &types.TriggerInstance{
-		ID:             instance.ID.String(),
-		ProjectID:      instance.ProjectID.String(),
-		DefinitionSlug: instance.DefinitionSlug,
-		Name:           instance.Name,
-		EnvironmentID:  conv.Ternary(instance.EnvironmentID.Valid, conv.PtrEmpty(instance.EnvironmentID.UUID.String()), nil),
-		TargetKind:     instance.TargetKind,
-		TargetRef:      instance.TargetRef,
-		TargetDisplay:  instance.TargetDisplay,
-		Config:         config,
-		Status:         instance.Status,
-		WebhookURL:     webhookURL,
-		CreatedAt:      instance.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:      instance.UpdatedAt.Time.Format(time.RFC3339),
-	}, nil
+	return view, nil
 }
 
 func buildDefinitionView(definition bgtriggers.Definition) *types.TriggerDefinition {
@@ -388,13 +449,21 @@ func buildDefinitionView(definition bgtriggers.Definition) *types.TriggerDefinit
 
 func toTriggerError(ctx context.Context, logger *slog.Logger, err error, message string) error {
 	code := oops.CodeUnexpected
+	public := message
 	switch {
 	case errors.Is(err, bgtriggers.ErrBadRequest):
 		code = oops.CodeBadRequest
-	case errors.Is(err, sql.ErrNoRows):
+		// Surface the validation detail (e.g. JSON schema mismatch on
+		// trigger config) so callers — especially LLM-driven ones — can
+		// self-correct. The chain is already user-actionable: it's only
+		// reached when the input fails validation.
+		public = fmt.Sprintf("%s: %s", message, err.Error())
+	case errors.Is(err, bgtriggers.ErrAuthFailed):
+		code = oops.CodeUnauthorized
+	case errors.Is(err, pgx.ErrNoRows):
 		code = oops.CodeNotFound
 	}
-	return oops.E(code, err, "%s", message).Log(ctx, logger)
+	return oops.E(code, err, "%s", public).Log(ctx, logger)
 }
 
 func nullUUIDToUUID(value uuid.NullUUID) uuid.UUID {

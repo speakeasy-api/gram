@@ -2,17 +2,18 @@ package mcp
 
 import (
 	"context"
-	"log/slog"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func TestParsePromptArgumentsFromJSONSchema(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	logger := slog.New(slog.DiscardHandler)
+	logger := testenv.NewLogger(t)
 
 	t.Run("parses_valid_schema_with_required_properties", func(t *testing.T) {
 		t.Parallel()

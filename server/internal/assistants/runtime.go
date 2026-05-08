@@ -72,6 +72,7 @@ type runtimeStartupConfig struct {
 	CompletionsURL *string            `json:"completions_url,omitempty"`
 	ChatID         string             `json:"chat_id"`
 	MCPServers     []runtimeMCPServer `json:"mcp_servers"`
+	History        []runtimeMessage   `json:"history,omitempty"`
 }
 
 type runtimeMCPServer struct {
@@ -98,18 +99,8 @@ type runtimeToolCall struct {
 }
 
 type runtimeTurnRequest struct {
-	History   []runtimeMessage `json:"history,omitempty"`
-	Input     string           `json:"input"`
-	AuthToken string           `json:"auth_token,omitempty"`
-}
-
-type runtimeTurnResponse struct {
-	FinishReason string `json:"finish_reason"`
-	FinalText    string `json:"final_text"`
-	Error        string `json:"error,omitempty"`
-	Stderr       string `json:"stderr,omitempty"`
-	Items        any    `json:"items,omitempty"`
-	Usage        any    `json:"usage,omitempty"`
+	Input     string `json:"input"`
+	AuthToken string `json:"auth_token,omitempty"`
 }
 
 type runtimeHTTPRequest struct {
@@ -315,6 +306,13 @@ func NewRuntimeManager(logger *slog.Logger, httpPolicy *guardian.Policy, config 
 // hammer a dead VM with duplicate deliveries.
 var ErrRuntimeUnhealthy = errors.New("assistant runtime unhealthy")
 
+// ErrCompletionFailed signals that a turn failed because the upstream
+// completion provider (OpenRouter/Anthropic/etc) refused the request or
+// returned a non-retryable error. The runtime itself is healthy — replaying
+// the same input would just produce the same failure, so callers terminally
+// fail the event and leave the VM warm to handle subsequent events.
+var ErrCompletionFailed = errors.New("assistant completion failed")
+
 func (m *RuntimeManager) Backend() string {
 	return runtimeBackendLocal
 }
@@ -430,6 +428,32 @@ func (m *RuntimeManager) Configure(ctx context.Context, runtime assistantRuntime
 	return nil
 }
 
+func (m *RuntimeManager) Status(ctx context.Context, runtime assistantRuntimeRecord) (RuntimeBackendStatus, error) {
+	if err := validateRuntimeBackend(m, runtime.Backend); err != nil {
+		return RuntimeBackendStatus{}, err
+	}
+	state, err := m.getRuntime(runtime.AssistantThreadID)
+	if err != nil {
+		return RuntimeBackendStatus{}, fmt.Errorf("%w: %w", ErrRuntimeUnhealthy, err)
+	}
+	body, err := m.runtimeRequest(ctx, state, runtimeHTTPRequest{
+		Method:         http.MethodGet,
+		Path:           "/state",
+		ContentType:    "",
+		Body:           nil,
+		MaxTimeSeconds: 0,
+		IdempotencyKey: "",
+	})
+	if err != nil {
+		return RuntimeBackendStatus{}, fmt.Errorf("%w: load assistant runtime state: %w", ErrRuntimeUnhealthy, err)
+	}
+	var resp runnerStateResponse
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return RuntimeBackendStatus{}, fmt.Errorf("decode assistant runtime state: %w", err)
+	}
+	return RuntimeBackendStatus(resp), nil
+}
+
 func (m *RuntimeManager) Stop(_ context.Context, runtime assistantRuntimeRecord) error {
 	if err := validateRuntimeBackend(m, runtime.Backend); err != nil {
 		return err
@@ -453,6 +477,12 @@ func (m *RuntimeManager) Stop(_ context.Context, runtime assistantRuntimeRecord)
 	}
 	m.stopState(state)
 	return nil
+}
+
+// Reap on the local Firecracker manager has the same effect as Stop: there
+// is no out-of-process resource that survives Stop, so cleanup is identical.
+func (m *RuntimeManager) Reap(ctx context.Context, runtime assistantRuntimeRecord) error {
+	return m.Stop(ctx, runtime)
 }
 
 func (m *RuntimeManager) ServerURL(_ context.Context, runtime assistantRuntimeRecord, raw *url.URL) (*url.URL, error) {
@@ -511,7 +541,6 @@ func (m *RuntimeManager) RunTurn(
 	runtime assistantRuntimeRecord,
 	idempotencyKey string,
 	authToken string,
-	history []runtimeMessage,
 	prompt string,
 ) error {
 	if err := validateRuntimeBackend(m, runtime.Backend); err != nil {
@@ -530,7 +559,6 @@ func (m *RuntimeManager) RunTurn(
 	}
 
 	reqBody, err := json.Marshal(runtimeTurnRequest{
-		History:   history,
 		Input:     prompt,
 		AuthToken: authToken,
 	})
@@ -538,24 +566,15 @@ func (m *RuntimeManager) RunTurn(
 		return fmt.Errorf("marshal assistant runtime turn request: %w", err)
 	}
 
-	body, err := m.runtimeRequest(ctx, state, runtimeHTTPRequest{
+	if _, err := m.runtimeRequest(ctx, state, runtimeHTTPRequest{
 		Method:         http.MethodPost,
 		Path:           "/turn",
 		ContentType:    "application/json",
 		Body:           reqBody,
 		MaxTimeSeconds: 30 * 60,
 		IdempotencyKey: idempotencyKey,
-	})
-	if err != nil {
+	}); err != nil {
 		return fmt.Errorf("%w: execute turn request: %w", ErrRuntimeUnhealthy, err)
-	}
-
-	var turnResp runtimeTurnResponse
-	if err := json.Unmarshal(body, &turnResp); err != nil {
-		return fmt.Errorf("decode assistant runtime turn response: %w; body=%s", err, truncateForMetadata(string(body), 16*1024))
-	}
-	if turnResp.Error != "" {
-		return fmt.Errorf("assistant runtime turn error: %s", turnResp.Error)
 	}
 	return nil
 }

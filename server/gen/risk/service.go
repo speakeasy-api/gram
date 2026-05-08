@@ -67,14 +67,21 @@ type CreateRiskPolicyPayload struct {
 	ApikeyToken      *string
 	SessionToken     *string
 	ProjectSlugInput *string
-	// The policy name.
-	Name string
+	// The policy name. If omitted, a name will be auto-generated.
+	Name *string
 	// Detection sources to enable.
 	Sources []string
 	// Presidio entity types to detect.
 	PresidioEntities []string
 	// Whether the policy is active.
 	Enabled *bool
+	// Policy action: flag or block.
+	Action string
+	// Whether the policy name should be auto-generated.
+	AutoName *bool
+	// Optional message shown to end users when this policy blocks an action or
+	// surfaces a flagged finding.
+	UserMessage *string
 }
 
 // DeleteRiskPolicyPayload is the payload type of the risk service
@@ -196,6 +203,13 @@ type UpdateRiskPolicyPayload struct {
 	PresidioEntities []string
 	// Whether the policy is active.
 	Enabled *bool
+	// Policy action: flag or block.
+	Action *string
+	// Whether the policy name should be auto-generated.
+	AutoName *bool
+	// Optional message shown to end users when this policy blocks an action or
+	// surfaces a flagged finding. Send an empty string to clear.
+	UserMessage *string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

@@ -11,6 +11,7 @@ packages:
   - evaluation
   - elements
   - elements/examples/*
+  - dev-idp-dashboard
 
 catalog:
   "@ai-sdk/openai": ^2.0.0

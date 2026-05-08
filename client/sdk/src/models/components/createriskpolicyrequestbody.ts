@@ -4,16 +4,37 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
+import { ClosedEnum } from "../../types/enums.js";
+
+/**
+ * Policy action: flag or block.
+ */
+export const Action = {
+  Flag: "flag",
+  Block: "block",
+} as const;
+/**
+ * Policy action: flag or block.
+ */
+export type Action = ClosedEnum<typeof Action>;
 
 export type CreateRiskPolicyRequestBody = {
+  /**
+   * Policy action: flag or block.
+   */
+  action?: Action | undefined;
+  /**
+   * Whether the policy name should be auto-generated.
+   */
+  autoName?: boolean | undefined;
   /**
    * Whether the policy is active.
    */
   enabled?: boolean | undefined;
   /**
-   * The policy name.
+   * The policy name. If omitted, a name will be auto-generated.
    */
-  name: string;
+  name?: string | undefined;
   /**
    * Presidio entity types to detect.
    */
@@ -22,14 +43,26 @@ export type CreateRiskPolicyRequestBody = {
    * Detection sources to enable.
    */
   sources?: Array<string> | undefined;
+  /**
+   * Optional message shown to end users when this policy blocks an action or surfaces a flagged finding.
+   */
+  userMessage?: string | undefined;
 };
 
 /** @internal */
+export const Action$outboundSchema: z.ZodMiniEnum<typeof Action> = z.enum(
+  Action,
+);
+
+/** @internal */
 export type CreateRiskPolicyRequestBody$Outbound = {
+  action: string;
+  auto_name?: boolean | undefined;
   enabled?: boolean | undefined;
-  name: string;
+  name?: string | undefined;
   presidio_entities?: Array<string> | undefined;
   sources?: Array<string> | undefined;
+  user_message?: string | undefined;
 };
 
 /** @internal */
@@ -38,14 +71,19 @@ export const CreateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
   CreateRiskPolicyRequestBody
 > = z.pipe(
   z.object({
+    action: z._default(Action$outboundSchema, "flag"),
+    autoName: z.optional(z.boolean()),
     enabled: z.optional(z.boolean()),
-    name: z.string(),
+    name: z.optional(z.string()),
     presidioEntities: z.optional(z.array(z.string())),
     sources: z.optional(z.array(z.string())),
+    userMessage: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
+      autoName: "auto_name",
       presidioEntities: "presidio_entities",
+      userMessage: "user_message",
     });
   }),
 );

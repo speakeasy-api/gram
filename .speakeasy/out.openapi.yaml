@@ -532,6 +532,155 @@ paths:
       x-speakeasy-name-override: getRole
       x-speakeasy-react-hook:
         name: Role
+  /rpc/access.listChallenges:
+    get:
+      description: List authz challenge events from ClickHouse, enriched with resolution state from PostgreSQL.
+      operationId: listChallenges
+      parameters:
+        - allowEmptyValue: true
+          description: Filter by outcome.
+          in: query
+          name: outcome
+          schema:
+            description: Filter by outcome.
+            enum:
+              - allow
+              - deny
+            type: string
+        - allowEmptyValue: true
+          description: Filter by principal URN.
+          in: query
+          name: principal_urn
+          schema:
+            description: Filter by principal URN.
+            type: string
+        - allowEmptyValue: true
+          description: Filter by scope.
+          in: query
+          name: scope
+          schema:
+            description: Filter by scope.
+            type: string
+        - allowEmptyValue: true
+          description: Filter to a specific project.
+          in: query
+          name: project_id
+          schema:
+            description: Filter to a specific project.
+            type: string
+        - allowEmptyValue: true
+          description: Filter by resolution state. True = only resolved, false = only unresolved.
+          in: query
+          name: resolved
+          schema:
+            description: Filter by resolution state. True = only resolved, false = only unresolved.
+            type: boolean
+        - allowEmptyValue: true
+          description: Maximum number of results to return.
+          in: query
+          name: limit
+          schema:
+            default: 50
+            description: Maximum number of results to return.
+            format: int64
+            maximum: 200
+            minimum: 1
+            type: integer
+        - allowEmptyValue: true
+          description: Number of results to skip.
+          in: query
+          name: offset
+          schema:
+            default: 0
+            description: Number of results to skip.
+            format: int64
+            minimum: 0
+            type: integer
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListChallengesResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+        - session_header_Gram-Session: []
+        - {}
+      summary: listChallenges access
+      tags:
+        - access
+      x-speakeasy-name-override: listChallenges
+      x-speakeasy-react-hook:
+        name: Challenges
   /rpc/access.listGrants:
     get:
       description: List the current user's effective grants, including inherited role grants.
@@ -892,6 +1041,102 @@ paths:
       x-speakeasy-name-override: listScopes
       x-speakeasy-react-hook:
         name: ListScopes
+  /rpc/access.resolveChallenge:
+    post:
+      description: Record resolutions for one or more denied authz challenges. The caller is responsible for assigning the role first.
+      operationId: resolveChallenge
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResolveChallengeForm'
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResolveChallengesResult'
+          description: Created response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+        - session_header_Gram-Session: []
+        - {}
+      summary: resolveChallenge access
+      tags:
+        - access
+      x-speakeasy-name-override: resolveChallenge
+      x-speakeasy-react-hook:
+        name: ResolveChallenge
   /rpc/access.updateMemberRole:
     put:
       description: Change a team member's role assignment.
@@ -7371,6 +7616,21 @@ paths:
       summary: claude hooks
       description: Unified endpoint for all Claude Code hook events. Handles SessionStart, PreToolUse, PostToolUse, and PostToolUseFailure.
       operationId: hooks#claude
+      parameters:
+        - name: Gram-Key
+          in: header
+          description: Optional API key for plugin-driven attribution.
+          allowEmptyValue: true
+          schema:
+            type: string
+            description: Optional API key for plugin-driven attribution.
+        - name: Gram-Project
+          in: header
+          description: Optional project slug for plugin-driven attribution.
+          allowEmptyValue: true
+          schema:
+            type: string
+            description: Optional project slug for plugin-driven attribution.
       requestBody:
         required: true
         content:
@@ -8665,6 +8925,551 @@ paths:
       x-speakeasy-name-override: validate
       x-speakeasy-react-hook:
         name: ValidateAPIKey
+  /rpc/mcpEndpoints.create:
+    post:
+      description: Create a new MCP endpoint for an MCP server
+      operationId: createMcpEndpoint
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateMcpEndpointForm'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/McpEndpoint'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: createMcpEndpoint mcpEndpoints
+      tags:
+        - mcpEndpoints
+      x-speakeasy-name-override: create
+      x-speakeasy-react-hook:
+        name: CreateMcpEndpoint
+  /rpc/mcpEndpoints.delete:
+    delete:
+      description: Delete an MCP endpoint
+      operationId: deleteMcpEndpoint
+      parameters:
+        - allowEmptyValue: true
+          description: The ID of the MCP endpoint to delete
+          in: query
+          name: id
+          required: true
+          schema:
+            description: The ID of the MCP endpoint to delete
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: deleteMcpEndpoint mcpEndpoints
+      tags:
+        - mcpEndpoints
+      x-speakeasy-name-override: delete
+      x-speakeasy-react-hook:
+        name: DeleteMcpEndpoint
+  /rpc/mcpEndpoints.get:
+    get:
+      description: Get an MCP endpoint by id or by (custom_domain_id, slug). Provide either id, or slug with an optional custom_domain_id — not both.
+      operationId: getMcpEndpoint
+      parameters:
+        - allowEmptyValue: true
+          description: The ID of the MCP endpoint
+          in: query
+          name: id
+          schema:
+            description: The ID of the MCP endpoint
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: The ID of the custom domain the endpoint slug is registered under. Omit to look up a platform-domain endpoint.
+          in: query
+          name: custom_domain_id
+          schema:
+            description: The ID of the custom domain the endpoint slug is registered under. Omit to look up a platform-domain endpoint.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: The slug to look up
+          in: query
+          name: slug
+          schema:
+            description: A url-friendly label (up to 128 characters) that addresses an MCP server through a slug-based URL. Platform-domain slugs (no custom domain) must be prefixed with the organization slug.
+            maxLength: 128
+            pattern: ^[a-z0-9_-]{1,128}$
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/McpEndpoint'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: getMcpEndpoint mcpEndpoints
+      tags:
+        - mcpEndpoints
+      x-speakeasy-name-override: get
+      x-speakeasy-react-hook:
+        name: GetMcpEndpoint
+  /rpc/mcpEndpoints.list:
+    get:
+      description: List MCP endpoints for a project. Optionally filter to only those associated with a specific MCP server.
+      operationId: listMcpEndpoints
+      parameters:
+        - allowEmptyValue: true
+          description: 'Optional filter: only return endpoints associated with this MCP server.'
+          in: query
+          name: mcp_server_id
+          schema:
+            description: 'Optional filter: only return endpoints associated with this MCP server.'
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListMcpEndpointsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: listMcpEndpoints mcpEndpoints
+      tags:
+        - mcpEndpoints
+      x-speakeasy-name-override: list
+      x-speakeasy-react-hook:
+        name: McpEndpoints
+  /rpc/mcpEndpoints.update:
+    post:
+      description: 'Update an MCP endpoint. This is a full-record replace: fields omitted from the request become null on the stored record. The id, mcp_server_id, and slug fields are required.'
+      operationId: updateMcpEndpoint
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateMcpEndpointForm'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/McpEndpoint'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: updateMcpEndpoint mcpEndpoints
+      tags:
+        - mcpEndpoints
+      x-speakeasy-name-override: update
+      x-speakeasy-react-hook:
+        name: UpdateMcpEndpoint
   /rpc/mcpMetadata.export:
     post:
       description: Export MCP server details as JSON for documentation and integration purposes.
@@ -9418,6 +10223,527 @@ paths:
       x-speakeasy-name-override: listRegistries
       x-speakeasy-react-hook:
         name: ListMCPRegistries
+  /rpc/mcpServers.create:
+    post:
+      description: Create a new MCP server
+      operationId: createMcpServer
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateMcpServerForm'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/McpServer'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: createMcpServer mcpServers
+      tags:
+        - mcpServers
+      x-speakeasy-name-override: create
+      x-speakeasy-react-hook:
+        name: CreateMcpServer
+  /rpc/mcpServers.delete:
+    delete:
+      description: Delete an MCP server
+      operationId: deleteMcpServer
+      parameters:
+        - allowEmptyValue: true
+          description: The ID of the MCP server to delete
+          in: query
+          name: id
+          required: true
+          schema:
+            description: The ID of the MCP server to delete
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: deleteMcpServer mcpServers
+      tags:
+        - mcpServers
+      x-speakeasy-name-override: delete
+      x-speakeasy-react-hook:
+        name: DeleteMcpServer
+  /rpc/mcpServers.get:
+    get:
+      description: Get an MCP server by ID
+      operationId: getMcpServer
+      parameters:
+        - allowEmptyValue: true
+          description: The ID of the MCP server
+          in: query
+          name: id
+          required: true
+          schema:
+            description: The ID of the MCP server
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/McpServer'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: getMcpServer mcpServers
+      tags:
+        - mcpServers
+      x-speakeasy-name-override: get
+      x-speakeasy-react-hook:
+        name: GetMcpServer
+  /rpc/mcpServers.list:
+    get:
+      description: List all MCP servers for a project
+      operationId: listMcpServers
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListMcpServersResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: listMcpServers mcpServers
+      tags:
+        - mcpServers
+      x-speakeasy-name-override: list
+      x-speakeasy-react-hook:
+        name: McpServers
+  /rpc/mcpServers.update:
+    post:
+      description: 'Update an MCP server. This is a full-record replace: fields omitted from the request become null on the stored record. The id and visibility fields are required; exactly one of remote_mcp_server_id or toolset_id must be provided; at most one of external_oauth_server_id or oauth_proxy_server_id may be provided.'
+      operationId: updateMcpServer
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateMcpServerForm'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/McpServer'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: updateMcpServer mcpServers
+      tags:
+        - mcpServers
+      x-speakeasy-name-override: update
+      x-speakeasy-react-hook:
+        name: UpdateMcpServer
   /rpc/organizations.getInviteByToken:
     get:
       description: Resolve a WorkOS invitation from its token (e.g. accept-flow).
@@ -10734,6 +12060,113 @@ paths:
       x-speakeasy-name-override: deletePlugin
       x-speakeasy-react-hook:
         name: DeletePlugin
+  /rpc/plugins.downloadObservabilityPlugin:
+    get:
+      description: Download a ZIP of the per-org observability plugin (Gram hooks). Mints a fresh hooks-scoped API key on each download and embeds it in the plugin's hook script.
+      operationId: downloadObservabilityPlugin
+      parameters:
+        - allowEmptyValue: true
+          description: Target platform.
+          in: query
+          name: platform
+          required: true
+          schema:
+            description: Target platform.
+            enum:
+              - claude
+              - cursor
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/zip:
+              schema:
+                format: binary
+                type: string
+          description: OK response.
+          headers:
+            Content-Disposition:
+              schema:
+                type: string
+            Content-Type:
+              schema:
+                type: string
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: downloadObservabilityPlugin plugins
+      tags:
+        - plugins
+      x-speakeasy-name-override: downloadObservabilityPlugin
   /rpc/plugins.downloadPluginPackage:
     get:
       description: Download a ZIP of a single plugin package for direct installation.
@@ -10758,6 +12191,7 @@ paths:
             enum:
               - claude
               - cursor
+              - codex
             type: string
         - allowEmptyValue: true
           description: Session header
@@ -10776,7 +12210,7 @@ paths:
       responses:
         "200":
           content:
-            application/json:
+            application/zip:
               schema:
                 format: binary
                 type: string
@@ -19209,6 +20643,88 @@ paths:
       x-speakeasy-name-override: createCustomerSession
       x-speakeasy-react-hook:
         name: createCustomerSession
+  /rpc/usage.createTopUpCheckout:
+    post:
+      description: Create a checkout link for a one-time credit top-up purchase
+      operationId: createTopUpCheckout
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: string
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: createTopUpCheckout usage
+      tags:
+        - usage
+      x-speakeasy-name-override: createTopUpCheckout
+      x-speakeasy-react-hook:
+        name: createTopUpCheckout
   /rpc/usage.getPeriodUsage:
     get:
       description: Get the usage for an organization for a given period
@@ -20125,6 +21641,110 @@ components:
         - value
         - display_name
         - count
+    AuthzChallenge:
+      type: object
+      properties:
+        evaluated_grant_count:
+          type: integer
+          description: Total grants evaluated.
+          format: int64
+        id:
+          type: string
+          description: Unique challenge identifier.
+        matched_grant_count:
+          type: integer
+          description: Number of grants that matched.
+          format: int64
+        operation:
+          type: string
+          enum:
+            - require
+            - require_any
+            - filter
+        organization_id:
+          type: string
+          description: Organization the principal was acting in.
+        outcome:
+          type: string
+          enum:
+            - allow
+            - deny
+            - error
+        photo_url:
+          type: string
+          description: User avatar URL when available.
+        principal_type:
+          type: string
+          description: Kind of principal.
+          enum:
+            - user
+            - api_key
+            - assistant
+        principal_urn:
+          type: string
+          description: Principal URN e.g. user:<uuid> or api_key:<id>.
+        project_id:
+          type: string
+          description: Project scope (empty for org-level checks).
+        reason:
+          type: string
+          enum:
+            - grant_matched
+            - no_grants
+            - scope_unsatisfied
+            - invalid_check
+            - rbac_skipped_apikey
+            - dev_override
+        resolution_role_slug:
+          type: string
+          description: Role slug assigned (when resolution_type=role_assigned).
+        resolution_type:
+          type: string
+          description: How the challenge was resolved.
+          enum:
+            - role_assigned
+            - dismissed
+        resolved_at:
+          type: string
+          description: When the challenge was resolved by an admin.
+          format: date-time
+        resolved_by:
+          type: string
+          description: URN of the admin who resolved.
+        resource_id:
+          type: string
+          description: Resource ID of the check.
+        resource_kind:
+          type: string
+          description: Resource kind of the check.
+        role_slugs:
+          type: array
+          items:
+            type: string
+          description: Roles the principal had loaded.
+        scope:
+          type: string
+          description: Scope that was checked.
+        timestamp:
+          type: string
+          description: When the authz decision was made.
+          format: date-time
+        user_email:
+          type: string
+          description: Email when available.
+      required:
+        - id
+        - timestamp
+        - organization_id
+        - principal_urn
+        - principal_type
+        - operation
+        - outcome
+        - reason
+        - scope
+        - role_slugs
+        - evaluated_grant_count
+        - matched_grant_count
     BaseResourceAttributes:
       type: object
       properties:
@@ -20289,6 +21909,53 @@ components:
       description: Result of capturing a telemetry event
       required:
         - success
+    ChallengeResolution:
+      type: object
+      properties:
+        challenge_id:
+          type: string
+          description: ClickHouse challenge ID.
+        created_at:
+          type: string
+          format: date-time
+        id:
+          type: string
+          description: Resolution record ID.
+        organization_id:
+          type: string
+          description: Organization ID.
+        principal_urn:
+          type: string
+          description: Denied principal.
+        resolution_type:
+          type: string
+          enum:
+            - role_assigned
+            - dismissed
+        resolved_by:
+          type: string
+          description: Admin who resolved.
+        resource_id:
+          type: string
+          description: Resource ID.
+        resource_kind:
+          type: string
+          description: Resource kind.
+        role_slug:
+          type: string
+          description: Assigned role slug.
+        scope:
+          type: string
+          description: Denied scope.
+      required:
+        - id
+        - organization_id
+        - challenge_id
+        - principal_urn
+        - scope
+        - resolution_type
+        - resolved_by
+        - created_at
     Chat:
       type: object
       properties:
@@ -20356,8 +22023,7 @@ components:
       type: object
       properties:
         content:
-          type: string
-          description: The content of the message
+          description: The content of the message — string for plain text, array for multimodal/tool-call content parts, null for assistant messages that only carry tool_calls
         created_at:
           type: string
           description: When the message was created.
@@ -20911,6 +22577,59 @@ components:
       required:
         - name
         - scopes
+    CreateMcpEndpointForm:
+      type: object
+      properties:
+        custom_domain_id:
+          type: string
+          description: The ID of the custom domain to register the endpoint slug under. Omit for a platform-domain endpoint.
+          format: uuid
+        mcp_server_id:
+          type: string
+          description: The ID of the MCP server this endpoint addresses
+          format: uuid
+        slug:
+          type: string
+          description: A url-friendly label (up to 128 characters) that addresses an MCP server through a slug-based URL. Platform-domain slugs (no custom domain) must be prefixed with the organization slug.
+          pattern: ^[a-z0-9_-]{1,128}$
+          maxLength: 128
+      description: Form for creating a new MCP endpoint. Platform-domain endpoint slugs (no custom_domain_id) must be prefixed with the organization slug.
+      required:
+        - mcp_server_id
+        - slug
+    CreateMcpServerForm:
+      type: object
+      properties:
+        environment_id:
+          type: string
+          description: The ID of the environment to associate with the server
+          format: uuid
+        external_oauth_server_id:
+          type: string
+          description: The ID of the external OAuth server to associate with the server
+          format: uuid
+        oauth_proxy_server_id:
+          type: string
+          description: The ID of the OAuth proxy server to associate with the server
+          format: uuid
+        remote_mcp_server_id:
+          type: string
+          description: The ID of the remote MCP server to use as the backend
+          format: uuid
+        toolset_id:
+          type: string
+          description: The ID of the toolset to use as the backend
+          format: uuid
+        visibility:
+          type: string
+          description: The visibility of an MCP server
+          enum:
+            - disabled
+            - private
+            - public
+      description: Form for creating a new MCP server. Exactly one of remote_mcp_server_id or toolset_id must be provided. At most one of external_oauth_server_id or oauth_proxy_server_id may be provided.
+      required:
+        - visibility
     CreatePackageForm:
       type: object
       properties:
@@ -21143,12 +22862,22 @@ components:
     CreateRiskPolicyRequestBody:
       type: object
       properties:
+        action:
+          type: string
+          description: 'Policy action: flag or block.'
+          default: flag
+          enum:
+            - flag
+            - block
+        auto_name:
+          type: boolean
+          description: Whether the policy name should be auto-generated.
         enabled:
           type: boolean
           description: Whether the policy is active.
         name:
           type: string
-          description: The policy name.
+          description: The policy name. If omitted, a name will be auto-generated.
         presidio_entities:
           type: array
           items:
@@ -21159,8 +22888,9 @@ components:
           items:
             type: string
           description: Detection sources to enable.
-      required:
-        - name
+        user_message:
+          type: string
+          description: Optional message shown to end users when this policy blocks an action or surfaces a flagged finding.
     CreateRoleForm:
       type: object
       properties:
@@ -23057,9 +24787,9 @@ components:
     GramProductFeatures:
       type: object
       properties:
-        block_shadow_mcp_enabled:
+        authz_challenge_logging_enabled:
           type: boolean
-          description: Whether shadow-MCP guarding is enabled (injects required toolset id and rejects unsigned tool calls)
+          description: Whether authz challenge logging to ClickHouse is enabled
         logs_enabled:
           type: boolean
           description: Whether logging is enabled
@@ -23074,7 +24804,7 @@ components:
         - logs_enabled
         - tool_io_logs_enabled
         - session_capture_enabled
-        - block_shadow_mcp_enabled
+        - authz_challenge_logging_enabled
     HTTPToolDefinition:
       type: object
       properties:
@@ -23702,6 +25432,21 @@ components:
           description: List of available MCP servers
       required:
         - servers
+    ListChallengesResult:
+      type: object
+      properties:
+        challenges:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuthzChallenge'
+          description: The challenge events.
+        total:
+          type: integer
+          description: Total number of matching challenges for pagination.
+          format: int64
+      required:
+        - challenges
+        - total
     ListChatsResult:
       type: object
       properties:
@@ -23894,6 +25639,26 @@ components:
             $ref: '#/components/schemas/Key'
       required:
         - keys
+    ListMcpEndpointsResult:
+      type: object
+      properties:
+        mcp_endpoints:
+          type: array
+          items:
+            $ref: '#/components/schemas/McpEndpoint'
+      description: Result type for listing MCP endpoints
+      required:
+        - mcp_endpoints
+    ListMcpServersResult:
+      type: object
+      properties:
+        mcp_servers:
+          type: array
+          items:
+            $ref: '#/components/schemas/McpServer'
+      description: Result type for listing MCP servers
+      required:
+        - mcp_servers
     ListMembersResult:
       type: object
       properties:
@@ -24295,6 +26060,46 @@ components:
         - id
         - name
         - url
+    McpEndpoint:
+      type: object
+      properties:
+        created_at:
+          type: string
+          description: When the MCP endpoint was created
+          format: date-time
+        custom_domain_id:
+          type: string
+          description: The ID of the custom domain this endpoint slug is registered under. Null for platform-domain endpoints.
+          format: uuid
+        id:
+          type: string
+          description: The ID of the MCP endpoint
+          format: uuid
+        mcp_server_id:
+          type: string
+          description: The ID of the MCP server this endpoint addresses
+          format: uuid
+        project_id:
+          type: string
+          description: The project ID this MCP endpoint belongs to
+          format: uuid
+        slug:
+          type: string
+          description: A url-friendly label (up to 128 characters) that addresses an MCP server through a slug-based URL. Platform-domain slugs (no custom domain) must be prefixed with the organization slug.
+          pattern: ^[a-z0-9_-]{1,128}$
+          maxLength: 128
+        updated_at:
+          type: string
+          description: When the MCP endpoint was last updated
+          format: date-time
+      description: 'An MCP endpoint: a url-friendly slug identifier that addresses an MCP server.'
+      required:
+        - id
+        - project_id
+        - mcp_server_id
+        - slug
+        - created_at
+        - updated_at
     McpEnvironmentConfig:
       type: object
       properties:
@@ -24472,6 +26277,59 @@ components:
       required:
         - id
         - toolset_id
+        - created_at
+        - updated_at
+    McpServer:
+      type: object
+      properties:
+        created_at:
+          type: string
+          description: When the MCP server was created
+          format: date-time
+        environment_id:
+          type: string
+          description: The ID of the environment associated with the server
+          format: uuid
+        external_oauth_server_id:
+          type: string
+          description: The ID of the external OAuth server associated with the server
+          format: uuid
+        id:
+          type: string
+          description: The ID of the MCP server
+          format: uuid
+        oauth_proxy_server_id:
+          type: string
+          description: The ID of the OAuth proxy server associated with the server
+          format: uuid
+        project_id:
+          type: string
+          description: The project ID this MCP server belongs to
+          format: uuid
+        remote_mcp_server_id:
+          type: string
+          description: The ID of the remote MCP server used as the backend
+          format: uuid
+        toolset_id:
+          type: string
+          description: The ID of the toolset used as the backend
+          format: uuid
+        updated_at:
+          type: string
+          description: When the MCP server was last updated
+          format: date-time
+        visibility:
+          type: string
+          description: The visibility of an MCP server
+          enum:
+            - disabled
+            - private
+            - public
+      description: 'An MCP server configuration: authentication, environment, and backend selection for an MCP server.'
+      required:
+        - id
+        - project_id
+        - visibility
         - created_at
         - updated_at
     ModelUsage:
@@ -25837,6 +27695,9 @@ components:
         connected:
           type: boolean
           description: Whether this project has a GitHub connection.
+        marketplace_url:
+          type: string
+          description: URL-based Claude Code marketplace install URL — the value to pass to `/plugin marketplace add`. Present once a marketplace token has been minted, which happens automatically on the first publish.
         repo_name:
           type: string
           description: GitHub repo name, if connected.
@@ -26002,6 +27863,50 @@ components:
           description: The rendered prompt
       required:
         - prompt
+    ResolveChallengeForm:
+      type: object
+      properties:
+        challenge_ids:
+          type: array
+          items:
+            type: string
+          description: IDs of the challenges in ClickHouse to resolve.
+        principal_urn:
+          type: string
+          description: Principal that was denied.
+        resolution_type:
+          type: string
+          description: How the challenge is being resolved.
+          enum:
+            - role_assigned
+            - dismissed
+        resource_id:
+          type: string
+          description: Resource ID from the challenge.
+        resource_kind:
+          type: string
+          description: Resource kind from the challenge.
+        role_slug:
+          type: string
+          description: Role slug to assign (required when resolution_type=role_assigned).
+        scope:
+          type: string
+          description: Scope that was denied.
+      required:
+        - challenge_ids
+        - principal_urn
+        - scope
+        - resolution_type
+    ResolveChallengesResult:
+      type: object
+      properties:
+        resolutions:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChallengeResolution'
+          description: The created resolution records.
+      required:
+        - resolutions
     Resource:
       type: object
       properties:
@@ -26082,6 +27987,16 @@ components:
     RiskPolicy:
       type: object
       properties:
+        action:
+          type: string
+          description: 'Policy action: flag (log only) or block (deny in real-time).'
+          default: flag
+          enum:
+            - flag
+            - block
+        auto_name:
+          type: boolean
+          description: Whether the policy name is auto-generated. When true, the name is regenerated on each update.
         created_at:
           type: string
           description: When the policy was created.
@@ -26122,6 +28037,9 @@ components:
           type: string
           description: When the policy was last updated.
           format: date-time
+        user_message:
+          type: string
+          description: Optional message shown to the end user when this policy blocks an action or surfaces a flagged finding. When unset, a default message is rendered.
         version:
           type: integer
           description: Policy version, incremented on each update.
@@ -26132,6 +28050,8 @@ components:
         - name
         - sources
         - enabled
+        - action
+        - auto_name
         - version
         - created_at
         - updated_at
@@ -27011,7 +28931,7 @@ components:
             - logs
             - tool_io_logs
             - session_capture
-            - block_shadow_mcp
+            - authz_challenge_logging
           maxLength: 60
       required:
         - feature_name
@@ -28207,6 +30127,69 @@ components:
       required:
         - entries_to_update
         - entries_to_remove
+    UpdateMcpEndpointForm:
+      type: object
+      properties:
+        custom_domain_id:
+          type: string
+          description: The ID of the custom domain to register the endpoint slug under. Omit to move the endpoint to a platform domain.
+          format: uuid
+        id:
+          type: string
+          description: The ID of the MCP endpoint to update
+          format: uuid
+        mcp_server_id:
+          type: string
+          description: The ID of the MCP server this endpoint addresses
+          format: uuid
+        slug:
+          type: string
+          description: A url-friendly label (up to 128 characters) that addresses an MCP server through a slug-based URL. Platform-domain slugs (no custom domain) must be prefixed with the organization slug.
+          pattern: ^[a-z0-9_-]{1,128}$
+          maxLength: 128
+      description: 'Form for updating an MCP endpoint. This is a full-record replace: the custom_domain_id field omitted from the request becomes null on the stored record. Platform-domain endpoint slugs (no custom_domain_id) must be prefixed with the organization slug.'
+      required:
+        - id
+        - mcp_server_id
+        - slug
+    UpdateMcpServerForm:
+      type: object
+      properties:
+        environment_id:
+          type: string
+          description: The ID of the environment to associate with the server
+          format: uuid
+        external_oauth_server_id:
+          type: string
+          description: The ID of the external OAuth server to associate with the server
+          format: uuid
+        id:
+          type: string
+          description: The ID of the MCP server to update
+          format: uuid
+        oauth_proxy_server_id:
+          type: string
+          description: The ID of the OAuth proxy server to associate with the server
+          format: uuid
+        remote_mcp_server_id:
+          type: string
+          description: The ID of the remote MCP server to use as the backend
+          format: uuid
+        toolset_id:
+          type: string
+          description: The ID of the toolset to use as the backend
+          format: uuid
+        visibility:
+          type: string
+          description: The visibility of an MCP server
+          enum:
+            - disabled
+            - private
+            - public
+      description: 'Form for updating an MCP server. This is a full-record replace: fields omitted from the request become null on the stored record. Exactly one of remote_mcp_server_id or toolset_id must be provided; at most one of external_oauth_server_id or oauth_proxy_server_id may be provided.'
+      required:
+        - id
+        - visibility
     UpdateMemberRoleForm:
       type: object
       properties:
@@ -28405,6 +30388,15 @@ components:
     UpdateRiskPolicyRequestBody:
       type: object
       properties:
+        action:
+          type: string
+          description: 'Policy action: flag or block.'
+          enum:
+            - flag
+            - block
+        auto_name:
+          type: boolean
+          description: Whether the policy name should be auto-generated.
         enabled:
           type: boolean
           description: Whether the policy is active.
@@ -28425,6 +30417,9 @@ components:
           items:
             type: string
           description: Detection sources to enable.
+        user_message:
+          type: string
+          description: Optional message shown to end users when this policy blocks an action or surfaces a flagged finding. Send an empty string to clear.
       required:
         - id
         - name
@@ -29032,7 +31027,7 @@ components:
       in: header
 tags:
   - name: access
-    description: Manage roles and team member access control.
+    description: Manage roles, team member access control, and authorization challenge events.
   - name: admin
     description: Operational endpoints for administrative tasks.
   - name: assets
@@ -29069,8 +31064,12 @@ tags:
     description: Explore third-party tools in Gram.
   - name: keys
     description: Managing system api keys.
+  - name: mcpEndpoints
+    description: Managing MCP endpoints, the url-friendly slug identifiers that address MCP servers.
   - name: mcpMetadata
     description: Manages metadata for the MCP install page shown to users.
+  - name: mcpServers
+    description: Managing MCP servers, which configure authentication, environment, and backend selection for an MCP server.
   - name: organizations
     description: Organization membership, invitations, and directory.
   - name: packages

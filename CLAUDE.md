@@ -71,9 +71,20 @@ The main frontend application lives in `client/dashboard/` (not `client/` direct
 
 </commands>
 
-### Atlas Migration Troubleshooting
+### Database Migrations
 
-- **"migration file X was added out of order" error**: Rename the migration file to have a timestamp after the latest existing migration (e.g., `20260129_foo.sql` → `20260203000001_foo.sql`), then run `mise db:hash` to regenerate `atlas.sum`.
+<important>
+
+These rules apply any time you touch `server/migrations/`, `atlas.sum`, or `server/database/schema.sql`. They are non-negotiable.
+
+</important>
+
+- **Migrations ship in their own PR.** No app code, no backfills, no unrelated changes alongside.
+- **Migration files and `atlas.sum` are produced only by the Atlas CLI.** Never hand-edit, rename, or rehash them. They must contain only DDL emitted by `mise db:diff`.
+- **Follow expand-contract.** Never drop a column or table in the same migration that adds others. If a column is unwanted, mark it nullable with a comment and leave it for a later contract migration; sticking around for a few days is fine.
+- **Never run agents (or any tooling) against dev or prod databases.** Local databases only.
+- **Out-of-order timestamps:** if `mise lint:migrations` (or CI) reports a migration timestamp at or before the latest on `main`, do NOT rename the file. Delete the offending migration on your branch, rebase/merge `main`, then re-run `mise db:diff <name>` so the migration is regenerated on top with a fresh timestamp.
+- **Migration merge conflicts:** never resolve them by hand. Delete your migrations, rebase/merge `main`, then re-run `mise db:diff` so your changes are recreated on top.
 
 ## Mise CLI
 
@@ -111,10 +122,14 @@ Activate a skill when your task falls within its scope.
 | `gram-management-api`         | Designing or modifying management API endpoints (Goa design, impl)         |
 | `gram-audit-logging`          | Recording or exposing audit events via the auditlogs management API        |
 | `gram-rbac`                   | Adding or enforcing authorization scopes, grants, or roles                 |
+| `glint`                       | Authoring or editing analyzers in the `glint/` go/analysis package         |
 | `mise-tasks`                  | Creating or editing mise task scripts in `.mise-tasks/`                    |
 | `jaeger`                      | Testing backend endpoints locally and inspecting traces via Jaeger API     |
 | `datadog`                     | Investigating errors, performance, incidents, or telemetry via Datadog     |
 | `datadog-insights`            | Running the full Gram production health digest and posting it to Slack     |
+| `madprocs`                    | Controlling local dev processes via mprocs (start, stop, restart, logs)    |
+| `pr`                          | Creating a Pull Request for current changes                                |
+| `spec`                        | Interviewing user in-depth to produce a detailed spec before building      |
 
 # Plan Mode
 

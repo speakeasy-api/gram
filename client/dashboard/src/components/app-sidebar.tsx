@@ -10,6 +10,7 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
 import { useSlugs } from "@/contexts/Sdk";
+import { useTelemetry } from "@/contexts/Telemetry";
 import { Scope } from "@/hooks/useRBAC";
 import { useProductTier } from "@/hooks/useProductTier";
 import { AppRoute, useOrgRoutes, useRoutes } from "@/routes";
@@ -48,7 +49,10 @@ function ScopeGatedNavItem({
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const routes = useRoutes();
   const { orgSlug } = useSlugs();
+  const telemetry = useTelemetry();
   const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
+
+  const isAssistantsEnabled = telemetry.isFeatureEnabled("assistants") ?? false;
 
   return (
     <Sidebar collapsible="icon" {...props}>
@@ -88,10 +92,12 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 item={routes.mcp}
                 scope={["mcp:read", "mcp:write"]}
               />
-              <ScopeGatedNavItem
-                item={routes.slackApps}
-                scope={["mcp:read", "mcp:write"]}
-              />
+              {isAssistantsEnabled && (
+                <ScopeGatedNavItem
+                  item={routes.assistants}
+                  scope="project:read"
+                />
+              )}
               <ScopeGatedNavItem item={routes.clis} scope="project:read" />
               <ScopeGatedNavItem
                 item={routes.plugins}
@@ -109,19 +115,8 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           <SidebarGroupLabel>observe</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              <ScopeGatedNavItem
-                item={routes.observability}
-                scope="project:read"
-              />
+              <ScopeGatedNavItem item={routes.insights} scope="project:read" />
               <ScopeGatedNavItem item={routes.logs} scope="project:read" />
-              <ScopeGatedNavItem
-                item={routes.chatSessions}
-                scope="project:read"
-              />
-              <ScopeGatedNavItem
-                item={routes.hooks}
-                scope={["project:read", "project:write"]}
-              />
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>

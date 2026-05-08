@@ -2375,6 +2375,248 @@ func DecodeDownloadPluginPackageResponse(decoder func(*http.Response) goahttp.De
 	}
 }
 
+// BuildDownloadObservabilityPluginRequest instantiates a HTTP request object
+// with method and path set to call the "plugins" service
+// "downloadObservabilityPlugin" endpoint
+func (c *Client) BuildDownloadObservabilityPluginRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: DownloadObservabilityPluginPluginsPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("plugins", "downloadObservabilityPlugin", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeDownloadObservabilityPluginRequest returns an encoder for requests
+// sent to the plugins downloadObservabilityPlugin server.
+func EncodeDownloadObservabilityPluginRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*plugins.DownloadObservabilityPluginPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("plugins", "downloadObservabilityPlugin", "*plugins.DownloadObservabilityPluginPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		values.Add("platform", p.Platform)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeDownloadObservabilityPluginResponse returns a decoder for responses
+// returned by the plugins downloadObservabilityPlugin endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeDownloadObservabilityPluginResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeDownloadObservabilityPluginResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				contentType        string
+				contentDisposition string
+				err                error
+			)
+			contentTypeRaw := resp.Header.Get("Content-Type")
+			if contentTypeRaw == "" {
+				err = goa.MergeErrors(err, goa.MissingFieldError("content_type", "header"))
+			}
+			contentType = contentTypeRaw
+			contentDispositionRaw := resp.Header.Get("Content-Disposition")
+			if contentDispositionRaw == "" {
+				err = goa.MergeErrors(err, goa.MissingFieldError("content_disposition", "header"))
+			}
+			contentDisposition = contentDispositionRaw
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "downloadObservabilityPlugin", err)
+			}
+			res := NewDownloadObservabilityPluginResultOK(contentType, contentDisposition)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body DownloadObservabilityPluginUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "downloadObservabilityPlugin", err)
+			}
+			err = ValidateDownloadObservabilityPluginUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "downloadObservabilityPlugin", err)
+			}
+			return nil, NewDownloadObservabilityPluginUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body DownloadObservabilityPluginForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "downloadObservabilityPlugin", err)
+			}
+			err = ValidateDownloadObservabilityPluginForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "downloadObservabilityPlugin", err)
+			}
+			return nil, NewDownloadObservabilityPluginForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body DownloadObservabilityPluginBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "downloadObservabilityPlugin", err)
+			}
+			err = ValidateDownloadObservabilityPluginBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "downloadObservabilityPlugin", err)
+			}
+			return nil, NewDownloadObservabilityPluginBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body DownloadObservabilityPluginNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "downloadObservabilityPlugin", err)
+			}
+			err = ValidateDownloadObservabilityPluginNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "downloadObservabilityPlugin", err)
+			}
+			return nil, NewDownloadObservabilityPluginNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body DownloadObservabilityPluginConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "downloadObservabilityPlugin", err)
+			}
+			err = ValidateDownloadObservabilityPluginConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "downloadObservabilityPlugin", err)
+			}
+			return nil, NewDownloadObservabilityPluginConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body DownloadObservabilityPluginUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "downloadObservabilityPlugin", err)
+			}
+			err = ValidateDownloadObservabilityPluginUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "downloadObservabilityPlugin", err)
+			}
+			return nil, NewDownloadObservabilityPluginUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body DownloadObservabilityPluginInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "downloadObservabilityPlugin", err)
+			}
+			err = ValidateDownloadObservabilityPluginInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "downloadObservabilityPlugin", err)
+			}
+			return nil, NewDownloadObservabilityPluginInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body DownloadObservabilityPluginInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("plugins", "downloadObservabilityPlugin", err)
+				}
+				err = ValidateDownloadObservabilityPluginInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("plugins", "downloadObservabilityPlugin", err)
+				}
+				return nil, NewDownloadObservabilityPluginInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body DownloadObservabilityPluginUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("plugins", "downloadObservabilityPlugin", err)
+				}
+				err = ValidateDownloadObservabilityPluginUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("plugins", "downloadObservabilityPlugin", err)
+				}
+				return nil, NewDownloadObservabilityPluginUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("plugins", "downloadObservabilityPlugin", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body DownloadObservabilityPluginGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "downloadObservabilityPlugin", err)
+			}
+			err = ValidateDownloadObservabilityPluginGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "downloadObservabilityPlugin", err)
+			}
+			return nil, NewDownloadObservabilityPluginGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("plugins", "downloadObservabilityPlugin", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildGetPublishStatusRequest instantiates a HTTP request object with method
 // and path set to call the "plugins" service "getPublishStatus" endpoint
 func (c *Client) BuildGetPublishStatusRequest(ctx context.Context, v any) (*http.Request, error) {

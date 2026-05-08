@@ -893,7 +893,7 @@ export function ToolList({
         ? [
             {
               id: "add-to-toolset",
-              label: "Add to toolset",
+              label: "Add to MCP server",
               icon: "plus",
               group: "Tool Actions",
               onSelect: () => {
@@ -909,7 +909,7 @@ export function ToolList({
         ? [
             {
               id: "create-toolset",
-              label: "Create toolset",
+              label: "Create MCP server",
               icon: "copy",
               group: "Tool Actions",
               onSelect: () => {

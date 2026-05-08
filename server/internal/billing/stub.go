@@ -26,10 +26,6 @@ type StubClient struct {
 }
 
 func NewStubClient(logger *slog.Logger, tracerProvider trace.TracerProvider) *StubClient {
-	if logger == nil {
-		logger = slog.Default()
-	}
-
 	return &StubClient{
 		mut:    sync.Mutex{},
 		logger: logger.With(attr.SlogComponent("billing_stub")),
@@ -68,6 +64,18 @@ func (s *StubClient) CreateCheckout(ctx context.Context, orgID string, serverURL
 	defer span.End()
 
 	return "", fmt.Errorf("not implemented")
+}
+
+func (s *StubClient) CreateTopUpCheckout(ctx context.Context, orgID, serverURL, successURL string) (string, error) {
+	_, span := s.tracer.Start(ctx, "stub_client.create_topup_checkout")
+	span.SetStatus(codes.Error, "not implemented")
+	defer span.End()
+
+	return "", fmt.Errorf("not implemented")
+}
+
+func (s *StubClient) IsTopUpProductID(productID string) bool {
+	return false
 }
 
 func (s *StubClient) CreateCustomerSession(ctx context.Context, orgID string) (string, error) {

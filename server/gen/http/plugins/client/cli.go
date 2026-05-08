@@ -389,8 +389,8 @@ func BuildDownloadPluginPackagePayload(pluginsDownloadPluginPackagePluginID stri
 	var platform string
 	{
 		platform = pluginsDownloadPluginPackagePlatform
-		if !(platform == "claude" || platform == "cursor") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("platform", platform, []any{"claude", "cursor"}))
+		if !(platform == "claude" || platform == "cursor" || platform == "codex") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("platform", platform, []any{"claude", "cursor", "codex"}))
 		}
 		if err != nil {
 			return nil, err
@@ -410,6 +410,40 @@ func BuildDownloadPluginPackagePayload(pluginsDownloadPluginPackagePluginID stri
 	}
 	v := &plugins.DownloadPluginPackagePayload{}
 	v.PluginID = pluginID
+	v.Platform = platform
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildDownloadObservabilityPluginPayload builds the payload for the plugins
+// downloadObservabilityPlugin endpoint from CLI flags.
+func BuildDownloadObservabilityPluginPayload(pluginsDownloadObservabilityPluginPlatform string, pluginsDownloadObservabilityPluginSessionToken string, pluginsDownloadObservabilityPluginProjectSlugInput string) (*plugins.DownloadObservabilityPluginPayload, error) {
+	var err error
+	var platform string
+	{
+		platform = pluginsDownloadObservabilityPluginPlatform
+		if !(platform == "claude" || platform == "cursor") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("platform", platform, []any{"claude", "cursor"}))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if pluginsDownloadObservabilityPluginSessionToken != "" {
+			sessionToken = &pluginsDownloadObservabilityPluginSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if pluginsDownloadObservabilityPluginProjectSlugInput != "" {
+			projectSlugInput = &pluginsDownloadObservabilityPluginProjectSlugInput
+		}
+	}
+	v := &plugins.DownloadObservabilityPluginPayload{}
 	v.Platform = platform
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput

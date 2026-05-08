@@ -99,10 +99,30 @@ WHERE slug = @slug
   AND project_id = @project_id AND deleted IS FALSE
 RETURNING id, name, slug;
 
+-- name: SetToolsetMCPPublicByID :exec
+UPDATE toolsets
+SET mcp_is_public = @mcp_is_public
+WHERE id = @id AND project_id = @project_id;
+
+-- name: SetToolsetMCPPublicBySlug :exec
+UPDATE toolsets
+SET mcp_is_public = @mcp_is_public
+WHERE mcp_slug = @mcp_slug;
+
+-- name: SetToolsetMCPEnabledByID :exec
+UPDATE toolsets
+SET mcp_enabled = @mcp_enabled
+WHERE id = @id AND project_id = @project_id;
+
 -- name: GetHTTPSecurityDefinitions :many
 SELECT *
 FROM http_security
-WHERE key = ANY(@security_keys::TEXT[]) AND deployment_id = ANY(@deployment_ids::UUID[]);
+WHERE key = ANY(@security_keys::TEXT[])
+  AND deployment_id = ANY(@deployment_ids::UUID[])
+  AND (
+    cardinality(@openapiv3_document_ids::UUID[]) = 0
+    OR openapiv3_document_id = ANY(@openapiv3_document_ids::UUID[])
+  );
 
 -- name: GetToolsetByMcpSlug :one
 SELECT *

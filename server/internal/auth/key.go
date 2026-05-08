@@ -3,7 +3,6 @@ package auth
 import (
 	"context"
 	"crypto/sha256"
-	"database/sql"
 	"encoding/hex"
 	"errors"
 	"log/slog"
@@ -11,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
@@ -109,7 +109,7 @@ func (k *ByKey) KeyBasedAuth(ctx context.Context, key string, requiredScopes []s
 
 	apiKey, err := k.keyDB.GetAPIKeyByKeyHash(ctx, keyHash)
 	switch {
-	case errors.Is(err, sql.ErrNoRows):
+	case errors.Is(err, pgx.ErrNoRows):
 		return ctx, oops.E(oops.CodeUnauthorized, err, "unauthorized: api key not found")
 	case err != nil:
 		return ctx, oops.E(oops.CodeUnexpected, err, "error loading api key details")

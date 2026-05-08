@@ -74,14 +74,10 @@ func (s *Service) UpdateOAuthProxyServer(ctx context.Context, payload *gen.Updat
 		return nil, oops.E(oops.CodeBadRequest, nil, "token_endpoint cannot be empty").Log(ctx, s.logger)
 	}
 
-	// Reject empty arrays for scopes and auth methods. The create path
-	// (impl.go:1013-1018) requires both to be non-empty for custom providers,
-	// and the update path should not allow putting the proxy into an invalid
-	// state. nil = "don't change" (PATCH skip); non-empty = "replace"; but
-	// empty = "clear to zero" would produce an OAuth proxy that can't function.
-	if form.ScopesSupported != nil && len(form.ScopesSupported) == 0 {
-		return nil, oops.E(oops.CodeBadRequest, nil, "scopes_supported cannot be empty").Log(ctx, s.logger)
-	}
+	// Reject empty arrays for auth methods on update. The create path requires
+	// it to be non-empty for custom providers, and clearing it on update would
+	// produce a proxy that can't function. (scopes_supported is allowed to be
+	// empty — many MCP servers don't advertise scopes in their well-known doc.)
 	if form.TokenEndpointAuthMethodsSupported != nil && len(form.TokenEndpointAuthMethodsSupported) == 0 {
 		return nil, oops.E(oops.CodeBadRequest, nil, "token_endpoint_auth_methods_supported cannot be empty").Log(ctx, s.logger)
 	}
@@ -219,7 +215,7 @@ func (s *Service) UpdateOAuthProxyServer(ctx context.Context, payload *gen.Updat
 	// Emit audit event inside the transaction (before commit). Pass before/after
 	// toolset snapshots so the audit log captures what actually changed, not just
 	// that an update occurred. Mirrors LogToolsetUpdate's snapshot pattern.
-	if err := audit.LogToolsetUpdateOAuthProxy(ctx, dbtx, audit.LogToolsetUpdateOAuthProxyEvent{
+	if err := s.audit.LogToolsetUpdateOAuthProxy(ctx, dbtx, audit.LogToolsetUpdateOAuthProxyEvent{
 		OrganizationID:        authCtx.ActiveOrganizationID,
 		ProjectID:             *authCtx.ProjectID,
 		Actor:                 urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),

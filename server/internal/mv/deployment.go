@@ -2,12 +2,12 @@ package mv
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/deployments/repo"
@@ -22,7 +22,7 @@ func DescribeDeployment(ctx context.Context, logger *slog.Logger, depRepo *repo.
 		ProjectID: uuid.UUID(projectID),
 	})
 	switch {
-	case errors.Is(err, sql.ErrNoRows), err == nil && len(rows) == 0:
+	case errors.Is(err, pgx.ErrNoRows), err == nil && len(rows) == 0:
 		return nil, oops.C(oops.CodeNotFound)
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "error getting deployment with assets").Log(ctx, logger)

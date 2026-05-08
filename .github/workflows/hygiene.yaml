@@ -4,6 +4,7 @@ on:
     types: [opened, synchronize, reopened, edited]
     branches:
       - main
+  merge_group:
 
 jobs:
   lint-pr:
@@ -18,8 +19,8 @@ jobs:
       - name: Validate PR title format
         shell: bash
         run: |
-          if [[ "$GIT_REF" ==  "refs/heads/main" ]]; then
-            echo "Skipping PR title validation on main."
+          if [[ "${{ github.event_name }}" == "merge_group" || "$GIT_REF" == "refs/heads/main" ]]; then
+            echo "Skipping PR title validation on $GIT_REF (event: ${{ github.event_name }})."
             exit 0
           fi
 
@@ -42,24 +43,68 @@ jobs:
             exit 1
           fi
 
+      - name: Checkout
+        uses: actions/checkout@ff7abcd0c3c05ccf6adc123a8cd1fd4fb30fb493 # v5.0.0
+
+      - name: Detect changed files
+        uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
+        id: filter
+        with:
+          filters: .github/filters.yaml
+          list-files: json
+
+      # Run a second paths-filter pass with `predicate-quantifier: every` so
+      # the `!` patterns below act as exclusions (every pattern must match,
+      # which inverts negations into proper exclusions). The default `some`
+      # quantifier on the step above would treat each `!` as its own positive
+      # predicate, matching every file outside the negated path.
+      - name: Detect server-internal changes
+        uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
+        id: filter-internal
+        with:
+          predicate-quantifier: every
+          list-files: json
+          # Excludes SQLc-generated output paths (per `server/database/sqlc.yaml`
+          # `out:` directives) since they legitimately change alongside
+          # schema.sql edits.
+          filters: |
+            server-internal:
+              - "server/internal/**"
+              - "!server/internal/database/**"
+              - "!server/internal/**/repo/**"
+              - "!server/internal/testenv/testrepo/**"
+
+      - name: Validate migration PR does not mix server changes
+        if: ${{ github.event_name != 'merge_group' && steps.filter.outputs.database-changes == 'true' && steps.filter-internal.outputs.server-internal == 'true' }}
+        shell: bash
+        env:
+          DB_FILES: ${{ steps.filter.outputs.database-changes_files }}
+          INTERNAL_FILES: ${{ steps.filter-internal.outputs.server-internal_files }}
+        run: |
+          set -e
+          echo "❌ This PR mixes database migration changes with other server changes."
+          echo ""
+          echo "Database migration files changed:"
+          echo "$DB_FILES" | jq -r '.[]' | sed 's/^/  - /'
+          echo ""
+          echo "Server implementation files changed:"
+          echo "$INTERNAL_FILES" | jq -r '.[]' | sed 's/^/  - /'
+          echo ""
+          echo "Database schema changes should be scheduled separately from business logic changes"
+          echo "so each can be reviewed and rolled out independently."
+          echo "Please move the non-migration changes to a separate PR."
+          exit 1
+
       - name: Check for significant changes
         id: check
         run: |
-          if [[ "$GIT_REF" ==  "refs/heads/main" ]]; then
-            echo "Skipping changesets-lint job on main."
-            exit 0
-          fi
-
-          if [[ "$PR_TITLE" =~ ^(chore|mig)(\([a-zA-Z0-9_-]+\))?: ]]; then
+          if [[ "${{ github.event_name }}" == "merge_group" || "$GIT_REF" == "refs/heads/main" ]]; then
+            echo "Skipping changesets-lint job on $GIT_REF (event: ${{ github.event_name }})."
+          elif [[ "$PR_TITLE" =~ ^(chore|mig)(\([a-zA-Z0-9_-]+\))?: ]]; then
             echo "Skipping changesets-lint job for chore/mig PR."
-            exit 0
+          else
+            echo "lint=true" >> $GITHUB_OUTPUT
           fi
-
-          echo "lint=true" >> $GITHUB_OUTPUT
-
-      - name: Checkout
-        if: ${{ steps.check.outputs.lint == 'true' }}
-        uses: actions/checkout@ff7abcd0c3c05ccf6adc123a8cd1fd4fb30fb493 # v5.0.0
 
       # Check out both the base and head refs so changeset status can compare
       # against the base branch

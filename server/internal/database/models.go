@@ -157,6 +157,26 @@ type AuditLog struct {
 	CreatedAt          pgtype.Timestamptz
 }
 
+// Tracks admin resolutions of authz challenge denials. challenge_id references authz_challenges.id in ClickHouse (soft cross-DB reference).
+type AuthzChallengeResolution struct {
+	ID             uuid.UUID
+	OrganizationID string
+	// UUID of the denied challenge in the ClickHouse authz_challenges table.
+	ChallengeID string
+	// The principal that was denied, copied from the challenge for query convenience.
+	PrincipalUrn string
+	Scope        string
+	ResourceKind string
+	ResourceID   string
+	// How the challenge was resolved: role_assigned, dismissed.
+	ResolutionType string
+	// When resolution_type=role_assigned, the role slug that was assigned to the principal.
+	RoleSlug pgtype.Text
+	// URN of the admin who resolved the challenge.
+	ResolvedBy string
+	CreatedAt  pgtype.Timestamptz
+}
+
 type Chat struct {
 	ID             uuid.UUID
 	ProjectID      uuid.UUID
@@ -494,6 +514,22 @@ type FunctionsAccess struct {
 	Deleted       bool
 }
 
+type GlobalRole struct {
+	ID                uuid.UUID
+	WorkosSlug        string
+	WorkosName        string
+	WorkosDescription pgtype.Text
+	WorkosCreatedAt   pgtype.Timestamptz
+	WorkosUpdatedAt   pgtype.Timestamptz
+	WorkosDeletedAt   pgtype.Timestamptz
+	WorkosDeleted     bool
+	WorkosLastEventID pgtype.Text
+	CreatedAt         pgtype.Timestamptz
+	UpdatedAt         pgtype.Timestamptz
+	DeletedAt         pgtype.Timestamptz
+	Deleted           bool
+}
+
 type HooksServerNameOverride struct {
 	ID            uuid.UUID
 	ProjectID     uuid.UUID
@@ -564,6 +600,18 @@ type HttpToolDefinition struct {
 	Deleted             bool
 }
 
+type McpEndpoint struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	CustomDomainID uuid.NullUUID
+	McpServerID    uuid.UUID
+	Slug           string
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	DeletedAt      pgtype.Timestamptz
+	Deleted        bool
+}
+
 type McpEnvironmentConfig struct {
 	ID                uuid.UUID
 	ProjectID         uuid.UUID
@@ -573,21 +621,6 @@ type McpEnvironmentConfig struct {
 	ProvidedBy        string
 	CreatedAt         pgtype.Timestamptz
 	UpdatedAt         pgtype.Timestamptz
-}
-
-type McpFrontend struct {
-	ID                    uuid.UUID
-	ProjectID             uuid.UUID
-	EnvironmentID         uuid.NullUUID
-	ExternalOauthServerID uuid.NullUUID
-	OauthProxyServerID    uuid.NullUUID
-	RemoteMcpServerID     uuid.NullUUID
-	ToolsetID             uuid.NullUUID
-	Visibility            string
-	CreatedAt             pgtype.Timestamptz
-	UpdatedAt             pgtype.Timestamptz
-	DeletedAt             pgtype.Timestamptz
-	Deleted               bool
 }
 
 type McpMetadatum struct {
@@ -615,16 +648,19 @@ type McpRegistry struct {
 	Deleted   bool
 }
 
-type McpSlug struct {
-	ID             uuid.UUID
-	ProjectID      uuid.UUID
-	CustomDomainID uuid.NullUUID
-	McpFrontendID  uuid.UUID
-	Slug           string
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-	DeletedAt      pgtype.Timestamptz
-	Deleted        bool
+type McpServer struct {
+	ID                    uuid.UUID
+	ProjectID             uuid.UUID
+	EnvironmentID         uuid.NullUUID
+	ExternalOauthServerID uuid.NullUUID
+	OauthProxyServerID    uuid.NullUUID
+	RemoteMcpServerID     uuid.NullUUID
+	ToolsetID             uuid.NullUUID
+	Visibility            string
+	CreatedAt             pgtype.Timestamptz
+	UpdatedAt             pgtype.Timestamptz
+	DeletedAt             pgtype.Timestamptz
+	Deleted               bool
 }
 
 type OauthProxyClientInfo struct {
@@ -740,6 +776,8 @@ type OrganizationMetadatum struct {
 	GramAccountType    string
 	SsoConnectionID    pgtype.Text
 	WorkosID           pgtype.Text
+	WorkosUpdatedAt    pgtype.Timestamptz
+	WorkosLastEventID  pgtype.Text
 	Whitelisted        bool
 	FreeTrialStartedAt pgtype.Timestamptz
 	FreeTrialEndsAt    pgtype.Timestamptz
@@ -748,11 +786,43 @@ type OrganizationMetadatum struct {
 	DisabledAt         pgtype.Timestamptz
 }
 
+type OrganizationRole struct {
+	ID                uuid.UUID
+	OrganizationID    string
+	WorkosSlug        string
+	WorkosName        string
+	WorkosDescription pgtype.Text
+	WorkosCreatedAt   pgtype.Timestamptz
+	WorkosUpdatedAt   pgtype.Timestamptz
+	WorkosDeletedAt   pgtype.Timestamptz
+	WorkosDeleted     bool
+	WorkosLastEventID pgtype.Text
+	CreatedAt         pgtype.Timestamptz
+	UpdatedAt         pgtype.Timestamptz
+	DeletedAt         pgtype.Timestamptz
+	Deleted           bool
+}
+
+type OrganizationRoleAssignment struct {
+	ID                 uuid.UUID
+	OrganizationID     string
+	WorkosUserID       string
+	UserID             pgtype.Text
+	RoleUrn            string
+	WorkosMembershipID pgtype.Text
+	WorkosUpdatedAt    pgtype.Timestamptz
+	WorkosLastEventID  pgtype.Text
+	CreatedAt          pgtype.Timestamptz
+	UpdatedAt          pgtype.Timestamptz
+}
+
 type OrganizationUserRelationship struct {
 	ID                 int64
 	OrganizationID     string
 	UserID             string
 	WorkosMembershipID pgtype.Text
+	WorkosUpdatedAt    pgtype.Timestamptz
+	WorkosLastEventID  pgtype.Text
 	CreatedAt          pgtype.Timestamptz
 	UpdatedAt          pgtype.Timestamptz
 	DeletedAt          pgtype.Timestamptz
@@ -816,13 +886,14 @@ type PluginAssignment struct {
 }
 
 type PluginGithubConnection struct {
-	ID             uuid.UUID
-	ProjectID      uuid.UUID
-	InstallationID int64
-	RepoOwner      string
-	RepoName       string
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
+	ID               uuid.UUID
+	ProjectID        uuid.UUID
+	InstallationID   int64
+	RepoOwner        string
+	RepoName         string
+	MarketplaceToken pgtype.Text
+	CreatedAt        pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
 }
 
 type PluginServer struct {
@@ -838,7 +909,7 @@ type PluginServer struct {
 	Deleted     bool
 }
 
-// RBAC grants. One row per (org, principal, scope, selectors). Selectors define resource constraints.
+// RBAC grants. Normalized: one row per (org, principal, scope). Selectors can further constrain applicability.
 type PrincipalGrant struct {
 	ID uuid.UUID
 	// The organization this grant belongs to. Grants are always org-scoped.
@@ -849,7 +920,9 @@ type PrincipalGrant struct {
 	PrincipalType string
 	// The scope being granted, e.g. "build:read". Validated in application code, not via FK.
 	Scope string
-	// JSON selector constraints defining what the grant applies to, e.g. {"resource_kind":"project","resource_id":"proj_123"}.
+	// Deprecated. Formerly '*' = unrestricted. Nullable, scheduled for removal.
+	DropResource pgtype.Text
+	// JSON selector constraints attached to a grant. Must be a non-empty JSONB object. Wildcard/unrestricted grants use {"resource_kind":"*","resource_id":"*"}.
 	Selectors []byte
 	CreatedAt pgtype.Timestamptz
 	UpdatedAt pgtype.Timestamptz
@@ -939,6 +1012,9 @@ type RiskPolicy struct {
 	Name             string
 	Sources          []string
 	PresidioEntities []string
+	Action           string
+	AutoName         bool
+	UserMessage      pgtype.Text
 	Version          int64
 	CreatedAt        pgtype.Timestamptz
 	UpdatedAt        pgtype.Timestamptz
@@ -1173,4 +1249,19 @@ type UserOauthToken struct {
 	UpdatedAt             pgtype.Timestamptz
 	DeletedAt             pgtype.Timestamptz
 	Deleted               bool
+}
+
+type WorkosOrganizationSync struct {
+	ID                   uuid.UUID
+	WorkosOrganizationID string
+	LastEventID          string
+	CreatedAt            pgtype.Timestamptz
+	UpdatedAt            pgtype.Timestamptz
+}
+
+type WorkosUserSync struct {
+	ID          int64
+	LastEventID string
+	CreatedAt   pgtype.Timestamptz
+	UpdatedAt   pgtype.Timestamptz
 }

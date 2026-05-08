@@ -10,6 +10,10 @@ import { Textarea } from "@/components/moon/textarea";
 import { Page } from "@/components/page-layout";
 import { PublicMcpWarningDialog } from "@/components/public-mcp-warning-dialog";
 import { ServerEnableDialog } from "@/components/server-enable-dialog";
+import {
+  RouteNotFoundState,
+  SecondaryRouteAction,
+} from "@/components/route-not-found-state";
 import { useExternalMcpOAuthConfigStatus } from "@/components/sources/sources-hooks";
 import { ToolList } from "@/components/tool-list";
 import { Dialog } from "@/components/ui/dialog";
@@ -38,6 +42,7 @@ import { FeatureRequestModal } from "@/components/FeatureRequestModal";
 import { useMissingRequiredEnvVars } from "@/hooks/useMissingEnvironmentVariables";
 import { useProductTier } from "@/hooks/useProductTier";
 import { useCustomDomain, useMcpUrl } from "@/hooks/useToolsetUrl";
+import { isNotFoundError } from "@/lib/route-errors";
 import { Tool, Toolset, useGroupedTools } from "@/lib/toolTypes";
 import { cn, getServerURL } from "@/lib/utils";
 import {
@@ -49,7 +54,7 @@ import { PromptsTabContent } from "@/pages/toolsets/PromptsTab";
 import { ResourcesTabContent } from "@/pages/toolsets/resources/ResourcesTab";
 import { ServerTabContent } from "@/pages/toolsets/ServerTab";
 import { useRoutes } from "@/routes";
-import { Confirm, ToolsetEntry } from "@gram/client/models/components";
+import { Confirm } from "@gram/client/models/components";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
 import {
   invalidateAllGetPeriodUsage,
@@ -165,11 +170,63 @@ export function MCPDetailPage() {
 
 function MCPDetailPageInner() {
   const { toolsetSlug } = useParams();
+
+  const {
+    data: toolset,
+    error: toolsetError,
+    isLoading,
+  } = useToolset(toolsetSlug, { throwOnError: false });
+
+  if (!toolsetSlug || isNotFoundError(toolsetError)) {
+    return <MCPRouteNotFound />;
+  }
+
+  if (toolsetError) {
+    throw toolsetError;
+  }
+
+  if (isLoading || !toolset) {
+    return <MCPLoading />;
+  }
+
+  return <MCPDetailPageContent toolset={toolset} toolsetSlug={toolsetSlug} />;
+}
+
+function MCPRouteNotFound() {
+  const routes = useRoutes();
+
+  return (
+    <Page>
+      <Page.Header>
+        <Page.Header.Breadcrumbs />
+      </Page.Header>
+      <Page.Body>
+        <RouteNotFoundState
+          title="MCP server not found"
+          description="This MCP server may have been deleted, renamed, or moved out of this project."
+          action={
+            <routes.mcp.Link>
+              <SecondaryRouteAction>Back to MCP servers</SecondaryRouteAction>
+            </routes.mcp.Link>
+          }
+        />
+      </Page.Body>
+    </Page>
+  );
+}
+
+type LoadedMcpToolset = NonNullable<ReturnType<typeof useToolset>["data"]>;
+
+function MCPDetailPageContent({
+  toolset,
+  toolsetSlug,
+}: {
+  toolset: LoadedMcpToolset;
+  toolsetSlug: string;
+}) {
   const routes = useRoutes();
   const telemetry = useTelemetry();
   const isRbacEnabled = telemetry.isFeatureEnabled("gram-rbac") ?? false;
-
-  const { data: toolset, isLoading } = useToolset(toolsetSlug);
 
   // Call hooks before any conditional returns
   const { url: mcpUrl } = useMcpUrl(toolset);
@@ -229,10 +286,6 @@ function MCPDetailPageInner() {
     useExternalMcpOAuthConfigStatus(toolsetSlug);
   const oauthRequiredUnconfigured =
     externalMcpOAuthConfigStatus === "required-unconfigured";
-
-  if (isLoading || !toolset) {
-    return <MCPLoading />;
-  }
 
   let statusBadge = null;
   if (!toolset.mcpEnabled) {
@@ -1825,14 +1878,18 @@ export function MCPJson({
   fullWidth = false,
   className,
 }: {
-  toolset: ToolsetEntry;
+  toolset: Toolset;
   fullWidth?: boolean; // If true, the code block will take up the full width of the page even when there's only one
   className?: string;
 }) {
   const telemetry = useTelemetry();
 
-  const { public: mcpJsonPublic, internal: mcpJsonInternal } =
-    useMcpConfigs(toolset);
+  const {
+    public: mcpJsonPublic,
+    internal: mcpJsonInternal,
+    requiresGramKey,
+    hasOAuth,
+  } = useMcpConfigs(toolset);
 
   const onCopy = () => {
     telemetry.capture("mcp_event", {
@@ -1841,38 +1898,53 @@ export function MCPJson({
     });
   };
 
+  const showManagedAuth = !hasOAuth;
+
   return (
     <Grid
       gap={4}
       className={cn("my-4!", className)}
-      columns={!fullWidth ? { xs: 1, md: 2, lg: 2, xl: 2, "2xl": 2 } : 1}
+      columns={
+        !fullWidth && showManagedAuth
+          ? { xs: 1, md: 2, lg: 2, xl: 2, "2xl": 2 }
+          : 1
+      }
     >
-      <Grid.Item>
-        <Type className="font-medium">Pass-through Authentication</Type>
-        <Type muted small className="mb-2! max-w-3xl">
-          Pass API credentials directly to the MCP server.
-          <br />
-          <span
-            className={
-              !toolset.mcpIsPublic
-                ? "text-warning-foreground font-medium"
-                : "italic"
-            }
-          >
-            Requires a Gram API key if the server is not public.
-          </span>
-        </Type>
-        <CodeBlock onCopy={onCopy}>{mcpJsonPublic}</CodeBlock>
-      </Grid.Item>
-      <Grid.Item>
-        <Type className="font-medium">Managed Authentication</Type>
-        <Type muted small className="mb-2! max-w-3xl">
-          Manage API authentication with Gram environments.
-          <br />
-          Users need a single Gram API Key rather than bringing their own keys.
-        </Type>
-        <CodeBlock onCopy={onCopy}>{mcpJsonInternal}</CodeBlock>
-      </Grid.Item>
+      {[
+        <Grid.Item key="passthrough">
+          <Type className="font-medium">Pass-through Authentication</Type>
+          <Type muted small className="mb-2! max-w-3xl">
+            Pass API credentials directly to the MCP server.
+            <br />
+            <span
+              className={
+                requiresGramKey
+                  ? "text-warning-foreground font-medium"
+                  : "italic"
+              }
+            >
+              {requiresGramKey
+                ? "Requires a Gram API key."
+                : "No Gram API key required."}
+            </span>
+          </Type>
+          <CodeBlock onCopy={onCopy}>{mcpJsonPublic}</CodeBlock>
+        </Grid.Item>,
+        ...(showManagedAuth
+          ? [
+              <Grid.Item key="managed">
+                <Type className="font-medium">Managed Authentication</Type>
+                <Type muted small className="mb-2! max-w-3xl">
+                  Manage API authentication with Gram environments.
+                  <br />
+                  Users need a single Gram API Key rather than bringing their
+                  own keys.
+                </Type>
+                <CodeBlock onCopy={onCopy}>{mcpJsonInternal}</CodeBlock>
+              </Grid.Item>,
+            ]
+          : []),
+      ]}
     </Grid>
   );
 }
@@ -2232,4 +2304,4 @@ export function GramOAuthProxyModal({
   );
 }
 
-export { ConnectOAuthModal } from "./oauth-wizard";
+export { ConnectOAuthModal, EditOAuthProxyModal } from "./oauth-wizard";

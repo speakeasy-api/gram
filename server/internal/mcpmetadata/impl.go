@@ -159,6 +159,7 @@ type Service struct {
 	serverURL    *url.URL
 	siteURL      *url.URL
 	toolsetCache cache.TypedCacheObject[mv.ToolsetBaseContents]
+	audit        *audit.Logger
 
 	// Hosted install page script (embedded and served with cache-busting hash)
 	installPageScriptHash string
@@ -168,7 +169,17 @@ type Service struct {
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, serverURL *url.URL, siteURL *url.URL, cacheAdapter cache.Cache, authzEngine *authz.Engine) *Service {
+func NewService(
+	logger *slog.Logger,
+	tracerProvider trace.TracerProvider,
+	db *pgxpool.Pool,
+	sessions *sessions.Manager,
+	serverURL *url.URL,
+	siteURL *url.URL,
+	cacheAdapter cache.Cache,
+	authzEngine *authz.Engine,
+	auditLogger *audit.Logger,
+) *Service {
 	logger = logger.With(attr.SlogComponent("mcp_metadata"))
 
 	// Calculate content hash for install page script (for cache busting)
@@ -187,6 +198,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		serverURL:    serverURL,
 		siteURL:      siteURL,
 		toolsetCache: cache.NewTypedObjectCache[mv.ToolsetBaseContents](logger.With(attr.SlogCacheNamespace("toolset")), cacheAdapter, cache.SuffixNone),
+		audit:        auditLogger,
 
 		installPageScriptHash: scriptHashStr,
 		installPageScriptData: hostedPageScriptData,
@@ -227,7 +239,7 @@ func (s *Service) GetMcpMetadata(ctx context.Context, payload *gen.GetMcpMetadat
 	record, err := s.repo.GetMetadataForToolset(ctx, toolset.ID)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return nil, oops.E(oops.CodeNotFound, err, "no MCP install page metadata for this toolset").Log(ctx, s.logger, attr.SlogToolsetID(toolset.ID.String()))
+		return nil, oops.E(oops.CodeNotFound, err, "no MCP install page metadata for this toolset")
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to fetch MCP install page metadata").Log(ctx, s.logger)
 	}
@@ -388,7 +400,7 @@ func (s *Service) SetMcpMetadata(ctx context.Context, payload *gen.SetMcpMetadat
 		return nil, err
 	}
 
-	if err := audit.LogMCPMetadataUpdate(ctx, dbtx, audit.LogMCPMetadataUpdateEvent{
+	if err := s.audit.LogMCPMetadataUpdate(ctx, dbtx, audit.LogMCPMetadataUpdateEvent{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		ProjectID:      *authCtx.ProjectID,
 
@@ -1095,14 +1107,16 @@ func (s *Service) loadToolsetFromContextAndSlug(ctx context.Context, mcpSlug str
 	return &toolset, nil
 }
 
-// resolveSecurityMode determines the security mode based on toolset configuration
-// Prefers oauth > gram > public
+// resolveSecurityMode determines the security mode based on toolset configuration.
+// OAuth wins regardless of public/private: when an OAuth proxy or external OAuth
+// server is attached, identity auth is delegated to the OAuth flow and the
+// install instructions must not ask the user for an Authorization/GRAM_KEY header.
 func (s *Service) resolveSecurityMode(toolset *toolsets_repo.Toolset) securityMode {
-	if toolset.McpIsPublic {
-		if toolset.OauthProxyServerID.Valid || toolset.ExternalOauthServerID.Valid {
-			return securityModeOAuth
-		}
+	if toolset.OauthProxyServerID.Valid || toolset.ExternalOauthServerID.Valid {
+		return securityModeOAuth
+	}
 
+	if toolset.McpIsPublic {
 		return securityModePublic
 	}
 
@@ -1199,6 +1213,9 @@ func (s *Service) collectEnvironmentVariables(mode securityMode, toolsetDetails 
 
 		for _, headerDef := range toolsetDetails.ExternalMcpHeaderDefinitions {
 			if !headerDef.Required {
+				continue
+			}
+			if isExplicitlyNotUserProvided(headerDef.Name) {
 				continue
 			}
 			if !seen[headerDef.Name] {

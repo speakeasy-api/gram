@@ -2,7 +2,6 @@ package background
 
 import (
 	"context"
-	"log/slog"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -11,6 +10,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 type countingSignaler struct {
@@ -36,7 +37,7 @@ func TestThrottledSignaler_FirstCallFiresImmediately(t *testing.T) {
 	t.Parallel()
 
 	inner := &countingSignaler{}
-	throttled := NewThrottledSignaler(inner, 100*time.Millisecond, slog.Default())
+	throttled := NewThrottledSignaler(inner, 100*time.Millisecond, testenv.NewLogger(t))
 
 	params := DrainRiskAnalysisParams{
 		ProjectID:    uuid.New(),
@@ -52,7 +53,7 @@ func TestThrottledSignaler_CoalescesDuringCooldown(t *testing.T) {
 	t.Parallel()
 
 	inner := &countingSignaler{}
-	throttled := NewThrottledSignaler(inner, 100*time.Millisecond, slog.Default())
+	throttled := NewThrottledSignaler(inner, 100*time.Millisecond, testenv.NewLogger(t))
 
 	params := DrainRiskAnalysisParams{
 		ProjectID:    uuid.New(),
@@ -81,7 +82,7 @@ func TestThrottledSignaler_NoPendingNoTrailing(t *testing.T) {
 	t.Parallel()
 
 	inner := &countingSignaler{}
-	throttled := NewThrottledSignaler(inner, 50*time.Millisecond, slog.Default())
+	throttled := NewThrottledSignaler(inner, 50*time.Millisecond, testenv.NewLogger(t))
 
 	params := DrainRiskAnalysisParams{
 		ProjectID:    uuid.New(),
@@ -102,7 +103,7 @@ func TestThrottledSignaler_IndependentPerPolicy(t *testing.T) {
 	t.Parallel()
 
 	inner := &countingSignaler{}
-	throttled := NewThrottledSignaler(inner, 100*time.Millisecond, slog.Default())
+	throttled := NewThrottledSignaler(inner, 100*time.Millisecond, testenv.NewLogger(t))
 
 	policy1 := DrainRiskAnalysisParams{ProjectID: uuid.New(), RiskPolicyID: uuid.New()}
 	policy2 := DrainRiskAnalysisParams{ProjectID: uuid.New(), RiskPolicyID: uuid.New()}
@@ -118,7 +119,7 @@ func TestThrottledSignaler_ZeroCooldownDisablesThrottling(t *testing.T) {
 	t.Parallel()
 
 	inner := &countingSignaler{}
-	throttled := NewThrottledSignaler(inner, 0, slog.Default())
+	throttled := NewThrottledSignaler(inner, 0, testenv.NewLogger(t))
 
 	params := DrainRiskAnalysisParams{
 		ProjectID:    uuid.New(),
@@ -136,7 +137,7 @@ func TestThrottledSignaler_RecoversAfterCooldown(t *testing.T) {
 	t.Parallel()
 
 	inner := &countingSignaler{}
-	throttled := NewThrottledSignaler(inner, 50*time.Millisecond, slog.Default())
+	throttled := NewThrottledSignaler(inner, 50*time.Millisecond, testenv.NewLogger(t))
 
 	params := DrainRiskAnalysisParams{
 		ProjectID:    uuid.New(),
@@ -159,7 +160,7 @@ func TestThrottledSignaler_ConcurrentCallers(t *testing.T) {
 	t.Parallel()
 
 	inner := &countingSignaler{}
-	throttled := NewThrottledSignaler(inner, 100*time.Millisecond, slog.Default())
+	throttled := NewThrottledSignaler(inner, 100*time.Millisecond, testenv.NewLogger(t))
 
 	params := DrainRiskAnalysisParams{
 		ProjectID:    uuid.New(),
@@ -187,7 +188,7 @@ func TestThrottledSignaler_MultipleBursts(t *testing.T) {
 	t.Parallel()
 
 	inner := &countingSignaler{}
-	throttled := NewThrottledSignaler(inner, 50*time.Millisecond, slog.Default())
+	throttled := NewThrottledSignaler(inner, 50*time.Millisecond, testenv.NewLogger(t))
 
 	params := DrainRiskAnalysisParams{
 		ProjectID:    uuid.New(),
@@ -219,7 +220,7 @@ func TestThrottledSignaler_FirstCallErrorPropagates(t *testing.T) {
 	t.Parallel()
 
 	inner := &countingSignaler{err: assert.AnError}
-	throttled := NewThrottledSignaler(inner, 100*time.Millisecond, slog.Default())
+	throttled := NewThrottledSignaler(inner, 100*time.Millisecond, testenv.NewLogger(t))
 
 	params := DrainRiskAnalysisParams{
 		ProjectID:    uuid.New(),
@@ -234,7 +235,7 @@ func TestThrottledSignaler_SuppressedCallsReturnNil(t *testing.T) {
 	t.Parallel()
 
 	inner := &countingSignaler{}
-	throttled := NewThrottledSignaler(inner, 100*time.Millisecond, slog.Default())
+	throttled := NewThrottledSignaler(inner, 100*time.Millisecond, testenv.NewLogger(t))
 
 	params := DrainRiskAnalysisParams{
 		ProjectID:    uuid.New(),
@@ -252,7 +253,7 @@ func TestThrottledSignaler_NegativeCooldownDisablesThrottling(t *testing.T) {
 	t.Parallel()
 
 	inner := &countingSignaler{}
-	throttled := NewThrottledSignaler(inner, -1*time.Second, slog.Default())
+	throttled := NewThrottledSignaler(inner, -1*time.Second, testenv.NewLogger(t))
 
 	params := DrainRiskAnalysisParams{
 		ProjectID:    uuid.New(),

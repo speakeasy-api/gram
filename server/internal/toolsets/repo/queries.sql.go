@@ -286,16 +286,22 @@ func (q *Queries) DeleteToolset(ctx context.Context, arg DeleteToolsetParams) (D
 const getHTTPSecurityDefinitions = `-- name: GetHTTPSecurityDefinitions :many
 SELECT id, deployment_id, project_id, openapiv3_document_id, key, type, name, in_placement, scheme, bearer_format, oauth_types, oauth_flows, env_variables, created_at, updated_at, deleted_at, deleted
 FROM http_security
-WHERE key = ANY($1::TEXT[]) AND deployment_id = ANY($2::UUID[])
+WHERE key = ANY($1::TEXT[])
+  AND deployment_id = ANY($2::UUID[])
+  AND (
+    cardinality($3::UUID[]) = 0
+    OR openapiv3_document_id = ANY($3::UUID[])
+  )
 `
 
 type GetHTTPSecurityDefinitionsParams struct {
-	SecurityKeys  []string
-	DeploymentIds []uuid.UUID
+	SecurityKeys         []string
+	DeploymentIds        []uuid.UUID
+	Openapiv3DocumentIds []uuid.UUID
 }
 
 func (q *Queries) GetHTTPSecurityDefinitions(ctx context.Context, arg GetHTTPSecurityDefinitionsParams) ([]HttpSecurity, error) {
-	rows, err := q.db.Query(ctx, getHTTPSecurityDefinitions, arg.SecurityKeys, arg.DeploymentIds)
+	rows, err := q.db.Query(ctx, getHTTPSecurityDefinitions, arg.SecurityKeys, arg.DeploymentIds, arg.Openapiv3DocumentIds)
 	if err != nil {
 		return nil, err
 	}
@@ -1204,6 +1210,56 @@ func (q *Queries) ListToolsetsWithVersionsByOrganization(ctx context.Context, or
 		return nil, err
 	}
 	return items, nil
+}
+
+const setToolsetMCPEnabledByID = `-- name: SetToolsetMCPEnabledByID :exec
+UPDATE toolsets
+SET mcp_enabled = $1
+WHERE id = $2 AND project_id = $3
+`
+
+type SetToolsetMCPEnabledByIDParams struct {
+	McpEnabled bool
+	ID         uuid.UUID
+	ProjectID  uuid.UUID
+}
+
+func (q *Queries) SetToolsetMCPEnabledByID(ctx context.Context, arg SetToolsetMCPEnabledByIDParams) error {
+	_, err := q.db.Exec(ctx, setToolsetMCPEnabledByID, arg.McpEnabled, arg.ID, arg.ProjectID)
+	return err
+}
+
+const setToolsetMCPPublicByID = `-- name: SetToolsetMCPPublicByID :exec
+UPDATE toolsets
+SET mcp_is_public = $1
+WHERE id = $2 AND project_id = $3
+`
+
+type SetToolsetMCPPublicByIDParams struct {
+	McpIsPublic bool
+	ID          uuid.UUID
+	ProjectID   uuid.UUID
+}
+
+func (q *Queries) SetToolsetMCPPublicByID(ctx context.Context, arg SetToolsetMCPPublicByIDParams) error {
+	_, err := q.db.Exec(ctx, setToolsetMCPPublicByID, arg.McpIsPublic, arg.ID, arg.ProjectID)
+	return err
+}
+
+const setToolsetMCPPublicBySlug = `-- name: SetToolsetMCPPublicBySlug :exec
+UPDATE toolsets
+SET mcp_is_public = $1
+WHERE mcp_slug = $2
+`
+
+type SetToolsetMCPPublicBySlugParams struct {
+	McpIsPublic bool
+	McpSlug     pgtype.Text
+}
+
+func (q *Queries) SetToolsetMCPPublicBySlug(ctx context.Context, arg SetToolsetMCPPublicBySlugParams) error {
+	_, err := q.db.Exec(ctx, setToolsetMCPPublicBySlug, arg.McpIsPublic, arg.McpSlug)
+	return err
 }
 
 const updateToolset = `-- name: UpdateToolset :one

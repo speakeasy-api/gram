@@ -16,7 +16,7 @@ import (
 // CreateRiskPolicyRequestBody is the type of the "risk" service
 // "createRiskPolicy" endpoint HTTP request body.
 type CreateRiskPolicyRequestBody struct {
-	// The policy name.
+	// The policy name. If omitted, a name will be auto-generated.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// Detection sources to enable.
 	Sources []string `form:"sources,omitempty" json:"sources,omitempty" xml:"sources,omitempty"`
@@ -24,6 +24,13 @@ type CreateRiskPolicyRequestBody struct {
 	PresidioEntities []string `form:"presidio_entities,omitempty" json:"presidio_entities,omitempty" xml:"presidio_entities,omitempty"`
 	// Whether the policy is active.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
+	// Policy action: flag or block.
+	Action *string `form:"action,omitempty" json:"action,omitempty" xml:"action,omitempty"`
+	// Whether the policy name should be auto-generated.
+	AutoName *bool `form:"auto_name,omitempty" json:"auto_name,omitempty" xml:"auto_name,omitempty"`
+	// Optional message shown to end users when this policy blocks an action or
+	// surfaces a flagged finding.
+	UserMessage *string `form:"user_message,omitempty" json:"user_message,omitempty" xml:"user_message,omitempty"`
 }
 
 // UpdateRiskPolicyRequestBody is the type of the "risk" service
@@ -39,6 +46,13 @@ type UpdateRiskPolicyRequestBody struct {
 	PresidioEntities []string `form:"presidio_entities,omitempty" json:"presidio_entities,omitempty" xml:"presidio_entities,omitempty"`
 	// Whether the policy is active.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
+	// Policy action: flag or block.
+	Action *string `form:"action,omitempty" json:"action,omitempty" xml:"action,omitempty"`
+	// Whether the policy name should be auto-generated.
+	AutoName *bool `form:"auto_name,omitempty" json:"auto_name,omitempty" xml:"auto_name,omitempty"`
+	// Optional message shown to end users when this policy blocks an action or
+	// surfaces a flagged finding. Send an empty string to clear.
+	UserMessage *string `form:"user_message,omitempty" json:"user_message,omitempty" xml:"user_message,omitempty"`
 }
 
 // TriggerRiskAnalysisRequestBody is the type of the "risk" service
@@ -63,6 +77,14 @@ type CreateRiskPolicyResponseBody struct {
 	PresidioEntities []string `form:"presidio_entities,omitempty" json:"presidio_entities,omitempty" xml:"presidio_entities,omitempty"`
 	// Whether the policy is active.
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
+	// Policy action: flag (log only) or block (deny in real-time).
+	Action string `form:"action" json:"action" xml:"action"`
+	// Whether the policy name is auto-generated. When true, the name is
+	// regenerated on each update.
+	AutoName bool `form:"auto_name" json:"auto_name" xml:"auto_name"`
+	// Optional message shown to the end user when this policy blocks an action or
+	// surfaces a flagged finding. When unset, a default message is rendered.
+	UserMessage *string `form:"user_message,omitempty" json:"user_message,omitempty" xml:"user_message,omitempty"`
 	// Policy version, incremented on each update.
 	Version int64 `form:"version" json:"version" xml:"version"`
 	// When the policy was created.
@@ -97,6 +119,14 @@ type GetRiskPolicyResponseBody struct {
 	PresidioEntities []string `form:"presidio_entities,omitempty" json:"presidio_entities,omitempty" xml:"presidio_entities,omitempty"`
 	// Whether the policy is active.
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
+	// Policy action: flag (log only) or block (deny in real-time).
+	Action string `form:"action" json:"action" xml:"action"`
+	// Whether the policy name is auto-generated. When true, the name is
+	// regenerated on each update.
+	AutoName bool `form:"auto_name" json:"auto_name" xml:"auto_name"`
+	// Optional message shown to the end user when this policy blocks an action or
+	// surfaces a flagged finding. When unset, a default message is rendered.
+	UserMessage *string `form:"user_message,omitempty" json:"user_message,omitempty" xml:"user_message,omitempty"`
 	// Policy version, incremented on each update.
 	Version int64 `form:"version" json:"version" xml:"version"`
 	// When the policy was created.
@@ -124,6 +154,14 @@ type UpdateRiskPolicyResponseBody struct {
 	PresidioEntities []string `form:"presidio_entities,omitempty" json:"presidio_entities,omitempty" xml:"presidio_entities,omitempty"`
 	// Whether the policy is active.
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
+	// Policy action: flag (log only) or block (deny in real-time).
+	Action string `form:"action" json:"action" xml:"action"`
+	// Whether the policy name is auto-generated. When true, the name is
+	// regenerated on each update.
+	AutoName bool `form:"auto_name" json:"auto_name" xml:"auto_name"`
+	// Optional message shown to the end user when this policy blocks an action or
+	// surfaces a flagged finding. When unset, a default message is rendered.
+	UserMessage *string `form:"user_message,omitempty" json:"user_message,omitempty" xml:"user_message,omitempty"`
 	// Policy version, incremented on each update.
 	Version int64 `form:"version" json:"version" xml:"version"`
 	// When the policy was created.
@@ -1839,6 +1877,14 @@ type RiskPolicyResponseBody struct {
 	PresidioEntities []string `form:"presidio_entities,omitempty" json:"presidio_entities,omitempty" xml:"presidio_entities,omitempty"`
 	// Whether the policy is active.
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
+	// Policy action: flag (log only) or block (deny in real-time).
+	Action string `form:"action" json:"action" xml:"action"`
+	// Whether the policy name is auto-generated. When true, the name is
+	// regenerated on each update.
+	AutoName bool `form:"auto_name" json:"auto_name" xml:"auto_name"`
+	// Optional message shown to the end user when this policy blocks an action or
+	// surfaces a flagged finding. When unset, a default message is rendered.
+	UserMessage *string `form:"user_message,omitempty" json:"user_message,omitempty" xml:"user_message,omitempty"`
 	// Policy version, incremented on each update.
 	Version int64 `form:"version" json:"version" xml:"version"`
 	// When the policy was created.
@@ -1909,6 +1955,9 @@ func NewCreateRiskPolicyResponseBody(res *types.RiskPolicy) *CreateRiskPolicyRes
 		ProjectID:       res.ProjectID,
 		Name:            res.Name,
 		Enabled:         res.Enabled,
+		Action:          res.Action,
+		AutoName:        res.AutoName,
+		UserMessage:     res.UserMessage,
 		Version:         res.Version,
 		CreatedAt:       res.CreatedAt,
 		UpdatedAt:       res.UpdatedAt,
@@ -1959,6 +2008,9 @@ func NewGetRiskPolicyResponseBody(res *types.RiskPolicy) *GetRiskPolicyResponseB
 		ProjectID:       res.ProjectID,
 		Name:            res.Name,
 		Enabled:         res.Enabled,
+		Action:          res.Action,
+		AutoName:        res.AutoName,
+		UserMessage:     res.UserMessage,
 		Version:         res.Version,
 		CreatedAt:       res.CreatedAt,
 		UpdatedAt:       res.UpdatedAt,
@@ -1990,6 +2042,9 @@ func NewUpdateRiskPolicyResponseBody(res *types.RiskPolicy) *UpdateRiskPolicyRes
 		ProjectID:       res.ProjectID,
 		Name:            res.Name,
 		Enabled:         res.Enabled,
+		Action:          res.Action,
+		AutoName:        res.AutoName,
+		UserMessage:     res.UserMessage,
 		Version:         res.Version,
 		CreatedAt:       res.CreatedAt,
 		UpdatedAt:       res.UpdatedAt,
@@ -3357,8 +3412,13 @@ func NewTriggerRiskAnalysisGatewayErrorResponseBody(res *goa.ServiceError) *Trig
 // payload.
 func NewCreateRiskPolicyPayload(body *CreateRiskPolicyRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.CreateRiskPolicyPayload {
 	v := &risk.CreateRiskPolicyPayload{
-		Name:    *body.Name,
-		Enabled: body.Enabled,
+		Name:        body.Name,
+		Enabled:     body.Enabled,
+		AutoName:    body.AutoName,
+		UserMessage: body.UserMessage,
+	}
+	if body.Action != nil {
+		v.Action = *body.Action
 	}
 	if body.Sources != nil {
 		v.Sources = make([]string, len(body.Sources))
@@ -3371,6 +3431,9 @@ func NewCreateRiskPolicyPayload(body *CreateRiskPolicyRequestBody, apikeyToken *
 		for i, val := range body.PresidioEntities {
 			v.PresidioEntities[i] = val
 		}
+	}
+	if body.Action == nil {
+		v.Action = "flag"
 	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
@@ -3405,9 +3468,12 @@ func NewGetRiskPolicyPayload(id string, apikeyToken *string, sessionToken *strin
 // payload.
 func NewUpdateRiskPolicyPayload(body *UpdateRiskPolicyRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.UpdateRiskPolicyPayload {
 	v := &risk.UpdateRiskPolicyPayload{
-		ID:      *body.ID,
-		Name:    *body.Name,
-		Enabled: body.Enabled,
+		ID:          *body.ID,
+		Name:        *body.Name,
+		Enabled:     body.Enabled,
+		Action:      body.Action,
+		AutoName:    body.AutoName,
+		UserMessage: body.UserMessage,
 	}
 	if body.Sources != nil {
 		v.Sources = make([]string, len(body.Sources))
@@ -3496,8 +3562,10 @@ func NewTriggerRiskAnalysisPayload(body *TriggerRiskAnalysisRequestBody, apikeyT
 // ValidateCreateRiskPolicyRequestBody runs the validations defined on
 // CreateRiskPolicyRequestBody
 func ValidateCreateRiskPolicyRequestBody(body *CreateRiskPolicyRequestBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	if body.Action != nil {
+		if !(*body.Action == "flag" || *body.Action == "block") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "block"}))
+		}
 	}
 	return
 }
@@ -3513,6 +3581,11 @@ func ValidateUpdateRiskPolicyRequestBody(body *UpdateRiskPolicyRequestBody) (err
 	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.Action != nil {
+		if !(*body.Action == "flag" || *body.Action == "block") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "block"}))
+		}
 	}
 	return
 }

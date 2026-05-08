@@ -6,7 +6,8 @@
 
 import path from "node:path";
 import process from "node:process";
-import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import { spawn, type ChildProcessByStdio } from "node:child_process";
+import type { Readable } from "node:stream";
 
 type RuntimeRow = {
   runtime_id: string;
@@ -17,9 +18,11 @@ type RuntimeRow = {
   machine_id: string;
 };
 
+type LogStreamProcess = ChildProcessByStdio<null, Readable, Readable>;
+
 type Subscriber = {
   runtime: RuntimeRow;
-  proc: ChildProcessWithoutNullStreams;
+  proc: LogStreamProcess;
   stopped: boolean;
 };
 
@@ -97,7 +100,7 @@ function writeLine(prefix: string, line: string) {
 
 function attachLinePrefixer(
   runtime: RuntimeRow,
-  proc: ChildProcessWithoutNullStreams,
+  proc: LogStreamProcess,
   stream: NodeJS.ReadableStream,
 ) {
   const prefix = linePrefix(runtime);
@@ -137,9 +140,7 @@ function sameTarget(left: RuntimeRow, right: RuntimeRow): boolean {
   );
 }
 
-function spawnLocalSubscriber(
-  runtime: RuntimeRow,
-): ChildProcessWithoutNullStreams {
+function spawnLocalSubscriber(runtime: RuntimeRow): LogStreamProcess {
   const logPath = localLogPath(runtime);
   return spawn(
     "bash",
@@ -156,9 +157,7 @@ function spawnLocalSubscriber(
   );
 }
 
-function spawnFlySubscriber(
-  runtime: RuntimeRow,
-): ChildProcessWithoutNullStreams {
+function spawnFlySubscriber(runtime: RuntimeRow): LogStreamProcess {
   const appName = flyAppName(runtime);
   const args = ["logs", "-a", appName];
   if (runtime.machine_id) {
@@ -173,7 +172,7 @@ function spawnFlySubscriber(
   });
 }
 
-function spawnSubscriber(runtime: RuntimeRow): ChildProcessWithoutNullStreams {
+function spawnSubscriber(runtime: RuntimeRow): LogStreamProcess {
   switch (runtime.backend) {
     case "local":
     case "firecracker":

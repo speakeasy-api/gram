@@ -306,14 +306,14 @@ export function FailedSourcesSection({
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <Dialog.Content className="max-w-lg!">
           <Dialog.Header>
-            <Dialog.Title>Active toolsets affected</Dialog.Title>
+            <Dialog.Title>Active MCP servers affected</Dialog.Title>
             <Dialog.Description>
-              {`${selectedWithTools.length} of the selected source${selectedWithTools.length !== 1 ? "s have" : " has"} ${totalAffectedTools} tool${totalAffectedTools !== 1 ? "s" : ""} referenced by active toolsets.`}
+              {`${selectedWithTools.length} of the selected source${selectedWithTools.length !== 1 ? "s have" : " has"} ${totalAffectedTools} tool${totalAffectedTools !== 1 ? "s" : ""} referenced by active MCP servers.`}
             </Dialog.Description>
           </Dialog.Header>
           <Alert variant="warning" dismissible={false}>
-            Removing these sources will break toolsets that depend on their
-            tools. You may need to update affected toolsets afterward.
+            Removing these sources will break MCP servers that depend on their
+            tools. You may need to update affected MCP servers afterward.
           </Alert>
           <ul className="space-y-1 text-sm">
             {selectedWithTools.map((s) => (

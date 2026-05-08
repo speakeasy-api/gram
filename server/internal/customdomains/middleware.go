@@ -1,7 +1,6 @@
 package customdomains
 
 import (
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"log/slog"
@@ -9,6 +8,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	domainsRepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
@@ -52,7 +52,7 @@ func Middleware(logger *slog.Logger, db *pgxpool.Pool, env string, serverURL *ur
 
 			domain, err := domainsRepo.GetCustomDomainByDomain(ctx, host)
 			switch {
-			case errors.Is(err, sql.ErrNoRows):
+			case errors.Is(err, pgx.ErrNoRows):
 				http.Error(w, "invalid domain", http.StatusForbidden)
 				return
 			case err != nil:

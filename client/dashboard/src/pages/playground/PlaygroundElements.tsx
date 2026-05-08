@@ -178,7 +178,7 @@ export function PlaygroundElements({
   if (!mcpUrl || !toolsetSlug) {
     return (
       <div className="flex h-full items-center justify-center">
-        <Type muted>Select a toolset to start chatting</Type>
+        <Type muted>Select an MCP server to start chatting</Type>
       </div>
     );
   }
@@ -278,7 +278,7 @@ export function PlaygroundElements({
               toolsetSlug={toolsetSlug}
             />
           )}
-          <div className="h-full overflow-hidden">
+          <div className="min-h-0 flex-1 overflow-hidden">
             <Chat />
           </div>
         </div>

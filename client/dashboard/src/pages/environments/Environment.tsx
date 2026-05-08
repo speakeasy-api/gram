@@ -110,12 +110,12 @@ function ToolsetDialog({ open, onOpenChange, onSubmit }: ToolsetDialogProps) {
     <Dialog open={open} onOpenChange={handleClose}>
       <Dialog.Content>
         <Dialog.Header>
-          <Dialog.Title>Fill for Toolset</Dialog.Title>
+          <Dialog.Title>Fill for MCP Server</Dialog.Title>
           <Dialog.Description>
             <p>
-              Select a toolsets you would like to prefill environment variables
-              for. All relevant env variables will be filled in with empty
-              placeholders.
+              Select an MCP server you would like to prefill environment
+              variables for. All relevant env variables will be filled in with
+              empty placeholders.
             </p>
             <br />
             <p>
@@ -132,13 +132,13 @@ function ToolsetDialog({ open, onOpenChange, onSubmit }: ToolsetDialogProps) {
         </Dialog.Header>
         <div className="grid gap-4 py-4">
           <div className="grid gap-2">
-            <Type>Toolset</Type>
+            <Type>MCP Server</Type>
             <select
               value={selectedToolset}
               onChange={(e) => setSelectedToolset(e.target.value)}
               className="border-input placeholder:text-muted-foreground focus-visible:ring-ring flex h-9 w-full rounded-md border bg-transparent px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium focus-visible:ring-1 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
             >
-              <option value="">Select a toolset</option>
+              <option value="">Select an MCP server</option>
               {options.map((option) => (
                 <option key={option.value} value={option.value}>
                   {option.label}
@@ -482,7 +482,7 @@ function EnvironmentPageInner() {
           <MoreActions
             actions={[
               {
-                label: "Fill for Toolset",
+                label: "Fill for MCP Server",
                 onClick: () => setToolsetDialogOpen(true),
                 icon: "copy-plus",
                 disabled: !canWrite,

@@ -2,7 +2,6 @@ package mv
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,6 +12,7 @@ import (
 
 	"github.com/ettle/strcase"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -81,7 +81,7 @@ func DescribeToolsetEntry(
 		ProjectID: pid,
 	})
 	switch {
-	case errors.Is(err, sql.ErrNoRows):
+	case errors.Is(err, pgx.ErrNoRows):
 		return nil, oops.E(oops.CodeNotFound, err, "toolset not found").Log(ctx, logger)
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to load toolset").Log(ctx, logger)
@@ -160,9 +160,10 @@ func DescribeToolsetEntry(
 			}
 
 			envQueries = append(envQueries, toolEnvLookupParams{
-				deploymentID: def.DeploymentID,
-				security:     def.Security,
-				serverEnvVar: def.ServerEnvVar,
+				deploymentID:        def.DeploymentID,
+				openapiv3DocumentID: def.Openapiv3DocumentID,
+				security:            def.Security,
+				serverEnvVar:        def.ServerEnvVar,
 			})
 
 			tools = append(tools, tool)
@@ -357,7 +358,7 @@ func DescribeToolset(
 		ProjectID: pid,
 	})
 	switch {
-	case errors.Is(err, sql.ErrNoRows):
+	case errors.Is(err, pgx.ErrNoRows):
 		return nil, oops.E(oops.CodeNotFound, err, "toolset not found").Log(ctx, logger)
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to load toolset").Log(ctx, logger)
@@ -366,7 +367,7 @@ func DescribeToolset(
 	// TODO: It would be better if every query below accepted a deployment ID as a parameter to guarantee cache consistency.
 	activeDeploymentID, err := deploymentRepo.GetActiveDeploymentID(ctx, pid)
 	switch {
-	case errors.Is(err, sql.ErrNoRows):
+	case errors.Is(err, pgx.ErrNoRows):
 		logger.WarnContext(ctx, "no active deployment id", attr.SlogError(err))
 	case err != nil:
 		logger.ErrorContext(ctx, "failed to get active deployment id", attr.SlogError(err))
@@ -449,7 +450,7 @@ func DescribeToolset(
 			ProjectID: pid,
 			ID:        toolset.ExternalOauthServerID.UUID,
 		})
-		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to get external oauth server metadata").Log(ctx, logger)
 		}
 		if len(externalOauthMetadata.Metadata) > 0 {
@@ -474,7 +475,7 @@ func DescribeToolset(
 			ProjectID: pid,
 			ID:        toolset.OauthProxyServerID.UUID,
 		})
-		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to get oauth proxy server").Log(ctx, logger)
 		}
 		if err == nil {
@@ -945,9 +946,10 @@ func readToolsetTools(
 			}
 
 			envQueries = append(envQueries, toolEnvLookupParams{
-				deploymentID: def.HttpToolDefinition.DeploymentID,
-				security:     def.HttpToolDefinition.Security,
-				serverEnvVar: def.HttpToolDefinition.ServerEnvVar,
+				deploymentID:        def.HttpToolDefinition.DeploymentID,
+				openapiv3DocumentID: def.HttpToolDefinition.Openapiv3DocumentID,
+				security:            def.HttpToolDefinition.Security,
+				serverEnvVar:        def.HttpToolDefinition.ServerEnvVar,
 			})
 
 			tools = append(tools, &types.Tool{
@@ -1204,7 +1206,7 @@ func getToolsetOrigin(
 		ToolsetID:      toolsetID,
 	})
 	switch {
-	case errors.Is(err, sql.ErrNoRows):
+	case errors.Is(err, pgx.ErrNoRows):
 		return nil, nil
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to load toolset origin").Log(ctx, logger)
@@ -1318,6 +1320,9 @@ type toolEnvLookupParams struct {
 	// The deployment ID of the tool.
 	deploymentID uuid.UUID
 
+	// The OpenAPI document ID of the tool, if the tool came from an OpenAPI source.
+	openapiv3DocumentID uuid.NullUUID
+
 	// The security requirements for the tool.
 	security []byte
 
@@ -1351,13 +1356,22 @@ func environmentVariablesForTools(ctx context.Context, tx DBTX, toolsetID uuid.U
 	}
 
 	uniqueDeploymentIDs := make(map[uuid.UUID]bool)
+	uniqueOpenAPIv3DocumentIDs := make(map[uuid.UUID]bool)
 	for _, tool := range tools {
 		uniqueDeploymentIDs[tool.deploymentID] = true
+		if tool.openapiv3DocumentID.Valid {
+			uniqueOpenAPIv3DocumentIDs[tool.openapiv3DocumentID.UUID] = true
+		}
+	}
+	openapiv3DocumentIDs := slices.Collect(maps.Keys(uniqueOpenAPIv3DocumentIDs))
+	if openapiv3DocumentIDs == nil {
+		openapiv3DocumentIDs = []uuid.UUID{}
 	}
 
 	securityEntries, err := toolsetRepo.GetHTTPSecurityDefinitions(ctx, tsr.GetHTTPSecurityDefinitionsParams{
-		SecurityKeys:  slices.Collect(maps.Keys(securityKeysMap)),
-		DeploymentIds: slices.Collect(maps.Keys(uniqueDeploymentIDs)), // all selected tools share the same deployment
+		SecurityKeys:         slices.Collect(maps.Keys(securityKeysMap)),
+		DeploymentIds:        slices.Collect(maps.Keys(uniqueDeploymentIDs)), // all selected tools share the same deployment
+		Openapiv3DocumentIds: openapiv3DocumentIDs,
 	})
 	if err != nil {
 		return nil, nil, fmt.Errorf("read toolset security definitions: %w", err)

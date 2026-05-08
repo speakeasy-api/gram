@@ -3,12 +3,14 @@ package mcp
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -17,8 +19,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
@@ -43,6 +45,7 @@ type toolListEntry struct {
 func handleToolsList(
 	ctx context.Context,
 	logger *slog.Logger,
+	authzEngine *authz.Engine,
 	guardianPolicy *guardian.Policy,
 	db *pgxpool.Pool,
 	env toolconfig.EnvironmentLoader,
@@ -52,7 +55,7 @@ func handleToolsList(
 	toolsetCache *cache.TypedCacheObject[mv.ToolsetBaseContents],
 	vectorToolStore *rag.ToolsetVectorStore,
 	temporalEnv *temporal.Environment,
-	features *productfeatures.Client,
+	shadowMCPClient *shadowmcp.Client,
 ) (json.RawMessage, error) {
 	projectID := mv.ProjectID(payload.projectID)
 
@@ -95,7 +98,32 @@ func handleToolsList(
 		}
 	}
 
-	if blockShadowMCPEnabled(ctx, logger, features, toolset.OrganizationID) {
+	// Filter tools by RBAC grants. Private authenticated MCPs enforce
+	// per-tool mcp:connect checks — the same dimensions used by tools/call.
+	// Public MCPs skip this (open to everyone, matching the connection guard).
+	if payload.authenticated && authzEngine != nil && (toolset.McpIsPublic == nil || !*toolset.McpIsPublic) {
+		allowed := make([]*toolListEntry, 0, len(tools))
+		for _, t := range tools {
+			disposition := dispositionFromAnnotations(t.Annotations)
+			if err := authzEngine.Require(ctx, authz.MCPToolCallCheck(toolset.ID, authz.MCPToolCallDimensions{
+				Tool:        t.Name,
+				Disposition: disposition,
+			})); err != nil {
+				var oopsErr *oops.ShareableError
+				if errors.As(err, &oopsErr) && oopsErr.Code == oops.CodeForbidden {
+					continue
+				}
+				return nil, oops.E(oops.CodeUnexpected, err, "check tool-level authz for tools/list").Log(ctx, logger)
+			}
+			allowed = append(allowed, t)
+		}
+		tools = allowed
+	}
+
+	toolsetProjectID, err := uuid.Parse(toolset.ProjectID)
+	if err != nil {
+		logger.WarnContext(ctx, "invalid toolset project id; skipping shadow_mcp schema injection", attr.SlogError(err))
+	} else if shadowMCPClient.IsEnabledForProject(ctx, toolsetProjectID) {
 		for _, t := range tools {
 			injected, err := injectToolsetIDConstant(t.InputSchema, toolset.ID)
 			if err != nil {
@@ -227,5 +255,24 @@ func convertConvAnnotations(c *conv.ToolAnnotations) *externalmcp.ToolAnnotation
 		DestructiveHint: c.DestructiveHint,
 		IdempotentHint:  c.IdempotentHint,
 		OpenWorldHint:   c.OpenWorldHint,
+	}
+}
+
+// dispositionFromAnnotations derives a disposition string from tool annotations.
+func dispositionFromAnnotations(a *externalmcp.ToolAnnotations) string {
+	if a == nil {
+		return ""
+	}
+	switch {
+	case a.ReadOnlyHint != nil && *a.ReadOnlyHint:
+		return "read_only"
+	case a.DestructiveHint != nil && *a.DestructiveHint:
+		return "destructive"
+	case a.IdempotentHint != nil && *a.IdempotentHint:
+		return "idempotent"
+	case a.OpenWorldHint != nil && *a.OpenWorldHint:
+		return "open_world"
+	default:
+		return ""
 	}
 }

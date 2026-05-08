@@ -29,7 +29,7 @@ type LogDeploymentCreateEvent struct {
 	DeploymentURN urn.Deployment
 }
 
-func LogDeploymentCreate(ctx context.Context, dbtx repo.DBTX, event LogDeploymentCreateEvent) error {
+func (l *Logger) LogDeploymentCreate(ctx context.Context, dbtx repo.DBTX, event LogDeploymentCreateEvent) error {
 	action := ActionDeploymentsCreate
 
 	entry := repo.InsertAuditLogParams{
@@ -74,7 +74,7 @@ type LogDeploymentEvolveEvent struct {
 	Current  *types.Deployment
 }
 
-func LogDeploymentEvolve(ctx context.Context, dbtx repo.DBTX, event LogDeploymentEvolveEvent) error {
+func (l *Logger) LogDeploymentEvolve(ctx context.Context, dbtx repo.DBTX, event LogDeploymentEvolveEvent) error {
 	action := ActionDeploymentsEvolve
 
 	var beforePayload any
@@ -132,7 +132,7 @@ type LogDeploymentRedeployEvent struct {
 	SourceDeploymentURN urn.Deployment
 }
 
-func LogDeploymentRedeploy(ctx context.Context, dbtx repo.DBTX, event LogDeploymentRedeployEvent) error {
+func (l *Logger) LogDeploymentRedeploy(ctx context.Context, dbtx repo.DBTX, event LogDeploymentRedeployEvent) error {
 	action := ActionDeploymentsRedeploy
 
 	metadata, err := marshalAuditPayload(map[string]any{

@@ -2,13 +2,13 @@ package remotemcp
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"log/slog"
 	"net/url"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -25,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -40,12 +41,23 @@ type Service struct {
 	auth    *auth.Auth
 	authz   *authz.Engine
 	headers *Headers
+	policy  *guardian.Policy
+	audit   *audit.Logger
 }
 
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, enc *encryption.Client, authzEngine *authz.Engine) *Service {
+func NewService(
+	logger *slog.Logger,
+	tracerProvider trace.TracerProvider,
+	db *pgxpool.Pool,
+	sessions *sessions.Manager,
+	enc *encryption.Client,
+	authzEngine *authz.Engine,
+	policy *guardian.Policy,
+	auditLogger *audit.Logger,
+) *Service {
 	logger = logger.With(attr.SlogComponent("remotemcp"))
 
 	return &Service{
@@ -55,6 +67,8 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		auth:    auth.New(logger, db, sessions, authzEngine),
 		authz:   authzEngine,
 		headers: NewHeaders(logger, db, enc),
+		policy:  policy,
+		audit:   auditLogger,
 	}
 }
 
@@ -80,7 +94,7 @@ func (s *Service) CreateServer(ctx context.Context, payload *gen.CreateServerPay
 
 	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
 
-	if err := validateURL(payload.URL); err != nil {
+	if err := validateURL(ctx, s.policy, payload.URL); err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid url").Log(ctx, logger)
 	}
 
@@ -127,7 +141,7 @@ func (s *Service) CreateServer(ctx context.Context, payload *gen.CreateServerPay
 		headerRows = append(headerRows, row)
 	}
 
-	if err := audit.LogRemoteMcpServerCreate(ctx, dbtx, audit.LogRemoteMcpServerCreateEvent{
+	if err := s.audit.LogRemoteMcpServerCreate(ctx, dbtx, audit.LogRemoteMcpServerCreateEvent{
 		OrganizationID:     authCtx.ActiveOrganizationID,
 		ProjectID:          *authCtx.ProjectID,
 		Actor:              urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
@@ -217,7 +231,7 @@ func (s *Service) GetServer(ctx context.Context, payload *gen.GetServerPayload) 
 		ProjectID: *authCtx.ProjectID,
 	})
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.E(oops.CodeNotFound, err, "remote mcp server not found").Log(ctx, s.logger)
 		}
 
@@ -250,7 +264,7 @@ func (s *Service) UpdateServer(ctx context.Context, payload *gen.UpdateServerPay
 	}
 
 	if payload.URL != nil {
-		if err := validateURL(*payload.URL); err != nil {
+		if err := validateURL(ctx, s.policy, *payload.URL); err != nil {
 			return nil, oops.E(oops.CodeBadRequest, err, "invalid url").Log(ctx, logger)
 		}
 	}
@@ -277,7 +291,7 @@ func (s *Service) UpdateServer(ctx context.Context, payload *gen.UpdateServerPay
 		ProjectID: *authCtx.ProjectID,
 	})
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.E(oops.CodeNotFound, err, "remote mcp server not found").Log(ctx, logger)
 		}
 
@@ -382,7 +396,7 @@ func (s *Service) UpdateServer(ctx context.Context, payload *gen.UpdateServerPay
 
 	afterView := mv.BuildRemoteMcpServerView(updatedServer, afterHeaders)
 
-	if err := audit.LogRemoteMcpServerUpdate(ctx, dbtx, audit.LogRemoteMcpServerUpdateEvent{
+	if err := s.audit.LogRemoteMcpServerUpdate(ctx, dbtx, audit.LogRemoteMcpServerUpdateEvent{
 		OrganizationID:     authCtx.ActiveOrganizationID,
 		ProjectID:          *authCtx.ProjectID,
 		Actor:              urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
@@ -437,14 +451,14 @@ func (s *Service) DeleteServer(ctx context.Context, payload *gen.DeleteServerPay
 		ProjectID: *authCtx.ProjectID,
 	})
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return nil
 		}
 
 		return oops.E(oops.CodeUnexpected, err, "delete remote mcp server").Log(ctx, logger)
 	}
 
-	if err := audit.LogRemoteMcpServerDelete(ctx, dbtx, audit.LogRemoteMcpServerDeleteEvent{
+	if err := s.audit.LogRemoteMcpServerDelete(ctx, dbtx, audit.LogRemoteMcpServerDeleteEvent{
 		OrganizationID:     authCtx.ActiveOrganizationID,
 		ProjectID:          *authCtx.ProjectID,
 		Actor:              urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
@@ -467,8 +481,9 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 	return s.auth.Authorize(ctx, key, schema)
 }
 
-// validateURL checks that the given URL string is a valid absolute HTTP(S) URL.
-func validateURL(rawURL string) error {
+// validateURL checks that the given URL string is a valid absolute HTTP(S) URL
+// whose host is permitted by the supplied [guardian.Policy].
+func validateURL(ctx context.Context, policy *guardian.Policy, rawURL string) error {
 	u, err := url.Parse(rawURL)
 	if err != nil {
 		return fmt.Errorf("parse url: %w", err)
@@ -480,6 +495,10 @@ func validateURL(rawURL string) error {
 
 	if u.Host == "" {
 		return fmt.Errorf("url must include a host")
+	}
+
+	if err := policy.ValidateHost(ctx, u.Hostname()); err != nil {
+		return fmt.Errorf("validate host: %w", err)
 	}
 
 	return nil

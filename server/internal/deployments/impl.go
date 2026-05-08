@@ -2,13 +2,13 @@ package deployments
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"log/slog"
 	"net/url"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
@@ -62,6 +62,7 @@ type Service struct {
 	temporalEnv    *temporal.Environment
 	posthog        *posthog.Posthog
 	siteURL        *url.URL
+	audit          *audit.Logger
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -78,6 +79,7 @@ func NewService(
 	siteURL *url.URL,
 	mcpRegistryClient *externalmcp.RegistryClient,
 	authzEngine *authz.Engine,
+	auditLogger *audit.Logger,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("deployments"))
 	tracer := tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/deployments")
@@ -97,6 +99,7 @@ func NewService(
 		posthog:        posthog,
 		siteURL:        siteURL,
 		registryClient: mcpRegistryClient,
+		audit:          auditLogger,
 		Service:        annotations.Service[gen.Service, gen.Auther]{},
 	}
 }
@@ -253,7 +256,7 @@ func (s *Service) GetLatestDeployment(ctx context.Context, _ *gen.GetLatestDeplo
 
 	id, err := tx.GetLatestDeploymentID(ctx, *authCtx.ProjectID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return &gen.GetLatestDeploymentResult{
 				Deployment: nil,
 			}, nil
@@ -299,7 +302,7 @@ func (s *Service) GetActiveDeployment(ctx context.Context, _ *gen.GetActiveDeplo
 
 	id, err := tx.GetActiveDeploymentID(ctx, *authCtx.ProjectID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return &gen.GetActiveDeploymentResult{
 				Deployment: nil,
 			}, nil
@@ -519,7 +522,7 @@ func (s *Service) CreateDeployment(ctx context.Context, form *gen.CreateDeployme
 		return nil, err
 	}
 
-	if err := audit.LogDeploymentCreate(ctx, dbtx, audit.LogDeploymentCreateEvent{
+	if err := s.audit.LogDeploymentCreate(ctx, dbtx, audit.LogDeploymentCreateEvent{
 		OrganizationID:   organizationID,
 		ProjectID:        projectID,
 		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
@@ -708,7 +711,7 @@ func (s *Service) Evolve(ctx context.Context, form *gen.EvolvePayload) (*gen.Evo
 	latestDeploymentID, err := tx.GetLatestDeploymentID(ctx, projectID)
 	switch {
 	// 1️⃣ Project has no deployments, we need to create an initial one instead of cloning
-	case errors.Is(err, sql.ErrNoRows), latestDeploymentID == uuid.Nil:
+	case errors.Is(err, pgx.ErrNoRows), latestDeploymentID == uuid.Nil:
 		newID, err := createDeployment(
 			ctx, s.tracer, logger, tx,
 			IdempotencyKey(nil),
@@ -782,7 +785,7 @@ func (s *Service) Evolve(ctx context.Context, form *gen.EvolvePayload) (*gen.Evo
 		return nil, err
 	}
 
-	if err := audit.LogDeploymentEvolve(ctx, dbtx, audit.LogDeploymentEvolveEvent{
+	if err := s.audit.LogDeploymentEvolve(ctx, dbtx, audit.LogDeploymentEvolveEvent{
 		OrganizationID: organizationID,
 		ProjectID:      projectID,
 
@@ -893,7 +896,7 @@ func (s *Service) Redeploy(ctx context.Context, payload *gen.RedeployPayload) (*
 		return nil, err
 	}
 
-	if err := audit.LogDeploymentRedeploy(ctx, dbtx, audit.LogDeploymentRedeployEvent{
+	if err := s.audit.LogDeploymentRedeploy(ctx, dbtx, audit.LogDeploymentRedeployEvent{
 		OrganizationID: organizationID,
 		ProjectID:      projectID,
 
@@ -950,7 +953,7 @@ func (s *Service) resolvePackages(ctx context.Context, tx *packagesRepo.Queries,
 
 		if version == "" {
 			row, err := tx.PeekLatestPackageVersionByName(ctx, name)
-			if errors.Is(err, sql.ErrNoRows) {
+			if errors.Is(err, pgx.ErrNoRows) {
 				return nil, oops.E(oops.CodeBadRequest, err, "no versions found for package: %s", name).Log(ctx, s.logger, attr.SlogPackageName(name))
 			}
 			if err != nil {
@@ -978,7 +981,7 @@ func (s *Service) resolvePackages(ctx context.Context, tx *packagesRepo.Queries,
 				Prerelease: conv.ToPGTextEmpty(semver.Prerelease),
 				Build:      conv.ToPGTextEmpty(semver.Build),
 			})
-			if errors.Is(err, sql.ErrNoRows) {
+			if errors.Is(err, pgx.ErrNoRows) {
 				return nil, oops.E(oops.CodeBadRequest, err, "package version not found: %s@%s", name, version).Log(ctx, s.logger, attr.SlogPackageName(name), attr.SlogPackageVersion(version))
 			}
 			if err != nil {

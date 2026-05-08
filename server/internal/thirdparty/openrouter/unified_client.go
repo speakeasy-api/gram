@@ -87,11 +87,6 @@ type initializeRequestResult struct {
 
 // initializeRequest creates the OpenAI-compatible request body with defaults applied.
 func (c *ChatClient) initializeRequest(ctx context.Context, req CompletionRequest) (*initializeRequestResult, error) {
-	// Normalize before anything else so hashing, persistence, and the forwarded
-	// request all see the same canonical shape. Combined assistant messages
-	// (content + tool_calls on the same object) become two sequential messages.
-	req.Messages = slices.Collect(NormalizeAssistantMessages(req.Messages))
-
 	var captureSession CaptureSession
 	if c.messageCaptureStrategy != nil {
 		sess, err := c.messageCaptureStrategy.StartOrResumeChat(ctx, req)
@@ -135,10 +130,15 @@ func (c *ChatClient) initializeRequest(ctx context.Context, req CompletionReques
 		return nil, fmt.Errorf("model %s is not allowed and no fallback is available for its provider", model)
 	}
 
+	outboundMessages := req.Messages
+	if req.NormalizeOutboundMessages {
+		outboundMessages = slices.Collect(NormalizeAssistantMessages(req.Messages))
+	}
+
 	// Build request body
 	reqBody := OpenAIChatRequest{
 		Model:          model,
-		Messages:       req.Messages,
+		Messages:       outboundMessages,
 		Stream:         req.Stream,
 		Tools:          req.Tools,
 		Temperature:    temp,
@@ -432,21 +432,22 @@ func (c *ChatClient) GetObjectCompletion(ctx context.Context, req ObjectCompleti
 	}))
 
 	completionReq := CompletionRequest{
-		OrgID:          req.OrgID,
-		ProjectID:      req.ProjectID,
-		Messages:       messages,
-		Tools:          nil,
-		Temperature:    nil,
-		Model:          req.Model,
-		Stream:         false,
-		UsageSource:    req.UsageSource,
-		UserID:         req.UserID,
-		ExternalUserID: req.ExternalUserID,
-		UserEmail:      "",
-		HTTPMetadata:   req.HTTPMetadata,
-		JSONSchema:     req.JSONSchema,
-		ChatID:         uuid.Nil,
-		APIKeyID:       "",
+		OrgID:                     req.OrgID,
+		ProjectID:                 req.ProjectID,
+		Messages:                  messages,
+		Tools:                     nil,
+		Temperature:               nil,
+		Model:                     req.Model,
+		Stream:                    false,
+		UsageSource:               req.UsageSource,
+		UserID:                    req.UserID,
+		ExternalUserID:            req.ExternalUserID,
+		UserEmail:                 "",
+		HTTPMetadata:              req.HTTPMetadata,
+		JSONSchema:                req.JSONSchema,
+		ChatID:                    uuid.Nil,
+		APIKeyID:                  "",
+		NormalizeOutboundMessages: false,
 	}
 
 	return c.GetCompletion(ctx, completionReq)

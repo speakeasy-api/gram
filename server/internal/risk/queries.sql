@@ -7,6 +7,9 @@ INSERT INTO risk_policies (
   , sources
   , presidio_entities
   , enabled
+  , action
+  , auto_name
+  , user_message
   , version
 )
 VALUES (
@@ -17,6 +20,9 @@ VALUES (
   , @sources
   , @presidio_entities
   , @enabled
+  , @action
+  , @auto_name
+  , @user_message
   , 1
 )
 RETURNING *;
@@ -48,10 +54,14 @@ SET name = @name
   , sources = @sources
   , presidio_entities = @presidio_entities
   , enabled = @enabled
+  , action = @action
+  , auto_name = @auto_name
+  , user_message = @user_message
   , version = CASE
       WHEN sources IS DISTINCT FROM @sources
         OR presidio_entities IS DISTINCT FROM @presidio_entities
         OR enabled IS DISTINCT FROM @enabled
+        OR action IS DISTINCT FROM @action
       THEN version + 1
       ELSE version
     END
@@ -113,13 +123,15 @@ WHERE cm.project_id = @project_id
     SELECT 1
     FROM risk_results rr
     WHERE rr.chat_message_id = cm.id
+      AND rr.project_id = @project_id
       AND rr.risk_policy_id = @risk_policy_id
       AND rr.risk_policy_version = @risk_policy_version
+    LIMIT 1
   )
 LIMIT @batch_limit;
 
 -- name: GetMessageContentBatch :many
-SELECT id, content
+SELECT id, content, tool_calls
 FROM chat_messages
 WHERE id = ANY(@ids::uuid[])
   AND project_id = @project_id;
@@ -221,3 +233,38 @@ WHERE rr.project_id = @project_id
 GROUP BY cm.chat_id, c.title, c.external_user_id
 ORDER BY cm.chat_id DESC
 LIMIT @page_limit;
+
+-- name: ListEnabledEnforcingPoliciesByProject :many
+SELECT *
+FROM risk_policies
+WHERE project_id = @project_id
+  AND enabled IS TRUE
+  AND action = 'block'
+  AND deleted IS FALSE;
+
+-- name: ListEnabledShadowMCPPoliciesByProject :many
+SELECT *
+FROM risk_policies
+WHERE project_id = @project_id
+  AND enabled IS TRUE
+  AND deleted IS FALSE
+  AND 'shadow_mcp' = ANY(sources)
+ORDER BY id;
+
+-- name: ListEnabledToolIdentityPoliciesByProject :many
+SELECT *
+FROM risk_policies
+WHERE project_id = @project_id
+  AND enabled IS TRUE
+  AND deleted IS FALSE
+  AND (
+    'shadow_mcp' = ANY(sources)
+    OR 'destructive_tool' = ANY(sources)
+  )
+ORDER BY id;
+
+-- name: HardDeleteRiskPoliciesByProject :exec
+-- Test-only helper: hard-deletes every risk policy for a project so tests can
+-- verify cache behavior without the soft-delete (DeleteRiskPolicy) leaving
+-- ghost rows that production lookups already filter out.
+DELETE FROM risk_policies WHERE project_id = @project_id;

@@ -92,9 +92,9 @@ export function ToolBuilderNew() {
   const newTemplate: ToolBuilderState = {
     name: "new_composite_tool",
     description:
-      "Do a series of steps using the tools in a toolset to accomplish a task",
+      "Do a series of steps using the tools in an MCP server to accomplish a task",
     purpose:
-      "Do a series of steps using the tools in a toolset to accomplish a task",
+      "Do a series of steps using the tools in an MCP server to accomplish a task",
     inputs: [],
     steps: [],
   };
@@ -503,7 +503,7 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
             <Block label="Tool name" className="w-2/3">
               <BlockInner>{toolName}</BlockInner>
             </Block>
-            <Block label="Toolset" className="w-1/3">
+            <Block label="MCP Server" className="w-1/3">
               <BlockInner>
                 <ToolsetDropdown
                   selectedToolset={toolsetFilter}
@@ -512,7 +512,7 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
                   defaultSelection="most-recent"
                   disabledMessage={
                     steps.length > 0
-                      ? "Can't change toolset after steps are added"
+                      ? "Can't change MCP server after steps are added"
                       : undefined
                   }
                 />
@@ -837,7 +837,7 @@ const ToolSelectPopover = ({
           <CommandList>
             <CommandEmpty>
               {groupedTools.length === 0
-                ? "Toolset is empty."
+                ? "MCP server is empty."
                 : "No items found."}
             </CommandEmpty>
             <CommandGroup>

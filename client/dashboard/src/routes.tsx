@@ -1,9 +1,16 @@
-import { McpIcon } from "@/components/ui/mcp-icon";
 import { Icon, IconName, IconProps } from "@speakeasy-api/moonshine";
 import React, { useMemo } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
+import {
+  RedirectToInsightsTools,
+  RedirectToLogAgents,
+  RedirectToLogTools,
+} from "./components/observe/ObserveRedirects";
 import { useSlugs } from "./contexts/Sdk";
 import { cn } from "./lib/utils";
+import AssistantPage from "./pages/assistants/Assistant";
+import AssistantsIndex, { AssistantsRoot } from "./pages/assistants/Assistants";
+import NewAssistantPage from "./pages/assistants/NewAssistant";
 import Billing from "./pages/billing/Billing";
 import Catalog, { CatalogRoot } from "./pages/catalog/Catalog";
 import CatalogDetail, {
@@ -19,15 +26,19 @@ import Environments, {
   EnvironmentsRoot,
 } from "./pages/environments/Environments";
 import Home from "./pages/home/Home";
-import Hooks from "./pages/hooks/Hooks";
 import Integrations from "./pages/integrations/Integrations";
 import Login from "./pages/login/Login";
 import Register from "./pages/login/Register";
-import Logs from "./pages/logs/Logs";
+import { LogsRoot, LogsMCPPage, LogsToolsPage } from "./pages/logs/Logs";
 import { BuiltInMCPDetailPage } from "./pages/mcp/BuiltInMCPDetailPage";
 import { MCPDetailPage, MCPDetailsRoot } from "./pages/mcp/MCPDetails";
 import { MCPPage, MCPRoot } from "./pages/mcp/MCP";
-import ObservabilityOverview from "./pages/observability/ObservabilityOverview";
+import {
+  InsightsAgentsPage,
+  InsightsHooksPage,
+  InsightsMCPPage,
+  InsightsRoot,
+} from "./pages/insights/Insights";
 import FunctionsOnboarding from "./pages/onboarding/FunctionsOnboarding";
 import UploadOpenAPI from "./pages/onboarding/UploadOpenAPI";
 import { OnboardingWizard } from "./pages/onboarding/Wizard";
@@ -260,15 +271,34 @@ const ROUTE_STRUCTURE = {
       },
     },
   },
-  slackApps: {
+  assistants: {
     title: "Assistants",
+    url: "assistants",
+    icon: "bot",
+    component: AssistantsRoot,
+    indexComponent: AssistantsIndex,
+    subPages: {
+      newAssistant: {
+        title: "New Assistant",
+        url: "new",
+        component: NewAssistantPage,
+      },
+      detail: {
+        title: "Assistant",
+        url: ":assistantId",
+        component: AssistantPage,
+      },
+    },
+  },
+  slackApps: {
+    title: "Slack Apps",
     url: "slack",
     icon: "bot",
     component: SlackAppsRoot,
     indexComponent: SlackAppsIndex,
     subPages: {
       detail: {
-        title: "Assistant",
+        title: "Slack App",
         url: ":slackAppId",
         component: SlackAppDetailPage,
       },
@@ -314,18 +344,6 @@ const ROUTE_STRUCTURE = {
       },
     },
   },
-  chatSessions: {
-    title: "Agent Sessions",
-    url: "agent-sessions",
-    icon: "messages-square",
-    component: ChatSessions,
-  },
-  logs: {
-    title: "MCP Logs",
-    url: "logs",
-    customIcon: McpIcon,
-    component: Logs,
-  },
   triggers: {
     title: "Triggers",
     url: "triggers",
@@ -333,17 +351,65 @@ const ROUTE_STRUCTURE = {
     component: TriggersRoot,
     indexComponent: TriggersIndex,
   },
+  insights: {
+    title: "Insights",
+    url: "insights",
+    icon: "layout-dashboard",
+    component: InsightsRoot,
+    indexComponent: RedirectToInsightsTools,
+    subPages: {
+      tools: {
+        title: "Tools",
+        url: "tools",
+        component: InsightsHooksPage,
+      },
+      mcp: {
+        title: "MCP Servers",
+        url: "mcp",
+        component: InsightsMCPPage,
+      },
+      agents: {
+        title: "Agents",
+        url: "agents",
+        component: InsightsAgentsPage,
+      },
+    },
+  },
   hooks: {
+    // redirect to insights/tools. TODO: remove this in a month
     title: "Hooks",
     url: "hooks",
-    icon: "webhook",
-    component: Hooks,
+    component: RedirectToInsightsTools,
   },
-  observability: {
-    title: "Insights",
-    url: "observability",
-    icon: "layout-dashboard",
-    component: ObservabilityOverview,
+  logs: {
+    title: "Logs",
+    url: "logs",
+    icon: "logs",
+    component: LogsRoot,
+    indexComponent: RedirectToLogTools,
+    subPages: {
+      tools: {
+        title: "Tools",
+        url: "tools",
+        component: LogsToolsPage,
+      },
+      mcp: {
+        title: "MCP Servers",
+        url: "mcp",
+        component: LogsMCPPage,
+      },
+      agents: {
+        title: "Agent Sessions",
+        url: "agents",
+        component: ChatSessions,
+      },
+    },
+  },
+  chatSessions: {
+    // redirect to logs/agents. TODO: remove this in a month
+    title: "Agent Sessions",
+    url: "agent-sessions",
+    component: RedirectToLogAgents,
   },
   riskOverview: {
     title: "Risk Overview",
@@ -643,6 +709,11 @@ const ORG_ROUTE_STRUCTURE = {
       members: {
         title: "Roles & Permissions",
         url: "members",
+        component: Access,
+      },
+      challenges: {
+        title: "Roles & Permissions",
+        url: "challenges",
         component: Access,
       },
     },

@@ -3,7 +3,6 @@ package templates
 import (
 	"bytes"
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,6 +12,7 @@ import (
 	"github.com/cbroglie/mustache"
 	"github.com/google/uuid"
 	"github.com/jackc/pgerrcode"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
@@ -52,12 +52,21 @@ type Service struct {
 	variations *variations.Service
 	toolsets   ToolsetsService
 	authz      *authz.Engine
+	audit      *audit.Logger
 }
 
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, toolsets ToolsetsService, authzEngine *authz.Engine) *Service {
+func NewService(
+	logger *slog.Logger,
+	tracerProvider trace.TracerProvider,
+	db *pgxpool.Pool,
+	sessions *sessions.Manager,
+	toolsets ToolsetsService,
+	authzEngine *authz.Engine,
+	auditLogger *audit.Logger,
+) *Service {
 	logger = logger.With(attr.SlogComponent("templates"))
 
 	return &Service{
@@ -66,9 +75,10 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		db:         db,
 		auth:       auth.New(logger, db, sessions, authzEngine),
 		repo:       repo.New(db),
-		variations: variations.NewService(logger, tracerProvider, db, sessions, authzEngine),
+		variations: variations.NewService(logger, tracerProvider, db, sessions, authzEngine, auditLogger),
 		toolsets:   toolsets,
 		authz:      authzEngine,
+		audit:      auditLogger,
 	}
 }
 
@@ -149,7 +159,7 @@ func (s *Service) CreateTemplate(ctx context.Context, payload *gen.CreateTemplat
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to create template").Log(ctx, logger)
 	}
 
-	if err := audit.LogTemplateCreate(ctx, dbtx, audit.LogTemplateCreateEvent{
+	if err := s.audit.LogTemplateCreate(ctx, dbtx, audit.LogTemplateCreateEvent{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: projectID, Valid: true},
 
@@ -208,7 +218,7 @@ func (s *Service) UpdateTemplate(ctx context.Context, payload *gen.UpdateTemplat
 		ID:        id,
 	})
 	switch {
-	case errors.Is(err, sql.ErrNoRows):
+	case errors.Is(err, pgx.ErrNoRows):
 		return nil, oops.E(oops.CodeNotFound, err, "template not found").Log(ctx, logger)
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to get template").Log(ctx, logger)
@@ -280,14 +290,14 @@ func (s *Service) UpdateTemplate(ctx context.Context, payload *gen.UpdateTemplat
 	case err == nil:
 		updated = true
 		nextid = newid
-	case errors.Is(err, sql.ErrNoRows):
+	case errors.Is(err, pgx.ErrNoRows):
 		// No change, so we can use the existing id
 	default:
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to update template").Log(ctx, logger)
 	}
 
 	if updated {
-		if err := audit.LogTemplateUpdate(ctx, dbtx, audit.LogTemplateUpdateEvent{
+		if err := s.audit.LogTemplateUpdate(ctx, dbtx, audit.LogTemplateUpdateEvent{
 			OrganizationID: authCtx.ActiveOrganizationID,
 			ProjectID:      uuid.NullUUID{UUID: projectID, Valid: true},
 
@@ -371,7 +381,7 @@ func (s *Service) DeleteTemplate(ctx context.Context, payload *gen.DeleteTemplat
 			ID:        id,
 		})
 		switch {
-		case errors.Is(err, sql.ErrNoRows):
+		case errors.Is(err, pgx.ErrNoRows):
 			return nil
 		case err != nil:
 			return oops.E(oops.CodeUnexpected, err, "failed to delete template by id").Log(ctx, logger)
@@ -388,7 +398,7 @@ func (s *Service) DeleteTemplate(ctx context.Context, payload *gen.DeleteTemplat
 			Name:      name,
 		})
 		switch {
-		case errors.Is(err, sql.ErrNoRows):
+		case errors.Is(err, pgx.ErrNoRows):
 			return nil
 		case err != nil:
 			return oops.E(oops.CodeUnexpected, err, "failed to delete template by name").Log(ctx, logger)
@@ -402,7 +412,7 @@ func (s *Service) DeleteTemplate(ctx context.Context, payload *gen.DeleteTemplat
 	}
 
 	if auditEntry.id != uuid.Nil {
-		if err := audit.LogTemplateDelete(ctx, dbtx, audit.LogTemplateDeleteEvent{
+		if err := s.audit.LogTemplateDelete(ctx, dbtx, audit.LogTemplateDeleteEvent{
 			OrganizationID: authCtx.ActiveOrganizationID,
 			ProjectID:      uuid.NullUUID{UUID: projectID, Valid: true},
 
@@ -511,7 +521,7 @@ func (s *Service) RenderTemplateByID(ctx context.Context, payload *gen.RenderTem
 		ID:        id,
 	})
 	switch {
-	case errors.Is(err, sql.ErrNoRows):
+	case errors.Is(err, pgx.ErrNoRows):
 		return nil, oops.E(oops.CodeNotFound, err, "template not found").Log(ctx, logger)
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to get template").Log(ctx, logger)

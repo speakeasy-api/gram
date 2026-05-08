@@ -32,8 +32,8 @@ export function RemoveSourceDialogContent({
 
   const handleConfirm = async () => {
     setPending(true);
-    // For external MCPs, pass the slug; for others, pass the asset ID
-    const identifier = asset.type === "externalmcp" ? asset.slug : asset.id;
+    const identifier =
+      asset.type === "externalmcp" ? asset.slug : asset.deploymentAssetId;
     try {
       await onConfirmRemoval(identifier, asset.type);
     } finally {
@@ -77,7 +77,7 @@ export function RemoveSourceDialogContent({
         <Dialog.Title>Delete {sourceLabel}</Dialog.Title>
         <Dialog.Description>
           This will permanently delete the {sourceTypeDescription} source and
-          related resources such as tools within toolsets.
+          related resources such as tools within MCP servers.
         </Dialog.Description>
       </Dialog.Header>
       <div className="grid gap-2">

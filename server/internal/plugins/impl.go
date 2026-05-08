@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"os"
 	"regexp"
 	"sort"
 	"strings"
@@ -34,13 +35,14 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/guardian"
 	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
+	"github.com/speakeasy-api/gram/server/internal/marketplace"
 	mcpmetarepo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/plugins/repo"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	ghclient "github.com/speakeasy-api/gram/server/internal/thirdparty/github"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -67,15 +69,17 @@ type GitHubConfig struct {
 	InstallationID int64
 }
 
-// GitHubConfigInput is the raw deployment-time configuration for plugin
-// GitHub publishing. All fields must be set together (the feature is on)
-// or all must be unset (the feature is off). Pass to NewGitHubConfig.
+// GitHubConfigInput is the deployment-time configuration for plugin
+// GitHub publishing. All fields must be set together (the feature is on) or
+// all must be unset (the feature is off). Pass to NewGitHubConfig.
+//
+// Client is constructed by the caller (typically once in cmd/gram, then
+// shared with other consumers like the marketplace proxy that need to mint
+// installation tokens against the same App).
 type GitHubConfigInput struct {
-	AppID          int64
-	PrivateKey     string
+	Client         *ghclient.Client
 	Org            string
 	InstallationID int64
-	HTTPClient     *guardian.HTTPClient
 }
 
 // NewGitHubConfig validates a GitHubConfigInput holistically and returns:
@@ -84,20 +88,15 @@ type GitHubConfigInput struct {
 //   - (nil, error)      when only some fields are set: deployment is misconfigured
 //
 // The all-or-nothing check prevents the silent-disable footgun where setting
-// three of four env vars (e.g. forgetting GRAM_PLUGINS_GITHUB_APP_ID) leaves
-// the deployment running with publishing inexplicably off.
+// two of three inputs (e.g. forgetting GRAM_PLUGINS_GITHUB_ORG) leaves the
+// deployment running with publishing inexplicably off.
 func NewGitHubConfig(in GitHubConfigInput) (*GitHubConfig, error) {
 	set := 0
 	missing := []string{}
-	if in.AppID != 0 {
+	if in.Client != nil {
 		set++
 	} else {
-		missing = append(missing, "plugins-github-app-id")
-	}
-	if in.PrivateKey != "" {
-		set++
-	} else {
-		missing = append(missing, "plugins-github-private-key")
+		missing = append(missing, "plugins-github-client")
 	}
 	if in.Org != "" {
 		set++
@@ -113,18 +112,14 @@ func NewGitHubConfig(in GitHubConfigInput) (*GitHubConfig, error) {
 	switch set {
 	case 0:
 		return nil, nil
-	case 4:
-		client, err := ghclient.NewClient(in.AppID, []byte(in.PrivateKey), in.HTTPClient)
-		if err != nil {
-			return nil, fmt.Errorf("create github client: %w", err)
-		}
+	case 3:
 		return &GitHubConfig{
-			Client:         client,
+			Client:         in.Client,
 			Org:            in.Org,
 			InstallationID: in.InstallationID,
 		}, nil
 	default:
-		return nil, fmt.Errorf("plugin github publishing requires all of plugins-github-app-id, plugins-github-private-key, plugins-github-org, plugins-github-installation-id; missing: %s", strings.Join(missing, ", "))
+		return nil, fmt.Errorf("plugin github publishing requires client, plugins-github-org, plugins-github-installation-id; missing: %s", strings.Join(missing, ", "))
 	}
 }
 
@@ -135,6 +130,7 @@ type Service struct {
 	repo      *repo.Queries
 	auth      *auth.Auth
 	authz     *authz.Engine
+	audit     *audit.Logger
 	github    *GitHubConfig
 	serverURL string
 	keyPrefix string
@@ -149,6 +145,7 @@ func NewService(
 	db *pgxpool.Pool,
 	sessions *sessions.Manager,
 	authzEngine *authz.Engine,
+	auditLogger *audit.Logger,
 	github *GitHubConfig,
 	env string,
 	serverURL string,
@@ -162,6 +159,7 @@ func NewService(
 		repo:      repo.New(db),
 		auth:      auth.New(logger, db, sessions, authzEngine),
 		authz:     authzEngine,
+		audit:     auditLogger,
 		github:    github,
 		serverURL: serverURL,
 		keyPrefix: auth.APIKeyPrefix(env),
@@ -284,7 +282,13 @@ func (s *Service) CreatePlugin(ctx context.Context, payload *gen.CreatePluginPay
 		return nil, oops.E(oops.CodeBadRequest, nil, "plugin name must produce a valid slug")
 	}
 
-	plugin, err := s.repo.CreatePlugin(ctx, repo.CreatePluginParams{
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").Log(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+
+	plugin, err := s.repo.WithTx(tx).CreatePlugin(ctx, repo.CreatePluginParams{
 		OrganizationID: ac.ActiveOrganizationID,
 		ProjectID:      *ac.ProjectID,
 		Name:           payload.Name,
@@ -297,6 +301,23 @@ func (s *Service) CreatePlugin(ctx context.Context, payload *gen.CreatePluginPay
 			return nil, oops.E(oops.CodeConflict, nil, "a plugin with this slug already exists")
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "create plugin").Log(ctx, s.logger)
+	}
+
+	if err := s.audit.LogPluginCreate(ctx, tx, audit.LogPluginCreateEvent{
+		OrganizationID:   ac.ActiveOrganizationID,
+		ProjectID:        *ac.ProjectID,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
+		ActorDisplayName: ac.Email,
+		ActorSlug:        nil,
+		PluginID:         plugin.ID,
+		PluginName:       plugin.Name,
+		PluginSlug:       plugin.Slug,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "audit log plugin create").Log(ctx, s.logger)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").Log(ctx, s.logger)
 	}
 
 	return pluginToGen(plugin, nil, nil), nil
@@ -322,7 +343,27 @@ func (s *Service) UpdatePlugin(ctx context.Context, payload *gen.UpdatePluginPay
 		return nil, oops.E(oops.CodeBadRequest, nil, "invalid slug: must be non-empty and contain only lowercase alphanumeric characters and hyphens")
 	}
 
-	plugin, err := s.repo.UpdatePlugin(ctx, repo.UpdatePluginParams{
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").Log(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+
+	txRepo := s.repo.WithTx(tx)
+
+	before, err := txRepo.GetPlugin(ctx, repo.GetPluginParams{
+		ID:             pluginID,
+		OrganizationID: ac.ActiveOrganizationID,
+		ProjectID:      *ac.ProjectID,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.C(oops.CodeNotFound)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "load plugin").Log(ctx, s.logger)
+	}
+
+	plugin, err := txRepo.UpdatePlugin(ctx, repo.UpdatePluginParams{
 		ID:             pluginID,
 		OrganizationID: ac.ActiveOrganizationID,
 		ProjectID:      *ac.ProjectID,
@@ -339,6 +380,33 @@ func (s *Service) UpdatePlugin(ctx context.Context, payload *gen.UpdatePluginPay
 			return nil, oops.E(oops.CodeConflict, nil, "a plugin with this slug already exists")
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "update plugin").Log(ctx, s.logger)
+	}
+
+	if err := s.audit.LogPluginUpdate(ctx, tx, audit.LogPluginUpdateEvent{
+		OrganizationID:   ac.ActiveOrganizationID,
+		ProjectID:        *ac.ProjectID,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
+		ActorDisplayName: ac.Email,
+		ActorSlug:        nil,
+		PluginID:         plugin.ID,
+		PluginName:       plugin.Name,
+		PluginSlug:       plugin.Slug,
+		SnapshotBefore: &audit.PluginSnapshot{
+			Name:        before.Name,
+			Slug:        before.Slug,
+			Description: conv.FromPGText[string](before.Description),
+		},
+		SnapshotAfter: &audit.PluginSnapshot{
+			Name:        plugin.Name,
+			Slug:        plugin.Slug,
+			Description: conv.FromPGText[string](plugin.Description),
+		},
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "audit log plugin update").Log(ctx, s.logger)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").Log(ctx, s.logger)
 	}
 
 	servers, err := s.repo.ListPluginServers(ctx, pluginID)
@@ -370,7 +438,8 @@ func (s *Service) DeletePlugin(ctx context.Context, payload *gen.DeletePluginPay
 	}
 
 	// Verify the plugin belongs to this project before mutating.
-	if _, err := s.repo.GetPlugin(ctx, repo.GetPluginParams{ID: pluginID, OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID}); err != nil {
+	plugin, err := s.repo.GetPlugin(ctx, repo.GetPluginParams{ID: pluginID, OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID})
+	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return oops.C(oops.CodeNotFound)
 		}
@@ -401,6 +470,19 @@ func (s *Service) DeletePlugin(ctx context.Context, payload *gen.DeletePluginPay
 		return oops.E(oops.CodeUnexpected, err, "delete plugin").Log(ctx, s.logger)
 	}
 
+	if err := s.audit.LogPluginDelete(ctx, tx, audit.LogPluginDeleteEvent{
+		OrganizationID:   ac.ActiveOrganizationID,
+		ProjectID:        *ac.ProjectID,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
+		ActorDisplayName: ac.Email,
+		ActorSlug:        nil,
+		PluginID:         plugin.ID,
+		PluginName:       plugin.Name,
+		PluginSlug:       plugin.Slug,
+	}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "audit log plugin delete").Log(ctx, s.logger)
+	}
+
 	if err := tx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "commit transaction").Log(ctx, s.logger)
 	}
@@ -425,7 +507,8 @@ func (s *Service) AddPluginServer(ctx context.Context, payload *gen.AddPluginSer
 	}
 
 	// Verify the plugin belongs to this project.
-	if _, err := s.repo.GetPlugin(ctx, repo.GetPluginParams{ID: pluginID, OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID}); err != nil {
+	plugin, err := s.repo.GetPlugin(ctx, repo.GetPluginParams{ID: pluginID, OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID})
+	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.C(oops.CodeNotFound)
 		}
@@ -452,7 +535,13 @@ func (s *Service) AddPluginServer(ctx context.Context, payload *gen.AddPluginSer
 		return nil, oops.E(oops.CodeBadRequest, nil, "toolset does not have MCP enabled")
 	}
 
-	row, err := s.repo.AddPluginServer(ctx, repo.AddPluginServerParams{
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").Log(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+
+	row, err := s.repo.WithTx(tx).AddPluginServer(ctx, repo.AddPluginServerParams{
 		PluginID:    pluginID,
 		ToolsetID:   toolsetID,
 		DisplayName: payload.DisplayName,
@@ -465,6 +554,28 @@ func (s *Service) AddPluginServer(ctx context.Context, payload *gen.AddPluginSer
 			return nil, oops.E(oops.CodeConflict, nil, "a server with this display name already exists in the plugin")
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "add plugin server").Log(ctx, s.logger)
+	}
+
+	if err := s.audit.LogPluginServerAdd(ctx, tx, audit.LogPluginServerAddEvent{
+		OrganizationID:    ac.ActiveOrganizationID,
+		ProjectID:         *ac.ProjectID,
+		Actor:             urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
+		ActorDisplayName:  ac.Email,
+		ActorSlug:         nil,
+		PluginID:          plugin.ID,
+		PluginName:        plugin.Name,
+		PluginSlug:        plugin.Slug,
+		ServerID:          row.ID,
+		ServerDisplayName: row.DisplayName,
+		ServerPolicy:      row.Policy,
+		ServerSortOrder:   row.SortOrder,
+		ToolsetURN:        urn.NewToolset(row.ToolsetID),
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "audit log plugin server add").Log(ctx, s.logger)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").Log(ctx, s.logger)
 	}
 
 	return pluginServerToGen(row), nil
@@ -490,14 +601,21 @@ func (s *Service) UpdatePluginServer(ctx context.Context, payload *gen.UpdatePlu
 	}
 
 	// Verify the plugin belongs to this project.
-	if _, err := s.repo.GetPlugin(ctx, repo.GetPluginParams{ID: pluginID, OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID}); err != nil {
+	plugin, err := s.repo.GetPlugin(ctx, repo.GetPluginParams{ID: pluginID, OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID})
+	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.C(oops.CodeNotFound)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "verify plugin ownership").Log(ctx, s.logger)
 	}
 
-	row, err := s.repo.UpdatePluginServer(ctx, repo.UpdatePluginServerParams{
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").Log(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+
+	row, err := s.repo.WithTx(tx).UpdatePluginServer(ctx, repo.UpdatePluginServerParams{
 		ID:          serverID,
 		PluginID:    pluginID,
 		DisplayName: payload.DisplayName,
@@ -509,6 +627,27 @@ func (s *Service) UpdatePluginServer(ctx context.Context, payload *gen.UpdatePlu
 			return nil, oops.C(oops.CodeNotFound)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "update plugin server").Log(ctx, s.logger)
+	}
+
+	if err := s.audit.LogPluginServerUpdate(ctx, tx, audit.LogPluginServerUpdateEvent{
+		OrganizationID:    ac.ActiveOrganizationID,
+		ProjectID:         *ac.ProjectID,
+		Actor:             urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
+		ActorDisplayName:  ac.Email,
+		ActorSlug:         nil,
+		PluginID:          plugin.ID,
+		PluginName:        plugin.Name,
+		PluginSlug:        plugin.Slug,
+		ServerID:          row.ID,
+		ServerDisplayName: row.DisplayName,
+		ServerPolicy:      row.Policy,
+		ServerSortOrder:   row.SortOrder,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "audit log plugin server update").Log(ctx, s.logger)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").Log(ctx, s.logger)
 	}
 
 	return pluginServerToGen(row), nil
@@ -534,18 +673,43 @@ func (s *Service) RemovePluginServer(ctx context.Context, payload *gen.RemovePlu
 	}
 
 	// Verify the plugin belongs to this project.
-	if _, err := s.repo.GetPlugin(ctx, repo.GetPluginParams{ID: pluginID, OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID}); err != nil {
+	plugin, err := s.repo.GetPlugin(ctx, repo.GetPluginParams{ID: pluginID, OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID})
+	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return oops.C(oops.CodeNotFound)
 		}
 		return oops.E(oops.CodeUnexpected, err, "verify plugin ownership").Log(ctx, s.logger)
 	}
 
-	if err := s.repo.RemovePluginServer(ctx, repo.RemovePluginServerParams{
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "begin transaction").Log(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+
+	if err := s.repo.WithTx(tx).RemovePluginServer(ctx, repo.RemovePluginServerParams{
 		ID:       serverID,
 		PluginID: pluginID,
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "remove plugin server").Log(ctx, s.logger)
+	}
+
+	if err := s.audit.LogPluginServerRemove(ctx, tx, audit.LogPluginServerRemoveEvent{
+		OrganizationID:   ac.ActiveOrganizationID,
+		ProjectID:        *ac.ProjectID,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
+		ActorDisplayName: ac.Email,
+		ActorSlug:        nil,
+		PluginID:         plugin.ID,
+		PluginName:       plugin.Name,
+		PluginSlug:       plugin.Slug,
+		ServerID:         serverID,
+	}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "audit log plugin server remove").Log(ctx, s.logger)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "commit transaction").Log(ctx, s.logger)
 	}
 	return nil
 }
@@ -568,7 +732,8 @@ func (s *Service) SetPluginAssignments(ctx context.Context, payload *gen.SetPlug
 	}
 
 	// Verify the plugin belongs to this project.
-	if _, err := s.repo.GetPlugin(ctx, repo.GetPluginParams{ID: pluginID, OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID}); err != nil {
+	plugin, err := s.repo.GetPlugin(ctx, repo.GetPluginParams{ID: pluginID, OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID})
+	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.C(oops.CodeNotFound)
 		}
@@ -604,6 +769,20 @@ func (s *Service) SetPluginAssignments(ctx context.Context, payload *gen.SetPlug
 			return nil, oops.E(oops.CodeUnexpected, err, "add plugin assignment").Log(ctx, s.logger)
 		}
 		assignments = append(assignments, pluginAssignmentToGen(row))
+	}
+
+	if err := s.audit.LogPluginAssignmentsSet(ctx, tx, audit.LogPluginAssignmentsSetEvent{
+		OrganizationID:   ac.ActiveOrganizationID,
+		ProjectID:        *ac.ProjectID,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
+		ActorDisplayName: ac.Email,
+		ActorSlug:        nil,
+		PluginID:         plugin.ID,
+		PluginName:       plugin.Name,
+		PluginSlug:       plugin.Slug,
+		PrincipalURNs:    payload.PrincipalUrns,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "audit log plugin assignments set").Log(ctx, s.logger)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -664,7 +843,11 @@ func (s *Service) DownloadPluginPackage(ctx context.Context, payload *gen.Downlo
 		}
 	}
 
-	cfg := s.generateConfig(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug)
+	projectSlug := ""
+	if ac.ProjectSlug != nil {
+		projectSlug = *ac.ProjectSlug
+	}
+	cfg := s.generateConfig(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug, projectSlug)
 
 	files, err := GenerateSinglePluginPackage(*pluginInfo, cfg, payload.Platform)
 	if err != nil {
@@ -672,31 +855,166 @@ func (s *Service) DownloadPluginPackage(ctx context.Context, payload *gen.Downlo
 	}
 
 	var buf bytes.Buffer
-	w := zip.NewWriter(&buf)
-	// Sort paths for deterministic ZIP output.
-	paths := make([]string, 0, len(files))
-	for path := range files {
-		paths = append(paths, path)
-	}
-	sort.Strings(paths)
-	for _, path := range paths {
-		content := files[path]
-		f, err := w.Create(path)
-		if err != nil {
-			return nil, nil, oops.E(oops.CodeUnexpected, err, "create zip entry").Log(ctx, s.logger)
-		}
-		if _, err := f.Write(content); err != nil {
-			return nil, nil, oops.E(oops.CodeUnexpected, err, "write zip entry").Log(ctx, s.logger)
-		}
-	}
-	if err := w.Close(); err != nil {
-		return nil, nil, oops.E(oops.CodeUnexpected, err, "close zip writer").Log(ctx, s.logger)
+	if err := writePluginZip(&buf, files); err != nil {
+		return nil, nil, oops.E(oops.CodeUnexpected, err, "build plugin zip").Log(ctx, s.logger)
 	}
 
 	return &gen.DownloadPluginPackageResult{
 		ContentType:        "application/zip",
 		ContentDisposition: fmt.Sprintf(`attachment; filename="%s.zip"`, dbPlugin.Slug),
 	}, io.NopCloser(bytes.NewReader(buf.Bytes())), nil
+}
+
+// DownloadObservabilityPlugin returns a ZIP of the per-org observability
+// plugin for direct installation. Mints a fresh hooks-scoped API key per
+// download and embeds it in the script — the org's API Keys page will
+// accumulate one row per download, which admins can audit and revoke
+// independently of the publish-bundled key. The plugin contents are
+// otherwise identical to what PublishPlugins ships in the GitHub marketplace.
+func (s *Service) DownloadObservabilityPlugin(ctx context.Context, payload *gen.DownloadObservabilityPluginPayload) (*gen.DownloadObservabilityPluginResult, io.ReadCloser, error) {
+	ac, err := s.authContext(ctx)
+	if err != nil {
+		return nil, nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, nil, err
+	}
+
+	if ac.ProjectSlug == nil {
+		return nil, nil, oops.E(oops.CodeUnauthorized, nil, "observability plugin download requires a session-authenticated context")
+	}
+
+	candidate, err := s.buildPluginAPIKeyCandidate(auth.APIKeyScopeHooks, "hooks-download")
+	if err != nil {
+		return nil, nil, oops.E(oops.CodeUnexpected, err, "build hooks api key").Log(ctx, s.logger)
+	}
+
+	if err := s.persistDownloadAPIKey(ctx, ac, candidate); err != nil {
+		return nil, nil, oops.E(oops.CodeUnexpected, err, "persist hooks api key").Log(ctx, s.logger)
+	}
+
+	cfg := s.generateConfig(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug, *ac.ProjectSlug)
+	cfg.HooksAPIKey = candidate.fullKey
+
+	files, err := GenerateObservabilityPluginPackage(cfg, payload.Platform)
+	if err != nil {
+		return nil, nil, oops.E(oops.CodeUnexpected, err, "generate observability plugin package").Log(ctx, s.logger)
+	}
+
+	var buf bytes.Buffer
+	if err := writePluginZip(&buf, files); err != nil {
+		return nil, nil, oops.E(oops.CodeUnexpected, err, "build plugin zip").Log(ctx, s.logger)
+	}
+
+	filename := "observability"
+	if payload.Platform == "cursor" {
+		filename = "observability-cursor"
+	}
+	return &gen.DownloadObservabilityPluginResult{
+		ContentType:        "application/zip",
+		ContentDisposition: fmt.Sprintf(`attachment; filename="%s.zip"`, filename),
+	}, io.NopCloser(bytes.NewReader(buf.Bytes())), nil
+}
+
+// writePluginZip serializes the file map as a deterministic ZIP, marking
+// shell scripts executable so hook.sh runs after extraction. The GitHub
+// publish path applies the same rule via Tree mode 100755 in
+// thirdparty/github/repo.go; keep them in sync — without the execute bit,
+// Claude Code and Cursor silently fail on `./hook.sh: permission denied`.
+func writePluginZip(w io.Writer, files map[string][]byte) error {
+	zw := zip.NewWriter(w)
+	paths := make([]string, 0, len(files))
+	for p := range files {
+		paths = append(paths, p)
+	}
+	sort.Strings(paths)
+	for _, p := range paths {
+		// Mirrors zip.Writer.Create's defaults: Method=Deflate, Modified=now.
+		// SetMode below populates ExternalAttrs + CreatorVersion to mark the
+		// entry as Unix-mode so the execute bit survives extraction. The
+		// remaining fields are computed by the writer (sizes, CRC) or
+		// intentionally zero (no comments / extra metadata).
+		header := &zip.FileHeader{
+			Name:               p,
+			Comment:            "",
+			NonUTF8:            false,
+			CreatorVersion:     0,
+			ReaderVersion:      0,
+			Flags:              0,
+			Method:             zip.Deflate,
+			Modified:           time.Now(),
+			ModifiedTime:       0,
+			ModifiedDate:       0,
+			CRC32:              0,
+			CompressedSize:     0,
+			UncompressedSize:   0,
+			CompressedSize64:   0,
+			UncompressedSize64: 0,
+			Extra:              nil,
+			ExternalAttrs:      0,
+		}
+		var mode os.FileMode = 0o644
+		if strings.HasSuffix(p, ".sh") {
+			mode = 0o755
+		}
+		header.SetMode(mode)
+		f, err := zw.CreateHeader(header)
+		if err != nil {
+			return fmt.Errorf("create zip entry %q: %w", p, err)
+		}
+		if _, err := f.Write(files[p]); err != nil {
+			return fmt.Errorf("write zip entry %q: %w", p, err)
+		}
+	}
+	if err := zw.Close(); err != nil {
+		return fmt.Errorf("close zip writer: %w", err)
+	}
+	return nil
+}
+
+// persistDownloadAPIKey writes a single hooks-scoped key + its audit log
+// in one transaction. Distinct from persistPluginAPIKeys because it does
+// not touch the GitHub connection record.
+func (s *Service) persistDownloadAPIKey(ctx context.Context, ac *contextvalues.AuthContext, candidate pluginAPIKeyCandidate) error {
+	projectID := uuid.NullUUID{UUID: *ac.ProjectID, Valid: true}
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin transaction: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+
+	scopes := []string{candidate.scope.String()}
+	createdKey, err := keysrepo.New(tx).CreateAPIKey(ctx, keysrepo.CreateAPIKeyParams{
+		OrganizationID:  ac.ActiveOrganizationID,
+		Name:            candidate.keyName,
+		KeyHash:         candidate.keyHash,
+		KeyPrefix:       candidate.keyPrefix,
+		Scopes:          scopes,
+		CreatedByUserID: ac.UserID,
+		ProjectID:       projectID,
+	})
+	if err != nil {
+		return fmt.Errorf("create api key: %w", err)
+	}
+
+	if err := s.audit.LogKeyCreate(ctx, tx, audit.LogKeyCreateEvent{
+		OrganizationID:   ac.ActiveOrganizationID,
+		ProjectID:        projectID,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
+		ActorDisplayName: ac.Email,
+		ActorSlug:        nil,
+		KeyURN:           urn.NewAPIKey(createdKey.ID),
+		KeyName:          candidate.keyName,
+		Scopes:           scopes,
+	}); err != nil {
+		return fmt.Errorf("audit log key creation: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit transaction: %w", err)
+	}
+	return nil
 }
 
 // --- Publish & Distribution ---
@@ -712,11 +1030,12 @@ func (s *Service) GetPublishStatus(ctx context.Context, payload *gen.GetPublishS
 	}
 
 	result := &gen.PublishStatusResult{
-		Configured: s.github != nil,
-		Connected:  false,
-		RepoOwner:  nil,
-		RepoName:   nil,
-		RepoURL:    nil,
+		Configured:     s.github != nil,
+		Connected:      false,
+		RepoOwner:      nil,
+		RepoName:       nil,
+		RepoURL:        nil,
+		MarketplaceURL: nil,
 	}
 
 	if s.github != nil {
@@ -730,6 +1049,10 @@ func (s *Service) GetPublishStatus(ctx context.Context, payload *gen.GetPublishS
 			result.RepoName = &conn.RepoName
 			repoURL := fmt.Sprintf("https://github.com/%s/%s", conn.RepoOwner, conn.RepoName)
 			result.RepoURL = &repoURL
+			if conn.MarketplaceToken.Valid && s.serverURL != "" {
+				marketplaceURL := fmt.Sprintf("%s%sm/%s/marketplace.json", s.serverURL, marketplace.RoutePrefix, conn.MarketplaceToken.String)
+				result.MarketplaceURL = &marketplaceURL
+			}
 		}
 	}
 
@@ -755,8 +1078,9 @@ func (s *Service) PublishPlugins(ctx context.Context, payload *gen.PublishPlugin
 		return nil, err
 	}
 
-	if len(pluginInfos) == 0 {
-		return nil, oops.E(oops.CodeBadRequest, nil, "no plugins with servers to publish")
+	project, err := projectsrepo.New(s.db).GetProjectByID(ctx, *ac.ProjectID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "get project").Log(ctx, s.logger)
 	}
 
 	if payload.GithubUsername != nil && *payload.GithubUsername != "" && !validGitHubUsername.MatchString(*payload.GithubUsername) {
@@ -769,13 +1093,18 @@ func (s *Service) PublishPlugins(ctx context.Context, payload *gen.PublishPlugin
 		return nil, oops.E(oops.CodeUnauthorized, nil, "publish requires a session-authenticated context")
 	}
 
-	candidate, err := s.buildPluginAPIKeyCandidate()
+	mcpCandidate, err := s.buildPluginAPIKeyCandidate(auth.APIKeyScopeConsumer, "mcp")
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "build plugin api key").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "build plugin mcp api key").Log(ctx, s.logger)
+	}
+	hooksCandidate, err := s.buildPluginAPIKeyCandidate(auth.APIKeyScopeHooks, "hooks")
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "build plugin hooks api key").Log(ctx, s.logger)
 	}
 
-	cfg := s.generateConfig(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug)
-	cfg.APIKey = candidate.fullKey
+	cfg := s.generateConfig(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug, *ac.ProjectSlug)
+	cfg.APIKey = mcpCandidate.fullKey
+	cfg.HooksAPIKey = hooksCandidate.fullKey
 
 	files, err := GeneratePluginPackages(pluginInfos, cfg)
 	if err != nil {
@@ -814,13 +1143,18 @@ func (s *Service) PublishPlugins(ctx context.Context, payload *gen.PublishPlugin
 		}
 	}
 
-	// Persist the API key, audit log, and github connection atomically only
+	pluginSlugs := make([]string, 0, len(pluginInfos))
+	for _, p := range pluginInfos {
+		pluginSlugs = append(pluginSlugs, p.Slug)
+	}
+
+	// Persist the API keys, audit logs, and github connection atomically only
 	// after the GitHub publish has succeeded. This prevents leaking valid
-	// consumer credentials when GitHub fails. If this transaction itself
-	// fails, the published repo contains a key string with no DB record —
-	// re-publish overwrites it with a fresh valid key.
-	if err := s.persistPluginAPIKey(ctx, ac, candidate, repoOwner, repoName); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "persist plugin api key").Log(ctx, s.logger)
+	// credentials when GitHub fails. If this transaction itself fails, the
+	// published repo contains key strings with no DB records — re-publish
+	// overwrites them with fresh valid keys.
+	if err := s.persistPluginAPIKeys(ctx, ac, []pluginAPIKeyCandidate{mcpCandidate, hooksCandidate}, project.Name, repoOwner, repoName, pluginSlugs); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "persist plugin api keys").Log(ctx, s.logger)
 	}
 
 	repoURL := fmt.Sprintf("https://github.com/%s/%s", repoOwner, repoName)
@@ -836,12 +1170,14 @@ type pluginAPIKeyCandidate struct {
 	keyHash   string
 	keyPrefix string
 	keyName   string
+	scope     auth.APIKeyScope
 }
 
 // buildPluginAPIKeyCandidate generates an API key in memory without writing
-// to the database. The caller must subsequently call persistPluginAPIKey to
-// commit the key.
-func (s *Service) buildPluginAPIKeyCandidate() (pluginAPIKeyCandidate, error) {
+// to the database. The caller must subsequently call persistPluginAPIKeys to
+// commit the key. `purpose` is embedded in the key name so admins can tell
+// distinct keys apart in the dashboard (e.g., "mcp" vs "hooks").
+func (s *Service) buildPluginAPIKeyCandidate(scope auth.APIKeyScope, purpose string) (pluginAPIKeyCandidate, error) {
 	tokenBytes := make([]byte, 32)
 	if _, err := rand.Read(tokenBytes); err != nil {
 		return pluginAPIKeyCandidate{}, fmt.Errorf("generate token: %w", err)
@@ -858,19 +1194,23 @@ func (s *Service) buildPluginAPIKeyCandidate() (pluginAPIKeyCandidate, error) {
 		fullKey:   fullKey,
 		keyHash:   keyHash,
 		keyPrefix: s.keyPrefix + token[:5],
-		keyName:   fmt.Sprintf("plugins-%s-%s", time.Now().UTC().Format("20060102-150405"), token[:6]),
+		keyName:   fmt.Sprintf("plugins-%s-%s-%s", purpose, time.Now().UTC().Format("20060102-150405"), token[:6]),
+		scope:     scope,
 	}, nil
 }
 
-// persistPluginAPIKey atomically writes the API key, its audit log entry, and
-// the GitHub connection record in one transaction.
-func (s *Service) persistPluginAPIKey(
+// persistPluginAPIKeys atomically writes one or more API keys, their audit
+// log entries, the plugin publish audit log entry, and the GitHub
+// connection record in a single transaction. All-or-nothing: if any
+// candidate fails to insert, none are persisted.
+func (s *Service) persistPluginAPIKeys(
 	ctx context.Context,
 	ac *contextvalues.AuthContext,
-	candidate pluginAPIKeyCandidate,
+	candidates []pluginAPIKeyCandidate,
+	projectName string,
 	repoOwner, repoName string,
+	pluginSlugs []string,
 ) error {
-	scopes := []string{auth.APIKeyScopeConsumer.String()}
 	projectID := uuid.NullUUID{UUID: *ac.ProjectID, Valid: true}
 
 	tx, err := s.db.Begin(ctx)
@@ -879,39 +1219,71 @@ func (s *Service) persistPluginAPIKey(
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
-	createdKey, err := keysrepo.New(tx).CreateAPIKey(ctx, keysrepo.CreateAPIKeyParams{
-		OrganizationID:  ac.ActiveOrganizationID,
-		Name:            candidate.keyName,
-		KeyHash:         candidate.keyHash,
-		KeyPrefix:       candidate.keyPrefix,
-		Scopes:          scopes,
-		CreatedByUserID: ac.UserID,
-		ProjectID:       projectID,
-	})
-	if err != nil {
-		return fmt.Errorf("create api key: %w", err)
+	keysQ := keysrepo.New(tx)
+	for _, candidate := range candidates {
+		scopes := []string{candidate.scope.String()}
+		createdKey, err := keysQ.CreateAPIKey(ctx, keysrepo.CreateAPIKeyParams{
+			OrganizationID:  ac.ActiveOrganizationID,
+			Name:            candidate.keyName,
+			KeyHash:         candidate.keyHash,
+			KeyPrefix:       candidate.keyPrefix,
+			Scopes:          scopes,
+			CreatedByUserID: ac.UserID,
+			ProjectID:       projectID,
+		})
+		if err != nil {
+			return fmt.Errorf("create api key %s: %w", candidate.keyName, err)
+		}
+
+		if err := s.audit.LogKeyCreate(ctx, tx, audit.LogKeyCreateEvent{
+			OrganizationID:   ac.ActiveOrganizationID,
+			ProjectID:        projectID,
+			Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
+			ActorDisplayName: ac.Email,
+			ActorSlug:        nil,
+			KeyURN:           urn.NewAPIKey(createdKey.ID),
+			KeyName:          candidate.keyName,
+			Scopes:           scopes,
+		}); err != nil {
+			return fmt.Errorf("audit log key creation %s: %w", candidate.keyName, err)
+		}
 	}
 
-	if err := audit.LogKeyCreate(ctx, tx, audit.LogKeyCreateEvent{
+	// Mint a candidate marketplace token for first-time publishes. The upsert
+	// preserves any existing token via COALESCE, so passing a fresh value on
+	// every publish never overwrites a token that's already minted — token
+	// rotation goes through a dedicated path.
+	candidateToken, err := generateMarketplaceToken()
+	if err != nil {
+		return fmt.Errorf("generate marketplace token: %w", err)
+	}
+	if _, err := s.repo.WithTx(tx).UpsertGitHubConnection(ctx, repo.UpsertGitHubConnectionParams{
+		ProjectID:        *ac.ProjectID,
+		InstallationID:   s.github.InstallationID,
+		RepoOwner:        repoOwner,
+		RepoName:         repoName,
+		MarketplaceToken: pgtype.Text{String: candidateToken, Valid: true},
+	}); err != nil {
+		return fmt.Errorf("upsert github connection: %w", err)
+	}
+
+	projectSlug := ""
+	if ac.ProjectSlug != nil {
+		projectSlug = *ac.ProjectSlug
+	}
+	if err := s.audit.LogPluginPublish(ctx, tx, audit.LogPluginPublishEvent{
 		OrganizationID:   ac.ActiveOrganizationID,
-		ProjectID:        projectID,
+		ProjectID:        *ac.ProjectID,
+		ProjectName:      projectName,
+		ProjectSlug:      projectSlug,
 		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
 		ActorDisplayName: ac.Email,
 		ActorSlug:        nil,
-		KeyURN:           urn.NewAPIKey(createdKey.ID),
-		KeyName:          candidate.keyName,
-		Scopes:           scopes,
+		PluginSlugs:      pluginSlugs,
+		RepoOwner:        repoOwner,
+		RepoName:         repoName,
 	}); err != nil {
-		return fmt.Errorf("audit log key creation: %w", err)
-	}
-
-	if _, err := s.repo.WithTx(tx).UpsertGitHubConnection(ctx, repo.UpsertGitHubConnectionParams{
-		ProjectID:      *ac.ProjectID,
-		InstallationID: s.github.InstallationID,
-		RepoOwner:      repoOwner,
-		RepoName:       repoName,
-	}); err != nil {
-		return fmt.Errorf("upsert github connection: %w", err)
+		return fmt.Errorf("audit log plugin publish: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -1015,12 +1387,14 @@ func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID) (
 	return pluginInfos, nil
 }
 
-func (s *Service) generateConfig(ctx context.Context, orgID, orgSlug string) GenerateConfig {
+func (s *Service) generateConfig(ctx context.Context, orgID, orgSlug, projectSlug string) GenerateConfig {
 	cfg := GenerateConfig{
-		OrgName:   orgSlug,
-		OrgEmail:  "",
-		ServerURL: s.serverURL,
-		APIKey:    "",
+		OrgName:     orgSlug,
+		OrgEmail:    "",
+		ServerURL:   s.serverURL,
+		APIKey:      "",
+		HooksAPIKey: "",
+		ProjectSlug: projectSlug,
 	}
 	orgName, err := s.repo.GetOrganizationName(ctx, orgID)
 	switch {

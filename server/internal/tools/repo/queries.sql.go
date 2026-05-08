@@ -14,6 +14,107 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+const createHTTPToolDefinition = `-- name: CreateHTTPToolDefinition :exec
+INSERT INTO http_tool_definitions (
+    project_id
+  , deployment_id
+  , tool_urn
+  , name
+  , untruncated_name
+  , summary
+  , description
+  , tags
+  , http_method
+  , path
+  , schema_version
+  , schema
+  , server_env_var
+  , security
+  , header_settings
+  , query_settings
+  , path_settings
+  , read_only_hint
+  , destructive_hint
+  , idempotent_hint
+  , open_world_hint
+) VALUES (
+    $1
+  , $2
+  , $3
+  , $4
+  , $5
+  , $6
+  , $7
+  , $8
+  , $9
+  , $10
+  , $11
+  , $12
+  , $13
+  , $14
+  , $15
+  , $16
+  , $17
+  , $18
+  , $19
+  , $20
+  , $21
+)
+`
+
+type CreateHTTPToolDefinitionParams struct {
+	ProjectID       uuid.UUID
+	DeploymentID    uuid.UUID
+	ToolUrn         urn.Tool
+	Name            string
+	UntruncatedName pgtype.Text
+	Summary         string
+	Description     string
+	Tags            []string
+	HttpMethod      string
+	Path            string
+	SchemaVersion   string
+	Schema          []byte
+	ServerEnvVar    string
+	Security        []byte
+	HeaderSettings  []byte
+	QuerySettings   []byte
+	PathSettings    []byte
+	ReadOnlyHint    pgtype.Bool
+	DestructiveHint pgtype.Bool
+	IdempotentHint  pgtype.Bool
+	OpenWorldHint   pgtype.Bool
+}
+
+// Inserts an http_tool_definition row. The production tool-ingestion path
+// lives in the deployments service.
+func (q *Queries) CreateHTTPToolDefinition(ctx context.Context, arg CreateHTTPToolDefinitionParams) error {
+	_, err := q.db.Exec(ctx, createHTTPToolDefinition,
+		arg.ProjectID,
+		arg.DeploymentID,
+		arg.ToolUrn,
+		arg.Name,
+		arg.UntruncatedName,
+		arg.Summary,
+		arg.Description,
+		arg.Tags,
+		arg.HttpMethod,
+		arg.Path,
+		arg.SchemaVersion,
+		arg.Schema,
+		arg.ServerEnvVar,
+		arg.Security,
+		arg.HeaderSettings,
+		arg.QuerySettings,
+		arg.PathSettings,
+		arg.ReadOnlyHint,
+		arg.DestructiveHint,
+		arg.IdempotentHint,
+		arg.OpenWorldHint,
+	)
+	return err
+}
+
 const findFunctionToolEntriesByUrn = `-- name: FindFunctionToolEntriesByUrn :many
 WITH deployment AS (
     SELECT d.id
@@ -242,7 +343,7 @@ external_deployments AS (
   WHERE deployments_packages.deployment_id = (SELECT id FROM deployment)
 )
 SELECT
-  htd.id, htd.tool_urn, htd.deployment_id, htd.name, htd.security, htd.server_env_var,
+  htd.id, htd.tool_urn, htd.deployment_id, htd.openapiv3_document_id, htd.name, htd.security, htd.server_env_var,
   htd.read_only_hint, htd.destructive_hint, htd.idempotent_hint, htd.open_world_hint,
   htd.http_method
 FROM http_tool_definitions htd
@@ -259,17 +360,18 @@ type FindHttpToolEntriesByUrnParams struct {
 }
 
 type FindHttpToolEntriesByUrnRow struct {
-	ID              uuid.UUID
-	ToolUrn         urn.Tool
-	DeploymentID    uuid.UUID
-	Name            string
-	Security        []byte
-	ServerEnvVar    string
-	ReadOnlyHint    pgtype.Bool
-	DestructiveHint pgtype.Bool
-	IdempotentHint  pgtype.Bool
-	OpenWorldHint   pgtype.Bool
-	HttpMethod      string
+	ID                  uuid.UUID
+	ToolUrn             urn.Tool
+	DeploymentID        uuid.UUID
+	Openapiv3DocumentID uuid.NullUUID
+	Name                string
+	Security            []byte
+	ServerEnvVar        string
+	ReadOnlyHint        pgtype.Bool
+	DestructiveHint     pgtype.Bool
+	IdempotentHint      pgtype.Bool
+	OpenWorldHint       pgtype.Bool
+	HttpMethod          string
 }
 
 func (q *Queries) FindHttpToolEntriesByUrn(ctx context.Context, arg FindHttpToolEntriesByUrnParams) ([]FindHttpToolEntriesByUrnRow, error) {
@@ -285,6 +387,7 @@ func (q *Queries) FindHttpToolEntriesByUrn(ctx context.Context, arg FindHttpTool
 			&i.ID,
 			&i.ToolUrn,
 			&i.DeploymentID,
+			&i.Openapiv3DocumentID,
 			&i.Name,
 			&i.Security,
 			&i.ServerEnvVar,

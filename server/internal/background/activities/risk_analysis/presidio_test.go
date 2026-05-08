@@ -51,6 +51,33 @@ func TestPresidio_DetectsEmail(t *testing.T) {
 	}
 }
 
+func TestPresidio_BatchResultsMapBackToInputIndexes(t *testing.T) {
+	t.Parallel()
+	client := infra.NewPresidioClient(t)
+
+	messages := make([]string, 75)
+	emails := make([]string, len(messages))
+	for i := range messages {
+		emails[i] = fmt.Sprintf("remap%03d@example.com", i)
+		messages[i] = fmt.Sprintf("message %03d contact %s end", i, emails[i])
+	}
+
+	results, err := client.AnalyzeBatch(t.Context(), messages, []string{"EMAIL_ADDRESS"}, nil)
+	require.NoError(t, err)
+	require.Len(t, results, len(messages))
+
+	for i, findings := range results {
+		var got string
+		for _, f := range findings {
+			if f.RuleID == "EMAIL_ADDRESS" {
+				got = f.Match
+				break
+			}
+		}
+		assert.Equal(t, emails[i], got, "message %d mapped to wrong finding", i)
+	}
+}
+
 func TestPresidio_DetectsCreditCard(t *testing.T) {
 	t.Parallel()
 	client := infra.NewPresidioClient(t)

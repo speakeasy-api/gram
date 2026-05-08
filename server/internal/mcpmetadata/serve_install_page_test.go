@@ -18,7 +18,16 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	customdomains_repo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
+	deployments_repo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
+	externalmcp_repo "github.com/speakeasy-api/gram/server/internal/externalmcp/repo"
+	externalmcp_types "github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types"
+	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
+	"github.com/speakeasy-api/gram/server/internal/oauthtest"
+	organizations_repo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	projects_repo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	tools_repo "github.com/speakeasy-api/gram/server/internal/tools/repo"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 func TestServeInstallPage_Authentication(t *testing.T) {
@@ -59,8 +68,11 @@ func TestServeInstallPage_Authentication(t *testing.T) {
 				require.NoError(t, err)
 
 				// Update to make it public (since CreateToolset doesn't have McpIsPublic field)
-				_, err = testInstance.conn.Exec(ctx,
-					"UPDATE toolsets SET mcp_is_public = true WHERE id = $1", toolset.ID)
+				err = toolsets_repo.New(testInstance.conn).SetToolsetMCPPublicByID(ctx, toolsets_repo.SetToolsetMCPPublicByIDParams{
+					McpIsPublic: true,
+					ID:          toolset.ID,
+					ProjectID:   toolset.ProjectID,
+				})
 				require.NoError(t, err)
 
 				return authCtx.ActiveOrganizationID
@@ -264,8 +276,11 @@ func TestServeInstallPage_Instructions(t *testing.T) {
 	require.NoError(t, err)
 
 	// Make it public
-	_, err = testInstance.conn.Exec(ctx,
-		"UPDATE toolsets SET mcp_is_public = true WHERE id = $1", toolset.ID)
+	err = toolsets_repo.New(testInstance.conn).SetToolsetMCPPublicByID(ctx, toolsets_repo.SetToolsetMCPPublicByIDParams{
+		McpIsPublic: true,
+		ID:          toolset.ID,
+		ProjectID:   toolset.ProjectID,
+	})
 	require.NoError(t, err)
 
 	// Set metadata with instructions
@@ -325,49 +340,60 @@ func TestServeInstallPage_ToolDetails(t *testing.T) {
 	require.NoError(t, err)
 
 	// Make it public
-	_, err = testInstance.conn.Exec(ctx,
-		"UPDATE toolsets SET mcp_is_public = true WHERE id = $1", toolset.ID)
+	err = toolsets_repo.New(testInstance.conn).SetToolsetMCPPublicByID(ctx, toolsets_repo.SetToolsetMCPPublicByIDParams{
+		McpIsPublic: true,
+		ID:          toolset.ID,
+		ProjectID:   toolset.ProjectID,
+	})
 	require.NoError(t, err)
 
-	// Create a completed deployment so tools can be resolved
-	var deploymentID uuid.UUID
-	err = testInstance.conn.QueryRow(ctx, `
-		INSERT INTO deployments (project_id, organization_id, user_id, idempotency_key)
-		VALUES ($1, $2, 'test-user', $3)
-		RETURNING id
-	`, *authCtx.ProjectID, authCtx.ActiveOrganizationID, uuid.New().String()).Scan(&deploymentID)
+	deploymentID, err := deployments_repo.New(testInstance.conn).InsertDeployment(ctx, deployments_repo.InsertDeploymentParams{
+		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		UserID:         "test-user",
+		IdempotencyKey: uuid.New().String(),
+	})
 	require.NoError(t, err)
 
-	_, err = testInstance.conn.Exec(ctx, `
-		INSERT INTO deployment_statuses (deployment_id, status)
-		VALUES ($1, 'completed')
-	`, deploymentID)
+	err = deployments_repo.New(testInstance.conn).CreateDeploymentStatus(ctx, deployments_repo.CreateDeploymentStatusParams{
+		DeploymentID: deploymentID,
+		Status:       "completed",
+	})
 	require.NoError(t, err)
 
-	// Create an HTTP tool with description and annotation hints
-	toolURN := "tools:http:test-api:" + uuid.New().String()[:8]
-	_, err = testInstance.conn.Exec(ctx, `
-		INSERT INTO http_tool_definitions (
-			project_id, deployment_id, tool_urn, name, untruncated_name,
-			summary, description, tags, http_method, path,
-			schema_version, schema, server_env_var, security,
-			header_settings, query_settings, path_settings,
-			read_only_hint, idempotent_hint
-		) VALUES (
-			$1, $2, $3, 'search_records', '', 'Search records',
-			'Search and filter records by various criteria',
-			'{}', 'GET', '/api/records', '3.0.0', '{}', 'TEST_SERVER_URL',
-			'[]', '{}', '{}', '{}',
-			true, true
-		)
-	`, *authCtx.ProjectID, deploymentID, toolURN)
+	toolURN := urn.NewTool(urn.ToolKindHTTP, "test-api", uuid.New().String()[:8])
+	err = tools_repo.New(testInstance.conn).CreateHTTPToolDefinition(ctx, tools_repo.CreateHTTPToolDefinitionParams{
+		ProjectID:       *authCtx.ProjectID,
+		DeploymentID:    deploymentID,
+		ToolUrn:         toolURN,
+		Name:            "search_records",
+		UntruncatedName: pgtype.Text{},
+		Summary:         "Search records",
+		Description:     "Search and filter records by various criteria",
+		Tags:            []string{},
+		HttpMethod:      "GET",
+		Path:            "/api/records",
+		SchemaVersion:   "3.0.0",
+		Schema:          []byte(`{}`),
+		ServerEnvVar:    "TEST_SERVER_URL",
+		Security:        []byte(`[]`),
+		HeaderSettings:  []byte(`{}`),
+		QuerySettings:   []byte(`{}`),
+		PathSettings:    []byte(`{}`),
+		ReadOnlyHint:    pgtype.Bool{Bool: true, Valid: true},
+		IdempotentHint:  pgtype.Bool{Bool: true, Valid: true},
+		DestructiveHint: pgtype.Bool{},
+		OpenWorldHint:   pgtype.Bool{},
+	})
 	require.NoError(t, err)
 
-	// Link the tool to the toolset via a toolset version
-	_, err = testInstance.conn.Exec(ctx, `
-		INSERT INTO toolset_versions (toolset_id, version, tool_urns, resource_urns)
-		VALUES ($1, 1, $2, '{}')
-	`, toolset.ID, []string{toolURN})
+	_, err = toolsets_repo.New(testInstance.conn).CreateToolsetVersion(ctx, toolsets_repo.CreateToolsetVersionParams{
+		ToolsetID:     toolset.ID,
+		Version:       1,
+		ToolUrns:      []urn.Tool{toolURN},
+		ResourceUrns:  []urn.Resource{},
+		PredecessorID: uuid.NullUUID{},
+	})
 	require.NoError(t, err)
 
 	// Create request
@@ -450,8 +476,11 @@ func TestServeInstallPage_CustomDomain_WrongDomainReturnsNotFound(t *testing.T) 
 	require.NoError(t, err)
 
 	// Make it public so auth isn't the reason for rejection.
-	_, err = testInstance.conn.Exec(ctx,
-		"UPDATE toolsets SET mcp_is_public = true WHERE id = $1", toolset.ID)
+	err = toolsets_repo.New(testInstance.conn).SetToolsetMCPPublicByID(ctx, toolsets_repo.SetToolsetMCPPublicByIDParams{
+		McpIsPublic: true,
+		ID:          toolset.ID,
+		ProjectID:   toolset.ProjectID,
+	})
 	require.NoError(t, err)
 
 	// Link the toolset to the custom domain.
@@ -552,8 +581,11 @@ func TestServeInstallPage_CustomDomain_CorrectDomainRendersPage(t *testing.T) {
 	require.NoError(t, err)
 
 	// Make it public and link it to the custom domain.
-	_, err = testInstance.conn.Exec(ctx,
-		"UPDATE toolsets SET mcp_is_public = true WHERE id = $1", toolset.ID)
+	err = toolsets_repo.New(testInstance.conn).SetToolsetMCPPublicByID(ctx, toolsets_repo.SetToolsetMCPPublicByIDParams{
+		McpIsPublic: true,
+		ID:          toolset.ID,
+		ProjectID:   toolset.ProjectID,
+	})
 	require.NoError(t, err)
 
 	_, err = testInstance.toolsetRepo.UpdateToolset(ctx, toolsets_repo.UpdateToolsetParams{
@@ -635,8 +667,11 @@ func TestServeInstallPage_CustomDomain_PlatformDomainStillWorks(t *testing.T) {
 	require.NoError(t, err)
 
 	// Make it public and link it to the custom domain.
-	_, err = testInstance.conn.Exec(ctx,
-		"UPDATE toolsets SET mcp_is_public = true WHERE id = $1", toolset.ID)
+	err = toolsets_repo.New(testInstance.conn).SetToolsetMCPPublicByID(ctx, toolsets_repo.SetToolsetMCPPublicByIDParams{
+		McpIsPublic: true,
+		ID:          toolset.ID,
+		ProjectID:   toolset.ProjectID,
+	})
 	require.NoError(t, err)
 
 	_, err = testInstance.toolsetRepo.UpdateToolset(ctx, toolsets_repo.UpdateToolsetParams{
@@ -715,8 +750,11 @@ func TestServeInstallPage_CustomDomain_DeletedToolsetReturnsNotFound(t *testing.
 	})
 	require.NoError(t, err)
 
-	_, err = testInstance.conn.Exec(ctx,
-		"UPDATE toolsets SET mcp_is_public = true WHERE id = $1", toolsetA.ID)
+	err = toolsets_repo.New(testInstance.conn).SetToolsetMCPPublicByID(ctx, toolsets_repo.SetToolsetMCPPublicByIDParams{
+		McpIsPublic: true,
+		ID:          toolsetA.ID,
+		ProjectID:   toolsetA.ProjectID,
+	})
 	require.NoError(t, err)
 
 	_, err = testInstance.toolsetRepo.UpdateToolset(ctx, toolsets_repo.UpdateToolsetParams{
@@ -736,16 +774,20 @@ func TestServeInstallPage_CustomDomain_DeletedToolsetReturnsNotFound(t *testing.
 	// --- Org B: the active toolset's org ---
 
 	orgBID := "org-b-" + uuid.New().String()[:8]
-	_, err = testInstance.conn.Exec(ctx,
-		"INSERT INTO organization_metadata (id, name, slug) VALUES ($1, $2, $3)",
-		orgBID, "Org B", "org-b-"+uuid.New().String()[:8])
+	err = organizations_repo.New(testInstance.conn).CreateOrganizationMetadata(ctx, organizations_repo.CreateOrganizationMetadataParams{
+		ID:   orgBID,
+		Name: "Org B",
+		Slug: "org-b-" + uuid.New().String()[:8],
+	})
 	require.NoError(t, err)
 
-	var projectBID uuid.UUID
-	err = testInstance.conn.QueryRow(ctx,
-		"INSERT INTO projects (organization_id, name, slug) VALUES ($1, $2, $3) RETURNING id",
-		orgBID, "Org B Project", "org-b-proj-"+uuid.New().String()[:8]).Scan(&projectBID)
+	projectB, err := projects_repo.New(testInstance.conn).CreateProject(ctx, projects_repo.CreateProjectParams{
+		Name:           "Org B Project",
+		Slug:           "org-b-proj-" + uuid.New().String()[:8],
+		OrganizationID: orgBID,
+	})
 	require.NoError(t, err)
+	projectBID := projectB.ID
 
 	domainB, err := domainsRepo.CreateCustomDomain(ctx, customdomains_repo.CreateCustomDomainParams{
 		OrganizationID: orgBID,
@@ -776,8 +818,11 @@ func TestServeInstallPage_CustomDomain_DeletedToolsetReturnsNotFound(t *testing.
 	})
 	require.NoError(t, err)
 
-	_, err = testInstance.conn.Exec(ctx,
-		"UPDATE toolsets SET mcp_is_public = true WHERE id = $1", toolsetB.ID)
+	err = toolsets_repo.New(testInstance.conn).SetToolsetMCPPublicByID(ctx, toolsets_repo.SetToolsetMCPPublicByIDParams{
+		McpIsPublic: true,
+		ID:          toolsetB.ID,
+		ProjectID:   toolsetB.ProjectID,
+	})
 	require.NoError(t, err)
 
 	_, err = testInstance.toolsetRepo.UpdateToolset(ctx, toolsets_repo.UpdateToolsetParams{
@@ -848,8 +893,11 @@ func TestServeInstallPage_ClaudeDesktop_NoSecurityInputs(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	_, err = testInstance.conn.Exec(ctx,
-		"UPDATE toolsets SET mcp_is_public = true WHERE id = $1", toolset.ID)
+	err = toolsets_repo.New(testInstance.conn).SetToolsetMCPPublicByID(ctx, toolsets_repo.SetToolsetMCPPublicByIDParams{
+		McpIsPublic: true,
+		ID:          toolset.ID,
+		ProjectID:   toolset.ProjectID,
+	})
 	require.NoError(t, err)
 
 	req := httptest.NewRequest("GET", "/mcp/"+mcpSlug+"/install", nil)
@@ -915,6 +963,43 @@ func TestServeInstallPage_ClaudeDesktop_WithSecurityInputs(t *testing.T) {
 	assert.NotContains(t, body, "For Teams &amp; Enterprise", "should not render the Teams & Enterprise admin connector footer")
 }
 
+// TestServeInstallPage_PrivateWithGramOAuth_NoAuthorizationHeader regression-tests
+// AGE-1962: a private MCP server with a Gram OAuth proxy attached must not render
+// the GRAM_KEY Authorization header (or gram-environment) in the install snippets.
+// OAuth handles identity auth at the HTTP layer, so the install command must not
+// instruct users to set those headers manually.
+func TestServeInstallPage_PrivateWithGramOAuth_NoAuthorizationHeader(t *testing.T) {
+	t.Parallel()
+	ctx, testInstance := newTestMCPMetadataService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	result := oauthtest.CreateProxyToolset(t, ctx, testInstance.conn, authCtx, oauthtest.ProxyToolsetOpts{
+		Slug:         "private-gram-oauth",
+		IsPublic:     false,
+		ProviderType: "",
+	})
+	mcpSlug := result.Toolset.McpSlug.String
+
+	req := httptest.NewRequest("GET", "/mcp/"+mcpSlug+"/install", nil)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("mcpSlug", mcpSlug)
+	req = req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, rctx))
+
+	rr := httptest.NewRecorder()
+	err := testInstance.service.ServeInstallPage(rr, req)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, rr.Code)
+
+	body := rr.Body.String()
+	assert.NotContains(t, body, "Authorization", "OAuth-protected install command must not reference an Authorization header")
+	assert.NotContains(t, body, "gram-key", "OAuth-protected install command must not reference the gram-key input")
+	assert.NotContains(t, body, "gram-environment", "OAuth-protected install command must not reference the gram-environment input")
+	assert.NotContains(t, body, "GRAM_KEY", "OAuth-protected install command must not reference the GRAM_KEY env var")
+}
+
 // TestServeInstallPage_NoDomain_AuthedUserWithOrgDomain verifies that a toolset
 // WITHOUT a custom domain can still be loaded via the platform domain when the
 // logged-in user's organization happens to have a custom domain configured. This
@@ -965,8 +1050,10 @@ func TestServeInstallPage_NoDomain_AuthedUserWithOrgDomain(t *testing.T) {
 	require.NoError(t, err)
 
 	// Make the toolset public.
-	_, err = testInstance.conn.Exec(ctx,
-		"UPDATE toolsets SET mcp_is_public = true WHERE mcp_slug = $1", mcpSlug)
+	err = toolsets_repo.New(testInstance.conn).SetToolsetMCPPublicBySlug(ctx, toolsets_repo.SetToolsetMCPPublicBySlugParams{
+		McpIsPublic: true,
+		McpSlug:     pgtype.Text{String: mcpSlug, Valid: true},
+	})
 	require.NoError(t, err)
 
 	// Build a request through the platform domain (no custom domain context)
@@ -984,4 +1071,146 @@ func TestServeInstallPage_NoDomain_AuthedUserWithOrgDomain(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, rr.Code)
 	require.Equal(t, "text/html", rr.Header().Get("Content-Type"))
+}
+
+func TestServeInstallPage_ExternalMCP_FiltersNonUserProvidedHeaders(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPMetadataService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
+
+	mcpSlug := "external-mcp-filter-" + uuid.New().String()[:8]
+	toolset, err := ti.toolsetRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+		OrganizationID:         orgID,
+		ProjectID:              projectID,
+		Name:                   "External MCP Filter Test",
+		Slug:                   mcpSlug,
+		McpSlug:                conv.ToPGText(mcpSlug),
+		Description:            conv.ToPGText("public toolset proxying an external MCP server with header configs"),
+		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
+		McpEnabled:             true,
+	})
+	require.NoError(t, err)
+
+	err = toolsets_repo.New(ti.conn).SetToolsetMCPPublicByID(ctx, toolsets_repo.SetToolsetMCPPublicByIDParams{
+		McpIsPublic: true,
+		ID:          toolset.ID,
+		ProjectID:   toolset.ProjectID,
+	})
+	require.NoError(t, err)
+
+	deploymentID, err := deployments_repo.New(ti.conn).InsertDeployment(ctx, deployments_repo.InsertDeploymentParams{
+		ProjectID:      projectID,
+		OrganizationID: orgID,
+		UserID:         "test-user",
+		IdempotencyKey: uuid.New().String(),
+	})
+	require.NoError(t, err)
+
+	err = deployments_repo.New(ti.conn).CreateDeploymentStatus(ctx, deployments_repo.CreateDeploymentStatusParams{
+		DeploymentID: deploymentID,
+		Status:       "completed",
+	})
+	require.NoError(t, err)
+
+	externalmcpRepo := externalmcp_repo.New(ti.conn)
+	registryID, err := externalmcpRepo.CreateMCPRegistry(ctx, externalmcp_repo.CreateMCPRegistryParams{
+		Name: "test-registry-" + mcpSlug,
+		Url:  "https://mcp.example.com/glyphic",
+	})
+	require.NoError(t, err)
+	attachmentSlug := "glyphic"
+	attachment, err := externalmcpRepo.CreateExternalMCPAttachment(ctx, externalmcp_repo.CreateExternalMCPAttachmentParams{
+		DeploymentID:            deploymentID,
+		RegistryID:              uuid.NullUUID{UUID: registryID, Valid: true},
+		Name:                    "Glyphic MCP Server",
+		Slug:                    attachmentSlug,
+		RegistryServerSpecifier: "test-server",
+	})
+	require.NoError(t, err)
+
+	// header_definitions JSON shape matches the unexported externalMCPHeaderDefinition
+	// struct in server/internal/mv/toolset.go. extractExternalMCPHeaderDefinitions
+	// produces variable names by snake-casing "<attachmentSlug>_<headerName>", so the
+	// resulting names here are GLYPHIC_X_API_KEY, GLYPHIC_AUTHORIZATION, GLYPHIC_TRACE_ID.
+	headerDefsJSON := []byte(`[
+		{"name":"X-Api-Key","isRequired":true,"isSecret":true},
+		{"name":"Authorization","isRequired":true,"isSecret":true},
+		{"name":"Trace-Id","isRequired":true,"isSecret":false}
+	]`)
+
+	toolURNString := "tools:externalmcp:" + attachmentSlug + ":proxy"
+	_, err = externalmcpRepo.CreateExternalMCPToolDefinition(ctx, externalmcp_repo.CreateExternalMCPToolDefinitionParams{
+		ExternalMcpAttachmentID:    attachment.ID,
+		ToolUrn:                    toolURNString,
+		Type:                       "proxy",
+		RemoteUrl:                  "https://mcp.example.com/glyphic",
+		TransportType:              externalmcp_types.TransportTypeStreamableHTTP,
+		RequiresOauth:              false,
+		OauthVersion:               "none",
+		OauthAuthorizationEndpoint: pgtype.Text{},
+		OauthTokenEndpoint:         pgtype.Text{},
+		OauthRegistrationEndpoint:  pgtype.Text{},
+		OauthScopesSupported:       []string{},
+		HeaderDefinitions:          headerDefsJSON,
+	})
+	require.NoError(t, err)
+
+	toolURN, err := urn.ParseTool(toolURNString)
+	require.NoError(t, err)
+	_, err = toolsets_repo.New(ti.conn).CreateToolsetVersion(ctx, toolsets_repo.CreateToolsetVersionParams{
+		ToolsetID:     toolset.ID,
+		Version:       1,
+		ToolUrns:      []urn.Tool{toolURN},
+		ResourceUrns:  []urn.Resource{},
+		PredecessorID: uuid.NullUUID{Valid: false},
+	})
+	require.NoError(t, err)
+
+	mcpRepo := mcpmetadata_repo.New(ti.conn)
+	metadata, err := mcpRepo.UpsertMetadata(ctx, mcpmetadata_repo.UpsertMetadataParams{
+		ToolsetID: toolset.ID,
+		ProjectID: projectID,
+	})
+	require.NoError(t, err)
+
+	// Mark X-Api-Key as system-provided and Authorization as omitted; leave Trace-Id
+	// without an env config (defaulting to user-provided) as the positive-case anchor.
+	_, err = mcpRepo.UpsertEnvironmentConfig(ctx, mcpmetadata_repo.UpsertEnvironmentConfigParams{
+		ProjectID:     projectID,
+		McpMetadataID: metadata.ID,
+		VariableName:  "GLYPHIC_X_API_KEY",
+		ProvidedBy:    "system",
+	})
+	require.NoError(t, err)
+	_, err = mcpRepo.UpsertEnvironmentConfig(ctx, mcpmetadata_repo.UpsertEnvironmentConfigParams{
+		ProjectID:     projectID,
+		McpMetadataID: metadata.ID,
+		VariableName:  "GLYPHIC_AUTHORIZATION",
+		ProvidedBy:    "none",
+	})
+	require.NoError(t, err)
+
+	installReq := httptest.NewRequest("GET", "/mcp/"+mcpSlug+"/install", nil)
+	installRctx := chi.NewRouteContext()
+	installRctx.URLParams.Add("mcpSlug", mcpSlug)
+	installReq = installReq.WithContext(context.WithValue(context.Background(), chi.RouteCtxKey, installRctx))
+
+	installRR := httptest.NewRecorder()
+	err = ti.service.ServeInstallPage(installRR, installReq)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, installRR.Code)
+
+	body := installRR.Body.String()
+	assert.NotContains(t, body, "GLYPHIC_X_API_KEY",
+		"system-provided external MCP header must not appear in the install snippet")
+	assert.NotContains(t, body, "GLYPHIC_AUTHORIZATION",
+		"omitted external MCP header must not appear in the install snippet")
+	assert.Contains(t, body, "GLYPHIC_TRACE_ID",
+		"user-provided external MCP header (no env config) must still appear in the install snippet")
 }

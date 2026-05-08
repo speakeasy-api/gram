@@ -78,7 +78,7 @@ export function buildPluginsDownloadPluginPackageQuery(
 export function queryKeyPluginsDownloadPluginPackage(
   parameters: {
     pluginId: string;
-    platform: operations.Platform;
+    platform: operations.QueryParamPlatform;
     gramSession?: string | undefined;
     gramProject?: string | undefined;
   },

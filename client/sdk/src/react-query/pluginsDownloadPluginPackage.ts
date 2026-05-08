@@ -115,7 +115,7 @@ export function setPluginsDownloadPluginPackageData(
   queryKeyBase: [
     parameters: {
       pluginId: string;
-      platform: operations.Platform;
+      platform: operations.QueryParamPlatform;
       gramSession?: string | undefined;
       gramProject?: string | undefined;
     },
@@ -132,7 +132,7 @@ export function invalidatePluginsDownloadPluginPackage(
   queryKeyBase: TupleToPrefixes<
     [parameters: {
       pluginId: string;
-      platform: operations.Platform;
+      platform: operations.QueryParamPlatform;
       gramSession?: string | undefined;
       gramProject?: string | undefined;
     }]

@@ -30,7 +30,7 @@ type LogProjectCreateEvent struct {
 	ProjectSlug string
 }
 
-func LogProjectCreate(ctx context.Context, dbtx repo.DBTX, event LogProjectCreateEvent) error {
+func (l *Logger) LogProjectCreate(ctx context.Context, dbtx repo.DBTX, event LogProjectCreateEvent) error {
 	action := ActionProjectCreate
 
 	entry := repo.InsertAuditLogParams{
@@ -75,7 +75,7 @@ type LogProjectUpdateEvent struct {
 	ProjectSnapshotAfter  *gen.Project
 }
 
-func LogProjectUpdate(ctx context.Context, dbtx repo.DBTX, event LogProjectUpdateEvent) error {
+func (l *Logger) LogProjectUpdate(ctx context.Context, dbtx repo.DBTX, event LogProjectUpdateEvent) error {
 	action := ActionProjectUpdate
 
 	beforeSnapshot, err := marshalAuditPayload(event.ProjectSnapshotBefore)
@@ -127,7 +127,7 @@ type LogProjectDeleteEvent struct {
 	ProjectSlug string
 }
 
-func LogProjectDelete(ctx context.Context, dbtx repo.DBTX, event LogProjectDeleteEvent) error {
+func (l *Logger) LogProjectDelete(ctx context.Context, dbtx repo.DBTX, event LogProjectDeleteEvent) error {
 	action := ActionProjectDelete
 
 	entry := repo.InsertAuditLogParams{

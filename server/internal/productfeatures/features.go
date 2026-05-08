@@ -10,15 +10,11 @@ import (
 type Feature string
 
 const (
-	FeatureLogs           Feature = "logs"
-	FeatureToolIOLogs     Feature = "tool_io_logs"
-	FeatureRBAC           Feature = "rbac"
-	FeatureSessionCapture Feature = "session_capture"
-	// FeatureBlockShadowMCP gates the shadow-MCP guard: when enabled, every
-	// Gram-hosted tool's input schema includes a required x-gram-toolset-id
-	// constant, and the Cursor/Claude hooks deny tool calls that do not echo
-	// a valid toolset id back. Disabled by default.
-	FeatureBlockShadowMCP Feature = "block_shadow_mcp"
+	FeatureLogs                  Feature = "logs"
+	FeatureToolIOLogs            Feature = "tool_io_logs"
+	FeatureRBAC                  Feature = "rbac"
+	FeatureSessionCapture        Feature = "session_capture"
+	FeatureAuthzChallengeLogging Feature = "authz_challenge_logging"
 )
 
 type FeatureCache struct {

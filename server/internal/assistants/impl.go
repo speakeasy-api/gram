@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net/url"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -19,34 +18,27 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
-	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
-	"github.com/speakeasy-api/gram/server/internal/background"
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/telemetry"
-	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
-	slackclient "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
 )
 
 type Service struct {
-	tracer      trace.Tracer
-	logger      *slog.Logger
-	auth        *auth.Auth
-	authz       *authz.Engine
-	core        *ServiceCore
-	temporalEnv *tenv.Environment
+	tracer   trace.Tracer
+	logger   *slog.Logger
+	auth     *auth.Auth
+	authz    *authz.Engine
+	core     *ServiceCore
+	signaler WorkflowSignaler
 }
 
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 var _ bgtriggers.Dispatcher = (*Service)(nil)
-
-const assistantWorkflowDispatchEnabled = false
 
 func NewService(
 	logger *slog.Logger,
@@ -54,23 +46,17 @@ func NewService(
 	db *pgxpool.Pool,
 	sessions *sessions.Manager,
 	authzEngine *authz.Engine,
-	assistantTokens *assistanttokens.Manager,
-	serverURL *url.URL,
-	slackClient *slackclient.SlackClient,
-	runtimeBackend RuntimeBackend,
-	temporalEnv *tenv.Environment,
-	telemetryLogger *telemetry.Logger,
+	core *ServiceCore,
+	signaler WorkflowSignaler,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("assistants"))
-	instrumentedRuntime := newTelemetryRuntimeBackend(runtimeBackend, telemetryLogger)
-	core := NewServiceCore(logger, db, instrumentedRuntime, slackClient, assistantTokens, serverURL, telemetryLogger)
 	return &Service{
-		tracer:      tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/assistants"),
-		logger:      logger,
-		auth:        auth.New(logger, db, sessions, authzEngine),
-		authz:       authzEngine,
-		core:        core,
-		temporalEnv: temporalEnv,
+		tracer:   tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/assistants"),
+		logger:   logger,
+		auth:     auth.New(logger, db, sessions, authzEngine),
+		authz:    authzEngine,
+		core:     core,
+		signaler: signaler,
 	}
 }
 
@@ -229,13 +215,6 @@ func (s *Service) Kind() string {
 }
 
 func (s *Service) Dispatch(ctx context.Context, task bgtriggers.Task) error {
-	if !assistantWorkflowDispatchEnabled {
-		// Keep assistant trigger delivery inert while the coordinator and thread
-		// workflows are stubs, so partial rollout does not create pending work
-		// that no workflow can admit or process yet.
-		return nil
-	}
-
 	result, err := s.core.EnqueueTriggerTask(ctx, task)
 	if err != nil {
 		return fmt.Errorf("enqueue assistant trigger task: %w", err)
@@ -243,7 +222,7 @@ func (s *Service) Dispatch(ctx context.Context, task bgtriggers.Task) error {
 	if !result.EventCreated || result.AssistantID == uuid.Nil {
 		return nil
 	}
-	if err := background.SignalAssistantCoordinator(ctx, s.temporalEnv, result.AssistantID); err != nil {
+	if err := s.signaler.SignalCoordinator(ctx, result.AssistantID); err != nil {
 		return fmt.Errorf("signal assistant coordinator: %w", err)
 	}
 	return nil

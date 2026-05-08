@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
-	"log/slog"
 	"testing"
 	"time"
 
@@ -14,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/oauth"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 const (
@@ -43,7 +43,7 @@ type TokenIssuer struct {
 // will later validate tokens — otherwise lookups won't find issued tokens.
 func NewTokenIssuer(t *testing.T, cacheAdapter cache.Cache, enc *encryption.Client) *TokenIssuer {
 	t.Helper()
-	logger := slog.New(slog.DiscardHandler)
+	logger := testenv.NewLogger(t)
 	clientReg := oauth.NewClientRegistrationService(cacheAdapter, logger)
 	pkceService := oauth.NewPKCEService(logger)
 	grantMgr := oauth.NewGrantManager(cacheAdapter, clientReg, pkceService, logger, enc)

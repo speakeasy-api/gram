@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"context"
 	"crypto/sha256"
-	"database/sql"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -20,6 +19,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -64,12 +64,24 @@ type Service struct {
 	chatSessions *chatsessions.Manager
 	projects     *projectsRepo.Queries
 	repo         *repo.Queries
+	audit        *audit.Logger
 }
 
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, guardianPolicy *guardian.Policy, db *pgxpool.Pool, sessions *sessions.Manager, chatSessions *chatsessions.Manager, storage BlobStore, jwtSecret string, authzEngine *authz.Engine) *Service {
+func NewService(
+	logger *slog.Logger,
+	tracerProvider trace.TracerProvider,
+	guardianPolicy *guardian.Policy,
+	db *pgxpool.Pool,
+	sessions *sessions.Manager,
+	chatSessions *chatsessions.Manager,
+	storage BlobStore,
+	jwtSecret string,
+	authzEngine *authz.Engine,
+	auditLogger *audit.Logger,
+) *Service {
 	logger = logger.With(attr.SlogComponent("assets"))
 
 	return &Service{
@@ -83,6 +95,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, guardi
 		chatSessions:   chatSessions,
 		projects:       projectsRepo.New(db),
 		repo:           repo.New(db),
+		audit:          auditLogger,
 	}
 }
 
@@ -141,7 +154,7 @@ func (s *Service) ServeImage(ctx context.Context, payload *gen.ServeImageForm) (
 
 	row, err := s.repo.GetImageAssetURL(ctx, assetID)
 	switch {
-	case errors.Is(err, sql.ErrNoRows):
+	case errors.Is(err, pgx.ErrNoRows):
 		return nil, nil, oops.C(oops.CodeNotFound)
 	case err != nil:
 		return nil, nil, oops.E(oops.CodeUnexpected, fmt.Errorf("get image asset url: %w", err), "error loading asset")
@@ -256,7 +269,7 @@ func (s *Service) UploadImage(ctx context.Context, payload *gen.UploadImageForm,
 		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("create asset in database: %w", err), "error saving document info").Log(ctx, logger)
 	}
 
-	if err := audit.LogAssetCreate(ctx, dbtx, audit.LogAssetCreateEvent{
+	if err := s.audit.LogAssetCreate(ctx, dbtx, audit.LogAssetCreateEvent{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
 
@@ -373,7 +386,7 @@ func (s *Service) UploadFunctions(ctx context.Context, payload *gen.UploadFuncti
 		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("create asset in database: %w", err), "error saving document info").Log(ctx, logger)
 	}
 
-	if err := audit.LogAssetCreate(ctx, dbtx, audit.LogAssetCreateEvent{
+	if err := s.audit.LogAssetCreate(ctx, dbtx, audit.LogAssetCreateEvent{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
 
@@ -486,7 +499,7 @@ func (s *Service) UploadOpenAPIv3(ctx context.Context, payload *gen.UploadOpenAP
 		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("create asset in database: %w", err), "error saving document info").Log(ctx, logger)
 	}
 
-	if err := audit.LogAssetCreate(ctx, dbtx, audit.LogAssetCreateEvent{
+	if err := s.audit.LogAssetCreate(ctx, dbtx, audit.LogAssetCreateEvent{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
 
@@ -596,7 +609,7 @@ func (s *Service) findExistingAsset(ctx context.Context, params *findAssetParams
 		ProjectID: params.projectID,
 		Sha256:    params.hash,
 	})
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("find project asset by hash: %w", err), "error loading document data")
 	}
 	if asset.ID != uuid.Nil {
@@ -749,7 +762,7 @@ func (s *Service) ServeOpenAPIv3(ctx context.Context, payload *gen.ServeOpenAPIv
 		ProjectID: projectID,
 	})
 	switch {
-	case errors.Is(err, sql.ErrNoRows):
+	case errors.Is(err, pgx.ErrNoRows):
 		return nil, nil, oops.C(oops.CodeNotFound)
 	case err != nil:
 		return nil, nil, oops.E(oops.CodeUnexpected, fmt.Errorf("get openapiv3 asset url: %w", err), "error loading asset").Log(ctx, logger)
@@ -946,7 +959,7 @@ func (s *Service) FetchOpenAPIv3FromURL(ctx context.Context, payload *gen.FetchO
 		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("create asset in database: %w", err), "error saving document info").Log(ctx, logger)
 	}
 
-	if err := audit.LogAssetCreate(ctx, dbtx, audit.LogAssetCreateEvent{
+	if err := s.audit.LogAssetCreate(ctx, dbtx, audit.LogAssetCreateEvent{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
 
@@ -1014,7 +1027,7 @@ func (s *Service) ServeFunction(ctx context.Context, payload *gen.ServeFunctionF
 		ProjectID: projectID,
 	})
 	switch {
-	case errors.Is(err, sql.ErrNoRows):
+	case errors.Is(err, pgx.ErrNoRows):
 		return nil, nil, oops.C(oops.CodeNotFound)
 	case err != nil:
 		return nil, nil, oops.E(oops.CodeUnexpected, fmt.Errorf("get function asset url: %w", err), "error loading asset").Log(ctx, logger)
@@ -1209,7 +1222,7 @@ func (s *Service) ServeChatAttachment(ctx context.Context, payload *gen.ServeCha
 		ProjectID: projectID,
 	})
 	switch {
-	case errors.Is(err, sql.ErrNoRows):
+	case errors.Is(err, pgx.ErrNoRows):
 		return nil, nil, oops.C(oops.CodeNotFound)
 	case err != nil:
 		return nil, nil, oops.E(oops.CodeUnexpected, fmt.Errorf("get chat attachment asset url: %w", err), "error loading asset").Log(ctx, logger)
@@ -1283,7 +1296,7 @@ func (s *Service) CreateSignedChatAttachmentURL(ctx context.Context, payload *ge
 		ProjectID: projectID,
 	})
 	switch {
-	case errors.Is(err, sql.ErrNoRows):
+	case errors.Is(err, pgx.ErrNoRows):
 		return nil, oops.C(oops.CodeNotFound)
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("get chat attachment asset url: %w", err), "error loading asset").Log(ctx, logger)
@@ -1348,7 +1361,7 @@ func (s *Service) ServeChatAttachmentSigned(ctx context.Context, payload *gen.Se
 		ProjectID: projectID,
 	})
 	switch {
-	case errors.Is(err, sql.ErrNoRows):
+	case errors.Is(err, pgx.ErrNoRows):
 		return nil, nil, oops.C(oops.CodeNotFound)
 	case err != nil:
 		return nil, nil, oops.E(oops.CodeUnexpected, fmt.Errorf("get chat attachment asset url: %w", err), "error loading asset").Log(ctx, logger)

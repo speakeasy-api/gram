@@ -1,5 +1,3 @@
-use std::time::Duration;
-
 use http::StatusCode;
 use thiserror::Error;
 
@@ -33,23 +31,11 @@ pub enum RunnerError {
     #[error("agent build failed: {0}")]
     AgentBuild(String),
 
-    #[error("mcp connect failed: {0}")]
-    McpConnect(String),
-
-    #[error("mcp connect timed out after {0:?}")]
-    McpConnectTimeout(Duration),
-
     #[error("agent session start failed: {0}")]
     AgentStart(String),
 
-    #[error("agent session start timed out after {0:?}")]
-    AgentStartTimeout(Duration),
-
     #[error("loop error: {0}")]
     Loop(String),
-
-    #[error("unexpected mcp auth interrupt — token likely expired or backend returned 403")]
-    McpAuthInterrupt,
 
     #[error("unsupported history role: {0}")]
     UnsupportedHistoryRole(String),
@@ -80,12 +66,9 @@ impl From<agentkit_loop::LoopError> for RunnerError {
 impl RunnerError {
     pub fn configure_status_code(&self) -> StatusCode {
         match self {
-            RunnerError::McpConnectTimeout(_) | RunnerError::AgentStartTimeout(_) => {
-                StatusCode::GATEWAY_TIMEOUT
+            RunnerError::AgentStart(_) | RunnerError::HttpClient(_) => {
+                StatusCode::SERVICE_UNAVAILABLE
             }
-            RunnerError::McpConnect(_)
-            | RunnerError::AgentStart(_)
-            | RunnerError::HttpClient(_) => StatusCode::SERVICE_UNAVAILABLE,
             RunnerError::McpHeaderName { .. }
             | RunnerError::McpHeaderValue { .. }
             | RunnerError::HeaderValue { .. }
@@ -93,10 +76,9 @@ impl RunnerError {
             | RunnerError::MissingToolCallId
             | RunnerError::ToolCallArguments { .. }
             | RunnerError::ConfigError { .. } => StatusCode::BAD_REQUEST,
-            RunnerError::AgentBuild(_)
-            | RunnerError::Loop(_)
-            | RunnerError::McpAuthInterrupt
-            | RunnerError::SubmitInput(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            RunnerError::AgentBuild(_) | RunnerError::Loop(_) | RunnerError::SubmitInput(_) => {
+                StatusCode::INTERNAL_SERVER_ERROR
+            }
         }
     }
 }

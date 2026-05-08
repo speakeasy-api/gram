@@ -2,13 +2,13 @@ package functions
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"log/slog"
 	"net/url"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -90,7 +90,7 @@ func (s *Service) GetSignedAssetURL(ctx context.Context, p *gen.GetSignedAssetUR
 		AssetID:      assetID,
 	})
 	switch {
-	case errors.Is(err, sql.ErrNoRows):
+	case errors.Is(err, pgx.ErrNoRows):
 		return nil, oops.C(oops.CodeNotFound)
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to get function asset url").Log(ctx, logger)

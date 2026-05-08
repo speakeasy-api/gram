@@ -54,6 +54,11 @@ type CompletionRequest struct {
 	APIKeyID       string
 
 	JSONSchema *or.ChatJSONSchemaConfig // For structured output mode
+
+	// NormalizeOutboundMessages drops narrative text from assistant messages
+	// that also carry tool_calls before forwarding to OpenRouter. Opt-in via
+	// the `unstable_normalizeOutboundMessages=1` query string on the proxy.
+	NormalizeOutboundMessages bool
 }
 
 type ObjectCompletionRequest struct {

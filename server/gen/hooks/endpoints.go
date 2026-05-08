@@ -46,7 +46,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 // "claude" of service "hooks".
 func NewClaudeEndpoint(s Service) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
-		p := req.(*ClaudeHookPayload)
+		p := req.(*ClaudePayload)
 		return s.Claude(ctx, p)
 	}
 }

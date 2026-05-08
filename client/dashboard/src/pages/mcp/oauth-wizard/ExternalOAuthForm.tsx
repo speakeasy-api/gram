@@ -5,25 +5,25 @@ import { TextArea } from "@/components/ui/textarea";
 import { Type } from "@/components/ui/type";
 import { Button, Stack } from "@speakeasy-api/moonshine";
 
-import type { DiscoveredOAuth, WizardDispatch, WizardState } from "./types";
+import { WizardContext } from "./machine";
 
 export function ExternalOAuthForm({
-  state,
-  dispatch,
-  discoveredOAuth,
   hasMultipleOAuth2AuthCode,
   oauth2SecurityCount,
-  isPending,
-  onSubmit,
 }: {
-  state: Extract<WizardState, { step: "external_oauth_server_metadata_form" }>;
-  dispatch: WizardDispatch;
-  discoveredOAuth: DiscoveredOAuth | null;
   hasMultipleOAuth2AuthCode: boolean;
   oauth2SecurityCount: number;
-  isPending: boolean;
-  onSubmit: () => void;
 }) {
+  const send = WizardContext.useActorRef().send;
+  const external = WizardContext.useSelector((s) => s.context.external);
+  const discovered = WizardContext.useSelector((s) => {
+    const d = s.context.discovered;
+    return d?.version === "2.1" ? d : null;
+  });
+  const submitting = WizardContext.useSelector((s) =>
+    s.matches({ external: "submitting" }),
+  );
+
   return (
     <>
       <div className="max-h-[60vh] space-y-4 overflow-auto">
@@ -35,33 +35,28 @@ export function ExternalOAuthForm({
             </Type>
           </div>
         )}
-        {discoveredOAuth && !state.prefilled && (
+        {discovered && !external.prefilled && (
           <div className="border-border bg-muted/50 mb-4 flex items-start justify-between gap-4 rounded-md border p-4">
             <div>
               <Type small className="font-medium">
-                OAuth detected from {discoveredOAuth.name}
+                OAuth detected from {discovered.name}
               </Type>
 
               <Type muted small className="mt-1">
-                We discovered OAuth {discoveredOAuth.version} metadata from this
+                We discovered OAuth {discovered.version} metadata from this
                 server. You can use it to pre-fill the form below.
               </Type>
             </div>
             <Button
               size="sm"
               variant="secondary"
-              onClick={() =>
-                dispatch({
-                  type: "APPLY_DISCOVERED",
-                  discoveredOAuth,
-                })
-              }
+              onClick={() => send({ type: "APPLY_DISCOVERED" })}
             >
               Apply
             </Button>
           </div>
         )}
-        {state.prefilled && (
+        {external.prefilled && (
           <div className="border-border bg-muted/50 mb-4 rounded-md border p-4">
             <Type small className="font-medium">
               Pre-filled from detected OAuth metadata
@@ -94,13 +89,9 @@ export function ExternalOAuthForm({
               <Type className="mb-2 font-medium">OAuth Server Slug</Type>
               <Input
                 placeholder="my-oauth-server"
-                value={state.slug}
-                onChange={(v: string) =>
-                  dispatch({
-                    type: "UPDATE_FIELD",
-                    field: "slug",
-                    value: v,
-                  })
+                value={external.slug}
+                onChange={(value: string) =>
+                  send({ type: "FIELD_EXTERNAL", key: "slug", value })
                 }
                 maxLength={40}
               />
@@ -110,9 +101,9 @@ export function ExternalOAuthForm({
               <Type className="mb-2 font-medium">
                 OAuth Authorization Server Metadata
               </Type>
-              {state.jsonError && (
+              {external.jsonError && (
                 <Type className="mt-1 text-sm text-red-500!">
-                  {state.jsonError}
+                  {external.jsonError}
                 </Type>
               )}
               <TextArea
@@ -132,21 +123,10 @@ export function ExternalOAuthForm({
     "S256"
   ]
 }`}
-                value={state.metadataJson}
-                onChange={(value: string) => {
-                  dispatch({
-                    type: "UPDATE_FIELD",
-                    field: "metadataJson",
-                    value,
-                  });
-                  if (state.jsonError) {
-                    dispatch({
-                      type: "UPDATE_FIELD",
-                      field: "jsonError",
-                      value: "",
-                    });
-                  }
-                }}
+                value={external.metadataJson}
+                onChange={(value: string) =>
+                  send({ type: "FIELD_EXTERNAL", key: "metadataJson", value })
+                }
                 rows={12}
                 className="font-mono text-sm"
               />
@@ -156,20 +136,20 @@ export function ExternalOAuthForm({
       </div>
 
       <Dialog.Footer className="flex justify-between">
-        <Button variant="secondary" onClick={() => dispatch({ type: "BACK" })}>
+        <Button variant="secondary" onClick={() => send({ type: "BACK" })}>
           Back
         </Button>
         <div className="ml-auto">
           <Button
-            onClick={onSubmit}
+            onClick={() => send({ type: "SUBMIT" })}
             disabled={
               hasMultipleOAuth2AuthCode ||
-              isPending ||
-              !state.slug.trim() ||
-              !state.metadataJson.trim()
+              submitting ||
+              !external.slug.trim() ||
+              !external.metadataJson.trim()
             }
           >
-            {isPending ? "Configuring..." : "Configure External OAuth"}
+            {submitting ? "Configuring..." : "Configure External OAuth"}
           </Button>
         </div>
       </Dialog.Footer>

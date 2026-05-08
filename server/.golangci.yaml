@@ -108,6 +108,19 @@ linters:
         linters:
           - forbidigo
         text: GG001|GG002
+      # The testenv package is the canonical provider of the helpers that
+      # GG006/GG008/GG009 redirect tests to. It necessarily constructs the
+      # underlying primitives directly.
+      - path: internal/testenv/testing\.go
+        linters:
+          - forbidigo
+        text: GG006|GG008|GG009
+      # Production observability setup falls back to noop providers when
+      # no exporter is configured.
+      - path: internal/o11y/setup\.go
+        linters:
+          - forbidigo
+        text: GG008|GG009
   settings:
     custom:
       glint:
@@ -159,6 +172,18 @@ linters:
         - pattern: ^net\.Lookup(Addr|CNAME|Host|IP|MX|NS|Port|SRV|TXT)$
           pkg: ^net$
           msg: "GG005: Use dns.NewNetResolver() instead of net.Lookup* for testability."
+        - pattern: ^slog\.DiscardHandler$
+          pkg: ^log/slog$
+          msg: "GG006: Use testenv.NewLogger(t) in tests instead of slog.DiscardHandler. testenv.NewLogger discards by default and emits pretty logs under `go test -v`."
+        - pattern: ^slog\.Default$
+          pkg: ^log/slog$
+          msg: "GG007: Pass a logger explicitly. In tests use testenv.NewLogger(t)."
+        - pattern: ^noop\.NewTracerProvider$
+          pkg: ^go\.opentelemetry\.io/otel/trace/noop$
+          msg: "GG008: Use testenv.NewTracerProvider(t) in tests instead of constructing a noop tracer provider inline."
+        - pattern: ^noop\.NewMeterProvider$
+          pkg: ^go\.opentelemetry\.io/otel/metric/noop$
+          msg: "GG009: Use testenv.NewMeterProvider(t) in tests instead of constructing a noop meter provider inline."
     sloglint:
       no-mixed-args: true
       attr-only: true
@@ -254,6 +279,24 @@ linters:
               desc: V3 is not ready yet use github.com/urfave/cli/v2
             - pkg: "github.com/pkg/errors"
               desc: Should be replaced by standard lib errors package
+        # testenv exposes cross-cutting test primitives (loggers, OTel
+        # providers, encryption clients, infra launchers). It must not import
+        # domain packages, otherwise internal tests in those packages can no
+        # longer use testenv. Per-domain test helpers belong in sibling
+        # packages such as `externalmcptest` and `functionstest`.
+        testenv-no-domain-imports:
+          list-mode: lax
+          files:
+            - "**/internal/testenv/*.go"
+          deny:
+            - pkg: "github.com/speakeasy-api/gram/server/internal/externalmcp"
+              desc: Move helpers that need externalmcp to internal/externalmcptest.
+            - pkg: "github.com/speakeasy-api/gram/server/internal/functions"
+              desc: Move helpers that need functions to internal/functionstest.
+            - pkg: "github.com/speakeasy-api/gram/server/internal/assets"
+              desc: Move helpers that need assets to a per-domain test package.
+            - pkg: "github.com/speakeasy-api/gram/server/internal/authz"
+              desc: testenv must not depend on authz; tests in package authz import testenv.
     importas:
       no-unaliased: true
       alias:

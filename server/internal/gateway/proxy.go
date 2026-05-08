@@ -783,14 +783,12 @@ func (tp *ToolProxy) doExternalMCP(
 		oauthToken = env.OAuthToken
 	}
 
-
 	// Build headers from environment variables
 	headers := externalmcp.BuildHeaders(env.SystemEnv, env.UserConfig, plan.HeaderDefinitions, oauthToken)
 	opts := &externalmcp.ClientOptions{
 		Authorization: "",
 		Headers:       headers,
 	}
-
 
 	// Connect to the external MCP server
 	client, err := externalmcp.NewClient(ctx, logger, tp.policy, plan.RemoteURL, plan.TransportType, opts)

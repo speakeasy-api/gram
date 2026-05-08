@@ -4,18 +4,18 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
-	"log/slog"
 	"net/http"
-	"os"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func TestHandleResponseFiltering_NoFilter(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
-	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	logger := testenv.NewLogger(t)
 
 	mockResp := func() *http.Response {
 		return &http.Response{
@@ -50,7 +50,7 @@ func TestHandleResponseFiltering_NoFilter(t *testing.T) {
 func TestHandleResponseFiltering_NoFilterExpression(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
-	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	logger := testenv.NewLogger(t)
 
 	config := &ResponseFilter{
 		Type:         FilterTypeJQ,
@@ -83,7 +83,7 @@ func TestHandleResponseFiltering_NoFilterExpression(t *testing.T) {
 func TestHandleResponseFiltering_ContentTypeMismatch(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
-	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	logger := testenv.NewLogger(t)
 
 	config := &ResponseFilter{
 		Type:         FilterTypeJQ,
@@ -121,7 +121,7 @@ func TestHandleResponseFiltering_ContentTypeMismatch(t *testing.T) {
 func TestHandleResponseFiltering_StatusCodeMismatch(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
-	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	logger := testenv.NewLogger(t)
 
 	config := &ResponseFilter{
 		Type:         FilterTypeJQ,
@@ -159,7 +159,7 @@ func TestHandleResponseFiltering_StatusCodeMismatch(t *testing.T) {
 func TestHandleResponseFiltering_InvalidJQFilter(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
-	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	logger := testenv.NewLogger(t)
 
 	config := &ResponseFilter{
 		Type:         FilterTypeJQ,
@@ -197,7 +197,7 @@ func TestHandleResponseFiltering_InvalidJQFilter(t *testing.T) {
 func TestHandleResponseFiltering_SuccessfulJSONFilter(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
-	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	logger := testenv.NewLogger(t)
 
 	config := &ResponseFilter{
 		Type:         FilterTypeJQ,
@@ -247,7 +247,7 @@ func TestHandleResponseFiltering_SuccessfulJSONFilter(t *testing.T) {
 func TestHandleResponseFiltering_SuccessfulYAMLFilter(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
-	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	logger := testenv.NewLogger(t)
 
 	config := &ResponseFilter{
 		Type:         FilterTypeJQ,
@@ -300,7 +300,7 @@ meta:
 func TestHandleResponseFiltering_ComplexJQFilter(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
-	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	logger := testenv.NewLogger(t)
 
 	config := &ResponseFilter{
 		Type:         FilterTypeJQ,
@@ -371,7 +371,7 @@ func TestHandleResponseFiltering_ComplexJQFilter(t *testing.T) {
 func TestHandleResponseFiltering_FilterError(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
-	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	logger := testenv.NewLogger(t)
 
 	config := &ResponseFilter{
 		Type:         FilterTypeJQ,
@@ -421,7 +421,7 @@ func TestHandleResponseFiltering_FilterError(t *testing.T) {
 func TestHandleResponseFiltering_ReadBodyError(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
-	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	logger := testenv.NewLogger(t)
 
 	config := &ResponseFilter{
 		Type:         FilterTypeJQ,

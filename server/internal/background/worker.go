@@ -3,6 +3,7 @@ package background
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -14,7 +15,9 @@ import (
 	"go.temporal.io/sdk/worker"
 
 	"github.com/speakeasy-api/gram/server/internal/assets"
+	"github.com/speakeasy-api/gram/server/internal/assistants"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	risk_analysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/background/interceptors"
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
@@ -29,11 +32,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/rag"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
+	"github.com/workos/workos-go/v6/pkg/events"
 )
 
 type WorkerOptions struct {
@@ -58,7 +63,12 @@ type WorkerOptions struct {
 	MCPRegistryClient   *externalmcp.RegistryClient
 	TelemetryLogger     *telemetry.Logger
 	TriggersApp         *bgtriggers.App
+	AssistantsCore      *assistants.ServiceCore
+	TemporalEnv         *tenv.Environment
 	PIIScanner          risk_analysis.PIIScanner
+	ShadowMCPClient     *shadowmcp.Client
+	AuditLogger         *audit.Logger
+	WorkOSEventsClient  *events.Client
 }
 
 func ForDeploymentProcessing(
@@ -69,6 +79,7 @@ func ForDeploymentProcessing(
 	enc *encryption.Client,
 	deployer functions.Deployer,
 	mcpRegistryClient *externalmcp.RegistryClient,
+	auditLogger *audit.Logger,
 ) *WorkerOptions {
 	return &WorkerOptions{
 		DB:                  db,
@@ -79,6 +90,7 @@ func ForDeploymentProcessing(
 		FunctionsDeployer:   deployer,
 		FunctionsVersion:    "local", // Test deployers don't use baked versions
 		MCPRegistryClient:   mcpRegistryClient,
+		AuditLogger:         auditLogger,
 		SlackClient:         nil,
 		ChatClient:          nil,
 		OpenRouter:          nil,
@@ -92,7 +104,11 @@ func ForDeploymentProcessing(
 		TelemetryLogger:     nil,
 		TriggersApp:         nil,
 		CacheAdapter:        nil,
+		AssistantsCore:      nil,
+		TemporalEnv:         nil,
 		PIIScanner:          nil,
+		ShadowMCPClient:     nil,
+		WorkOSEventsClient:  nil,
 	}
 }
 
@@ -102,7 +118,7 @@ func NewTemporalWorker(
 	tracerProvider trace.TracerProvider,
 	meterProvider metric.MeterProvider,
 	options ...*WorkerOptions,
-) worker.Worker {
+) *Workers {
 	opts := &WorkerOptions{
 		GuardianPolicy:      nil,
 		DB:                  nil,
@@ -125,7 +141,12 @@ func NewTemporalWorker(
 		TelemetryLogger:     nil,
 		TriggersApp:         nil,
 		CacheAdapter:        nil,
+		AssistantsCore:      nil,
+		TemporalEnv:         env,
 		PIIScanner:          nil,
+		ShadowMCPClient:     nil,
+		AuditLogger:         nil,
+		WorkOSEventsClient:  nil,
 	}
 
 	for _, o := range options {
@@ -151,16 +172,28 @@ func NewTemporalWorker(
 			TelemetryLogger:     conv.Default(o.TelemetryLogger, opts.TelemetryLogger),
 			TriggersApp:         conv.Default(o.TriggersApp, opts.TriggersApp),
 			CacheAdapter:        conv.Default(o.CacheAdapter, opts.CacheAdapter),
+			AssistantsCore:      conv.Default(o.AssistantsCore, opts.AssistantsCore),
+			TemporalEnv:         conv.Default(o.TemporalEnv, opts.TemporalEnv),
 			PIIScanner:          conv.Default(o.PIIScanner, opts.PIIScanner),
+			ShadowMCPClient:     conv.Default(o.ShadowMCPClient, opts.ShadowMCPClient),
+			AuditLogger:         conv.Default(o.AuditLogger, opts.AuditLogger),
+			WorkOSEventsClient:  conv.Default(o.WorkOSEventsClient, opts.WorkOSEventsClient),
 		}
 	}
 
+	workerInterceptors := []interceptor.WorkerInterceptor{
+		&interceptors.Recovery{WorkerInterceptorBase: interceptor.WorkerInterceptorBase{}},
+		&interceptors.InjectExecutionInfo{WorkerInterceptorBase: interceptor.WorkerInterceptorBase{}},
+		&interceptors.Logging{WorkerInterceptorBase: interceptor.WorkerInterceptorBase{}},
+	}
+
 	temporalWorker := worker.New(env.Client(), string(env.Queue()), worker.Options{
-		Interceptors: []interceptor.WorkerInterceptor{
-			&interceptors.Recovery{WorkerInterceptorBase: interceptor.WorkerInterceptorBase{}},
-			&interceptors.InjectExecutionInfo{WorkerInterceptorBase: interceptor.WorkerInterceptorBase{}},
-			&interceptors.Logging{WorkerInterceptorBase: interceptor.WorkerInterceptorBase{}},
-		},
+		Interceptors: workerInterceptors,
+	})
+
+	riskWorker := worker.New(env.Client(), RiskAnalysisTaskQueue(env.Queue()), worker.Options{
+		Interceptors:                       workerInterceptors,
+		MaxConcurrentActivityExecutionSize: perPodAnalyzeBatchConcurrency,
 	})
 
 	activities := NewActivities(
@@ -184,11 +217,15 @@ func NewTemporalWorker(
 		opts.FunctionsVersion,
 		opts.RagService,
 		opts.MCPRegistryClient,
-		env.Client(),
+		opts.TemporalEnv,
 		opts.TelemetryLogger,
 		opts.TriggersApp,
 		opts.CacheAdapter,
+		opts.AssistantsCore,
 		opts.PIIScanner,
+		opts.ShadowMCPClient,
+		opts.AuditLogger,
+		opts.WorkOSEventsClient,
 	)
 
 	temporalWorker.RegisterActivity(activities.ProcessDeployment)
@@ -218,9 +255,20 @@ func NewTemporalWorker(
 	// Trigger related activities
 	temporalWorker.RegisterActivity(activities.DispatchTrigger)
 	temporalWorker.RegisterActivity(activities.ProcessScheduledTrigger)
-	// Risk analysis activities
+	// Risk analysis activities — AnalyzeBatch on the dedicated worker.
 	temporalWorker.RegisterActivity(activities.FetchUnanalyzedMessages)
-	temporalWorker.RegisterActivity(activities.AnalyzeBatch)
+	riskWorker.RegisterActivity(activities.AnalyzeBatch)
+	// Assistant activities
+	temporalWorker.RegisterActivity(activities.AdmitAssistantThreads)
+	temporalWorker.RegisterActivity(activities.ProcessAssistantThread)
+	temporalWorker.RegisterActivity(activities.ExpireAssistantThreadRuntime)
+	temporalWorker.RegisterActivity(activities.ReapStuckAssistantRuntimes)
+	temporalWorker.RegisterActivity(activities.ReapInactiveAssistantRuntimes)
+	temporalWorker.RegisterActivity(activities.SignalAssistantCoordinator)
+	temporalWorker.RegisterActivity(activities.SignalAssistantThread)
+	// WorkOS sync activities
+	temporalWorker.RegisterActivity(activities.ProcessWorkOSOrganizationEvents)
+	temporalWorker.RegisterActivity(activities.ProcessWorkOSMembershipEvents)
 
 	temporalWorker.RegisterWorkflow(ProcessDeploymentWorkflow)
 	temporalWorker.RegisterWorkflow(FunctionsReaperWorkflow)
@@ -240,9 +288,15 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(TriggerDispatchWorkflow)
 	// Risk analysis workflow
 	temporalWorker.RegisterWorkflow(DrainRiskAnalysisWorkflow)
-	// Assistant workflows (stub bodies — populated in the workflows PR)
 	temporalWorker.RegisterWorkflow(AssistantCoordinatorWorkflow)
 	temporalWorker.RegisterWorkflow(AssistantThreadWorkflow)
+	temporalWorker.RegisterWorkflow(AssistantReaperWorkflow)
+	temporalWorker.RegisterWorkflow(AssistantRuntimeJanitorWorkflow)
+	// WorkOS sync workflows
+	temporalWorker.RegisterWorkflow(ProcessWorkOSOrganizationEventsWorkflow)
+	temporalWorker.RegisterWorkflow(ProcessWorkOSOrganizationEventsWorkflowDebounced)
+	temporalWorker.RegisterWorkflow(ProcessWorkOSMembershipEventsWorkflow)
+	temporalWorker.RegisterWorkflow(ProcessWorkOSMembershipEventsWorkflowDebounced)
 
 	if err := AddPlatformUsageMetricsSchedule(context.Background(), env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
@@ -256,5 +310,58 @@ func NewTemporalWorker(
 		}
 	}
 
-	return temporalWorker
+	if err := AddAssistantReaperSchedule(context.Background(), env); err != nil {
+		logger.ErrorContext(context.Background(), "failed to add assistant reaper schedule", attr.SlogError(err))
+	}
+
+	if err := AddAssistantRuntimeJanitorSchedule(context.Background(), env); err != nil {
+		logger.ErrorContext(context.Background(), "failed to add assistant runtime janitor schedule", attr.SlogError(err))
+	}
+
+	return &Workers{main: temporalWorker, riskAnalysis: riskWorker}
+}
+
+// Fleet-wide cap on in-flight AnalyzeBatch per worker pod — the only knob
+// in the chain that doesn't multiply with N policies or N batches.
+const perPodAnalyzeBatchConcurrency = 20
+
+func RiskAnalysisTaskQueue(mainQueue tenv.TaskQueueName) string {
+	return string(mainQueue) + "-risk-analysis"
+}
+
+// Workers bundles the main and risk-analysis Temporal workers.
+type Workers struct {
+	main         worker.Worker
+	riskAnalysis worker.Worker
+}
+
+// Run starts the risk-analysis worker, then blocks running the main worker
+// until interruptCh receives.
+func (w *Workers) Run(interruptCh <-chan any) error {
+	if err := w.riskAnalysis.Start(); err != nil {
+		return fmt.Errorf("start risk analysis worker: %w", err)
+	}
+	defer w.riskAnalysis.Stop()
+
+	if err := w.main.Run(interruptCh); err != nil {
+		return fmt.Errorf("run main worker: %w", err)
+	}
+	return nil
+}
+
+// Start starts both workers without blocking. Pair with Stop (used by tests).
+func (w *Workers) Start() error {
+	if err := w.main.Start(); err != nil {
+		return fmt.Errorf("start main worker: %w", err)
+	}
+	if err := w.riskAnalysis.Start(); err != nil {
+		w.main.Stop()
+		return fmt.Errorf("start risk analysis worker: %w", err)
+	}
+	return nil
+}
+
+func (w *Workers) Stop() {
+	w.riskAnalysis.Stop()
+	w.main.Stop()
 }

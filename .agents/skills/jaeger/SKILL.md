@@ -5,7 +5,19 @@ description: Use the local Jaeger instance to inspect OpenTelemetry traces emitt
 
 # Jaeger — Local Trace Inspection
 
-Gram runs a local Jaeger All-in-One instance that collects all OpenTelemetry traces from `gram-server` and `gram-worker`. It starts automatically with `mise run infra:start`.
+Gram runs a local OpenTelemetry Collector that receives all OTLP signals from `gram-server` and `gram-worker`, routing traces to Jaeger and metrics to Prometheus. Everything starts automatically with `mise run infra:start`.
+
+## Architecture
+
+```
+App → OTLP :$OTLP_GRPC_PORT → OTel Collector → traces → Jaeger
+                                               → metrics → Prometheus (scrapes collector)
+                                               → spanmetrics connector → Prometheus (RED metrics from traces)
+```
+
+- **OTel Collector** receives all OTLP (traces + metrics) on `$OTLP_GRPC_PORT`
+- **Jaeger** receives traces from the collector (not directly from the app)
+- **Prometheus** scrapes the collector's metrics exporter and stores both app metrics and span-derived RED metrics
 
 ## Discovering Ports
 
@@ -93,15 +105,33 @@ Key attributes on spans:
 - `service.name` — `gram-server` or `gram-worker`
 - `error` — `true` if the span recorded an error
 
+## Prometheus — Local Metrics
+
+Prometheus is available at `http://localhost:$PROMETHEUS_PORT`. It stores:
+
+- **App metrics** — custom counters, histograms, gauges exported via OTLP from server/worker
+- **Span metrics** — RED metrics (rate, errors, duration) derived from traces by the OTel Collector's `spanmetrics` connector
+
+```bash
+# Prometheus UI
+echo $PROMETHEUS_PORT
+
+# Example PromQL queries
+# Request rate by service:    calls_total{service_name="gram-server"}
+# Error rate:                 calls_total{status_code="STATUS_CODE_ERROR"}
+# P99 latency:                histogram_quantile(0.99, sum(rate(duration_milliseconds_bucket[5m])) by (le, service_name))
+```
+
 ## Environment Variables
 
 Configured in `mise.toml`:
 
-| Variable                      | Default                 | Purpose                          |
-| ----------------------------- | ----------------------- | -------------------------------- |
-| `OTLP_GRPC_HOST`              | `localhost`             | OTLP receiver host               |
-| `OTLP_GRPC_PORT`              | `4317`                  | OTLP receiver port               |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:4317` | Full endpoint (auto-constructed) |
-| `JAEGER_WEB_PORT`             | `16686`                 | Jaeger UI/API port               |
-| `GRAM_ENABLE_OTEL_TRACES`     | `1`                     | Enable/disable trace export      |
-| `GRAM_ENABLE_OTEL_METRICS`    | `1`                     | Enable/disable metrics export    |
+| Variable                      | Default                 | Purpose                             |
+| ----------------------------- | ----------------------- | ----------------------------------- |
+| `OTLP_GRPC_HOST`              | `localhost`             | OTLP receiver host (OTel Collector) |
+| `OTLP_GRPC_PORT`              | `4317`                  | OTLP receiver port (OTel Collector) |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:4317` | Full endpoint (auto-constructed)    |
+| `JAEGER_WEB_PORT`             | `16686`                 | Jaeger UI/API port (traces)         |
+| `PROMETHEUS_PORT`             | `9099`                  | Prometheus UI/API port (metrics)    |
+| `GRAM_ENABLE_OTEL_TRACES`     | `1`                     | Enable/disable trace export         |
+| `GRAM_ENABLE_OTEL_METRICS`    | `1`                     | Enable/disable metrics export       |

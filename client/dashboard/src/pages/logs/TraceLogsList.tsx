@@ -1,11 +1,46 @@
 import { cn } from "@/lib/utils";
 import { telemetrySearchLogs } from "@gram/client/funcs/telemetrySearchLogs";
 import { TelemetryLogRecord } from "@gram/client/models/components";
+import { Operator as Op } from "@gram/client/models/components/logfilter";
+import type { SearchLogsPayload } from "@gram/client/models/components/searchlogspayload";
 import { useGramContext } from "@gram/client/react-query";
 import { unwrapAsync } from "@gram/client/types/fp";
 import { Icon } from "@speakeasy-api/moonshine";
 import { useQuery } from "@tanstack/react-query";
 import { formatNanoTimestamp, formatLogBody } from "./utils";
+
+// Standalone trigger logs (no correlation_id, no event_id) are grouped under
+// `trigger-log:<log.id>` in use-attribute-logs-query.ts. The originating log
+// is already rendered as the group header, so there are no sub-spans to fetch.
+const TRIGGER_LOG_PREFIX = "trigger-log:";
+
+function buildTraceFilters(
+  traceId: string,
+): Pick<SearchLogsPayload, "filter" | "filters"> {
+  if (traceId.startsWith("corr:")) {
+    return {
+      filters: [
+        {
+          path: "gram.trigger.correlation_id",
+          operator: Op.Eq,
+          values: [traceId.slice("corr:".length)],
+        },
+      ],
+    };
+  }
+  if (traceId.startsWith("trigger:")) {
+    return {
+      filters: [
+        {
+          path: "gram.trigger.event_id",
+          operator: Op.Eq,
+          values: [traceId.slice("trigger:".length)],
+        },
+      ],
+    };
+  }
+  return { filter: { traceId } };
+}
 
 // Uses design system tokens where available (destructive, warning, muted).
 // INFO has no semantic token — hardcoded Tailwind is intentional and matches
@@ -56,6 +91,7 @@ export function TraceLogsList({
   parentTimestamp,
 }: TraceLogsListProps) {
   const client = useGramContext();
+  const isStandaloneTriggerLog = traceId.startsWith(TRIGGER_LOG_PREFIX);
 
   const { data, isPending, error } = useQuery({
     queryKey: ["trace-logs", traceId],
@@ -63,19 +99,28 @@ export function TraceLogsList({
       unwrapAsync(
         telemetrySearchLogs(client, {
           searchLogsPayload: {
-            filter: {
-              traceId,
-            },
+            ...buildTraceFilters(traceId),
             limit: 100,
             sort: "asc",
           },
         }),
       ),
-    enabled: isExpanded,
+    enabled: isExpanded && !isStandaloneTriggerLog,
   });
 
   if (!isExpanded) {
     return null;
+  }
+
+  if (isStandaloneTriggerLog) {
+    return (
+      <div className="text-muted-foreground bg-muted/30 flex items-center gap-3 px-5 py-2">
+        <div className="w-1.5 shrink-0" />
+        <div className="w-[150px] shrink-0" />
+        <div className="w-5 shrink-0" />
+        <span className="text-sm">No additional logs in this trace</span>
+      </div>
+    );
   }
 
   if (isPending) {

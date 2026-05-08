@@ -13,12 +13,8 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	tracernoop "go.opentelemetry.io/otel/trace/noop"
 
-	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
-	"github.com/speakeasy-api/gram/server/internal/externalmcp"
-	"github.com/speakeasy-api/gram/server/internal/functions"
-	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
 
@@ -29,13 +25,6 @@ func DefaultSiteURL(t *testing.T) *url.URL {
 	require.NoError(t, err, "expected default site URL to parse")
 	return parsed
 
-}
-
-func NewFunctionsTestOrchestrator(t *testing.T, assetStore assets.BlobStore) functions.Orchestrator {
-	t.Helper()
-
-	codeRoot := t.TempDir()
-	return functions.NewLocalRunner(NewLogger(t), NewTracerProvider(t), codeRoot, DefaultSiteURL(t), assetStore)
 }
 
 func NewEncryptionClient(t *testing.T) *encryption.Client {
@@ -76,25 +65,4 @@ func NewMeterProvider(t *testing.T) metric.MeterProvider {
 	t.Helper()
 
 	return metricnoop.NewMeterProvider()
-}
-
-func NewMCPRegistryClient(t *testing.T, logger *slog.Logger, tracerProvider trace.TracerProvider) *externalmcp.RegistryClient {
-	t.Helper()
-
-	pulseURL, err := url.Parse("https://api.pulsemcp.com")
-	require.NoError(t, err, "expected pulse URL to parse")
-
-	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
-	require.NoError(t, err, "expected guardian policy to initialize without error")
-
-	client := externalmcp.NewRegistryClient(
-		NewLogger(t),
-		tracerProvider,
-		guardianPolicy,
-		externalmcp.NewPulseBackend(pulseURL, "test-tenant-id", conv.NewSecret([]byte("test-api-key"))),
-		nil,
-	)
-	require.NoError(t, err, "expected mcp registry client to initialize without error")
-
-	return client
 }

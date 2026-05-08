@@ -1,7 +1,7 @@
 {
   "name": "dashboard",
   "private": true,
-  "version": "0.44.0",
+  "version": "0.46.0",
   "type": "module",
   "scripts": {
     "dev": "vite --port ${GRAM_SITE_PORT:-5173}",
@@ -60,6 +60,7 @@
     "@tanstack/react-table": "^8.21.3",
     "@tanstack/react-virtual": "^3.13.23",
     "@tremor/react": "^3.18.7",
+    "@xstate/react": "^6.1.0",
     "@xyflow/react": "^12.8.6",
     "ai": "catalog:",
     "chart.js": "^4.5.1",
@@ -98,6 +99,7 @@
     "uuid": "^13.0.0",
     "vaul": "^1.1.2",
     "vega": "^6.2.0",
+    "xstate": "^5.30.0",
     "zod": "^4",
     "zustand": "^5.0.8"
   },

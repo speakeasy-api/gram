@@ -27,6 +27,17 @@ function formatFileSize(bytes: number) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function formatMemory(mib: number) {
+  if (mib < 1024) return `${mib} MiB`;
+  const gib = mib / 1024;
+  return Number.isInteger(gib) ? `${gib} GiB` : `${gib.toFixed(1)} GiB`;
+}
+
+// Mirror server/internal/constants/functions.go — applied at deploy time when
+// the per-source value is NULL.
+const DEFAULT_FUNCTION_MEMORY_MIB = 1024;
+const DEFAULT_FUNCTION_SCALE = 2;
+
 function OverviewRow({
   label,
   children,
@@ -69,6 +80,9 @@ export function SourceOverviewTab({
       })
     : "Unknown";
 
+  const functionSource =
+    !isOpenAPI && source ? (source as DeploymentFunctions) : null;
+
   return (
     <div className="mx-auto w-full max-w-[1270px] px-8 py-8">
       <div className="grid grid-cols-[280px_1fr] items-start gap-8">
@@ -100,11 +114,35 @@ export function SourceOverviewTab({
                 </Type>
               </OverviewRow>
             ) : (
-              <OverviewRow label="Runtime">
-                <Type className="text-sm">
-                  {source && "runtime" in source ? String(source.runtime) : "—"}
-                </Type>
-              </OverviewRow>
+              <>
+                <OverviewRow label="Runtime">
+                  <Type className="text-sm">
+                    {functionSource ? functionSource.runtime : "—"}
+                  </Type>
+                </OverviewRow>
+                <OverviewRow label="Memory">
+                  <Type className="text-sm">
+                    {formatMemory(
+                      functionSource?.memoryMib ?? DEFAULT_FUNCTION_MEMORY_MIB,
+                    )}
+                    {functionSource?.memoryMib == null && (
+                      <Type muted small as="span" className="ml-1">
+                        (default)
+                      </Type>
+                    )}
+                  </Type>
+                </OverviewRow>
+                <OverviewRow label="Instances">
+                  <Type className="text-sm">
+                    {functionSource?.scale ?? DEFAULT_FUNCTION_SCALE}
+                    {functionSource?.scale == null && (
+                      <Type muted small as="span" className="ml-1">
+                        (default)
+                      </Type>
+                    )}
+                  </Type>
+                </OverviewRow>
+              </>
             )}
             <OverviewRow label="File size">
               <Type className="text-sm">

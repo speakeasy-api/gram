@@ -6,19 +6,19 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"math/rand/v2"
 	"net/http"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/hashicorp/go-cleanhttp"
-	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
 
@@ -32,7 +32,7 @@ type PIIScanner interface {
 
 // presidioRequest is the payload sent to POST /analyze.
 type presidioRequest struct {
-	Text     string   `json:"text"`
+	Text     []string `json:"text"`
 	Language string   `json:"language"`
 	ScoreMin float64  `json:"score_threshold"`
 	Entities []string `json:"entities,omitempty"`
@@ -46,23 +46,30 @@ type presidioResult struct {
 	Score      float64 `json:"score"`
 }
 
-// presidioMaxWorkers is the default concurrency limit for Presidio HTTP
-// requests. Presidio scanning is network-bound, not CPU-bound, so we use a
-// higher limit than runtime.NumCPU().
-const presidioMaxWorkers = 100
+// Tuned to Presidio capacity 2026-05-01. Fleet-wide cap is perPodAnalyzeBatchConcurrency.
+const perBatchRequestConcurrency = 4
+
+// /analyze accepts a string or array; array returns ordered nested list. Bounds blast radius on retry-bisect.
+const presidioHTTPBatchSize = 50
+
+// Keep jitter small: bisection is bounded, but sleeping still counts against the activity timeout.
+const presidioRetryBackoff = 100 * time.Millisecond
+
+const presidioRetryBackoffCap = 1 * time.Second
 
 // PresidioClient calls the Presidio Analyzer HTTP API.
-// Presidio is a trusted cluster-internal service, so the client bypasses
-// guardian's SSRF blocklist (which rejects private IP ranges like 10.0.0.0/8
-// that Kubernetes ClusterIPs fall into).
+// Presidio is a trusted cluster-internal service, so the client uses an
+// unsafe guardian policy with an empty blocklist. The default policy blocks
+// RFC 1918 private ranges (10.0.0.0/8) which Kubernetes ClusterIPs fall into.
 type PresidioClient struct {
-	baseURL         string
-	httpClient      *http.Client //nolint:forbidigo // Internal pooled client, not guardian-managed.
-	tracer          trace.Tracer
-	logger          *slog.Logger
-	maxWorkers      int
-	requestDuration metric.Float64Histogram
-	requestFailures metric.Int64Counter
+	baseURL            string
+	httpClient         *guardian.HTTPClient
+	tracer             trace.Tracer
+	logger             *slog.Logger
+	requestConcurrency int
+	retryBackoff       time.Duration
+	requestDuration    metric.Float64Histogram
+	requestFailures    metric.Int64Counter
 }
 
 // NewPresidioClient creates a client pointing at the given base URL.
@@ -82,28 +89,62 @@ func NewPresidioClient(baseURL string, tracerProvider trace.TracerProvider, mete
 		metric.WithUnit("{request}"),
 	)
 
-	httpClient := &http.Client{Transport: otelhttp.NewTransport( //nolint:forbidigo // Internal pooled client, not guardian-managed.
-		cleanhttp.DefaultPooledTransport(),
-		otelhttp.WithTracerProvider(tracerProvider),
-	)}
+	// Empty blocklist allows connections to private IPs (Kubernetes ClusterIPs).
+	unsafePolicy, _ := guardian.NewUnsafePolicy(tracerProvider, []string{})
+	httpClient := unsafePolicy.PooledClient()
 
 	return &PresidioClient{
-		baseURL:         strings.TrimRight(baseURL, "/"),
-		httpClient:      httpClient,
-		tracer:          tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis/presidio"),
-		logger:          logger,
-		maxWorkers:      presidioMaxWorkers,
-		requestDuration: requestDuration,
-		requestFailures: requestFailures,
+		baseURL:            strings.TrimRight(baseURL, "/"),
+		httpClient:         httpClient,
+		tracer:             tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis/presidio"),
+		logger:             logger,
+		requestConcurrency: perBatchRequestConcurrency,
+		retryBackoff:       presidioRetryBackoff,
+		requestDuration:    requestDuration,
+		requestFailures:    requestFailures,
 	}
 }
 
-// NewPresidioClientWithWorkers is like NewPresidioClient but allows overriding
-// the concurrency limit. Used for benchmarking.
-func NewPresidioClientWithWorkers(baseURL string, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, logger *slog.Logger, maxWorkers int) *PresidioClient {
+// NewPresidioClientWithConcurrency is like NewPresidioClient but allows
+// overriding the per-batch HTTP request concurrency. Used for benchmarking
+// and tests; the retry backoff is disabled so test sweeps don't pay 500ms
+// per bisect step.
+func NewPresidioClientWithConcurrency(baseURL string, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, logger *slog.Logger, requestConcurrency int) *PresidioClient {
 	c := NewPresidioClient(baseURL, tracerProvider, meterProvider, logger)
-	c.maxWorkers = maxWorkers
+	c.requestConcurrency = requestConcurrency
+	c.retryBackoff = 0
 	return c
+}
+
+// presidioEntityBlacklist is the set of Presidio entity types we refuse to
+// scan for regardless of what's stored on the policy.
+//
+//   - PERSON: Presidio's NER-backed person detection trips on common
+//     capitalized words ("Bash", "Read", proper nouns inside code
+//     identifiers, etc.) and would deny legitimate tool calls / pollute
+//     batch findings. Re-enable once we have a confidence threshold or a
+//     scoped allow-list.
+var presidioEntityBlacklist = map[string]struct{}{
+	"PERSON": {},
+}
+
+// filterEntities removes blacklisted entity types from the caller's list.
+// Returns nil unchanged so Presidio's default entity set still applies for
+// callers that didn't pin a list. Returns an empty (non-nil) slice when the
+// caller pinned a list and every entry was blacklisted, so AnalyzeBatch can
+// short-circuit instead of falling back to the unbounded default scan.
+func filterEntities(entities []string) []string {
+	if entities == nil {
+		return nil
+	}
+	out := make([]string, 0, len(entities))
+	for _, e := range entities {
+		if _, blocked := presidioEntityBlacklist[e]; blocked {
+			continue
+		}
+		out = append(out, e)
+	}
+	return out
 }
 
 func (p *PresidioClient) AnalyzeBatch(ctx context.Context, texts []string, entities []string, onProgress func()) (_ [][]Finding, err error) {
@@ -112,8 +153,18 @@ func (p *PresidioClient) AnalyzeBatch(ctx context.Context, texts []string, entit
 		return nil, nil
 	}
 
+	// Apply the entity blacklist at the lowest level so every caller (hook
+	// scanner + Temporal drain activity) inherits the same policy.
+	filtered := filterEntities(entities)
+	if len(entities) > 0 && len(filtered) == 0 {
+		// Caller pinned only blacklisted entities; nothing to scan for.
+		return make([][]Finding, n), nil
+	}
+	entities = filtered
+
 	ctx, span := p.tracer.Start(ctx, "presidio.analyzeBatch", trace.WithAttributes(
 		attribute.Int("presidio.batch_size", n),
+		attribute.Int("presidio.http_batch_size", presidioHTTPBatchSize),
 	))
 	defer func() {
 		if err != nil {
@@ -123,36 +174,20 @@ func (p *PresidioClient) AnalyzeBatch(ctx context.Context, texts []string, entit
 	}()
 
 	results := make([][]Finding, n)
-	workers := min(p.maxWorkers, n)
+	batches := chunkTextIndexes(n, presidioHTTPBatchSize)
+	workers := min(max(1, p.requestConcurrency), len(batches))
 
-	// Pre-fill a buffered channel with indices so workers can pull the next
-	// item without coordination. Closing it causes workers to exit when the
-	// channel drains.
-	ch := make(chan int, n)
-	for i := range n {
-		ch <- i
+	ch := make(chan indexRange, len(batches))
+	for _, batch := range batches {
+		ch <- batch
 	}
 	close(ch)
 
 	var wg sync.WaitGroup
-
-	// Fan out workers that each drain items from ch until it's empty.
-	// Individual failures are logged and skipped; results[idx] stays nil
-	// for that text, which the caller treats as "no findings".
 	for range workers {
 		wg.Go(func() {
-			for idx := range ch {
-				findings, err := p.analyze(ctx, texts[idx], entities)
-				if err != nil {
-					p.logger.WarnContext(ctx, "presidio analyze failed for text, skipping",
-						attr.SlogError(err),
-					)
-					continue
-				}
-				results[idx] = findings
-				if onProgress != nil {
-					onProgress()
-				}
+			for batch := range ch {
+				p.analyzeRange(ctx, texts, entities, batch, results, onProgress)
 			}
 		})
 	}
@@ -161,7 +196,124 @@ func (p *PresidioClient) AnalyzeBatch(ctx context.Context, texts []string, entit
 	return results, nil
 }
 
-func (p *PresidioClient) analyze(ctx context.Context, text string, entities []string) (_ []Finding, err error) {
+func (p *PresidioClient) analyzeRange(ctx context.Context, texts []string, entities []string, batch indexRange, results [][]Finding, onProgress func()) {
+	if ok, err := p.tryAnalyzeRange(ctx, texts, entities, batch, results, onProgress); !ok {
+		p.splitFailedRange(ctx, texts, entities, batch, results, onProgress, err, 0)
+	}
+}
+
+func (p *PresidioClient) tryAnalyzeRange(ctx context.Context, texts []string, entities []string, batch indexRange, results [][]Finding, onProgress func()) (bool, error) {
+	if onProgress != nil {
+		onProgress()
+	}
+
+	findings, err := p.analyze(ctx, texts[batch.start:batch.end], entities)
+	if err != nil {
+		return false, err
+	}
+
+	for i, f := range findings {
+		results[batch.start+i] = f
+		if onProgress != nil {
+			onProgress()
+		}
+	}
+	return true, nil
+}
+
+func (p *PresidioClient) splitFailedRange(ctx context.Context, texts []string, entities []string, batch indexRange, results [][]Finding, onProgress func(), cause error, depth int) {
+	if ctx.Err() != nil {
+		return
+	}
+	if batch.end-batch.start == 1 {
+		p.logger.WarnContext(ctx, "presidio analyze failed for text, skipping",
+			attr.SlogError(cause),
+		)
+		if onProgress != nil {
+			onProgress()
+		}
+		return
+	}
+
+	p.logger.WarnContext(ctx, "presidio analyze failed for text batch, splitting",
+		attr.SlogError(cause),
+	)
+
+	if !sleepCtx(ctx, computePresidioBackoff(p.retryBackoff, depth)) {
+		return
+	}
+
+	mid := batch.start + ((batch.end - batch.start) / 2)
+	left := indexRange{start: batch.start, end: mid}
+	right := indexRange{start: mid, end: batch.end}
+
+	leftOK, leftErr := p.tryAnalyzeRange(ctx, texts, entities, left, results, onProgress)
+	rightOK, rightErr := p.tryAnalyzeRange(ctx, texts, entities, right, results, onProgress)
+	if !leftOK {
+		p.splitFailedRange(ctx, texts, entities, left, results, onProgress, leftErr, depth+1)
+	}
+	if !rightOK {
+		p.splitFailedRange(ctx, texts, entities, right, results, onProgress, rightErr, depth+1)
+	}
+}
+
+// computePresidioBackoff returns a full-jittered exponential backoff for the
+// given split depth: uniform in [0, min(cap, base*2^depth)). Returns 0 when
+// base is 0 (tests disable backoff that way).
+func computePresidioBackoff(base time.Duration, depth int) time.Duration {
+	if base <= 0 {
+		return 0
+	}
+	backoff := base
+	for range depth {
+		backoff *= 2
+		if backoff >= presidioRetryBackoffCap {
+			backoff = presidioRetryBackoffCap
+			break
+		}
+	}
+	return time.Duration(rand.Int64N(int64(backoff))) // #nosec G404 -- jitter, not security-sensitive
+}
+
+// sleepCtx pauses for d, returning false if ctx is cancelled before the
+// timer fires. A non-positive d is treated as no sleep.
+func sleepCtx(ctx context.Context, d time.Duration) bool {
+	if d <= 0 {
+		return ctx.Err() == nil
+	}
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-t.C:
+		return true
+	case <-ctx.Done():
+		return false
+	}
+}
+
+type indexRange struct {
+	start int
+	end   int
+}
+
+func chunkTextIndexes(n, size int) []indexRange {
+	if n == 0 {
+		return nil
+	}
+	var batches []indexRange
+	for start := 0; start < n; start += size {
+		end := min(start+size, n)
+		batches = append(batches, indexRange{start: start, end: end})
+	}
+	return batches
+}
+
+func (p *PresidioClient) analyze(ctx context.Context, texts []string, entities []string) (_ [][]Finding, err error) {
+	// /analyze 500s on empty array ("No text provided"). Short-circuit.
+	if len(texts) == 0 {
+		return nil, nil
+	}
+
 	ctx, span := p.tracer.Start(ctx, "presidio.analyze")
 	start := time.Now()
 	defer func() {
@@ -179,7 +331,7 @@ func (p *PresidioClient) analyze(ctx context.Context, text string, entities []st
 	}()
 
 	body, err := json.Marshal(presidioRequest{
-		Text:     text,
+		Text:     texts,
 		Language: "en",
 		ScoreMin: 0.5,
 		Entities: entities,
@@ -204,11 +356,28 @@ func (p *PresidioClient) analyze(ctx context.Context, text string, entities []st
 		return nil, fmt.Errorf("presidio returned status %d", resp.StatusCode)
 	}
 
-	var results []presidioResult
+	var results [][]presidioResult
 	if err := json.NewDecoder(resp.Body).Decode(&results); err != nil {
 		return nil, fmt.Errorf("decode presidio response: %w", err)
 	}
+	if len(results) != len(texts) {
+		return nil, fmt.Errorf("presidio returned %d result sets for %d texts", len(results), len(texts))
+	}
 
+	findings := make([][]Finding, len(texts))
+	findingsCount := 0
+	for i, text := range texts {
+		findings[i] = convertPresidioFindings(text, results[i])
+		findingsCount += len(findings[i])
+	}
+	span.SetAttributes(
+		attribute.Int("presidio.http_batch_size", len(texts)),
+		attribute.Int("presidio.findings_count", findingsCount),
+	)
+	return findings, nil
+}
+
+func convertPresidioFindings(text string, results []presidioResult) []Finding {
 	// Presidio returns character (rune) offsets, not byte offsets.
 	// Convert to runes for correct slicing, then map back to byte positions.
 	runes := []rune(text)
@@ -236,17 +405,12 @@ func (p *PresidioClient) analyze(ctx context.Context, text string, entities []st
 			Confidence:  r.Score,
 		})
 	}
-	span.SetAttributes(attribute.Int("presidio.findings_count", len(findings)))
-	return findings, nil
+	return findings
 }
 
 // StubPIIScanner is a no-op implementation for environments without Presidio.
 type StubPIIScanner struct{}
 
 func (s *StubPIIScanner) AnalyzeBatch(_ context.Context, texts []string, _ []string, _ func()) ([][]Finding, error) {
-	results := make([][]Finding, len(texts))
-	for i := range texts {
-		results[i] = nil
-	}
-	return results, nil
+	return make([][]Finding, len(texts)), nil
 }

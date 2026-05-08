@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oauth"
 	"github.com/speakeasy-api/gram/server/internal/oauth/providers"
 	oauth_repo "github.com/speakeasy-api/gram/server/internal/oauth/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
@@ -159,7 +160,7 @@ func TestRefreshProxyToken_UpstreamError(t *testing.T) {
 func TestRefreshProxyToken_GramProviderUnsupported(t *testing.T) {
 	t.Parallel()
 
-	provider := providers.NewGramProvider(newLogger(t), nil)
+	provider := providers.NewGramProvider(testenv.NewLogger(t), nil)
 	_, err := provider.RefreshToken(
 		context.Background(),
 		"some-refresh-token",

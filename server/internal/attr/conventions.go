@@ -141,6 +141,9 @@ const (
 	AssistantRuntimeIDKey          = attribute.Key("gram.assistant.runtime_id")
 	AssistantRuntimeBackendKey     = attribute.Key("gram.assistant.runtime_backend")
 	AssistantPhaseKey              = attribute.Key("gram.assistant.phase")
+	AssistantColdStartKey          = attribute.Key("gram.assistant.cold_start")
+	AssistantAppCreatedKey         = attribute.Key("gram.assistant.app_created")
+	AssistantSetupFailureClassKey  = attribute.Key("gram.assistant.setup_failure_class")
 	AssistantServerIPKey           = attribute.Key("gram.assistant.server_ip")
 	ChatModelKey                   = attribute.Key("gram.chat.model")
 	ChatToolCountKey               = attribute.Key("gram.chat.tool_count")
@@ -295,6 +298,16 @@ const (
 	GenAIEvaluationScoreValueKey  = attribute.Key("gen_ai.evaluation.score.value") // Numeric score (0-100)
 	GenAIEvaluationScoreLabelKey  = attribute.Key("gen_ai.evaluation.score.label") // Low cardinality label (success, failure, partial, abandoned)
 	GenAIEvaluationExplanationKey = attribute.Key("gen_ai.evaluation.explanation") // Free-form explanation
+
+	RemoteMCPProxyInterceptorKey       = attribute.Key("gram.remote_mcp.proxy.interceptor")
+	RemoteMCPProxyRemoteStatusCodeKey  = attribute.Key("gram.remote_mcp.proxy.remote_status_code")
+	RemoteMCPProxyRemoteStatusClassKey = attribute.Key("gram.remote_mcp.proxy.remote_status_class")
+	RemoteMCPServerIDKey               = attribute.Key("gram.remote_mcp_server.id")
+	RemoteMCPServerURLKey              = attribute.Key("gram.remote_mcp_server.url")
+
+	WorkOSEventIDKey             = attribute.Key("gram.workos_event.id")
+	WorkOSEventTypeKey           = attribute.Key("gram.workos_event.type")
+	WorkOSEventOrganizationIDKey = attribute.Key("gram.workos_event.organization_id")
 
 	StatsToolCallCountKey  = attribute.Key("gram.stats.tool_call_count")
 	StatsMCPServerCountKey = attribute.Key("gram.stats.mcp_server_count")
@@ -879,6 +892,37 @@ func SlogProjectSlug(v string) slog.Attr      { return slog.String(string(Projec
 func ProjectName(v string) attribute.KeyValue { return ProjectNameKey.String(v) }
 func SlogProjectName(v string) slog.Attr      { return slog.String(string(ProjectNameKey), v) }
 
+func RemoteMCPServerID(v string) attribute.KeyValue { return RemoteMCPServerIDKey.String(v) }
+func SlogRemoteMCPServerID(v string) slog.Attr {
+	return slog.String(string(RemoteMCPServerIDKey), v)
+}
+
+func RemoteMCPServerURL(v string) attribute.KeyValue { return RemoteMCPServerURLKey.String(v) }
+func SlogRemoteMCPServerURL(v string) slog.Attr {
+	return slog.String(string(RemoteMCPServerURLKey), v)
+}
+
+func RemoteMCPProxyInterceptor(v string) attribute.KeyValue {
+	return RemoteMCPProxyInterceptorKey.String(v)
+}
+func SlogRemoteMCPProxyInterceptor(v string) slog.Attr {
+	return slog.String(string(RemoteMCPProxyInterceptorKey), v)
+}
+
+func RemoteMCPProxyRemoteStatusCode(v int) attribute.KeyValue {
+	return RemoteMCPProxyRemoteStatusCodeKey.Int(v)
+}
+func SlogRemoteMCPProxyRemoteStatusCode(v int) slog.Attr {
+	return slog.Int(string(RemoteMCPProxyRemoteStatusCodeKey), v)
+}
+
+func RemoteMCPProxyRemoteStatusClass(v string) attribute.KeyValue {
+	return RemoteMCPProxyRemoteStatusClassKey.String(v)
+}
+func SlogRemoteMCPProxyRemoteStatusClass(v string) slog.Attr {
+	return slog.String(string(RemoteMCPProxyRemoteStatusClassKey), v)
+}
+
 func RiskPolicyCount(v int) attribute.KeyValue { return RiskPolicyCountKey.Int(v) }
 func SlogRiskPolicyCount(v int) slog.Attr      { return slog.Int(string(RiskPolicyCountKey), v) }
 
@@ -1230,11 +1274,34 @@ func SlogLogSeverityText(v string) slog.Attr      { return slog.String(string(Lo
 func LogBody(v string) attribute.KeyValue { return LogBodyKey.String(v) }
 func SlogLogBody(v string) slog.Attr      { return slog.String(string(LogBodyKey), v) }
 
+func WorkOSEventID(v string) attribute.KeyValue { return WorkOSEventIDKey.String(v) }
+func SlogWorkOSEventID(v string) slog.Attr      { return slog.String(string(WorkOSEventIDKey), v) }
+
+func WorkOSEventType(v string) attribute.KeyValue { return WorkOSEventTypeKey.String(v) }
+func SlogWorkOSEventType(v string) slog.Attr      { return slog.String(string(WorkOSEventTypeKey), v) }
+
+func WorkOSEventOrganizationID(v string) attribute.KeyValue {
+	return WorkOSEventOrganizationIDKey.String(v)
+}
+func SlogWorkOSEventOrganizationID(v string) slog.Attr {
+	return slog.String(string(WorkOSEventOrganizationIDKey), v)
+}
+
 func StatsToolCallCount(v int) attribute.KeyValue { return StatsToolCallCountKey.Int(v) }
 func SlogStatsToolCallCount(v int) slog.Attr      { return slog.Int(string(StatsToolCallCountKey), v) }
 
 func StatsMCPServerCount(v int) attribute.KeyValue { return StatsMCPServerCountKey.Int(v) }
 func SlogStatsMCPServerCount(v int) slog.Attr      { return slog.Int(string(StatsMCPServerCountKey), v) }
+
+func AssistantID(v string) attribute.KeyValue { return AssistantIDKey.String(v) }
+func SlogAssistantID(v string) slog.Attr      { return slog.String(string(AssistantIDKey), v) }
+
+func AssistantRuntimeBackend(v string) attribute.KeyValue {
+	return AssistantRuntimeBackendKey.String(v)
+}
+func SlogAssistantRuntimeBackend(v string) slog.Attr {
+	return slog.String(string(AssistantRuntimeBackendKey), v)
+}
 
 func AssistantThreadID(v string) attribute.KeyValue { return AssistantThreadIDKey.String(v) }
 func SlogAssistantThreadID(v string) slog.Attr      { return slog.String(string(AssistantThreadIDKey), v) }
@@ -1250,6 +1317,14 @@ func SlogAssistantAttempt(v int) slog.Attr      { return slog.Int(string(Assista
 
 func AssistantServerIP(v string) attribute.KeyValue { return AssistantServerIPKey.String(v) }
 func SlogAssistantServerIP(v string) slog.Attr      { return slog.String(string(AssistantServerIPKey), v) }
+
+func AssistantColdStart(v bool) attribute.KeyValue { return AssistantColdStartKey.Bool(v) }
+
+func AssistantAppCreated(v bool) attribute.KeyValue { return AssistantAppCreatedKey.Bool(v) }
+
+func AssistantSetupFailureClass(v string) attribute.KeyValue {
+	return AssistantSetupFailureClassKey.String(v)
+}
 
 func ChatModel(v string) attribute.KeyValue { return ChatModelKey.String(v) }
 func SlogChatModel(v string) slog.Attr      { return slog.String(string(ChatModelKey), v) }

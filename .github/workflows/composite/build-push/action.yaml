@@ -59,7 +59,7 @@ runs:
       with:
         images: ${{ inputs.registry }}/${{ inputs.image }}
         tags: |
-          type=ref,event=branch
+          type=ref,event=branch,enable=${{ github.event_name != 'merge_group' }}
           type=ref,event=tag
           type=ref,event=pr
           type=raw,value=${{ steps.preview-tag.outputs.tag }},enable=${{ steps.preview-tag.outputs.enabled }}

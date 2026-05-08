@@ -4,8 +4,16 @@
 
 #MISE flag "--git-base <base>" help="The git base to use for finding modified migrations"
 #USAGE flag "--file... <file>" help="The files to lint. This flag can be provided multiple times. If not provided, all modified migrations will be linted."
+#USAGE flag "--no-atlas" help="Skip the 'atlas migrate lint' step. CI uses this so it isn't duplicated by the dedicated atlas-action job step."
 
 set -e
+
+# Emit a GitHub Actions error annotation alongside human output when running in CI.
+gh_error() {
+  if [ "${GITHUB_ACTIONS:-}" = "true" ]; then
+    echo "::error file=$1::$2"
+  fi
+}
 
 base_ref="origin/main"
 
@@ -14,13 +22,18 @@ if [ -n "$usage_git_base" ]; then
 fi
 
 files=()
+added_files=()
 
 if [ -n "$usage_file" ]; then
   files=("${usage_file[@]}")
+  added_files=("${usage_file[@]}")
 else
   while IFS= read -r line; do
     files+=("$line")
   done < <(git diff --relative --diff-filter=d --name-only "$base_ref" -- 'server/migrations/*.sql')
+  while IFS= read -r line; do
+    added_files+=("$line")
+  done < <(git diff --relative --diff-filter=A --name-only "$base_ref" -- 'server/migrations/*.sql')
 fi
 
 if [ ${#files[@]} -eq 0 ]; then
@@ -40,6 +53,7 @@ for file in "${files[@]}"; do
     if [ "$first_line" != "-- atlas:txmode none" ]; then
       invalid_indexes=true
       echo "❌ $file"
+      gh_error "$file" "Migration uses CREATE [UNIQUE] INDEX CONCURRENTLY but does not have '-- atlas:txmode none' as the first line."
     else
       echo "✅ $file"
     fi
@@ -55,6 +69,60 @@ if [ "$invalid_indexes" = true ]; then
 🚨 are isolated to their own files and disable transaction mode.
 "
   exit 1
+fi
+
+# Ordering only applies to newly-added migrations: edits and renames don't
+# move a file's timestamp, so they can't make the migration sequence out of order.
+echo -e "\n🔎 Checking for out-of-order migrations..."
+
+if [ ${#added_files[@]} -eq 0 ]; then
+  echo "No newly added migrations, skipping ordering check"
+else
+  latest_base_name=$(git ls-tree --name-only "$base_ref" -- server/migrations/ | grep '\.sql$' | sort | tail -n 1)
+  latest_base_ts="${latest_base_name##*/}"
+  latest_base_ts="${latest_base_ts%%_*}"
+
+  bad_files=()
+  for file in "${added_files[@]}"; do
+    base_name="${file##*/}"
+    ts="${base_name%%_*}"
+    if [ -n "$latest_base_ts" ] && { [ "$ts" \< "$latest_base_ts" ] || [ "$ts" = "$latest_base_ts" ]; }; then
+      bad_files+=("$file")
+      echo "❌ $file (timestamp $ts <= latest on $base_ref: $latest_base_ts)"
+      gh_error "$file" "Migration $base_name has timestamp $ts <= latest on $base_ref ($latest_base_ts). Do NOT rename or hand-edit atlas.sum. Delete this file, rebase $base_ref, then re-run 'mise db:diff <name>' so it is regenerated on top."
+    fi
+  done
+
+  if [ ${#bad_files[@]} -gt 0 ]; then
+    echo "
+🚨 The following migration(s) were added out of order (timestamp <= $latest_base_ts on $base_ref):
+🚨"
+    for f in "${bad_files[@]}"; do
+      echo "🚨   - $f"
+    done
+    echo "🚨
+🚨 Do NOT rename the file(s) or hand-edit atlas.sum. Migration files
+🚨 and atlas.sum must only be produced by the Atlas CLI.
+🚨
+🚨 To fix:
+🚨   1. Delete the file(s) listed above on this branch:
+🚨"
+    for f in "${bad_files[@]}"; do
+      echo "🚨        rm $f"
+    done
+    echo "🚨   2. Rebase or merge $base_ref into your branch.
+🚨   3. Re-run the migration diff (e.g. 'mise db:diff <name>') so the
+🚨      migration is regenerated on top with a fresh timestamp.
+"
+    exit 1
+  fi
+
+  echo "✅ All new migrations are ordered correctly"
+fi
+
+if [ "${usage_no_atlas:-}" = "true" ]; then
+  echo -e "\nSkipping 'atlas migrate lint' (--no-atlas)"
+  exit 0
 fi
 
 # Run atlas migrate lint

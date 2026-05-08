@@ -112,6 +112,8 @@ function getResourceLabel(resource: string) {
       return "environment";
     case "mcp_metadata":
       return "MCP metadata";
+    case "plugin":
+      return "plugin";
     case "project":
       return "project";
     case "template":
@@ -166,6 +168,17 @@ function renderSubject(log: AuditLog, orgSlug: string) {
         className={cn(monoClass, "hover:underline")}
       >
         {log.subjectSlug}
+      </Link>
+    );
+  }
+
+  if (log.subjectType === "plugin" && log.projectSlug) {
+    return (
+      <Link
+        to={`/${orgSlug}/projects/${log.projectSlug}/plugins/${log.subjectId}`}
+        className={cn(monoClass, "hover:underline")}
+      >
+        {log.subjectSlug || log.subjectId}
       </Link>
     );
   }
@@ -289,6 +302,22 @@ function renderVerb(log: AuditLog): string {
       return "updated MCP metadata for";
     case "asset:create":
       return "uploaded asset";
+    case "plugin:create":
+      return "created plugin";
+    case "plugin:update":
+      return "updated plugin";
+    case "plugin:delete":
+      return "deleted plugin";
+    case "plugin:server_add":
+      return "added server to plugin";
+    case "plugin:server_update":
+      return "updated server on plugin";
+    case "plugin:server_remove":
+      return "removed server from plugin";
+    case "plugin:assignments_set":
+      return "updated plugin access assignments";
+    case "plugin:publish":
+      return "published plugins";
     default: {
       const [resource = "activity", verb = "updated"] = log.action.split(":");
       return `${verb.replace(/_/g, " ")} ${getResourceLabel(resource)}`;

@@ -1,3 +1,4 @@
+import { Eye, EyeOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -28,6 +29,8 @@ import type { RiskResult } from "@gram/client/models/components";
 import { CircularProgress } from "./CircularProgress";
 import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
 import { MessageContent } from "@gram-ai/elements";
+import { useIsAdmin } from "@/contexts/Auth";
+import { toast } from "sonner";
 
 interface ChatDetailPanelProps {
   chatId: string;
@@ -40,6 +43,71 @@ interface ChatDetailPanelProps {
 
 function getTraceId(chatId: string): string {
   return `trace-${chatId.slice(0, 3)}`;
+}
+
+function exportChatAsJson(chat: {
+  id: string;
+  title: string;
+  source?: string;
+  createdAt: Date;
+  updatedAt: Date;
+  messages: Array<{
+    id: string;
+    role: string;
+    content?: string;
+    model: string;
+    toolCallId?: string;
+    toolCalls?: string;
+    finishReason?: string;
+    createdAt: Date;
+    generation: number;
+  }>;
+  totalInputTokens?: number;
+  totalOutputTokens?: number;
+  totalTokens?: number;
+  totalCost?: number;
+}) {
+  try {
+    const exported = {
+      id: chat.id,
+      title: chat.title,
+      source: chat.source,
+      created_at: chat.createdAt.toISOString(),
+      updated_at: chat.updatedAt.toISOString(),
+      total_input_tokens: chat.totalInputTokens,
+      total_output_tokens: chat.totalOutputTokens,
+      total_tokens: chat.totalTokens,
+      total_cost: chat.totalCost,
+      messages: chat.messages.map((m) => ({
+        id: m.id,
+        role: m.role,
+        content: m.content,
+        model: m.model,
+        tool_call_id: m.toolCallId,
+        tool_calls: m.toolCalls ? JSON.parse(m.toolCalls) : undefined,
+        finish_reason: m.finishReason,
+        created_at: m.createdAt.toISOString(),
+        generation: m.generation,
+      })),
+    };
+
+    const json = JSON.stringify(exported, null, 2);
+    const blob = new Blob([json], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    const slug = chat.title
+      ? chat.title
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "-")
+          .slice(0, 40)
+      : chat.id.slice(0, 8);
+    a.download = `chat-${slug}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch (_err) {
+    toast.error("Failed to export chat session");
+  }
 }
 
 function getOverallResolutionStatus(
@@ -182,6 +250,7 @@ function MessageItem({
 }) {
   const hasRisk = riskResults && riskResults.length > 0;
   const [expanded, setExpanded] = useState(false);
+  const [contentRevealed, setContentRevealed] = useState(false);
   const isCollapsed = collapseNonRisk && !hasRisk && !expanded;
 
   const parsedToolCalls: ToolCall[] | null = useMemo(() => {
@@ -260,26 +329,30 @@ function MessageItem({
                   <RiskBadgePopover results={riskResults} />
                 )}
               </div>
-              <div className="bg-background overflow-hidden rounded-lg border text-sm">
-                <div className="bg-muted/30 border-b p-3">
-                  <div className="flex items-center gap-2">
-                    <Icon name="zap" className="text-primary size-4" />
-                    <span className="font-semibold">
-                      {tc.function?.name || tc.name || "Tool Call"}
-                    </span>
+              {hasRisk && !contentRevealed ? (
+                <MaskedContent onReveal={() => setContentRevealed(true)} />
+              ) : (
+                <div className="bg-background overflow-hidden rounded-lg border text-sm">
+                  <div className="bg-muted/30 border-b p-3">
+                    <div className="flex items-center gap-2">
+                      <Icon name="zap" className="text-primary size-4" />
+                      <span className="font-semibold">
+                        {tc.function?.name || tc.name || "Tool Call"}
+                      </span>
+                    </div>
                   </div>
+                  {tc.function?.arguments && (
+                    <CodeBlock
+                      content={
+                        typeof tc.function.arguments === "string"
+                          ? tc.function.arguments
+                          : JSON.stringify(tc.function.arguments, null, 2)
+                      }
+                      maxHeight={300}
+                    />
+                  )}
                 </div>
-                {tc.function?.arguments && (
-                  <CodeBlock
-                    content={
-                      typeof tc.function.arguments === "string"
-                        ? tc.function.arguments
-                        : JSON.stringify(tc.function.arguments, null, 2)
-                    }
-                    maxHeight={300}
-                  />
-                )}
-              </div>
+              )}
             </div>
           </div>
         ))
@@ -328,7 +401,9 @@ function MessageItem({
                 <RiskBadgePopover results={riskResults} />
               )}
             </div>
-            {message.role === "system" ? (
+            {hasRisk && !contentRevealed ? (
+              <MaskedContent onReveal={() => setContentRevealed(true)} />
+            ) : message.role === "system" ? (
               <details className="bg-muted/30 group overflow-hidden rounded-lg border text-sm">
                 <summary className="text-muted-foreground hover:bg-muted/50 flex cursor-pointer list-none items-center gap-2 px-3 py-2 text-xs select-none">
                   <Icon
@@ -566,14 +641,80 @@ function ToolCallsTab({
   );
 }
 
+function MaskedContent({ onReveal }: { onReveal: () => void }) {
+  return (
+    <div className="bg-muted/30 flex items-center gap-2 rounded-lg border border-dashed p-3">
+      <EyeOff className="text-muted-foreground h-4 w-4 shrink-0" />
+      <span className="text-muted-foreground text-sm">
+        This message contains sensitive data.
+      </span>
+      <button
+        type="button"
+        className="hover:text-foreground text-sm font-medium underline underline-offset-2"
+        onClick={onReveal}
+      >
+        Click to reveal
+      </button>
+    </div>
+  );
+}
+
+function MaskedMatchInline({ value }: { value: string }) {
+  const [revealed, setRevealed] = useState(false);
+
+  if (!revealed) {
+    return (
+      <button
+        type="button"
+        className="text-muted-foreground hover:text-foreground mt-1 inline-flex items-center gap-1 text-xs"
+        onClick={() => setRevealed(true)}
+      >
+        <EyeOff className="h-3 w-3" />
+        <span>Click to reveal</span>
+      </button>
+    );
+  }
+
+  return (
+    <span className="mt-1 inline-flex items-center gap-1">
+      <code className="bg-destructive/10 text-destructive inline-block rounded px-1.5 py-0.5 font-mono text-xs break-all">
+        {value}
+      </code>
+      <button
+        type="button"
+        className="text-muted-foreground hover:text-foreground"
+        onClick={() => setRevealed(false)}
+      >
+        <Eye className="h-3 w-3" />
+      </button>
+    </span>
+  );
+}
+
 function RiskBadgePopover({ results }: { results: RiskResult[] }) {
+  // Long messages can repeat the same secret/email many times. Collapse to
+  // distinct (source, ruleId, match) so the popover lists each unique
+  // finding once with an occurrence count instead of an N-row scroll of
+  // identical rows.
+  const grouped = new Map<string, { result: RiskResult; count: number }>();
+  for (const r of results) {
+    const key = `${r.source}\u0000${r.ruleId ?? ""}\u0000${r.match ?? ""}`;
+    const hit = grouped.get(key);
+    if (hit) {
+      hit.count++;
+    } else {
+      grouped.set(key, { result: r, count: 1 });
+    }
+  }
+  const unique = [...grouped.values()];
+
   return (
     <Popover>
       <PopoverTrigger asChild>
         <button type="button" className="cursor-pointer">
           <Badge variant="destructive" className="text-xs">
             <Icon name="shield-alert" className="mr-1 size-3" />
-            {results.length} {results.length === 1 ? "Risk" : "Risks"}
+            {unique.length} {unique.length === 1 ? "Risk" : "Risks"}
           </Badge>
         </button>
       </PopoverTrigger>
@@ -584,7 +725,7 @@ function RiskBadgePopover({ results }: { results: RiskResult[] }) {
         <div className="space-y-3">
           <div className="text-sm font-semibold">Risk Findings</div>
           <div className="divide-border divide-y">
-            {results.map((r) => (
+            {unique.map(({ result: r, count }) => (
               <div key={r.id} className="py-2 first:pt-0 last:pb-0">
                 <div className="flex items-center gap-2">
                   <Badge variant="destructive" className="shrink-0 text-[10px]">
@@ -595,17 +736,21 @@ function RiskBadgePopover({ results }: { results: RiskResult[] }) {
                       {r.ruleId}
                     </span>
                   )}
+                  {count > 1 && (
+                    <Badge
+                      variant="neutral"
+                      className="ml-auto shrink-0 text-[10px]"
+                    >
+                      ×{count}
+                    </Badge>
+                  )}
                 </div>
                 {r.description && (
                   <p className="text-muted-foreground mt-1 text-xs">
                     {r.description}
                   </p>
                 )}
-                {r.match && (
-                  <code className="bg-destructive/10 text-destructive mt-1 inline-block rounded px-1.5 py-0.5 font-mono text-xs break-all">
-                    {r.match}
-                  </code>
-                )}
+                {r.match && <MaskedMatchInline value={r.match} />}
                 {r.tags && r.tags.length > 0 && (
                   <div className="mt-1 flex flex-wrap gap-1">
                     {r.tags.map((tag) => (
@@ -635,6 +780,7 @@ export function ChatDetailPanel({
   onDelete,
   collapseNonRisk,
 }: ChatDetailPanelProps) {
+  const isAdmin = useIsAdmin();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const { data: chat, isLoading: chatLoading } = useLoadChat(
     { id: chatId },
@@ -734,13 +880,24 @@ export function ChatDetailPanel({
             )}
           </div>
           <div className="flex items-center gap-1">
-            <button
-              onClick={() => setShowDeleteConfirm(true)}
-              className="hover:bg-destructive/10 text-muted-foreground hover:text-destructive rounded-md p-1 transition-colors"
-              aria-label="Delete chat"
-            >
-              <Icon name="trash-2" className="size-5" />
-            </button>
+            {isAdmin && (
+              <>
+                <button
+                  onClick={() => exportChatAsJson(chat)}
+                  className="hover:bg-muted text-muted-foreground rounded-md p-1 transition-colors"
+                  aria-label="Export chat as JSON"
+                >
+                  <Icon name="download" className="size-5" />
+                </button>
+                <button
+                  onClick={() => setShowDeleteConfirm(true)}
+                  className="hover:bg-destructive/10 text-muted-foreground hover:text-destructive rounded-md p-1 transition-colors"
+                  aria-label="Delete chat"
+                >
+                  <Icon name="trash-2" className="size-5" />
+                </button>
+              </>
+            )}
             <button
               onClick={onClose}
               className="hover:bg-muted rounded-md p-1 transition-colors"

@@ -29,6 +29,7 @@ import (
 	"github.com/superfly/fly-go/tokens"
 	"github.com/urfave/cli/v2"
 	"github.com/urfave/cli/v2/altsrc"
+	"github.com/workos/workos-go/v6/pkg/events"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/metric"
 	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
@@ -41,6 +42,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/admin"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -417,6 +419,7 @@ func newBillingProvider(
 		catalog := &polar.Catalog{
 			ProductIDBase:    c.String("polar-product-id-free"),
 			ProductIDPro:     c.String("polar-product-id-pro"),
+			ProductIDsTopUp:  c.StringSlice("polar-product-ids-topup"),
 			MeterIDToolCalls: c.String("polar-meter-id-tool-calls"),
 			MeterIDServers:   c.String("polar-meter-id-servers"),
 			MeterIDCredits:   c.String("polar-meter-id-credits"),
@@ -453,12 +456,23 @@ func newBillingProvider(
 	}
 }
 
+// workosClientOpts builds the ClientOpts threaded into every workos.NewClient
+// call site below. Pulls the optional --workos-endpoint override (env:
+// WORKOS_API_URL) so local dev can point both real-WorkOS callers at
+// the dev-idp's local-speakeasy emulator without changing any wiring.
+func workosClientOpts(c *cli.Context) workos.ClientOpts {
+	return workos.ClientOpts{
+		Endpoint:   c.String("workos-endpoint"),
+		HTTPClient: nil,
+	}
+}
+
 func newAccessRoleProvider(ctx context.Context, logger *slog.Logger, guardianPolicy *guardian.Policy, c *cli.Context) (access.RoleProvider, error) {
 	apiKey := c.String("workos-api-key")
 
 	switch {
 	case apiKey != "" && apiKey != "unset":
-		return workos.NewClient(guardianPolicy, apiKey), nil
+		return workos.NewClient(guardianPolicy, apiKey, workosClientOpts(c)), nil
 	case c.String("environment") == "local":
 		logger.WarnContext(ctx, "using stub access role provider: WorkOS not configured")
 		return workos.NewStubClient(), nil
@@ -476,7 +490,26 @@ func newWorkOSClient(guardianPolicy *guardian.Policy, c *cli.Context) (client *w
 		return nil, false, errors.New("WorkOS API key not provided")
 	}
 
-	return workos.NewClient(guardianPolicy, apiKey), haveAPIKey, nil
+	return workos.NewClient(guardianPolicy, apiKey, workosClientOpts(c)), haveAPIKey, nil
+}
+
+func newWorkOSEventsClient(c *cli.Context, guardianPolicy *guardian.Policy) (*events.Client, error) {
+	apiKey := c.String("workos-api-key")
+	if apiKey == "" || apiKey == "unset" {
+		if c.String("environment") != "local" {
+			return nil, errors.New("WorkOS API key not provided")
+		}
+		// Local dev without a configured key: return nil so the activity can
+		// surface a clear "not configured" error rather than calling WorkOS
+		// with an empty key and getting an opaque API failure.
+		return nil, nil
+	}
+
+	return &events.Client{
+		APIKey:     apiKey,
+		HTTPClient: guardianPolicy.PooledClient(),
+		Endpoint:   workosClientOpts(c).Endpoint,
+	}, nil
 }
 
 func newTigrisStore(ctx context.Context, c *cli.Context, logger *slog.Logger) (*assets.TigrisStore, func(context.Context) error, error) {
@@ -709,6 +742,10 @@ func newTriggersApp(
 		serverURL,
 		bgtriggers.NewNoopDispatcher(logger),
 	)
+}
+
+func newAuditLogger() *audit.Logger {
+	return audit.NewLogger()
 }
 
 func newAdminOIDCClient(ctx context.Context, c *cli.Context, tracerProvider trace.TracerProvider, guardianPolicy *guardian.Policy, serverURL *url.URL) (*admin.OIDCClient, error) {

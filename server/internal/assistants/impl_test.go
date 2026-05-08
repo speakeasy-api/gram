@@ -6,7 +6,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
-	"go.opentelemetry.io/otel/trace/noop"
 
 	gen "github.com/speakeasy-api/gram/server/gen/assistants"
 	"github.com/speakeasy-api/gram/server/gen/types"
@@ -15,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -128,23 +128,26 @@ func newRBACService(t *testing.T) (*Service, context.Context, uuid.UUID) {
 	conn, err := assistantsInfra.CloneTestDatabase(t, "assistants_rbac")
 	require.NoError(t, err)
 
-	projectID := uuid.New()
-	projectSlug := "project-" + projectID.String()[:8]
-	_, err = conn.Exec(t.Context(), `
-INSERT INTO projects (id, name, slug, organization_id)
-VALUES ($1, 'Project', $2, 'org-test')
-`, projectID, projectSlug)
+	proj, err := projectsRepo.New(conn).CreateProject(t.Context(), projectsRepo.CreateProjectParams{
+		Name:           "Project",
+		Slug:           "project-rbac-test",
+		OrganizationID: "org-test",
+	})
 	require.NoError(t, err)
+	projectID := proj.ID
+	projectSlug := proj.Slug
 
 	logger := testenv.NewLogger(t)
-	authzEngine := authz.NewEngine(logger, conn, authztest.RBACAlwaysEnabled, workos.NewStubClient(), cache.NoopCache)
+	chConn, err := assistantsInfra.NewClickhouseClient(t)
+	require.NoError(t, err)
+	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), cache.NoopCache)
 	service := &Service{
-		tracer:      noop.NewTracerProvider().Tracer("test"),
-		logger:      logger,
-		auth:        nil,
-		authz:       authzEngine,
-		core:        NewServiceCore(logger, conn, testRuntimeBackend{backend: runtimeBackendLocal, runTurnErr: nil}, nil, nil, nil, telemetry.NewStub(logger)),
-		temporalEnv: nil,
+		tracer:   testenv.NewTracerProvider(t).Tracer("test"),
+		logger:   logger,
+		auth:     nil,
+		authz:    authzEngine,
+		core:     NewServiceCore(logger, testenv.NewTracerProvider(t), conn, testRuntimeBackend{backend: runtimeBackendLocal, runTurnErr: nil}, nil, nil, nil, telemetry.NewStub(logger)),
+		signaler: nil,
 	}
 
 	sessionID := "session-test"

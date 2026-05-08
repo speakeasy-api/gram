@@ -14,9 +14,13 @@ import { XYFade } from "./ui/xy-fade.tsx";
 
 function PageLayout({ children }: { children: React.ReactNode }) {
   return (
-    // The height calculation accounts for the page body "visual" gutter and
-    // the impersonation banner (when present, via --banner-offset).
-    <div className="flex h-[calc(100vh-16px-var(--banner-offset,0px))] flex-col overflow-hidden">
+    // Height accounts for the AppLayout chrome above us (TopHeader = 3.5rem,
+    // content-wrapper pt-2 = 0.5rem), the SidebarInset visual gutter (m-2
+    // top+bottom = 1rem), and the impersonation banner via --banner-offset.
+    // Without subtracting the TopHeader + pt-2, fullHeight pages overflow the
+    // visible area and SidebarInset's overflow-auto silently scrolls them
+    // (clipping things like the chat composer below the fold).
+    <div className="flex h-[calc(100vh-5rem-var(--banner-offset,0px))] flex-col overflow-hidden">
       <ContentErrorBoundary>{children}</ContentErrorBoundary>
     </div>
   );

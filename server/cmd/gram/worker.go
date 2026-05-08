@@ -16,6 +16,7 @@ import (
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 
+	"github.com/speakeasy-api/gram/server/internal/assistants"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
@@ -40,6 +41,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/risk"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
@@ -231,6 +233,12 @@ func newWorkerCommand() *cli.Command {
 			EnvVars:  []string{"POLAR_METER_ID_CREDITS"},
 			Required: false,
 		}),
+		&cli.StringSliceFlag{
+			Name:     "polar-product-ids-topup",
+			Usage:    "Product IDs of one-time credit top-up packs in Polar",
+			EnvVars:  []string{"POLAR_PRODUCT_IDS_TOPUP"},
+			Required: false,
+		},
 		&cli.StringFlag{
 			Name:    "custom-domain-cname",
 			Usage:   "The expected CNAME target for custom domain verification (e.g., cname.getgram.ai.)",
@@ -267,6 +275,18 @@ func newWorkerCommand() *cli.Command {
 			Required: false,
 		},
 		&cli.StringFlag{
+			Name:     "workos-api-key",
+			Usage:    "WorkOS API key for the events client",
+			EnvVars:  []string{"WORKOS_API_KEY"},
+			Required: false,
+		},
+		&cli.StringFlag{
+			Name:     "workos-endpoint",
+			Usage:    "Base URL for WorkOS API calls. Leave unset for production (defaults to https://api.workos.com); set to the dev-idp's local-speakeasy mode for fully-local development.",
+			EnvVars:  []string{"WORKOS_API_URL"},
+			Required: false,
+		},
+		&cli.StringFlag{
 			Name:    "presidio-analyzer-url",
 			Usage:   "Base URL of the Presidio Analyzer service (e.g. http://presidio-analyzer:3000). Empty disables PII scanning.",
 			EnvVars: []string{"PRESIDIO_ANALYZER_URL"},
@@ -277,6 +297,7 @@ func newWorkerCommand() *cli.Command {
 	flags = append(flags, clickHouseFlags...)
 	flags = append(flags, functionsFlags...)
 	flags = append(flags, pulseMCPFlags...)
+	flags = append(flags, assistantRuntimeFlags...)
 
 	return &cli.Command{
 		Name:  "worker",
@@ -359,6 +380,8 @@ func newWorkerCommand() *cli.Command {
 				return fmt.Errorf("failed to create encryption client: %w", err)
 			}
 
+			auditLogger := newAuditLogger()
+
 			mcpMetadataRepo := mcpmetadata_repo.New(db)
 			env := environments.NewEnvironmentEntries(logger, db, encryptionClient, mcpMetadataRepo)
 
@@ -436,6 +459,7 @@ func newWorkerCommand() *cli.Command {
 			toolIOLogsEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureToolIOLogs)
 			sessionCaptureEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureSessionCapture)
 			rbacEnabled := authz.IsRBACEnabled(newFeatureChecker(logger, productFeatures, productfeatures.FeatureRBAC))
+			challengeLoggingEnabled := authz.ChallengeLoggingEnabled(newFeatureChecker(logger, productFeatures, productfeatures.FeatureAuthzChallengeLogging))
 
 			// Create ClickHouse client and telemetry service for resolution events
 			chDB, chShutdown, err := newClickhouseClient(ctx, logger, c)
@@ -448,11 +472,18 @@ func newWorkerCommand() *cli.Command {
 			authzEngine := authz.NewEngine(
 				logger,
 				db,
+				chDB,
 				rbacEnabled,
+				challengeLoggingEnabled,
 				workos.NewStubClient(),
 				cache.NewRedisCacheAdapter(redisClient),
 				authz.EngineOpts{DevMode: c.String("environment") == "local"},
 			)
+
+			workosEventsClient, err := newWorkOSEventsClient(c, guardianPolicy)
+			if err != nil {
+				return fmt.Errorf("failed to create WorkOS events client: %w", err)
+			}
 
 			telemetryLogger, shutdown := newTelemetryLogger(ctx, logger, chDB, logsEnabled, toolIOLogsEnabled)
 			shutdownFuncs = append(shutdownFuncs, shutdown)
@@ -463,8 +494,10 @@ func newWorkerCommand() *cli.Command {
 			 * BEGIN -- MCP service setup for agent client
 			 */
 
-			captureStrategy, shutdown := chat.NewChatMessageCaptureStrategy(logger, db, assetStorage)
-			shutdownFuncs = append(shutdownFuncs, shutdown)
+			chatWriter, chatWriterShutdown := chat.NewChatMessageWriter(logger, db, assetStorage)
+			shutdownFuncs = append(shutdownFuncs, chatWriterShutdown)
+
+			captureStrategy := chat.NewChatMessageCaptureStrategy(logger, db, chatWriter)
 
 			riskSignaler := background.NewThrottledSignaler(
 				&background.TemporalRiskAnalysisSignaler{TemporalEnv: temporalEnv, Logger: logger},
@@ -472,7 +505,7 @@ func newWorkerCommand() *cli.Command {
 				logger,
 			)
 			shutdownFuncs = append(shutdownFuncs, riskSignaler.Shutdown)
-			captureStrategy.AddObserver(risk.NewObserver(logger, db, riskSignaler))
+			chatWriter.AddObserver(risk.NewObserver(logger, tracerProvider, db, riskSignaler, auditLogger))
 
 			completionsClient := openrouter.NewUnifiedClient(
 				logger,
@@ -509,10 +542,12 @@ func newWorkerCommand() *cli.Command {
 
 			chatSessionsManager := chatsessions.NewManager(logger, redisClient, c.String("jwt-signing-key"))
 
-			oauthService := oauth.NewService(logger, tracerProvider, meterProvider, db, serverURL, cache.NewRedisCacheAdapter(redisClient), encryptionClient, env, sessionManager)
+			oauthService := oauth.NewService(logger, tracerProvider, meterProvider, db, serverURL, cache.NewRedisCacheAdapter(redisClient), encryptionClient, env, sessionManager, guardianPolicy)
 			triggerApp := newTriggersApp(logger, db, encryptionClient, temporalEnv, telemetryLogger, serverURL)
 
 			assistantTokenManager := assistanttokens.New(c.String("jwt-signing-key"), db, authzEngine)
+
+			shadowMCPClient := shadowmcp.NewClient(logger, db, cache.NewRedisCacheAdapter(redisClient))
 
 			mcpService := mcp.NewService(
 				logger,
@@ -533,12 +568,13 @@ func newWorkerCommand() *cli.Command {
 				billingRepo,
 				telemetryLogger,
 				telemetryService,
-				productFeatures,
 				ragService,
 				triggerApp,
 				temporalEnv,
 				authzEngine,
 				assistantTokenManager,
+				shadowMCPClient,
+				auditLogger,
 			)
 
 			chatClient := chat.NewAgenticChatClient(
@@ -549,6 +585,14 @@ func newWorkerCommand() *cli.Command {
 				completionsClient,
 				mcpclient.NewInternalMCPClient(mcpService),
 			)
+
+			assistantRuntime, err := newAssistantRuntime(ctx, logger, tracerProvider, c, guardianPolicy, db, serverURL)
+			if err != nil {
+				return err
+			}
+			assistantsCore := assistants.NewServiceCore(logger, tracerProvider, db, assistantRuntime, slackClient, assistantTokenManager, serverURL, telemetryLogger)
+			assistantsSvc := assistants.NewService(logger, tracerProvider, db, sessionManager, authzEngine, assistantsCore, &background.AssistantWorkflowSignaler{TemporalEnv: temporalEnv})
+			triggerApp.RegisterDispatcher(assistantsSvc)
 
 			/**
 			 * END -- Agent client
@@ -582,7 +626,12 @@ func newWorkerCommand() *cli.Command {
 				TelemetryLogger:     telemetryLogger,
 				TriggersApp:         triggerApp,
 				CacheAdapter:        cache.NewRedisCacheAdapter(redisClient),
+				AssistantsCore:      assistantsCore,
+				TemporalEnv:         temporalEnv,
 				PIIScanner:          piiScanner,
+				ShadowMCPClient:     shadowMCPClient,
+				AuditLogger:         auditLogger,
+				WorkOSEventsClient:  workosEventsClient,
 			})
 
 			return temporalWorker.Run(worker.InterruptCh())
