@@ -22,6 +22,7 @@ import {
   isConnectionError,
   isTimeoutError,
   matchContentType,
+  matchStatusCode,
 } from "./http.js";
 import { Logger } from "./logger.js";
 import { retry, RetryConfig } from "./retries.js";
@@ -232,7 +233,7 @@ export class ClientSDK {
     request: Request,
     options: {
       context: HookContext;
-      isErrorStatusCode: (statusCode: number) => boolean;
+      errorCodes: number | string | (number | string)[];
       retryConfig: RetryConfig;
       retryCodes: string[];
     },
@@ -245,7 +246,7 @@ export class ClientSDK {
       | UnexpectedClientError
     >
   > {
-    const { context, isErrorStatusCode } = options;
+    const { context, errorCodes } = options;
 
     return retry(
       async () => {
@@ -257,7 +258,7 @@ export class ClientSDK {
         let response = await this.#httpClient.request(req);
 
         try {
-          if (isErrorStatusCode(response.status)) {
+          if (matchStatusCode(response, errorCodes)) {
             const result = await this.#hooks.afterError(
               context,
               response,
@@ -381,6 +382,8 @@ async function logResponse(
       break;
     case matchContentType(res, "application/jsonl")
       || jsonlLikeContentTypeRE.test(ct):
+      logger.log(await res.clone().text());
+      break;
     case matchContentType(res, "text/event-stream"):
       logger.log(`<${contentType}>`);
       break;
