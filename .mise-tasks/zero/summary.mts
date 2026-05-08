@@ -93,7 +93,7 @@ async function pokePostgreSQL() {
       throw new Error("Unexpected container info");
     }
   } catch {
-    return row("Gram database", false, dbURL);
+    return row("Database", false, dbURL);
   }
 
   const portspec = parsed.Publishers.find((p) => {
@@ -110,16 +110,16 @@ async function pokePostgreSQL() {
     typeof portspec?.PublishedPort === "number" ? portspec.PublishedPort : null;
 
   if (p == null) {
-    return row("Gram database", false, dbURL);
+    return row("Database", false, dbURL);
   }
 
   result =
     await $`docker compose exec -T gram-db psql -U ${process.env["DB_USER"]} -d ${process.env["DB_NAME"]} -c "SELECT 1"`.nothrow();
   if (!result.ok) {
-    return row("Gram database", false, dbURL);
+    return row("Database", false, dbURL);
   }
 
-  row("Gram database", true, dbURL);
+  row("Database", true, dbURL);
 }
 
 await pokePostgreSQL();
