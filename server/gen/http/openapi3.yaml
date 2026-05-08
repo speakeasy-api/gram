@@ -29258,7 +29258,7 @@ components:
                     description: Whether this project has a GitHub connection.
                 marketplace_url:
                     type: string
-                    description: URL-based Claude Code marketplace install URL — the value to pass to `/plugin marketplace add`. Present once a marketplace token has been minted, which happens automatically on the first publish.
+                    description: Git-based Claude Code marketplace URL — the value to pass to `/plugin marketplace add` or set as the source URL in `extraKnownMarketplaces`. Present once a marketplace token has been minted, which happens automatically on the first publish.
                 repo_name:
                     type: string
                     description: GitHub repo name, if connected.
