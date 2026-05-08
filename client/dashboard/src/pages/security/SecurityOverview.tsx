@@ -24,6 +24,7 @@ import {
 } from "./policy-data";
 import { ChatDetailPanel } from "@/pages/chatLogs/ChatDetailPanel";
 import { Drawer, DrawerContent } from "@/components/ui/drawer";
+import { MetricCard } from "@/components/chart/MetricCard";
 
 const RULE_ID_TO_CATEGORY = new Map<string, RuleCategory>();
 for (const [category, rules] of Object.entries(DETECTION_RULES)) {
@@ -170,8 +171,6 @@ function SecurityOverviewContent() {
     () => resultsQuery.data?.pages.flatMap((p) => p.results) ?? [],
     [resultsQuery.data],
   );
-  const totalFindings =
-    resultsQuery.data?.pages[0]?.totalCount ?? results.length;
   const recentChats = useMemo(
     () => chatSummaryQuery.data?.pages.flatMap((p) => p.chats) ?? [],
     [chatSummaryQuery.data],
@@ -222,6 +221,8 @@ function SecurityOverviewContent() {
     (max, p) => Math.max(max, p.totalMessages - p.pendingMessages),
     0,
   );
+  const totalFindings =
+    resultsQuery.data?.pages[0]?.totalCount ?? results.length;
 
   const hasData = recentChats.length > 0 || results.length > 0;
 
@@ -248,18 +249,18 @@ function SecurityOverviewContent() {
           </div>
 
           <div className="mt-4 grid grid-cols-2 gap-4">
-            <div className="rounded-lg border p-4">
-              <p className="text-muted-foreground text-sm">Events Scanned</p>
-              <p className="text-2xl font-bold">
-                {totalScanned.toLocaleString()}
-              </p>
-            </div>
-            <div className="rounded-lg border p-4">
-              <p className="text-muted-foreground text-sm">Recent Findings</p>
-              <p className="text-2xl font-bold">
-                {totalFindings.toLocaleString()}
-              </p>
-            </div>
+            <MetricCard
+              title="Events Scanned"
+              value={totalScanned}
+              format="number"
+              icon="scan-search"
+            />
+            <MetricCard
+              title="Recent Findings"
+              value={totalFindings}
+              format="number"
+              icon="flag"
+            />
           </div>
 
           {hasData ? (
