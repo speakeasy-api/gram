@@ -1,5 +1,24 @@
 # server
 
+## 0.49.0
+
+### Minor Changes
+
+- 5136b45: Add optional `remote_mcp_server_id` and `toolset_id` filter parameters to `mcpServers.list` so callers can scope the result to MCP servers backed by a single remote MCP server or toolset. The two filters are mutually exclusive.
+- 5136b45: Add `remoteMcp.verifyURL` for probing a candidate remote MCP server URL by issuing an MCP `initialize` request and reporting whether the URL is reachable. A `401` or `403` response counts as verified — auth verification is intentionally out of scope.
+
+### Patch Changes
+
+- 7834695: Fix generated observability plugin hooks not firing correctly in production. Hook events now carry explicit `async` flags matching the public Gram plugin (`false` for blocking events like `PreToolUse` and `UserPromptSubmit`, `true` for fire-and-forget events like `Stop` and `PostToolUse`). The generated `hook.sh` script now captures the HTTP response body and status code separately, forwarding the body to stdout for Claude to read `permissionDecision` from on `PreToolUse`, and exiting with code 2 on 4xx/5xx so an unreachable Gram server cannot silently bypass blocking policies.
+- 0b356a5: Fix Claude Code plugins not loading after restart. The `git-subdir` source
+  type used by the marketplace proxy does not persist the plugin cache path
+  across Claude Code sessions, causing "not cached at (not recorded)" errors
+  on every relaunch. The marketplace URL returned by `getPublishStatus` now
+  points directly at the git proxy (`/marketplace/p/{token}.git`) and the
+  install instructions emit `"source": "git"` in the `extraKnownMarketplaces`
+  snippet, which Claude Code caches reliably between sessions. The
+  URL-based manifest endpoint and its rewrite logic have been removed.
+
 ## 0.48.0
 
 ### Minor Changes

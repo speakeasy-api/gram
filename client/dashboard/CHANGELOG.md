@@ -1,5 +1,32 @@
 # dashboard
 
+## 0.48.0
+
+### Minor Changes
+
+- 5136b45: Add the initial Remote MCP source management UI under the gram-remote-mcp feature flag: a Custom remote server entry in the Add Source dropdown, a URL-only create form, and a detail page with Overview, MCP Servers, and Settings tabs covering URL edit and a delete flow that lists the linked MCP servers and endpoints. Also renames the existing Third party server entry to Registry server.
+- 50433e1: Upgraded dashboard and elements Tailwind dependencies to 4.2.4
+
+### Patch Changes
+
+- d1bdd11: Fix a crash in the RBAC dev toolbar when toggling `environment:read` or
+  `environment:write` for the first time. The toggle handler spread `undefined`
+  into a new state entry, producing an object without the `resources` field;
+  the next render then crashed reading `.length` on undefined. Hardened
+  `toggleScope` and `setScopeResources` to materialize a known-good baseline
+  before spreading, and added a defensive `!= null` at the render site so any
+  legacy malformed localStorage state can't crash either.
+- 0b356a5: Fix Claude Code plugins not loading after restart. The `git-subdir` source
+  type used by the marketplace proxy does not persist the plugin cache path
+  across Claude Code sessions, causing "not cached at (not recorded)" errors
+  on every relaunch. The marketplace URL returned by `getPublishStatus` now
+  points directly at the git proxy (`/marketplace/p/{token}.git`) and the
+  install instructions emit `"source": "git"` in the `extraKnownMarketplaces`
+  snippet, which Claude Code caches reliably between sessions. The
+  URL-based manifest endpoint and its rewrite logic have been removed.
+- Updated dependencies [50433e1]
+  - @gram-ai/elements@1.31.0
+
 ## 0.47.0
 
 ### Minor Changes
