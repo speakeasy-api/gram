@@ -167,23 +167,26 @@ SPEAKEASY_API_KEY="%s"
 SPEAKEASY_INSTALL_SCRIPT="%s/rpc/mdm.getInstallScript"
 
 CONSOLE_USER=$(stat -f '%%Su' /dev/console 2>/dev/null || true)
-[[ "$CONSOLE_USER" =~ ^(root|loginwindow|)$ ]] && { echo "Speakeasy: no console user logged in, skipping" >&2; exit 0; }
+[[ -z "$CONSOLE_USER" || "$CONSOLE_USER" == "root" || "$CONSOLE_USER" == "loginwindow" ]] && { echo "Speakeasy: no console user logged in, skipping" >&2; exit 0; }
 
-USER_UID=$(id -u "$CONSOLE_USER")
 USER_HOME=$(/usr/sbin/dscl . -read "/Users/$CONSOLE_USER" NFSHomeDirectory | awk '{print $2}')
+[[ -z "$USER_HOME" ]] && { echo "Speakeasy: could not determine home for $CONSOLE_USER" >&2; exit 1; }
 
 echo "Speakeasy: applying settings for $CONSOLE_USER..."
 
-WRAPPER=$(mktemp)
-trap 'rm -f "$WRAPPER"' EXIT
-cat > "$WRAPPER" <<WEOF
-#!/bin/bash
-export HOME="$USER_HOME"
-curl -fsSL "$SPEAKEASY_INSTALL_SCRIPT" | bash -s -- "$SPEAKEASY_API_KEY"
-WEOF
-chmod +x "$WRAPPER"
+TMPSCRIPT=$(mktemp)
+trap 'rm -f "$TMPSCRIPT"' EXIT
 
-/bin/launchctl asuser "$USER_UID" "$WRAPPER"
+# Download to file first — never pipe an unknown server response directly into bash.
+curl -fsSL --connect-timeout 15 --max-time 120 --retry 3 --retry-delay 5 \
+  "$SPEAKEASY_INSTALL_SCRIPT" -o "$TMPSCRIPT"
+
+# Sanity-check: must start with a shebang.
+[[ "$(head -c 2 "$TMPSCRIPT")" == "#!" ]] || { echo "Speakeasy: install script invalid, aborting" >&2; exit 1; }
+
+# sudo drops root and sets HOME correctly; file permissions stay root-owned so the
+# user cannot swap the script between download and execution.
+sudo -u "$CONSOLE_USER" HOME="$USER_HOME" SPEAKEASY_API_KEY="$SPEAKEASY_API_KEY" bash "$TMPSCRIPT"
 echo "Speakeasy: done."
 `, apiKey, base)
 	return []byte(script)
@@ -204,7 +207,6 @@ func (s *Service) GetInstallScript(ctx context.Context) ([]byte, error) {
 	base := s.serverURL.String()
 	script := fmt.Sprintf(`#!/bin/bash
 # Speakeasy Install Script — auto-served from %s
-# Usage: curl -fsSL '%s/rpc/mdm.getInstallScript' | bash -s -- <SPEAKEASY_API_KEY>
 set -euo pipefail
 SPEAKEASY_API_KEY="${1:?SPEAKEASY_API_KEY required as \$1}"
 SETTINGS="$HOME/.claude/settings.json"
@@ -220,7 +222,7 @@ curl -fsSL \
 mv "$SETTINGS.tmp" "$SETTINGS"
 chmod 600 "$SETTINGS"
 echo "Speakeasy: settings applied to $SETTINGS"
-`, base, base, base)
+`, base, base)
 
 	return []byte(script), nil
 }
