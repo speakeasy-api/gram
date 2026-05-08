@@ -98,22 +98,22 @@ func (s *Service) GenerateDeployScript(ctx context.Context, _ *gen.GenerateDeplo
 
 	token, err := generateToken()
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to generate key token")
+		return nil, oops.E(oops.CodeUnexpected, err, "generating key token")
 	}
 	fullKey := s.keyPrefix + token
 
 	keyHash, err := auth.GetAPIKeyHash(fullKey)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to hash api key")
+		return nil, oops.E(oops.CodeUnexpected, err, "hashing api key")
 	}
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to begin transaction")
+		return nil, oops.E(oops.CodeUnexpected, err, "beginning transaction")
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
-	kr := keysrepo.New(s.db).WithTx(dbtx)
+	kr := keysrepo.New(dbtx)
 
 	email := ""
 	if authCtx.Email != nil {
@@ -130,7 +130,7 @@ func (s *Service) GenerateDeployScript(ctx context.Context, _ *gen.GenerateDeplo
 		ProjectID:       uuid.NullUUID{},
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to create api key").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "creating api key").Log(ctx, s.logger)
 	}
 
 	if err := s.audit.LogKeyCreate(ctx, dbtx, audit.LogKeyCreateEvent{
@@ -143,11 +143,11 @@ func (s *Service) GenerateDeployScript(ctx context.Context, _ *gen.GenerateDeplo
 		KeyName:          keyName,
 		Scopes:           []string{auth.APIKeyScopeHooks.String()},
 	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to log key creation").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "logging key creation audit event").Log(ctx, s.logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to commit key creation")
+		return nil, oops.E(oops.CodeUnexpected, err, "committing key creation")
 	}
 
 	return s.renderDeployScript(fullKey), nil
@@ -238,7 +238,7 @@ func (s *Service) PatchClaudeSettings(ctx context.Context, payload *gen.PatchCla
 
 	raw, err := io.ReadAll(body)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("read body: %w", err), "failed to read settings")
+		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("read body: %w", err), "reading settings body")
 	}
 
 	var settings map[string]any
@@ -260,7 +260,7 @@ func (s *Service) PatchClaudeSettings(ctx context.Context, payload *gen.PatchCla
 
 	out, err := json.MarshalIndent(settings, "", "  ")
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("marshal settings: %w", err), "failed to marshal settings")
+		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("marshal settings: %w", err), "marshaling settings")
 	}
 
 	return io.NopCloser(bytes.NewReader(out)), nil
