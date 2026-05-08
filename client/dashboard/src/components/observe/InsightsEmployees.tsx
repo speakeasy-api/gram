@@ -4,6 +4,7 @@ import { useInsightsState } from "@/components/insights-context";
 import { ErrorAlert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
 import {
   Table,
   TableBody,
@@ -59,6 +60,9 @@ export function InsightsEmployeesContent() {
     sendPrompt,
     setIsExpanded,
   } = useInsightsState();
+  const mcpConfig = useObservabilityMcpConfig({
+    toolsToInclude: ["gram_search_users", "gram_list_organization_users"],
+  });
   const {
     data: membersData,
     isLoading: membersLoading,
@@ -121,6 +125,7 @@ export function InsightsEmployeesContent() {
   return (
     <>
       <InsightsConfig
+        mcpConfig={mcpConfig}
         title="What would you like to know about employee uptake?"
         subtitle="Ask about enrollment, agent setup, and Gram adoption across the team"
         contextInfo={`Project-scoped Employees tab: ${compliantEmployees} of ${totalEmployees} employees have Gram token usage in the last ${LOOKBACK_DAYS} days and are compliant; ${notCompliantEmployees} employees have no Gram token usage and are not compliant.`}
@@ -141,6 +146,12 @@ export function InsightsEmployeesContent() {
             label: "Summarize compliance",
             prompt:
               "Summarize project employee compliance based on whether each employee has Gram token usage.",
+          },
+          {
+            title: "User Usage",
+            label: "Show user usage",
+            prompt:
+              "Show me a table of organization users' Gram usage for the last 30 days, including token counts, last activity, and hook source breakdowns.",
           },
         ]}
       />
