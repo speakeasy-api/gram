@@ -429,7 +429,8 @@ function buildEmployees(
   return members
     .map((member) => {
       const summary = summaryByUserId.get(member.id);
-      const tokenCount = summary?.totalTokens ?? 0;
+      const tokenCount =
+        (summary?.totalInputTokens ?? 0) + (summary?.totalOutputTokens ?? 0);
       const status: EmployeeStatus =
         tokenCount > 0 ? "compliant" : "not_compliant";
 
