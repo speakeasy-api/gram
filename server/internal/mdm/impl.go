@@ -39,7 +39,6 @@ type Service struct {
 	db        *pgxpool.Pool
 	auth      *auth.Auth
 	authz     *authz.Engine
-	keysRepo  *keysrepo.Queries
 	keyPrefix string
 	audit     *audit.Logger
 	serverURL *url.URL
@@ -64,7 +63,6 @@ func NewService(
 		db:        db,
 		auth:      auth.New(logger, db, sessionsMgr, authzEngine),
 		authz:     authzEngine,
-		keysRepo:  keysrepo.New(db),
 		keyPrefix: auth.APIKeyPrefix(env),
 		audit:     auditLogger,
 		serverURL: serverURL,
@@ -115,7 +113,7 @@ func (s *Service) GenerateDeployScript(ctx context.Context, _ *gen.GenerateDeplo
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
-	kr := s.keysRepo.WithTx(dbtx)
+	kr := keysrepo.New(s.db).WithTx(dbtx)
 
 	email := ""
 	if authCtx.Email != nil {
