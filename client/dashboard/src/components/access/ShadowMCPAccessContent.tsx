@@ -163,6 +163,25 @@ function RoleBadges({
   );
 }
 
+function TableEmptyState({
+  title,
+  description,
+}: {
+  title: string;
+  description: string;
+}) {
+  return (
+    <div className="bg-background flex min-h-32 flex-col items-center justify-center gap-1 px-4 py-8 text-center">
+      <Type variant="body" className="font-medium">
+        {title}
+      </Type>
+      <Type muted small className="max-w-md">
+        {description}
+      </Type>
+    </div>
+  );
+}
+
 function RolePicker({
   roles,
   selectedRoleIds,
@@ -343,7 +362,7 @@ function ReviewRequestSheet({
                     <label
                       key={option.value}
                       htmlFor={`shadow-mcp-review-${option.value}`}
-                      className="hover:bg-muted/50 flex cursor-pointer items-start gap-3 p-3"
+                      className="hover:bg-muted/50 flex cursor-pointer items-center gap-3 p-3"
                     >
                       <RadioGroupItem
                         id={`shadow-mcp-review-${option.value}`}
@@ -351,12 +370,7 @@ function ReviewRequestSheet({
                         className="mt-0.5"
                       />
                       <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                          <ReviewActionBadge action={option.value} />
-                          <Type variant="body" className="text-sm font-medium">
-                            {option.label}
-                          </Type>
-                        </div>
+                        <ReviewActionBadge action={option.value} />
                         <Type
                           variant="body"
                           className="text-muted-foreground mt-1 text-xs"
@@ -569,7 +583,7 @@ function ServerEntrySheet({
                   <label
                     key={option.value}
                     htmlFor={`shadow-mcp-rule-${option.value}`}
-                    className="hover:bg-muted/50 flex cursor-pointer items-start gap-3 p-3"
+                    className="hover:bg-muted/50 flex cursor-pointer items-center gap-3 p-3"
                   >
                     <RadioGroupItem
                       id={`shadow-mcp-rule-${option.value}`}
@@ -577,12 +591,7 @@ function ServerEntrySheet({
                       className="mt-0.5"
                     />
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <DecisionBadge decision={option.value} />
-                        <Type variant="body" className="text-sm font-medium">
-                          {option.label}
-                        </Type>
-                      </div>
+                      <DecisionBadge decision={option.value} />
                       <Type
                         variant="body"
                         className="text-muted-foreground mt-1 text-xs"
@@ -752,6 +761,18 @@ export function ShadowMCPAccessContent() {
     ruleDecisionFilter === "all"
       ? entries
       : entries.filter((entry) => entry.decision === ruleDecisionFilter);
+  const accessRulesEmptyState =
+    ruleDecisionFilter === "all" ? (
+      <TableEmptyState
+        title="No access rules"
+        description="Add an access rule or review a request to allow or deny Shadow MCP server access."
+      />
+    ) : (
+      <TableEmptyState
+        title={`No ${getDecisionLabel(ruleDecisionFilter).toLowerCase()} rules`}
+        description="Change the filter or add a new access rule."
+      />
+    );
 
   const openReview = (request: ShadowMCPApprovalRequest) => {
     setReviewRequest(request);
@@ -955,6 +976,12 @@ export function ShadowMCPAccessContent() {
             data={pendingRequests}
             rowKey={(row) => row.id}
             className="[&_thead]:bg-background max-h-128 overflow-y-auto [&_thead]:sticky [&_thead]:top-0 [&_thead]:z-10"
+            noResultsMessage={
+              <TableEmptyState
+                title="No requests"
+                description="Blocked Shadow MCP requests that need review will appear here."
+              />
+            }
           />
         </section>
 
@@ -1002,6 +1029,7 @@ export function ShadowMCPAccessContent() {
             data={filteredEntries}
             rowKey={(row) => row.id}
             className="[&_thead]:bg-background max-h-128 overflow-y-auto [&_thead]:sticky [&_thead]:top-0 [&_thead]:z-10"
+            noResultsMessage={accessRulesEmptyState}
           />
         </section>
       </div>
