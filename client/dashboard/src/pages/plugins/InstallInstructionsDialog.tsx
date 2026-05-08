@@ -95,7 +95,7 @@ function ClaudeCodeInstallContent({
             [repoName]: {
               autoUpdate: true,
               source: {
-                source: "url",
+                source: "git",
                 url: marketplaceUrl,
               },
             },
