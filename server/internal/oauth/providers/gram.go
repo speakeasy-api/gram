@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/oauth/repo"
@@ -89,7 +90,7 @@ func (p *GramProvider) ExchangeToken(
 		return nil, ErrAccessDenied
 	}
 
-	sessionID := fmt.Sprintf("oauth_%s", userID)
+	sessionID := fmt.Sprintf("oauth_%s_%s", userID, uuid.New().String())
 	session := sessions.Session{
 		SessionID:            sessionID,
 		UserID:               userInfo.UserID,

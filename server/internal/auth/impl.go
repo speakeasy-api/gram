@@ -600,8 +600,8 @@ func (s *Service) buildCallbackURL(ctx context.Context) string {
 // slugify converts a name into a URL-safe slug.
 func slugify(name string) string {
 	s := strings.ToLower(strings.TrimSpace(name))
-	s = regexp.MustCompile(`[^a-z0-9\s-]`).ReplaceAllString(s, "")
-	s = regexp.MustCompile(`[\s]+`).ReplaceAllString(s, "-")
+	s = regexp.MustCompile(`[^a-z0-9]+`).ReplaceAllString(s, "-")
+	s = strings.Trim(s, "-")
 	return s
 }
 
