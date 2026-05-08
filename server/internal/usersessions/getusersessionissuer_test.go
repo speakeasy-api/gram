@@ -17,11 +17,11 @@ func TestGetUserSessionIssuerByID(t *testing.T) {
 	ctx, ti := newTestService(t)
 
 	created, err := ti.service.CreateUserSessionIssuer(ctx, &gen.CreateUserSessionIssuerPayload{
-		SessionToken:       nil,
-		ApikeyToken:        nil,
-		ProjectSlugInput:   nil,
-		Slug:               "get-by-id",
-		AuthnChallengeMode: "chain",
+		SessionToken:         nil,
+		ApikeyToken:          nil,
+		ProjectSlugInput:     nil,
+		Slug:                 "get-by-id",
+		AuthnChallengeMode:   "chain",
 		SessionDurationHours: 24,
 	})
 	require.NoError(t, err)
@@ -45,11 +45,11 @@ func TestGetUserSessionIssuerBySlug(t *testing.T) {
 	ctx, ti := newTestService(t)
 
 	created, err := ti.service.CreateUserSessionIssuer(ctx, &gen.CreateUserSessionIssuerPayload{
-		SessionToken:       nil,
-		ApikeyToken:        nil,
-		ProjectSlugInput:   nil,
-		Slug:               "get-by-slug",
-		AuthnChallengeMode: "chain",
+		SessionToken:         nil,
+		ApikeyToken:          nil,
+		ProjectSlugInput:     nil,
+		Slug:                 "get-by-slug",
+		AuthnChallengeMode:   "chain",
 		SessionDurationHours: 24,
 	})
 	require.NoError(t, err)
@@ -108,11 +108,11 @@ func TestGetUserSessionIssuer_RBACForbidden(t *testing.T) {
 	require.True(t, ok)
 
 	created, err := ti.service.CreateUserSessionIssuer(ctx, &gen.CreateUserSessionIssuerPayload{
-		SessionToken:       nil,
-		ApikeyToken:        nil,
-		ProjectSlugInput:   nil,
-		Slug:               "rbac-get",
-		AuthnChallengeMode: "chain",
+		SessionToken:         nil,
+		ApikeyToken:          nil,
+		ProjectSlugInput:     nil,
+		Slug:                 "rbac-get",
+		AuthnChallengeMode:   "chain",
 		SessionDurationHours: 24,
 	})
 	require.NoError(t, err)

@@ -17,11 +17,11 @@ func TestListUserSessionIssuers(t *testing.T) {
 
 	for _, slug := range []string{"a", "b", "c"} {
 		_, err := ti.service.CreateUserSessionIssuer(ctx, &gen.CreateUserSessionIssuerPayload{
-			SessionToken:       nil,
-			ApikeyToken:        nil,
-			ProjectSlugInput:   nil,
-			Slug:               "list-" + slug,
-			AuthnChallengeMode: "chain",
+			SessionToken:         nil,
+			ApikeyToken:          nil,
+			ProjectSlugInput:     nil,
+			Slug:                 "list-" + slug,
+			AuthnChallengeMode:   "chain",
 			SessionDurationHours: 24,
 		})
 		require.NoError(t, err)

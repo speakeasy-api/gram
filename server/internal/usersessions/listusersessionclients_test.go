@@ -17,11 +17,11 @@ func TestListUserSessionClients(t *testing.T) {
 	ctx, ti := newTestService(t)
 
 	issuer, err := ti.service.CreateUserSessionIssuer(ctx, &issuersgen.CreateUserSessionIssuerPayload{
-		SessionToken:       nil,
-		ApikeyToken:        nil,
-		ProjectSlugInput:   nil,
-		Slug:               "list-clients-issuer",
-		AuthnChallengeMode: "chain",
+		SessionToken:         nil,
+		ApikeyToken:          nil,
+		ProjectSlugInput:     nil,
+		Slug:                 "list-clients-issuer",
+		AuthnChallengeMode:   "chain",
 		SessionDurationHours: 24,
 	})
 	require.NoError(t, err)
@@ -50,20 +50,20 @@ func TestListUserSessionClients_FilterByIssuer(t *testing.T) {
 	ctx, ti := newTestService(t)
 
 	issuerA, err := ti.service.CreateUserSessionIssuer(ctx, &issuersgen.CreateUserSessionIssuerPayload{
-		SessionToken:       nil,
-		ApikeyToken:        nil,
-		ProjectSlugInput:   nil,
-		Slug:               "client-filter-a",
-		AuthnChallengeMode: "chain",
+		SessionToken:         nil,
+		ApikeyToken:          nil,
+		ProjectSlugInput:     nil,
+		Slug:                 "client-filter-a",
+		AuthnChallengeMode:   "chain",
 		SessionDurationHours: 24,
 	})
 	require.NoError(t, err)
 	issuerB, err := ti.service.CreateUserSessionIssuer(ctx, &issuersgen.CreateUserSessionIssuerPayload{
-		SessionToken:       nil,
-		ApikeyToken:        nil,
-		ProjectSlugInput:   nil,
-		Slug:               "client-filter-b",
-		AuthnChallengeMode: "chain",
+		SessionToken:         nil,
+		ApikeyToken:          nil,
+		ProjectSlugInput:     nil,
+		Slug:                 "client-filter-b",
+		AuthnChallengeMode:   "chain",
 		SessionDurationHours: 24,
 	})
 	require.NoError(t, err)

@@ -22,11 +22,11 @@ func TestRevokeUserSession(t *testing.T) {
 	ctx, ti := newTestService(t)
 
 	issuer, err := ti.service.CreateUserSessionIssuer(ctx, &issuersgen.CreateUserSessionIssuerPayload{
-		SessionToken:       nil,
-		ApikeyToken:        nil,
-		ProjectSlugInput:   nil,
-		Slug:               "revoke-session-issuer",
-		AuthnChallengeMode: "chain",
+		SessionToken:         nil,
+		ApikeyToken:          nil,
+		ProjectSlugInput:     nil,
+		Slug:                 "revoke-session-issuer",
+		AuthnChallengeMode:   "chain",
 		SessionDurationHours: 24,
 	})
 	require.NoError(t, err)
@@ -99,11 +99,11 @@ func TestRevokeUserSession_RBACForbidden(t *testing.T) {
 	ctx, ti := newTestService(t)
 
 	issuer, err := ti.service.CreateUserSessionIssuer(ctx, &issuersgen.CreateUserSessionIssuerPayload{
-		SessionToken:       nil,
-		ApikeyToken:        nil,
-		ProjectSlugInput:   nil,
-		Slug:               "rbac-revoke-session",
-		AuthnChallengeMode: "chain",
+		SessionToken:         nil,
+		ApikeyToken:          nil,
+		ProjectSlugInput:     nil,
+		Slug:                 "rbac-revoke-session",
+		AuthnChallengeMode:   "chain",
 		SessionDurationHours: 24,
 	})
 	require.NoError(t, err)

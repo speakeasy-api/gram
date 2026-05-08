@@ -18,11 +18,11 @@ func TestListUserSessionConsents(t *testing.T) {
 	ctx, ti := newTestService(t)
 
 	issuer, err := ti.service.CreateUserSessionIssuer(ctx, &issuersgen.CreateUserSessionIssuerPayload{
-		SessionToken:       nil,
-		ApikeyToken:        nil,
-		ProjectSlugInput:   nil,
-		Slug:               "list-consents-issuer",
-		AuthnChallengeMode: "chain",
+		SessionToken:         nil,
+		ApikeyToken:          nil,
+		ProjectSlugInput:     nil,
+		Slug:                 "list-consents-issuer",
+		AuthnChallengeMode:   "chain",
 		SessionDurationHours: 24,
 	})
 	require.NoError(t, err)
@@ -39,7 +39,7 @@ func TestListUserSessionConsents(t *testing.T) {
 		SessionToken:        nil,
 		ApikeyToken:         nil,
 		ProjectSlugInput:    nil,
-		SubjectUrn:        nil,
+		SubjectUrn:          nil,
 		UserSessionClientID: nil,
 		UserSessionIssuerID: nil,
 		Cursor:              nil,
@@ -55,11 +55,11 @@ func TestListUserSessionConsents_FilterByPrincipal(t *testing.T) {
 	ctx, ti := newTestService(t)
 
 	issuer, err := ti.service.CreateUserSessionIssuer(ctx, &issuersgen.CreateUserSessionIssuerPayload{
-		SessionToken:       nil,
-		ApikeyToken:        nil,
-		ProjectSlugInput:   nil,
-		Slug:               "consents-by-principal",
-		AuthnChallengeMode: "chain",
+		SessionToken:         nil,
+		ApikeyToken:          nil,
+		ProjectSlugInput:     nil,
+		Slug:                 "consents-by-principal",
+		AuthnChallengeMode:   "chain",
 		SessionDurationHours: 24,
 	})
 	require.NoError(t, err)
@@ -77,7 +77,7 @@ func TestListUserSessionConsents_FilterByPrincipal(t *testing.T) {
 		SessionToken:        nil,
 		ApikeyToken:         nil,
 		ProjectSlugInput:    nil,
-		SubjectUrn:        &target,
+		SubjectUrn:          &target,
 		UserSessionClientID: nil,
 		UserSessionIssuerID: nil,
 		Cursor:              nil,
@@ -94,11 +94,11 @@ func TestListUserSessionConsents_FilterByClient(t *testing.T) {
 	ctx, ti := newTestService(t)
 
 	issuer, err := ti.service.CreateUserSessionIssuer(ctx, &issuersgen.CreateUserSessionIssuerPayload{
-		SessionToken:       nil,
-		ApikeyToken:        nil,
-		ProjectSlugInput:   nil,
-		Slug:               "consents-by-client",
-		AuthnChallengeMode: "chain",
+		SessionToken:         nil,
+		ApikeyToken:          nil,
+		ProjectSlugInput:     nil,
+		Slug:                 "consents-by-client",
+		AuthnChallengeMode:   "chain",
 		SessionDurationHours: 24,
 	})
 	require.NoError(t, err)
@@ -118,7 +118,7 @@ func TestListUserSessionConsents_FilterByClient(t *testing.T) {
 		SessionToken:        nil,
 		ApikeyToken:         nil,
 		ProjectSlugInput:    nil,
-		SubjectUrn:        nil,
+		SubjectUrn:          nil,
 		UserSessionClientID: &clientFilter,
 		UserSessionIssuerID: nil,
 		Cursor:              nil,
@@ -135,20 +135,20 @@ func TestListUserSessionConsents_FilterByIssuer(t *testing.T) {
 	ctx, ti := newTestService(t)
 
 	issuerA, err := ti.service.CreateUserSessionIssuer(ctx, &issuersgen.CreateUserSessionIssuerPayload{
-		SessionToken:       nil,
-		ApikeyToken:        nil,
-		ProjectSlugInput:   nil,
-		Slug:               "consents-issuer-a",
-		AuthnChallengeMode: "chain",
+		SessionToken:         nil,
+		ApikeyToken:          nil,
+		ProjectSlugInput:     nil,
+		Slug:                 "consents-issuer-a",
+		AuthnChallengeMode:   "chain",
 		SessionDurationHours: 24,
 	})
 	require.NoError(t, err)
 	issuerB, err := ti.service.CreateUserSessionIssuer(ctx, &issuersgen.CreateUserSessionIssuerPayload{
-		SessionToken:       nil,
-		ApikeyToken:        nil,
-		ProjectSlugInput:   nil,
-		Slug:               "consents-issuer-b",
-		AuthnChallengeMode: "chain",
+		SessionToken:         nil,
+		ApikeyToken:          nil,
+		ProjectSlugInput:     nil,
+		Slug:                 "consents-issuer-b",
+		AuthnChallengeMode:   "chain",
 		SessionDurationHours: 24,
 	})
 	require.NoError(t, err)
@@ -168,7 +168,7 @@ func TestListUserSessionConsents_FilterByIssuer(t *testing.T) {
 		SessionToken:        nil,
 		ApikeyToken:         nil,
 		ProjectSlugInput:    nil,
-		SubjectUrn:        nil,
+		SubjectUrn:          nil,
 		UserSessionClientID: nil,
 		UserSessionIssuerID: &issuerFilter,
 		Cursor:              nil,
@@ -185,11 +185,11 @@ func TestListUserSessionConsents_Pagination(t *testing.T) {
 	ctx, ti := newTestService(t)
 
 	issuer, err := ti.service.CreateUserSessionIssuer(ctx, &issuersgen.CreateUserSessionIssuerPayload{
-		SessionToken:       nil,
-		ApikeyToken:        nil,
-		ProjectSlugInput:   nil,
-		Slug:               "consents-pagination",
-		AuthnChallengeMode: "chain",
+		SessionToken:         nil,
+		ApikeyToken:          nil,
+		ProjectSlugInput:     nil,
+		Slug:                 "consents-pagination",
+		AuthnChallengeMode:   "chain",
 		SessionDurationHours: 24,
 	})
 	require.NoError(t, err)
@@ -207,7 +207,7 @@ func TestListUserSessionConsents_Pagination(t *testing.T) {
 		SessionToken:        nil,
 		ApikeyToken:         nil,
 		ProjectSlugInput:    nil,
-		SubjectUrn:        nil,
+		SubjectUrn:          nil,
 		UserSessionClientID: nil,
 		UserSessionIssuerID: nil,
 		Cursor:              nil,
@@ -221,7 +221,7 @@ func TestListUserSessionConsents_Pagination(t *testing.T) {
 		SessionToken:        nil,
 		ApikeyToken:         nil,
 		ProjectSlugInput:    nil,
-		SubjectUrn:        nil,
+		SubjectUrn:          nil,
 		UserSessionClientID: nil,
 		UserSessionIssuerID: nil,
 		Cursor:              page1.NextCursor,
@@ -242,7 +242,7 @@ func TestListUserSessionConsents_RBACForbidden(t *testing.T) {
 		SessionToken:        nil,
 		ApikeyToken:         nil,
 		ProjectSlugInput:    nil,
-		SubjectUrn:        nil,
+		SubjectUrn:          nil,
 		UserSessionClientID: nil,
 		UserSessionIssuerID: nil,
 		Cursor:              nil,

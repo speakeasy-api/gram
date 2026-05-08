@@ -203,6 +203,9 @@ type UserSummary struct {
 	ToolCounts        map[string]uint64 `ch:"tool_counts"`
 	ToolSuccessCounts map[string]uint64 `ch:"tool_success_counts"`
 	ToolFailureCounts map[string]uint64 `ch:"tool_failure_counts"`
+
+	// Hook source breakdowns (maps of hook source -> count)
+	HookSourceCounts map[string]uint64 `ch:"hook_source_counts"`
 }
 
 // TimeSeriesBucket represents a single time bucket for time series metrics.

@@ -18,11 +18,11 @@ func TestListUserSessions(t *testing.T) {
 	ctx, ti := newTestService(t)
 
 	issuer, err := ti.service.CreateUserSessionIssuer(ctx, &issuersgen.CreateUserSessionIssuerPayload{
-		SessionToken:       nil,
-		ApikeyToken:        nil,
-		ProjectSlugInput:   nil,
-		Slug:               "list-sessions-issuer",
-		AuthnChallengeMode: "chain",
+		SessionToken:         nil,
+		ApikeyToken:          nil,
+		ProjectSlugInput:     nil,
+		Slug:                 "list-sessions-issuer",
+		AuthnChallengeMode:   "chain",
 		SessionDurationHours: 24,
 	})
 	require.NoError(t, err)
@@ -36,7 +36,7 @@ func TestListUserSessions(t *testing.T) {
 		SessionToken:        nil,
 		ApikeyToken:         nil,
 		ProjectSlugInput:    nil,
-		SubjectUrn:        nil,
+		SubjectUrn:          nil,
 		UserSessionIssuerID: nil,
 		Cursor:              nil,
 		Limit:               nil,
@@ -52,11 +52,11 @@ func TestListUserSessions_FilterByPrincipal(t *testing.T) {
 	ctx, ti := newTestService(t)
 
 	issuer, err := ti.service.CreateUserSessionIssuer(ctx, &issuersgen.CreateUserSessionIssuerPayload{
-		SessionToken:       nil,
-		ApikeyToken:        nil,
-		ProjectSlugInput:   nil,
-		Slug:               "sessions-by-principal",
-		AuthnChallengeMode: "chain",
+		SessionToken:         nil,
+		ApikeyToken:          nil,
+		ProjectSlugInput:     nil,
+		Slug:                 "sessions-by-principal",
+		AuthnChallengeMode:   "chain",
 		SessionDurationHours: 24,
 	})
 	require.NoError(t, err)
@@ -71,7 +71,7 @@ func TestListUserSessions_FilterByPrincipal(t *testing.T) {
 		SessionToken:        nil,
 		ApikeyToken:         nil,
 		ProjectSlugInput:    nil,
-		SubjectUrn:        &target,
+		SubjectUrn:          &target,
 		UserSessionIssuerID: nil,
 		Cursor:              nil,
 		Limit:               nil,
@@ -87,20 +87,20 @@ func TestListUserSessions_FilterByIssuer(t *testing.T) {
 	ctx, ti := newTestService(t)
 
 	issuerA, err := ti.service.CreateUserSessionIssuer(ctx, &issuersgen.CreateUserSessionIssuerPayload{
-		SessionToken:       nil,
-		ApikeyToken:        nil,
-		ProjectSlugInput:   nil,
-		Slug:               "sessions-by-issuer-A",
-		AuthnChallengeMode: "chain",
+		SessionToken:         nil,
+		ApikeyToken:          nil,
+		ProjectSlugInput:     nil,
+		Slug:                 "sessions-by-issuer-A",
+		AuthnChallengeMode:   "chain",
 		SessionDurationHours: 24,
 	})
 	require.NoError(t, err)
 	issuerB, err := ti.service.CreateUserSessionIssuer(ctx, &issuersgen.CreateUserSessionIssuerPayload{
-		SessionToken:       nil,
-		ApikeyToken:        nil,
-		ProjectSlugInput:   nil,
-		Slug:               "sessions-by-issuer-B",
-		AuthnChallengeMode: "chain",
+		SessionToken:         nil,
+		ApikeyToken:          nil,
+		ProjectSlugInput:     nil,
+		Slug:                 "sessions-by-issuer-B",
+		AuthnChallengeMode:   "chain",
 		SessionDurationHours: 24,
 	})
 	require.NoError(t, err)
@@ -115,7 +115,7 @@ func TestListUserSessions_FilterByIssuer(t *testing.T) {
 		SessionToken:        nil,
 		ApikeyToken:         nil,
 		ProjectSlugInput:    nil,
-		SubjectUrn:        nil,
+		SubjectUrn:          nil,
 		UserSessionIssuerID: &filter,
 		Cursor:              nil,
 		Limit:               nil,
@@ -135,7 +135,7 @@ func TestListUserSessions_BadCursor(t *testing.T) {
 		SessionToken:        nil,
 		ApikeyToken:         nil,
 		ProjectSlugInput:    nil,
-		SubjectUrn:        nil,
+		SubjectUrn:          nil,
 		UserSessionIssuerID: nil,
 		Cursor:              &bad,
 		Limit:               nil,
@@ -155,7 +155,7 @@ func TestListUserSessions_RBACForbidden(t *testing.T) {
 		SessionToken:        nil,
 		ApikeyToken:         nil,
 		ProjectSlugInput:    nil,
-		SubjectUrn:        nil,
+		SubjectUrn:          nil,
 		UserSessionIssuerID: nil,
 		Cursor:              nil,
 		Limit:               nil,
@@ -175,11 +175,11 @@ func TestListUserSessions_RefreshTokenHashNotReturned(t *testing.T) {
 	ctx, ti := newTestService(t)
 
 	issuer, err := ti.service.CreateUserSessionIssuer(ctx, &issuersgen.CreateUserSessionIssuerPayload{
-		SessionToken:       nil,
-		ApikeyToken:        nil,
-		ProjectSlugInput:   nil,
-		Slug:               "no-refresh-token",
-		AuthnChallengeMode: "chain",
+		SessionToken:         nil,
+		ApikeyToken:          nil,
+		ProjectSlugInput:     nil,
+		Slug:                 "no-refresh-token",
+		AuthnChallengeMode:   "chain",
 		SessionDurationHours: 24,
 	})
 	require.NoError(t, err)
@@ -191,7 +191,7 @@ func TestListUserSessions_RefreshTokenHashNotReturned(t *testing.T) {
 		SessionToken:        nil,
 		ApikeyToken:         nil,
 		ProjectSlugInput:    nil,
-		SubjectUrn:        nil,
+		SubjectUrn:          nil,
 		UserSessionIssuerID: nil,
 		Cursor:              nil,
 		Limit:               nil,

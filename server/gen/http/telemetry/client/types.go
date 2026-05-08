@@ -2905,6 +2905,9 @@ type SearchUsersFilterRequestBody struct {
 	To string `form:"to" json:"to" xml:"to"`
 	// Deployment ID filter
 	DeploymentID *string `form:"deployment_id,omitempty" json:"deployment_id,omitempty" xml:"deployment_id,omitempty"`
+	// Optional list of user identifiers to include. Matches user_id for internal
+	// searches and external_user_id for external searches.
+	UserIds []string `form:"user_ids,omitempty" json:"user_ids,omitempty" xml:"user_ids,omitempty"`
 }
 
 // UserSummaryResponseBody is used to define fields on response body types.
@@ -2941,6 +2944,8 @@ type UserSummaryResponseBody struct {
 	ToolCallFailure *int64 `form:"tool_call_failure,omitempty" json:"tool_call_failure,omitempty" xml:"tool_call_failure,omitempty"`
 	// Per-tool usage breakdown
 	Tools []*ToolUsageResponseBody `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
+	// Per-hook-source usage breakdown
+	HookSources []*HookSourceUsageResponseBody `form:"hook_sources,omitempty" json:"hook_sources,omitempty" xml:"hook_sources,omitempty"`
 }
 
 // ToolUsageResponseBody is used to define fields on response body types.
@@ -2953,6 +2958,14 @@ type ToolUsageResponseBody struct {
 	SuccessCount *int64 `form:"success_count,omitempty" json:"success_count,omitempty" xml:"success_count,omitempty"`
 	// Failed calls (4xx/5xx status)
 	FailureCount *int64 `form:"failure_count,omitempty" json:"failure_count,omitempty" xml:"failure_count,omitempty"`
+}
+
+// HookSourceUsageResponseBody is used to define fields on response body types.
+type HookSourceUsageResponseBody struct {
+	// Hook source (from attributes.gram.hook.source)
+	Source *string `form:"source,omitempty" json:"source,omitempty" xml:"source,omitempty"`
+	// Total hook events for this source
+	EventCount *int64 `form:"event_count,omitempty" json:"event_count,omitempty" xml:"event_count,omitempty"`
 }
 
 // ProjectSummaryResponseBody is used to define fields on response body types.
@@ -9469,9 +9482,19 @@ func ValidateUserSummaryResponseBody(body *UserSummaryResponseBody) (err error) 
 	if body.Tools == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("tools", "body"))
 	}
+	if body.HookSources == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("hook_sources", "body"))
+	}
 	for _, e := range body.Tools {
 		if e != nil {
 			if err2 := ValidateToolUsageResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.HookSources {
+		if e != nil {
+			if err2 := ValidateHookSourceUsageResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -9493,6 +9516,18 @@ func ValidateToolUsageResponseBody(body *ToolUsageResponseBody) (err error) {
 	}
 	if body.FailureCount == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("failure_count", "body"))
+	}
+	return
+}
+
+// ValidateHookSourceUsageResponseBody runs the validations defined on
+// HookSourceUsageResponseBody
+func ValidateHookSourceUsageResponseBody(body *HookSourceUsageResponseBody) (err error) {
+	if body.Source == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("source", "body"))
+	}
+	if body.EventCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("event_count", "body"))
 	}
 	return
 }
