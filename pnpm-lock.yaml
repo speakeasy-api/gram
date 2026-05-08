@@ -204,8 +204,8 @@ importers:
         specifier: ^3.0.4
         version: 3.0.4(@react-three/fiber@9.4.0(@types/react@19.2.7)(immer@11.0.0)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(three@0.181.2))(@types/three@0.181.0)(react@19.2.3)(three@0.181.2)
       '@speakeasy-api/moonshine':
-        specifier: 1.35.0
-        version: 1.35.0(@dnd-kit/core@6.3.1(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(@dnd-kit/modifiers@9.0.0(@dnd-kit/core@6.3.1(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(react@19.2.3))(@dnd-kit/utilities@3.2.2(react@19.2.3))(@rive-app/react-canvas-lite@4.23.4(react@19.2.3))(@types/react-dom@19.2.3(@types/react@19.2.7))(@types/react@19.2.7)(ai@5.0.66(zod@4.3.6))(lucide-react@1.8.0(react@19.2.3))(motion@12.23.24(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(react-dom@19.2.3(react@19.2.3))(react-markdown@10.1.0(@types/react@19.2.7)(react@19.2.3))(react-resizable-panels@2.1.9(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(react-virtuoso@4.14.1(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(react@19.2.3)(remark-gfm@4.0.1)(shiki@3.20.0)
+        specifier: 1.36.0
+        version: 1.36.0(@dnd-kit/core@6.3.1(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(@dnd-kit/modifiers@9.0.0(@dnd-kit/core@6.3.1(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(react@19.2.3))(@dnd-kit/utilities@3.2.2(react@19.2.3))(@rive-app/react-canvas-lite@4.23.4(react@19.2.3))(@types/react-dom@19.2.3(@types/react@19.2.7))(@types/react@19.2.7)(ai@5.0.66(zod@4.3.6))(lucide-react@1.8.0(react@19.2.3))(motion@12.23.24(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(react-dom@19.2.3(react@19.2.3))(react-markdown@10.1.0(@types/react@19.2.7)(react@19.2.3))(react-resizable-panels@2.1.9(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(react-virtuoso@4.14.1(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(react@19.2.3)(remark-gfm@4.0.1)(shiki@3.20.0)
       '@tailwindcss/vite':
         specifier: ^4.2.4
         version: 4.2.4(vite@7.2.4(@types/node@24.10.1)(jiti@2.6.1)(lightningcss@1.32.0)(tsx@4.20.6)(yaml@2.8.1))
@@ -274,7 +274,7 @@ importers:
         version: 0.4.6(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
       nuqs:
         specifier: ^2.8.9
-        version: 2.8.9(@tanstack/react-router@1.168.24(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(next@15.5.12(@opentelemetry/api@1.9.0)(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(react-router-dom@7.13.0(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(react-router@7.12.0(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(react@19.2.3)
+        version: 2.8.9(@tanstack/react-router@1.168.24(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(next@15.5.12(@babel/core@7.28.5)(@opentelemetry/api@1.9.0)(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(react-router-dom@7.13.0(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(react-router@7.12.0(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(react@19.2.3)
       posthog-js:
         specifier: ^1.298.0
         version: 1.298.0
@@ -1086,7 +1086,7 @@ importers:
         version: 12.23.24(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
       next:
         specifier: ^15.4.0
-        version: 15.5.12(@opentelemetry/api@1.9.0)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
+        version: 15.5.12(@babel/core@7.28.5)(@opentelemetry/api@1.9.0)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
       react:
         specifier: ^19.2.0
         version: 19.2.3
@@ -4203,8 +4203,8 @@ packages:
     resolution: {integrity: sha512-tlqY9xq5ukxTUZBmoOp+m61cqwQD5pHJtFY3Mn8CA8ps6yghLH/Hw8UPdqg4OLmFW3IFlcXnQNmo/dh8HzXYIQ==}
     engines: {node: '>=18'}
 
-  '@speakeasy-api/moonshine@1.35.0':
-    resolution: {integrity: sha512-pFTLZ485DXc1HUF8jNktfB4tudEd/Dp/kQomy1Mw0yr9L3i/RwarORDVYx0V3h8Ra/s6QZwJsX3iNoxgPwDUlQ==}
+  '@speakeasy-api/moonshine@1.36.0':
+    resolution: {integrity: sha512-HKlHE5UAa5cOkQZK39fRmpABFVxyasb60+TlWxQF8rv8ZIECGeDUtNi3bMS4wRMl5OeQ/U8bngKy077YbnLHFg==}
     peerDependencies:
       '@dnd-kit/core': ^6.1.0
       '@dnd-kit/modifiers': ^7.0.0
@@ -13336,7 +13336,7 @@ snapshots:
 
   '@sindresorhus/merge-streams@4.0.0': {}
 
-  '@speakeasy-api/moonshine@1.35.0(@dnd-kit/core@6.3.1(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(@dnd-kit/modifiers@9.0.0(@dnd-kit/core@6.3.1(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(react@19.2.3))(@dnd-kit/utilities@3.2.2(react@19.2.3))(@rive-app/react-canvas-lite@4.23.4(react@19.2.3))(@types/react-dom@19.2.3(@types/react@19.2.7))(@types/react@19.2.7)(ai@5.0.66(zod@4.3.6))(lucide-react@1.8.0(react@19.2.3))(motion@12.23.24(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(react-dom@19.2.3(react@19.2.3))(react-markdown@10.1.0(@types/react@19.2.7)(react@19.2.3))(react-resizable-panels@2.1.9(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(react-virtuoso@4.14.1(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(react@19.2.3)(remark-gfm@4.0.1)(shiki@3.20.0)':
+  '@speakeasy-api/moonshine@1.36.0(@dnd-kit/core@6.3.1(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(@dnd-kit/modifiers@9.0.0(@dnd-kit/core@6.3.1(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(react@19.2.3))(@dnd-kit/utilities@3.2.2(react@19.2.3))(@rive-app/react-canvas-lite@4.23.4(react@19.2.3))(@types/react-dom@19.2.3(@types/react@19.2.7))(@types/react@19.2.7)(ai@5.0.66(zod@4.3.6))(lucide-react@1.8.0(react@19.2.3))(motion@12.23.24(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(react-dom@19.2.3(react@19.2.3))(react-markdown@10.1.0(@types/react@19.2.7)(react@19.2.3))(react-resizable-panels@2.1.9(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(react-virtuoso@4.14.1(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(react@19.2.3)(remark-gfm@4.0.1)(shiki@3.20.0)':
     dependencies:
       '@dnd-kit/core': 6.3.1(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
       '@dnd-kit/modifiers': 9.0.0(@dnd-kit/core@6.3.1(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(react@19.2.3)
@@ -17988,7 +17988,7 @@ snapshots:
       react: 19.2.3
       react-dom: 19.2.3(react@19.2.3)
 
-  next@15.5.12(@opentelemetry/api@1.9.0)(react-dom@19.2.3(react@19.2.3))(react@19.2.3):
+  next@15.5.12(@babel/core@7.28.5)(@opentelemetry/api@1.9.0)(react-dom@19.2.3(react@19.2.3))(react@19.2.3):
     dependencies:
       '@next/env': 15.5.12
       '@swc/helpers': 0.5.15
@@ -17996,7 +17996,7 @@ snapshots:
       postcss: 8.4.31
       react: 19.2.3
       react-dom: 19.2.3(react@19.2.3)
-      styled-jsx: 5.1.6(react@19.2.3)
+      styled-jsx: 5.1.6(@babel/core@7.28.5)(react@19.2.3)
     optionalDependencies:
       '@next/swc-darwin-arm64': 15.5.12
       '@next/swc-darwin-x64': 15.5.12
@@ -18043,13 +18043,13 @@ snapshots:
     dependencies:
       boolbase: 1.0.0
 
-  nuqs@2.8.9(@tanstack/react-router@1.168.24(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(next@15.5.12(@opentelemetry/api@1.9.0)(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(react-router-dom@7.13.0(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(react-router@7.12.0(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(react@19.2.3):
+  nuqs@2.8.9(@tanstack/react-router@1.168.24(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(next@15.5.12(@babel/core@7.28.5)(@opentelemetry/api@1.9.0)(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(react-router-dom@7.13.0(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(react-router@7.12.0(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(react@19.2.3):
     dependencies:
       '@standard-schema/spec': 1.0.0
       react: 19.2.3
     optionalDependencies:
       '@tanstack/react-router': 1.168.24(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
-      next: 15.5.12(@opentelemetry/api@1.9.0)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
+      next: 15.5.12(@babel/core@7.28.5)(@opentelemetry/api@1.9.0)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
       react-router: 7.12.0(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
       react-router-dom: 7.13.0(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
 
@@ -19463,10 +19463,12 @@ snapshots:
     dependencies:
       inline-style-parser: 0.2.7
 
-  styled-jsx@5.1.6(react@19.2.3):
+  styled-jsx@5.1.6(@babel/core@7.28.5)(react@19.2.3):
     dependencies:
       client-only: 0.0.1
       react: 19.2.3
+    optionalDependencies:
+      '@babel/core': 7.28.5
 
   stylis@4.3.6: {}
 
