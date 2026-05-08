@@ -90,7 +90,7 @@ func UsageCommands() []string {
 		"instances get-instance",
 		"integrations (get|list)",
 		"keys (create-key|list-keys|revoke-key|verify-key)",
-		"mcp-endpoints (create-mcp-endpoint|get-mcp-endpoint|list-mcp-endpoints|update-mcp-endpoint|delete-mcp-endpoint)",
+		"mcp-endpoints (create-mcp-endpoint|get-mcp-endpoint|list-mcp-endpoints|update-mcp-endpoint|check-mcp-endpoint-slug-availability|delete-mcp-endpoint)",
 		"mcp-metadata (get-mcp-metadata|set-mcp-metadata|export-mcp-metadata)",
 		"mcp-servers (create-mcp-server|get-mcp-server|list-mcp-servers|update-mcp-server|delete-mcp-server)",
 		"organizations (get|send-invite|revoke-invite|list-invites|get-invite-by-token|list-users|remove-user|enable-webhooks|disable-webhooks|create-portal-session)",
@@ -759,6 +759,13 @@ func ParseEndpoint(
 		mcpEndpointsUpdateMcpEndpointSessionTokenFlag     = mcpEndpointsUpdateMcpEndpointFlags.String("session-token", "", "")
 		mcpEndpointsUpdateMcpEndpointApikeyTokenFlag      = mcpEndpointsUpdateMcpEndpointFlags.String("apikey-token", "", "")
 		mcpEndpointsUpdateMcpEndpointProjectSlugInputFlag = mcpEndpointsUpdateMcpEndpointFlags.String("project-slug-input", "", "")
+
+		mcpEndpointsCheckMcpEndpointSlugAvailabilityFlags                = flag.NewFlagSet("check-mcp-endpoint-slug-availability", flag.ExitOnError)
+		mcpEndpointsCheckMcpEndpointSlugAvailabilitySlugFlag             = mcpEndpointsCheckMcpEndpointSlugAvailabilityFlags.String("slug", "REQUIRED", "")
+		mcpEndpointsCheckMcpEndpointSlugAvailabilityCustomDomainIDFlag   = mcpEndpointsCheckMcpEndpointSlugAvailabilityFlags.String("custom-domain-id", "", "")
+		mcpEndpointsCheckMcpEndpointSlugAvailabilitySessionTokenFlag     = mcpEndpointsCheckMcpEndpointSlugAvailabilityFlags.String("session-token", "", "")
+		mcpEndpointsCheckMcpEndpointSlugAvailabilityApikeyTokenFlag      = mcpEndpointsCheckMcpEndpointSlugAvailabilityFlags.String("apikey-token", "", "")
+		mcpEndpointsCheckMcpEndpointSlugAvailabilityProjectSlugInputFlag = mcpEndpointsCheckMcpEndpointSlugAvailabilityFlags.String("project-slug-input", "", "")
 
 		mcpEndpointsDeleteMcpEndpointFlags                = flag.NewFlagSet("delete-mcp-endpoint", flag.ExitOnError)
 		mcpEndpointsDeleteMcpEndpointIDFlag               = mcpEndpointsDeleteMcpEndpointFlags.String("id", "REQUIRED", "")
@@ -1697,6 +1704,7 @@ func ParseEndpoint(
 	mcpEndpointsGetMcpEndpointFlags.Usage = mcpEndpointsGetMcpEndpointUsage
 	mcpEndpointsListMcpEndpointsFlags.Usage = mcpEndpointsListMcpEndpointsUsage
 	mcpEndpointsUpdateMcpEndpointFlags.Usage = mcpEndpointsUpdateMcpEndpointUsage
+	mcpEndpointsCheckMcpEndpointSlugAvailabilityFlags.Usage = mcpEndpointsCheckMcpEndpointSlugAvailabilityUsage
 	mcpEndpointsDeleteMcpEndpointFlags.Usage = mcpEndpointsDeleteMcpEndpointUsage
 
 	mcpMetadataFlags.Usage = mcpMetadataUsage
@@ -2414,6 +2422,9 @@ func ParseEndpoint(
 
 			case "update-mcp-endpoint":
 				epf = mcpEndpointsUpdateMcpEndpointFlags
+
+			case "check-mcp-endpoint-slug-availability":
+				epf = mcpEndpointsCheckMcpEndpointSlugAvailabilityFlags
 
 			case "delete-mcp-endpoint":
 				epf = mcpEndpointsDeleteMcpEndpointFlags
@@ -3362,6 +3373,9 @@ func ParseEndpoint(
 			case "update-mcp-endpoint":
 				endpoint = c.UpdateMcpEndpoint()
 				data, err = mcpendpointsc.BuildUpdateMcpEndpointPayload(*mcpEndpointsUpdateMcpEndpointBodyFlag, *mcpEndpointsUpdateMcpEndpointSessionTokenFlag, *mcpEndpointsUpdateMcpEndpointApikeyTokenFlag, *mcpEndpointsUpdateMcpEndpointProjectSlugInputFlag)
+			case "check-mcp-endpoint-slug-availability":
+				endpoint = c.CheckMcpEndpointSlugAvailability()
+				data, err = mcpendpointsc.BuildCheckMcpEndpointSlugAvailabilityPayload(*mcpEndpointsCheckMcpEndpointSlugAvailabilitySlugFlag, *mcpEndpointsCheckMcpEndpointSlugAvailabilityCustomDomainIDFlag, *mcpEndpointsCheckMcpEndpointSlugAvailabilitySessionTokenFlag, *mcpEndpointsCheckMcpEndpointSlugAvailabilityApikeyTokenFlag, *mcpEndpointsCheckMcpEndpointSlugAvailabilityProjectSlugInputFlag)
 			case "delete-mcp-endpoint":
 				endpoint = c.DeleteMcpEndpoint()
 				data, err = mcpendpointsc.BuildDeleteMcpEndpointPayload(*mcpEndpointsDeleteMcpEndpointIDFlag, *mcpEndpointsDeleteMcpEndpointSessionTokenFlag, *mcpEndpointsDeleteMcpEndpointApikeyTokenFlag, *mcpEndpointsDeleteMcpEndpointProjectSlugInputFlag)
@@ -6542,6 +6556,7 @@ func mcpEndpointsUsage() {
 	fmt.Fprintln(os.Stderr, `    get-mcp-endpoint: Get an MCP endpoint by id or by (custom_domain_id, slug). Provide either id, or slug with an optional custom_domain_id — not both.`)
 	fmt.Fprintln(os.Stderr, `    list-mcp-endpoints: List MCP endpoints for a project. Optionally filter to only those associated with a specific MCP server.`)
 	fmt.Fprintln(os.Stderr, `    update-mcp-endpoint: Update an MCP endpoint. This is a full-record replace: fields omitted from the request become null on the stored record. The id, mcp_server_id, and slug fields are required.`)
+	fmt.Fprintln(os.Stderr, `    check-mcp-endpoint-slug-availability: Check whether an MCP endpoint slug is available. The uniqueness scope depends on whether a custom_domain_id is provided: platform-domain slugs are checked across all platform-domain endpoints (custom_domain_id IS NULL); custom-domain slugs are checked within the (custom_domain_id, slug) pair. Returns true when the slug is free.`)
 	fmt.Fprintln(os.Stderr, `    delete-mcp-endpoint: Delete an MCP endpoint`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
@@ -6645,6 +6660,32 @@ func mcpEndpointsUpdateMcpEndpointUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-endpoints update-mcp-endpoint --body '{\n      \"custom_domain_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"slug\": \"aaa\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func mcpEndpointsCheckMcpEndpointSlugAvailabilityUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] mcp-endpoints check-mcp-endpoint-slug-availability", os.Args[0])
+	fmt.Fprint(os.Stderr, " -slug STRING")
+	fmt.Fprint(os.Stderr, " -custom-domain-id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Check whether an MCP endpoint slug is available. The uniqueness scope depends on whether a custom_domain_id is provided: platform-domain slugs are checked across all platform-domain endpoints (custom_domain_id IS NULL); custom-domain slugs are checked within the (custom_domain_id, slug) pair. Returns true when the slug is free.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -slug STRING: `)
+	fmt.Fprintln(os.Stderr, `    -custom-domain-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-endpoints check-mcp-endpoint-slug-availability --slug \"aaa\" --custom-domain-id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func mcpEndpointsDeleteMcpEndpointUsage() {

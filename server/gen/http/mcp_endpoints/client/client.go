@@ -33,6 +33,10 @@ type Client struct {
 	// updateMcpEndpoint endpoint.
 	UpdateMcpEndpointDoer goahttp.Doer
 
+	// CheckMcpEndpointSlugAvailability Doer is the HTTP client used to make
+	// requests to the checkMcpEndpointSlugAvailability endpoint.
+	CheckMcpEndpointSlugAvailabilityDoer goahttp.Doer
+
 	// DeleteMcpEndpoint Doer is the HTTP client used to make requests to the
 	// deleteMcpEndpoint endpoint.
 	DeleteMcpEndpointDoer goahttp.Doer
@@ -57,16 +61,17 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		CreateMcpEndpointDoer: doer,
-		GetMcpEndpointDoer:    doer,
-		ListMcpEndpointsDoer:  doer,
-		UpdateMcpEndpointDoer: doer,
-		DeleteMcpEndpointDoer: doer,
-		RestoreResponseBody:   restoreBody,
-		scheme:                scheme,
-		host:                  host,
-		decoder:               dec,
-		encoder:               enc,
+		CreateMcpEndpointDoer:                doer,
+		GetMcpEndpointDoer:                   doer,
+		ListMcpEndpointsDoer:                 doer,
+		UpdateMcpEndpointDoer:                doer,
+		CheckMcpEndpointSlugAvailabilityDoer: doer,
+		DeleteMcpEndpointDoer:                doer,
+		RestoreResponseBody:                  restoreBody,
+		scheme:                               scheme,
+		host:                                 host,
+		decoder:                              dec,
+		encoder:                              enc,
 	}
 }
 
@@ -161,6 +166,30 @@ func (c *Client) UpdateMcpEndpoint() goa.Endpoint {
 		resp, err := c.UpdateMcpEndpointDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("mcpEndpoints", "updateMcpEndpoint", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// CheckMcpEndpointSlugAvailability returns an endpoint that makes HTTP
+// requests to the mcpEndpoints service checkMcpEndpointSlugAvailability server.
+func (c *Client) CheckMcpEndpointSlugAvailability() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeCheckMcpEndpointSlugAvailabilityRequest(c.encoder)
+		decodeResponse = DecodeCheckMcpEndpointSlugAvailabilityResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildCheckMcpEndpointSlugAvailabilityRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.CheckMcpEndpointSlugAvailabilityDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("mcpEndpoints", "checkMcpEndpointSlugAvailability", err)
 		}
 		return decodeResponse(resp)
 	}
