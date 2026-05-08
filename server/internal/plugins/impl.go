@@ -1050,7 +1050,7 @@ func (s *Service) GetPublishStatus(ctx context.Context, payload *gen.GetPublishS
 			repoURL := fmt.Sprintf("https://github.com/%s/%s", conn.RepoOwner, conn.RepoName)
 			result.RepoURL = &repoURL
 			if conn.MarketplaceToken.Valid && s.serverURL != "" {
-				marketplaceURL := fmt.Sprintf("%s%sm/%s/marketplace.json", s.serverURL, marketplace.RoutePrefix, conn.MarketplaceToken.String)
+				marketplaceURL := fmt.Sprintf("%s%sp/%s.git", s.serverURL, marketplace.RoutePrefix, conn.MarketplaceToken.String)
 				result.MarketplaceURL = &marketplaceURL
 			}
 		}

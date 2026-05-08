@@ -200,9 +200,10 @@ type GetPublishStatusResponseBody struct {
 	RepoName *string `form:"repo_name,omitempty" json:"repo_name,omitempty" xml:"repo_name,omitempty"`
 	// Full GitHub repository URL, if connected.
 	RepoURL *string `form:"repo_url,omitempty" json:"repo_url,omitempty" xml:"repo_url,omitempty"`
-	// URL-based Claude Code marketplace install URL — the value to pass to
-	// `/plugin marketplace add`. Present once a marketplace token has been minted,
-	// which happens automatically on the first publish.
+	// Git-based Claude Code marketplace URL — the value to pass to `/plugin
+	// marketplace add` or set as the source URL in `extraKnownMarketplaces`.
+	// Present once a marketplace token has been minted, which happens
+	// automatically on the first publish.
 	MarketplaceURL *string `form:"marketplace_url,omitempty" json:"marketplace_url,omitempty" xml:"marketplace_url,omitempty"`
 }
 

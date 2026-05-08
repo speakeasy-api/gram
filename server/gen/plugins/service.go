@@ -249,9 +249,10 @@ type PublishStatusResult struct {
 	RepoName *string
 	// Full GitHub repository URL, if connected.
 	RepoURL *string
-	// URL-based Claude Code marketplace install URL — the value to pass to
-	// `/plugin marketplace add`. Present once a marketplace token has been minted,
-	// which happens automatically on the first publish.
+	// Git-based Claude Code marketplace URL — the value to pass to `/plugin
+	// marketplace add` or set as the source URL in `extraKnownMarketplaces`.
+	// Present once a marketplace token has been minted, which happens
+	// automatically on the first publish.
 	MarketplaceURL *string
 }
 
