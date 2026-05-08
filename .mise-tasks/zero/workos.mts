@@ -1,70 +1,86 @@
 #!/usr/bin/env -S node
 
-//MISE description="Setup WorkOS AuthKit OIDC credentials for the mock IDP"
+//MISE description="Configure IDP mode: mock-workos (default) or real WorkOS"
 //MISE hide=true
 //USAGE flag "--restart" default="false" help="Force the onboarding even if configuration already exists."
 
 import { $, question } from "zx";
 
-const WORKOS_ISSUER = "https://convenient-daydream-57-development.authkit.app/";
-
 async function run() {
+  const apiKey = process.env["WORKOS_API_KEY"];
+  const hasWorkOS =
+    typeof apiKey === "string" && apiKey !== "" && apiKey !== "unset";
+
+  if (hasWorkOS && process.env["usage_restart"] !== "true") {
+    console.log("✅ IDP mode: real WorkOS (already configured).");
+    process.exit(0);
+  }
+
   if (
-    process.env["OIDC_SKIPPED"] === "true" &&
+    process.env["WORKOS_SKIPPED"] === "true" &&
     process.env["usage_restart"] !== "true"
   ) {
-    console.log(
-      "⏭️  WorkOS OIDC setup previously skipped. Mock IDP will run in mock mode. Run with `mise run zero:workos --restart` to restart the onboarding process.",
-    );
+    console.log("✅ IDP mode: mock-workos (previously selected).");
     process.exit(0);
   }
 
-  const issuer = process.env["OIDC_ISSUER"];
-  if (
-    typeof issuer === "string" &&
-    issuer !== "unset" &&
-    process.env["usage_restart"] !== "true"
-  ) {
-    console.log("✅ WorkOS OIDC credentials are already configured.");
-    process.exit(0);
-  }
-
+  console.log();
+  console.log("💬 Which IDP mode do you want to use?");
+  console.log();
+  console.log("  1) mock-workos  (default)");
   console.log(
-    "💬 WorkOS AuthKit can be configured for authentication in local development.",
+    "     \x1b[90mFully local, zero config. dev-idp emulates the WorkOS API.\x1b[0m",
   );
   console.log(
-    "💬 If you don't have WorkOS access, skip this step and the mock IDP will use a hardcoded test user instead.",
+    "     \x1b[90mUses a hardcoded test user — no external account needed.\x1b[0m",
   );
-
-  const clientId = await question(
-    "💬 Paste your WorkOS Client ID or press enter to skip: ",
-  );
-  if (!clientId) {
-    await $`mise set --file mise.local.toml OIDC_SKIPPED=true`;
-    console.log("⏭️  Skipping WorkOS setup. Mock IDP will run in mock mode.");
-    process.exit(0);
-  }
-
-  const port = process.env["MOCK_IDP_PORT"] || "35291";
-  const host = process.env["MOCK_IDP_HOST"] || "localhost";
+  console.log();
+  console.log("  2) workos");
   console.log(
-    "💬 Make sure you add the following redirect URI to your WorkOS AuthKit config:",
+    "     \x1b[90mReal WorkOS AuthKit login via dev-idp proxy.\x1b[0m",
   );
-  console.log(`\thttp://${host}:${port}/v1/speakeasy_provider/oidc/callback`);
+  console.log("     \x1b[90mRequires a WorkOS API key and client ID.\x1b[0m");
   console.log();
 
-  const clientSecret = await question("💬 Paste your WorkOS Client Secret: ");
-  if (!clientSecret) {
-    console.log("❌ Client Secret is required.");
+  const choice = await question("💬 Enter 1 or 2 (default: 1): ");
+
+  if (choice.trim() === "2") {
+    await setupRealWorkOS();
+  } else {
+    await $`mise set --file mise.local.toml WORKOS_SKIPPED=true`;
+    console.log();
+    console.log("✅ IDP mode: mock-workos. No additional config needed.");
+  }
+}
+
+async function setupRealWorkOS() {
+  console.log();
+  const key = await question("💬 WorkOS API Key (sk_test_...): ");
+  if (!key.trim()) {
+    console.log("❌ API key is required for real WorkOS mode.");
     process.exit(1);
   }
 
+  const clientId = await question("💬 WorkOS Client ID (client_...): ");
+  if (!clientId.trim()) {
+    console.log("❌ Client ID is required for real WorkOS mode.");
+    process.exit(1);
+  }
+
+  const devidpURL =
+    process.env["GRAM_DEVIDP_EXTERNAL_URL"] || "http://localhost:35291";
+
   await $`touch mise.local.toml`;
-  await $`mise unset --file mise.local.toml OIDC_SKIPPED`;
-  await $`mise set --file mise.local.toml OIDC_ISSUER=${WORKOS_ISSUER}`;
-  await $`mise set --file mise.local.toml OIDC_CLIENT_ID=${clientId}`;
-  await $`mise set --file mise.local.toml OIDC_CLIENT_SECRET=${clientSecret}`;
-  console.log("🔑 WorkOS OIDC credentials have been saved to mise.local.toml");
+  await $`mise unset --file mise.local.toml WORKOS_SKIPPED`;
+  await $`mise set --file mise.local.toml WORKOS_API_KEY=${key.trim()}`;
+  await $`mise set --file mise.local.toml WORKOS_API_URL=${devidpURL}/workos`;
+  await $`mise set --file mise.local.toml GRAM_IDP_CLIENT_ID=${clientId.trim()}`;
+
+  console.log();
+  console.log(
+    "✅ IDP mode: real WorkOS. Credentials saved to mise.local.toml.",
+  );
+  console.log("   Restart madprocs to apply.");
 }
 
 run();
