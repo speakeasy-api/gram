@@ -159,35 +159,35 @@ func (s *Service) GenerateDeployScript(ctx context.Context, _ *gen.GenerateDeplo
 func (s *Service) renderDeployScript(apiKey string) []byte {
 	base := s.serverURL.String()
 	script := fmt.Sprintf(`#!/bin/bash
-# Gram Claude Code MDM Deploy Script
+# Speakeasy Claude Code MDM Deploy Script
 #
 # Works with any MDM that supports arbitrary shell scripts (Jamf, Kandji, Mosyle, etc.)
 # Set policy trigger to "Login" or "Recurring check-in" for idempotent rollout.
 # Only dependency: curl (always present on macOS).
 set -euo pipefail
 
-GRAM_API_KEY="%s"
-GRAM_INSTALL_SCRIPT="%s/rpc/mdm.getInstallScript"
+SPEAKEASY_API_KEY="%s"
+SPEAKEASY_INSTALL_SCRIPT="%s/rpc/mdm.getInstallScript"
 
 CONSOLE_USER=$(stat -f '%%Su' /dev/console 2>/dev/null || true)
-[[ "$CONSOLE_USER" =~ ^(root|loginwindow|)$ ]] && { echo "Gram: no console user logged in, skipping" >&2; exit 0; }
+[[ "$CONSOLE_USER" =~ ^(root|loginwindow|)$ ]] && { echo "Speakeasy: no console user logged in, skipping" >&2; exit 0; }
 
 USER_UID=$(id -u "$CONSOLE_USER")
 USER_HOME=$(/usr/sbin/dscl . -read "/Users/$CONSOLE_USER" NFSHomeDirectory | awk '{print $2}')
 
-echo "Gram: applying settings for $CONSOLE_USER..."
+echo "Speakeasy: applying settings for $CONSOLE_USER..."
 
 WRAPPER=$(mktemp)
 trap 'rm -f "$WRAPPER"' EXIT
 cat > "$WRAPPER" <<WEOF
 #!/bin/bash
 export HOME="$USER_HOME"
-curl -fsSL "$GRAM_INSTALL_SCRIPT" | bash -s -- "$GRAM_API_KEY"
+curl -fsSL "$SPEAKEASY_INSTALL_SCRIPT" | bash -s -- "$SPEAKEASY_API_KEY"
 WEOF
 chmod +x "$WRAPPER"
 
 /bin/launchctl asuser "$USER_UID" "$WRAPPER"
-echo "Gram: done."
+echo "Speakeasy: done."
 `, apiKey, base)
 	return []byte(script)
 }
@@ -206,32 +206,32 @@ func generateToken() (string, error) {
 func (s *Service) GetInstallScript(ctx context.Context) ([]byte, error) {
 	base := s.serverURL.String()
 	script := fmt.Sprintf(`#!/bin/bash
-# Gram Claude Code Apply Script — auto-served from %s
-# Usage: curl -fsSL '%s/rpc/mdm.getInstallScript' | bash -s -- <GRAM_API_KEY>
+# Speakeasy Claude Code Install Script — auto-served from %s
+# Usage: curl -fsSL '%s/rpc/mdm.getInstallScript' | bash -s -- <SPEAKEASY_API_KEY>
 # Only dependency: curl (always present on macOS).
 set -euo pipefail
-GRAM_API_KEY="${1:?GRAM_API_KEY required as \$1}"
+SPEAKEASY_API_KEY="${1:?SPEAKEASY_API_KEY required as \$1}"
 SETTINGS="$HOME/.claude/settings.json"
 mkdir -p "$HOME/.claude"
 [ -f "$SETTINGS" ] || echo '{}' > "$SETTINGS"
 curl -fsSL \
   -X POST \
-  -H "X-Api-Key: $GRAM_API_KEY" \
+  -H "X-Api-Key: $SPEAKEASY_API_KEY" \
   -H "Content-Type: application/json" \
   --data-binary @"$SETTINGS" \
   '%s/rpc/mdm.patchClaudeSettings' \
   -o "$SETTINGS.tmp"
 mv "$SETTINGS.tmp" "$SETTINGS"
 chmod 600 "$SETTINGS"
-echo "Gram: settings applied to $SETTINGS"
+echo "Speakeasy: settings applied to $SETTINGS"
 `, base, base, base)
 
 	return []byte(script), nil
 }
 
-// PatchClaudeSettings accepts the current settings.json, injects Gram observability
+// PatchClaudeSettings accepts the current settings.json, injects Speakeasy observability
 // config into the relevant keys, and returns the patched JSON. All existing settings
-// are preserved — only the specific Gram keys are written.
+// are preserved — only the specific Speakeasy keys are written.
 func (s *Service) PatchClaudeSettings(ctx context.Context, payload *gen.PatchClaudeSettingsPayload, body io.ReadCloser) (io.ReadCloser, error) {
 	defer o11y.NoLogDefer(func() error { return body.Close() })
 
@@ -270,7 +270,7 @@ func (s *Service) PatchClaudeSettings(ctx context.Context, payload *gen.PatchCla
 	return io.NopCloser(bytes.NewReader(out)), nil
 }
 
-// patch injects Gram keys into settings without touching any other fields.
+// patch injects Speakeasy keys into settings without touching any other fields.
 func patch(settings map[string]any, projectSlug, apiKey, serverURL string) {
 	env, _ := settings["env"].(map[string]any)
 	if env == nil {

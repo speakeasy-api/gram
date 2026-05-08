@@ -58,8 +58,8 @@ var _ = Service("mdm", func() {
 
 	Method("patchClaudeSettings", func() {
 		Description("Accepts the current ~/.claude/settings.json as the request body and returns a patched " +
-			"version with Gram observability configuration injected. All existing user settings are preserved. " +
-			"Called by the apply script — requires a Hooks-scoped API key.")
+			"version with Speakeasy observability configuration injected. All existing user settings are preserved. " +
+			"Called by the install script — requires a Hooks-scoped API key.")
 
 		Security(security.ByKey, func() {
 			Scope("hooks")
