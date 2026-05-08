@@ -34,6 +34,30 @@ func (s *Service) bufferHook(ctx context.Context, sessionID string, payload *gen
 	return nil
 }
 
+// resolveUserByEmail looks up a connected user by email within an org.
+// Returns the user ID if found, or empty string if not found or if email is empty.
+func (s *Service) resolveUserByEmail(ctx context.Context, email, orgID string) string {
+	lookup := strings.ToLower(strings.TrimSpace(email))
+	if lookup == "" {
+		return ""
+	}
+	user, err := usersrepo.New(s.db).GetConnectedUserByEmail(ctx, usersrepo.GetConnectedUserByEmailParams{
+		Email:          lookup,
+		OrganizationID: orgID,
+	})
+	if err == nil {
+		return user.ID
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		s.logger.WarnContext(ctx, "failed to resolve hook user by email",
+			attr.SlogError(err),
+			attr.SlogOrganizationID(orgID),
+			attr.SlogAuthUserEmail(email),
+		)
+	}
+	return ""
+}
+
 // persistToolCallEvent writes a hook event to ClickHouse with full session context
 func (s *Service) persistToolCallEvent(ctx context.Context, payload *gen.ClaudePayload, metadata *SessionMetadata) error {
 	attrs := s.buildTelemetryAttributesWithMetadata(ctx, payload, metadata)
@@ -110,23 +134,6 @@ func (s *Service) buildTelemetryAttributesWithMetadata(ctx context.Context, payl
 	}
 	if metadata.UserID != "" {
 		attrs[attr.UserIDKey] = metadata.UserID
-	} else if userLookupEmail := strings.ToLower(strings.TrimSpace(metadata.UserEmail)); userLookupEmail != "" {
-		user, err := usersrepo.New(s.db).GetConnectedUserByEmail(ctx, usersrepo.GetConnectedUserByEmailParams{
-			Email:          userLookupEmail,
-			OrganizationID: metadata.GramOrgID,
-		})
-		if err == nil {
-			attrs[attr.UserIDKey] = user.ID
-			// Write back so downstream PG writes (e.g. writeToolCallRequestToPG) also
-			// get the resolved ID without an additional DB round-trip.
-			metadata.UserID = user.ID
-		} else if !errors.Is(err, pgx.ErrNoRows) {
-			s.logger.WarnContext(ctx, "failed to resolve hook user by email",
-				attr.SlogError(err),
-				attr.SlogOrganizationID(metadata.GramOrgID),
-				attr.SlogAuthUserEmail(metadata.UserEmail),
-			)
-		}
 	}
 
 	if payload.Error != nil {

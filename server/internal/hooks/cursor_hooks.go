@@ -5,14 +5,12 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/url"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -22,7 +20,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
-	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
 // Cursor is the endpoint for Cursor hook events
@@ -142,23 +139,7 @@ func (s *Service) recordCursorHook(ctx context.Context, payload *gen.CursorPaylo
 	}
 
 	userEmail := conv.PtrValOr(payload.UserEmail, "")
-	userID := ""
-	userLookupEmail := strings.ToLower(strings.TrimSpace(userEmail))
-	if userLookupEmail != "" {
-		user, err := usersrepo.New(s.db).GetConnectedUserByEmail(ctx, usersrepo.GetConnectedUserByEmailParams{
-			Email:          userLookupEmail,
-			OrganizationID: orgID,
-		})
-		if err == nil {
-			userID = user.ID
-		} else if !errors.Is(err, pgx.ErrNoRows) {
-			s.logger.WarnContext(ctx, "failed to resolve hook user by email",
-				attr.SlogError(err),
-				attr.SlogOrganizationID(orgID),
-				attr.SlogAuthUserEmail(userEmail),
-			)
-		}
-	}
+	userID := s.resolveUserByEmail(ctx, userEmail, orgID)
 
 	metadata := &SessionMetadata{
 		SessionID:   *payload.ConversationID,

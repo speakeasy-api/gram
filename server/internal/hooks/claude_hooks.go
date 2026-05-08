@@ -3,7 +3,6 @@ package hooks
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -12,7 +11,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
 
@@ -22,7 +20,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
-	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
 // claudeRequestDecoder is a custom decoder that handles both JSON and form-urlencoded content types
@@ -92,24 +89,7 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 		return nil
 	}
 
-	userID := ""
-	userEmail := strings.TrimSpace(claudeMetadata.UserEmail)
-	userLookupEmail := strings.ToLower(userEmail)
-	if userLookupEmail != "" {
-		user, err := usersrepo.New(s.db).GetConnectedUserByEmail(ctx, usersrepo.GetConnectedUserByEmailParams{
-			Email:          userLookupEmail,
-			OrganizationID: authCtx.ActiveOrganizationID,
-		})
-		if err == nil {
-			userID = user.ID
-		} else if !errors.Is(err, pgx.ErrNoRows) {
-			s.logger.WarnContext(ctx, "failed to resolve hook user by email",
-				attr.SlogError(err),
-				attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
-				attr.SlogAuthUserEmail(claudeMetadata.UserEmail),
-			)
-		}
-	}
+	userID := s.resolveUserByEmail(ctx, claudeMetadata.UserEmail, authCtx.ActiveOrganizationID)
 
 	completeMetadata := SessionMetadata{
 		SessionID:   claudeMetadata.SessionID,
