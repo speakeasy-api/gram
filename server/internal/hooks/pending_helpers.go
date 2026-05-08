@@ -117,6 +117,9 @@ func (s *Service) buildTelemetryAttributesWithMetadata(ctx context.Context, payl
 		})
 		if err == nil {
 			attrs[attr.UserIDKey] = user.ID
+			// Write back so downstream PG writes (e.g. writeToolCallRequestToPG) also
+			// get the resolved ID without an additional DB round-trip.
+			metadata.UserID = user.ID
 		} else if !errors.Is(err, pgx.ErrNoRows) {
 			s.logger.WarnContext(ctx, "failed to resolve hook user by email",
 				attr.SlogError(err),
