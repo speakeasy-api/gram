@@ -17,14 +17,18 @@ import (
 
 // MDM configuration management for Claude Code deployments.
 type Service interface {
-	// Returns the shell script used to apply Gram settings to Claude Code. Host
-	// this endpoint URL in your MDM policy — script updates automatically without
-	// touching Jamf/MDM.
-	GetInstallScript(context.Context) (res []byte, err error)
+	// Generates a ready-to-use MDM deploy script with an embedded Hooks-scoped API
+	// key. Download this script once and upload it to your MDM platform (Jamf,
+	// Kandji, Mosyle, etc.). The embedded key is automatically provisioned with
+	// Hooks scope. Requires org admin access.
+	GenerateDeployScript(context.Context, *GenerateDeployScriptPayload) (res []byte, err error)
+	// Returns the per-user apply script. The deploy script fetches and runs this
+	// on each login — logic updates automatically without touching your MDM policy.
+	GetApplyScript(context.Context) (res []byte, err error)
 	// Accepts the current ~/.claude/settings.json as the request body and returns
 	// a patched version with Gram observability configuration injected. All
-	// existing user settings are preserved. Called by the MDM install script —
-	// requires a Hooks-scoped API key.
+	// existing user settings are preserved. Called by the apply script — requires
+	// a Hooks-scoped API key.
 
 	// If body implements [io.WriterTo], that implementation will be used instead.
 	// Consider [goa.design/goa/v3/pkg.SkipResponseWriter] to adapt existing
@@ -52,7 +56,13 @@ const ServiceName = "mdm"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [2]string{"getInstallScript", "patchClaudeSettings"}
+var MethodNames = [3]string{"generateDeployScript", "getApplyScript", "patchClaudeSettings"}
+
+// GenerateDeployScriptPayload is the payload type of the mdm service
+// generateDeployScript method.
+type GenerateDeployScriptPayload struct {
+	SessionToken *string
+}
 
 // PatchClaudeSettingsPayload is the payload type of the mdm service
 // patchClaudeSettings method.

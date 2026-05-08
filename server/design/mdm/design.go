@@ -10,28 +10,53 @@ var _ = Service("mdm", func() {
 	Description("MDM configuration management for Claude Code deployments.")
 	shared.DeclareErrorResponses()
 
-	Method("getInstallScript", func() {
-		Description("Returns the shell script used to apply Gram settings to Claude Code. " +
-			"Host this endpoint URL in your MDM policy — script updates automatically without touching Jamf/MDM.")
-		NoSecurity()
+	Method("generateDeployScript", func() {
+		Description("Generates a ready-to-use MDM deploy script with an embedded Hooks-scoped API key. " +
+			"Download this script once and upload it to your MDM platform (Jamf, Kandji, Mosyle, etc.). " +
+			"The embedded key is automatically provisioned with Hooks scope. Requires org admin access.")
+
+		Security(security.Session)
+
+		Payload(func() {
+			security.SessionPayload()
+		})
 
 		Result(Bytes)
 
 		HTTP(func() {
-			GET("/rpc/mdm.getInstallScript")
+			POST("/rpc/mdm.generateDeployScript")
+			security.SessionHeader()
 			Response(StatusOK, func() {
 				ContentType("text/plain")
 			})
 		})
 
-		Meta("openapi:operationId", "getInstallScript")
-		Meta("openapi:extension:x-speakeasy-name-override", "getInstallScript")
+		Meta("openapi:operationId", "generateDeployScript")
+		Meta("openapi:extension:x-speakeasy-name-override", "generateDeployScript")
+	})
+
+	Method("getApplyScript", func() {
+		Description("Returns the per-user apply script. The deploy script fetches and runs this on each " +
+			"login — logic updates automatically without touching your MDM policy.")
+		NoSecurity()
+
+		Result(Bytes)
+
+		HTTP(func() {
+			GET("/rpc/mdm.getApplyScript")
+			Response(StatusOK, func() {
+				ContentType("text/plain")
+			})
+		})
+
+		Meta("openapi:operationId", "getApplyScript")
+		Meta("openapi:extension:x-speakeasy-name-override", "getApplyScript")
 	})
 
 	Method("patchClaudeSettings", func() {
 		Description("Accepts the current ~/.claude/settings.json as the request body and returns a patched " +
 			"version with Gram observability configuration injected. All existing user settings are preserved. " +
-			"Called by the MDM install script — requires a Hooks-scoped API key.")
+			"Called by the apply script — requires a Hooks-scoped API key.")
 
 		Security(security.ByKey, func() {
 			Scope("hooks")

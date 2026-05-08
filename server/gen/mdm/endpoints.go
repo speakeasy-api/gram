@@ -17,8 +17,9 @@ import (
 
 // Endpoints wraps the "mdm" service endpoints.
 type Endpoints struct {
-	GetInstallScript    goa.Endpoint
-	PatchClaudeSettings goa.Endpoint
+	GenerateDeployScript goa.Endpoint
+	GetApplyScript       goa.Endpoint
+	PatchClaudeSettings  goa.Endpoint
 }
 
 // PatchClaudeSettingsRequestData holds both the payload and the HTTP request
@@ -42,22 +43,47 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		GetInstallScript:    NewGetInstallScriptEndpoint(s),
-		PatchClaudeSettings: NewPatchClaudeSettingsEndpoint(s, a.APIKeyAuth),
+		GenerateDeployScript: NewGenerateDeployScriptEndpoint(s, a.APIKeyAuth),
+		GetApplyScript:       NewGetApplyScriptEndpoint(s),
+		PatchClaudeSettings:  NewPatchClaudeSettingsEndpoint(s, a.APIKeyAuth),
 	}
 }
 
 // Use applies the given middleware to all the "mdm" service endpoints.
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
-	e.GetInstallScript = m(e.GetInstallScript)
+	e.GenerateDeployScript = m(e.GenerateDeployScript)
+	e.GetApplyScript = m(e.GetApplyScript)
 	e.PatchClaudeSettings = m(e.PatchClaudeSettings)
 }
 
-// NewGetInstallScriptEndpoint returns an endpoint function that calls the
-// method "getInstallScript" of service "mdm".
-func NewGetInstallScriptEndpoint(s Service) goa.Endpoint {
+// NewGenerateDeployScriptEndpoint returns an endpoint function that calls the
+// method "generateDeployScript" of service "mdm".
+func NewGenerateDeployScriptEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
-		return s.GetInstallScript(ctx)
+		p := req.(*GenerateDeployScriptPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GenerateDeployScript(ctx, p)
+	}
+}
+
+// NewGetApplyScriptEndpoint returns an endpoint function that calls the method
+// "getApplyScript" of service "mdm".
+func NewGetApplyScriptEndpoint(s Service) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		return s.GetApplyScript(ctx)
 	}
 }
 

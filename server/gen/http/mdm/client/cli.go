@@ -11,6 +11,21 @@ import (
 	mdm "github.com/speakeasy-api/gram/server/gen/mdm"
 )
 
+// BuildGenerateDeployScriptPayload builds the payload for the mdm
+// generateDeployScript endpoint from CLI flags.
+func BuildGenerateDeployScriptPayload(mdmGenerateDeployScriptSessionToken string) (*mdm.GenerateDeployScriptPayload, error) {
+	var sessionToken *string
+	{
+		if mdmGenerateDeployScriptSessionToken != "" {
+			sessionToken = &mdmGenerateDeployScriptSessionToken
+		}
+	}
+	v := &mdm.GenerateDeployScriptPayload{}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildPatchClaudeSettingsPayload builds the payload for the mdm
 // patchClaudeSettings endpoint from CLI flags.
 func BuildPatchClaudeSettingsPayload(mdmPatchClaudeSettingsApikeyToken string) (*mdm.PatchClaudeSettingsPayload, error) {

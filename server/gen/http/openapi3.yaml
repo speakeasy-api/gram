@@ -10793,10 +10793,18 @@ paths:
             x-speakeasy-name-override: update
             x-speakeasy-react-hook:
                 name: UpdateMcpServer
-    /rpc/mdm.getInstallScript:
-        get:
-            description: Returns the shell script used to apply Gram settings to Claude Code. Host this endpoint URL in your MDM policy — script updates automatically without touching Jamf/MDM.
-            operationId: getInstallScript
+    /rpc/mdm.generateDeployScript:
+        post:
+            description: Generates a ready-to-use MDM deploy script with an embedded Hooks-scoped API key. Download this script once and upload it to your MDM platform (Jamf, Kandji, Mosyle, etc.). The embedded key is automatically provisioned with Hooks scope. Requires org admin access.
+            operationId: generateDeployScript
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
             responses:
                 "200":
                     content:
@@ -10859,13 +10867,85 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
-            summary: getInstallScript mdm
+            security:
+                - session_header_Gram-Session: []
+            summary: generateDeployScript mdm
             tags:
                 - mdm
-            x-speakeasy-name-override: getInstallScript
+            x-speakeasy-name-override: generateDeployScript
+    /rpc/mdm.getApplyScript:
+        get:
+            description: Returns the per-user apply script. The deploy script fetches and runs this on each login — logic updates automatically without touching your MDM policy.
+            operationId: getApplyScript
+            responses:
+                "200":
+                    content:
+                        text/plain:
+                            schema:
+                                format: binary
+                                type: string
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            summary: getApplyScript mdm
+            tags:
+                - mdm
+            x-speakeasy-name-override: getApplyScript
     /rpc/mdm.patchClaudeSettings:
         post:
-            description: Accepts the current ~/.claude/settings.json as the request body and returns a patched version with Gram observability configuration injected. All existing user settings are preserved. Called by the MDM install script — requires a Hooks-scoped API key.
+            description: Accepts the current ~/.claude/settings.json as the request body and returns a patched version with Gram observability configuration injected. All existing user settings are preserved. Called by the apply script — requires a Hooks-scoped API key.
             operationId: patchClaudeSettings
             parameters:
                 - allowEmptyValue: true

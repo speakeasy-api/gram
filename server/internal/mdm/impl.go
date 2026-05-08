@@ -3,12 +3,15 @@ package mdm
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/url"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -17,18 +20,27 @@ import (
 	srv "github.com/speakeasy-api/gram/server/gen/http/mdm/server"
 	gen "github.com/speakeasy-api/gram/server/gen/mdm"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 type Service struct {
 	tracer    trace.Tracer
 	logger    *slog.Logger
+	db        *pgxpool.Pool
 	auth      *auth.Auth
+	authz     *authz.Engine
+	keysRepo  *keysrepo.Queries
+	keyPrefix string
+	audit     *audit.Logger
 	serverURL *url.URL
 }
 
@@ -41,12 +53,19 @@ func NewService(
 	db *pgxpool.Pool,
 	sessionsMgr *sessions.Manager,
 	authzEngine *authz.Engine,
+	auditLogger *audit.Logger,
+	env string,
 	serverURL *url.URL,
 ) *Service {
 	return &Service{
 		tracer:    tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/mdm"),
 		logger:    logger.With(attr.SlogComponent("mdm")),
+		db:        db,
 		auth:      auth.New(logger, db, sessionsMgr, authzEngine),
+		authz:     authzEngine,
+		keysRepo:  keysrepo.New(db),
+		keyPrefix: auth.APIKeyPrefix(env),
+		audit:     auditLogger,
 		serverURL: serverURL,
 	}
 }
@@ -62,13 +81,128 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 	return s.auth.Authorize(ctx, key, schema)
 }
 
-// GetInstallScript returns the MDM shell script. Hosted dynamically so we can update
-// logic without customers touching their MDM policy — only the API key stays in Jamf.
-func (s *Service) GetInstallScript(ctx context.Context) ([]byte, error) {
+// GenerateDeployScript creates a Hooks-scoped API key for the caller's org and returns a
+// ready-to-use MDM deploy script with that key embedded. Upload the returned script to any
+// MDM platform (Jamf, Kandji, Mosyle, etc.) — no further configuration needed.
+func (s *Service) GenerateDeployScript(ctx context.Context, _ *gen.GenerateDeployScriptPayload) ([]byte, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	if err := s.authz.Require(ctx, authz.Check{
+		Scope:        authz.ScopeOrgAdmin,
+		ResourceKind: "",
+		ResourceID:   authCtx.ActiveOrganizationID,
+	}); err != nil {
+		return nil, err
+	}
+
+	token, err := generateToken()
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to generate key token")
+	}
+	fullKey := s.keyPrefix + token
+
+	keyHash, err := auth.GetAPIKeyHash(fullKey)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to hash api key")
+	}
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to begin transaction")
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	kr := s.keysRepo.WithTx(dbtx)
+
+	keyName := "gram-mdm-hooks"
+	createdKey, err := kr.CreateAPIKey(ctx, keysrepo.CreateAPIKeyParams{
+		OrganizationID:  authCtx.ActiveOrganizationID,
+		Name:            keyName,
+		KeyHash:         keyHash,
+		KeyPrefix:       s.keyPrefix + token[:5],
+		Scopes:          []string{auth.APIKeyScopeHooks.String()},
+		CreatedByUserID: authCtx.UserID,
+		ProjectID:       uuid.NullUUID{},
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to create api key").Log(ctx, s.logger)
+	}
+
+	if err := s.audit.LogKeyCreate(ctx, dbtx, audit.LogKeyCreateEvent{
+		OrganizationID:   authCtx.ActiveOrganizationID,
+		ProjectID:        uuid.NullUUID{},
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName: authCtx.Email,
+		ActorSlug:        nil,
+		KeyURN:           urn.NewAPIKey(createdKey.ID),
+		KeyName:          keyName,
+		Scopes:           []string{auth.APIKeyScopeHooks.String()},
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to log key creation").Log(ctx, s.logger)
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to commit key creation")
+	}
+
+	return s.renderDeployScript(fullKey), nil
+}
+
+// renderDeployScript returns the MDM deploy script with the given API key embedded.
+func (s *Service) renderDeployScript(apiKey string) []byte {
 	base := s.serverURL.String()
 	script := fmt.Sprintf(`#!/bin/bash
-# Gram Claude Code MDM Install Script — auto-served from %s
-# Usage: curl -fsSL '%s/rpc/mdm.getInstallScript' | bash -s -- <GRAM_API_KEY>
+# Gram Claude Code MDM Deploy Script
+#
+# Works with any MDM that supports arbitrary shell scripts (Jamf, Kandji, Mosyle, etc.)
+# Set policy trigger to "Login" or "Recurring check-in" for idempotent rollout.
+# Only dependency: curl (always present on macOS).
+set -euo pipefail
+
+GRAM_API_KEY="%s"
+GRAM_APPLY_SCRIPT="%s/rpc/mdm.getApplyScript"
+
+CONSOLE_USER=$(stat -f '%%Su' /dev/console 2>/dev/null || true)
+[[ "$CONSOLE_USER" =~ ^(root|loginwindow|)$ ]] && { echo "Gram: no console user logged in, skipping" >&2; exit 0; }
+
+USER_UID=$(id -u "$CONSOLE_USER")
+USER_HOME=$(/usr/sbin/dscl . -read "/Users/$CONSOLE_USER" NFSHomeDirectory | awk '{print $2}')
+
+echo "Gram: applying settings for $CONSOLE_USER..."
+
+WRAPPER=$(mktemp)
+trap 'rm -f "$WRAPPER"' EXIT
+cat > "$WRAPPER" <<WEOF
+#!/bin/bash
+export HOME="$USER_HOME"
+curl -fsSL "$GRAM_APPLY_SCRIPT" | bash -s -- "$GRAM_API_KEY"
+WEOF
+chmod +x "$WRAPPER"
+
+/bin/launchctl asuser "$USER_UID" "$WRAPPER"
+echo "Gram: done."
+`, apiKey, base)
+	return []byte(script)
+}
+
+func generateToken() (string, error) {
+	const randomKeyLength = 64
+	randomBytes := make([]byte, randomKeyLength/2)
+	if _, err := rand.Read(randomBytes); err != nil {
+		return "", fmt.Errorf("generate random token bytes: %w", err)
+	}
+	return hex.EncodeToString(randomBytes), nil
+}
+
+// GetApplyScript returns the per-user apply script. The deploy script fetches and runs this
+// on each login — logic updates automatically without MDM policy changes.
+func (s *Service) GetApplyScript(ctx context.Context) ([]byte, error) {
+	base := s.serverURL.String()
+	script := fmt.Sprintf(`#!/bin/bash
+# Gram Claude Code Apply Script — auto-served from %s
+# Usage: curl -fsSL '%s/rpc/mdm.getApplyScript' | bash -s -- <GRAM_API_KEY>
 # Only dependency: curl (always present on macOS).
 set -euo pipefail
 GRAM_API_KEY="${1:?GRAM_API_KEY required as \$1}"

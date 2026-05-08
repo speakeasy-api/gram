@@ -19,13 +19,13 @@ import (
 	goahttp "goa.design/goa/v3/http"
 )
 
-// BuildGetInstallScriptRequest instantiates a HTTP request object with method
-// and path set to call the "mdm" service "getInstallScript" endpoint
-func (c *Client) BuildGetInstallScriptRequest(ctx context.Context, v any) (*http.Request, error) {
-	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetInstallScriptMdmPath()}
-	req, err := http.NewRequest("GET", u.String(), nil)
+// BuildGenerateDeployScriptRequest instantiates a HTTP request object with
+// method and path set to call the "mdm" service "generateDeployScript" endpoint
+func (c *Client) BuildGenerateDeployScriptRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GenerateDeployScriptMdmPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
 	if err != nil {
-		return nil, goahttp.ErrInvalidURL("mdm", "getInstallScript", u.String(), err)
+		return nil, goahttp.ErrInvalidURL("mdm", "generateDeployScript", u.String(), err)
 	}
 	if ctx != nil {
 		req = req.WithContext(ctx)
@@ -34,10 +34,26 @@ func (c *Client) BuildGetInstallScriptRequest(ctx context.Context, v any) (*http
 	return req, nil
 }
 
-// DecodeGetInstallScriptResponse returns a decoder for responses returned by
-// the mdm getInstallScript endpoint. restoreBody controls whether the response
-// body should be restored after having been read.
-// DecodeGetInstallScriptResponse may return the following errors:
+// EncodeGenerateDeployScriptRequest returns an encoder for requests sent to
+// the mdm generateDeployScript server.
+func EncodeGenerateDeployScriptRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*mdm.GenerateDeployScriptPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("mdm", "generateDeployScript", "*mdm.GenerateDeployScriptPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		return nil
+	}
+}
+
+// DecodeGenerateDeployScriptResponse returns a decoder for responses returned
+// by the mdm generateDeployScript endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeGenerateDeployScriptResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
@@ -49,7 +65,7 @@ func (c *Client) BuildGetInstallScriptRequest(ctx context.Context, v any) (*http
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
 //   - error: internal error
-func DecodeGetInstallScriptResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+func DecodeGenerateDeployScriptResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
 		if restoreBody {
 			b, err := io.ReadAll(resp.Body)
@@ -71,159 +87,368 @@ func DecodeGetInstallScriptResponse(decoder func(*http.Response) goahttp.Decoder
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("mdm", "getInstallScript", err)
+				return nil, goahttp.ErrDecodingError("mdm", "generateDeployScript", err)
 			}
 			return body, nil
 		case http.StatusUnauthorized:
 			var (
-				body GetInstallScriptUnauthorizedResponseBody
+				body GenerateDeployScriptUnauthorizedResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("mdm", "getInstallScript", err)
+				return nil, goahttp.ErrDecodingError("mdm", "generateDeployScript", err)
 			}
-			err = ValidateGetInstallScriptUnauthorizedResponseBody(&body)
+			err = ValidateGenerateDeployScriptUnauthorizedResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("mdm", "getInstallScript", err)
+				return nil, goahttp.ErrValidationError("mdm", "generateDeployScript", err)
 			}
-			return nil, NewGetInstallScriptUnauthorized(&body)
+			return nil, NewGenerateDeployScriptUnauthorized(&body)
 		case http.StatusForbidden:
 			var (
-				body GetInstallScriptForbiddenResponseBody
+				body GenerateDeployScriptForbiddenResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("mdm", "getInstallScript", err)
+				return nil, goahttp.ErrDecodingError("mdm", "generateDeployScript", err)
 			}
-			err = ValidateGetInstallScriptForbiddenResponseBody(&body)
+			err = ValidateGenerateDeployScriptForbiddenResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("mdm", "getInstallScript", err)
+				return nil, goahttp.ErrValidationError("mdm", "generateDeployScript", err)
 			}
-			return nil, NewGetInstallScriptForbidden(&body)
+			return nil, NewGenerateDeployScriptForbidden(&body)
 		case http.StatusBadRequest:
 			var (
-				body GetInstallScriptBadRequestResponseBody
+				body GenerateDeployScriptBadRequestResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("mdm", "getInstallScript", err)
+				return nil, goahttp.ErrDecodingError("mdm", "generateDeployScript", err)
 			}
-			err = ValidateGetInstallScriptBadRequestResponseBody(&body)
+			err = ValidateGenerateDeployScriptBadRequestResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("mdm", "getInstallScript", err)
+				return nil, goahttp.ErrValidationError("mdm", "generateDeployScript", err)
 			}
-			return nil, NewGetInstallScriptBadRequest(&body)
+			return nil, NewGenerateDeployScriptBadRequest(&body)
 		case http.StatusNotFound:
 			var (
-				body GetInstallScriptNotFoundResponseBody
+				body GenerateDeployScriptNotFoundResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("mdm", "getInstallScript", err)
+				return nil, goahttp.ErrDecodingError("mdm", "generateDeployScript", err)
 			}
-			err = ValidateGetInstallScriptNotFoundResponseBody(&body)
+			err = ValidateGenerateDeployScriptNotFoundResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("mdm", "getInstallScript", err)
+				return nil, goahttp.ErrValidationError("mdm", "generateDeployScript", err)
 			}
-			return nil, NewGetInstallScriptNotFound(&body)
+			return nil, NewGenerateDeployScriptNotFound(&body)
 		case http.StatusConflict:
 			var (
-				body GetInstallScriptConflictResponseBody
+				body GenerateDeployScriptConflictResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("mdm", "getInstallScript", err)
+				return nil, goahttp.ErrDecodingError("mdm", "generateDeployScript", err)
 			}
-			err = ValidateGetInstallScriptConflictResponseBody(&body)
+			err = ValidateGenerateDeployScriptConflictResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("mdm", "getInstallScript", err)
+				return nil, goahttp.ErrValidationError("mdm", "generateDeployScript", err)
 			}
-			return nil, NewGetInstallScriptConflict(&body)
+			return nil, NewGenerateDeployScriptConflict(&body)
 		case http.StatusUnsupportedMediaType:
 			var (
-				body GetInstallScriptUnsupportedMediaResponseBody
+				body GenerateDeployScriptUnsupportedMediaResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("mdm", "getInstallScript", err)
+				return nil, goahttp.ErrDecodingError("mdm", "generateDeployScript", err)
 			}
-			err = ValidateGetInstallScriptUnsupportedMediaResponseBody(&body)
+			err = ValidateGenerateDeployScriptUnsupportedMediaResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("mdm", "getInstallScript", err)
+				return nil, goahttp.ErrValidationError("mdm", "generateDeployScript", err)
 			}
-			return nil, NewGetInstallScriptUnsupportedMedia(&body)
+			return nil, NewGenerateDeployScriptUnsupportedMedia(&body)
 		case http.StatusUnprocessableEntity:
 			var (
-				body GetInstallScriptInvalidResponseBody
+				body GenerateDeployScriptInvalidResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("mdm", "getInstallScript", err)
+				return nil, goahttp.ErrDecodingError("mdm", "generateDeployScript", err)
 			}
-			err = ValidateGetInstallScriptInvalidResponseBody(&body)
+			err = ValidateGenerateDeployScriptInvalidResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("mdm", "getInstallScript", err)
+				return nil, goahttp.ErrValidationError("mdm", "generateDeployScript", err)
 			}
-			return nil, NewGetInstallScriptInvalid(&body)
+			return nil, NewGenerateDeployScriptInvalid(&body)
 		case http.StatusInternalServerError:
 			en := resp.Header.Get("goa-error")
 			switch en {
 			case "invariant_violation":
 				var (
-					body GetInstallScriptInvariantViolationResponseBody
+					body GenerateDeployScriptInvariantViolationResponseBody
 					err  error
 				)
 				err = decoder(resp).Decode(&body)
 				if err != nil {
-					return nil, goahttp.ErrDecodingError("mdm", "getInstallScript", err)
+					return nil, goahttp.ErrDecodingError("mdm", "generateDeployScript", err)
 				}
-				err = ValidateGetInstallScriptInvariantViolationResponseBody(&body)
+				err = ValidateGenerateDeployScriptInvariantViolationResponseBody(&body)
 				if err != nil {
-					return nil, goahttp.ErrValidationError("mdm", "getInstallScript", err)
+					return nil, goahttp.ErrValidationError("mdm", "generateDeployScript", err)
 				}
-				return nil, NewGetInstallScriptInvariantViolation(&body)
+				return nil, NewGenerateDeployScriptInvariantViolation(&body)
 			case "unexpected":
 				var (
-					body GetInstallScriptUnexpectedResponseBody
+					body GenerateDeployScriptUnexpectedResponseBody
 					err  error
 				)
 				err = decoder(resp).Decode(&body)
 				if err != nil {
-					return nil, goahttp.ErrDecodingError("mdm", "getInstallScript", err)
+					return nil, goahttp.ErrDecodingError("mdm", "generateDeployScript", err)
 				}
-				err = ValidateGetInstallScriptUnexpectedResponseBody(&body)
+				err = ValidateGenerateDeployScriptUnexpectedResponseBody(&body)
 				if err != nil {
-					return nil, goahttp.ErrValidationError("mdm", "getInstallScript", err)
+					return nil, goahttp.ErrValidationError("mdm", "generateDeployScript", err)
 				}
-				return nil, NewGetInstallScriptUnexpected(&body)
+				return nil, NewGenerateDeployScriptUnexpected(&body)
 			default:
 				body, _ := io.ReadAll(resp.Body)
-				return nil, goahttp.ErrInvalidResponse("mdm", "getInstallScript", resp.StatusCode, string(body))
+				return nil, goahttp.ErrInvalidResponse("mdm", "generateDeployScript", resp.StatusCode, string(body))
 			}
 		case http.StatusBadGateway:
 			var (
-				body GetInstallScriptGatewayErrorResponseBody
+				body GenerateDeployScriptGatewayErrorResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("mdm", "getInstallScript", err)
+				return nil, goahttp.ErrDecodingError("mdm", "generateDeployScript", err)
 			}
-			err = ValidateGetInstallScriptGatewayErrorResponseBody(&body)
+			err = ValidateGenerateDeployScriptGatewayErrorResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("mdm", "getInstallScript", err)
+				return nil, goahttp.ErrValidationError("mdm", "generateDeployScript", err)
 			}
-			return nil, NewGetInstallScriptGatewayError(&body)
+			return nil, NewGenerateDeployScriptGatewayError(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
-			return nil, goahttp.ErrInvalidResponse("mdm", "getInstallScript", resp.StatusCode, string(body))
+			return nil, goahttp.ErrInvalidResponse("mdm", "generateDeployScript", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildGetApplyScriptRequest instantiates a HTTP request object with method
+// and path set to call the "mdm" service "getApplyScript" endpoint
+func (c *Client) BuildGetApplyScriptRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetApplyScriptMdmPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("mdm", "getApplyScript", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// DecodeGetApplyScriptResponse returns a decoder for responses returned by the
+// mdm getApplyScript endpoint. restoreBody controls whether the response body
+// should be restored after having been read.
+// DecodeGetApplyScriptResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetApplyScriptResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body []byte
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mdm", "getApplyScript", err)
+			}
+			return body, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetApplyScriptUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mdm", "getApplyScript", err)
+			}
+			err = ValidateGetApplyScriptUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mdm", "getApplyScript", err)
+			}
+			return nil, NewGetApplyScriptUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetApplyScriptForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mdm", "getApplyScript", err)
+			}
+			err = ValidateGetApplyScriptForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mdm", "getApplyScript", err)
+			}
+			return nil, NewGetApplyScriptForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetApplyScriptBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mdm", "getApplyScript", err)
+			}
+			err = ValidateGetApplyScriptBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mdm", "getApplyScript", err)
+			}
+			return nil, NewGetApplyScriptBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetApplyScriptNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mdm", "getApplyScript", err)
+			}
+			err = ValidateGetApplyScriptNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mdm", "getApplyScript", err)
+			}
+			return nil, NewGetApplyScriptNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetApplyScriptConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mdm", "getApplyScript", err)
+			}
+			err = ValidateGetApplyScriptConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mdm", "getApplyScript", err)
+			}
+			return nil, NewGetApplyScriptConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetApplyScriptUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mdm", "getApplyScript", err)
+			}
+			err = ValidateGetApplyScriptUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mdm", "getApplyScript", err)
+			}
+			return nil, NewGetApplyScriptUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetApplyScriptInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mdm", "getApplyScript", err)
+			}
+			err = ValidateGetApplyScriptInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mdm", "getApplyScript", err)
+			}
+			return nil, NewGetApplyScriptInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetApplyScriptInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("mdm", "getApplyScript", err)
+				}
+				err = ValidateGetApplyScriptInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("mdm", "getApplyScript", err)
+				}
+				return nil, NewGetApplyScriptInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetApplyScriptUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("mdm", "getApplyScript", err)
+				}
+				err = ValidateGetApplyScriptUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("mdm", "getApplyScript", err)
+				}
+				return nil, NewGetApplyScriptUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("mdm", "getApplyScript", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetApplyScriptGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mdm", "getApplyScript", err)
+			}
+			err = ValidateGetApplyScriptGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mdm", "getApplyScript", err)
+			}
+			return nil, NewGetApplyScriptGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("mdm", "getApplyScript", resp.StatusCode, string(body))
 		}
 	}
 }

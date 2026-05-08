@@ -89,7 +89,7 @@ func UsageCommands() []string {
 		"mcp-endpoints (create-mcp-endpoint|get-mcp-endpoint|list-mcp-endpoints|update-mcp-endpoint|delete-mcp-endpoint)",
 		"mcp-metadata (get-mcp-metadata|set-mcp-metadata|export-mcp-metadata)",
 		"mcp-servers (create-mcp-server|get-mcp-server|list-mcp-servers|update-mcp-server|delete-mcp-server)",
-		"mdm (get-install-script|patch-claude-settings)",
+		"mdm (generate-deploy-script|get-apply-script|patch-claude-settings)",
 		"organizations (send-invite|revoke-invite|list-invites|get-invite-by-token|list-users|remove-user)",
 		"packages (create-package|update-package|list-packages|list-versions|publish)",
 		"plugins (list-plugins|get-plugin|create-plugin|update-plugin|delete-plugin|add-plugin-server|update-plugin-server|remove-plugin-server|set-plugin-assignments|download-plugin-package|download-observability-plugin|get-publish-status|publish-plugins)",
@@ -771,7 +771,10 @@ func ParseEndpoint(
 
 		mdmFlags = flag.NewFlagSet("mdm", flag.ContinueOnError)
 
-		mdmGetInstallScriptFlags = flag.NewFlagSet("get-install-script", flag.ExitOnError)
+		mdmGenerateDeployScriptFlags            = flag.NewFlagSet("generate-deploy-script", flag.ExitOnError)
+		mdmGenerateDeployScriptSessionTokenFlag = mdmGenerateDeployScriptFlags.String("session-token", "", "")
+
+		mdmGetApplyScriptFlags = flag.NewFlagSet("get-apply-script", flag.ExitOnError)
 
 		mdmPatchClaudeSettingsFlags           = flag.NewFlagSet("patch-claude-settings", flag.ExitOnError)
 		mdmPatchClaudeSettingsApikeyTokenFlag = mdmPatchClaudeSettingsFlags.String("apikey-token", "", "")
@@ -1616,7 +1619,8 @@ func ParseEndpoint(
 	mcpServersDeleteMcpServerFlags.Usage = mcpServersDeleteMcpServerUsage
 
 	mdmFlags.Usage = mdmUsage
-	mdmGetInstallScriptFlags.Usage = mdmGetInstallScriptUsage
+	mdmGenerateDeployScriptFlags.Usage = mdmGenerateDeployScriptUsage
+	mdmGetApplyScriptFlags.Usage = mdmGetApplyScriptUsage
 	mdmPatchClaudeSettingsFlags.Usage = mdmPatchClaudeSettingsUsage
 
 	organizationsFlags.Usage = organizationsUsage
@@ -2320,8 +2324,11 @@ func ParseEndpoint(
 
 		case "mdm":
 			switch epn {
-			case "get-install-script":
-				epf = mdmGetInstallScriptFlags
+			case "generate-deploy-script":
+				epf = mdmGenerateDeployScriptFlags
+
+			case "get-apply-script":
+				epf = mdmGetApplyScriptFlags
 
 			case "patch-claude-settings":
 				epf = mdmPatchClaudeSettingsFlags
@@ -3214,8 +3221,11 @@ func ParseEndpoint(
 		case "mdm":
 			c := mdmc.NewClient(scheme, host, doer, enc, dec, restore)
 			switch epn {
-			case "get-install-script":
-				endpoint = c.GetInstallScript()
+			case "generate-deploy-script":
+				endpoint = c.GenerateDeployScript()
+				data, err = mdmc.BuildGenerateDeployScriptPayload(*mdmGenerateDeployScriptSessionTokenFlag)
+			case "get-apply-script":
+				endpoint = c.GetApplyScript()
 			case "patch-claude-settings":
 				endpoint = c.PatchClaudeSettings()
 				data, err = mdmc.BuildPatchClaudeSettingsPayload(*mdmPatchClaudeSettingsApikeyTokenFlag)
@@ -6508,26 +6518,45 @@ func mdmUsage() {
 	fmt.Fprintln(os.Stderr, `MDM configuration management for Claude Code deployments.`)
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] mdm COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
-	fmt.Fprintln(os.Stderr, `    get-install-script: Returns the shell script used to apply Gram settings to Claude Code. Host this endpoint URL in your MDM policy — script updates automatically without touching Jamf/MDM.`)
-	fmt.Fprintln(os.Stderr, `    patch-claude-settings: Accepts the current ~/.claude/settings.json as the request body and returns a patched version with Gram observability configuration injected. All existing user settings are preserved. Called by the MDM install script — requires a Hooks-scoped API key.`)
+	fmt.Fprintln(os.Stderr, `    generate-deploy-script: Generates a ready-to-use MDM deploy script with an embedded Hooks-scoped API key. Download this script once and upload it to your MDM platform (Jamf, Kandji, Mosyle, etc.). The embedded key is automatically provisioned with Hooks scope. Requires org admin access.`)
+	fmt.Fprintln(os.Stderr, `    get-apply-script: Returns the per-user apply script. The deploy script fetches and runs this on each login — logic updates automatically without touching your MDM policy.`)
+	fmt.Fprintln(os.Stderr, `    patch-claude-settings: Accepts the current ~/.claude/settings.json as the request body and returns a patched version with Gram observability configuration injected. All existing user settings are preserved. Called by the apply script — requires a Hooks-scoped API key.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s mdm COMMAND --help\n", os.Args[0])
 }
-func mdmGetInstallScriptUsage() {
+func mdmGenerateDeployScriptUsage() {
 	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] mdm get-install-script", os.Args[0])
+	fmt.Fprintf(os.Stderr, "%s [flags] mdm generate-deploy-script", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprintln(os.Stderr)
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Returns the shell script used to apply Gram settings to Claude Code. Host this endpoint URL in your MDM policy — script updates automatically without touching Jamf/MDM.`)
+	fmt.Fprintln(os.Stderr, `Generates a ready-to-use MDM deploy script with an embedded Hooks-scoped API key. Download this script once and upload it to your MDM platform (Jamf, Kandji, Mosyle, etc.). The embedded key is automatically provisioned with Hooks scope. Requires org admin access.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mdm generate-deploy-script --session-token \"abc123\"")
+}
+
+func mdmGetApplyScriptUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] mdm get-apply-script", os.Args[0])
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Returns the per-user apply script. The deploy script fetches and runs this on each login — logic updates automatically without touching your MDM policy.`)
 
 	// Flags list
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mdm get-install-script")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mdm get-apply-script")
 }
 
 func mdmPatchClaudeSettingsUsage() {
@@ -6539,7 +6568,7 @@ func mdmPatchClaudeSettingsUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Accepts the current ~/.claude/settings.json as the request body and returns a patched version with Gram observability configuration injected. All existing user settings are preserved. Called by the MDM install script — requires a Hooks-scoped API key.`)
+	fmt.Fprintln(os.Stderr, `Accepts the current ~/.claude/settings.json as the request body and returns a patched version with Gram observability configuration injected. All existing user settings are preserved. Called by the apply script — requires a Hooks-scoped API key.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)

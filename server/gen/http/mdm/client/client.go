@@ -18,9 +18,13 @@ import (
 
 // Client lists the mdm service endpoint HTTP clients.
 type Client struct {
-	// GetInstallScript Doer is the HTTP client used to make requests to the
-	// getInstallScript endpoint.
-	GetInstallScriptDoer goahttp.Doer
+	// GenerateDeployScript Doer is the HTTP client used to make requests to the
+	// generateDeployScript endpoint.
+	GenerateDeployScriptDoer goahttp.Doer
+
+	// GetApplyScript Doer is the HTTP client used to make requests to the
+	// getApplyScript endpoint.
+	GetApplyScriptDoer goahttp.Doer
 
 	// PatchClaudeSettings Doer is the HTTP client used to make requests to the
 	// patchClaudeSettings endpoint.
@@ -46,30 +50,55 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		GetInstallScriptDoer:    doer,
-		PatchClaudeSettingsDoer: doer,
-		RestoreResponseBody:     restoreBody,
-		scheme:                  scheme,
-		host:                    host,
-		decoder:                 dec,
-		encoder:                 enc,
+		GenerateDeployScriptDoer: doer,
+		GetApplyScriptDoer:       doer,
+		PatchClaudeSettingsDoer:  doer,
+		RestoreResponseBody:      restoreBody,
+		scheme:                   scheme,
+		host:                     host,
+		decoder:                  dec,
+		encoder:                  enc,
 	}
 }
 
-// GetInstallScript returns an endpoint that makes HTTP requests to the mdm
-// service getInstallScript server.
-func (c *Client) GetInstallScript() goa.Endpoint {
+// GenerateDeployScript returns an endpoint that makes HTTP requests to the mdm
+// service generateDeployScript server.
+func (c *Client) GenerateDeployScript() goa.Endpoint {
 	var (
-		decodeResponse = DecodeGetInstallScriptResponse(c.decoder, c.RestoreResponseBody)
+		encodeRequest  = EncodeGenerateDeployScriptRequest(c.encoder)
+		decodeResponse = DecodeGenerateDeployScriptResponse(c.decoder, c.RestoreResponseBody)
 	)
 	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildGetInstallScriptRequest(ctx, v)
+		req, err := c.BuildGenerateDeployScriptRequest(ctx, v)
 		if err != nil {
 			return nil, err
 		}
-		resp, err := c.GetInstallScriptDoer.Do(req)
+		err = encodeRequest(req, v)
 		if err != nil {
-			return nil, goahttp.ErrRequestError("mdm", "getInstallScript", err)
+			return nil, err
+		}
+		resp, err := c.GenerateDeployScriptDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("mdm", "generateDeployScript", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetApplyScript returns an endpoint that makes HTTP requests to the mdm
+// service getApplyScript server.
+func (c *Client) GetApplyScript() goa.Endpoint {
+	var (
+		decodeResponse = DecodeGetApplyScriptResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetApplyScriptRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetApplyScriptDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("mdm", "getApplyScript", err)
 		}
 		return decodeResponse(resp)
 	}

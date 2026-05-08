@@ -11,9 +11,10 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
-// GetInstallScriptUnauthorizedResponseBody is the type of the "mdm" service
-// "getInstallScript" endpoint HTTP response body for the "unauthorized" error.
-type GetInstallScriptUnauthorizedResponseBody struct {
+// GenerateDeployScriptUnauthorizedResponseBody is the type of the "mdm"
+// service "generateDeployScript" endpoint HTTP response body for the
+// "unauthorized" error.
+type GenerateDeployScriptUnauthorizedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -29,9 +30,9 @@ type GetInstallScriptUnauthorizedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// GetInstallScriptForbiddenResponseBody is the type of the "mdm" service
-// "getInstallScript" endpoint HTTP response body for the "forbidden" error.
-type GetInstallScriptForbiddenResponseBody struct {
+// GenerateDeployScriptForbiddenResponseBody is the type of the "mdm" service
+// "generateDeployScript" endpoint HTTP response body for the "forbidden" error.
+type GenerateDeployScriptForbiddenResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -47,9 +48,10 @@ type GetInstallScriptForbiddenResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// GetInstallScriptBadRequestResponseBody is the type of the "mdm" service
-// "getInstallScript" endpoint HTTP response body for the "bad_request" error.
-type GetInstallScriptBadRequestResponseBody struct {
+// GenerateDeployScriptBadRequestResponseBody is the type of the "mdm" service
+// "generateDeployScript" endpoint HTTP response body for the "bad_request"
+// error.
+type GenerateDeployScriptBadRequestResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -65,9 +67,9 @@ type GetInstallScriptBadRequestResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// GetInstallScriptNotFoundResponseBody is the type of the "mdm" service
-// "getInstallScript" endpoint HTTP response body for the "not_found" error.
-type GetInstallScriptNotFoundResponseBody struct {
+// GenerateDeployScriptNotFoundResponseBody is the type of the "mdm" service
+// "generateDeployScript" endpoint HTTP response body for the "not_found" error.
+type GenerateDeployScriptNotFoundResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -83,9 +85,9 @@ type GetInstallScriptNotFoundResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// GetInstallScriptConflictResponseBody is the type of the "mdm" service
-// "getInstallScript" endpoint HTTP response body for the "conflict" error.
-type GetInstallScriptConflictResponseBody struct {
+// GenerateDeployScriptConflictResponseBody is the type of the "mdm" service
+// "generateDeployScript" endpoint HTTP response body for the "conflict" error.
+type GenerateDeployScriptConflictResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -101,10 +103,10 @@ type GetInstallScriptConflictResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// GetInstallScriptUnsupportedMediaResponseBody is the type of the "mdm"
-// service "getInstallScript" endpoint HTTP response body for the
+// GenerateDeployScriptUnsupportedMediaResponseBody is the type of the "mdm"
+// service "generateDeployScript" endpoint HTTP response body for the
 // "unsupported_media" error.
-type GetInstallScriptUnsupportedMediaResponseBody struct {
+type GenerateDeployScriptUnsupportedMediaResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -120,9 +122,9 @@ type GetInstallScriptUnsupportedMediaResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// GetInstallScriptInvalidResponseBody is the type of the "mdm" service
-// "getInstallScript" endpoint HTTP response body for the "invalid" error.
-type GetInstallScriptInvalidResponseBody struct {
+// GenerateDeployScriptInvalidResponseBody is the type of the "mdm" service
+// "generateDeployScript" endpoint HTTP response body for the "invalid" error.
+type GenerateDeployScriptInvalidResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -138,10 +140,10 @@ type GetInstallScriptInvalidResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// GetInstallScriptInvariantViolationResponseBody is the type of the "mdm"
-// service "getInstallScript" endpoint HTTP response body for the
+// GenerateDeployScriptInvariantViolationResponseBody is the type of the "mdm"
+// service "generateDeployScript" endpoint HTTP response body for the
 // "invariant_violation" error.
-type GetInstallScriptInvariantViolationResponseBody struct {
+type GenerateDeployScriptInvariantViolationResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -157,9 +159,10 @@ type GetInstallScriptInvariantViolationResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// GetInstallScriptUnexpectedResponseBody is the type of the "mdm" service
-// "getInstallScript" endpoint HTTP response body for the "unexpected" error.
-type GetInstallScriptUnexpectedResponseBody struct {
+// GenerateDeployScriptUnexpectedResponseBody is the type of the "mdm" service
+// "generateDeployScript" endpoint HTTP response body for the "unexpected"
+// error.
+type GenerateDeployScriptUnexpectedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -175,9 +178,192 @@ type GetInstallScriptUnexpectedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// GetInstallScriptGatewayErrorResponseBody is the type of the "mdm" service
-// "getInstallScript" endpoint HTTP response body for the "gateway_error" error.
-type GetInstallScriptGatewayErrorResponseBody struct {
+// GenerateDeployScriptGatewayErrorResponseBody is the type of the "mdm"
+// service "generateDeployScript" endpoint HTTP response body for the
+// "gateway_error" error.
+type GenerateDeployScriptGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetApplyScriptUnauthorizedResponseBody is the type of the "mdm" service
+// "getApplyScript" endpoint HTTP response body for the "unauthorized" error.
+type GetApplyScriptUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetApplyScriptForbiddenResponseBody is the type of the "mdm" service
+// "getApplyScript" endpoint HTTP response body for the "forbidden" error.
+type GetApplyScriptForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetApplyScriptBadRequestResponseBody is the type of the "mdm" service
+// "getApplyScript" endpoint HTTP response body for the "bad_request" error.
+type GetApplyScriptBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetApplyScriptNotFoundResponseBody is the type of the "mdm" service
+// "getApplyScript" endpoint HTTP response body for the "not_found" error.
+type GetApplyScriptNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetApplyScriptConflictResponseBody is the type of the "mdm" service
+// "getApplyScript" endpoint HTTP response body for the "conflict" error.
+type GetApplyScriptConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetApplyScriptUnsupportedMediaResponseBody is the type of the "mdm" service
+// "getApplyScript" endpoint HTTP response body for the "unsupported_media"
+// error.
+type GetApplyScriptUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetApplyScriptInvalidResponseBody is the type of the "mdm" service
+// "getApplyScript" endpoint HTTP response body for the "invalid" error.
+type GetApplyScriptInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetApplyScriptInvariantViolationResponseBody is the type of the "mdm"
+// service "getApplyScript" endpoint HTTP response body for the
+// "invariant_violation" error.
+type GetApplyScriptInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetApplyScriptUnexpectedResponseBody is the type of the "mdm" service
+// "getApplyScript" endpoint HTTP response body for the "unexpected" error.
+type GetApplyScriptUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetApplyScriptGatewayErrorResponseBody is the type of the "mdm" service
+// "getApplyScript" endpoint HTTP response body for the "gateway_error" error.
+type GetApplyScriptGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -378,9 +564,9 @@ type PatchClaudeSettingsGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// NewGetInstallScriptUnauthorized builds a mdm service getInstallScript
-// endpoint unauthorized error.
-func NewGetInstallScriptUnauthorized(body *GetInstallScriptUnauthorizedResponseBody) *goa.ServiceError {
+// NewGenerateDeployScriptUnauthorized builds a mdm service
+// generateDeployScript endpoint unauthorized error.
+func NewGenerateDeployScriptUnauthorized(body *GenerateDeployScriptUnauthorizedResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -393,9 +579,159 @@ func NewGetInstallScriptUnauthorized(body *GetInstallScriptUnauthorizedResponseB
 	return v
 }
 
-// NewGetInstallScriptForbidden builds a mdm service getInstallScript endpoint
+// NewGenerateDeployScriptForbidden builds a mdm service generateDeployScript
+// endpoint forbidden error.
+func NewGenerateDeployScriptForbidden(body *GenerateDeployScriptForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGenerateDeployScriptBadRequest builds a mdm service generateDeployScript
+// endpoint bad_request error.
+func NewGenerateDeployScriptBadRequest(body *GenerateDeployScriptBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGenerateDeployScriptNotFound builds a mdm service generateDeployScript
+// endpoint not_found error.
+func NewGenerateDeployScriptNotFound(body *GenerateDeployScriptNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGenerateDeployScriptConflict builds a mdm service generateDeployScript
+// endpoint conflict error.
+func NewGenerateDeployScriptConflict(body *GenerateDeployScriptConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGenerateDeployScriptUnsupportedMedia builds a mdm service
+// generateDeployScript endpoint unsupported_media error.
+func NewGenerateDeployScriptUnsupportedMedia(body *GenerateDeployScriptUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGenerateDeployScriptInvalid builds a mdm service generateDeployScript
+// endpoint invalid error.
+func NewGenerateDeployScriptInvalid(body *GenerateDeployScriptInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGenerateDeployScriptInvariantViolation builds a mdm service
+// generateDeployScript endpoint invariant_violation error.
+func NewGenerateDeployScriptInvariantViolation(body *GenerateDeployScriptInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGenerateDeployScriptUnexpected builds a mdm service generateDeployScript
+// endpoint unexpected error.
+func NewGenerateDeployScriptUnexpected(body *GenerateDeployScriptUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGenerateDeployScriptGatewayError builds a mdm service
+// generateDeployScript endpoint gateway_error error.
+func NewGenerateDeployScriptGatewayError(body *GenerateDeployScriptGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetApplyScriptUnauthorized builds a mdm service getApplyScript endpoint
+// unauthorized error.
+func NewGetApplyScriptUnauthorized(body *GetApplyScriptUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetApplyScriptForbidden builds a mdm service getApplyScript endpoint
 // forbidden error.
-func NewGetInstallScriptForbidden(body *GetInstallScriptForbiddenResponseBody) *goa.ServiceError {
+func NewGetApplyScriptForbidden(body *GetApplyScriptForbiddenResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -408,9 +744,9 @@ func NewGetInstallScriptForbidden(body *GetInstallScriptForbiddenResponseBody) *
 	return v
 }
 
-// NewGetInstallScriptBadRequest builds a mdm service getInstallScript endpoint
+// NewGetApplyScriptBadRequest builds a mdm service getApplyScript endpoint
 // bad_request error.
-func NewGetInstallScriptBadRequest(body *GetInstallScriptBadRequestResponseBody) *goa.ServiceError {
+func NewGetApplyScriptBadRequest(body *GetApplyScriptBadRequestResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -423,9 +759,9 @@ func NewGetInstallScriptBadRequest(body *GetInstallScriptBadRequestResponseBody)
 	return v
 }
 
-// NewGetInstallScriptNotFound builds a mdm service getInstallScript endpoint
+// NewGetApplyScriptNotFound builds a mdm service getApplyScript endpoint
 // not_found error.
-func NewGetInstallScriptNotFound(body *GetInstallScriptNotFoundResponseBody) *goa.ServiceError {
+func NewGetApplyScriptNotFound(body *GetApplyScriptNotFoundResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -438,9 +774,9 @@ func NewGetInstallScriptNotFound(body *GetInstallScriptNotFoundResponseBody) *go
 	return v
 }
 
-// NewGetInstallScriptConflict builds a mdm service getInstallScript endpoint
+// NewGetApplyScriptConflict builds a mdm service getApplyScript endpoint
 // conflict error.
-func NewGetInstallScriptConflict(body *GetInstallScriptConflictResponseBody) *goa.ServiceError {
+func NewGetApplyScriptConflict(body *GetApplyScriptConflictResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -453,9 +789,9 @@ func NewGetInstallScriptConflict(body *GetInstallScriptConflictResponseBody) *go
 	return v
 }
 
-// NewGetInstallScriptUnsupportedMedia builds a mdm service getInstallScript
+// NewGetApplyScriptUnsupportedMedia builds a mdm service getApplyScript
 // endpoint unsupported_media error.
-func NewGetInstallScriptUnsupportedMedia(body *GetInstallScriptUnsupportedMediaResponseBody) *goa.ServiceError {
+func NewGetApplyScriptUnsupportedMedia(body *GetApplyScriptUnsupportedMediaResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -468,9 +804,9 @@ func NewGetInstallScriptUnsupportedMedia(body *GetInstallScriptUnsupportedMediaR
 	return v
 }
 
-// NewGetInstallScriptInvalid builds a mdm service getInstallScript endpoint
+// NewGetApplyScriptInvalid builds a mdm service getApplyScript endpoint
 // invalid error.
-func NewGetInstallScriptInvalid(body *GetInstallScriptInvalidResponseBody) *goa.ServiceError {
+func NewGetApplyScriptInvalid(body *GetApplyScriptInvalidResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -483,9 +819,9 @@ func NewGetInstallScriptInvalid(body *GetInstallScriptInvalidResponseBody) *goa.
 	return v
 }
 
-// NewGetInstallScriptInvariantViolation builds a mdm service getInstallScript
+// NewGetApplyScriptInvariantViolation builds a mdm service getApplyScript
 // endpoint invariant_violation error.
-func NewGetInstallScriptInvariantViolation(body *GetInstallScriptInvariantViolationResponseBody) *goa.ServiceError {
+func NewGetApplyScriptInvariantViolation(body *GetApplyScriptInvariantViolationResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -498,9 +834,9 @@ func NewGetInstallScriptInvariantViolation(body *GetInstallScriptInvariantViolat
 	return v
 }
 
-// NewGetInstallScriptUnexpected builds a mdm service getInstallScript endpoint
+// NewGetApplyScriptUnexpected builds a mdm service getApplyScript endpoint
 // unexpected error.
-func NewGetInstallScriptUnexpected(body *GetInstallScriptUnexpectedResponseBody) *goa.ServiceError {
+func NewGetApplyScriptUnexpected(body *GetApplyScriptUnexpectedResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -513,9 +849,9 @@ func NewGetInstallScriptUnexpected(body *GetInstallScriptUnexpectedResponseBody)
 	return v
 }
 
-// NewGetInstallScriptGatewayError builds a mdm service getInstallScript
-// endpoint gateway_error error.
-func NewGetInstallScriptGatewayError(body *GetInstallScriptGatewayErrorResponseBody) *goa.ServiceError {
+// NewGetApplyScriptGatewayError builds a mdm service getApplyScript endpoint
+// gateway_error error.
+func NewGetApplyScriptGatewayError(body *GetApplyScriptGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -678,9 +1014,9 @@ func NewPatchClaudeSettingsGatewayError(body *PatchClaudeSettingsGatewayErrorRes
 	return v
 }
 
-// ValidateGetInstallScriptUnauthorizedResponseBody runs the validations
-// defined on getInstallScript_unauthorized_response_body
-func ValidateGetInstallScriptUnauthorizedResponseBody(body *GetInstallScriptUnauthorizedResponseBody) (err error) {
+// ValidateGenerateDeployScriptUnauthorizedResponseBody runs the validations
+// defined on generateDeployScript_unauthorized_response_body
+func ValidateGenerateDeployScriptUnauthorizedResponseBody(body *GenerateDeployScriptUnauthorizedResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -702,9 +1038,9 @@ func ValidateGetInstallScriptUnauthorizedResponseBody(body *GetInstallScriptUnau
 	return
 }
 
-// ValidateGetInstallScriptForbiddenResponseBody runs the validations defined
-// on getInstallScript_forbidden_response_body
-func ValidateGetInstallScriptForbiddenResponseBody(body *GetInstallScriptForbiddenResponseBody) (err error) {
+// ValidateGenerateDeployScriptForbiddenResponseBody runs the validations
+// defined on generateDeployScript_forbidden_response_body
+func ValidateGenerateDeployScriptForbiddenResponseBody(body *GenerateDeployScriptForbiddenResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -726,9 +1062,9 @@ func ValidateGetInstallScriptForbiddenResponseBody(body *GetInstallScriptForbidd
 	return
 }
 
-// ValidateGetInstallScriptBadRequestResponseBody runs the validations defined
-// on getInstallScript_bad_request_response_body
-func ValidateGetInstallScriptBadRequestResponseBody(body *GetInstallScriptBadRequestResponseBody) (err error) {
+// ValidateGenerateDeployScriptBadRequestResponseBody runs the validations
+// defined on generateDeployScript_bad_request_response_body
+func ValidateGenerateDeployScriptBadRequestResponseBody(body *GenerateDeployScriptBadRequestResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -750,9 +1086,9 @@ func ValidateGetInstallScriptBadRequestResponseBody(body *GetInstallScriptBadReq
 	return
 }
 
-// ValidateGetInstallScriptNotFoundResponseBody runs the validations defined on
-// getInstallScript_not_found_response_body
-func ValidateGetInstallScriptNotFoundResponseBody(body *GetInstallScriptNotFoundResponseBody) (err error) {
+// ValidateGenerateDeployScriptNotFoundResponseBody runs the validations
+// defined on generateDeployScript_not_found_response_body
+func ValidateGenerateDeployScriptNotFoundResponseBody(body *GenerateDeployScriptNotFoundResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -774,9 +1110,9 @@ func ValidateGetInstallScriptNotFoundResponseBody(body *GetInstallScriptNotFound
 	return
 }
 
-// ValidateGetInstallScriptConflictResponseBody runs the validations defined on
-// getInstallScript_conflict_response_body
-func ValidateGetInstallScriptConflictResponseBody(body *GetInstallScriptConflictResponseBody) (err error) {
+// ValidateGenerateDeployScriptConflictResponseBody runs the validations
+// defined on generateDeployScript_conflict_response_body
+func ValidateGenerateDeployScriptConflictResponseBody(body *GenerateDeployScriptConflictResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -798,9 +1134,9 @@ func ValidateGetInstallScriptConflictResponseBody(body *GetInstallScriptConflict
 	return
 }
 
-// ValidateGetInstallScriptUnsupportedMediaResponseBody runs the validations
-// defined on getInstallScript_unsupported_media_response_body
-func ValidateGetInstallScriptUnsupportedMediaResponseBody(body *GetInstallScriptUnsupportedMediaResponseBody) (err error) {
+// ValidateGenerateDeployScriptUnsupportedMediaResponseBody runs the
+// validations defined on generateDeployScript_unsupported_media_response_body
+func ValidateGenerateDeployScriptUnsupportedMediaResponseBody(body *GenerateDeployScriptUnsupportedMediaResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -822,9 +1158,9 @@ func ValidateGetInstallScriptUnsupportedMediaResponseBody(body *GetInstallScript
 	return
 }
 
-// ValidateGetInstallScriptInvalidResponseBody runs the validations defined on
-// getInstallScript_invalid_response_body
-func ValidateGetInstallScriptInvalidResponseBody(body *GetInstallScriptInvalidResponseBody) (err error) {
+// ValidateGenerateDeployScriptInvalidResponseBody runs the validations defined
+// on generateDeployScript_invalid_response_body
+func ValidateGenerateDeployScriptInvalidResponseBody(body *GenerateDeployScriptInvalidResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -846,9 +1182,9 @@ func ValidateGetInstallScriptInvalidResponseBody(body *GetInstallScriptInvalidRe
 	return
 }
 
-// ValidateGetInstallScriptInvariantViolationResponseBody runs the validations
-// defined on getInstallScript_invariant_violation_response_body
-func ValidateGetInstallScriptInvariantViolationResponseBody(body *GetInstallScriptInvariantViolationResponseBody) (err error) {
+// ValidateGenerateDeployScriptInvariantViolationResponseBody runs the
+// validations defined on generateDeployScript_invariant_violation_response_body
+func ValidateGenerateDeployScriptInvariantViolationResponseBody(body *GenerateDeployScriptInvariantViolationResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -870,9 +1206,9 @@ func ValidateGetInstallScriptInvariantViolationResponseBody(body *GetInstallScri
 	return
 }
 
-// ValidateGetInstallScriptUnexpectedResponseBody runs the validations defined
-// on getInstallScript_unexpected_response_body
-func ValidateGetInstallScriptUnexpectedResponseBody(body *GetInstallScriptUnexpectedResponseBody) (err error) {
+// ValidateGenerateDeployScriptUnexpectedResponseBody runs the validations
+// defined on generateDeployScript_unexpected_response_body
+func ValidateGenerateDeployScriptUnexpectedResponseBody(body *GenerateDeployScriptUnexpectedResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -894,9 +1230,249 @@ func ValidateGetInstallScriptUnexpectedResponseBody(body *GetInstallScriptUnexpe
 	return
 }
 
-// ValidateGetInstallScriptGatewayErrorResponseBody runs the validations
-// defined on getInstallScript_gateway_error_response_body
-func ValidateGetInstallScriptGatewayErrorResponseBody(body *GetInstallScriptGatewayErrorResponseBody) (err error) {
+// ValidateGenerateDeployScriptGatewayErrorResponseBody runs the validations
+// defined on generateDeployScript_gateway_error_response_body
+func ValidateGenerateDeployScriptGatewayErrorResponseBody(body *GenerateDeployScriptGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetApplyScriptUnauthorizedResponseBody runs the validations defined
+// on getApplyScript_unauthorized_response_body
+func ValidateGetApplyScriptUnauthorizedResponseBody(body *GetApplyScriptUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetApplyScriptForbiddenResponseBody runs the validations defined on
+// getApplyScript_forbidden_response_body
+func ValidateGetApplyScriptForbiddenResponseBody(body *GetApplyScriptForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetApplyScriptBadRequestResponseBody runs the validations defined on
+// getApplyScript_bad_request_response_body
+func ValidateGetApplyScriptBadRequestResponseBody(body *GetApplyScriptBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetApplyScriptNotFoundResponseBody runs the validations defined on
+// getApplyScript_not_found_response_body
+func ValidateGetApplyScriptNotFoundResponseBody(body *GetApplyScriptNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetApplyScriptConflictResponseBody runs the validations defined on
+// getApplyScript_conflict_response_body
+func ValidateGetApplyScriptConflictResponseBody(body *GetApplyScriptConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetApplyScriptUnsupportedMediaResponseBody runs the validations
+// defined on getApplyScript_unsupported_media_response_body
+func ValidateGetApplyScriptUnsupportedMediaResponseBody(body *GetApplyScriptUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetApplyScriptInvalidResponseBody runs the validations defined on
+// getApplyScript_invalid_response_body
+func ValidateGetApplyScriptInvalidResponseBody(body *GetApplyScriptInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetApplyScriptInvariantViolationResponseBody runs the validations
+// defined on getApplyScript_invariant_violation_response_body
+func ValidateGetApplyScriptInvariantViolationResponseBody(body *GetApplyScriptInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetApplyScriptUnexpectedResponseBody runs the validations defined on
+// getApplyScript_unexpected_response_body
+func ValidateGetApplyScriptUnexpectedResponseBody(body *GetApplyScriptUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetApplyScriptGatewayErrorResponseBody runs the validations defined
+// on getApplyScript_gateway_error_response_body
+func ValidateGetApplyScriptGatewayErrorResponseBody(body *GetApplyScriptGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}

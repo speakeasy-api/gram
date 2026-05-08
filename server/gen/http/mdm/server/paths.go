@@ -7,9 +7,14 @@
 
 package server
 
-// GetInstallScriptMdmPath returns the URL path to the mdm service getInstallScript HTTP endpoint.
-func GetInstallScriptMdmPath() string {
-	return "/rpc/mdm.getInstallScript"
+// GenerateDeployScriptMdmPath returns the URL path to the mdm service generateDeployScript HTTP endpoint.
+func GenerateDeployScriptMdmPath() string {
+	return "/rpc/mdm.generateDeployScript"
+}
+
+// GetApplyScriptMdmPath returns the URL path to the mdm service getApplyScript HTTP endpoint.
+func GetApplyScriptMdmPath() string {
+	return "/rpc/mdm.getApplyScript"
 }
 
 // PatchClaudeSettingsMdmPath returns the URL path to the mdm service patchClaudeSettings HTTP endpoint.

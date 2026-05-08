@@ -12,9 +12,10 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
-// GetInstallScriptUnauthorizedResponseBody is the type of the "mdm" service
-// "getInstallScript" endpoint HTTP response body for the "unauthorized" error.
-type GetInstallScriptUnauthorizedResponseBody struct {
+// GenerateDeployScriptUnauthorizedResponseBody is the type of the "mdm"
+// service "generateDeployScript" endpoint HTTP response body for the
+// "unauthorized" error.
+type GenerateDeployScriptUnauthorizedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -30,9 +31,9 @@ type GetInstallScriptUnauthorizedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetInstallScriptForbiddenResponseBody is the type of the "mdm" service
-// "getInstallScript" endpoint HTTP response body for the "forbidden" error.
-type GetInstallScriptForbiddenResponseBody struct {
+// GenerateDeployScriptForbiddenResponseBody is the type of the "mdm" service
+// "generateDeployScript" endpoint HTTP response body for the "forbidden" error.
+type GenerateDeployScriptForbiddenResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -48,9 +49,10 @@ type GetInstallScriptForbiddenResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetInstallScriptBadRequestResponseBody is the type of the "mdm" service
-// "getInstallScript" endpoint HTTP response body for the "bad_request" error.
-type GetInstallScriptBadRequestResponseBody struct {
+// GenerateDeployScriptBadRequestResponseBody is the type of the "mdm" service
+// "generateDeployScript" endpoint HTTP response body for the "bad_request"
+// error.
+type GenerateDeployScriptBadRequestResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -66,9 +68,9 @@ type GetInstallScriptBadRequestResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetInstallScriptNotFoundResponseBody is the type of the "mdm" service
-// "getInstallScript" endpoint HTTP response body for the "not_found" error.
-type GetInstallScriptNotFoundResponseBody struct {
+// GenerateDeployScriptNotFoundResponseBody is the type of the "mdm" service
+// "generateDeployScript" endpoint HTTP response body for the "not_found" error.
+type GenerateDeployScriptNotFoundResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -84,9 +86,9 @@ type GetInstallScriptNotFoundResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetInstallScriptConflictResponseBody is the type of the "mdm" service
-// "getInstallScript" endpoint HTTP response body for the "conflict" error.
-type GetInstallScriptConflictResponseBody struct {
+// GenerateDeployScriptConflictResponseBody is the type of the "mdm" service
+// "generateDeployScript" endpoint HTTP response body for the "conflict" error.
+type GenerateDeployScriptConflictResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -102,10 +104,10 @@ type GetInstallScriptConflictResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetInstallScriptUnsupportedMediaResponseBody is the type of the "mdm"
-// service "getInstallScript" endpoint HTTP response body for the
+// GenerateDeployScriptUnsupportedMediaResponseBody is the type of the "mdm"
+// service "generateDeployScript" endpoint HTTP response body for the
 // "unsupported_media" error.
-type GetInstallScriptUnsupportedMediaResponseBody struct {
+type GenerateDeployScriptUnsupportedMediaResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -121,9 +123,9 @@ type GetInstallScriptUnsupportedMediaResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetInstallScriptInvalidResponseBody is the type of the "mdm" service
-// "getInstallScript" endpoint HTTP response body for the "invalid" error.
-type GetInstallScriptInvalidResponseBody struct {
+// GenerateDeployScriptInvalidResponseBody is the type of the "mdm" service
+// "generateDeployScript" endpoint HTTP response body for the "invalid" error.
+type GenerateDeployScriptInvalidResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -139,10 +141,10 @@ type GetInstallScriptInvalidResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetInstallScriptInvariantViolationResponseBody is the type of the "mdm"
-// service "getInstallScript" endpoint HTTP response body for the
+// GenerateDeployScriptInvariantViolationResponseBody is the type of the "mdm"
+// service "generateDeployScript" endpoint HTTP response body for the
 // "invariant_violation" error.
-type GetInstallScriptInvariantViolationResponseBody struct {
+type GenerateDeployScriptInvariantViolationResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -158,9 +160,10 @@ type GetInstallScriptInvariantViolationResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetInstallScriptUnexpectedResponseBody is the type of the "mdm" service
-// "getInstallScript" endpoint HTTP response body for the "unexpected" error.
-type GetInstallScriptUnexpectedResponseBody struct {
+// GenerateDeployScriptUnexpectedResponseBody is the type of the "mdm" service
+// "generateDeployScript" endpoint HTTP response body for the "unexpected"
+// error.
+type GenerateDeployScriptUnexpectedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -176,9 +179,192 @@ type GetInstallScriptUnexpectedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetInstallScriptGatewayErrorResponseBody is the type of the "mdm" service
-// "getInstallScript" endpoint HTTP response body for the "gateway_error" error.
-type GetInstallScriptGatewayErrorResponseBody struct {
+// GenerateDeployScriptGatewayErrorResponseBody is the type of the "mdm"
+// service "generateDeployScript" endpoint HTTP response body for the
+// "gateway_error" error.
+type GenerateDeployScriptGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetApplyScriptUnauthorizedResponseBody is the type of the "mdm" service
+// "getApplyScript" endpoint HTTP response body for the "unauthorized" error.
+type GetApplyScriptUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetApplyScriptForbiddenResponseBody is the type of the "mdm" service
+// "getApplyScript" endpoint HTTP response body for the "forbidden" error.
+type GetApplyScriptForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetApplyScriptBadRequestResponseBody is the type of the "mdm" service
+// "getApplyScript" endpoint HTTP response body for the "bad_request" error.
+type GetApplyScriptBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetApplyScriptNotFoundResponseBody is the type of the "mdm" service
+// "getApplyScript" endpoint HTTP response body for the "not_found" error.
+type GetApplyScriptNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetApplyScriptConflictResponseBody is the type of the "mdm" service
+// "getApplyScript" endpoint HTTP response body for the "conflict" error.
+type GetApplyScriptConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetApplyScriptUnsupportedMediaResponseBody is the type of the "mdm" service
+// "getApplyScript" endpoint HTTP response body for the "unsupported_media"
+// error.
+type GetApplyScriptUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetApplyScriptInvalidResponseBody is the type of the "mdm" service
+// "getApplyScript" endpoint HTTP response body for the "invalid" error.
+type GetApplyScriptInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetApplyScriptInvariantViolationResponseBody is the type of the "mdm"
+// service "getApplyScript" endpoint HTTP response body for the
+// "invariant_violation" error.
+type GetApplyScriptInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetApplyScriptUnexpectedResponseBody is the type of the "mdm" service
+// "getApplyScript" endpoint HTTP response body for the "unexpected" error.
+type GetApplyScriptUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetApplyScriptGatewayErrorResponseBody is the type of the "mdm" service
+// "getApplyScript" endpoint HTTP response body for the "gateway_error" error.
+type GetApplyScriptGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -379,10 +565,11 @@ type PatchClaudeSettingsGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// NewGetInstallScriptUnauthorizedResponseBody builds the HTTP response body
-// from the result of the "getInstallScript" endpoint of the "mdm" service.
-func NewGetInstallScriptUnauthorizedResponseBody(res *goa.ServiceError) *GetInstallScriptUnauthorizedResponseBody {
-	body := &GetInstallScriptUnauthorizedResponseBody{
+// NewGenerateDeployScriptUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "generateDeployScript" endpoint of the "mdm"
+// service.
+func NewGenerateDeployScriptUnauthorizedResponseBody(res *goa.ServiceError) *GenerateDeployScriptUnauthorizedResponseBody {
+	body := &GenerateDeployScriptUnauthorizedResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -393,10 +580,10 @@ func NewGetInstallScriptUnauthorizedResponseBody(res *goa.ServiceError) *GetInst
 	return body
 }
 
-// NewGetInstallScriptForbiddenResponseBody builds the HTTP response body from
-// the result of the "getInstallScript" endpoint of the "mdm" service.
-func NewGetInstallScriptForbiddenResponseBody(res *goa.ServiceError) *GetInstallScriptForbiddenResponseBody {
-	body := &GetInstallScriptForbiddenResponseBody{
+// NewGenerateDeployScriptForbiddenResponseBody builds the HTTP response body
+// from the result of the "generateDeployScript" endpoint of the "mdm" service.
+func NewGenerateDeployScriptForbiddenResponseBody(res *goa.ServiceError) *GenerateDeployScriptForbiddenResponseBody {
+	body := &GenerateDeployScriptForbiddenResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -407,10 +594,10 @@ func NewGetInstallScriptForbiddenResponseBody(res *goa.ServiceError) *GetInstall
 	return body
 }
 
-// NewGetInstallScriptBadRequestResponseBody builds the HTTP response body from
-// the result of the "getInstallScript" endpoint of the "mdm" service.
-func NewGetInstallScriptBadRequestResponseBody(res *goa.ServiceError) *GetInstallScriptBadRequestResponseBody {
-	body := &GetInstallScriptBadRequestResponseBody{
+// NewGenerateDeployScriptBadRequestResponseBody builds the HTTP response body
+// from the result of the "generateDeployScript" endpoint of the "mdm" service.
+func NewGenerateDeployScriptBadRequestResponseBody(res *goa.ServiceError) *GenerateDeployScriptBadRequestResponseBody {
+	body := &GenerateDeployScriptBadRequestResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -421,10 +608,10 @@ func NewGetInstallScriptBadRequestResponseBody(res *goa.ServiceError) *GetInstal
 	return body
 }
 
-// NewGetInstallScriptNotFoundResponseBody builds the HTTP response body from
-// the result of the "getInstallScript" endpoint of the "mdm" service.
-func NewGetInstallScriptNotFoundResponseBody(res *goa.ServiceError) *GetInstallScriptNotFoundResponseBody {
-	body := &GetInstallScriptNotFoundResponseBody{
+// NewGenerateDeployScriptNotFoundResponseBody builds the HTTP response body
+// from the result of the "generateDeployScript" endpoint of the "mdm" service.
+func NewGenerateDeployScriptNotFoundResponseBody(res *goa.ServiceError) *GenerateDeployScriptNotFoundResponseBody {
+	body := &GenerateDeployScriptNotFoundResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -435,10 +622,10 @@ func NewGetInstallScriptNotFoundResponseBody(res *goa.ServiceError) *GetInstallS
 	return body
 }
 
-// NewGetInstallScriptConflictResponseBody builds the HTTP response body from
-// the result of the "getInstallScript" endpoint of the "mdm" service.
-func NewGetInstallScriptConflictResponseBody(res *goa.ServiceError) *GetInstallScriptConflictResponseBody {
-	body := &GetInstallScriptConflictResponseBody{
+// NewGenerateDeployScriptConflictResponseBody builds the HTTP response body
+// from the result of the "generateDeployScript" endpoint of the "mdm" service.
+func NewGenerateDeployScriptConflictResponseBody(res *goa.ServiceError) *GenerateDeployScriptConflictResponseBody {
+	body := &GenerateDeployScriptConflictResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -449,10 +636,11 @@ func NewGetInstallScriptConflictResponseBody(res *goa.ServiceError) *GetInstallS
 	return body
 }
 
-// NewGetInstallScriptUnsupportedMediaResponseBody builds the HTTP response
-// body from the result of the "getInstallScript" endpoint of the "mdm" service.
-func NewGetInstallScriptUnsupportedMediaResponseBody(res *goa.ServiceError) *GetInstallScriptUnsupportedMediaResponseBody {
-	body := &GetInstallScriptUnsupportedMediaResponseBody{
+// NewGenerateDeployScriptUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "generateDeployScript" endpoint of the "mdm"
+// service.
+func NewGenerateDeployScriptUnsupportedMediaResponseBody(res *goa.ServiceError) *GenerateDeployScriptUnsupportedMediaResponseBody {
+	body := &GenerateDeployScriptUnsupportedMediaResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -463,10 +651,10 @@ func NewGetInstallScriptUnsupportedMediaResponseBody(res *goa.ServiceError) *Get
 	return body
 }
 
-// NewGetInstallScriptInvalidResponseBody builds the HTTP response body from
-// the result of the "getInstallScript" endpoint of the "mdm" service.
-func NewGetInstallScriptInvalidResponseBody(res *goa.ServiceError) *GetInstallScriptInvalidResponseBody {
-	body := &GetInstallScriptInvalidResponseBody{
+// NewGenerateDeployScriptInvalidResponseBody builds the HTTP response body
+// from the result of the "generateDeployScript" endpoint of the "mdm" service.
+func NewGenerateDeployScriptInvalidResponseBody(res *goa.ServiceError) *GenerateDeployScriptInvalidResponseBody {
+	body := &GenerateDeployScriptInvalidResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -477,10 +665,11 @@ func NewGetInstallScriptInvalidResponseBody(res *goa.ServiceError) *GetInstallSc
 	return body
 }
 
-// NewGetInstallScriptInvariantViolationResponseBody builds the HTTP response
-// body from the result of the "getInstallScript" endpoint of the "mdm" service.
-func NewGetInstallScriptInvariantViolationResponseBody(res *goa.ServiceError) *GetInstallScriptInvariantViolationResponseBody {
-	body := &GetInstallScriptInvariantViolationResponseBody{
+// NewGenerateDeployScriptInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "generateDeployScript" endpoint of the
+// "mdm" service.
+func NewGenerateDeployScriptInvariantViolationResponseBody(res *goa.ServiceError) *GenerateDeployScriptInvariantViolationResponseBody {
+	body := &GenerateDeployScriptInvariantViolationResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -491,10 +680,10 @@ func NewGetInstallScriptInvariantViolationResponseBody(res *goa.ServiceError) *G
 	return body
 }
 
-// NewGetInstallScriptUnexpectedResponseBody builds the HTTP response body from
-// the result of the "getInstallScript" endpoint of the "mdm" service.
-func NewGetInstallScriptUnexpectedResponseBody(res *goa.ServiceError) *GetInstallScriptUnexpectedResponseBody {
-	body := &GetInstallScriptUnexpectedResponseBody{
+// NewGenerateDeployScriptUnexpectedResponseBody builds the HTTP response body
+// from the result of the "generateDeployScript" endpoint of the "mdm" service.
+func NewGenerateDeployScriptUnexpectedResponseBody(res *goa.ServiceError) *GenerateDeployScriptUnexpectedResponseBody {
+	body := &GenerateDeployScriptUnexpectedResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -505,10 +694,151 @@ func NewGetInstallScriptUnexpectedResponseBody(res *goa.ServiceError) *GetInstal
 	return body
 }
 
-// NewGetInstallScriptGatewayErrorResponseBody builds the HTTP response body
-// from the result of the "getInstallScript" endpoint of the "mdm" service.
-func NewGetInstallScriptGatewayErrorResponseBody(res *goa.ServiceError) *GetInstallScriptGatewayErrorResponseBody {
-	body := &GetInstallScriptGatewayErrorResponseBody{
+// NewGenerateDeployScriptGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "generateDeployScript" endpoint of the "mdm"
+// service.
+func NewGenerateDeployScriptGatewayErrorResponseBody(res *goa.ServiceError) *GenerateDeployScriptGatewayErrorResponseBody {
+	body := &GenerateDeployScriptGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetApplyScriptUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "getApplyScript" endpoint of the "mdm" service.
+func NewGetApplyScriptUnauthorizedResponseBody(res *goa.ServiceError) *GetApplyScriptUnauthorizedResponseBody {
+	body := &GetApplyScriptUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetApplyScriptForbiddenResponseBody builds the HTTP response body from
+// the result of the "getApplyScript" endpoint of the "mdm" service.
+func NewGetApplyScriptForbiddenResponseBody(res *goa.ServiceError) *GetApplyScriptForbiddenResponseBody {
+	body := &GetApplyScriptForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetApplyScriptBadRequestResponseBody builds the HTTP response body from
+// the result of the "getApplyScript" endpoint of the "mdm" service.
+func NewGetApplyScriptBadRequestResponseBody(res *goa.ServiceError) *GetApplyScriptBadRequestResponseBody {
+	body := &GetApplyScriptBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetApplyScriptNotFoundResponseBody builds the HTTP response body from the
+// result of the "getApplyScript" endpoint of the "mdm" service.
+func NewGetApplyScriptNotFoundResponseBody(res *goa.ServiceError) *GetApplyScriptNotFoundResponseBody {
+	body := &GetApplyScriptNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetApplyScriptConflictResponseBody builds the HTTP response body from the
+// result of the "getApplyScript" endpoint of the "mdm" service.
+func NewGetApplyScriptConflictResponseBody(res *goa.ServiceError) *GetApplyScriptConflictResponseBody {
+	body := &GetApplyScriptConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetApplyScriptUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "getApplyScript" endpoint of the "mdm" service.
+func NewGetApplyScriptUnsupportedMediaResponseBody(res *goa.ServiceError) *GetApplyScriptUnsupportedMediaResponseBody {
+	body := &GetApplyScriptUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetApplyScriptInvalidResponseBody builds the HTTP response body from the
+// result of the "getApplyScript" endpoint of the "mdm" service.
+func NewGetApplyScriptInvalidResponseBody(res *goa.ServiceError) *GetApplyScriptInvalidResponseBody {
+	body := &GetApplyScriptInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetApplyScriptInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "getApplyScript" endpoint of the "mdm" service.
+func NewGetApplyScriptInvariantViolationResponseBody(res *goa.ServiceError) *GetApplyScriptInvariantViolationResponseBody {
+	body := &GetApplyScriptInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetApplyScriptUnexpectedResponseBody builds the HTTP response body from
+// the result of the "getApplyScript" endpoint of the "mdm" service.
+func NewGetApplyScriptUnexpectedResponseBody(res *goa.ServiceError) *GetApplyScriptUnexpectedResponseBody {
+	body := &GetApplyScriptUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetApplyScriptGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "getApplyScript" endpoint of the "mdm" service.
+func NewGetApplyScriptGatewayErrorResponseBody(res *goa.ServiceError) *GetApplyScriptGatewayErrorResponseBody {
+	body := &GetApplyScriptGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -659,6 +989,15 @@ func NewPatchClaudeSettingsGatewayErrorResponseBody(res *goa.ServiceError) *Patc
 		Fault:     res.Fault,
 	}
 	return body
+}
+
+// NewGenerateDeployScriptPayload builds a mdm service generateDeployScript
+// endpoint payload.
+func NewGenerateDeployScriptPayload(sessionToken *string) *mdm.GenerateDeployScriptPayload {
+	v := &mdm.GenerateDeployScriptPayload{}
+	v.SessionToken = sessionToken
+
+	return v
 }
 
 // NewPatchClaudeSettingsPayload builds a mdm service patchClaudeSettings
