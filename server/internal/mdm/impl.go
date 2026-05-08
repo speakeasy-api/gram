@@ -157,11 +157,10 @@ func (s *Service) GenerateDeployScript(ctx context.Context, _ *gen.GenerateDeplo
 func (s *Service) renderDeployScript(apiKey string) []byte {
 	base := s.serverURL.String()
 	script := fmt.Sprintf(`#!/bin/bash
-# Speakeasy Claude Code MDM Deploy Script
+# Speakeasy MDM Deploy Script
 #
 # Works with any MDM that supports arbitrary shell scripts (Jamf, Kandji, Mosyle, etc.)
 # Set policy trigger to "Login" or "Recurring check-in" for idempotent rollout.
-# Only dependency: curl (always present on macOS).
 set -euo pipefail
 
 SPEAKEASY_API_KEY="%s"
@@ -204,9 +203,8 @@ func generateToken() (string, error) {
 func (s *Service) GetInstallScript(ctx context.Context) ([]byte, error) {
 	base := s.serverURL.String()
 	script := fmt.Sprintf(`#!/bin/bash
-# Speakeasy Claude Code Install Script — auto-served from %s
+# Speakeasy Install Script — auto-served from %s
 # Usage: curl -fsSL '%s/rpc/mdm.getInstallScript' | bash -s -- <SPEAKEASY_API_KEY>
-# Only dependency: curl (always present on macOS).
 set -euo pipefail
 SPEAKEASY_API_KEY="${1:?SPEAKEASY_API_KEY required as \$1}"
 SETTINGS="$HOME/.claude/settings.json"
