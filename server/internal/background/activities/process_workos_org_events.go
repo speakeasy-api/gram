@@ -244,7 +244,13 @@ func handleOrganizationUpsert(ctx context.Context, logger *slog.Logger, dbtx dat
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		if payload.ExternalID == "" {
-			return oops.Permanent(fmt.Errorf("workos organization %q has no external_id and no existing mapping", payload.ID))
+			// Unlinked org with no external_id: skip + advance cursor so a
+			// later event in the same stream that does carry an external_id
+			// (or sets workos_id via another path) can still land. A
+			// permanent error here would stall the per-org workflow and
+			// block every subsequent event for this org.
+			logger.WarnContext(ctx, "skipping organization event for unlinked org with no external_id", attr.SlogWorkOSOrganizationID(payload.ID))
+			return nil
 		}
 	case err != nil:
 		return fmt.Errorf("get organization by workos id %q: %w", payload.ID, err)

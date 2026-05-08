@@ -167,25 +167,39 @@ func TestProcessWorkOSOrganizationEvents_EmptyPage(t *testing.T) {
 	require.ErrorIs(t, err, pgx.ErrNoRows)
 }
 
-func TestProcessWorkOSOrganizationEvents_RejectsMalformedEvent(t *testing.T) {
+func TestProcessWorkOSOrganizationEvents_SkipsUnlinkedOrgWithoutExternalID(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	conn := newOrgEventsTestConn(t, "workos_org_events_malformed")
+	conn := newOrgEventsTestConn(t, "workos_org_events_unlinked_no_external_id")
 	logger := testenv.NewLogger(t)
 
 	const workosOrgID = "org_01HZTESTBAD"
 
+	// First event has neither a Gram-side mapping nor an external_id — must
+	// not stall the stream. Second event in the same page carries the
+	// external_id and should be applied normally.
 	stub := &stubWorkOSEventsClient{
 		pages: [][]events.Event{{
-			{ID: "event_01HZBAD", Event: "organization.updated", CreatedAt: time.Now(), Data: []byte(`{"id":"","object":"organization"}`)},
+			{ID: "event_01HZBAD", Event: "organization.updated", CreatedAt: time.Now(), Data: []byte(`{"id":"` + workosOrgID + `","object":"organization","name":"Pending","updated_at":"2026-05-06T11:00:00Z"}`)},
+			{ID: "event_01HZGOOD", Event: "organization.updated", CreatedAt: time.Now(), Data: []byte(`{"id":"` + workosOrgID + `","object":"organization","name":"Resolved","external_id":"sb_resolved","updated_at":"2026-05-06T12:00:00Z"}`)},
 		}},
 	}
 
 	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
 
-	_, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
-	require.Error(t, err)
+	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
+	require.NoError(t, err)
+	require.Equal(t, "event_01HZGOOD", res.LastEventID)
+
+	row, err := orgrepo.New(conn).GetOrganizationByWorkosID(ctx, conv.ToPGText(workosOrgID))
+	require.NoError(t, err)
+	require.Equal(t, "sb_resolved", row.ID)
+	require.Equal(t, "Resolved", row.Name)
+
+	cursor, err := workosrepo.New(conn).GetOrganizationSyncLastEventID(ctx, workosOrgID)
+	require.NoError(t, err)
+	require.Equal(t, "event_01HZGOOD", cursor)
 }
 
 func TestProcessWorkOSOrganizationEvents_OrganizationCreatedAndUpdated(t *testing.T) {
