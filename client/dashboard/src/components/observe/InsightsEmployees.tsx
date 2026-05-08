@@ -25,8 +25,8 @@ import type {
 import { useGramContext, useMembers, useRoles } from "@gram/client/react-query";
 import { unwrapAsync } from "@gram/client/types/fp";
 import { useQuery } from "@tanstack/react-query";
-import { Info, Sparkles } from "lucide-react";
-import { useMemo } from "react";
+import { ChevronLeft, ChevronRight, Info, Sparkles } from "lucide-react";
+import { useMemo, useState } from "react";
 
 type EmployeeStatus = "compliant" | "not_compliant";
 
@@ -251,7 +251,16 @@ export function InsightsEmployeesContent() {
   );
 }
 
+const PAGE_SIZE = 25;
+
 function EmployeeTable({ employees }: { employees: Employee[] }) {
+  const [page, setPage] = useState(0);
+  const totalPages = Math.ceil(employees.length / PAGE_SIZE);
+  const pageEmployees = employees.slice(
+    page * PAGE_SIZE,
+    (page + 1) * PAGE_SIZE,
+  );
+
   return (
     <section className="bg-card rounded-xl border">
       <Table>
@@ -272,8 +281,8 @@ function EmployeeTable({ employees }: { employees: Employee[] }) {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {employees.length > 0 ? (
-            employees.map((item) => (
+          {pageEmployees.length > 0 ? (
+            pageEmployees.map((item) => (
               <TableRow key={item.id}>
                 <TableCell>
                   <div className="flex items-center gap-3">
@@ -316,6 +325,33 @@ function EmployeeTable({ employees }: { employees: Employee[] }) {
           )}
         </TableBody>
       </Table>
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between border-t px-4 py-3">
+          <p className="text-muted-foreground text-sm">
+            {page * PAGE_SIZE + 1}–
+            {Math.min((page + 1) * PAGE_SIZE, employees.length)} of{" "}
+            {employees.length}
+          </p>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setPage((p) => p - 1)}
+              disabled={page === 0}
+            >
+              <ChevronLeft className="size-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setPage((p) => p + 1)}
+              disabled={page >= totalPages - 1}
+            >
+              <ChevronRight className="size-4" />
+            </Button>
+          </div>
+        </div>
+      )}
     </section>
   );
 }
