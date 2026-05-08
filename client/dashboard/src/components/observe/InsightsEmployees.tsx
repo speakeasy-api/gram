@@ -2,6 +2,7 @@ import { MetricCard } from "@/components/chart/MetricCard";
 import { InsightsConfig } from "@/components/insights-sidebar";
 import { useInsightsState } from "@/components/insights-context";
 import { ErrorAlert } from "@/components/ui/alert";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
@@ -24,7 +25,7 @@ import type {
 import { useGramContext, useMembers, useRoles } from "@gram/client/react-query";
 import { unwrapAsync } from "@gram/client/types/fp";
 import { useQuery } from "@tanstack/react-query";
-import { Sparkles } from "lucide-react";
+import { Info, Sparkles } from "lucide-react";
 import { useMemo } from "react";
 
 type EmployeeStatus = "compliant" | "not_compliant";
@@ -256,7 +257,14 @@ function EmployeeTable({ employees }: { employees: Employee[] }) {
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Employee</TableHead>
+            <TableHead>
+              <span className="flex items-center gap-1">
+                Employee
+                <SimpleTooltip tooltip="Usage is attributed by matching the email reported by each AI coding tool to the member's Gram account. Members without a Gram account won't appear as compliant until they sign up or directory sync is configured.">
+                  <Info className="text-muted-foreground size-3 shrink-0" />
+                </SimpleTooltip>
+              </span>
+            </TableHead>
             <TableHead>Role</TableHead>
             <TableHead>Compliance</TableHead>
             <TableHead>Token Count</TableHead>
