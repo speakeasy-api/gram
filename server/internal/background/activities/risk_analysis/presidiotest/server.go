@@ -8,6 +8,7 @@ package presidiotest
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -50,17 +51,20 @@ type MockServer struct {
 }
 
 // NewMockServer starts an httptest server bound to a random localhost port
-// and registers t.Cleanup to shut it down at the end of the test. Pass
-// nil for testing.TB outside of a test (e.g. testenv.Launch) and call Close
+// and registers tb.Cleanup to shut it down at the end of the test. Pass
+// nil for *testing.T outside of a test (e.g. testenv.Launch) and call Close
 // manually.
-func NewMockServer(t testing.TB, logger *slog.Logger) *MockServer {
+func NewMockServer(tb *testing.T, logger *slog.Logger) *MockServer {
 	if logger == nil {
-		logger = slog.New(slog.DiscardHandler)
+		logger = slog.New(slog.NewTextHandler(io.Discard, nil))
 	}
 
 	m := &MockServer{
-		logger:   logger,
-		detector: DefaultDetector,
+		logger:      logger,
+		detector:    DefaultDetector,
+		srv:         nil,
+		mu:          sync.RWMutex{},
+		analyzeReqs: atomic.Int64{},
 	}
 
 	mux := http.NewServeMux()
@@ -68,8 +72,8 @@ func NewMockServer(t testing.TB, logger *slog.Logger) *MockServer {
 	mux.HandleFunc("POST /analyze", m.handleAnalyze)
 	m.srv = httptest.NewServer(mux)
 
-	if t != nil {
-		t.Cleanup(m.Close)
+	if tb != nil {
+		tb.Cleanup(m.Close)
 	}
 
 	return m
