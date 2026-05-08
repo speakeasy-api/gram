@@ -2908,6 +2908,9 @@ type SearchUsersFilterRequestBody struct {
 	// Optional list of user identifiers to include. Matches user_id for internal
 	// searches and external_user_id for external searches.
 	UserIds []string `form:"user_ids,omitempty" json:"user_ids,omitempty" xml:"user_ids,omitempty"`
+	// Optional event source filter (e.g. 'hook'). When set, only rows with a
+	// matching event_source are included.
+	EventSource *string `form:"event_source,omitempty" json:"event_source,omitempty" xml:"event_source,omitempty"`
 }
 
 // UserSummaryResponseBody is used to define fields on response body types.

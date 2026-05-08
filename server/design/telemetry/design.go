@@ -678,6 +678,7 @@ var SearchUsersFilter = Type("SearchUsersFilter", func() {
 		Format(FormatUUID)
 	})
 	Attribute("user_ids", ArrayOf(String), "Optional list of user identifiers to include. Matches user_id for internal searches and external_user_id for external searches.")
+	Attribute("event_source", String, "Optional event source filter (e.g. 'hook'). When set, only rows with a matching event_source are included.")
 
 	Required("from", "to")
 })

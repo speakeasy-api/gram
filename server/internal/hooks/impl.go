@@ -54,6 +54,7 @@ type SessionMetadata struct {
 	SessionID   string
 	ServiceName string
 	UserEmail   string
+	UserID      string
 	ClaudeOrgID string
 	GramOrgID   string
 	ProjectID   string

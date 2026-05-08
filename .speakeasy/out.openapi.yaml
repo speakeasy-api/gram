@@ -30265,6 +30265,9 @@ components:
           type: string
           description: Deployment ID filter
           format: uuid
+        event_source:
+          type: string
+          description: Optional event source filter (e.g. 'hook'). When set, only rows with a matching event_source are included.
         from:
           type: string
           description: Start time in ISO 8601 format (e.g., '2025-12-19T10:00:00Z')

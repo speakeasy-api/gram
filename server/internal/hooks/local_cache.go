@@ -68,6 +68,7 @@ func (c *localSessionCache) Get(ctx context.Context, key string, value any) erro
 		SessionID:   sessionID,
 		ServiceName: "claude-code",
 		UserEmail:   localFallbackEmail,
+		UserID:      "",
 		ClaudeOrgID: orgID,
 		GramOrgID:   orgID,
 		ProjectID:   projectID,

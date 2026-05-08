@@ -1048,6 +1048,7 @@ type SearchUsersParams struct {
 	TimeStart        int64
 	TimeEnd          int64
 	GramDeploymentID string // optional
+	EventSource      string // optional; e.g. "hook"
 	GroupBy          string // "user_id" or "external_user_id"
 	UserIDs          []string
 	SortOrder        string // "asc" or "desc"
@@ -1111,6 +1112,9 @@ func (q *Queries) SearchUsers(ctx context.Context, arg SearchUsersParams) ([]Use
 	// Optional deployment filter
 	if arg.GramDeploymentID != "" {
 		sb = sb.Where("gram_deployment_id = toUUIDOrNull(?)", arg.GramDeploymentID)
+	}
+	if arg.EventSource != "" {
+		sb = sb.Where("event_source = ?", arg.EventSource)
 	}
 	if len(arg.UserIDs) > 0 {
 		sb = sb.Where(squirrel.Eq{groupCol: arg.UserIDs})
