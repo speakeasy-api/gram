@@ -182,10 +182,14 @@ export function ScopePickerPopover({
   // selectors have content, so clearing it eagerly only causes the UI to
   // jump back to "servers" when the user deselects all items.
 
-  const projectList = organization.projects.map((p) => ({
-    id: p.id,
-    name: p.name,
-  }));
+  const projectList = useMemo(
+    () =>
+      organization.projects.map((p) => ({
+        id: p.id,
+        name: p.name,
+      })),
+    [organization.projects],
+  );
 
   const resourceKind = resourceType === "project" ? "project" : "mcp";
 
