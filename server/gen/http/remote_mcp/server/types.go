@@ -16,6 +16,9 @@ import (
 // CreateServerRequestBody is the type of the "remoteMcp" service
 // "createServer" endpoint HTTP request body.
 type CreateServerRequestBody struct {
+	// Optional human-readable name for the remote MCP server. Empty values are
+	// stored as null.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// The URL of the remote MCP server
 	URL *string `form:"url,omitempty" json:"url,omitempty" xml:"url,omitempty"`
 	// The transport type for the remote MCP server (e.g. streamable-http)
@@ -29,6 +32,9 @@ type CreateServerRequestBody struct {
 type UpdateServerRequestBody struct {
 	// The ID of the remote MCP server to update
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Optional human-readable name. Pass an empty string to clear the existing
+	// name.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// The URL of the remote MCP server
 	URL *string `form:"url,omitempty" json:"url,omitempty" xml:"url,omitempty"`
 	// The transport type for the remote MCP server
@@ -54,6 +60,10 @@ type CreateServerResponseBody struct {
 	ID string `form:"id" json:"id" xml:"id"`
 	// The project ID this remote MCP server belongs to
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// Optional human-readable name for the remote MCP server
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// URL-friendly slug derived from the URL and ID.
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// The URL of the remote MCP server
 	URL string `form:"url" json:"url" xml:"url"`
 	// The transport type for the remote MCP server
@@ -79,6 +89,10 @@ type GetServerResponseBody struct {
 	ID string `form:"id" json:"id" xml:"id"`
 	// The project ID this remote MCP server belongs to
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// Optional human-readable name for the remote MCP server
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// URL-friendly slug derived from the URL and ID.
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// The URL of the remote MCP server
 	URL string `form:"url" json:"url" xml:"url"`
 	// The transport type for the remote MCP server
@@ -98,6 +112,10 @@ type UpdateServerResponseBody struct {
 	ID string `form:"id" json:"id" xml:"id"`
 	// The project ID this remote MCP server belongs to
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// Optional human-readable name for the remote MCP server
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// URL-friendly slug derived from the URL and ID.
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// The URL of the remote MCP server
 	URL string `form:"url" json:"url" xml:"url"`
 	// The transport type for the remote MCP server
@@ -1240,6 +1258,10 @@ type RemoteMcpServerResponseBody struct {
 	ID string `form:"id" json:"id" xml:"id"`
 	// The project ID this remote MCP server belongs to
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// Optional human-readable name for the remote MCP server
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// URL-friendly slug derived from the URL and ID.
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// The URL of the remote MCP server
 	URL string `form:"url" json:"url" xml:"url"`
 	// The transport type for the remote MCP server
@@ -1275,6 +1297,8 @@ func NewCreateServerResponseBody(res *types.RemoteMcpServer) *CreateServerRespon
 	body := &CreateServerResponseBody{
 		ID:            res.ID,
 		ProjectID:     res.ProjectID,
+		Name:          res.Name,
+		Slug:          res.Slug,
 		URL:           res.URL,
 		TransportType: res.TransportType,
 		CreatedAt:     res.CreatedAt,
@@ -1320,6 +1344,8 @@ func NewGetServerResponseBody(res *types.RemoteMcpServer) *GetServerResponseBody
 	body := &GetServerResponseBody{
 		ID:            res.ID,
 		ProjectID:     res.ProjectID,
+		Name:          res.Name,
+		Slug:          res.Slug,
 		URL:           res.URL,
 		TransportType: res.TransportType,
 		CreatedAt:     res.CreatedAt,
@@ -1346,6 +1372,8 @@ func NewUpdateServerResponseBody(res *types.RemoteMcpServer) *UpdateServerRespon
 	body := &UpdateServerResponseBody{
 		ID:            res.ID,
 		ProjectID:     res.ProjectID,
+		Name:          res.Name,
+		Slug:          res.Slug,
 		URL:           res.URL,
 		TransportType: res.TransportType,
 		CreatedAt:     res.CreatedAt,
@@ -2221,6 +2249,7 @@ func NewDeleteServerGatewayErrorResponseBody(res *goa.ServiceError) *DeleteServe
 // payload.
 func NewCreateServerPayload(body *CreateServerRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *remotemcp.CreateServerPayload {
 	v := &remotemcp.CreateServerPayload{
+		Name:          body.Name,
 		URL:           *body.URL,
 		TransportType: *body.TransportType,
 	}
@@ -2251,9 +2280,10 @@ func NewListServersPayload(sessionToken *string, apikeyToken *string, projectSlu
 }
 
 // NewGetServerPayload builds a remoteMcp service getServer endpoint payload.
-func NewGetServerPayload(id string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *remotemcp.GetServerPayload {
+func NewGetServerPayload(id *string, slug *string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *remotemcp.GetServerPayload {
 	v := &remotemcp.GetServerPayload{}
 	v.ID = id
+	v.Slug = slug
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
@@ -2266,6 +2296,7 @@ func NewGetServerPayload(id string, sessionToken *string, apikeyToken *string, p
 func NewUpdateServerPayload(body *UpdateServerRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *remotemcp.UpdateServerPayload {
 	v := &remotemcp.UpdateServerPayload{
 		ID:            *body.ID,
+		Name:          body.Name,
 		URL:           body.URL,
 		TransportType: body.TransportType,
 	}

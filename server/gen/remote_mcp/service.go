@@ -21,7 +21,8 @@ type Service interface {
 	CreateServer(context.Context, *CreateServerPayload) (res *types.RemoteMcpServer, err error)
 	// List all remote MCP servers for a project
 	ListServers(context.Context, *ListServersPayload) (res *ListServersResult, err error)
-	// Get a remote MCP server by ID
+	// Get a remote MCP server by ID or slug. Exactly one of id or slug must be
+	// provided.
 	GetServer(context.Context, *GetServerPayload) (res *types.RemoteMcpServer, err error)
 	// Update a remote MCP server
 	UpdateServer(context.Context, *UpdateServerPayload) (res *types.RemoteMcpServer, err error)
@@ -62,6 +63,9 @@ type CreateServerPayload struct {
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
+	// Optional human-readable name for the remote MCP server. Empty values are
+	// stored as null.
+	Name *string
 	// The URL of the remote MCP server
 	URL string
 	// The transport type for the remote MCP server (e.g. streamable-http)
@@ -83,8 +87,10 @@ type DeleteServerPayload struct {
 // GetServerPayload is the payload type of the remoteMcp service getServer
 // method.
 type GetServerPayload struct {
-	// The ID of the remote MCP server
-	ID               string
+	// The ID of the remote MCP server. Mutually exclusive with slug.
+	ID *string
+	// The slug of the remote MCP server. Mutually exclusive with id.
+	Slug             *string
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
@@ -129,6 +135,9 @@ type UpdateServerPayload struct {
 	ProjectSlugInput *string
 	// The ID of the remote MCP server to update
 	ID string
+	// Optional human-readable name. Pass an empty string to clear the existing
+	// name.
+	Name *string
 	// The URL of the remote MCP server
 	URL *string
 	// The transport type for the remote MCP server

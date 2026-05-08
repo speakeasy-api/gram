@@ -11,7 +11,10 @@ import {
   type UseMutationResult,
 } from "@tanstack/react-query";
 
-export type CreateRemoteMcpSourceVariables = { url: string };
+export type CreateRemoteMcpSourceVariables = {
+  name?: string | undefined;
+  url: string;
+};
 
 export type CreateRemoteMcpSourceData = { remoteMcpServer: RemoteMcpServer };
 
@@ -24,9 +27,10 @@ export function useCreateRemoteMcpSource(): UseMutationResult<
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ url }) => {
+    mutationFn: async ({ name, url }) => {
       const remoteMcpServer = await client.remoteMcp.createServer({
         createServerForm: {
+          name,
           url,
           transportType: "streamable-http",
           headers: [],

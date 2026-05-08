@@ -6,6 +6,7 @@ import { useViewMode } from "@/components/ui/use-view-mode";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useCatalogIconMap } from "./sources-hooks";
+import { remoteMcpRouteParam } from "@/lib/sources";
 import { useRoutes } from "@/routes";
 import {
   useLatestDeployment,
@@ -163,14 +164,15 @@ export default function Sources() {
     );
 
     // Remote MCP servers are project-scoped, not deployment-bound, so they're
-    // fetched independently. The id doubles as the route slug since there's no
-    // user-defined name to derive one from.
+    // fetched independently. The route slug prefers the server's slug column
+    // for human-friendly URLs and falls back to the id.
     const remoteMcpSources: NamedAsset[] = (
       remoteMcpServersResult?.remoteMcpServers ?? []
     ).map((server) => ({
       id: server.id,
       deploymentAssetId: server.id,
-      slug: server.id,
+      slug: remoteMcpRouteParam(server),
+      name: server.name,
       url: server.url,
       type: "remotemcp" as const,
     }));

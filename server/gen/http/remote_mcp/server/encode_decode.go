@@ -492,15 +492,24 @@ func DecodeGetServerRequest(mux goahttp.Muxer, decoder func(*http.Request) goaht
 	return func(r *http.Request) (*remotemcp.GetServerPayload, error) {
 		var payload *remotemcp.GetServerPayload
 		var (
-			id               string
+			id               *string
+			slug             *string
 			sessionToken     *string
 			apikeyToken      *string
 			projectSlugInput *string
 			err              error
 		)
-		id = r.URL.Query().Get("id")
-		if id == "" {
-			err = goa.MergeErrors(err, goa.MissingFieldError("id", "query string"))
+		qp := r.URL.Query()
+		idRaw := qp.Get("id")
+		if idRaw != "" {
+			id = &idRaw
+		}
+		if id != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("id", *id, goa.FormatUUID))
+		}
+		slugRaw := qp.Get("slug")
+		if slugRaw != "" {
+			slug = &slugRaw
 		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
@@ -517,7 +526,7 @@ func DecodeGetServerRequest(mux goahttp.Muxer, decoder func(*http.Request) goaht
 		if err != nil {
 			return payload, err
 		}
-		payload = NewGetServerPayload(id, sessionToken, apikeyToken, projectSlugInput)
+		payload = NewGetServerPayload(id, slug, sessionToken, apikeyToken, projectSlugInput)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -1438,6 +1447,8 @@ func marshalTypesRemoteMcpServerToRemoteMcpServerResponseBody(v *types.RemoteMcp
 	res := &RemoteMcpServerResponseBody{
 		ID:            v.ID,
 		ProjectID:     v.ProjectID,
+		Name:          v.Name,
+		Slug:          v.Slug,
 		URL:           v.URL,
 		TransportType: v.TransportType,
 		CreatedAt:     v.CreatedAt,

@@ -3,6 +3,7 @@ import { RequireScope } from "@/components/require-scope";
 import { Heading } from "@/components/ui/heading";
 import { Input } from "@/components/ui/input";
 import { Type } from "@/components/ui/type";
+import { remoteMcpRouteParam } from "@/lib/sources";
 import { useRoutes } from "@/routes";
 import { Alert, Button, Stack } from "@speakeasy-api/moonshine";
 import { Loader2, Network } from "lucide-react";
@@ -55,6 +56,7 @@ function CreateRemoteMcpForm() {
   const routes = useRoutes();
   const createSource = useCreateRemoteMcpSource();
 
+  const [name, setName] = useState("");
   const [url, setUrl] = useState("");
   // Track whether the field has been touched so we don't surface "URL is
   // required" the moment the page renders.
@@ -75,11 +77,16 @@ function CreateRemoteMcpForm() {
       return;
     }
     try {
+      const trimmedName = name.trim();
       const { remoteMcpServer } = await createSource.mutateAsync({
+        name: trimmedName === "" ? undefined : trimmedName,
         url: url.trim(),
       });
       toast.success("Remote MCP server added");
-      routes.sources.source.goTo("remotemcp", remoteMcpServer.id);
+      routes.sources.source.goTo(
+        "remotemcp",
+        remoteMcpRouteParam(remoteMcpServer),
+      );
     } catch (error) {
       const message =
         error instanceof Error
@@ -108,6 +115,22 @@ function CreateRemoteMcpForm() {
         <Stack gap={4}>
           <Stack gap={1}>
             <label
+              htmlFor="remote-mcp-name"
+              className="text-sm leading-none font-medium"
+            >
+              Display name (optional)
+            </label>
+            <Input
+              id="remote-mcp-name"
+              autoFocus
+              placeholder="My MCP server"
+              value={name}
+              onChange={setName}
+            />
+          </Stack>
+
+          <Stack gap={1}>
+            <label
               htmlFor="remote-mcp-url"
               className="text-sm leading-none font-medium"
             >
@@ -115,7 +138,6 @@ function CreateRemoteMcpForm() {
             </label>
             <Input
               id="remote-mcp-url"
-              autoFocus
               placeholder="https://example.com/mcp"
               value={url}
               onChange={(value) => {

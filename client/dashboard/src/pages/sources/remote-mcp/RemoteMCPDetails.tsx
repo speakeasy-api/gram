@@ -9,9 +9,16 @@ import {
   TabsList,
 } from "@/components/ui/tabs";
 import { Type } from "@/components/ui/type";
-import { formatRemoteMcpUrlForDisplay } from "@/lib/sources";
+import {
+  formatRemoteMcpDisplay,
+  getRemoteMcpServerArgs,
+  remoteMcpRouteParam,
+} from "@/lib/sources";
 import { useRoutes } from "@/routes";
-import type { McpServer } from "@gram/client/models/components";
+import type {
+  McpServer,
+  RemoteMcpServer,
+} from "@gram/client/models/components";
 import {
   invalidateAllGetRemoteMcpServer,
   invalidateAllRemoteMcpServers,
@@ -62,7 +69,7 @@ function validateRemoteMcpUrl(value: string): string | null {
 export default function RemoteMCPDetails() {
   const { sourceSlug } = useParams<{ sourceSlug: string }>();
   const routes = useRoutes();
-  const remoteMcpServerId = sourceSlug ?? "";
+  const idOrSlug = sourceSlug ?? "";
 
   const [activeTab, setActiveTab] = useState<TabValue>(() => {
     const hash = window.location.hash.replace("#", "");
@@ -81,9 +88,11 @@ export default function RemoteMCPDetails() {
     data: remoteMcpServer,
     isLoading,
     isError,
-  } = useGetRemoteMcpServer({ id: remoteMcpServerId }, undefined, {
-    enabled: remoteMcpServerId !== "",
+  } = useGetRemoteMcpServer(getRemoteMcpServerArgs(idOrSlug), undefined, {
+    enabled: idOrSlug !== "",
   });
+
+  const remoteMcpServerId = remoteMcpServer?.id ?? "";
 
   const { data: mcpServersResult, isLoading: isLoadingMcpServers } =
     useMcpServers({ remoteMcpServerId }, undefined, {
@@ -103,8 +112,8 @@ export default function RemoteMCPDetails() {
       <Page.Header>
         <Page.Header.Breadcrumbs
           substitutions={{
-            [remoteMcpServerId]: remoteMcpServer?.url
-              ? formatRemoteMcpUrlForDisplay(remoteMcpServer.url)
+            [idOrSlug]: remoteMcpServer
+              ? formatRemoteMcpDisplay(remoteMcpServer)
               : undefined,
           }}
           skipSegments={["remotemcp"]}
@@ -118,7 +127,7 @@ export default function RemoteMCPDetails() {
         overflowHidden
         className="gap-0"
       >
-        <RemoteMcpHero url={remoteMcpServer?.url} />
+        <RemoteMcpHero server={remoteMcpServer} />
 
         <Tabs
           value={activeTab}
@@ -157,6 +166,7 @@ export default function RemoteMCPDetails() {
             {remoteMcpServer && (
               <SettingsTab
                 remoteMcpServerId={remoteMcpServer.id}
+                initialName={remoteMcpServer.name ?? ""}
                 url={remoteMcpServer.url}
                 linkedMcpServers={linkedMcpServers}
               />
@@ -184,7 +194,7 @@ function useMcpServersForRemote(
   }, [servers, remoteMcpServerId]);
 }
 
-function RemoteMcpHero({ url }: { url: string | undefined }) {
+function RemoteMcpHero({ server }: { server: RemoteMcpServer | undefined }) {
   return (
     <div className="border-b">
       <div className="mx-auto w-full max-w-[1270px] px-8 py-8">
@@ -194,7 +204,7 @@ function RemoteMcpHero({ url }: { url: string | undefined }) {
               <Network className="h-5 w-5 text-violet-600 dark:text-violet-400" />
             </div>
             <Heading variant="h1" className="break-all normal-case">
-              {url ? formatRemoteMcpUrlForDisplay(url) : "Remote MCP server"}
+              {server ? formatRemoteMcpDisplay(server) : "Remote MCP server"}
             </Heading>
             <Badge variant="neutral">
               <Badge.Text>Remote MCP</Badge.Text>
@@ -315,21 +325,117 @@ function McpServerVisibilityBadge({ visibility }: { visibility: string }) {
 
 function SettingsTab({
   remoteMcpServerId,
+  initialName,
   url,
   linkedMcpServers,
 }: {
   remoteMcpServerId: string;
+  initialName: string;
   url: string;
   linkedMcpServers: McpServer[];
 }) {
   return (
     <div className="mx-auto w-full max-w-[1270px] space-y-8 px-8 py-8">
+      <NameSection
+        remoteMcpServerId={remoteMcpServerId}
+        initialName={initialName}
+      />
       <UrlSection remoteMcpServerId={remoteMcpServerId} initialUrl={url} />
       <DangerZoneSection
         remoteMcpServerId={remoteMcpServerId}
         url={url}
         linkedMcpServers={linkedMcpServers}
       />
+    </div>
+  );
+}
+
+function NameSection({
+  remoteMcpServerId,
+  initialName,
+}: {
+  remoteMcpServerId: string;
+  initialName: string;
+}) {
+  const [draft, setDraft] = useState(initialName);
+
+  // Mirror UrlSection: re-sync the input when the upstream value changes so a
+  // stale draft doesn't survive an edit from another tab or a refetch.
+  useEffect(() => {
+    setDraft(initialName);
+  }, [initialName]);
+
+  const queryClient = useQueryClient();
+  const update = useUpdateRemoteMcpServerMutation();
+
+  const dirty = draft.trim() !== initialName.trim();
+  const saveDisabled = !dirty || update.isPending;
+
+  const handleSave = async () => {
+    try {
+      await update.mutateAsync({
+        request: {
+          updateServerForm: {
+            id: remoteMcpServerId,
+            // Empty string explicitly clears the name on the server side; nil
+            // would leave it unchanged. The trimmed input handles whitespace.
+            name: draft.trim(),
+          },
+        },
+      });
+      await Promise.all([
+        invalidateAllGetRemoteMcpServer(queryClient, { refetchType: "all" }),
+        invalidateAllRemoteMcpServers(queryClient, { refetchType: "all" }),
+      ]);
+      toast.success("Remote MCP name updated");
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to update name";
+      toast.error(message);
+    }
+  };
+
+  return (
+    <div className="rounded-lg border p-6">
+      <Type variant="subheading" className="mb-1">
+        Display Name
+      </Type>
+      <Type muted small className="mb-4">
+        Optional name for display purposes such as source listings and
+        breadcrumbs. Defaults to URL when empty.
+      </Type>
+      <Stack gap={2}>
+        <Input
+          value={draft}
+          onChange={(value) => setDraft(value)}
+          placeholder="My MCP server"
+        />
+        {update.isError && (
+          <Alert variant="error" dismissible={false}>
+            {update.error.message}
+          </Alert>
+        )}
+        <Stack direction="horizontal" gap={2}>
+          <RequireScope scope="mcp:write" level="component">
+            <Button
+              variant="primary"
+              disabled={saveDisabled}
+              onClick={handleSave}
+            >
+              {update.isPending ? (
+                <>
+                  <Button.LeftIcon>
+                    <Loader2 className="size-4 animate-spin" />
+                  </Button.LeftIcon>
+                  <Button.Text>Saving</Button.Text>
+                </>
+              ) : (
+                <Button.Text>Save</Button.Text>
+              )}
+            </Button>
+          </RequireScope>
+        </Stack>
+      </Stack>
     </div>
   );
 }
@@ -341,6 +447,8 @@ function UrlSection({
   remoteMcpServerId: string;
   initialUrl: string;
 }) {
+  const navigate = useNavigate();
+  const routes = useRoutes();
   const [draft, setDraft] = useState(initialUrl);
   const [touched, setTouched] = useState(false);
 
@@ -367,13 +475,23 @@ function UrlSection({
     setTouched(true);
     if (validateRemoteMcpUrl(draft) !== null) return;
     try {
-      await update.mutateAsync({
+      const updated = await update.mutateAsync({
         request: {
           updateServerForm: {
             id: remoteMcpServerId,
             url: draft.trim(),
           },
         },
+      });
+      // The server recomputes slug from URL on every update, so a URL change
+      // produces a new slug. Replace the route param with the new slug
+      // *before* invalidating queries so the refetch uses the new lookup
+      // args and the page-level not-found guard doesn't bounce the user back
+      // to the Sources index. Replace (not push) avoids a dead history entry
+      // pointing at the now-stale slug.
+      const nextParam = remoteMcpRouteParam(updated);
+      navigate(routes.sources.source.href("remotemcp", nextParam), {
+        replace: true,
       });
       // Invalidate every consumer of the remote MCP server: the per-id detail
       // query that drives the hero + Settings inputs, and the project-scoped

@@ -7,10 +7,7 @@ import { DotCard } from "@/components/ui/dot-card";
 import { MoreActions } from "@/components/ui/more-actions";
 import { Type } from "@/components/ui/type";
 import { useRBAC } from "@/hooks/useRBAC";
-import {
-  formatRemoteMcpUrlForDisplay,
-  sourceTypeToUrnKind,
-} from "@/lib/sources";
+import { formatRemoteMcpDisplay, sourceTypeToUrnKind } from "@/lib/sources";
 import { useRoutes } from "@/routes";
 import { Asset } from "@gram/client/models/components";
 import { useLatestDeployment } from "@gram/client/react-query/index.js";
@@ -38,6 +35,7 @@ export type NamedAsset =
       id: string;
       deploymentAssetId: string;
       slug: string;
+      name?: string | null;
       url: string;
       type: "remotemcp";
     };
@@ -121,9 +119,7 @@ export function SourceCard({
         ];
 
   const displayName =
-    asset.type === "remotemcp"
-      ? formatRemoteMcpUrlForDisplay(asset.url)
-      : asset.name;
+    asset.type === "remotemcp" ? formatRemoteMcpDisplay(asset) : asset.name;
 
   const iconContent = (() => {
     if (asset.type === "externalmcp" && asset.iconUrl) {

@@ -14321,16 +14321,23 @@ paths:
         name: DeleteRemoteMcpServer
   /rpc/remoteMcp.getServer:
     get:
-      description: Get a remote MCP server by ID
+      description: Get a remote MCP server by ID or slug. Exactly one of id or slug must be provided.
       operationId: getRemoteMcpServer
       parameters:
         - allowEmptyValue: true
-          description: The ID of the remote MCP server
+          description: The ID of the remote MCP server. Mutually exclusive with slug.
           in: query
           name: id
-          required: true
           schema:
-            description: The ID of the remote MCP server
+            description: The ID of the remote MCP server. Mutually exclusive with slug.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: The slug of the remote MCP server. Mutually exclusive with id.
+          in: query
+          name: slug
+          schema:
+            description: The slug of the remote MCP server. Mutually exclusive with id.
             type: string
         - allowEmptyValue: true
           description: Session header
@@ -24555,6 +24562,9 @@ components:
           items:
             $ref: '#/components/schemas/HeaderInput'
           description: Headers to send when proxying requests to the remote server
+        name:
+          type: string
+          description: Optional human-readable name for the remote MCP server. Empty values are stored as null.
         transport_type:
           type: string
           description: The transport type for the remote MCP server (e.g. streamable-http)
@@ -29479,10 +29489,16 @@ components:
           type: string
           description: The ID of the remote MCP server
           format: uuid
+        name:
+          type: string
+          description: Optional human-readable name for the remote MCP server
         project_id:
           type: string
           description: The project ID this remote MCP server belongs to
           format: uuid
+        slug:
+          type: string
+          description: URL-friendly slug derived from the URL and ID.
         transport_type:
           type: string
           description: The transport type for the remote MCP server
@@ -32215,6 +32231,9 @@ components:
         id:
           type: string
           description: The ID of the remote MCP server to update
+        name:
+          type: string
+          description: Optional human-readable name. Pass an empty string to clear the existing name.
         transport_type:
           type: string
           description: The transport type for the remote MCP server

@@ -1,6 +1,7 @@
 package remotemcp_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -218,4 +219,76 @@ func TestCreateServer_RBACForbidden(t *testing.T) {
 
 	_, err := ti.service.CreateServer(ctx, payload)
 	require.Error(t, err)
+}
+
+func TestCreateServer_NameStored(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	result, err := ti.service.CreateServer(ctx, &gen.CreateServerPayload{
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		Name:             new("My MCP Server"),
+		URL:              "https://mcp.example.com",
+		TransportType:    "streamable-http",
+		Headers:          []*gen.HeaderInput{},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result.Name)
+	require.Equal(t, "My MCP Server", *result.Name)
+}
+
+func TestCreateServer_NameTrimmed(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	result, err := ti.service.CreateServer(ctx, &gen.CreateServerPayload{
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		Name:             new("  Trimmed Name  "),
+		URL:              "https://mcp.example.com",
+		TransportType:    "streamable-http",
+		Headers:          []*gen.HeaderInput{},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result.Name)
+	require.Equal(t, "Trimmed Name", *result.Name)
+}
+
+func TestCreateServer_NameEmptyTreatedAsNull(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	result, err := ti.service.CreateServer(ctx, &gen.CreateServerPayload{
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		Name:             new("   "),
+		URL:              "https://mcp.example.com",
+		TransportType:    "streamable-http",
+		Headers:          []*gen.HeaderInput{},
+	})
+	require.NoError(t, err)
+	require.Nil(t, result.Name)
+}
+
+func TestCreateServer_SlugComputed(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	result, err := ti.service.CreateServer(ctx, &gen.CreateServerPayload{
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		URL:              "https://api.example.com/mcp",
+		TransportType:    "streamable-http",
+		Headers:          []*gen.HeaderInput{},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result.Slug)
+	// Format: <host-and-path-slug>-<last 4 chars of UUID>
+	require.True(t, strings.HasPrefix(*result.Slug, "api-example-com-mcp-"), "got %s", *result.Slug)
+	require.True(t, strings.HasSuffix(*result.Slug, result.ID[len(result.ID)-4:]), "got %s", *result.Slug)
 }

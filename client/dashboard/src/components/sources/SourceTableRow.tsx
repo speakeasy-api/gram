@@ -2,10 +2,7 @@ import { DotRow } from "@/components/ui/dot-row";
 import { MoreActions } from "@/components/ui/more-actions";
 import { Type } from "@/components/ui/type";
 import { useRBAC } from "@/hooks/useRBAC";
-import {
-  formatRemoteMcpUrlForDisplay,
-  sourceTypeToUrnKind,
-} from "@/lib/sources";
+import { formatRemoteMcpDisplay, sourceTypeToUrnKind } from "@/lib/sources";
 import { useRoutes } from "@/routes";
 import { Badge } from "@speakeasy-api/moonshine";
 import { CircleAlertIcon, FileCode, Network } from "lucide-react";
@@ -110,9 +107,7 @@ export function SourceTableRow({
   })();
 
   const displayName =
-    asset.type === "remotemcp"
-      ? formatRemoteMcpUrlForDisplay(asset.url)
-      : asset.name;
+    asset.type === "remotemcp" ? formatRemoteMcpDisplay(asset) : asset.name;
 
   return (
     <DotRow

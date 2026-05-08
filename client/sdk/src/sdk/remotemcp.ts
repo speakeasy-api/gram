@@ -56,10 +56,10 @@ export class RemoteMcp extends ClientSDK {
    * getServer remoteMcp
    *
    * @remarks
-   * Get a remote MCP server by ID
+   * Get a remote MCP server by ID or slug. Exactly one of id or slug must be provided.
    */
   async getServer(
-    request: operations.GetRemoteMcpServerRequest,
+    request?: operations.GetRemoteMcpServerRequest | undefined,
     security?: operations.GetRemoteMcpServerSecurity | undefined,
     options?: RequestOptions,
   ): Promise<components.RemoteMcpServer> {

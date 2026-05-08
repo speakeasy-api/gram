@@ -76,6 +76,8 @@ func VerifyRemoteMcpURL(ctx context.Context, policy *guardian.Policy, rawURL str
 	switch status {
 	case http.StatusUnauthorized, http.StatusForbidden:
 		return true, &status, "Reachable: received authorization required response"
+	case http.StatusNotFound:
+		return false, &status, "MCP response not found"
 	}
 
 	if status >= 200 && status < 300 {

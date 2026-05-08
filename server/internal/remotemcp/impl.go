@@ -6,9 +6,13 @@ import (
 	"fmt"
 	"log/slog"
 	"net/url"
+	"strings"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -105,6 +109,25 @@ func (s *Service) CreateServer(ctx context.Context, payload *gen.CreateServerPay
 		}
 	}
 
+	// Generate the server ID up front so the slug can include its suffix and
+	// the row can be inserted in a single statement (no insert-then-update).
+	serverID, err := uuid.NewV7()
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "generate server id").Log(ctx, logger)
+	}
+
+	slug, err := computeServerSlug(payload.URL, serverID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "compute server slug").Log(ctx, logger)
+	}
+
+	name := pgtype.Text{String: "", Valid: false}
+	if payload.Name != nil {
+		if trimmed := strings.TrimSpace(*payload.Name); trimmed != "" {
+			name = pgtype.Text{String: trimmed, Valid: true}
+		}
+	}
+
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").Log(ctx, logger)
@@ -115,11 +138,18 @@ func (s *Service) CreateServer(ctx context.Context, payload *gen.CreateServerPay
 	headersRepo := NewHeaders(s.logger, dbtx, s.headers.enc)
 
 	server, err := txRepo.CreateServer(ctx, repo.CreateServerParams{
+		ID:            serverID,
 		ProjectID:     *authCtx.ProjectID,
+		Name:          name,
+		Slug:          conv.ToPGText(slug),
 		TransportType: payload.TransportType,
 		Url:           payload.URL,
 	})
 	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
+			return nil, oops.E(oops.CodeConflict, err, "remote mcp server slug already in use").Log(ctx, logger)
+		}
 		return nil, oops.E(oops.CodeUnexpected, err, "create remote mcp server").Log(ctx, logger)
 	}
 
@@ -212,9 +242,13 @@ func (s *Service) GetServer(ctx context.Context, payload *gen.GetServerPayload) 
 		return nil, err
 	}
 
-	serverID, err := uuid.Parse(payload.ID)
-	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid server id").Log(ctx, s.logger)
+	idProvided := payload.ID != nil && *payload.ID != ""
+	slugProvided := payload.Slug != nil && *payload.Slug != ""
+	if !idProvided && !slugProvided {
+		return nil, oops.E(oops.CodeBadRequest, nil, "id or slug is required").Log(ctx, s.logger)
+	}
+	if idProvided && slugProvided {
+		return nil, oops.E(oops.CodeBadRequest, nil, "id and slug are mutually exclusive").Log(ctx, s.logger)
 	}
 
 	dbtx, err := s.db.Begin(ctx)
@@ -226,10 +260,22 @@ func (s *Service) GetServer(ctx context.Context, payload *gen.GetServerPayload) 
 	txRepo := repo.New(dbtx)
 	headersRepo := NewHeaders(s.logger, dbtx, s.headers.enc)
 
-	server, err := txRepo.GetServerByID(ctx, repo.GetServerByIDParams{
-		ID:        serverID,
-		ProjectID: *authCtx.ProjectID,
-	})
+	var server repo.RemoteMcpServer
+	if idProvided {
+		serverID, parseErr := uuid.Parse(*payload.ID)
+		if parseErr != nil {
+			return nil, oops.E(oops.CodeBadRequest, parseErr, "invalid server id").Log(ctx, s.logger)
+		}
+		server, err = txRepo.GetServerByID(ctx, repo.GetServerByIDParams{
+			ID:        serverID,
+			ProjectID: *authCtx.ProjectID,
+		})
+	} else {
+		server, err = txRepo.GetServerBySlug(ctx, repo.GetServerBySlugParams{
+			Slug:      conv.ToPGText(*payload.Slug),
+			ProjectID: *authCtx.ProjectID,
+		})
+	}
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.E(oops.CodeNotFound, err, "remote mcp server not found").Log(ctx, s.logger)
@@ -305,14 +351,35 @@ func (s *Service) UpdateServer(ctx context.Context, payload *gen.UpdateServerPay
 
 	beforeView := mv.BuildRemoteMcpServerView(existingServer, beforeHeaders)
 
+	// Resolve name: nil = leave existing, "" = clear, value = trimmed value.
+	name := existingServer.Name
+	if payload.Name != nil {
+		trimmed := strings.TrimSpace(*payload.Name)
+		name = pgtype.Text{String: trimmed, Valid: trimmed != ""}
+	}
+
+	// Always recompute slug from the post-update URL so it tracks the URL
+	// even when the URL didn't change (idempotent).
+	finalURL := conv.PtrValOr(payload.URL, existingServer.Url)
+	slug, err := computeServerSlug(finalURL, existingServer.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "compute server slug").Log(ctx, logger)
+	}
+
 	// Update server fields
 	updatedServer, err := txRepo.UpdateServer(ctx, repo.UpdateServerParams{
 		ID:            serverID,
 		ProjectID:     *authCtx.ProjectID,
+		Name:          name,
+		Slug:          conv.ToPGText(slug),
 		TransportType: conv.PtrValOr(payload.TransportType, existingServer.TransportType),
-		Url:           conv.PtrValOr(payload.URL, existingServer.Url),
+		Url:           finalURL,
 	})
 	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
+			return nil, oops.E(oops.CodeConflict, err, "remote mcp server slug already in use").Log(ctx, logger)
+		}
 		return nil, oops.E(oops.CodeUnexpected, err, "update remote mcp server").Log(ctx, logger)
 	}
 

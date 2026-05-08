@@ -197,6 +197,22 @@ func TestVerifyRemoteMcpURL_HTMLNotMCP(t *testing.T) {
 	require.Equal(t, "Reachable: although received unexpected MCP response", message)
 }
 
+func TestVerifyRemoteMcpURL_NotFound(t *testing.T) {
+	t.Parallel()
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	t.Cleanup(upstream.Close)
+
+	verified, status, message := remotemcp.VerifyRemoteMcpURL(t.Context(), newPermissivePolicy(t), upstream.URL)
+
+	require.False(t, verified)
+	require.NotNil(t, status)
+	require.Equal(t, http.StatusNotFound, *status)
+	require.Equal(t, "MCP response not found", message)
+}
+
 func TestVerifyRemoteMcpURL_MethodNotAllowed(t *testing.T) {
 	t.Parallel()
 

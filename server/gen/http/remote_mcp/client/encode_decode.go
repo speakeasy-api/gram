@@ -535,7 +535,12 @@ func EncodeGetServerRequest(encoder func(*http.Request) goahttp.Encoder) func(*h
 			req.Header.Set("Gram-Project", head)
 		}
 		values := req.URL.Query()
-		values.Add("id", p.ID)
+		if p.ID != nil {
+			values.Add("id", *p.ID)
+		}
+		if p.Slug != nil {
+			values.Add("slug", *p.Slug)
+		}
 		req.URL.RawQuery = values.Encode()
 		return nil
 	}
@@ -1508,6 +1513,8 @@ func unmarshalRemoteMcpServerResponseBodyToTypesRemoteMcpServer(v *RemoteMcpServ
 	res := &types.RemoteMcpServer{
 		ID:            *v.ID,
 		ProjectID:     *v.ProjectID,
+		Name:          v.Name,
+		Slug:          v.Slug,
 		URL:           *v.URL,
 		TransportType: *v.TransportType,
 		CreatedAt:     *v.CreatedAt,

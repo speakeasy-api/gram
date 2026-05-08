@@ -48,7 +48,8 @@ func TestDeleteServer(t *testing.T) {
 
 	// Verify get returns not found
 	_, err = ti.service.GetServer(ctx, &gen.GetServerPayload{
-		ID:               created.ID,
+		ID:               &created.ID,
+		Slug:             nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
 	})

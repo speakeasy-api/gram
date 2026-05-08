@@ -16,6 +16,9 @@ import (
 // CreateServerRequestBody is the type of the "remoteMcp" service
 // "createServer" endpoint HTTP request body.
 type CreateServerRequestBody struct {
+	// Optional human-readable name for the remote MCP server. Empty values are
+	// stored as null.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// The URL of the remote MCP server
 	URL string `form:"url" json:"url" xml:"url"`
 	// The transport type for the remote MCP server (e.g. streamable-http)
@@ -29,6 +32,9 @@ type CreateServerRequestBody struct {
 type UpdateServerRequestBody struct {
 	// The ID of the remote MCP server to update
 	ID string `form:"id" json:"id" xml:"id"`
+	// Optional human-readable name. Pass an empty string to clear the existing
+	// name.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// The URL of the remote MCP server
 	URL *string `form:"url,omitempty" json:"url,omitempty" xml:"url,omitempty"`
 	// The transport type for the remote MCP server
@@ -54,6 +60,10 @@ type CreateServerResponseBody struct {
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// The project ID this remote MCP server belongs to
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// Optional human-readable name for the remote MCP server
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// URL-friendly slug derived from the URL and ID.
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// The URL of the remote MCP server
 	URL *string `form:"url,omitempty" json:"url,omitempty" xml:"url,omitempty"`
 	// The transport type for the remote MCP server
@@ -79,6 +89,10 @@ type GetServerResponseBody struct {
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// The project ID this remote MCP server belongs to
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// Optional human-readable name for the remote MCP server
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// URL-friendly slug derived from the URL and ID.
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// The URL of the remote MCP server
 	URL *string `form:"url,omitempty" json:"url,omitempty" xml:"url,omitempty"`
 	// The transport type for the remote MCP server
@@ -98,6 +112,10 @@ type UpdateServerResponseBody struct {
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// The project ID this remote MCP server belongs to
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// Optional human-readable name for the remote MCP server
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// URL-friendly slug derived from the URL and ID.
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// The URL of the remote MCP server
 	URL *string `form:"url,omitempty" json:"url,omitempty" xml:"url,omitempty"`
 	// The transport type for the remote MCP server
@@ -1257,6 +1275,10 @@ type RemoteMcpServerResponseBody struct {
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// The project ID this remote MCP server belongs to
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// Optional human-readable name for the remote MCP server
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// URL-friendly slug derived from the URL and ID.
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// The URL of the remote MCP server
 	URL *string `form:"url,omitempty" json:"url,omitempty" xml:"url,omitempty"`
 	// The transport type for the remote MCP server
@@ -1273,6 +1295,7 @@ type RemoteMcpServerResponseBody struct {
 // the "createServer" endpoint of the "remoteMcp" service.
 func NewCreateServerRequestBody(p *remotemcp.CreateServerPayload) *CreateServerRequestBody {
 	body := &CreateServerRequestBody{
+		Name:          p.Name,
 		URL:           p.URL,
 		TransportType: p.TransportType,
 	}
@@ -1296,6 +1319,7 @@ func NewCreateServerRequestBody(p *remotemcp.CreateServerPayload) *CreateServerR
 func NewUpdateServerRequestBody(p *remotemcp.UpdateServerPayload) *UpdateServerRequestBody {
 	body := &UpdateServerRequestBody{
 		ID:            p.ID,
+		Name:          p.Name,
 		URL:           p.URL,
 		TransportType: p.TransportType,
 	}
@@ -1328,6 +1352,8 @@ func NewCreateServerRemoteMcpServerOK(body *CreateServerResponseBody) *types.Rem
 	v := &types.RemoteMcpServer{
 		ID:            *body.ID,
 		ProjectID:     *body.ProjectID,
+		Name:          body.Name,
+		Slug:          body.Slug,
 		URL:           *body.URL,
 		TransportType: *body.TransportType,
 		CreatedAt:     *body.CreatedAt,
@@ -1667,6 +1693,8 @@ func NewGetServerRemoteMcpServerOK(body *GetServerResponseBody) *types.RemoteMcp
 	v := &types.RemoteMcpServer{
 		ID:            *body.ID,
 		ProjectID:     *body.ProjectID,
+		Name:          body.Name,
+		Slug:          body.Slug,
 		URL:           *body.URL,
 		TransportType: *body.TransportType,
 		CreatedAt:     *body.CreatedAt,
@@ -1840,6 +1868,8 @@ func NewUpdateServerRemoteMcpServerOK(body *UpdateServerResponseBody) *types.Rem
 	v := &types.RemoteMcpServer{
 		ID:            *body.ID,
 		ProjectID:     *body.ProjectID,
+		Name:          body.Name,
+		Slug:          body.Slug,
 		URL:           *body.URL,
 		TransportType: *body.TransportType,
 		CreatedAt:     *body.CreatedAt,

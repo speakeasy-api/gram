@@ -1,5 +1,5 @@
 import { Alert, Button } from "@speakeasy-api/moonshine";
-import { Loader2, ShieldCheck } from "lucide-react";
+import { Loader2, Plug } from "lucide-react";
 import type { VerifyRemoteMcpUrlState } from "./useVerifyRemoteMcpUrl";
 
 export function VerifyRemoteMcpUrlButton({
@@ -32,7 +32,7 @@ export function VerifyRemoteMcpUrlButton({
       ) : (
         <>
           <Button.LeftIcon>
-            <ShieldCheck className="size-4" />
+            <Plug className="size-4" />
           </Button.LeftIcon>
           <Button.Text>Verify MCP Connectivity</Button.Text>
         </>
