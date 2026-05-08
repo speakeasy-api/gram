@@ -1,5 +1,46 @@
 # dashboard
 
+## 0.47.0
+
+### Minor Changes
+
+- 658ff47: Auto-provision an org and attach the free-tier Polar subscription when an unauthenticated user lands on Gram with `?disposition=assistants` and has no org after IDP signin. Generates a legible random org name (e.g. `Swift Otter 42`), eagerly materializes the default project and environment, marks the org as whitelisted so it bypasses the BookDemo gate, and redirects to `/<org>/projects/default/assistants` so the credit benefit is in place before the user reaches the assistants page.
+- 9dcc221: Add `cli_destructive` risk-policy source for flagging destructive CLI commands.
+
+  Mirrors the existing `destructive_tool` shape (post-hoc batch scan, flag-only,
+  no live blocking) but is content-driven instead of annotation-driven. A
+  curated regex set covers shell (`rm -rf`, `dd`, `mkfs`, fork-bomb,
+  `chmod -R`, `chown -R`, `sudo <arg>`), git (`push --force`, `reset --hard`,
+  `clean -f`, `branch -D`), database (`DROP`, `TRUNCATE`, unguarded
+  `DELETE FROM`, `dropdb`), and cloud (`aws ec2 terminate-instances`,
+  `aws s3 rb`, `gcloud projects delete`, `kubectl delete ns/workloads`).
+
+  The scanner walks every recorded tool call's parsed arguments — no MCP
+  filter — so native Bash and `run_terminal_cmd` are now in scope alongside
+  MCP-routed calls whose arguments happen to carry destructive content.
+  First-match-wins iteration over map keys is sorted so rule_ids are
+  deterministic across runs.
+
+  PolicyCenter exposes the new source as a "Destructive CLI Commands" rule
+  category (category-toggle UX matching `destructive_tool`).
+
+### Patch Changes
+
+- 188e614: Add a credit-balance gate on `/chat/completions` for **free-tier** orgs: pre-request check returns HTTP 402 `insufficient_credits` once the cached Polar Chat Credits balance is exhausted. Pro and enterprise stay bounded by the existing OpenRouter monthly key cap; unifying the two limit sources is tracked separately. Speakeasy-internal orgs (`specialLimitOrgs`) bypass; cache misses fail open. Self-serve top-up checkout (`usage.createTopUpCheckout`) opens a one-time Polar product configured via `POLAR_PRODUCT_IDS_TOPUP`.
+- e9f4a92: Add a Clone action to environment cards in the Environments page. The clone
+  dialog lets users pick a new name and choose whether to copy only the variable
+  names (with empty placeholders) or duplicate the encrypted secret values from
+  the source. Encrypted secret values are never decrypted during the clone —
+  ciphertext is copied row-to-row inside Postgres. Clone is gated by a project-
+  level `environment:write` scope plus a per-resource read check on the source
+  environment (either an `environment:read` grant on that specific env or a
+  `project:read` grant on the project).
+- 8ce7444: scan risk policies for prompt injection. enable the new "Prompt Injection" category in the policy editor to flag or block instruction overrides, role hijacks, system-prompt leaks, encoded payloads, delimiter injection, and shell tool-abuse attempts
+- a25df49: Filter the "Recent Challenges" widget on the org home page to only show
+  denied, unresolved challenges (previously it listed any challenge in any
+  status). When there are no denied challenges, the widget now renders the
+  same empty state used on the Denied tab of the Challenges page.
+
 ## 0.46.0
 
 ### Minor Changes
