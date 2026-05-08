@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 #MISE description="Open a thing with the system default application"
-#MISE silent=true
+#MISE quiet=true
 #MISE hide=true
 
 #USAGE arg "<thing>" help="The thing to open (e.g. a file path or URL)"
