@@ -61,7 +61,14 @@ function CategoryBadge({
 export default function SecurityOverview() {
   return (
     <RequireScope scope="org:admin" level="page">
-      <SecurityOverviewContent />
+      <Page>
+        <Page.Header>
+          <Page.Header.Breadcrumbs />
+        </Page.Header>
+        <Page.Body>
+          <SecurityOverviewContent />
+        </Page.Body>
+      </Page>
     </RequireScope>
   );
 }
@@ -181,39 +188,25 @@ function SecurityOverviewContent() {
 
   if (isInitialLoading) {
     return (
-      <Page>
-        <Page.Header>
-          <Page.Header.Breadcrumbs />
-        </Page.Header>
-        <Page.Body>
-          <div className="flex items-center justify-center py-20">
-            <p className="text-muted-foreground text-sm">Loading...</p>
-          </div>
-        </Page.Body>
-      </Page>
+      <div className="flex items-center justify-center py-20">
+        <p className="text-muted-foreground text-sm">Loading...</p>
+      </div>
     );
   }
 
   if (policies.length === 0) {
     return (
-      <Page>
-        <Page.Header>
-          <Page.Header.Breadcrumbs />
-        </Page.Header>
-        <Page.Body>
-          <div className="flex flex-col items-center justify-center gap-4 py-20">
-            <Shield className="text-muted-foreground h-12 w-12" />
-            <h2 className="text-lg font-semibold">Risk Analysis</h2>
-            <p className="text-muted-foreground max-w-md text-center text-sm">
-              Monitor your chat messages for leaked secrets and sensitive data.
-              Set up a risk policy to get started.
-            </p>
-            <Button onClick={() => routes.policyCenter.goTo()}>
-              Go to Policy Center
-            </Button>
-          </div>
-        </Page.Body>
-      </Page>
+      <div className="flex flex-col items-center justify-center gap-4 py-20">
+        <Shield className="text-muted-foreground h-12 w-12" />
+        <h2 className="text-lg font-semibold">Risk Analysis</h2>
+        <p className="text-muted-foreground max-w-md text-center text-sm">
+          Monitor your chat messages for leaked secrets and sensitive data. Set
+          up a risk policy to get started.
+        </p>
+        <Button onClick={() => routes.policyCenter.goTo()}>
+          Go to Policy Center
+        </Button>
+      </div>
     );
   }
 
@@ -228,190 +221,175 @@ function SecurityOverviewContent() {
 
   return (
     <>
-      <Page>
-        <Page.Header>
-          <Page.Header.Breadcrumbs />
-        </Page.Header>
-        <Page.Body>
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-lg font-semibold">Risk Overview</h2>
-              <p className="text-muted-foreground text-sm">
-                Recent findings from risk analysis scans across your project.
-              </p>
-            </div>
-            <Button
-              variant="outline"
-              onClick={() => routes.policyCenter.goTo()}
-            >
-              Manage Policies
-            </Button>
-          </div>
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-lg font-semibold">Risk Overview</h2>
+          <p className="text-muted-foreground text-sm">
+            Recent findings from risk analysis scans across your project.
+          </p>
+        </div>
+        <Button variant="outline" onClick={() => routes.policyCenter.goTo()}>
+          Manage Policies
+        </Button>
+      </div>
 
-          <div className="mt-4 grid grid-cols-2 gap-4">
-            <MetricCard
-              title="Events Scanned"
-              value={totalScanned}
-              format="number"
-              icon="scan-search"
-            />
-            <MetricCard
-              title="Recent Findings"
-              value={totalFindings}
-              format="number"
-              icon="flag"
-            />
-          </div>
+      <div className="mt-4 grid grid-cols-2 gap-4">
+        <MetricCard
+          title="Events Scanned"
+          value={totalScanned}
+          format="number"
+          icon="scan-search"
+        />
+        <MetricCard
+          title="Recent Findings"
+          value={totalFindings}
+          format="number"
+          icon="flag"
+        />
+      </div>
 
-          {hasData ? (
-            <>
-              {recentChats.length > 0 && (
-                <div className="mt-6">
-                  <h3 className="mb-2 text-sm font-semibold">Recent Chats</h3>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Chat</TableHead>
-                        <TableHead>User</TableHead>
-                        <TableHead>Findings</TableHead>
-                        <TableHead>Latest Detected</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {recentChats.map((chat) => (
-                        <TableRow
-                          key={chat.chatId}
-                          className="cursor-pointer"
-                          onClick={() => setSelectedChatId(chat.chatId)}
-                        >
-                          <TableCell className="text-muted-foreground max-w-[300px] truncate text-xs">
-                            {chat.chatTitle ?? "Untitled"}
-                          </TableCell>
-                          <TableCell className="text-muted-foreground text-xs">
-                            {chat.userId ?? "-"}
-                          </TableCell>
-                          <TableCell className="font-mono text-xs">
-                            {chat.findingsCount}
-                          </TableCell>
-                          <TableCell className="text-muted-foreground text-xs">
-                            {chat.latestDetected
-                              ? new Date(chat.latestDetected).toLocaleString()
-                              : "-"}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                  {chatSummaryQuery.hasNextPage && (
-                    <div className="mt-2 flex justify-center">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        disabled={chatSummaryQuery.isFetchingNextPage}
-                        onClick={() => chatSummaryQuery.fetchNextPage()}
-                      >
-                        {chatSummaryQuery.isFetchingNextPage
-                          ? "Loading..."
-                          : "Load More"}
-                      </Button>
-                    </div>
-                  )}
+      {hasData ? (
+        <>
+          {recentChats.length > 0 && (
+            <div className="mt-6">
+              <h3 className="mb-2 text-sm font-semibold">Recent Chats</h3>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Chat</TableHead>
+                    <TableHead>User</TableHead>
+                    <TableHead>Findings</TableHead>
+                    <TableHead>Latest Detected</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {recentChats.map((chat) => (
+                    <TableRow
+                      key={chat.chatId}
+                      className="cursor-pointer"
+                      onClick={() => setSelectedChatId(chat.chatId)}
+                    >
+                      <TableCell className="text-muted-foreground max-w-[300px] truncate text-xs">
+                        {chat.chatTitle ?? "Untitled"}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground text-xs">
+                        {chat.userId ?? "-"}
+                      </TableCell>
+                      <TableCell className="font-mono text-xs">
+                        {chat.findingsCount}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground text-xs">
+                        {chat.latestDetected
+                          ? new Date(chat.latestDetected).toLocaleString()
+                          : "-"}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+              {chatSummaryQuery.hasNextPage && (
+                <div className="mt-2 flex justify-center">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={chatSummaryQuery.isFetchingNextPage}
+                    onClick={() => chatSummaryQuery.fetchNextPage()}
+                  >
+                    {chatSummaryQuery.isFetchingNextPage
+                      ? "Loading..."
+                      : "Load More"}
+                  </Button>
                 </div>
               )}
-
-              {results.length > 0 && (
-                <div className="mt-6">
-                  <h3 className="mb-2 text-sm font-semibold">
-                    Recent Findings
-                  </h3>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Category</TableHead>
-                        <TableHead>Rule</TableHead>
-                        <TableHead>Chat</TableHead>
-                        <TableHead>User</TableHead>
-                        <TableHead className="w-[200px]">Match</TableHead>
-                        <TableHead className="w-[240px]">Policy Note</TableHead>
-                        <TableHead>Detected</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {results.map((result) => {
-                        const policyNote = policyMessageById.get(
-                          result.policyId,
-                        );
-                        return (
-                          <TableRow
-                            key={result.id}
-                            className="cursor-pointer"
-                            onClick={() => {
-                              if (result.chatId) {
-                                setSelectedChatId(result.chatId);
-                              }
-                            }}
-                          >
-                            <TableCell>
-                              <CategoryBadge
-                                source={result.source}
-                                ruleId={result.ruleId}
-                              />
-                            </TableCell>
-                            <TableCell className="font-mono text-xs">
-                              {result.ruleId ?? "-"}
-                            </TableCell>
-                            <TableCell className="text-muted-foreground max-w-[200px] truncate text-xs">
-                              {result.chatTitle ?? "Untitled"}
-                            </TableCell>
-                            <TableCell className="text-muted-foreground text-xs">
-                              {result.userId ?? "-"}
-                            </TableCell>
-                            <TableCell className="w-[200px] max-w-[200px] truncate">
-                              <MaskedMatch value={result.match} />
-                            </TableCell>
-                            <TableCell
-                              className="text-muted-foreground w-[240px] max-w-[240px] truncate text-xs italic"
-                              title={policyNote ?? undefined}
-                            >
-                              {policyNote ?? "-"}
-                            </TableCell>
-                            <TableCell className="text-muted-foreground text-xs">
-                              {result.createdAt
-                                ? new Date(result.createdAt).toLocaleString()
-                                : "-"}
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
-                  {resultsQuery.hasNextPage && (
-                    <div className="mt-2 flex justify-center">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        disabled={resultsQuery.isFetchingNextPage}
-                        onClick={() => resultsQuery.fetchNextPage()}
-                      >
-                        {resultsQuery.isFetchingNextPage
-                          ? "Loading..."
-                          : "Load More"}
-                      </Button>
-                    </div>
-                  )}
-                </div>
-              )}
-            </>
-          ) : (
-            <div className="mt-8 text-center">
-              <p className="text-muted-foreground text-sm">
-                No findings yet. Findings will appear here as messages are
-                analyzed.
-              </p>
             </div>
           )}
-        </Page.Body>
-      </Page>
+
+          {results.length > 0 && (
+            <div className="mt-6">
+              <h3 className="mb-2 text-sm font-semibold">Recent Findings</h3>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Category</TableHead>
+                    <TableHead>Rule</TableHead>
+                    <TableHead>Chat</TableHead>
+                    <TableHead>User</TableHead>
+                    <TableHead className="w-[200px]">Match</TableHead>
+                    <TableHead className="w-[240px]">Policy Note</TableHead>
+                    <TableHead>Detected</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {results.map((result) => {
+                    const policyNote = policyMessageById.get(result.policyId);
+                    return (
+                      <TableRow
+                        key={result.id}
+                        className="cursor-pointer"
+                        onClick={() => {
+                          if (result.chatId) {
+                            setSelectedChatId(result.chatId);
+                          }
+                        }}
+                      >
+                        <TableCell>
+                          <CategoryBadge
+                            source={result.source}
+                            ruleId={result.ruleId}
+                          />
+                        </TableCell>
+                        <TableCell className="font-mono text-xs">
+                          {result.ruleId ?? "-"}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground max-w-[200px] truncate text-xs">
+                          {result.chatTitle ?? "Untitled"}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground text-xs">
+                          {result.userId ?? "-"}
+                        </TableCell>
+                        <TableCell className="w-[200px] max-w-[200px] truncate">
+                          <MaskedMatch value={result.match} />
+                        </TableCell>
+                        <TableCell
+                          className="text-muted-foreground w-[240px] max-w-[240px] truncate text-xs italic"
+                          title={policyNote ?? undefined}
+                        >
+                          {policyNote ?? "-"}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground text-xs">
+                          {result.createdAt
+                            ? new Date(result.createdAt).toLocaleString()
+                            : "-"}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+              {resultsQuery.hasNextPage && (
+                <div className="mt-2 flex justify-center">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={resultsQuery.isFetchingNextPage}
+                    onClick={() => resultsQuery.fetchNextPage()}
+                  >
+                    {resultsQuery.isFetchingNextPage
+                      ? "Loading..."
+                      : "Load More"}
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
+        </>
+      ) : (
+        <div className="mt-8 text-center">
+          <p className="text-muted-foreground text-sm">
+            No findings yet. Findings will appear here as messages are analyzed.
+          </p>
+        </div>
+      )}
 
       <Drawer
         open={!!selectedChatId}
