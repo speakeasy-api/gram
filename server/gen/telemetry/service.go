@@ -750,6 +750,9 @@ type SearchUsersFilter struct {
 	// Optional list of user identifiers to include. Matches user_id for internal
 	// searches and external_user_id for external searches.
 	UserIds []string
+	// Optional event source filter (e.g. 'hook'). When set, only rows with a
+	// matching event_source are included.
+	EventSource *string
 }
 
 // SearchUsersPayload is the payload type of the telemetry service searchUsers

@@ -3447,6 +3447,7 @@ func marshalTelemetrySearchUsersFilterToSearchUsersFilterRequestBody(v *telemetr
 		From:         v.From,
 		To:           v.To,
 		DeploymentID: v.DeploymentID,
+		EventSource:  v.EventSource,
 	}
 	if v.UserIds != nil {
 		res.UserIds = make([]string, len(v.UserIds))
@@ -3466,6 +3467,7 @@ func marshalSearchUsersFilterRequestBodyToTelemetrySearchUsersFilter(v *SearchUs
 		From:         v.From,
 		To:           v.To,
 		DeploymentID: v.DeploymentID,
+		EventSource:  v.EventSource,
 	}
 	if v.UserIds != nil {
 		res.UserIds = make([]string, len(v.UserIds))

@@ -3290,6 +3290,7 @@ func unmarshalSearchUsersFilterRequestBodyToTelemetrySearchUsersFilter(v *Search
 		From:         *v.From,
 		To:           *v.To,
 		DeploymentID: v.DeploymentID,
+		EventSource:  v.EventSource,
 	}
 	if v.UserIds != nil {
 		res.UserIds = make([]string, len(v.UserIds))

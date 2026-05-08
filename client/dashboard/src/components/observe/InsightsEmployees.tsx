@@ -440,6 +440,7 @@ async function fetchEmployeeUsage(
             from,
             to,
             userIds,
+            eventSource: "hook",
           },
           limit: 1000,
           sort: "desc",

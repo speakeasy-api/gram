@@ -378,6 +378,7 @@ func (s *Service) SearchUsers(ctx context.Context, payload *telem_gen.SearchUser
 		TimeStart:        params.timeStart,
 		TimeEnd:          params.timeEnd,
 		GramDeploymentID: deploymentID,
+		EventSource:      conv.PtrValOr(payload.Filter.EventSource, ""),
 		GroupBy:          groupBy,
 		UserIDs:          payload.Filter.UserIds,
 		SortOrder:        params.sortOrder,
