@@ -110,9 +110,9 @@ func (s *Service) buildTelemetryAttributesWithMetadata(ctx context.Context, payl
 	}
 	if metadata.UserID != "" {
 		attrs[attr.UserIDKey] = metadata.UserID
-	} else if strings.TrimSpace(metadata.UserEmail) != "" {
+	} else if userLookupEmail := strings.ToLower(strings.TrimSpace(metadata.UserEmail)); userLookupEmail != "" {
 		user, err := usersrepo.New(s.db).GetConnectedUserByEmail(ctx, usersrepo.GetConnectedUserByEmailParams{
-			Email:          strings.TrimSpace(metadata.UserEmail),
+			Email:          userLookupEmail,
 			OrganizationID: metadata.GramOrgID,
 		})
 		if err == nil {
@@ -239,18 +239,21 @@ func (s *Service) writeMetricsToClickHouse(ctx context.Context, payload *gen.Met
 		}
 		if m.UserEmail != "" {
 			attrs[attr.UserEmailKey] = m.UserEmail
-			user, err := usersrepo.New(s.db).GetConnectedUserByEmail(ctx, usersrepo.GetConnectedUserByEmailParams{
-				Email:          strings.TrimSpace(m.UserEmail),
-				OrganizationID: orgID,
-			})
-			if err == nil {
-				attrs[attr.UserIDKey] = user.ID
-			} else if !errors.Is(err, pgx.ErrNoRows) {
-				s.logger.WarnContext(ctx, "failed to resolve hook user by email",
-					attr.SlogError(err),
-					attr.SlogOrganizationID(orgID),
-					attr.SlogAuthUserEmail(m.UserEmail),
-				)
+			userLookupEmail := strings.ToLower(strings.TrimSpace(m.UserEmail))
+			if userLookupEmail != "" {
+				user, err := usersrepo.New(s.db).GetConnectedUserByEmail(ctx, usersrepo.GetConnectedUserByEmailParams{
+					Email:          userLookupEmail,
+					OrganizationID: orgID,
+				})
+				if err == nil {
+					attrs[attr.UserIDKey] = user.ID
+				} else if !errors.Is(err, pgx.ErrNoRows) {
+					s.logger.WarnContext(ctx, "failed to resolve hook user by email",
+						attr.SlogError(err),
+						attr.SlogOrganizationID(orgID),
+						attr.SlogAuthUserEmail(m.UserEmail),
+					)
+				}
 			}
 		}
 		if m.SessionID != "" {

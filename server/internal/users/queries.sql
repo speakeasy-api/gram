@@ -37,7 +37,7 @@ WHERE u.workos_id = ANY(@workos_ids::text[])
 -- name: GetConnectedUserByEmail :one
 SELECT u.* FROM users u
 JOIN organization_user_relationships our ON our.user_id = u.id
-WHERE lower(u.email) = lower(@email)
+WHERE u.email = @email
   AND our.organization_id = @organization_id
   AND our.deleted_at IS NULL
 LIMIT 1;

@@ -94,9 +94,10 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 
 	userID := ""
 	userEmail := strings.TrimSpace(claudeMetadata.UserEmail)
-	if userEmail != "" {
+	userLookupEmail := strings.ToLower(userEmail)
+	if userLookupEmail != "" {
 		user, err := usersrepo.New(s.db).GetConnectedUserByEmail(ctx, usersrepo.GetConnectedUserByEmailParams{
-			Email:          userEmail,
+			Email:          userLookupEmail,
 			OrganizationID: authCtx.ActiveOrganizationID,
 		})
 		if err == nil {

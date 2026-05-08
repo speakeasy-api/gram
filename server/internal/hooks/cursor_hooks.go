@@ -143,9 +143,10 @@ func (s *Service) recordCursorHook(ctx context.Context, payload *gen.CursorPaylo
 
 	userEmail := conv.PtrValOr(payload.UserEmail, "")
 	userID := ""
-	if userEmail != "" {
+	userLookupEmail := strings.ToLower(strings.TrimSpace(userEmail))
+	if userLookupEmail != "" {
 		user, err := usersrepo.New(s.db).GetConnectedUserByEmail(ctx, usersrepo.GetConnectedUserByEmailParams{
-			Email:          strings.TrimSpace(userEmail),
+			Email:          userLookupEmail,
 			OrganizationID: orgID,
 		})
 		if err == nil {
