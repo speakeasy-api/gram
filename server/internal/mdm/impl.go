@@ -236,7 +236,7 @@ func (s *Service) PatchClaudeSettings(ctx context.Context, payload *gen.PatchCla
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	raw, err := io.ReadAll(body)
+	raw, err := io.ReadAll(io.LimitReader(body, 1<<20)) // 1 MiB — settings.json is typically a few KB
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("read body: %w", err), "reading settings body")
 	}
