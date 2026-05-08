@@ -171,11 +171,13 @@ export function ScopePickerPopover({
   // selectors have content, so clearing it eagerly only causes the UI to
   // jump back to "servers" when the user deselects all items.
 
-  // Org-scoped permissions have no resource picker — they're always org-wide
-  if (resourceType === "org") {
+  // Fixed-scope permissions have no resource picker — their granularity is
+  // baked into the scope definition. Org scopes are always org-wide;
+  // environment scopes apply to every environment in the project.
+  if (resourceType === "org" || resourceType === "environment") {
     return (
       <span className="border-input text-muted-foreground inline-flex h-7 items-center rounded-md border bg-transparent px-2 py-1 text-xs">
-        All
+        {resourceType === "environment" ? "All in project" : "All"}
       </span>
     );
   }

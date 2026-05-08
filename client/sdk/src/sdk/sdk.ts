@@ -38,6 +38,10 @@ import { Tools } from "./tools.js";
 import { Toolsets } from "./toolsets.js";
 import { Triggers } from "./triggers.js";
 import { Usage } from "./usage.js";
+import { UserSessionClients } from "./usersessionclients.js";
+import { UserSessionConsents } from "./usersessionconsents.js";
+import { UserSessionIssuers } from "./usersessionissuers.js";
+import { UserSessions } from "./usersessions.js";
 import { Variations } from "./variations.js";
 
 export class Gram extends ClientSDK {
@@ -214,6 +218,28 @@ export class Gram extends ClientSDK {
   private _usage?: Usage;
   get usage(): Usage {
     return (this._usage ??= new Usage(this._options));
+  }
+
+  private _userSessionClients?: UserSessionClients;
+  get userSessionClients(): UserSessionClients {
+    return (this._userSessionClients ??= new UserSessionClients(this._options));
+  }
+
+  private _userSessionConsents?: UserSessionConsents;
+  get userSessionConsents(): UserSessionConsents {
+    return (this._userSessionConsents ??= new UserSessionConsents(
+      this._options,
+    ));
+  }
+
+  private _userSessionIssuers?: UserSessionIssuers;
+  get userSessionIssuers(): UserSessionIssuers {
+    return (this._userSessionIssuers ??= new UserSessionIssuers(this._options));
+  }
+
+  private _userSessions?: UserSessions;
+  get userSessions(): UserSessions {
+    return (this._userSessions ??= new UserSessions(this._options));
   }
 
   private _variations?: Variations;

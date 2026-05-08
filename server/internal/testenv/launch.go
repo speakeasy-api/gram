@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	risk_analysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
+	"github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis/presidiotest"
 	"github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
@@ -46,7 +47,7 @@ func Launch(ctx context.Context, opts LaunchOptions) (*Environment, func() error
 	var pgcontainer terminateable
 	var rediscontainer terminateable
 	var clickhousecontainer terminateable
-	var presidiocontainer terminateable
+	var presidioserver *presidiotest.MockServer
 	var temporalserver *testsuite.DevServer
 	var temporalserverErr error
 	var temporalserverOnce sync.Once
@@ -98,24 +99,23 @@ func Launch(ctx context.Context, opts LaunchOptions) (*Environment, func() error
 	}
 
 	if opts.Presidio {
-		launchEg.Go(func() error {
-			container, pcFactory, err := NewTestPresidio(ctx)
-			if err != nil {
-				return fmt.Errorf("start presidio container: %w", err)
-			}
-			presidiocontainer = container
-			res.NewPresidioClient = pcFactory
-			return nil
-		})
+		// In-process mock — no goroutine needed. The mock starts an
+		// httptest.Server synchronously and never fails.
+		server, pcFactory := NewTestPresidio()
+		presidioserver = server
+		res.NewPresidioClient = pcFactory
 	}
 
 	if err := launchEg.Wait(); err != nil {
-		for _, c := range []terminateable{pgcontainer, rediscontainer, clickhousecontainer, presidiocontainer} {
+		for _, c := range []terminateable{pgcontainer, rediscontainer, clickhousecontainer} {
 			if c != nil {
 				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 				_ = c.Terminate(ctx)
 				cancel()
 			}
+		}
+		if presidioserver != nil {
+			presidioserver.Close()
 		}
 		return nil, nil, fmt.Errorf("start containers: %w", err)
 	}
@@ -168,15 +168,8 @@ func Launch(ctx context.Context, opts LaunchOptions) (*Environment, func() error
 				return nil
 			})
 		}
-		if presidiocontainer != nil {
-			eg.Go(func() error {
-				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-				defer cancel()
-				if err := presidiocontainer.Terminate(ctx); err != nil {
-					log.Printf("terminate presidio container: %v", err)
-				}
-				return nil
-			})
+		if presidioserver != nil {
+			presidioserver.Close()
 		}
 		if temporalserver != nil {
 			eg.Go(func() error {

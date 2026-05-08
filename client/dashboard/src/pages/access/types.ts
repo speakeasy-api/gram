@@ -23,7 +23,7 @@ export function toRoleSlug(name: string): string {
 }
 
 /** What kind of resource a scope protects. */
-export type ResourceType = "org" | "project" | "mcp";
+export type ResourceType = "org" | "project" | "mcp" | "environment";
 
 /** The 4 MCP tool annotation hint keys. */
 export type AnnotationHint =

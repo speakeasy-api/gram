@@ -83,6 +83,37 @@ func TestCreateRiskPolicy_DestructiveToolRejectsBlock(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestCreateRiskPolicy_CLIDestructiveSource(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	ctx = withExactAccessGrants(t, ctx, ti.conn, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)})
+
+	result, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
+		Sources: []string{"cli_destructive"},
+		Action:  "flag",
+	})
+	require.NoError(t, err)
+	require.Equal(t, []string{"cli_destructive"}, result.Sources)
+	require.Equal(t, "Destructive CLI Command Scanner", result.Name)
+}
+
+func TestCreateRiskPolicy_CLIDestructiveRejectsBlock(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	ctx = withExactAccessGrants(t, ctx, ti.conn, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)})
+
+	_, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
+		Sources: []string{"cli_destructive"},
+		Action:  "block",
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "cli_destructive")
+}
+
 func TestCreateRiskPolicy_EmptyName(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestRiskService(t)

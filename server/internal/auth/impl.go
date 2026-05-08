@@ -26,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	envRepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
@@ -33,7 +34,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 )
+
+const dispositionAssistants = "assistants"
 
 type authErr string
 
@@ -51,16 +55,23 @@ type AuthConfigurations struct {
 
 // Service for gram dashboard authentication endpoints
 
+type AssistantsSubscriptionCancelScheduler interface {
+	ScheduleCancelAssistantsSubscription(ctx context.Context, subscriptionID string) error
+}
+
 type Service struct {
-	tracer       trace.Tracer
-	logger       *slog.Logger
-	db           *pgxpool.Pool
-	sessions     *sessions.Manager
-	cfg          AuthConfigurations
-	authz        *authz.Engine
-	projectsRepo *projectsRepo.Queries
-	envRepo      *envRepo.Queries
-	orgRepo      *orgRepo.Queries
+	tracer              trace.Tracer
+	logger              *slog.Logger
+	db                  *pgxpool.Pool
+	sessions            *sessions.Manager
+	cfg                 AuthConfigurations
+	authz               *authz.Engine
+	billing             billing.Repository
+	cancelSubsScheduler AssistantsSubscriptionCancelScheduler
+	posthog             *posthog.Posthog
+	projectsRepo        *projectsRepo.Queries
+	envRepo             *envRepo.Queries
+	orgRepo             *orgRepo.Queries
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -72,19 +83,25 @@ func NewService(
 	sessions *sessions.Manager,
 	cfg AuthConfigurations,
 	authzEngine *authz.Engine,
+	billingRepo billing.Repository,
+	cancelSubsScheduler AssistantsSubscriptionCancelScheduler,
+	posthogClient *posthog.Posthog,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("auth"))
 
 	return &Service{
-		tracer:       tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/auth"),
-		logger:       logger,
-		db:           db,
-		sessions:     sessions,
-		cfg:          cfg,
-		authz:        authzEngine,
-		projectsRepo: projectsRepo.New(db),
-		envRepo:      envRepo.New(db),
-		orgRepo:      orgRepo.New(db),
+		tracer:              tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/auth"),
+		logger:              logger,
+		db:                  db,
+		sessions:            sessions,
+		cfg:                 cfg,
+		authz:               authzEngine,
+		billing:             billingRepo,
+		cancelSubsScheduler: cancelSubsScheduler,
+		posthog:             posthogClient,
+		projectsRepo:        projectsRepo.New(db),
+		envRepo:             envRepo.New(db),
+		orgRepo:             orgRepo.New(db),
 	}
 }
 
@@ -157,6 +174,18 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 	}
 
 	if len(userInfo.Organizations) == 0 {
+		if dispositionFromState(payload) == dispositionAssistants {
+			location, err := s.autoProvisionForAssistants(ctx, userInfo, &session)
+			if err != nil {
+				return redirectWithError(authErrInit, err)
+			}
+			return &gen.CallbackResult{
+				Location:      location,
+				SessionToken:  session.SessionID,
+				SessionCookie: session.SessionID,
+			}, nil
+		}
+
 		if err := s.sessions.StoreSession(ctx, session); err != nil {
 			return redirectWithError(authErrInit, err)
 		}
@@ -491,6 +520,77 @@ func (s *Service) Register(ctx context.Context, payload *gen.RegisterPayload) (e
 	}
 
 	return nil
+}
+
+func (s *Service) autoProvisionForAssistants(ctx context.Context, userInfo *sessions.CachedUserInfo, session *sessions.Session) (string, error) {
+	orgName := generateLegibleOrgName()
+	org, err := s.orgRepo.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
+		ID:          "org_" + uuid.New().String(),
+		Name:        orgName,
+		Slug:        slugify(orgName),
+		WorkosID:    pgtype.Text{Valid: false},
+		Whitelisted: pgtype.Bool{Bool: true, Valid: true},
+	})
+	if err != nil {
+		return "", fmt.Errorf("create organization: %w", err)
+	}
+
+	if _, err := s.orgRepo.UpsertOrganizationUserRelationship(ctx, orgRepo.UpsertOrganizationUserRelationshipParams{
+		OrganizationID: org.ID,
+		UserID:         userInfo.UserID,
+	}); err != nil {
+		return "", fmt.Errorf("create org-user relationship: %w", err)
+	}
+
+	if invalidationErr := s.sessions.InvalidateUserInfoCache(ctx, userInfo.UserID); invalidationErr != nil {
+		return "", fmt.Errorf("invalidate user info cache: %w", invalidationErr)
+	}
+
+	projects, err := s.getProjectsOrSetupDefaults(ctx, org.ID)
+	if err != nil {
+		return "", fmt.Errorf("setup default project: %w", err)
+	}
+	if len(projects) == 0 {
+		return "", errors.New("default project missing after setup")
+	}
+
+	subID, benefitErr := s.billing.AttachAssistantsBenefit(ctx, org.ID, userInfo.Email)
+	if benefitErr != nil {
+		s.logger.ErrorContext(ctx, "failed to attach assistants benefit", attr.SlogError(benefitErr), attr.SlogOrganizationID(org.ID))
+	} else if subID != "" {
+		if err := s.cancelSubsScheduler.ScheduleCancelAssistantsSubscription(ctx, subID); err != nil {
+			s.logger.ErrorContext(ctx, "failed to schedule assistants subscription cancel-at-period-end", attr.SlogError(err), attr.SlogOrganizationID(org.ID))
+		}
+	}
+
+	session.ActiveOrganizationID = org.ID
+	if err := s.sessions.StoreSession(ctx, *session); err != nil {
+		return "", fmt.Errorf("store session: %w", err)
+	}
+
+	if err := s.posthog.CaptureEvent(ctx, "gram_assistants_signup", userInfo.Email, map[string]any{
+		"email":                       userInfo.Email,
+		"organization_id":             org.ID,
+		"organization_slug":           org.Slug,
+		"disposition":                 dispositionAssistants,
+		"has_assistants_subscription": subID != "",
+	}); err != nil {
+		s.logger.ErrorContext(ctx, "failed to capture gram_assistants_signup event", attr.SlogError(err), attr.SlogOrganizationID(org.ID))
+	}
+
+	return fmt.Sprintf("/%s/projects/%s/assistants/new?disposition=%s", org.Slug, projects[0].Slug, dispositionAssistants), nil
+}
+
+func dispositionFromState(payload *gen.CallbackPayload) string {
+	state := decodeStateParam(payload)
+	if state == nil {
+		return ""
+	}
+	parsed, err := url.Parse(relativeURL(state.FinalDestinationURL))
+	if err != nil {
+		return ""
+	}
+	return parsed.Query().Get("disposition")
 }
 
 func (s *Service) getProjectsOrSetupDefaults(ctx context.Context, organizationID string) ([]projectsRepo.Project, error) {

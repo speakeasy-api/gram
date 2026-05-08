@@ -22,7 +22,7 @@ const STORAGE_KEY = "gram-rbac-dev-override";
 const HIDDEN_KEY = "gram-dev-toolbar-hidden";
 const SUPER_ADMIN_KEY = "gram-dev-super-admin";
 
-type ResourceType = "org" | "project" | "mcp";
+type ResourceType = "org" | "project" | "environment" | "mcp";
 
 const SCOPE_DEFS: {
   scope: string;
@@ -53,6 +53,18 @@ const SCOPE_DEFS: {
     label: "project:write",
     resourceType: "project",
     description: "Modify projects & build resources",
+  },
+  {
+    scope: "environment:read",
+    label: "environment:read",
+    resourceType: "environment",
+    description: "View environments & their entries",
+  },
+  {
+    scope: "environment:write",
+    label: "environment:write",
+    resourceType: "environment",
+    description: "Create, edit, clone & delete environments",
   },
   {
     scope: "mcp:read",
@@ -164,6 +176,7 @@ function loadPosition(): { x: number; y: number } | null {
 const GROUP_ORDER: { key: ResourceType; label: string }[] = [
   { key: "org", label: "Organization" },
   { key: "project", label: "Project" },
+  { key: "environment", label: "Environments" },
   { key: "mcp", label: "MCP" },
 ];
 

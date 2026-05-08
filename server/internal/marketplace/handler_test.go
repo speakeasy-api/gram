@@ -15,9 +15,10 @@ import (
 // rewriteManifest is the only place we encode the Claude Code marketplace
 // schema, so its output shape is the load-bearing contract. The schema
 // (https://www.schemastore.org/claude-code-marketplace.json) defines exactly
-// four plugin source types: npm, url, github, and git-subdir. There is no
-// plain "git" type — installs fail with "source type your version does not
-// support" if you use one. These tests pin the discriminator and field names.
+// four plugin source types: npm, url, github, and git-subdir.
+//
+// We use git-subdir with an explicit sha so Claude Code has a stable cache
+// key and survives restarts without "not cached at (not recorded)".
 func TestRewriteManifest(t *testing.T) {
 	t.Parallel()
 
@@ -26,7 +27,9 @@ func TestRewriteManifest(t *testing.T) {
 		logger:        testenv.NewLogger(t),
 	}
 
-	t.Run("relative path source becomes git-subdir", func(t *testing.T) {
+	const testSHA = "abc123def456abc123def456abc123def456abc123"
+
+	t.Run("relative path source becomes git-subdir with ref and sha", func(t *testing.T) {
 		t.Parallel()
 		in := []byte(`{
 			"name": "m",
@@ -36,7 +39,7 @@ func TestRewriteManifest(t *testing.T) {
 			]
 		}`)
 
-		out, err := s.rewriteManifest(in, "TOK")
+		out, err := s.rewriteManifest(in, "TOK", testSHA)
 		require.NoError(t, err)
 
 		var got struct {
@@ -46,15 +49,18 @@ func TestRewriteManifest(t *testing.T) {
 		}
 		require.NoError(t, json.Unmarshal(out, &got))
 		require.Len(t, got.Plugins, 1)
-		require.Equal(t, "git-subdir", got.Plugins[0].Source["source"])
-		require.Equal(t, "https://gram.test/marketplace/p/TOK.git", got.Plugins[0].Source["url"])
-		require.Equal(t, "foo", got.Plugins[0].Source["path"])
+		src := got.Plugins[0].Source
+		require.Equal(t, "git-subdir", src["source"])
+		require.Equal(t, "https://gram.test/marketplace/p/TOK.git", src["url"])
+		require.Equal(t, "foo", src["path"])
+		require.Equal(t, "main", src["ref"])
+		require.Equal(t, testSHA, src["sha"])
 	})
 
-	t.Run("leading slash on path is trimmed", func(t *testing.T) {
+	t.Run("leading slash on path is trimmed in git-subdir path", func(t *testing.T) {
 		t.Parallel()
 		in := []byte(`{"plugins": [{"name": "x", "source": "/x"}]}`)
-		out, err := s.rewriteManifest(in, "TOK")
+		out, err := s.rewriteManifest(in, "TOK", testSHA)
 		require.NoError(t, err)
 
 		var got struct {
@@ -72,7 +78,7 @@ func TestRewriteManifest(t *testing.T) {
 		// (e.g. github source for a public dep), the proxy should leave them
 		// alone — only string sources need rewriting.
 		in := []byte(`{"plugins": [{"name": "y", "source": {"source": "github", "repo": "anthropics/example"}}]}`)
-		out, err := s.rewriteManifest(in, "TOK")
+		out, err := s.rewriteManifest(in, "TOK", testSHA)
 		require.NoError(t, err)
 
 		var got struct {
@@ -91,7 +97,7 @@ func TestRewriteManifest(t *testing.T) {
 			{"name": "a", "source": "./a"},
 			{"name": "b", "source": "./b"}
 		]}`)
-		out, err := s.rewriteManifest(in, "TOK")
+		out, err := s.rewriteManifest(in, "TOK", testSHA)
 		require.NoError(t, err)
 
 		var got struct {
@@ -104,17 +110,19 @@ func TestRewriteManifest(t *testing.T) {
 		require.Len(t, got.Plugins, 2)
 		require.Equal(t, "a", got.Plugins[0].Source["path"])
 		require.Equal(t, "b", got.Plugins[1].Source["path"])
+		require.Equal(t, testSHA, got.Plugins[0].Source["sha"])
+		require.Equal(t, testSHA, got.Plugins[1].Source["sha"])
 	})
 
 	t.Run("missing plugins array errors", func(t *testing.T) {
 		t.Parallel()
-		_, err := s.rewriteManifest([]byte(`{"name": "no-plugins"}`), "TOK")
+		_, err := s.rewriteManifest([]byte(`{"name": "no-plugins"}`), "TOK", testSHA)
 		require.Error(t, err)
 	})
 
 	t.Run("malformed JSON errors", func(t *testing.T) {
 		t.Parallel()
-		_, err := s.rewriteManifest([]byte(`{not json`), "TOK")
+		_, err := s.rewriteManifest([]byte(`{not json`), "TOK", testSHA)
 		require.Error(t, err)
 	})
 }

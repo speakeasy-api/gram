@@ -75,6 +75,7 @@ type Activities struct {
 	signalAssistantThread           *activities.SignalAssistantThread
 	processWorkOSOrganizationEvents *activities.ProcessWorkOSOrganizationEvents
 	processWorkOSMembershipEvents   *activities.ProcessWorkOSMembershipEvents
+	cancelAssistantsSubscription    *activities.CancelAssistantsSubscription
 }
 
 func NewActivities(
@@ -158,6 +159,7 @@ func NewActivities(
 		signalAssistantThread:           activities.NewSignalAssistantThread(&AssistantWorkflowSignaler{TemporalEnv: temporalEnv}),
 		processWorkOSOrganizationEvents: processWorkOSOrgEvents,
 		processWorkOSMembershipEvents:   processWorkOSMembershipEvents,
+		cancelAssistantsSubscription:    activities.NewCancelAssistantsSubscription(logger, billingRepo),
 	}
 }
 
@@ -338,4 +340,8 @@ func (a *Activities) SignalAssistantCoordinator(ctx context.Context, input activ
 
 func (a *Activities) SignalAssistantThread(ctx context.Context, input activities.SignalAssistantThreadInput) error {
 	return a.signalAssistantThread.Do(ctx, input)
+}
+
+func (a *Activities) CancelAssistantsSubscription(ctx context.Context, args activities.CancelAssistantsSubscriptionArgs) error {
+	return a.cancelAssistantsSubscription.Do(ctx, args)
 }
