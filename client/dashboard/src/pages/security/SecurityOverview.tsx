@@ -1,6 +1,5 @@
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
-import { Badge } from "@/components/ui/badge";
 import {
   Table,
   TableBody,
@@ -33,29 +32,32 @@ for (const [category, rules] of Object.entries(DETECTION_RULES)) {
   }
 }
 
+const SOURCE_TO_CATEGORY = new Map<string, RuleCategory>([
+  ["destructive_tool", "destructive_tool"],
+  ["shadow_mcp", "shadow_mcp"],
+  ["prompt_injection", "prompt_injection"],
+]);
+
 function getCategoryForFinding(
   source: string | undefined,
   ruleId: string | undefined,
 ): RuleCategory | null {
-  if (source === "destructive_tool") return "destructive_tool";
-  if (source === "shadow_mcp") return "shadow_mcp";
-  if (source === "prompt_injection") return "prompt_injection";
+  const sourceCategory = source ? SOURCE_TO_CATEGORY.get(source) : null;
+  if (sourceCategory) return sourceCategory;
   if (!ruleId) return null;
   return RULE_ID_TO_CATEGORY.get(ruleId) ?? null;
 }
 
-function CategoryBadge({
+function CategoryLabel({
   source,
   ruleId,
 }: {
-  source: string | undefined;
-  ruleId: string | undefined;
+  source?: string;
+  ruleId?: string;
 }) {
   const category = getCategoryForFinding(source, ruleId);
-  if (!category) return null;
-  return (
-    <Badge variant="secondary">{RULE_CATEGORY_META[category].label}</Badge>
-  );
+  const label = category ? RULE_CATEGORY_META[category].label : null;
+  return <span className="font-mono text-xs">{label}</span>;
 }
 
 export default function SecurityOverview() {
@@ -256,10 +258,10 @@ function SecurityOverviewContent() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Chat</TableHead>
-                    <TableHead>User</TableHead>
-                    <TableHead>Findings</TableHead>
-                    <TableHead>Latest Detected</TableHead>
+                    <TableHead className="w-6/12">Chat</TableHead>
+                    <TableHead className="w-3/12">User</TableHead>
+                    <TableHead className="w-1/12">Findings</TableHead>
+                    <TableHead className="w-2/12">Latest Detected</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -269,16 +271,16 @@ function SecurityOverviewContent() {
                       className="cursor-pointer"
                       onClick={() => setSelectedChatId(chat.chatId)}
                     >
-                      <TableCell className="text-muted-foreground max-w-[300px] truncate text-xs">
+                      <TableCell className="text-muted-foreground truncate">
                         {chat.chatTitle ?? "Untitled"}
                       </TableCell>
-                      <TableCell className="text-muted-foreground text-xs">
+                      <TableCell className="text-muted-foreground">
                         {chat.userId ?? "-"}
                       </TableCell>
-                      <TableCell className="font-mono text-xs">
+                      <TableCell className="text-foreground font-mono">
                         {chat.findingsCount}
                       </TableCell>
-                      <TableCell className="text-muted-foreground text-xs">
+                      <TableCell className="text-muted-foreground">
                         {chat.latestDetected
                           ? new Date(chat.latestDetected).toLocaleString()
                           : "-"}
@@ -310,13 +312,13 @@ function SecurityOverviewContent() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Category</TableHead>
-                    <TableHead>Rule</TableHead>
-                    <TableHead>Chat</TableHead>
-                    <TableHead>User</TableHead>
-                    <TableHead className="w-[200px]">Match</TableHead>
-                    <TableHead className="w-[240px]">Policy Note</TableHead>
-                    <TableHead>Detected</TableHead>
+                    <TableHead className="w-1/12">Category</TableHead>
+                    <TableHead className="w-1/12">Rule</TableHead>
+                    <TableHead className="w-1/12">Chat</TableHead>
+                    <TableHead className="w-1/12">User</TableHead>
+                    <TableHead className="w-1/12">Match</TableHead>
+                    <TableHead className="w-1/12">Policy Note</TableHead>
+                    <TableHead className="w-1/12">Detected</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -333,30 +335,32 @@ function SecurityOverviewContent() {
                         }}
                       >
                         <TableCell>
-                          <CategoryBadge
+                          <CategoryLabel
                             source={result.source}
                             ruleId={result.ruleId}
                           />
                         </TableCell>
-                        <TableCell className="font-mono text-xs">
-                          {result.ruleId ?? "-"}
+                        <TableCell>
+                          <span className="font-mono text-xs">
+                            {result.ruleId ? result.ruleId : "-"}
+                          </span>
                         </TableCell>
-                        <TableCell className="text-muted-foreground max-w-[200px] truncate text-xs">
+                        <TableCell className="text-muted-foreground truncate">
                           {result.chatTitle ?? "Untitled"}
                         </TableCell>
-                        <TableCell className="text-muted-foreground text-xs">
+                        <TableCell className="text-muted-foreground">
                           {result.userId ?? "-"}
                         </TableCell>
-                        <TableCell className="w-[200px] max-w-[200px] truncate">
+                        <TableCell className="truncate">
                           <MaskedMatch value={result.match} />
                         </TableCell>
                         <TableCell
-                          className="text-muted-foreground w-[240px] max-w-[240px] truncate text-xs italic"
+                          className="text-muted-foreground truncate italic"
                           title={policyNote ?? undefined}
                         >
                           {policyNote ?? "-"}
                         </TableCell>
-                        <TableCell className="text-muted-foreground text-xs">
+                        <TableCell className="text-muted-foreground">
                           {result.createdAt
                             ? new Date(result.createdAt).toLocaleString()
                             : "-"}
