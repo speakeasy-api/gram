@@ -36,11 +36,56 @@ const resolutionStatusOptions = [
   },
 ];
 
+const sourceOptions = [
+  {
+    value: "all",
+    label: "All Sources",
+    description: "Show sessions from any client",
+  },
+  {
+    value: "claude-code",
+    label: "Claude Code",
+    description: "Sessions originating from the Claude Code CLI",
+  },
+  {
+    value: "dashboard-ai-insights",
+    label: "AI Insights",
+    description: "Sessions from the dashboard AI Insights sidebar",
+  },
+  {
+    value: "playground",
+    label: "Playground",
+    description: "Sessions from the in-dashboard MCP Playground",
+  },
+  {
+    value: "elements",
+    label: "Elements",
+    description: "Sessions from the embeddable Elements chat",
+  },
+  {
+    value: "assistant",
+    label: "Assistant",
+    description: "Sessions from the embedded assistant onboarding",
+  },
+  {
+    value: "gram",
+    label: "Gram",
+    description: "Sessions from the Gram product itself",
+  },
+  {
+    value: "slack",
+    label: "Slack",
+    description: "Sessions originating from the Slack integration",
+  },
+];
+
 interface ChatLogsFiltersProps {
   searchQuery: string;
   onSearchQueryChange: (value: string) => void;
   resolutionStatus: string;
   onResolutionStatusChange: (value: string) => void;
+  source: string;
+  onSourceChange: (value: string) => void;
   disabled?: boolean;
 }
 
@@ -49,6 +94,8 @@ export function ChatLogsFilters({
   onSearchQueryChange,
   resolutionStatus,
   onResolutionStatusChange,
+  source,
+  onSourceChange,
   disabled,
 }: ChatLogsFiltersProps) {
   const [localSearch, setLocalSearch] = useState(searchQuery);
@@ -75,6 +122,25 @@ export function ChatLogsFilters({
     onResolutionStatusChange(value === "all" ? "" : value);
   };
 
+  const handleSourceChange = (value: string) => {
+    onSourceChange(value === "all" ? "" : value);
+  };
+
+  // If the current `source` value isn't one of the predefined options
+  // (e.g. a custom X-Gram-Source value set by an external client), inject it
+  // as an extra option so it round-trips through the dropdown.
+  const sourceItems =
+    source && !sourceOptions.some((o) => o.value === source)
+      ? [
+          ...sourceOptions,
+          {
+            value: source,
+            label: source,
+            description: "Custom source detected from chat traffic",
+          },
+        ]
+      : sourceOptions;
+
   return (
     <div className="flex flex-1 items-center gap-3">
       <SearchBar
@@ -98,6 +164,30 @@ export function ChatLogsFilters({
         </SelectTrigger>
         <SelectContent className="w-[280px]">
           {resolutionStatusOptions.map((option) => (
+            <SelectItem
+              key={option.value}
+              value={option.value}
+              description={option.description}
+            >
+              {option.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+
+      <Select
+        value={source || "all"}
+        onValueChange={handleSourceChange}
+        disabled={disabled}
+      >
+        <SelectTrigger
+          className="border-border !h-10 w-[170px]"
+          disabled={disabled}
+        >
+          <SelectValue placeholder="All Sources" />
+        </SelectTrigger>
+        <SelectContent className="w-[280px]">
+          {sourceItems.map((option) => (
             <SelectItem
               key={option.value}
               value={option.value}

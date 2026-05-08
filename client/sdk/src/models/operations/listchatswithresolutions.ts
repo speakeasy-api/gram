@@ -59,6 +59,10 @@ export type ListChatsWithResolutionsRequest = {
    */
   resolutionStatus?: string | undefined;
   /**
+   * Filter by chat source (e.g. claude-code, dashboard-ai-insights, playground, elements)
+   */
+  source?: string | undefined;
+  /**
    * Filter chats created after this timestamp (ISO 8601)
    */
   from?: Date | undefined;
@@ -216,6 +220,7 @@ export type ListChatsWithResolutionsRequest$Outbound = {
   search?: string | undefined;
   external_user_id?: string | undefined;
   resolution_status?: string | undefined;
+  source?: string | undefined;
   from?: string | undefined;
   to?: string | undefined;
   limit: number;
@@ -236,6 +241,7 @@ export const ListChatsWithResolutionsRequest$outboundSchema: z.ZodMiniType<
     search: z.optional(z.string()),
     externalUserId: z.optional(z.string()),
     resolutionStatus: z.optional(z.string()),
+    source: z.optional(z.string()),
     from: z.optional(z.pipe(z.date(), z.transform(v => v.toISOString()))),
     to: z.optional(z.pipe(z.date(), z.transform(v => v.toISOString()))),
     limit: z._default(z.int(), 50),

@@ -2623,11 +2623,12 @@ func NewCreditUsagePayload(sessionToken *string) *chat.CreditUsagePayload {
 
 // NewListChatsWithResolutionsPayload builds a chat service
 // listChatsWithResolutions endpoint payload.
-func NewListChatsWithResolutionsPayload(search *string, externalUserID *string, resolutionStatus *string, from *string, to *string, limit int, offset int, sortBy string, sortOrder string, sessionToken *string, projectSlugInput *string, chatSessionsToken *string) *chat.ListChatsWithResolutionsPayload {
+func NewListChatsWithResolutionsPayload(search *string, externalUserID *string, resolutionStatus *string, source *string, from *string, to *string, limit int, offset int, sortBy string, sortOrder string, sessionToken *string, projectSlugInput *string, chatSessionsToken *string) *chat.ListChatsWithResolutionsPayload {
 	v := &chat.ListChatsWithResolutionsPayload{}
 	v.Search = search
 	v.ExternalUserID = externalUserID
 	v.ResolutionStatus = resolutionStatus
+	v.Source = source
 	v.From = from
 	v.To = to
 	v.Limit = limit

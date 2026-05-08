@@ -153,6 +153,7 @@ export function LogsAgentsContent() {
   const urlSearch = searchParams.get("search");
   const urlChatId = searchParams.get("chatId");
   const urlStatus = searchParams.get("status");
+  const urlSource = searchParams.get("source");
   const urlSort = searchParams.get("sort") as SortField | null;
   const urlOrder = searchParams.get("order") as SortOrder | null;
 
@@ -176,6 +177,7 @@ export function LogsAgentsContent() {
 
   const searchQuery = urlSearch ?? "";
   const resolutionStatus = urlStatus ?? "";
+  const sourceFilter = urlSource ?? "";
 
   const timeRange = useMemo(() => {
     if (customRange) {
@@ -238,6 +240,13 @@ export function LogsAgentsContent() {
     [updateSearchParams],
   );
 
+  const setSourceFilter = useCallback(
+    (value: string) => {
+      updateSearchParams({ source: value || null });
+    },
+    [updateSearchParams],
+  );
+
   const setSortField = useCallback(
     (value: SortField) => {
       updateSearchParams({ sort: value === "chronological" ? null : value });
@@ -262,6 +271,7 @@ export function LogsAgentsContent() {
         {
           search: searchQuery || undefined,
           resolutionStatus: resolutionStatus || undefined,
+          source: sourceFilter || undefined,
           from: timeRange.from,
           to: timeRange.to,
           sortBy: toApiSortBy(sortField),
@@ -327,8 +337,14 @@ export function LogsAgentsContent() {
       });
     return `Viewing logs from ${formatDate(timeRange.from)} to ${formatDate(timeRange.to)}${
       resolutionStatus ? `. Filtered to ${resolutionStatus} status.` : ""
-    }${searchQuery ? ` Search query: "${searchQuery}"` : ""}`;
-  }, [timeRange.from, timeRange.to, resolutionStatus, searchQuery]);
+    }${sourceFilter ? `. Source: ${sourceFilter}.` : ""}${searchQuery ? ` Search query: "${searchQuery}"` : ""}`;
+  }, [
+    timeRange.from,
+    timeRange.to,
+    resolutionStatus,
+    sourceFilter,
+    searchQuery,
+  ]);
 
   return (
     <>
@@ -369,6 +385,8 @@ export function LogsAgentsContent() {
         setSearchQuery={setSearchQuery}
         resolutionStatus={resolutionStatus}
         setResolutionStatus={setResolutionStatus}
+        sourceFilter={sourceFilter}
+        setSourceFilter={setSourceFilter}
         sortField={sortField}
         setSortField={setSortField}
         sortOrder={sortOrder}
@@ -401,6 +419,8 @@ function AgentSessionsPageContent({
   setSearchQuery,
   resolutionStatus,
   setResolutionStatus,
+  sourceFilter,
+  setSourceFilter,
   sortField,
   setSortField,
   sortOrder,
@@ -428,6 +448,8 @@ function AgentSessionsPageContent({
   setSearchQuery: (value: string) => void;
   resolutionStatus: string;
   setResolutionStatus: (value: string) => void;
+  sourceFilter: string;
+  setSourceFilter: (value: string) => void;
   sortField: SortField;
   setSortField: (value: SortField) => void;
   sortOrder: SortOrder;
@@ -484,6 +506,8 @@ function AgentSessionsPageContent({
               onSearchQueryChange={setSearchQuery}
               resolutionStatus={resolutionStatus}
               onResolutionStatusChange={setResolutionStatus}
+              source={sourceFilter}
+              onSourceChange={setSourceFilter}
             />
             <div className="ml-auto flex shrink-0 items-center gap-3">
               <div className="border-border flex h-10 items-center rounded-md border">

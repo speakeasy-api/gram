@@ -4803,6 +4803,13 @@ paths:
             description: Filter by resolution status
             type: string
         - allowEmptyValue: true
+          description: Filter by chat source (e.g. claude-code, dashboard-ai-insights, playground, elements)
+          in: query
+          name: source
+          schema:
+            description: Filter by chat source (e.g. claude-code, dashboard-ai-insights, playground, elements)
+            type: string
+        - allowEmptyValue: true
           description: Filter chats created after this timestamp (ISO 8601)
           in: query
           name: from

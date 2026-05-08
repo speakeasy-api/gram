@@ -75,6 +75,10 @@ WHERE c.project_id = $1
       )
     )
   )
+  AND (
+    $7 = ''
+    OR (SELECT source FROM chat_messages WHERE chat_id = c.id AND source IS NOT NULL ORDER BY created_at DESC LIMIT 1) = $7
+  )
 `
 
 type CountChatsWithResolutionsParams struct {
@@ -84,6 +88,7 @@ type CountChatsWithResolutionsParams struct {
 	ToTime           pgtype.Timestamptz
 	Search           interface{}
 	ResolutionStatus interface{}
+	Source           interface{}
 }
 
 func (q *Queries) CountChatsWithResolutions(ctx context.Context, arg CountChatsWithResolutionsParams) (int64, error) {
@@ -94,6 +99,7 @@ func (q *Queries) CountChatsWithResolutions(ctx context.Context, arg CountChatsW
 		arg.ToTime,
 		arg.Search,
 		arg.ResolutionStatus,
+		arg.Source,
 	)
 	var total int64
 	err := row.Scan(&total)
@@ -1181,6 +1187,10 @@ WITH limited_chats AS (
         )
       )
     )
+    AND (
+      $9 = ''
+      OR (SELECT source FROM chat_messages WHERE chat_id = c.id AND source IS NOT NULL ORDER BY created_at DESC LIMIT 1) = $9
+    )
   ORDER BY
     CASE WHEN $1 = 'created_at' AND $2 = 'desc' THEN c.created_at END DESC NULLS LAST,
     CASE WHEN $1 = 'created_at' AND $2 = 'asc' THEN c.created_at END ASC NULLS LAST,
@@ -1189,8 +1199,8 @@ WITH limited_chats AS (
     CASE WHEN $1 = 'score' AND $2 = 'desc' THEN COALESCE((SELECT AVG(score) FROM chat_resolutions WHERE chat_id = c.id), 0) END DESC NULLS LAST,
     CASE WHEN $1 = 'score' AND $2 = 'asc' THEN COALESCE((SELECT AVG(score) FROM chat_resolutions WHERE chat_id = c.id), 0) END ASC NULLS LAST,
     c.created_at DESC
-  LIMIT $10
-  OFFSET $9
+  LIMIT $11
+  OFFSET $10
 )
 SELECT
     lc.id as chat_id,
@@ -1239,6 +1249,7 @@ type ListChatsWithResolutionsParams struct {
 	ToTime           pgtype.Timestamptz
 	Search           interface{}
 	ResolutionStatus interface{}
+	Source           interface{}
 	PageOffset       int32
 	PageLimit        int32
 }
@@ -1273,6 +1284,7 @@ func (q *Queries) ListChatsWithResolutions(ctx context.Context, arg ListChatsWit
 		arg.ToTime,
 		arg.Search,
 		arg.ResolutionStatus,
+		arg.Source,
 		arg.PageOffset,
 		arg.PageLimit,
 	)

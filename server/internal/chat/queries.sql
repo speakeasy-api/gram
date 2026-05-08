@@ -277,6 +277,10 @@ WHERE c.project_id = @project_id
         SELECT 1 FROM chat_resolutions WHERE chat_id = c.id AND resolution = @resolution_status
       )
     )
+  )
+  AND (
+    @source = ''
+    OR (SELECT source FROM chat_messages WHERE chat_id = c.id AND source IS NOT NULL ORDER BY created_at DESC LIMIT 1) = @source
   );
 
 -- name: ListChatsWithResolutions :many
@@ -319,6 +323,10 @@ WITH limited_chats AS (
           SELECT 1 FROM chat_resolutions WHERE chat_id = c.id AND resolution = @resolution_status
         )
       )
+    )
+    AND (
+      @source = ''
+      OR (SELECT source FROM chat_messages WHERE chat_id = c.id AND source IS NOT NULL ORDER BY created_at DESC LIMIT 1) = @source
     )
   ORDER BY
     CASE WHEN @sort_by = 'created_at' AND @sort_order = 'desc' THEN c.created_at END DESC NULLS LAST,

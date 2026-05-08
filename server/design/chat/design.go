@@ -131,6 +131,7 @@ var _ = Service("chat", func() {
 			Attribute("search", String, "Search query (searches chat ID, user ID, and title)")
 			Attribute("external_user_id", String, "Filter by external user ID")
 			Attribute("resolution_status", String, "Filter by resolution status")
+			Attribute("source", String, "Filter by chat source (e.g. claude-code, dashboard-ai-insights, playground, elements)")
 			Attribute("from", String, "Filter chats created after this timestamp (ISO 8601)", func() {
 				Format(FormatDateTime)
 			})
@@ -163,6 +164,7 @@ var _ = Service("chat", func() {
 			Param("search")
 			Param("external_user_id")
 			Param("resolution_status")
+			Param("source")
 			Param("from")
 			Param("to")
 			Param("limit")

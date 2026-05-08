@@ -262,6 +262,9 @@ type ListChatsWithResolutionsPayload struct {
 	ExternalUserID *string
 	// Filter by resolution status
 	ResolutionStatus *string
+	// Filter by chat source (e.g. claude-code, dashboard-ai-insights, playground,
+	// elements)
+	Source *string
 	// Filter chats created after this timestamp (ISO 8601)
 	From *string
 	// Filter chats created before this timestamp (ISO 8601)

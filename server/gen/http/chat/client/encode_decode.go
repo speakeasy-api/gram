@@ -1016,6 +1016,9 @@ func EncodeListChatsWithResolutionsRequest(encoder func(*http.Request) goahttp.E
 		if p.ResolutionStatus != nil {
 			values.Add("resolution_status", *p.ResolutionStatus)
 		}
+		if p.Source != nil {
+			values.Add("source", *p.Source)
+		}
 		if p.From != nil {
 			values.Add("from", *p.From)
 		}
