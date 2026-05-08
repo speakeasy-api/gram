@@ -418,7 +418,7 @@ function SecurityOverviewContent() {
         onOpenChange={(open) => !open && setSelectedChatId(null)}
         direction="right"
       >
-        <DrawerContent className="!w-[720px] sm:!max-w-[720px]">
+        <DrawerContent className="data-[vaul-drawer-direction=right]:w-[720px] data-[vaul-drawer-direction=right]:sm:max-w-[720px]">
           {selectedChatId && (
             <ChatDetailPanel
               chatId={selectedChatId}
