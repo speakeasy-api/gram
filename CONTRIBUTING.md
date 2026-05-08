@@ -14,29 +14,35 @@ mise seed
 
 This populates the database with projects, deployments, API keys, and other resources so you have something to work with in the dashboard. The seed script authenticates against the running server, so make sure the services are up before running it.
 
-### Local auth (dev-idp)
+### Local auth and identity (dev-idp)
 
-Gram uses a local development identity provider called **dev-idp** (`dev-idp/`) for authentication. It runs as a process in madprocs and exposes standard OIDC endpoints that the Gram server authenticates against — the same code paths used in production, just backed by a local SQLite database instead of an external identity service.
+In production, Gram relies on two external services for identity:
 
-dev-idp serves multiple protocol handlers on different URL prefixes:
+1. **An OIDC provider** — handles the login flow (redirect → authenticate → callback with authorization code → exchange for tokens).
+2. **WorkOS** — provides organization management, role-based membership, and team invitations. The Gram server calls the WorkOS REST API directly for things like listing roles on the Roles & Permissions page, managing org memberships, and syncing user data.
 
-| Prefix         | Purpose                                                                                                     |
-| -------------- | ----------------------------------------------------------------------------------------------------------- |
-| `/oauth2`      | Standard OIDC provider (authorize, token, userinfo, JWKS). This is what the Gram server talks to for login. |
-| `/mock-workos` | Emulates the WorkOS REST API (organizations, roles, memberships). Used by the Gram server's WorkOS client.  |
-| `/workos`      | Thin proxy to the real WorkOS API. Only mounted when `WORKOS_API_KEY` is set.                               |
+For local development, both of these are replaced by **dev-idp** — a lightweight Go server in the `dev-idp/` directory that runs as a process in madprocs. It uses SQLite for storage and requires no external accounts or API keys.
+
+dev-idp handles both concerns through different URL prefixes:
+
+- **`/oauth2`** — A standard OIDC provider (authorize, token, userinfo, JWKS). The Gram server's login flow talks to this. When you click "Login" in the dashboard, the browser redirects here, dev-idp issues tokens, and the server creates a session.
+- **`/mock-workos`** — A mock implementation of the WorkOS REST API. Any part of the Gram server that calls WorkOS directly (e.g. the Roles & Permissions page listing organization roles, sending team invitations, or checking membership status) hits this mock instead. It returns synthetic data from dev-idp's SQLite store.
+
+The Gram server doesn't know or care that these are mocked — it uses the same code paths as production. The only difference is that `GRAM_IDP_BASE_URL` and `WORKOS_API_URL` point to `localhost` instead of external services.
 
 #### Mode: mock-workos (default — zero config)
 
-Out of the box, `./zero` sets up everything you need. Clicking "Login" in the dashboard authenticates instantly with a hardcoded test user. The Gram server's WorkOS client calls hit the mock-workos emulator, which returns synthetic organizations, roles, and memberships from dev-idp's SQLite store.
+This is what you get out of the box after running `./zero`. No configuration needed.
 
-No env vars are required beyond the defaults in `mise.toml`.
-
-To customize the mock user identity, open the dev-idp dashboard at `http://localhost:35293` and edit users/organizations there. Changes take effect on next login.
+- **Login**: Clicking "Login" authenticates instantly with a test user. No credentials needed.
+- **WorkOS features**: Dashboard pages that call WorkOS (Roles & Permissions, Team management, Invitations) work against the mock, returning synthetic data.
+- **Customization**: Open the dev-idp dashboard at `http://localhost:35293` to create/edit users, organizations, roles, and memberships. Changes take effect on next login.
 
 #### Mode: real WorkOS (opt-in)
 
-For Speakeasy employees who need to test with real WorkOS AuthKit login and real organization data. The `./zero` script will prompt you to choose a mode during setup. You can also switch manually by adding the following to `mise.local.toml`:
+For Speakeasy employees who want to test against real WorkOS data (real organizations, real roles, real AuthKit login). The `./zero` script prompts you to choose during setup, or you can switch manually.
+
+Add the following to `mise.local.toml`:
 
 ```toml
 [env]
@@ -45,9 +51,12 @@ WORKOS_API_URL = "{{env.GRAM_DEVIDP_EXTERNAL_URL}}/workos"
 GRAM_IDP_CLIENT_ID = "client_..."
 ```
 
-When `WORKOS_API_KEY` is set, dev-idp mounts a `/workos/` proxy that forwards API requests to the real WorkOS API. The Gram server's WorkOS client is pointed at this proxy via `WORKOS_API_URL`. The OIDC login flow still goes through dev-idp's `/oauth2` endpoints.
+This does two things:
 
-After switching modes, restart madprocs for changes to take effect.
+1. **dev-idp mounts `/workos/`** — a thin proxy that forwards API requests to the real WorkOS API using your API key. The Gram server's WorkOS client calls go through this proxy.
+2. **The OIDC login still goes through dev-idp's `/oauth2`** — dev-idp handles the token exchange locally.
+
+After changing modes, restart madprocs for changes to take effect.
 
 ### CLI development
 
