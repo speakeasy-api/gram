@@ -398,6 +398,7 @@ func (s *Service) CloneEnvironment(ctx context.Context, payload *gen.CloneEnviro
 		if err := er.CloneEnvironmentEntriesWithValues(ctx, repo.CloneEnvironmentEntriesWithValuesParams{
 			NewEnvironmentID:    newEnv.ID,
 			SourceEnvironmentID: sourceEnv.ID,
+			ProjectID:           *authCtx.ProjectID,
 		}); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to clone environment entries").Log(ctx, logger)
 		}
@@ -410,6 +411,7 @@ func (s *Service) CloneEnvironment(ctx context.Context, payload *gen.CloneEnviro
 			NewEnvironmentID:    newEnv.ID,
 			SourceEnvironmentID: sourceEnv.ID,
 			PlaceholderValue:    placeholder,
+			ProjectID:           *authCtx.ProjectID,
 		}); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to clone environment entry names").Log(ctx, logger)
 		}

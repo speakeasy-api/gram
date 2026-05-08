@@ -90,18 +90,22 @@ RETURNING *;
 -- the application during the clone. Same plaintext + same nonce + same key produces the
 -- same ciphertext under AES-GCM, which is cryptographically permissible.
 INSERT INTO environment_entries (environment_id, name, value)
-SELECT @new_environment_id::uuid, name, value
-FROM environment_entries
-WHERE environment_id = @source_environment_id::uuid;
+SELECT @new_environment_id::uuid, ee.name, ee.value
+FROM environment_entries ee
+INNER JOIN environments e ON ee.environment_id = e.id
+WHERE ee.environment_id = @source_environment_id::uuid
+  AND e.project_id = @project_id::uuid;
 
 -- name: CloneEnvironmentEntryNames :exec
 -- Copy only the variable names from a source environment, using a caller-supplied
 -- placeholder ciphertext as the value for every new entry. Used when the user wants
 -- the structure of the source environment but not its secrets.
 INSERT INTO environment_entries (environment_id, name, value)
-SELECT @new_environment_id::uuid, name, @placeholder_value::text
-FROM environment_entries
-WHERE environment_id = @source_environment_id::uuid;
+SELECT @new_environment_id::uuid, ee.name, @placeholder_value::text
+FROM environment_entries ee
+INNER JOIN environments e ON ee.environment_id = e.id
+WHERE ee.environment_id = @source_environment_id::uuid
+  AND e.project_id = @project_id::uuid;
 
 -- name: UpsertEnvironmentEntry :one
 INSERT INTO environment_entries (environment_id, name, value, updated_at)
