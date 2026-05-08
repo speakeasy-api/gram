@@ -35,6 +35,7 @@ var _ = Service("mdm", func() {
 		Meta("openapi:operationId", "generateDeployScript")
 		Meta("openapi:extension:x-speakeasy-group", "mdm")
 		Meta("openapi:extension:x-speakeasy-name-override", "generateDeployScript")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GenerateDeployScript"}`)
 	})
 
 	Method("getInstallScript", func() {
