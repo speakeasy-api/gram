@@ -46,7 +46,7 @@ func (p *GramProvider) ExchangeToken(
 		p.logger.ErrorContext(ctx, "failed to exchange code for token from oauth gram provider",
 			attr.SlogOAuthProvider(provider.Slug),
 			attr.SlogError(err))
-		return nil, fmt.Errorf("failed to exchange code for token: %w", err)
+		return nil, fmt.Errorf("exchange code for token: %w", err)
 	}
 
 	idpUser, err := p.sessions.FetchUserInfoFromIDP(ctx, accessToken)
@@ -54,7 +54,7 @@ func (p *GramProvider) ExchangeToken(
 		p.logger.ErrorContext(ctx, "failed to get user info from oauth gram provider",
 			attr.SlogOAuthProvider(provider.Slug),
 			attr.SlogError(err))
-		return nil, fmt.Errorf("failed to retrieve user info: %w", err)
+		return nil, fmt.Errorf("retrieve user info: %w", err)
 	}
 
 	userID, err := p.sessions.UpsertUserFromIDP(ctx, idpUser)
@@ -62,7 +62,7 @@ func (p *GramProvider) ExchangeToken(
 		p.logger.ErrorContext(ctx, "failed to upsert user from oauth gram provider",
 			attr.SlogOAuthProvider(provider.Slug),
 			attr.SlogError(err))
-		return nil, fmt.Errorf("failed to upsert user: %w", err)
+		return nil, fmt.Errorf("upsert user: %w", err)
 	}
 
 	userInfo, err := p.sessions.BuildUserInfoFromDB(ctx, userID)
@@ -70,7 +70,7 @@ func (p *GramProvider) ExchangeToken(
 		p.logger.ErrorContext(ctx, "failed to build user info from oauth gram provider",
 			attr.SlogOAuthProvider(provider.Slug),
 			attr.SlogError(err))
-		return nil, fmt.Errorf("failed to build user info: %w", err)
+		return nil, fmt.Errorf("build user info: %w", err)
 	}
 
 	// Check if user has access to the organization

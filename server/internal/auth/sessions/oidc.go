@@ -37,6 +37,7 @@ func (s *Manager) ExchangeCodeForTokens(ctx context.Context, code, redirectURI s
 	data.Set("grant_type", "authorization_code")
 	data.Set("code", code)
 	data.Set("redirect_uri", redirectURI)
+	data.Set("client_id", s.idpClientID)
 
 	req, err := http.NewRequestWithContext(ctx, "POST", s.idpBaseURL+"/token", strings.NewReader(data.Encode()))
 	if err != nil {
@@ -268,7 +269,7 @@ func (s *Manager) BuildAuthorizationURL(ctx context.Context, params AuthURLParam
 	authURL, err := url.Parse(fmt.Sprintf("%s/authorize?%s", s.idpBaseURL, q.Encode()))
 	if err != nil {
 		s.logger.ErrorContext(ctx, "failed to parse OIDC authorization URL", attr.SlogError(err))
-		return nil, fmt.Errorf("failed to parse OIDC authorization URL: %w", err)
+		return nil, fmt.Errorf("parse OIDC authorization URL: %w", err)
 	}
 
 	return authURL, nil
