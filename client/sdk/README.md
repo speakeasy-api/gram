@@ -356,6 +356,7 @@ run();
 * [getServer](docs/sdks/remotemcp/README.md#getserver) - getServer remoteMcp
 * [listServers](docs/sdks/remotemcp/README.md#listservers) - listServers remoteMcp
 * [updateServer](docs/sdks/remotemcp/README.md#updateserver) - updateServer remoteMcp
+* [verifyURL](docs/sdks/remotemcp/README.md#verifyurl) - verifyURL remoteMcp
 
 ### [Resources](docs/sdks/resources/README.md)
 
@@ -644,6 +645,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`remoteMcpGetServer`](docs/sdks/remotemcp/README.md#getserver) - getServer remoteMcp
 - [`remoteMcpListServers`](docs/sdks/remotemcp/README.md#listservers) - listServers remoteMcp
 - [`remoteMcpUpdateServer`](docs/sdks/remotemcp/README.md#updateserver) - updateServer remoteMcp
+- [`remoteMcpVerifyURL`](docs/sdks/remotemcp/README.md#verifyurl) - verifyURL remoteMcp
 - [`resourcesList`](docs/sdks/resources/README.md#list) - listResources resources
 - [`riskPoliciesCreate`](docs/sdks/policies/README.md#create) - createRiskPolicy risk
 - [`riskPoliciesDelete`](docs/sdks/policies/README.md#delete) - deleteRiskPolicy risk
@@ -969,6 +971,7 @@ To learn about this feature and how to get started, check
 - [`useUserSessionIssuers`](docs/sdks/usersessionissuers/README.md#list) - listUserSessionIssuers userSessionIssuers
 - [`useUserSessions`](docs/sdks/usersessions/README.md#list) - listUserSessions userSessions
 - [`useValidateAPIKey`](docs/sdks/keys/README.md#validate) - verifyKey keys
+- [`useVerifyRemoteMcpURLMutation`](docs/sdks/remotemcp/README.md#verifyurl) - verifyURL remoteMcp
 
 </details>
 <!-- End React hooks with TanStack Query [react-query] -->

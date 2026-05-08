@@ -32,6 +32,7 @@ import { Suspense, useEffect, useMemo, useState } from "react";
 import { Navigate, useParams } from "react-router";
 import { SourceDeploymentsPanel } from "./SourceDeploymentsPanel";
 import ExternalMCPDetails from "./external-mcp/ExternalMCPDetails";
+import RemoteMCPDetails from "./remote-mcp/RemoteMCPDetails";
 import { SourceOverviewTab } from "./SourceOverviewTab";
 import { SourceToolsTab } from "./SourceToolsTab";
 import { SourceMCPServersTab } from "./SourceMCPServersTab";
@@ -216,6 +217,10 @@ export default function SourceDetails() {
 
   if (sourceKind === "externalmcp") {
     return <ExternalMCPDetails />;
+  }
+
+  if (sourceKind === "remotemcp") {
+    return <RemoteMCPDetails />;
   }
 
   if (!isLoadingDeployment && !source) {

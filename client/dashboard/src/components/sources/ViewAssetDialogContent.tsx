@@ -8,12 +8,16 @@ import { useQuery } from "@tanstack/react-query";
 import { NamedAsset } from "./SourceCard";
 import MonacoEditorLazy from "../monaco-editor.lazy";
 
+// Remote MCP servers don't have a viewable artifact (no spec, no manifest), so
+// this dialog narrows the union to deployment-backed assets.
+type ViewableAsset = Exclude<NamedAsset, { type: "remotemcp" }>;
+
 interface ViewAssetDialogContentProps {
-  asset: NamedAsset;
+  asset: ViewableAsset;
 }
 
 function useFetchAssetContent(
-  asset: NamedAsset,
+  asset: ViewableAsset,
   project: { id: string },
   projectSlug: string | undefined,
 ) {

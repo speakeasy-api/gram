@@ -4,8 +4,7 @@
 
 import * as z from "zod/v4-mini";
 import { GramCore } from "../core.js";
-import { encodeSimple } from "../lib/encodings.js";
-import { matchStatusCode } from "../lib/http.js";
+import { encodeFormQuery, encodeSimple } from "../lib/encodings.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
 import { safeParse } from "../lib/schemas.js";
@@ -32,7 +31,7 @@ import { Result } from "../types/fp.js";
  * listMcpServers mcpServers
  *
  * @remarks
- * List all MCP servers for a project
+ * List MCP servers for a project. Accepts optional remote_mcp_server_id or toolset_id filters to scope the result to a single backend; at most one filter may be supplied since the two backends are mutually exclusive.
  */
 export function mcpServersList(
   client: GramCore,
@@ -100,6 +99,11 @@ async function $do(
 
   const path = pathToFunc("/rpc/mcpServers.list")();
 
+  const query = encodeFormQuery({
+    "remote_mcp_server_id": payload?.remote_mcp_server_id,
+    "toolset_id": payload?.toolset_id,
+  });
+
   const headers = new Headers(compactMap({
     Accept: "application/json",
     "Gram-Key": encodeSimple("Gram-Key", payload?.["Gram-Key"], {
@@ -164,6 +168,7 @@ async function $do(
     baseURL: options?.serverURL,
     path: path,
     headers: headers,
+    query: query,
     body: body,
     userAgent: client._options.userAgent,
     timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1,
@@ -175,8 +180,19 @@ async function $do(
 
   const doResult = await client._do(req, {
     context,
-    isErrorStatusCode: (statusCode: number) =>
-      matchStatusCode({ status: statusCode } as Response, ["4XX", "5XX"]),
+    errorCodes: [
+      "400",
+      "401",
+      "403",
+      "404",
+      "409",
+      "415",
+      "422",
+      "4XX",
+      "500",
+      "502",
+      "5XX",
+    ],
     retryConfig: context.retryConfig,
     retryCodes: context.retryCodes,
   });

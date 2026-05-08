@@ -251,6 +251,35 @@ func ToSlug(s string) string {
 	return s
 }
 
+// URLToSlug converts an input string to a URL-friendly "slug" by lowercasing
+// it, mapping every non-alphanumeric character (including `.`, `/`, `:`,
+// whitespace, and similar) to a single hyphen, collapsing runs of hyphens,
+// and trimming trailing hyphens.
+//
+// Differs from [ToSlug] in that delimiters like dots and slashes are
+// preserved as hyphen boundaries instead of being stripped, which makes it
+// suitable for slugifying URL-shaped strings where those characters carry
+// structural meaning (e.g. `api.example.com/mcp` → `api-example-com-mcp`).
+// Callers are expected to strip the URL scheme themselves before passing
+// the value in.
+func URLToSlug(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	prevDash := true // treat start as "after dash" so leading separators are dropped
+	for _, r := range strings.ToLower(s) {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+			b.WriteRune(r)
+			prevDash = false
+			continue
+		}
+		if !prevDash {
+			b.WriteByte('-')
+			prevDash = true
+		}
+	}
+	return strings.TrimRight(b.String(), "-")
+}
+
 // GenerateRandomSlug generates a random slug of the given size using lowercase
 // letters and digits. It returns an error if it fails to generate random bytes.
 func GenerateRandomSlug(size int) (string, error) {

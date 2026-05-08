@@ -31,7 +31,8 @@ func TestGetServer(t *testing.T) {
 	require.NoError(t, err)
 
 	result, err := ti.service.GetServer(ctx, &gen.GetServerPayload{
-		ID:               created.ID,
+		ID:               &created.ID,
+		Slug:             nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
 	})
@@ -52,11 +53,81 @@ func TestGetServer_NotFound(t *testing.T) {
 
 	ctx, ti := newTestService(t)
 
+	missing := uuid.NewString()
 	_, err := ti.service.GetServer(ctx, &gen.GetServerPayload{
-		ID:               uuid.NewString(),
+		ID:               &missing,
+		Slug:             nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
 	})
 	require.Error(t, err)
 	requireOopsCode(t, err, oops.CodeNotFound)
+}
+
+func TestGetServer_BySlug(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	created, err := ti.service.CreateServer(ctx, &gen.CreateServerPayload{
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		URL:              "https://api.example.com/mcp",
+		TransportType:    "streamable-http",
+		Headers:          []*gen.HeaderInput{},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, created.Slug)
+
+	result, err := ti.service.GetServer(ctx, &gen.GetServerPayload{
+		ID:               nil,
+		Slug:             created.Slug,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+	require.Equal(t, created.ID, result.ID)
+}
+
+func TestGetServer_BySlug_NotFound(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	_, err := ti.service.GetServer(ctx, &gen.GetServerPayload{
+		ID:               nil,
+		Slug:             new("nonexistent-slug-aaaa"),
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+	})
+	requireOopsCode(t, err, oops.CodeNotFound)
+}
+
+func TestGetServer_NeitherIDNorSlug(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	_, err := ti.service.GetServer(ctx, &gen.GetServerPayload{
+		ID:               nil,
+		Slug:             nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+	})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+}
+
+func TestGetServer_BothIDAndSlug(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	id := uuid.NewString()
+	_, err := ti.service.GetServer(ctx, &gen.GetServerPayload{
+		ID:               &id,
+		Slug:             new("some-slug-aaaa"),
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+	})
+	requireOopsCode(t, err, oops.CodeBadRequest)
 }

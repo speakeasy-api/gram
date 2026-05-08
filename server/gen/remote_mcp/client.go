@@ -20,16 +20,18 @@ type Client struct {
 	ListServersEndpoint  goa.Endpoint
 	GetServerEndpoint    goa.Endpoint
 	UpdateServerEndpoint goa.Endpoint
+	VerifyURLEndpoint    goa.Endpoint
 	DeleteServerEndpoint goa.Endpoint
 }
 
 // NewClient initializes a "remoteMcp" service client given the endpoints.
-func NewClient(createServer, listServers, getServer, updateServer, deleteServer goa.Endpoint) *Client {
+func NewClient(createServer, listServers, getServer, updateServer, verifyURL, deleteServer goa.Endpoint) *Client {
 	return &Client{
 		CreateServerEndpoint: createServer,
 		ListServersEndpoint:  listServers,
 		GetServerEndpoint:    getServer,
 		UpdateServerEndpoint: updateServer,
+		VerifyURLEndpoint:    verifyURL,
 		DeleteServerEndpoint: deleteServer,
 	}
 }
@@ -120,6 +122,28 @@ func (c *Client) UpdateServer(ctx context.Context, p *UpdateServerPayload) (res 
 		return
 	}
 	return ires.(*types.RemoteMcpServer), nil
+}
+
+// VerifyURL calls the "verifyURL" endpoint of the "remoteMcp" service.
+// VerifyURL may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) VerifyURL(ctx context.Context, p *VerifyURLPayload) (res *VerifyURLResult, err error) {
+	var ires any
+	ires, err = c.VerifyURLEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*VerifyURLResult), nil
 }
 
 // DeleteServer calls the "deleteServer" endpoint of the "remoteMcp" service.

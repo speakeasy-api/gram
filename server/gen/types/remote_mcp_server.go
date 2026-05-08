@@ -14,6 +14,10 @@ type RemoteMcpServer struct {
 	ID string
 	// The project ID this remote MCP server belongs to
 	ProjectID string
+	// Optional human-readable name for the remote MCP server
+	Name *string
+	// URL-friendly slug derived from the URL and ID.
+	Slug *string
 	// The URL of the remote MCP server
 	URL string
 	// The transport type for the remote MCP server

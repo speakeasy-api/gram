@@ -4,6 +4,12 @@
 # starting with a marker comment so the workflow can find and update the
 # sticky comment idempotently.
 #
+# Comment is intentionally compact: status line, changes vs main (when any),
+# and a one-line overall summary. Any non-zero delta surfaces in the changes
+# block — direction (improvement vs regression) is left for the reader. Full
+# per-source / per-rule breakdown is in the workflow run's
+# `risk-accuracy-metrics` artifact.
+#
 # usage: risk-metrics-comment.sh <pr.json> [main.json]
 #   pr.json   — required; the current PR run's metrics envelope.
 #   main.json — optional; main's last successful run, for delta cells.
@@ -55,102 +61,115 @@ if [ "$HAS_MAIN" -eq 1 ]; then
 else
   echo "Corpus: $PR_TOTAL cases ($PR_MALICIOUS malicious / $PR_BENIGN benign)"
   echo "This PR: \`$PR_SHA_SHORT\` · $PR_TS"
-  echo
-  echo "_No baseline yet — main has no recorded run for this artifact. Tracking starts on the next merge._"
 fi
 echo
 
-echo '#### Overall'
-echo
-echo '| metric | value | Δ vs main |'
-echo '| --- | --- | --- |'
-
-emit_overall() {
-  local metric="$1"
-  local field="$2"
-  local pr_val
-  pr_val=$(jq -r ".summary.overall.${field} | . * 10000 | round / 10000" "$PR_FILE")
-  if [ "$HAS_MAIN" -eq 1 ]; then
-    local main_val delta_str
-    main_val=$(jq -r ".summary.overall.${field} | . * 10000 | round / 10000" "$MAIN_FILE")
-    delta_str=$(awk -v a="$pr_val" -v b="$main_val" 'BEGIN {
-      d = a - b
-      if (d > 0)       printf "+%.4f", d
-      else if (d < 0)  printf "%.4f", d
-      else             printf "0"
-    }')
-    echo "| $metric | $pr_val | $delta_str |"
-  else
-    echo "| $metric | $pr_val | — |"
-  fi
-}
-
-emit_overall precision precision
-emit_overall recall recall
-emit_overall f1 f1
-emit_overall accuracy accuracy
-emit_overall fp_rate fp_rate
-echo
-
-echo '#### By source'
-echo
+# Compute change bullets when a baseline is available.
+OVERALL_BULLETS=""
+RULE_BULLETS=""
+SOURCE_BULLETS=""
+CHANGE_TOTAL=0
 
 if [ "$HAS_MAIN" -eq 1 ]; then
-  echo '| source | TP | FP | TN | FN | recall | fp_rate | Δ recall | Δ fp_rate |'
-  echo '| --- | --- | --- | --- | --- | --- | --- | --- | --- |'
-  jq -r --slurpfile main "$MAIN_FILE" '
+  OVERALL_BULLETS=$(jq -r --slurpfile main "$MAIN_FILE" '
     def fmt: . * 10000 | round / 10000;
-    def fmt_delta($d):
-      if $d == null then "—"
-      elif $d > 0   then "+" + ($d | fmt | tostring)
-      elif $d < 0   then ($d | fmt | tostring)
-      else "0" end;
-    def main_metric($source; $field):
-      ($main[0].summary.by_source[]? | select(.source == $source) | .metrics[$field]) // null;
-    .summary.by_source[]
-    | . as $s
-    | (main_metric($s.source; "recall")) as $mr
-    | (main_metric($s.source; "fp_rate")) as $mf
-    | "| \($s.source) | \($s.counts.tp) | \($s.counts.fp) | \($s.counts.tn) | \($s.counts.fn) | \($s.metrics.recall|fmt) | \($s.metrics.fp_rate|fmt) | \(if $mr == null then "—" else fmt_delta($s.metrics.recall - $mr) end) | \(if $mf == null then "—" else fmt_delta($s.metrics.fp_rate - $mf) end) |"
-  ' "$PR_FILE"
-else
-  echo '| source | TP | FP | TN | FN | recall | fp_rate |'
-  echo '| --- | --- | --- | --- | --- | --- | --- |'
-  jq -r '
-    def fmt: . * 10000 | round / 10000;
-    .summary.by_source[]
-    | "| \(.source) | \(.counts.tp) | \(.counts.fp) | \(.counts.tn) | \(.counts.fn) | \(.metrics.recall|fmt) | \(.metrics.fp_rate|fmt) |"
-  ' "$PR_FILE"
-fi
-echo
-
-echo '#### By rule'
-echo
-
-if [ "$HAS_MAIN" -eq 1 ]; then
-  echo '| rule | TP | Δ TP | FP | Δ FP |'
-  echo '| --- | --- | --- | --- | --- |'
-  jq -r --slurpfile main "$MAIN_FILE" '
-    def fmt_delta($d):
+    def fmt_d($d):
       if $d > 0   then "+" + ($d | tostring)
       elif $d < 0 then ($d | tostring)
       else "0" end;
-    def main_rule($rule_id; $field):
-      ($main[0].summary.by_rule[]? | select(.rule_id == $rule_id) | .[$field]) // 0;
-    .summary.by_rule[]
-    | . as $r
-    | (main_rule($r.rule_id; "tp_count")) as $mtp
-    | (main_rule($r.rule_id; "fp_count")) as $mfp
-    | "| \($r.rule_id) | \($r.tp_count) | \(fmt_delta($r.tp_count - $mtp)) | \($r.fp_count) | \(fmt_delta($r.fp_count - $mfp)) |"
-  ' "$PR_FILE"
+    .summary.overall as $o
+    | $main[0].summary.overall as $m
+    | ["precision","recall","f1","accuracy","fp_rate"]
+    | map(. as $k
+        | (($o[$k]  // 0) | fmt) as $pr
+        | ((($o[$k] // 0) - ($m[$k] // 0)) | fmt) as $d
+        | select($d != 0)
+        | "- **\($k):** \($pr) (Δ \(fmt_d($d)))")
+    | .[]
+  ' "$PR_FILE")
+
+  RULE_BULLETS=$(jq -r --slurpfile main "$MAIN_FILE" '
+    def fmt_d($d):
+      if $d > 0   then "+" + ($d | tostring)
+      elif $d < 0 then ($d | tostring)
+      else "0" end;
+    ((.summary.by_rule // []) | map({(.rule_id): {tp: .tp_count, fp: .fp_count}}) | add // {}) as $pr
+    | (($main[0].summary.by_rule // []) | map({(.rule_id): {tp: .tp_count, fp: .fp_count}}) | add // {}) as $mn
+    | (($pr | keys) + ($mn | keys) | unique)
+    | map(. as $k
+        | { rule: $k,
+            ptp: ($pr[$k].tp // 0), pfp: ($pr[$k].fp // 0),
+            mtp: ($mn[$k].tp // 0), mfp: ($mn[$k].fp // 0) }
+        | . + { dtp: (.ptp - .mtp), dfp: (.pfp - .mfp) }
+        | select(.dtp != 0 or .dfp != 0)
+        | "- `\(.rule)`: TP \(.ptp) (Δ \(fmt_d(.dtp))), FP \(.pfp) (Δ \(fmt_d(.dfp)))")
+    | .[]
+  ' "$PR_FILE")
+
+  SOURCE_BULLETS=$(jq -r --slurpfile main "$MAIN_FILE" '
+    def fmt: . * 10000 | round / 10000;
+    def fmt_d($d):
+      if $d > 0   then "+" + ($d | tostring)
+      elif $d < 0 then ($d | tostring)
+      else "0" end;
+    (($main[0].summary.by_source // []) | map({(.source): .metrics}) | add // {}) as $mn
+    | (.summary.by_source // [])[]
+    | . as $s
+    | (($s.metrics.recall  // 0) | fmt) as $pr_r
+    | (($s.metrics.fp_rate // 0) | fmt) as $pr_f
+    | ((($s.metrics.recall  // 0) - ($mn[$s.source].recall  // 0)) | fmt) as $dr
+    | ((($s.metrics.fp_rate // 0) - ($mn[$s.source].fp_rate // 0)) | fmt) as $df
+    | select($dr != 0 or $df != 0)
+    | "- **\($s.source):** recall \($pr_r) (Δ \(fmt_d($dr))), fp_rate \($pr_f) (Δ \(fmt_d($df)))"
+  ' "$PR_FILE")
+
+  OVERALL_N=$(printf '%s\n' "$OVERALL_BULLETS" | grep -c '^- ' || true)
+  RULE_N=$(printf '%s\n' "$RULE_BULLETS"   | grep -c '^- ' || true)
+  SOURCE_N=$(printf '%s\n' "$SOURCE_BULLETS" | grep -c '^- ' || true)
+  CHANGE_TOTAL=$((OVERALL_N + RULE_N + SOURCE_N))
+fi
+
+if [ "$HAS_MAIN" -eq 0 ]; then
+  echo "_No baseline yet — main has no recorded run for this artifact. Tracking starts on the next merge._"
+elif [ "$CHANGE_TOTAL" -eq 0 ]; then
+  echo "✅ No changes vs main."
 else
-  echo '| rule | TP | FP |'
-  echo '| --- | --- | --- |'
-  jq -r '
-    .summary.by_rule[]
-    | "| \(.rule_id) | \(.tp_count) | \(.fp_count) |"
-  ' "$PR_FILE"
+  if [ "$CHANGE_TOTAL" -eq 1 ]; then
+    echo "📊 1 change vs main."
+  else
+    echo "📊 $CHANGE_TOTAL changes vs main."
+  fi
 fi
 echo
 
-echo '<sub>Generated by <code>.github/scripts/risk-metrics-comment.sh</code>. The hard floor on FP-rate lives in <code>server/internal/background/activities/risk_analysis/testdata/prompt_injection/floors.json</code>.</sub>'
+if [ "$HAS_MAIN" -eq 1 ] && [ "$CHANGE_TOTAL" -gt 0 ]; then
+  if [ "$OVERALL_N" -gt 0 ]; then
+    echo '**Overall**'
+    echo
+    printf '%s\n' "$OVERALL_BULLETS"
+    echo
+  fi
+  if [ "$RULE_N" -gt 0 ]; then
+    echo '**By rule**'
+    echo
+    printf '%s\n' "$RULE_BULLETS"
+    echo
+  fi
+  if [ "$SOURCE_N" -gt 0 ]; then
+    echo '**By source**'
+    echo
+    printf '%s\n' "$SOURCE_BULLETS"
+    echo
+  fi
+fi
+
+# Always show a one-line current snapshot of overall metrics.
+HEADLINE=$(jq -r '
+  def fmt: . * 10000 | round / 10000;
+  .summary.overall
+  | "**Overall:** precision `\(.precision|fmt)` · recall `\(.recall|fmt)` · f1 `\(.f1|fmt)` · accuracy `\(.accuracy|fmt)` · fp_rate `\(.fp_rate|fmt)`"
+' "$PR_FILE")
+echo "$HEADLINE"
+echo
+
+echo '<sub>Generated by <code>.github/scripts/risk-metrics-comment.sh</code>. Hard floor on FP-rate: <code>server/internal/background/activities/risk_analysis/testdata/prompt_injection/floors.json</code>. Full per-source / per-rule breakdown: <code>risk-accuracy-metrics</code> artifact on the workflow run.</sub>'

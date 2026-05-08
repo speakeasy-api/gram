@@ -225,3 +225,4 @@ export * from "./upsertallowedorigin.js";
 export * from "./upsertglobalvariation.js";
 export * from "./upsertservernameoverride.js";
 export * from "./validateapikey.js";
+export * from "./verifyremotemcpurl.js";

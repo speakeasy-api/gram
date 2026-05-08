@@ -374,16 +374,19 @@ function RBACDevToolbarInner({ onHide }: { onHide: () => void }) {
 
   const toggleScope = useCallback(
     (scope: string) => {
-      setState((prev) => ({
-        ...prev,
-        scopes: {
-          ...prev.scopes,
-          [scope]: {
-            ...prev.scopes[scope],
-            enabled: !prev.scopes[scope]?.enabled,
+      setState((prev) => {
+        const existing = prev.scopes[scope] ?? {
+          enabled: true,
+          resources: null,
+        };
+        return {
+          ...prev,
+          scopes: {
+            ...prev.scopes,
+            [scope]: { ...existing, enabled: !existing.enabled },
           },
-        },
-      }));
+        };
+      });
       if (state.enabled) invalidate();
     },
     [state.enabled, invalidate],
@@ -391,13 +394,19 @@ function RBACDevToolbarInner({ onHide }: { onHide: () => void }) {
 
   const setScopeResources = useCallback(
     (scope: string, resources: string[] | null) => {
-      setState((prev) => ({
-        ...prev,
-        scopes: {
-          ...prev.scopes,
-          [scope]: { ...prev.scopes[scope], resources },
-        },
-      }));
+      setState((prev) => {
+        const existing = prev.scopes[scope] ?? {
+          enabled: true,
+          resources: null,
+        };
+        return {
+          ...prev,
+          scopes: {
+            ...prev.scopes,
+            [scope]: { ...existing, resources },
+          },
+        };
+      });
       if (state.enabled) invalidate();
     },
     [state.enabled, invalidate],
@@ -582,8 +591,10 @@ function RBACDevToolbarInner({ onHide }: { onHide: () => void }) {
                             enabled: true,
                             resources: null,
                           };
+                          // Defensive: legacy localStorage may have entries without `resources`.
+                          // Use loose != null so both null and undefined skip the length read.
                           const isRestricted =
-                            scopeState.resources !== null &&
+                            scopeState.resources != null &&
                             scopeState.resources.length > 0;
                           let knownResources: { id: string; label: string }[] =
                             [];

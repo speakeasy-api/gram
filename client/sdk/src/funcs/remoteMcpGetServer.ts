@@ -32,11 +32,11 @@ import { Result } from "../types/fp.js";
  * getServer remoteMcp
  *
  * @remarks
- * Get a remote MCP server by ID
+ * Get a remote MCP server by ID or slug. Exactly one of id or slug must be provided.
  */
 export function remoteMcpGetServer(
   client: GramCore,
-  request: operations.GetRemoteMcpServerRequest,
+  request?: operations.GetRemoteMcpServerRequest | undefined,
   security?: operations.GetRemoteMcpServerSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
@@ -63,7 +63,7 @@ export function remoteMcpGetServer(
 
 async function $do(
   client: GramCore,
-  request: operations.GetRemoteMcpServerRequest,
+  request?: operations.GetRemoteMcpServerRequest | undefined,
   security?: operations.GetRemoteMcpServerSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
@@ -86,7 +86,10 @@ async function $do(
   const parsed = safeParse(
     request,
     (value) =>
-      z.parse(operations.GetRemoteMcpServerRequest$outboundSchema, value),
+      z.parse(
+        z.optional(operations.GetRemoteMcpServerRequest$outboundSchema),
+        value,
+      ),
     "Input validation failed",
   );
   if (!parsed.ok) {
@@ -98,20 +101,21 @@ async function $do(
   const path = pathToFunc("/rpc/remoteMcp.getServer")();
 
   const query = encodeFormQuery({
-    "id": payload.id,
+    "id": payload?.id,
+    "slug": payload?.slug,
   });
 
   const headers = new Headers(compactMap({
     Accept: "application/json",
-    "Gram-Key": encodeSimple("Gram-Key", payload["Gram-Key"], {
+    "Gram-Key": encodeSimple("Gram-Key", payload?.["Gram-Key"], {
       explode: false,
       charEncoding: "none",
     }),
-    "Gram-Project": encodeSimple("Gram-Project", payload["Gram-Project"], {
+    "Gram-Project": encodeSimple("Gram-Project", payload?.["Gram-Project"], {
       explode: false,
       charEncoding: "none",
     }),
-    "Gram-Session": encodeSimple("Gram-Session", payload["Gram-Session"], {
+    "Gram-Session": encodeSimple("Gram-Session", payload?.["Gram-Session"], {
       explode: false,
       charEncoding: "none",
     }),

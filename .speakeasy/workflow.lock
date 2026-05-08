@@ -1,9 +1,9 @@
-speakeasyVersion: 1.762.0
+speakeasyVersion: 1.761.5
 sources:
     Gram-Internal:
         sourceNamespace: gram-api-description
-        sourceRevisionDigest: sha256:8391c30acf5b61582ca6d83fecbe6e41f41b7c800074df939d870195ac1ae7db
-        sourceBlobDigest: sha256:cac6b2f00a736d71b28dc064b88f3a4ec6650886dcf593005d6b060cab2b658f
+        sourceRevisionDigest: sha256:91af0e26fd13f5cb29822e6fa1c092f12553ad8a768f3b56f2e4558af3777119
+        sourceBlobDigest: sha256:944d88ea137eef48c6ddb3c71a9621f3d68c20981fdb65433a5ed2de02fdcbf1
         tags:
             - latest
             - 0.0.1
@@ -11,8 +11,10 @@ targets:
     gram-internal:
         source: Gram-Internal
         sourceNamespace: gram-api-description
-        sourceRevisionDigest: sha256:8391c30acf5b61582ca6d83fecbe6e41f41b7c800074df939d870195ac1ae7db
-        sourceBlobDigest: sha256:cac6b2f00a736d71b28dc064b88f3a4ec6650886dcf593005d6b060cab2b658f
+        sourceRevisionDigest: sha256:91af0e26fd13f5cb29822e6fa1c092f12553ad8a768f3b56f2e4558af3777119
+        sourceBlobDigest: sha256:944d88ea137eef48c6ddb3c71a9621f3d68c20981fdb65433a5ed2de02fdcbf1
+        codeSamplesNamespace: gram-api-description-typescript-code-samples
+        codeSamplesRevisionDigest: sha256:5a297fd5590bbeb6443dd963bf469a88194e1aace2ba95cbd9b441432d6c1339
 workflow:
     workflowVersion: 1.0.0
     speakeasyVersion: pinned
