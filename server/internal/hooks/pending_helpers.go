@@ -3,14 +3,17 @@ package hooks
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
+	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 )
@@ -104,6 +107,23 @@ func (s *Service) buildTelemetryAttributesWithMetadata(ctx context.Context, payl
 		attr.ProjectIDKey:      metadata.ProjectID,
 		attr.OrganizationIDKey: metadata.GramOrgID,
 		attr.HookSourceKey:     hookSource,
+	}
+	if metadata.UserID != "" {
+		attrs[attr.UserIDKey] = metadata.UserID
+	} else if strings.TrimSpace(metadata.UserEmail) != "" {
+		user, err := usersrepo.New(s.db).GetConnectedUserByEmail(ctx, usersrepo.GetConnectedUserByEmailParams{
+			Email:          strings.TrimSpace(metadata.UserEmail),
+			OrganizationID: metadata.GramOrgID,
+		})
+		if err == nil {
+			attrs[attr.UserIDKey] = user.ID
+		} else if !errors.Is(err, pgx.ErrNoRows) {
+			s.logger.WarnContext(ctx, "failed to resolve hook user by email",
+				attr.SlogError(err),
+				attr.SlogOrganizationID(metadata.GramOrgID),
+				attr.SlogAuthUserEmail(metadata.UserEmail),
+			)
+		}
 	}
 
 	if payload.Error != nil {
@@ -219,6 +239,19 @@ func (s *Service) writeMetricsToClickHouse(ctx context.Context, payload *gen.Met
 		}
 		if m.UserEmail != "" {
 			attrs[attr.UserEmailKey] = m.UserEmail
+			user, err := usersrepo.New(s.db).GetConnectedUserByEmail(ctx, usersrepo.GetConnectedUserByEmailParams{
+				Email:          strings.TrimSpace(m.UserEmail),
+				OrganizationID: orgID,
+			})
+			if err == nil {
+				attrs[attr.UserIDKey] = user.ID
+			} else if !errors.Is(err, pgx.ErrNoRows) {
+				s.logger.WarnContext(ctx, "failed to resolve hook user by email",
+					attr.SlogError(err),
+					attr.SlogOrganizationID(orgID),
+					attr.SlogAuthUserEmail(m.UserEmail),
+				)
+			}
 		}
 		if m.SessionID != "" {
 			attrs[attr.GenAIConversationIDKey] = m.SessionID

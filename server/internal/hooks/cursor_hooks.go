@@ -5,12 +5,14 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/url"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -20,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
+	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
 // Cursor is the endpoint for Cursor hook events
@@ -138,10 +141,29 @@ func (s *Service) recordCursorHook(ctx context.Context, payload *gen.CursorPaylo
 		return
 	}
 
+	userEmail := conv.PtrValOr(payload.UserEmail, "")
+	userID := ""
+	if userEmail != "" {
+		user, err := usersrepo.New(s.db).GetConnectedUserByEmail(ctx, usersrepo.GetConnectedUserByEmailParams{
+			Email:          strings.TrimSpace(userEmail),
+			OrganizationID: orgID,
+		})
+		if err == nil {
+			userID = user.ID
+		} else if !errors.Is(err, pgx.ErrNoRows) {
+			s.logger.WarnContext(ctx, "failed to resolve hook user by email",
+				attr.SlogError(err),
+				attr.SlogOrganizationID(orgID),
+				attr.SlogAuthUserEmail(userEmail),
+			)
+		}
+	}
+
 	metadata := &SessionMetadata{
 		SessionID:   *payload.ConversationID,
 		ServiceName: "Cursor",
-		UserEmail:   conv.PtrValOr(payload.UserEmail, ""),
+		UserEmail:   userEmail,
+		UserID:      userID,
 		ClaudeOrgID: "",
 		GramOrgID:   orgID,
 		ProjectID:   projectID,
@@ -291,6 +313,19 @@ func (s *Service) writeCursorMetricsToClickHouse(ctx context.Context, payload *g
 	}
 	if payload.UserEmail != nil && *payload.UserEmail != "" {
 		attrs[attr.UserEmailKey] = *payload.UserEmail
+		user, err := usersrepo.New(s.db).GetConnectedUserByEmail(ctx, usersrepo.GetConnectedUserByEmailParams{
+			Email:          strings.TrimSpace(*payload.UserEmail),
+			OrganizationID: orgID,
+		})
+		if err == nil {
+			attrs[attr.UserIDKey] = user.ID
+		} else if !errors.Is(err, pgx.ErrNoRows) {
+			s.logger.WarnContext(ctx, "failed to resolve hook user by email",
+				attr.SlogError(err),
+				attr.SlogOrganizationID(orgID),
+				attr.SlogAuthUserEmail(*payload.UserEmail),
+			)
+		}
 	}
 	switch {
 	case payload.ConversationID != nil && *payload.ConversationID != "":
@@ -364,6 +399,21 @@ func (s *Service) buildCursorTelemetryAttributes(ctx context.Context, payload *g
 		attr.ProjectIDKey:      projectID,
 		attr.OrganizationIDKey: orgID,
 		attr.HookSourceKey:     "cursor",
+	}
+	if userEmail != "" {
+		user, err := usersrepo.New(s.db).GetConnectedUserByEmail(ctx, usersrepo.GetConnectedUserByEmailParams{
+			Email:          strings.TrimSpace(userEmail),
+			OrganizationID: orgID,
+		})
+		if err == nil {
+			attrs[attr.UserIDKey] = user.ID
+		} else if !errors.Is(err, pgx.ErrNoRows) {
+			s.logger.WarnContext(ctx, "failed to resolve hook user by email",
+				attr.SlogError(err),
+				attr.SlogOrganizationID(orgID),
+				attr.SlogAuthUserEmail(userEmail),
+			)
+		}
 	}
 
 	if payload.Error != nil {
@@ -543,7 +593,7 @@ func (s *Service) writeCursorToolCallRequestToPG(ctx context.Context, payload *g
 		Role:             "assistant",
 		Content:          "",
 		Model:            conv.ToPGTextEmpty(conv.PtrValOr(payload.Model, "")),
-		UserID:           conv.ToPGTextEmpty(""),
+		UserID:           conv.ToPGTextEmpty(metadata.UserID),
 		Source:           conv.ToPGText("Cursor"),
 		ToolCalls:        toolCallsJSON,
 		FinishReason:     conv.ToPGText("tool_calls"),
@@ -604,7 +654,7 @@ func (s *Service) writeCursorToolCallResultToPG(ctx context.Context, payload *ge
 		ProjectID:        projectID,
 		Role:             "tool",
 		Content:          content,
-		UserID:           conv.ToPGTextEmpty(""),
+		UserID:           conv.ToPGTextEmpty(metadata.UserID),
 		Source:           conv.ToPGText("Cursor"),
 		ToolCallID:       conv.ToPGTextEmpty(cursorToolCorrelationID(payload)),
 		PromptTokens:     0,
@@ -652,7 +702,7 @@ func (s *Service) persistCursorAgentResponse(ctx context.Context, payload *gen.C
 		Role:             "assistant",
 		Content:          content,
 		Model:            conv.ToPGTextEmpty(conv.PtrValOr(payload.Model, "")),
-		UserID:           conv.ToPGTextEmpty(""),
+		UserID:           conv.ToPGTextEmpty(metadata.UserID),
 		Source:           conv.ToPGText("Cursor"),
 		PromptTokens:     0,
 		CompletionTokens: 0,
@@ -715,7 +765,7 @@ func (s *Service) persistCursorUserPrompt(ctx context.Context, payload *gen.Curs
 		Role:             "user",
 		Content:          content,
 		Model:            conv.ToPGTextEmpty(""),
-		UserID:           conv.ToPGTextEmpty(""),
+		UserID:           conv.ToPGTextEmpty(metadata.UserID),
 		Source:           conv.ToPGText("Cursor"),
 		PromptTokens:     0,
 		CompletionTokens: 0,

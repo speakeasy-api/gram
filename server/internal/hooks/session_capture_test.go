@@ -40,11 +40,15 @@ func TestClaudeHookSource_ConsistentAcrossAllWrites(t *testing.T) {
 	sessionID := uuid.NewString()
 	chatID := sessionIDToUUID(sessionID)
 	const wantSource = "test-agent-source"
+	const wantUserID = "session-capture-user"
+	const wantUserEmail = "tester@example.com"
+	seedHookUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, wantUserID, wantUserEmail)
 
 	metadata := &SessionMetadata{
 		SessionID:   sessionID,
 		ServiceName: wantSource,
-		UserEmail:   "tester@example.com",
+		UserEmail:   wantUserEmail,
+		UserID:      wantUserID,
 		GramOrgID:   authCtx.ActiveOrganizationID,
 		ProjectID:   authCtx.ProjectID.String(),
 	}
@@ -109,5 +113,8 @@ func TestClaudeHookSource_ConsistentAcrossAllWrites(t *testing.T) {
 		assert.True(t, m.Source.Valid, "Source should be set (role=%s)", m.Role)
 		assert.Equal(t, wantSource, m.Source.String,
 			"Source should match metadata.ServiceName for all hook writes (role=%s)", m.Role)
+		assert.True(t, m.UserID.Valid, "UserID should be set (role=%s)", m.Role)
+		assert.Equal(t, wantUserID, m.UserID.String,
+			"UserID should match metadata.UserID for all hook writes (role=%s)", m.Role)
 	}
 }

@@ -54,6 +54,37 @@ func (q *Queries) GetConnectedUsersByWorkosIDs(ctx context.Context, arg GetConne
 	return items, nil
 }
 
+const getConnectedUserByEmail = `-- name: GetConnectedUserByEmail :one
+SELECT u.id, u.email, u.display_name, u.photo_url, u.admin, u.last_login, u.workos_id, u.created_at, u.updated_at FROM users u
+JOIN organization_user_relationships our ON our.user_id = u.id
+WHERE lower(u.email) = lower($1)
+  AND our.organization_id = $2
+  AND our.deleted_at IS NULL
+LIMIT 1
+`
+
+type GetConnectedUserByEmailParams struct {
+	Email          string
+	OrganizationID string
+}
+
+func (q *Queries) GetConnectedUserByEmail(ctx context.Context, arg GetConnectedUserByEmailParams) (User, error) {
+	row := q.db.QueryRow(ctx, getConnectedUserByEmail, arg.Email, arg.OrganizationID)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.DisplayName,
+		&i.PhotoUrl,
+		&i.Admin,
+		&i.LastLogin,
+		&i.WorkosID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getUser = `-- name: GetUser :one
 SELECT id, email, display_name, photo_url, admin, last_login, workos_id, created_at, updated_at FROM users
 WHERE id = $1
