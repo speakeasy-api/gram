@@ -1,6 +1,8 @@
 package marketplace
 
 import (
+	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -21,24 +23,32 @@ import (
 // into the server bootstrap.
 const RoutePrefix = "/marketplace/"
 
+// publishedManifestRef pins manifest fetches to the same branch the publish
+// flow writes to (see plugins/impl.go). If the publish flow ever stops
+// hardcoding "main", this needs to track that.
+const publishedManifestRef = "main"
+
 // Server hosts the git Smart HTTP proxy for plugin source clones. Streams
 // directly from GitHub against an installation token minted by the resolver —
 // no local mirror state.
 type Server struct {
-	resolver   Resolver
-	httpClient *guardian.HTTPClient
-	logger     *slog.Logger
+	resolver      Resolver
+	httpClient    *guardian.HTTPClient
+	publicBaseURL string
+	logger        *slog.Logger
 }
 
 func NewServer(
 	resolver Resolver,
 	httpClient *guardian.HTTPClient,
+	publicBaseURL string,
 	logger *slog.Logger,
 ) *Server {
 	return &Server{
-		resolver:   resolver,
-		httpClient: httpClient,
-		logger:     logger,
+		resolver:      resolver,
+		httpClient:    httpClient,
+		publicBaseURL: publicBaseURL,
+		logger:        logger,
 	}
 }
 
@@ -48,20 +58,15 @@ func (s *Server) Routes() http.Handler {
 	// ServeMux disallows mixing literals with wildcards inside one segment.
 	mux.HandleFunc("GET "+RoutePrefix+"p/{slug}/info/refs", s.handleInfoRefs)
 	mux.HandleFunc("POST "+RoutePrefix+"p/{slug}/git-upload-pack", s.handleUploadPack)
+	// Claude Code's managed settings appends a trailing slash to git source
+	// URLs (TOKEN.git → TOKEN.git/). Without the slash, Claude Code recognises
+	// the .git suffix and uses the git smart HTTP protocol above. With the
+	// slash it does a plain GET expecting marketplace JSON, so we serve that.
+	mux.HandleFunc("GET "+RoutePrefix+"p/{slug}/", s.handleManifestFromSlug)
 	mux.HandleFunc("GET "+RoutePrefix+"healthz", func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = io.WriteString(w, "ok")
 	})
-	// Claude Code's managed settings appends a trailing slash to git source
-	// URLs; strip it before routing so the patterns above still match.
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasSuffix(r.URL.Path, "/") {
-			r2 := r.Clone(r.Context())
-			r2.URL.Path = strings.TrimRight(r.URL.Path, "/")
-			mux.ServeHTTP(w, r2)
-			return
-		}
-		mux.ServeHTTP(w, r)
-	})
+	return mux
 }
 
 // IsMarketplaceRoute reports whether the request targets a path owned by the
@@ -99,6 +104,198 @@ func tokenFromSlug(slug string) string {
 		return ""
 	}
 	return token
+}
+
+// handleManifestFromSlug handles GET /marketplace/p/{slug}/ — the trailing-
+// slash form Claude Code's managed settings produces. It extracts the token
+// from the slug (stripping .git) and serves the marketplace manifest JSON.
+func (s *Server) handleManifestFromSlug(w http.ResponseWriter, r *http.Request) {
+	token := tokenFromSlug(r.PathValue("slug"))
+	if token == "" {
+		http.NotFound(w, r)
+		return
+	}
+	s.serveManifest(w, r, token)
+}
+
+// serveManifest fetches the upstream's .claude-plugin/marketplace.json,
+// rewrites plugin sources to point at this proxy's git URL, and writes the
+// JSON response.
+func (s *Server) serveManifest(w http.ResponseWriter, r *http.Request, token string) {
+	ctx := r.Context()
+
+	up, err := s.resolver.Resolve(ctx, token)
+	if err != nil {
+		s.errorResponse(w, r, err)
+		return
+	}
+
+	raw, err := s.fetchPublishedManifest(ctx, up)
+	if err != nil {
+		var nf *upstreamNotFoundError
+		if errors.As(err, &nf) {
+			http.Error(w, "marketplace.json missing in upstream", http.StatusNotFound)
+			return
+		}
+		s.logger.ErrorContext(ctx, "fetch published manifest", attr.SlogError(err))
+		http.Error(w, "manifest unavailable", http.StatusBadGateway)
+		return
+	}
+
+	sha, err := s.fetchRefSHA(ctx, up)
+	if err != nil {
+		s.logger.ErrorContext(ctx, "fetch ref sha", attr.SlogError(err))
+		http.Error(w, "manifest unavailable", http.StatusBadGateway)
+		return
+	}
+
+	rewritten, err := s.rewriteManifest(raw, token, sha)
+	if err != nil {
+		s.logger.ErrorContext(ctx, "rewrite manifest", attr.SlogError(err))
+		http.Error(w, "manifest rewrite failed", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-cache")
+	_, _ = w.Write(rewritten)
+}
+
+// upstreamNotFoundError signals that the upstream returned 404 for the
+// resource being fetched (file missing in the repo or repo not found).
+type upstreamNotFoundError struct{ resource string }
+
+func (e *upstreamNotFoundError) Error() string {
+	return "upstream not found: " + e.resource
+}
+
+// fetchPublishedManifest returns the raw bytes of the marketplace.json file at
+// the published ref via the GitHub Contents API.
+func (s *Server) fetchPublishedManifest(ctx context.Context, up Upstream) ([]byte, error) {
+	apiURL := fmt.Sprintf(
+		"https://api.github.com/repos/%s/%s/contents/.claude-plugin/marketplace.json?ref=%s",
+		url.PathEscape(up.Owner), url.PathEscape(up.Repo), url.QueryEscape(publishedManifestRef),
+	)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("build manifest request: %w", err)
+	}
+	req.Header.Set("Accept", "application/vnd.github.raw+json")
+	req.Header.Set("Authorization", "Bearer "+up.AccessToken)
+	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
+
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("contents api request: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return resp.Body.Close() })
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, &upstreamNotFoundError{resource: ".claude-plugin/marketplace.json"}
+	}
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		return nil, fmt.Errorf("contents api: status %d: %s", resp.StatusCode, body)
+	}
+
+	const maxManifestBytes = 4 << 20 // 4 MiB
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxManifestBytes+1))
+	if err != nil {
+		return nil, fmt.Errorf("read manifest body: %w", err)
+	}
+	if len(body) > maxManifestBytes {
+		return nil, fmt.Errorf("manifest exceeds %d bytes", maxManifestBytes)
+	}
+	return body, nil
+}
+
+// fetchRefSHA returns the commit SHA at the tip of publishedManifestRef via
+// the GitHub Git Refs API. Embedded in the rewritten manifest so Claude Code
+// can build a stable on-disk cache key for each plugin version.
+func (s *Server) fetchRefSHA(ctx context.Context, up Upstream) (string, error) {
+	refURL := fmt.Sprintf(
+		"https://api.github.com/repos/%s/%s/git/ref/heads/%s",
+		url.PathEscape(up.Owner), url.PathEscape(up.Repo), url.QueryEscape(publishedManifestRef),
+	)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, refURL, nil)
+	if err != nil {
+		return "", fmt.Errorf("build ref request: %w", err)
+	}
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("Authorization", "Bearer "+up.AccessToken)
+	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
+
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("ref api request: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return resp.Body.Close() })
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		return "", fmt.Errorf("ref api: status %d: %s", resp.StatusCode, body)
+	}
+
+	var refResp struct {
+		Object struct {
+			SHA string `json:"sha"`
+		} `json:"object"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&refResp); err != nil {
+		return "", fmt.Errorf("decode ref response: %w", err)
+	}
+	if refResp.Object.SHA == "" {
+		return "", errors.New("ref response missing sha")
+	}
+	return refResp.Object.SHA, nil
+}
+
+// rewriteManifest transforms string-typed plugin sources into git-subdir
+// entries pointing at the proxy with an explicit ref and sha.
+func (s *Server) rewriteManifest(raw []byte, token, sha string) ([]byte, error) {
+	var m map[string]any
+	if err := json.Unmarshal(raw, &m); err != nil {
+		return nil, fmt.Errorf("unmarshal manifest: %w", err)
+	}
+	pluginsRaw, ok := m["plugins"].([]any)
+	if !ok {
+		return nil, errors.New("manifest missing plugins array")
+	}
+	for _, p := range pluginsRaw {
+		entry, ok := p.(map[string]any)
+		if !ok {
+			continue
+		}
+		src, hasSource := entry["source"]
+		if !hasSource {
+			continue
+		}
+		if pathStr, isString := src.(string); isString {
+			slug := trimRelPrefix(pathStr)
+			gitURL := fmt.Sprintf("%s%sp/%s.git", s.publicBaseURL, RoutePrefix, token)
+			entry["source"] = map[string]any{
+				"source": "git-subdir",
+				"url":    gitURL,
+				"path":   slug,
+				"ref":    publishedManifestRef,
+				"sha":    sha,
+			}
+		}
+	}
+	out, err := json.MarshalIndent(m, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("marshal rewritten manifest: %w", err)
+	}
+	return out, nil
+}
+
+func trimRelPrefix(s string) string {
+	for _, prefix := range []string{"./", "/"} {
+		if len(s) >= len(prefix) && s[:len(prefix)] == prefix {
+			return s[len(prefix):]
+		}
+	}
+	return s
 }
 
 // handleInfoRefs streams the Smart HTTP ref-advertisement straight from
@@ -150,8 +347,7 @@ func (s *Server) handleUploadPack(w http.ResponseWriter, r *http.Request) {
 }
 
 // proxyToGitHub forwards a Smart HTTP request to github.com with installation-
-// token basic auth and streams the response back. Body and headers are
-// streamed without buffering so packfiles flow through in chunks.
+// token basic auth and streams the response back.
 func (s *Server) proxyToGitHub(
 	w http.ResponseWriter,
 	r *http.Request,
@@ -187,10 +383,6 @@ func (s *Server) proxyToGitHub(
 	}
 	defer o11y.NoLogDefer(func() error { return resp.Body.Close() })
 
-	// Mirror the response shape the git client expects. We pass through
-	// Content-Type (carries the application/x-git-* media type), Cache-Control,
-	// and Content-Encoding; everything else (cookies, GitHub-specific
-	// headers) is dropped.
 	for _, h := range []string{"Content-Type", "Cache-Control", "Content-Encoding"} {
 		if v := resp.Header.Get(h); v != "" {
 			w.Header().Set(h, v)
