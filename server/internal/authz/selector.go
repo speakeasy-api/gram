@@ -133,20 +133,42 @@ func NewSelector(scope Scope, resourceID string) Selector {
 	}
 }
 
-// NewGrant creates a Grant with selector derived from scope and resource ID.
+// NewGrant creates an allow Grant with selector derived from scope and resource ID.
 func NewGrant(scope Scope, resourceID string) Grant {
 	return Grant{
 		PrincipalUrn: "",
 		Scope:        scope,
+		Effect:       PolicyEffectAllow,
 		Selector:     NewSelector(scope, resourceID),
 	}
 }
 
-// NewGrantWithSelector creates a Grant with an explicit selector.
+// NewDenyGrant creates a deny Grant with selector derived from scope and resource ID.
+func NewDenyGrant(scope Scope, resourceID string) Grant {
+	return Grant{
+		PrincipalUrn: "",
+		Scope:        scope,
+		Effect:       PolicyEffectDeny,
+		Selector:     NewSelector(scope, resourceID),
+	}
+}
+
+// NewGrantWithSelector creates an allow Grant with an explicit selector.
 func NewGrantWithSelector(scope Scope, selector Selector) Grant {
 	return Grant{
 		PrincipalUrn: "",
 		Scope:        scope,
+		Effect:       PolicyEffectAllow,
+		Selector:     selector,
+	}
+}
+
+// NewDenyGrantWithSelector creates a deny Grant with an explicit selector.
+func NewDenyGrantWithSelector(scope Scope, selector Selector) Grant {
+	return Grant{
+		PrincipalUrn: "",
+		Scope:        scope,
+		Effect:       PolicyEffectDeny,
 		Selector:     selector,
 	}
 }

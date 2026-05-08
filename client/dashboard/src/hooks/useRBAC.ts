@@ -88,7 +88,24 @@ export function useRBAC() {
   }, [data?.grants]);
 
   /**
+   * Check if a grant's scope matches the required scope (including sub-scopes).
+   */
+  const grantMatchesScope = useCallback(
+    (
+      grant: { scope?: string; subScopes?: string[] },
+      scope: Scope,
+    ): boolean => {
+      return grant.scope === scope || !!grant.subScopes?.includes(scope);
+    },
+    [],
+  );
+
+  /**
    * Check if the user has a given scope, optionally scoped to a resource ID.
+   *
+   * Uses deny-wins semantics: if any matching deny grant exists, access is
+   * denied regardless of allow grants. Otherwise, at least one matching allow
+   * grant must exist.
    *
    * - If RBAC is disabled, always returns true.
    * - If grants haven't loaded yet, returns false (safe default).
@@ -100,21 +117,32 @@ export function useRBAC() {
       if (!isRbacEnabled) return true;
       if (!grants) return false;
 
-      return grants.some((grant) => {
-        // evaluate if the grant's scope or any of its sub scopes matches the required scope
-        if (grant.scope !== scope && !grant.subScopes?.includes(scope))
-          return false;
-        // Unrestricted grant — no selectors
-        if (!grant.selectors) return true;
-        // Build a check selector mirroring the backend's Check.selector().
-        const check: Record<string, string> = {
-          resourceKind: resourceKindForScope(scope),
-        };
-        if (resourceId) check.resourceId = resourceId;
-        return grant.selectors.some((s) => selectorMatches(s, check));
-      });
+      const check: Record<string, string> = {
+        resourceKind: resourceKindForScope(scope),
+      };
+      if (resourceId) check.resourceId = resourceId;
+
+      let hasAllow = false;
+
+      for (const grant of grants) {
+        if (!grantMatchesScope(grant, scope)) continue;
+
+        const effect = (grant as { effect?: string }).effect || "allow";
+
+        // Check if selectors match
+        const selectorsMatch = !grant.selectors
+          ? true
+          : grant.selectors.some((s) => selectorMatches(s, check));
+
+        if (!selectorsMatch) continue;
+
+        if (effect === "deny") return false;
+        hasAllow = true;
+      }
+
+      return hasAllow;
     },
-    [isRbacEnabled, grants],
+    [isRbacEnabled, grants, grantMatchesScope],
   );
 
   /**

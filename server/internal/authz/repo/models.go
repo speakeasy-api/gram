@@ -28,6 +28,7 @@ const (
 	ReasonGrantMatched      Reason = "grant_matched"
 	ReasonNoGrants          Reason = "no_grants"
 	ReasonScopeUnsatisfied  Reason = "scope_unsatisfied"
+	ReasonDenyGrant         Reason = "deny_grant"
 	ReasonInvalidCheck      Reason = "invalid_check"
 	ReasonRBACSkippedAPIKey Reason = "rbac_skipped_apikey" //nolint:gosec // not a credential
 	ReasonDevOverride       Reason = "dev_override"

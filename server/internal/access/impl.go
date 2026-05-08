@@ -934,8 +934,13 @@ func roleGrantPayloads(grants []*gen.RoleGrant) []*authz.RoleGrant {
 			selectors = append(selectors, genSelectorToAuthz(s))
 		}
 
+		effect := authz.PolicyEffectAllow
+		if grant.Effect != nil {
+			effect = authz.PolicyEffect(*grant.Effect)
+		}
 		out = append(out, &authz.RoleGrant{
 			Scope:     grant.Scope,
+			Effect:    effect,
 			Selectors: selectors,
 		})
 	}
@@ -1116,7 +1121,8 @@ func scopedGrantToGenRoleGrant(g *authz.ScopedGrant) *gen.RoleGrant {
 	for _, sel := range g.Selectors {
 		selectors = append(selectors, authzSelectorToGen(sel))
 	}
-	return &gen.RoleGrant{Scope: g.Scope, Selectors: selectors}
+	effect := string(g.Effect)
+	return &gen.RoleGrant{Scope: g.Scope, Effect: &effect, Selectors: selectors}
 }
 
 // allScopesGrants returns unrestricted grants for every known scope.
@@ -1143,7 +1149,8 @@ func listRoleGrantsFromGrants(grants []authz.Grant) []*gen.ListRoleGrant {
 		for _, sel := range g.Selectors {
 			selectors = append(selectors, authzSelectorToGen(sel))
 		}
-		out = append(out, &gen.ListRoleGrant{Scope: g.Scope, SubScopes: g.SubScopes, Selectors: selectors})
+		effect := string(g.Effect)
+		out = append(out, &gen.ListRoleGrant{Scope: g.Scope, Effect: &effect, SubScopes: g.SubScopes, Selectors: selectors})
 	}
 	return out
 }

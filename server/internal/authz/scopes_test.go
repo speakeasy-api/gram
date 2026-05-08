@@ -126,6 +126,151 @@ func TestGrantsHasAccess_wrongResourceNotSatisfied(t *testing.T) {
 	require.Nil(t, grant)
 }
 
+// --- Deny-wins evaluation tests ---
+
+func TestEvaluateGrants_denyBlocksAllow(t *testing.T) {
+	t.Parallel()
+
+	grants := []Grant{
+		NewGrant(ScopeProjectRead, WildcardResource),
+		NewDenyGrant(ScopeProjectRead, "proj_secret"),
+	}
+	checks := Check{Scope: ScopeProjectRead, ResourceID: "proj_secret"}.expand()
+
+	allow, _, denied := evaluateGrants(grants, checks)
+	require.Nil(t, allow)
+	require.True(t, denied)
+}
+
+func TestEvaluateGrants_denyWinsRegardlessOfOrder(t *testing.T) {
+	t.Parallel()
+
+	// Deny grant comes first — should still block the allow.
+	grants := []Grant{
+		NewDenyGrant(ScopeMCPRead, "server_a"),
+		NewGrant(ScopeMCPRead, WildcardResource),
+	}
+	checks := Check{Scope: ScopeMCPRead, ResourceID: "server_a"}.expand()
+
+	allow, _, denied := evaluateGrants(grants, checks)
+	require.Nil(t, allow)
+	require.True(t, denied)
+}
+
+func TestEvaluateGrants_denyOnDifferentResourceDoesNotBlock(t *testing.T) {
+	t.Parallel()
+
+	grants := []Grant{
+		NewGrant(ScopeProjectRead, WildcardResource),
+		NewDenyGrant(ScopeProjectRead, "proj_secret"),
+	}
+	checks := Check{Scope: ScopeProjectRead, ResourceID: "proj_normal"}.expand()
+
+	allow, _, denied := evaluateGrants(grants, checks)
+	require.NotNil(t, allow)
+	require.False(t, denied)
+}
+
+func TestEvaluateGrants_denyOnDifferentScopeDoesNotBlock(t *testing.T) {
+	t.Parallel()
+
+	grants := []Grant{
+		NewGrant(ScopeProjectRead, "proj_123"),
+		NewDenyGrant(ScopeProjectWrite, "proj_123"),
+	}
+	checks := Check{Scope: ScopeProjectRead, ResourceID: "proj_123"}.expand()
+
+	allow, _, denied := evaluateGrants(grants, checks)
+	require.NotNil(t, allow)
+	require.False(t, denied)
+}
+
+func TestEvaluateGrants_noGrantsReturnsNilNotDenied(t *testing.T) {
+	t.Parallel()
+
+	checks := Check{Scope: ScopeProjectRead, ResourceID: "proj_123"}.expand()
+	allow, _, denied := evaluateGrants(nil, checks)
+	require.Nil(t, allow)
+	require.False(t, denied)
+}
+
+func TestEvaluateGrants_onlyDenyGrantReturnsDenied(t *testing.T) {
+	t.Parallel()
+
+	grants := []Grant{NewDenyGrant(ScopeProjectRead, "proj_123")}
+	checks := Check{Scope: ScopeProjectRead, ResourceID: "proj_123"}.expand()
+
+	allow, _, denied := evaluateGrants(grants, checks)
+	require.Nil(t, allow)
+	require.True(t, denied)
+}
+
+func TestFindMatchingGrant_denyBlocksMatch(t *testing.T) {
+	t.Parallel()
+
+	grants := []Grant{
+		NewGrant(ScopeOrgAdmin, WildcardResource),
+		NewDenyGrant(ScopeOrgRead, "org_123"),
+	}
+	// org:read check expands to include org:admin and org:read.
+	// The deny on org:read should block even though org:admin matches.
+	grant, _ := findMatchingGrant(grants, Check{Scope: ScopeOrgRead, ResourceID: "org_123"}.expand())
+	require.Nil(t, grant)
+}
+
+func TestFindMatchingGrant_wildcardDenyBlocksAll(t *testing.T) {
+	t.Parallel()
+
+	grants := []Grant{
+		NewGrant(ScopeMCPConnect, WildcardResource),
+		NewDenyGrant(ScopeMCPConnect, WildcardResource),
+	}
+	grant, _ := findMatchingGrant(grants, Check{Scope: ScopeMCPConnect, ResourceID: "tool_a"}.expand())
+	require.Nil(t, grant)
+}
+
+func TestFindMatchingGrant_denyDoesNotCrossScopes(t *testing.T) {
+	t.Parallel()
+
+	// Deny mcp:write on server_a should NOT block mcp:read on server_a.
+	grants := []Grant{
+		NewGrant(ScopeMCPRead, WildcardResource),
+		NewDenyGrant(ScopeMCPWrite, "server_a"),
+	}
+	grant, _ := findMatchingGrant(grants, Check{Scope: ScopeMCPRead, ResourceID: "server_a"}.expand())
+	require.NotNil(t, grant)
+}
+
+func TestGrantsToScopedGrants_separatesAllowAndDeny(t *testing.T) {
+	t.Parallel()
+
+	rows := []Grant{
+		NewGrant(ScopeProjectRead, "proj_a"),
+		NewDenyGrant(ScopeProjectRead, "proj_b"),
+		NewGrant(ScopeProjectRead, "proj_c"),
+	}
+
+	scoped := GrantsToScopedGrants(rows)
+
+	// Should produce two entries for project:read — one allow, one deny.
+	var allowGrant, denyGrant *ScopedGrant
+	for _, sg := range scoped {
+		if sg.Scope != string(ScopeProjectRead) {
+			continue
+		}
+		if sg.Effect == PolicyEffectAllow {
+			allowGrant = sg
+		}
+		if sg.Effect == PolicyEffectDeny {
+			denyGrant = sg
+		}
+	}
+	require.NotNil(t, allowGrant, "expected allow grant for project:read")
+	require.NotNil(t, denyGrant, "expected deny grant for project:read")
+	require.Len(t, allowGrant.Selectors, 2)
+	require.Len(t, denyGrant.Selectors, 1)
+}
+
 func TestScopeExpansions_isDAG(t *testing.T) {
 	t.Parallel()
 
