@@ -697,10 +697,12 @@ func (s *Service) buildCallbackURL(ctx context.Context) string {
 	return returnAddress + "/rpc/auth.callback"
 }
 
+var slugifyRe = regexp.MustCompile(`[^a-z0-9]+`)
+
 // slugify converts a name into a URL-safe slug.
 func slugify(name string) string {
 	s := strings.ToLower(strings.TrimSpace(name))
-	s = regexp.MustCompile(`[^a-z0-9]+`).ReplaceAllString(s, "-")
+	s = slugifyRe.ReplaceAllString(s, "-")
 	s = strings.Trim(s, "-")
 	return s
 }

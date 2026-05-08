@@ -101,6 +101,7 @@ func (p *GramProvider) ExchangeToken(
 		p.logger.ErrorContext(ctx, "failed to store session from oauth gram provider",
 			attr.SlogOAuthProvider(provider.Slug),
 			attr.SlogError(err))
+		return nil, fmt.Errorf("store session: %w", err)
 	}
 
 	return &TokenExchangeResult{
