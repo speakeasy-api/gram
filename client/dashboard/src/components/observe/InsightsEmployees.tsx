@@ -170,8 +170,8 @@ export function InsightsEmployeesContent() {
               <h1 className="text-xl font-semibold">Employee Compliance</h1>
               <p className="text-muted-foreground text-sm">
                 Track Gram uptake for organization members in this project over
-                the last {LOOKBACK_DAYS} days. Employees with token usage are
-                marked compliant; employees without usage are marked not
+                the last {LOOKBACK_DAYS} days. Employees with hook activity are
+                marked compliant; employees without any activity are marked not
                 compliant.
               </p>
             </div>
@@ -224,14 +224,14 @@ export function InsightsEmployeesContent() {
                   value={compliantEmployees}
                   icon="circle-check"
                   accentColor="green"
-                  subtext="Token usage present"
+                  subtext="Hook activity present"
                 />
                 <MetricCard
                   title="Not Compliant"
                   value={notCompliantEmployees}
                   icon="triangle-alert"
                   accentColor="orange"
-                  subtext="No token usage found"
+                  subtext="No hook activity found"
                 />
                 <MetricCard
                   title="Token Count"
@@ -432,7 +432,7 @@ function buildEmployees(
       const tokenCount =
         (summary?.totalInputTokens ?? 0) + (summary?.totalOutputTokens ?? 0);
       const status: EmployeeStatus =
-        tokenCount > 0 ? "compliant" : "not_compliant";
+        summary != null ? "compliant" : "not_compliant";
 
       return {
         id: member.id,
@@ -443,7 +443,7 @@ function buildEmployees(
         tokenCount,
         lastActivity: summary
           ? formatUnixNano(summary.lastSeenUnixNano)
-          : "No token usage found",
+          : "No activity found",
       };
     })
     .sort((a, b) => {
