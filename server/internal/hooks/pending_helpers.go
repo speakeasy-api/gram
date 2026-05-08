@@ -251,6 +251,7 @@ func (s *Service) writeMetricsToClickHouse(ctx context.Context, payload *gen.Met
 		urn := "claude-code:usage:metrics"
 
 		attrs := map[attr.Key]any{
+			attr.EventSourceKey:    string(telemetry.EventSourceHook),
 			attr.LogBodyKey:        "Claude Code usage metrics",
 			attr.ProjectIDKey:      projectID,
 			attr.OrganizationIDKey: orgID,
