@@ -10872,6 +10872,7 @@ paths:
             summary: generateDeployScript mdm
             tags:
                 - mdm
+            x-speakeasy-group: mdm
             x-speakeasy-name-override: generateDeployScript
     /rpc/mdm.getInstallScript:
         get:
@@ -10942,6 +10943,7 @@ paths:
             summary: getInstallScript mdm
             tags:
                 - mdm
+            x-speakeasy-group: mdm
             x-speakeasy-name-override: getInstallScript
     /rpc/mdm.patchClaudeSettings:
         post:
@@ -11022,6 +11024,7 @@ paths:
             summary: patchClaudeSettings mdm
             tags:
                 - mdm
+            x-speakeasy-group: mdm
             x-speakeasy-name-override: patchClaudeSettings
     /rpc/organizations.getInviteByToken:
         get:

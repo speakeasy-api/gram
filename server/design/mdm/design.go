@@ -8,6 +8,7 @@ import (
 
 var _ = Service("mdm", func() {
 	Description("MDM configuration management for Claude Code deployments.")
+	Meta("openapi:extension:x-speakeasy-group", "mdm")
 	shared.DeclareErrorResponses()
 
 	Method("generateDeployScript", func() {
@@ -32,6 +33,7 @@ var _ = Service("mdm", func() {
 		})
 
 		Meta("openapi:operationId", "generateDeployScript")
+		Meta("openapi:extension:x-speakeasy-group", "mdm")
 		Meta("openapi:extension:x-speakeasy-name-override", "generateDeployScript")
 	})
 
@@ -50,6 +52,7 @@ var _ = Service("mdm", func() {
 		})
 
 		Meta("openapi:operationId", "getInstallScript")
+		Meta("openapi:extension:x-speakeasy-group", "mdm")
 		Meta("openapi:extension:x-speakeasy-name-override", "getInstallScript")
 	})
 
@@ -77,6 +80,7 @@ var _ = Service("mdm", func() {
 		})
 
 		Meta("openapi:operationId", "patchClaudeSettings")
+		Meta("openapi:extension:x-speakeasy-group", "mdm")
 		Meta("openapi:extension:x-speakeasy-name-override", "patchClaudeSettings")
 	})
 })
