@@ -18,7 +18,7 @@ import (
 // Endpoints wraps the "mdm" service endpoints.
 type Endpoints struct {
 	GenerateDeployScript goa.Endpoint
-	GetApplyScript       goa.Endpoint
+	GetInstallScript     goa.Endpoint
 	PatchClaudeSettings  goa.Endpoint
 }
 
@@ -44,7 +44,7 @@ func NewEndpoints(s Service) *Endpoints {
 	a := s.(Auther)
 	return &Endpoints{
 		GenerateDeployScript: NewGenerateDeployScriptEndpoint(s, a.APIKeyAuth),
-		GetApplyScript:       NewGetApplyScriptEndpoint(s),
+		GetInstallScript:     NewGetInstallScriptEndpoint(s),
 		PatchClaudeSettings:  NewPatchClaudeSettingsEndpoint(s, a.APIKeyAuth),
 	}
 }
@@ -52,7 +52,7 @@ func NewEndpoints(s Service) *Endpoints {
 // Use applies the given middleware to all the "mdm" service endpoints.
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.GenerateDeployScript = m(e.GenerateDeployScript)
-	e.GetApplyScript = m(e.GetApplyScript)
+	e.GetInstallScript = m(e.GetInstallScript)
 	e.PatchClaudeSettings = m(e.PatchClaudeSettings)
 }
 
@@ -79,11 +79,11 @@ func NewGenerateDeployScriptEndpoint(s Service, authAPIKeyFn security.AuthAPIKey
 	}
 }
 
-// NewGetApplyScriptEndpoint returns an endpoint function that calls the method
-// "getApplyScript" of service "mdm".
-func NewGetApplyScriptEndpoint(s Service) goa.Endpoint {
+// NewGetInstallScriptEndpoint returns an endpoint function that calls the
+// method "getInstallScript" of service "mdm".
+func NewGetInstallScriptEndpoint(s Service) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
-		return s.GetApplyScript(ctx)
+		return s.GetInstallScript(ctx)
 	}
 }
 

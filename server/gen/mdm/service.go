@@ -22,9 +22,9 @@ type Service interface {
 	// Kandji, Mosyle, etc.). The embedded key is automatically provisioned with
 	// Hooks scope. Requires org admin access.
 	GenerateDeployScript(context.Context, *GenerateDeployScriptPayload) (res []byte, err error)
-	// Returns the per-user apply script. The deploy script fetches and runs this
+	// Returns the per-user install script. The deploy script fetches and runs this
 	// on each login — logic updates automatically without touching your MDM policy.
-	GetApplyScript(context.Context) (res []byte, err error)
+	GetInstallScript(context.Context) (res []byte, err error)
 	// Accepts the current ~/.claude/settings.json as the request body and returns
 	// a patched version with Gram observability configuration injected. All
 	// existing user settings are preserved. Called by the apply script — requires
@@ -56,7 +56,7 @@ const ServiceName = "mdm"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [3]string{"generateDeployScript", "getApplyScript", "patchClaudeSettings"}
+var MethodNames = [3]string{"generateDeployScript", "getInstallScript", "patchClaudeSettings"}
 
 // GenerateDeployScriptPayload is the payload type of the mdm service
 // generateDeployScript method.

@@ -22,7 +22,7 @@ import (
 type Server struct {
 	Mounts               []*MountPoint
 	GenerateDeployScript http.Handler
-	GetApplyScript       http.Handler
+	GetInstallScript     http.Handler
 	PatchClaudeSettings  http.Handler
 }
 
@@ -54,11 +54,11 @@ func New(
 	return &Server{
 		Mounts: []*MountPoint{
 			{"GenerateDeployScript", "POST", "/rpc/mdm.generateDeployScript"},
-			{"GetApplyScript", "GET", "/rpc/mdm.getApplyScript"},
+			{"GetInstallScript", "GET", "/rpc/mdm.getInstallScript"},
 			{"PatchClaudeSettings", "POST", "/rpc/mdm.patchClaudeSettings"},
 		},
 		GenerateDeployScript: NewGenerateDeployScriptHandler(e.GenerateDeployScript, mux, decoder, encoder, errhandler, formatter),
-		GetApplyScript:       NewGetApplyScriptHandler(e.GetApplyScript, mux, decoder, encoder, errhandler, formatter),
+		GetInstallScript:     NewGetInstallScriptHandler(e.GetInstallScript, mux, decoder, encoder, errhandler, formatter),
 		PatchClaudeSettings:  NewPatchClaudeSettingsHandler(e.PatchClaudeSettings, mux, decoder, encoder, errhandler, formatter),
 	}
 }
@@ -69,7 +69,7 @@ func (s *Server) Service() string { return "mdm" }
 // Use wraps the server handlers with the given middleware.
 func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.GenerateDeployScript = m(s.GenerateDeployScript)
-	s.GetApplyScript = m(s.GetApplyScript)
+	s.GetInstallScript = m(s.GetInstallScript)
 	s.PatchClaudeSettings = m(s.PatchClaudeSettings)
 }
 
@@ -79,7 +79,7 @@ func (s *Server) MethodNames() []string { return mdm.MethodNames[:] }
 // Mount configures the mux to serve the mdm endpoints.
 func Mount(mux goahttp.Muxer, h *Server) {
 	MountGenerateDeployScriptHandler(mux, h.GenerateDeployScript)
-	MountGetApplyScriptHandler(mux, h.GetApplyScript)
+	MountGetInstallScriptHandler(mux, h.GetInstallScript)
 	MountPatchClaudeSettingsHandler(mux, h.PatchClaudeSettings)
 }
 
@@ -141,21 +141,21 @@ func NewGenerateDeployScriptHandler(
 	})
 }
 
-// MountGetApplyScriptHandler configures the mux to serve the "mdm" service
-// "getApplyScript" endpoint.
-func MountGetApplyScriptHandler(mux goahttp.Muxer, h http.Handler) {
+// MountGetInstallScriptHandler configures the mux to serve the "mdm" service
+// "getInstallScript" endpoint.
+func MountGetInstallScriptHandler(mux goahttp.Muxer, h http.Handler) {
 	f, ok := h.(http.HandlerFunc)
 	if !ok {
 		f = func(w http.ResponseWriter, r *http.Request) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("GET", "/rpc/mdm.getApplyScript", f)
+	mux.Handle("GET", "/rpc/mdm.getInstallScript", f)
 }
 
-// NewGetApplyScriptHandler creates a HTTP handler which loads the HTTP request
-// and calls the "mdm" service "getApplyScript" endpoint.
-func NewGetApplyScriptHandler(
+// NewGetInstallScriptHandler creates a HTTP handler which loads the HTTP
+// request and calls the "mdm" service "getInstallScript" endpoint.
+func NewGetInstallScriptHandler(
 	endpoint goa.Endpoint,
 	mux goahttp.Muxer,
 	decoder func(*http.Request) goahttp.Decoder,
@@ -164,12 +164,12 @@ func NewGetApplyScriptHandler(
 	formatter func(ctx context.Context, err error) goahttp.Statuser,
 ) http.Handler {
 	var (
-		encodeResponse = EncodeGetApplyScriptResponse(encoder)
-		encodeError    = EncodeGetApplyScriptError(encoder, formatter)
+		encodeResponse = EncodeGetInstallScriptResponse(encoder)
+		encodeError    = EncodeGetInstallScriptError(encoder, formatter)
 	)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
-		ctx = context.WithValue(ctx, goa.MethodKey, "getApplyScript")
+		ctx = context.WithValue(ctx, goa.MethodKey, "getInstallScript")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "mdm")
 		var err error
 		res, err := endpoint(ctx, nil)

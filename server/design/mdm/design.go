@@ -35,22 +35,22 @@ var _ = Service("mdm", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "generateDeployScript")
 	})
 
-	Method("getApplyScript", func() {
-		Description("Returns the per-user apply script. The deploy script fetches and runs this on each " +
+	Method("getInstallScript", func() {
+		Description("Returns the per-user install script. The deploy script fetches and runs this on each " +
 			"login — logic updates automatically without touching your MDM policy.")
 		NoSecurity()
 
 		Result(Bytes)
 
 		HTTP(func() {
-			GET("/rpc/mdm.getApplyScript")
+			GET("/rpc/mdm.getInstallScript")
 			Response(StatusOK, func() {
 				ContentType("text/plain")
 			})
 		})
 
-		Meta("openapi:operationId", "getApplyScript")
-		Meta("openapi:extension:x-speakeasy-name-override", "getApplyScript")
+		Meta("openapi:operationId", "getInstallScript")
+		Meta("openapi:extension:x-speakeasy-name-override", "getInstallScript")
 	})
 
 	Method("patchClaudeSettings", func() {

@@ -13,7 +13,7 @@
 set -euo pipefail
 
 GRAM_API_KEY="<GRAM_API_KEY>"
-GRAM_APPLY_SCRIPT="https://app.getgram.ai/rpc/mdm.getApplyScript"
+GRAM_APPLY_SCRIPT="https://app.getgram.ai/rpc/mdm.getInstallScript"
 
 CONSOLE_USER=$(stat -f '%Su' /dev/console 2>/dev/null || true)
 [[ "$CONSOLE_USER" =~ ^(root|loginwindow|)$ ]] && { echo "Gram: no console user logged in, skipping" >&2; exit 0; }

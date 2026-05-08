@@ -17,15 +17,15 @@ import (
 // Client is the "mdm" service client.
 type Client struct {
 	GenerateDeployScriptEndpoint goa.Endpoint
-	GetApplyScriptEndpoint       goa.Endpoint
+	GetInstallScriptEndpoint     goa.Endpoint
 	PatchClaudeSettingsEndpoint  goa.Endpoint
 }
 
 // NewClient initializes a "mdm" service client given the endpoints.
-func NewClient(generateDeployScript, getApplyScript, patchClaudeSettings goa.Endpoint) *Client {
+func NewClient(generateDeployScript, getInstallScript, patchClaudeSettings goa.Endpoint) *Client {
 	return &Client{
 		GenerateDeployScriptEndpoint: generateDeployScript,
-		GetApplyScriptEndpoint:       getApplyScript,
+		GetInstallScriptEndpoint:     getInstallScript,
 		PatchClaudeSettingsEndpoint:  patchClaudeSettings,
 	}
 }
@@ -53,8 +53,8 @@ func (c *Client) GenerateDeployScript(ctx context.Context, p *GenerateDeployScri
 	return ires.([]byte), nil
 }
 
-// GetApplyScript calls the "getApplyScript" endpoint of the "mdm" service.
-// GetApplyScript may return the following errors:
+// GetInstallScript calls the "getInstallScript" endpoint of the "mdm" service.
+// GetInstallScript may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
@@ -66,9 +66,9 @@ func (c *Client) GenerateDeployScript(ctx context.Context, p *GenerateDeployScri
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
-func (c *Client) GetApplyScript(ctx context.Context) (res []byte, err error) {
+func (c *Client) GetInstallScript(ctx context.Context) (res []byte, err error) {
 	var ires any
-	ires, err = c.GetApplyScriptEndpoint(ctx, nil)
+	ires, err = c.GetInstallScriptEndpoint(ctx, nil)
 	if err != nil {
 		return
 	}

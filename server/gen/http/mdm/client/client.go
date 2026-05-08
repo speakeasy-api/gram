@@ -22,9 +22,9 @@ type Client struct {
 	// generateDeployScript endpoint.
 	GenerateDeployScriptDoer goahttp.Doer
 
-	// GetApplyScript Doer is the HTTP client used to make requests to the
-	// getApplyScript endpoint.
-	GetApplyScriptDoer goahttp.Doer
+	// GetInstallScript Doer is the HTTP client used to make requests to the
+	// getInstallScript endpoint.
+	GetInstallScriptDoer goahttp.Doer
 
 	// PatchClaudeSettings Doer is the HTTP client used to make requests to the
 	// patchClaudeSettings endpoint.
@@ -51,7 +51,7 @@ func NewClient(
 ) *Client {
 	return &Client{
 		GenerateDeployScriptDoer: doer,
-		GetApplyScriptDoer:       doer,
+		GetInstallScriptDoer:     doer,
 		PatchClaudeSettingsDoer:  doer,
 		RestoreResponseBody:      restoreBody,
 		scheme:                   scheme,
@@ -85,20 +85,20 @@ func (c *Client) GenerateDeployScript() goa.Endpoint {
 	}
 }
 
-// GetApplyScript returns an endpoint that makes HTTP requests to the mdm
-// service getApplyScript server.
-func (c *Client) GetApplyScript() goa.Endpoint {
+// GetInstallScript returns an endpoint that makes HTTP requests to the mdm
+// service getInstallScript server.
+func (c *Client) GetInstallScript() goa.Endpoint {
 	var (
-		decodeResponse = DecodeGetApplyScriptResponse(c.decoder, c.RestoreResponseBody)
+		decodeResponse = DecodeGetInstallScriptResponse(c.decoder, c.RestoreResponseBody)
 	)
 	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildGetApplyScriptRequest(ctx, v)
+		req, err := c.BuildGetInstallScriptRequest(ctx, v)
 		if err != nil {
 			return nil, err
 		}
-		resp, err := c.GetApplyScriptDoer.Do(req)
+		resp, err := c.GetInstallScriptDoer.Do(req)
 		if err != nil {
-			return nil, goahttp.ErrRequestError("mdm", "getApplyScript", err)
+			return nil, goahttp.ErrRequestError("mdm", "getInstallScript", err)
 		}
 		return decodeResponse(resp)
 	}

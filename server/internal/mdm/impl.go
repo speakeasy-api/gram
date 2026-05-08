@@ -162,7 +162,7 @@ func (s *Service) renderDeployScript(apiKey string) []byte {
 set -euo pipefail
 
 GRAM_API_KEY="%s"
-GRAM_APPLY_SCRIPT="%s/rpc/mdm.getApplyScript"
+GRAM_INSTALL_SCRIPT="%s/rpc/mdm.getInstallScript"
 
 CONSOLE_USER=$(stat -f '%%Su' /dev/console 2>/dev/null || true)
 [[ "$CONSOLE_USER" =~ ^(root|loginwindow|)$ ]] && { echo "Gram: no console user logged in, skipping" >&2; exit 0; }
@@ -177,7 +177,7 @@ trap 'rm -f "$WRAPPER"' EXIT
 cat > "$WRAPPER" <<WEOF
 #!/bin/bash
 export HOME="$USER_HOME"
-curl -fsSL "$GRAM_APPLY_SCRIPT" | bash -s -- "$GRAM_API_KEY"
+curl -fsSL "$GRAM_INSTALL_SCRIPT" | bash -s -- "$GRAM_API_KEY"
 WEOF
 chmod +x "$WRAPPER"
 
@@ -196,13 +196,13 @@ func generateToken() (string, error) {
 	return hex.EncodeToString(randomBytes), nil
 }
 
-// GetApplyScript returns the per-user apply script. The deploy script fetches and runs this
-// on each login — logic updates automatically without MDM policy changes.
-func (s *Service) GetApplyScript(ctx context.Context) ([]byte, error) {
+// GetInstallScript returns the per-user install script. The deploy script fetches and runs
+// this on each login — logic updates automatically without MDM policy changes.
+func (s *Service) GetInstallScript(ctx context.Context) ([]byte, error) {
 	base := s.serverURL.String()
 	script := fmt.Sprintf(`#!/bin/bash
 # Gram Claude Code Apply Script — auto-served from %s
-# Usage: curl -fsSL '%s/rpc/mdm.getApplyScript' | bash -s -- <GRAM_API_KEY>
+# Usage: curl -fsSL '%s/rpc/mdm.getInstallScript' | bash -s -- <GRAM_API_KEY>
 # Only dependency: curl (always present on macOS).
 set -euo pipefail
 GRAM_API_KEY="${1:?GRAM_API_KEY required as \$1}"

@@ -212,9 +212,9 @@ func EncodeGenerateDeployScriptError(encoder func(context.Context, http.Response
 	}
 }
 
-// EncodeGetApplyScriptResponse returns an encoder for responses returned by
-// the mdm getApplyScript endpoint.
-func EncodeGetApplyScriptResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+// EncodeGetInstallScriptResponse returns an encoder for responses returned by
+// the mdm getInstallScript endpoint.
+func EncodeGetInstallScriptResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
 		res, _ := v.([]byte)
 		ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "text/plain")
@@ -225,9 +225,9 @@ func EncodeGetApplyScriptResponse(encoder func(context.Context, http.ResponseWri
 	}
 }
 
-// EncodeGetApplyScriptError returns an encoder for errors returned by the
-// getApplyScript mdm endpoint.
-func EncodeGetApplyScriptError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+// EncodeGetInstallScriptError returns an encoder for errors returned by the
+// getInstallScript mdm endpoint.
+func EncodeGetInstallScriptError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
 	encodeError := goahttp.ErrorEncoder(encoder, formatter)
 	return func(ctx context.Context, w http.ResponseWriter, v error) error {
 		var en goa.GoaErrorNamer
@@ -244,7 +244,7 @@ func EncodeGetApplyScriptError(encoder func(context.Context, http.ResponseWriter
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetApplyScriptUnauthorizedResponseBody(res)
+				body = NewGetInstallScriptUnauthorizedResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnauthorized)
@@ -258,7 +258,7 @@ func EncodeGetApplyScriptError(encoder func(context.Context, http.ResponseWriter
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetApplyScriptForbiddenResponseBody(res)
+				body = NewGetInstallScriptForbiddenResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusForbidden)
@@ -272,7 +272,7 @@ func EncodeGetApplyScriptError(encoder func(context.Context, http.ResponseWriter
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetApplyScriptBadRequestResponseBody(res)
+				body = NewGetInstallScriptBadRequestResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadRequest)
@@ -286,7 +286,7 @@ func EncodeGetApplyScriptError(encoder func(context.Context, http.ResponseWriter
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetApplyScriptNotFoundResponseBody(res)
+				body = NewGetInstallScriptNotFoundResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusNotFound)
@@ -300,7 +300,7 @@ func EncodeGetApplyScriptError(encoder func(context.Context, http.ResponseWriter
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetApplyScriptConflictResponseBody(res)
+				body = NewGetInstallScriptConflictResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusConflict)
@@ -314,7 +314,7 @@ func EncodeGetApplyScriptError(encoder func(context.Context, http.ResponseWriter
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetApplyScriptUnsupportedMediaResponseBody(res)
+				body = NewGetInstallScriptUnsupportedMediaResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnsupportedMediaType)
@@ -328,7 +328,7 @@ func EncodeGetApplyScriptError(encoder func(context.Context, http.ResponseWriter
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetApplyScriptInvalidResponseBody(res)
+				body = NewGetInstallScriptInvalidResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnprocessableEntity)
@@ -342,7 +342,7 @@ func EncodeGetApplyScriptError(encoder func(context.Context, http.ResponseWriter
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetApplyScriptInvariantViolationResponseBody(res)
+				body = NewGetInstallScriptInvariantViolationResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -356,7 +356,7 @@ func EncodeGetApplyScriptError(encoder func(context.Context, http.ResponseWriter
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetApplyScriptUnexpectedResponseBody(res)
+				body = NewGetInstallScriptUnexpectedResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -370,7 +370,7 @@ func EncodeGetApplyScriptError(encoder func(context.Context, http.ResponseWriter
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetApplyScriptGatewayErrorResponseBody(res)
+				body = NewGetInstallScriptGatewayErrorResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadGateway)

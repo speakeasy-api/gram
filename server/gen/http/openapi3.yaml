@@ -10873,10 +10873,10 @@ paths:
             tags:
                 - mdm
             x-speakeasy-name-override: generateDeployScript
-    /rpc/mdm.getApplyScript:
+    /rpc/mdm.getInstallScript:
         get:
-            description: Returns the per-user apply script. The deploy script fetches and runs this on each login — logic updates automatically without touching your MDM policy.
-            operationId: getApplyScript
+            description: Returns the per-user install script. The deploy script fetches and runs this on each login — logic updates automatically without touching your MDM policy.
+            operationId: getInstallScript
             responses:
                 "200":
                     content:
@@ -10939,10 +10939,10 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
-            summary: getApplyScript mdm
+            summary: getInstallScript mdm
             tags:
                 - mdm
-            x-speakeasy-name-override: getApplyScript
+            x-speakeasy-name-override: getInstallScript
     /rpc/mdm.patchClaudeSettings:
         post:
             description: Accepts the current ~/.claude/settings.json as the request body and returns a patched version with Gram observability configuration injected. All existing user settings are preserved. Called by the apply script — requires a Hooks-scoped API key.
