@@ -102,7 +102,7 @@ var _ = Service("mcpServers", func() {
 	})
 
 	Method("updateMcpServer", func() {
-		Description("Update an MCP server. This is a full-record replace: fields omitted from the request become null on the stored record. The id and visibility fields are required; exactly one of remote_mcp_server_id or toolset_id must be provided; at most one of external_oauth_server_id or oauth_proxy_server_id may be provided.")
+		Description("Update an MCP server. This is a full-record replace for the optional UUID references: fields omitted from the request become null on the stored record. name is an exception — omitting it leaves the existing display name unchanged, while providing it requires a non-empty value and recomputes the server-side slug. The id and visibility fields are required; exactly one of remote_mcp_server_id or toolset_id must be provided; at most one of external_oauth_server_id or oauth_proxy_server_id may be provided.")
 
 		Payload(func() {
 			Extend(UpdateMcpServerForm)
@@ -163,6 +163,7 @@ var McpServerVisibility = Type("McpServerVisibility", String, func() {
 var CreateMcpServerForm = Type("CreateMcpServerForm", func() {
 	Description("Form for creating a new MCP server. Exactly one of remote_mcp_server_id or toolset_id must be provided. At most one of external_oauth_server_id or oauth_proxy_server_id may be provided.")
 
+	Attribute("name", String, "A human-readable display name for the server")
 	Attribute("environment_id", String, "The ID of the environment to associate with the server", func() {
 		Format(FormatUUID)
 	})
@@ -180,15 +181,16 @@ var CreateMcpServerForm = Type("CreateMcpServerForm", func() {
 	})
 	Attribute("visibility", McpServerVisibility, "The visibility of the server")
 
-	Required("visibility")
+	Required("name", "visibility")
 })
 
 var UpdateMcpServerForm = Type("UpdateMcpServerForm", func() {
-	Description("Form for updating an MCP server. This is a full-record replace: fields omitted from the request become null on the stored record. Exactly one of remote_mcp_server_id or toolset_id must be provided; at most one of external_oauth_server_id or oauth_proxy_server_id may be provided.")
+	Description("Form for updating an MCP server. This is a full-record replace: fields omitted from the request become null on the stored record. Exactly one of remote_mcp_server_id or toolset_id must be provided; at most one of external_oauth_server_id or oauth_proxy_server_id may be provided. Omit name to leave the existing display name unchanged; the slug is recomputed server-side from the resulting name.")
 
 	Attribute("id", String, "The ID of the MCP server to update", func() {
 		Format(FormatUUID)
 	})
+	Attribute("name", String, "A human-readable display name for the server. Omit to leave the existing name unchanged; if provided, must be non-empty.")
 	Attribute("environment_id", String, "The ID of the environment to associate with the server", func() {
 		Format(FormatUUID)
 	})
@@ -220,6 +222,8 @@ var McpServer = Type("McpServer", func() {
 	Attribute("project_id", String, "The project ID this MCP server belongs to", func() {
 		Format(FormatUUID)
 	})
+	Attribute("name", String, "A human-readable display name for the server")
+	Attribute("slug", String, "A URL-safe, project-unique slug derived server-side from the name and ID")
 	Attribute("environment_id", String, "The ID of the environment associated with the server", func() {
 		Format(FormatUUID)
 	})

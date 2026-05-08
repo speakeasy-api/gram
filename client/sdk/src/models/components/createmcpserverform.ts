@@ -34,6 +34,10 @@ export type CreateMcpServerForm = {
    */
   externalOauthServerId?: string | undefined;
   /**
+   * A human-readable display name for the server
+   */
+  name: string;
+  /**
    * The ID of the OAuth proxy server to associate with the server
    */
   oauthProxyServerId?: string | undefined;
@@ -60,6 +64,7 @@ export const CreateMcpServerFormVisibility$outboundSchema: z.ZodMiniEnum<
 export type CreateMcpServerForm$Outbound = {
   environment_id?: string | undefined;
   external_oauth_server_id?: string | undefined;
+  name: string;
   oauth_proxy_server_id?: string | undefined;
   remote_mcp_server_id?: string | undefined;
   toolset_id?: string | undefined;
@@ -74,6 +79,7 @@ export const CreateMcpServerForm$outboundSchema: z.ZodMiniType<
   z.object({
     environmentId: z.optional(z.string()),
     externalOauthServerId: z.optional(z.string()),
+    name: z.string(),
     oauthProxyServerId: z.optional(z.string()),
     remoteMcpServerId: z.optional(z.string()),
     toolsetId: z.optional(z.string()),

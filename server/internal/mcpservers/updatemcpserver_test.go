@@ -29,6 +29,7 @@ func TestUpdateMcpServer_FullReplace(t *testing.T) {
 		SessionToken:          nil,
 		ApikeyToken:           nil,
 		ProjectSlugInput:      nil,
+		Name:                  "test mcp server",
 		EnvironmentID:         nil,
 		ExternalOauthServerID: nil,
 		OauthProxyServerID:    nil,
@@ -85,6 +86,7 @@ func TestUpdateMcpServer_InvalidBackend(t *testing.T) {
 		SessionToken:          nil,
 		ApikeyToken:           nil,
 		ProjectSlugInput:      nil,
+		Name:                  "test mcp server",
 		EnvironmentID:         nil,
 		ExternalOauthServerID: nil,
 		OauthProxyServerID:    nil,
@@ -133,6 +135,136 @@ func TestUpdateMcpServer_NotFound(t *testing.T) {
 		Visibility:            types.McpServerVisibility("disabled"),
 	})
 	requireOopsCode(t, err, oops.CodeNotFound)
+}
+
+func TestUpdateMcpServer_LeavesNameWhenOmitted(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	serverID := seedRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
+
+	created, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
+		SessionToken:          nil,
+		ApikeyToken:           nil,
+		ProjectSlugInput:      nil,
+		Name:                  "original name",
+		EnvironmentID:         nil,
+		ExternalOauthServerID: nil,
+		OauthProxyServerID:    nil,
+		RemoteMcpServerID:     &serverID,
+		ToolsetID:             nil,
+		Visibility:            types.McpServerVisibility("disabled"),
+	})
+	require.NoError(t, err)
+
+	updated, err := ti.service.UpdateMcpServer(ctx, &gen.UpdateMcpServerPayload{
+		SessionToken:          nil,
+		ApikeyToken:           nil,
+		ProjectSlugInput:      nil,
+		ID:                    created.ID,
+		Name:                  nil,
+		EnvironmentID:         nil,
+		ExternalOauthServerID: nil,
+		OauthProxyServerID:    nil,
+		RemoteMcpServerID:     &serverID,
+		ToolsetID:             nil,
+		Visibility:            types.McpServerVisibility("public"),
+	})
+	require.NoError(t, err)
+	require.NotNil(t, updated.Name)
+	require.Equal(t, "original name", *updated.Name)
+}
+
+func TestUpdateMcpServer_RecomputesSlugOnNameChange(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	serverID := seedRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
+
+	created, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
+		SessionToken:          nil,
+		ApikeyToken:           nil,
+		ProjectSlugInput:      nil,
+		Name:                  "before name",
+		EnvironmentID:         nil,
+		ExternalOauthServerID: nil,
+		OauthProxyServerID:    nil,
+		RemoteMcpServerID:     &serverID,
+		ToolsetID:             nil,
+		Visibility:            types.McpServerVisibility("disabled"),
+	})
+	require.NoError(t, err)
+	require.NotNil(t, created.Slug)
+	originalSlug := *created.Slug
+
+	newName := "after name"
+	updated, err := ti.service.UpdateMcpServer(ctx, &gen.UpdateMcpServerPayload{
+		SessionToken:          nil,
+		ApikeyToken:           nil,
+		ProjectSlugInput:      nil,
+		ID:                    created.ID,
+		Name:                  &newName,
+		EnvironmentID:         nil,
+		ExternalOauthServerID: nil,
+		OauthProxyServerID:    nil,
+		RemoteMcpServerID:     &serverID,
+		ToolsetID:             nil,
+		Visibility:            types.McpServerVisibility("disabled"),
+	})
+	require.NoError(t, err)
+	require.NotNil(t, updated.Name)
+	require.Equal(t, newName, *updated.Name)
+	require.NotNil(t, updated.Slug)
+	require.NotEqual(t, originalSlug, *updated.Slug, "slug should recompute when name changes")
+}
+
+func TestUpdateMcpServer_RejectsEmptyName(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	serverID := seedRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
+
+	created, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
+		SessionToken:          nil,
+		ApikeyToken:           nil,
+		ProjectSlugInput:      nil,
+		Name:                  "original name",
+		EnvironmentID:         nil,
+		ExternalOauthServerID: nil,
+		OauthProxyServerID:    nil,
+		RemoteMcpServerID:     &serverID,
+		ToolsetID:             nil,
+		Visibility:            types.McpServerVisibility("disabled"),
+	})
+	require.NoError(t, err)
+
+	emptyName := "   "
+	_, err = ti.service.UpdateMcpServer(ctx, &gen.UpdateMcpServerPayload{
+		SessionToken:          nil,
+		ApikeyToken:           nil,
+		ProjectSlugInput:      nil,
+		ID:                    created.ID,
+		Name:                  &emptyName,
+		EnvironmentID:         nil,
+		ExternalOauthServerID: nil,
+		OauthProxyServerID:    nil,
+		RemoteMcpServerID:     &serverID,
+		ToolsetID:             nil,
+		Visibility:            types.McpServerVisibility("disabled"),
+	})
+	requireOopsCode(t, err, oops.CodeBadRequest)
 }
 
 func TestUpdateMcpServer_RBACForbidden(t *testing.T) {

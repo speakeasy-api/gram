@@ -1224,6 +1224,8 @@ func unmarshalMcpServerResponseBodyToTypesMcpServer(v *McpServerResponseBody) *t
 	res := &types.McpServer{
 		ID:                    *v.ID,
 		ProjectID:             *v.ProjectID,
+		Name:                  v.Name,
+		Slug:                  v.Slug,
 		EnvironmentID:         v.EnvironmentID,
 		ExternalOauthServerID: v.ExternalOauthServerID,
 		OauthProxyServerID:    v.OauthProxyServerID,

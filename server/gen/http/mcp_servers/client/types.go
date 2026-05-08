@@ -16,6 +16,8 @@ import (
 // CreateMcpServerRequestBody is the type of the "mcpServers" service
 // "createMcpServer" endpoint HTTP request body.
 type CreateMcpServerRequestBody struct {
+	// A human-readable display name for the server
+	Name string `form:"name" json:"name" xml:"name"`
 	// The ID of the environment to associate with the server
 	EnvironmentID *string `form:"environment_id,omitempty" json:"environment_id,omitempty" xml:"environment_id,omitempty"`
 	// The ID of the external OAuth server to associate with the server
@@ -35,6 +37,9 @@ type CreateMcpServerRequestBody struct {
 type UpdateMcpServerRequestBody struct {
 	// The ID of the MCP server to update
 	ID string `form:"id" json:"id" xml:"id"`
+	// A human-readable display name for the server. Omit to leave the existing
+	// name unchanged; if provided, must be non-empty.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// The ID of the environment to associate with the server
 	EnvironmentID *string `form:"environment_id,omitempty" json:"environment_id,omitempty" xml:"environment_id,omitempty"`
 	// The ID of the external OAuth server to associate with the server
@@ -56,6 +61,10 @@ type CreateMcpServerResponseBody struct {
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// The project ID this MCP server belongs to
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// A human-readable display name for the server
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// A URL-safe, project-unique slug derived server-side from the name and ID
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// The ID of the environment associated with the server
 	EnvironmentID *string `form:"environment_id,omitempty" json:"environment_id,omitempty" xml:"environment_id,omitempty"`
 	// The ID of the external OAuth server associated with the server
@@ -81,6 +90,10 @@ type GetMcpServerResponseBody struct {
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// The project ID this MCP server belongs to
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// A human-readable display name for the server
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// A URL-safe, project-unique slug derived server-side from the name and ID
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// The ID of the environment associated with the server
 	EnvironmentID *string `form:"environment_id,omitempty" json:"environment_id,omitempty" xml:"environment_id,omitempty"`
 	// The ID of the external OAuth server associated with the server
@@ -112,6 +125,10 @@ type UpdateMcpServerResponseBody struct {
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// The project ID this MCP server belongs to
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// A human-readable display name for the server
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// A URL-safe, project-unique slug derived server-side from the name and ID
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// The ID of the environment associated with the server
 	EnvironmentID *string `form:"environment_id,omitempty" json:"environment_id,omitempty" xml:"environment_id,omitempty"`
 	// The ID of the external OAuth server associated with the server
@@ -1060,6 +1077,10 @@ type McpServerResponseBody struct {
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// The project ID this MCP server belongs to
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// A human-readable display name for the server
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// A URL-safe, project-unique slug derived server-side from the name and ID
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// The ID of the environment associated with the server
 	EnvironmentID *string `form:"environment_id,omitempty" json:"environment_id,omitempty" xml:"environment_id,omitempty"`
 	// The ID of the external OAuth server associated with the server
@@ -1082,6 +1103,7 @@ type McpServerResponseBody struct {
 // of the "createMcpServer" endpoint of the "mcpServers" service.
 func NewCreateMcpServerRequestBody(p *mcpservers.CreateMcpServerPayload) *CreateMcpServerRequestBody {
 	body := &CreateMcpServerRequestBody{
+		Name:                  p.Name,
 		EnvironmentID:         p.EnvironmentID,
 		ExternalOauthServerID: p.ExternalOauthServerID,
 		OauthProxyServerID:    p.OauthProxyServerID,
@@ -1097,6 +1119,7 @@ func NewCreateMcpServerRequestBody(p *mcpservers.CreateMcpServerPayload) *Create
 func NewUpdateMcpServerRequestBody(p *mcpservers.UpdateMcpServerPayload) *UpdateMcpServerRequestBody {
 	body := &UpdateMcpServerRequestBody{
 		ID:                    p.ID,
+		Name:                  p.Name,
 		EnvironmentID:         p.EnvironmentID,
 		ExternalOauthServerID: p.ExternalOauthServerID,
 		OauthProxyServerID:    p.OauthProxyServerID,
@@ -1113,6 +1136,8 @@ func NewCreateMcpServerMcpServerOK(body *CreateMcpServerResponseBody) *types.Mcp
 	v := &types.McpServer{
 		ID:                    *body.ID,
 		ProjectID:             *body.ProjectID,
+		Name:                  body.Name,
+		Slug:                  body.Slug,
 		EnvironmentID:         body.EnvironmentID,
 		ExternalOauthServerID: body.ExternalOauthServerID,
 		OauthProxyServerID:    body.OauthProxyServerID,
@@ -1282,6 +1307,8 @@ func NewGetMcpServerMcpServerOK(body *GetMcpServerResponseBody) *types.McpServer
 	v := &types.McpServer{
 		ID:                    *body.ID,
 		ProjectID:             *body.ProjectID,
+		Name:                  body.Name,
+		Slug:                  body.Slug,
 		EnvironmentID:         body.EnvironmentID,
 		ExternalOauthServerID: body.ExternalOauthServerID,
 		OauthProxyServerID:    body.OauthProxyServerID,
@@ -1617,6 +1644,8 @@ func NewUpdateMcpServerMcpServerOK(body *UpdateMcpServerResponseBody) *types.Mcp
 	v := &types.McpServer{
 		ID:                    *body.ID,
 		ProjectID:             *body.ProjectID,
+		Name:                  body.Name,
+		Slug:                  body.Slug,
 		EnvironmentID:         body.EnvironmentID,
 		ExternalOauthServerID: body.ExternalOauthServerID,
 		OauthProxyServerID:    body.OauthProxyServerID,

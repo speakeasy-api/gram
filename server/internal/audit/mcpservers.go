@@ -26,7 +26,9 @@ type LogMcpServerCreateEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	McpServerURN urn.McpServer
+	McpServerURN  urn.McpServer
+	McpServerName string
+	McpServerSlug string
 }
 
 func (l *Logger) LogMcpServerCreate(ctx context.Context, dbtx repo.DBTX, event LogMcpServerCreateEvent) error {
@@ -44,8 +46,8 @@ func (l *Logger) LogMcpServerCreate(ctx context.Context, dbtx repo.DBTX, event L
 
 		SubjectID:          event.McpServerURN.ID.String(),
 		SubjectType:        string(subjectTypeMcpServer),
-		SubjectDisplayName: conv.ToPGTextEmpty(""),
-		SubjectSlug:        conv.ToPGTextEmpty(""),
+		SubjectDisplayName: conv.ToPGTextEmpty(event.McpServerName),
+		SubjectSlug:        conv.ToPGTextEmpty(event.McpServerSlug),
 
 		BeforeSnapshot: nil,
 		AfterSnapshot:  nil,
@@ -64,6 +66,8 @@ type LogMcpServerUpdateEvent struct {
 	ActorSlug        *string
 
 	McpServerURN            urn.McpServer
+	McpServerName           string
+	McpServerSlug           string
 	McpServerSnapshotBefore *types.McpServer
 	McpServerSnapshotAfter  *types.McpServer
 }
@@ -94,8 +98,8 @@ func (l *Logger) LogMcpServerUpdate(ctx context.Context, dbtx repo.DBTX, event L
 
 		SubjectID:          event.McpServerURN.ID.String(),
 		SubjectType:        string(subjectTypeMcpServer),
-		SubjectDisplayName: conv.ToPGTextEmpty(""),
-		SubjectSlug:        conv.ToPGTextEmpty(""),
+		SubjectDisplayName: conv.ToPGTextEmpty(event.McpServerName),
+		SubjectSlug:        conv.ToPGTextEmpty(event.McpServerSlug),
 
 		BeforeSnapshot: beforeSnapshot,
 		AfterSnapshot:  afterSnapshot,
@@ -113,7 +117,9 @@ type LogMcpServerDeleteEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	McpServerURN urn.McpServer
+	McpServerURN  urn.McpServer
+	McpServerName string
+	McpServerSlug string
 }
 
 func (l *Logger) LogMcpServerDelete(ctx context.Context, dbtx repo.DBTX, event LogMcpServerDeleteEvent) error {
@@ -131,8 +137,8 @@ func (l *Logger) LogMcpServerDelete(ctx context.Context, dbtx repo.DBTX, event L
 
 		SubjectID:          event.McpServerURN.ID.String(),
 		SubjectType:        string(subjectTypeMcpServer),
-		SubjectDisplayName: conv.ToPGTextEmpty(""),
-		SubjectSlug:        conv.ToPGTextEmpty(""),
+		SubjectDisplayName: conv.ToPGTextEmpty(event.McpServerName),
+		SubjectSlug:        conv.ToPGTextEmpty(event.McpServerSlug),
 
 		BeforeSnapshot: nil,
 		AfterSnapshot:  nil,

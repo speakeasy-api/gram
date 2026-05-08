@@ -26,6 +26,7 @@ func TestGetMcpServer(t *testing.T) {
 		SessionToken:          nil,
 		ApikeyToken:           nil,
 		ProjectSlugInput:      nil,
+		Name:                  "test mcp server",
 		EnvironmentID:         nil,
 		ExternalOauthServerID: nil,
 		OauthProxyServerID:    nil,

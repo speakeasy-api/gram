@@ -1189,6 +1189,8 @@ func marshalTypesMcpServerToMcpServerResponseBody(v *types.McpServer) *McpServer
 	res := &McpServerResponseBody{
 		ID:                    v.ID,
 		ProjectID:             v.ProjectID,
+		Name:                  v.Name,
+		Slug:                  v.Slug,
 		EnvironmentID:         v.EnvironmentID,
 		ExternalOauthServerID: v.ExternalOauthServerID,
 		OauthProxyServerID:    v.OauthProxyServerID,

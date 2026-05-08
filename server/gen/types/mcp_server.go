@@ -14,6 +14,10 @@ type McpServer struct {
 	ID string
 	// The project ID this MCP server belongs to
 	ProjectID string
+	// A human-readable display name for the server
+	Name *string
+	// A URL-safe, project-unique slug derived server-side from the name and ID
+	Slug *string
 	// The ID of the environment associated with the server
 	EnvironmentID *string
 	// The ID of the external OAuth server associated with the server
