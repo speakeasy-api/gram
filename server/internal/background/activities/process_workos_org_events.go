@@ -93,6 +93,10 @@ func (p *ProcessWorkOSOrganizationEvents) Do(ctx context.Context, params Process
 			string(workos.EventKindOrganizationRoleCreated),
 			string(workos.EventKindOrganizationRoleDeleted),
 			string(workos.EventKindOrganizationRoleUpdated),
+
+			string(workos.EventKindOrganizationMembershipCreated),
+			string(workos.EventKindOrganizationMembershipUpdated),
+			string(workos.EventKindOrganizationMembershipDeleted),
 		},
 		Limit:          workosOrgEventsPageSize,
 		After:          sinceEventID,
@@ -193,8 +197,8 @@ func (p *ProcessWorkOSOrganizationEvents) handleEvent(ctx context.Context, logge
 	return event.ID, nil
 }
 
-// handleOrganizationEvent dispatches an organization.* or organization_role.*
-// WorkOS event to its handler. Each handler is responsible for the
+// handleOrganizationEvent dispatches a WorkOS event scoped to a specific
+// organization to its handler. Each handler is responsible for the
 // ShouldProcessEvent guard against duplicate apply.
 func handleOrganizationEvent(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, event events.Event) error {
 	switch event.Event {
@@ -206,6 +210,10 @@ func handleOrganizationEvent(ctx context.Context, logger *slog.Logger, dbtx data
 		return handleRoleUpsert(ctx, logger, dbtx, event)
 	case string(workos.EventKindOrganizationRoleDeleted):
 		return handleRoleDeleted(ctx, logger, dbtx, event)
+	case string(workos.EventKindOrganizationMembershipCreated), string(workos.EventKindOrganizationMembershipUpdated):
+		return handleOrganizationMembershipUpsert(ctx, logger, dbtx, event)
+	case string(workos.EventKindOrganizationMembershipDeleted):
+		return handleOrganizationMembershipDeleted(ctx, logger, dbtx, event)
 	}
 
 	return oops.Permanent(fmt.Errorf("unhandled workos organization event type: %s", event.Event))
