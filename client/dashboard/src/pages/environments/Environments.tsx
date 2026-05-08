@@ -146,6 +146,7 @@ function EnvironmentsInner() {
         }}
       />
       <CloneEnvironmentDialog
+        key={cloneSource?.id ?? ""}
         source={cloneSource}
         open={cloneSource !== null}
         onOpenChange={(open) => {

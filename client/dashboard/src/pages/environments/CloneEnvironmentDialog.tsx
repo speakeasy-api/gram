@@ -4,7 +4,7 @@ import { Switch } from "@/components/ui/switch";
 import { Type } from "@/components/ui/type";
 import { Environment } from "@gram/client/models/components/environment.js";
 import { Button } from "@speakeasy-api/moonshine";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useCloneEnvironment } from "./useEnvironmentActions";
 
 type Props = {
@@ -14,19 +14,12 @@ type Props = {
 };
 
 export function CloneEnvironmentDialog({ source, open, onOpenChange }: Props) {
-  const [name, setName] = useState("");
+  const [name, setName] = useState(source ? `${source.name} (copy)` : "");
   const [copyValues, setCopyValues] = useState(false);
 
   const { clone, isPending } = useCloneEnvironment({
     onSuccess: () => onOpenChange(false),
   });
-
-  useEffect(() => {
-    if (source) {
-      setName(`${source.name} (copy)`);
-      setCopyValues(false);
-    }
-  }, [source]);
 
   const submit = () => {
     if (!source || !name.trim() || isPending) return;
