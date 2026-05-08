@@ -51,7 +51,17 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET "+RoutePrefix+"healthz", func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = io.WriteString(w, "ok")
 	})
-	return mux
+	// Claude Code's managed settings appends a trailing slash to git source
+	// URLs; strip it before routing so the patterns above still match.
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/") {
+			r2 := r.Clone(r.Context())
+			r2.URL.Path = strings.TrimRight(r.URL.Path, "/")
+			mux.ServeHTTP(w, r2)
+			return
+		}
+		mux.ServeHTTP(w, r)
+	})
 }
 
 // IsMarketplaceRoute reports whether the request targets a path owned by the
