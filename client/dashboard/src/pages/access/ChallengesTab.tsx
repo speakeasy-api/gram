@@ -94,6 +94,34 @@ function FilterPill({
   );
 }
 
+export function ChallengesEmptyState({
+  outcomeFilter,
+}: {
+  outcomeFilter: OutcomeFilter;
+}) {
+  return (
+    <div className="border-border/50 bg-muted/20 rounded-lg border px-6 py-16 text-center">
+      <div className="bg-primary/10 mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full">
+        <Check className="text-primary h-6 w-6" />
+      </div>
+      <Type variant="body" className="font-medium">
+        {outcomeFilter === "deny"
+          ? "No denied access attempts"
+          : outcomeFilter === "resolved"
+            ? "No resolved challenges yet"
+            : "No challenges found"}
+      </Type>
+      <Type variant="body" className="text-muted-foreground mt-1 text-sm">
+        {outcomeFilter === "deny"
+          ? "All authorization checks are passing. Your team's permissions look good."
+          : outcomeFilter === "resolved"
+            ? "Denied challenges that are resolved by granting access will appear here."
+            : "Authorization challenges will appear here as your team uses the platform."}
+      </Type>
+    </div>
+  );
+}
+
 export function ChallengesTab() {
   const [searchParams] = useSearchParams();
   const [outcomeFilter, setOutcomeFilter] = useState<OutcomeFilter>("deny");
@@ -282,25 +310,7 @@ export function ChallengesTab() {
       {isLoading ? (
         <SkeletonTable />
       ) : filtered.length === 0 ? (
-        <div className="border-border/50 bg-muted/20 rounded-lg border px-6 py-16 text-center">
-          <div className="bg-primary/10 mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full">
-            <Check className="text-primary h-6 w-6" />
-          </div>
-          <Type variant="body" className="font-medium">
-            {outcomeFilter === "deny"
-              ? "No denied access attempts"
-              : outcomeFilter === "resolved"
-                ? "No resolved challenges yet"
-                : "No challenges found"}
-          </Type>
-          <Type variant="body" className="text-muted-foreground mt-1 text-sm">
-            {outcomeFilter === "deny"
-              ? "All authorization checks are passing. Your team's permissions look good."
-              : outcomeFilter === "resolved"
-                ? "Denied challenges that are resolved by granting access will appear here."
-                : "Authorization challenges will appear here as your team uses the platform."}
-          </Type>
-        </div>
+        <ChallengesEmptyState outcomeFilter={outcomeFilter} />
       ) : (
         <Table columns={columns} data={filtered} rowKey={(row) => row.id} />
       )}
