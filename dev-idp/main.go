@@ -6,7 +6,7 @@
 //   - the mock-workos mode at /mock-workos/ (mock WorkOS REST surface);
 //   - the oauth2 mode at /oauth2/;
 //   - the oauth2-1 mode at /oauth2-1/;
-//   - the workos mode at /workos/ (only when WORKOS_API_KEY is set).
+//   - the workos mode at /workos/ (only when GRAM_IDP_MODE=workos and WORKOS_API_KEY is set).
 //
 // A second tiny health server is mounted on GRAM_DEVIDP_CONTROL_ADDRESS.
 //
@@ -60,7 +60,8 @@ func run() error {
 	externalURL := flag.String("external-url", os.Getenv("GRAM_DEVIDP_EXTERNAL_URL"), "Public base URL for discovery docs / redirect URIs (defaults from --address)")
 	dbSpec := flag.String("db", os.Getenv("GRAM_DEVIDP_DB"), "SQLite location: 'memory' or 'file:<path>' (default file:local/devidp/devidp.db)")
 	rsaKey := flag.String("rsa-private-key", os.Getenv("GRAM_DEVIDP_RSA_PRIVATE_KEY"), "PEM-encoded RSA private key (omit to generate a fresh ephemeral key)")
-	workosKey := flag.String("workos-api-key", os.Getenv("WORKOS_API_KEY"), "When set, mounts /workos/ as a thin proxy over the live WorkOS API")
+	idpMode := flag.String("idp-mode", envOr("GRAM_IDP_MODE", "mock-workos"), "IDP mode: mock-workos (default) or workos")
+	workosKey := flag.String("workos-api-key", os.Getenv("WORKOS_API_KEY"), "WorkOS API key (required when --idp-mode=workos)")
 	workosHost := flag.String("workos-host", envOr("WORKOS_HOST", "https://api.workos.com"), "Base URL of the WorkOS API")
 	flag.Parse()
 
@@ -135,7 +136,10 @@ func run() error {
 	)
 	outer.Handle(oauth2.Prefix+"/", http.StripPrefix(oauth2.Prefix, oauth2Handler.Handler()))
 
-	if *workosKey != "" {
+	if *idpMode == "workos" {
+		if *workosKey == "" {
+			return fmt.Errorf("GRAM_IDP_MODE=workos requires WORKOS_API_KEY to be set")
+		}
 		wsClient := workos.NewClient(*workosKey, workos.Opts{
 			Endpoint: *workosHost,
 		})
@@ -143,8 +147,10 @@ func run() error {
 			wsClient, logger, tp, db,
 		)
 		outer.Handle(devidpworkos.Prefix+"/", http.StripPrefix(devidpworkos.Prefix, wsHandler.Handler()))
-		logger.InfoContext(ctx, "/workos/ mode mounted")
+		logger.InfoContext(ctx, "/workos/ proxy mounted (GRAM_IDP_MODE=workos)")
 	}
+
+	logger.InfoContext(ctx, "idp mode", slog.String("mode", *idpMode))
 
 	outer.Handle("/", goaMux)
 

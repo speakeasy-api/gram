@@ -16,51 +16,53 @@ This populates the database with projects, deployments, API keys, and other reso
 
 ### Local auth and identity (dev-idp)
 
-In production, Gram relies on two external services for identity:
+Local development uses **dev-idp** — a lightweight Go server (`dev-idp/`) that replaces the external identity services Gram uses in production. It runs as a madprocs process, uses SQLite, and requires no external accounts.
 
-1. **An OIDC provider** — handles the login flow (redirect → authenticate → callback with authorization code → exchange for tokens).
-2. **WorkOS** — provides organization management, role-based membership, and team invitations. The Gram server calls the WorkOS REST API directly for things like listing roles on the Roles & Permissions page, managing org memberships, and syncing user data.
+The mode is controlled by a single env var:
 
-For local development, both of these are replaced by **dev-idp** — a lightweight Go server in the `dev-idp/` directory that runs as a process in madprocs. It uses SQLite for storage and requires no external accounts or API keys.
+```
+GRAM_IDP_MODE = "mock-workos" | "workos"
+```
 
-dev-idp mounts several protocol handlers, all sharing the same SQLite database:
+#### mock-workos (default — zero config)
 
-| Prefix         | Always mounted              | Purpose                 | Details                                                                                                                                                                                  |
-| -------------- | --------------------------- | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `/oauth2`      | ✅                          | User login              | Standard OIDC provider (authorize, token, userinfo, JWKS). When you click "Login" in the dashboard, the browser redirects here, dev-idp issues tokens, and the server creates a session. |
-| `/oauth2-1`    | ✅                          | MCP auth                | OAuth 2.1 server with PKCE (S256) and Dynamic Client Registration. Used by MCP remote session flows. Shares the same user/org data as `/oauth2`.                                         |
-| `/mock-workos` | ✅                          | Orgs, roles, teams      | Mock WorkOS REST API. Dashboard pages that call WorkOS directly (Roles & Permissions, Team management, Invitations, membership checks) hit this instead of the real API.                 |
-| `/workos`      | ❌ (needs `WORKOS_API_KEY`) | Real orgs, roles, teams | Thin proxy to the real WorkOS API. Forwards requests using your API key. Replaces `/mock-workos` when you need real data.                                                                |
+This is what you get out of the box after `./zero`. No configuration needed.
 
-The Gram server doesn't know or care that these are mocked — it uses the same code paths as production. The only difference is that `GRAM_IDP_BASE_URL` and `WORKOS_API_URL` point to `localhost` instead of external services.
+- **Login** authenticates instantly with a test user — no credentials needed.
+- **WorkOS API calls** (Roles & Permissions, Team management, Invitations) hit dev-idp's built-in mock instead of the real API.
+- **Customization**: open `http://localhost:35293` to create/edit users, organizations, roles, and memberships.
 
-#### Mode: mock-workos (default — zero config)
+#### workos (opt-in — real WorkOS)
 
-This is what you get out of the box after running `./zero`. No configuration needed.
-
-- **Login**: Clicking "Login" authenticates instantly with a test user. No credentials needed.
-- **WorkOS features**: Dashboard pages that call WorkOS (Roles & Permissions, Team management, Invitations) work against the mock, returning synthetic data.
-- **Customization**: Open the dev-idp dashboard at `http://localhost:35293` to create/edit users, organizations, roles, and memberships. Changes take effect on next login.
-
-#### Mode: real WorkOS (opt-in)
-
-For Speakeasy employees who want to test against real WorkOS data (real organizations, real roles, real AuthKit login). The `./zero` script prompts you to choose during setup, or you can switch manually.
-
-Add the following to `mise.local.toml`:
+For Speakeasy employees testing against real WorkOS data. The `./zero` script prompts you to choose during setup, or add to `mise.local.toml` manually:
 
 ```toml
 [env]
+GRAM_IDP_MODE = "workos"
 WORKOS_API_KEY = "sk_test_..."
 WORKOS_API_URL = "{{env.GRAM_DEVIDP_EXTERNAL_URL}}/workos"
 GRAM_IDP_CLIENT_ID = "client_..."
 ```
 
-This does two things:
+This routes the server's WorkOS API calls through a dev-idp proxy to the real WorkOS API. OIDC login still goes through dev-idp's `/oauth2` handler locally.
 
-1. **dev-idp mounts `/workos/`** — a thin proxy that forwards API requests to the real WorkOS API using your API key. The Gram server's WorkOS client calls go through this proxy.
-2. **The OIDC login still goes through dev-idp's `/oauth2`** — dev-idp handles the token exchange locally.
+After changing modes, restart madprocs.
 
-After changing modes, restart madprocs for changes to take effect.
+<details>
+<summary>dev-idp protocol handlers (advanced)</summary>
+
+dev-idp mounts several protocol handlers on a single port, all sharing one SQLite database:
+
+| Prefix         | Purpose            | Details                                                                   |
+| -------------- | ------------------ | ------------------------------------------------------------------------- |
+| `/oauth2`      | User login         | Standard OIDC provider (authorize, token, userinfo, JWKS).                |
+| `/oauth2-1`    | MCP auth           | OAuth 2.1 with PKCE and Dynamic Client Registration.                      |
+| `/mock-workos` | Orgs, roles, teams | Mock WorkOS REST API — always mounted.                                    |
+| `/workos`      | Real WorkOS proxy  | Thin proxy to real WorkOS API — only mounted when `GRAM_IDP_MODE=workos`. |
+
+The Gram server uses the same code paths as production — only `GRAM_IDP_BASE_URL` and `WORKOS_API_URL` point to localhost instead of external services.
+
+</details>
 
 ### CLI development
 

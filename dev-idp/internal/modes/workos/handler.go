@@ -2,7 +2,7 @@
 // REST API calls to the live WorkOS dev environment. Provides direct
 // inspection endpoints for users, organizations, and the current user.
 //
-// The mode is unmounted entirely when WORKOS_API_KEY is unset.
+// The mode is only mounted when GRAM_IDP_MODE=workos.
 // When mounted, every request hits the live WorkOS API (or whatever
 // WORKOS_HOST points at) using the configured API key.
 package workos

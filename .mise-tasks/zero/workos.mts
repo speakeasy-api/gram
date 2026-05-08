@@ -7,21 +7,23 @@
 import { $, question } from "zx";
 
 async function run() {
-  const apiKey = process.env["WORKOS_API_KEY"];
-  const hasWorkOS =
-    typeof apiKey === "string" && apiKey !== "" && apiKey !== "unset";
+  const mode = process.env["GRAM_IDP_MODE"] || "mock-workos";
 
-  if (hasWorkOS && process.env["usage_restart"] !== "true") {
-    console.log("✅ IDP mode: real WorkOS (already configured).");
+  if (mode === "workos" && process.env["usage_restart"] !== "true") {
+    console.log("✅ IDP mode: workos (already configured).");
     process.exit(0);
   }
 
-  if (
-    process.env["WORKOS_SKIPPED"] === "true" &&
-    process.env["usage_restart"] !== "true"
-  ) {
-    console.log("✅ IDP mode: mock-workos (previously selected).");
-    process.exit(0);
+  if (mode === "mock-workos" && process.env["usage_restart"] !== "true") {
+    // Check if the user previously made an explicit choice (not just the default).
+    const apiKey = process.env["WORKOS_API_KEY"];
+    const hasExplicitChoice =
+      (typeof apiKey === "string" && apiKey !== "" && apiKey !== "unset") ||
+      process.env["WORKOS_SKIPPED"] === "true";
+    if (hasExplicitChoice) {
+      console.log("✅ IDP mode: mock-workos (already configured).");
+      process.exit(0);
+    }
   }
 
   console.log();
@@ -47,7 +49,7 @@ async function run() {
   if (choice.trim() === "2") {
     await setupRealWorkOS();
   } else {
-    await $`mise set --file mise.local.toml WORKOS_SKIPPED=true`;
+    await $`mise set --file mise.local.toml GRAM_IDP_MODE=mock-workos`;
     console.log();
     console.log("✅ IDP mode: mock-workos. No additional config needed.");
   }
@@ -71,7 +73,7 @@ async function setupRealWorkOS() {
     process.env["GRAM_DEVIDP_EXTERNAL_URL"] || "http://localhost:35291";
 
   await $`touch mise.local.toml`;
-  await $`mise unset --file mise.local.toml WORKOS_SKIPPED`;
+  await $`mise set --file mise.local.toml GRAM_IDP_MODE=workos`;
   await $`mise set --file mise.local.toml WORKOS_API_KEY=${key.trim()}`;
   await $`mise set --file mise.local.toml WORKOS_API_URL=${devidpURL}/workos`;
   await $`mise set --file mise.local.toml GRAM_IDP_CLIENT_ID=${clientId.trim()}`;

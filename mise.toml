@@ -123,16 +123,14 @@ GRAM_DEVIDP_EXTERNAL_URL = "http://{{env.GRAM_DEVIDP_HOST}}:{{env.GRAM_DEVIDP_PO
 GRAM_DEVIDP_DB = "file:{{ config_root }}/local/devidp/devidp.db"
 GRAM_IDP_BASE_URL = "{{env.GRAM_DEVIDP_EXTERNAL_URL}}/oauth2"
 GRAM_IDP_CLIENT_ID = "gram-local-dev"
-## By default, the server's WorkOS client points at dev-idp's mock-workos
-## emulator so everything works out-of-the-box with zero config.
+## IDP mode: "mock-workos" (default) or "workos".
 ##
-## To switch to REAL WorkOS (e.g. for testing AuthKit login), add the
-## following to mise.local.toml:
+## mock-workos — fully local, zero config. dev-idp emulates the WorkOS API.
+## workos      — real WorkOS via dev-idp proxy. Requires WORKOS_API_KEY and
+##               GRAM_IDP_CLIENT_ID override in mise.local.toml.
 ##
-##   WORKOS_API_KEY = "sk_test_..."
-##   WORKOS_API_URL = "{{env.GRAM_DEVIDP_EXTERNAL_URL}}/workos"
-##
-## That's it — WORKOS_API_KEY also enables the dev-idp /workos/ proxy.
+## See CONTRIBUTING.md "Local auth and identity" for details.
+GRAM_IDP_MODE = "mock-workos"
 WORKOS_API_URL = "{{env.GRAM_DEVIDP_EXTERNAL_URL}}/mock-workos"
 ## PEM-encoded RSA private key for stable JWKS across dev-idp restarts.
 # GRAM_DEVIDP_RSA_PRIVATE_KEY = ""
