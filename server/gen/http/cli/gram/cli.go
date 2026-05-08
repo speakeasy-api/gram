@@ -3,7 +3,7 @@
 // gram HTTP client CLI support package
 //
 // Command:
-// $ goa gen github.com/speakeasy-api/gram/server/design
+// $ goa gen github.com/speakeasy-api/gram/server/design -o server
 
 package cli
 
@@ -37,6 +37,7 @@ import (
 	mcpmetadatac "github.com/speakeasy-api/gram/server/gen/http/mcp_metadata/client"
 	mcpregistriesc "github.com/speakeasy-api/gram/server/gen/http/mcp_registries/client"
 	mcpserversc "github.com/speakeasy-api/gram/server/gen/http/mcp_servers/client"
+	mdmc "github.com/speakeasy-api/gram/server/gen/http/mdm/client"
 	organizationsc "github.com/speakeasy-api/gram/server/gen/http/organizations/client"
 	packagesc "github.com/speakeasy-api/gram/server/gen/http/packages/client"
 	pluginsc "github.com/speakeasy-api/gram/server/gen/http/plugins/client"
@@ -88,6 +89,7 @@ func UsageCommands() []string {
 		"mcp-endpoints (create-mcp-endpoint|get-mcp-endpoint|list-mcp-endpoints|update-mcp-endpoint|delete-mcp-endpoint)",
 		"mcp-metadata (get-mcp-metadata|set-mcp-metadata|export-mcp-metadata)",
 		"mcp-servers (create-mcp-server|get-mcp-server|list-mcp-servers|update-mcp-server|delete-mcp-server)",
+		"mdm (get-install-script|patch-claude-settings)",
 		"organizations (send-invite|revoke-invite|list-invites|get-invite-by-token|list-users|remove-user)",
 		"packages (create-package|update-package|list-packages|list-versions|publish)",
 		"plugins (list-plugins|get-plugin|create-plugin|update-plugin|delete-plugin|add-plugin-server|update-plugin-server|remove-plugin-server|set-plugin-assignments|download-plugin-package|download-observability-plugin|get-publish-status|publish-plugins)",
@@ -766,6 +768,14 @@ func ParseEndpoint(
 		mcpServersDeleteMcpServerSessionTokenFlag     = mcpServersDeleteMcpServerFlags.String("session-token", "", "")
 		mcpServersDeleteMcpServerApikeyTokenFlag      = mcpServersDeleteMcpServerFlags.String("apikey-token", "", "")
 		mcpServersDeleteMcpServerProjectSlugInputFlag = mcpServersDeleteMcpServerFlags.String("project-slug-input", "", "")
+
+		mdmFlags = flag.NewFlagSet("mdm", flag.ContinueOnError)
+
+		mdmGetInstallScriptFlags = flag.NewFlagSet("get-install-script", flag.ExitOnError)
+
+		mdmPatchClaudeSettingsFlags           = flag.NewFlagSet("patch-claude-settings", flag.ExitOnError)
+		mdmPatchClaudeSettingsApikeyTokenFlag = mdmPatchClaudeSettingsFlags.String("apikey-token", "", "")
+		mdmPatchClaudeSettingsStreamFlag      = mdmPatchClaudeSettingsFlags.String("stream", "REQUIRED", "path to file containing the streamed request body")
 
 		organizationsFlags = flag.NewFlagSet("organizations", flag.ContinueOnError)
 
@@ -1605,6 +1615,10 @@ func ParseEndpoint(
 	mcpServersUpdateMcpServerFlags.Usage = mcpServersUpdateMcpServerUsage
 	mcpServersDeleteMcpServerFlags.Usage = mcpServersDeleteMcpServerUsage
 
+	mdmFlags.Usage = mdmUsage
+	mdmGetInstallScriptFlags.Usage = mdmGetInstallScriptUsage
+	mdmPatchClaudeSettingsFlags.Usage = mdmPatchClaudeSettingsUsage
+
 	organizationsFlags.Usage = organizationsUsage
 	organizationsSendInviteFlags.Usage = organizationsSendInviteUsage
 	organizationsRevokeInviteFlags.Usage = organizationsRevokeInviteUsage
@@ -1822,6 +1836,8 @@ func ParseEndpoint(
 			svcf = mcpMetadataFlags
 		case "mcp-servers":
 			svcf = mcpServersFlags
+		case "mdm":
+			svcf = mdmFlags
 		case "organizations":
 			svcf = organizationsFlags
 		case "packages":
@@ -2299,6 +2315,16 @@ func ParseEndpoint(
 
 			case "delete-mcp-server":
 				epf = mcpServersDeleteMcpServerFlags
+
+			}
+
+		case "mdm":
+			switch epn {
+			case "get-install-script":
+				epf = mdmGetInstallScriptFlags
+
+			case "patch-claude-settings":
+				epf = mdmPatchClaudeSettingsFlags
 
 			}
 
@@ -3184,6 +3210,18 @@ func ParseEndpoint(
 			case "delete-mcp-server":
 				endpoint = c.DeleteMcpServer()
 				data, err = mcpserversc.BuildDeleteMcpServerPayload(*mcpServersDeleteMcpServerIDFlag, *mcpServersDeleteMcpServerSessionTokenFlag, *mcpServersDeleteMcpServerApikeyTokenFlag, *mcpServersDeleteMcpServerProjectSlugInputFlag)
+			}
+		case "mdm":
+			c := mdmc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "get-install-script":
+				endpoint = c.GetInstallScript()
+			case "patch-claude-settings":
+				endpoint = c.PatchClaudeSettings()
+				data, err = mdmc.BuildPatchClaudeSettingsPayload(*mdmPatchClaudeSettingsApikeyTokenFlag)
+				if err == nil {
+					data, err = mdmc.BuildPatchClaudeSettingsStreamPayload(data, *mdmPatchClaudeSettingsStreamFlag)
+				}
 			}
 		case "organizations":
 			c := organizationsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -6463,6 +6501,53 @@ func mcpServersDeleteMcpServerUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-servers delete-mcp-server --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+// mdmUsage displays the usage of the mdm command and its subcommands.
+func mdmUsage() {
+	fmt.Fprintln(os.Stderr, `MDM configuration management for Claude Code deployments.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] mdm COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    get-install-script: Returns the shell script used to apply Gram settings to Claude Code. Host this endpoint URL in your MDM policy — script updates automatically without touching Jamf/MDM.`)
+	fmt.Fprintln(os.Stderr, `    patch-claude-settings: Accepts the current ~/.claude/settings.json as the request body and returns a patched version with Gram observability configuration injected. All existing user settings are preserved. Called by the MDM install script — requires a Hooks-scoped API key.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s mdm COMMAND --help\n", os.Args[0])
+}
+func mdmGetInstallScriptUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] mdm get-install-script", os.Args[0])
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Returns the shell script used to apply Gram settings to Claude Code. Host this endpoint URL in your MDM policy — script updates automatically without touching Jamf/MDM.`)
+
+	// Flags list
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mdm get-install-script")
+}
+
+func mdmPatchClaudeSettingsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] mdm patch-claude-settings", os.Args[0])
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -stream STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Accepts the current ~/.claude/settings.json as the request body and returns a patched version with Gram observability configuration injected. All existing user settings are preserved. Called by the MDM install script — requires a Hooks-scoped API key.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -stream STRING: path to file containing the streamed request body`)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mdm patch-claude-settings --apikey-token \"abc123\" --stream \"goa.png\"")
 }
 
 // organizationsUsage displays the usage of the organizations command and its
