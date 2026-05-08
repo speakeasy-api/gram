@@ -7058,7 +7058,7 @@ func mcpServersUsage() {
 	fmt.Fprintln(os.Stderr, `    create-mcp-server: Create a new MCP server`)
 	fmt.Fprintln(os.Stderr, `    get-mcp-server: Get an MCP server by ID`)
 	fmt.Fprintln(os.Stderr, `    list-mcp-servers: List MCP servers for a project. Accepts optional remote_mcp_server_id or toolset_id filters to scope the result to a single backend; at most one filter may be supplied since the two backends are mutually exclusive.`)
-	fmt.Fprintln(os.Stderr, `    update-mcp-server: Update an MCP server. This is a full-record replace: fields omitted from the request become null on the stored record. The id and visibility fields are required; exactly one of remote_mcp_server_id or toolset_id must be provided.`)
+	fmt.Fprintln(os.Stderr, `    update-mcp-server: Update an MCP server. This is a full-record replace for the optional UUID references: fields omitted from the request become null on the stored record. name is an exception — omitting it leaves the existing display name unchanged, while providing it requires a non-empty value and recomputes the server-side slug. The id and visibility fields are required; exactly one of remote_mcp_server_id or toolset_id must be provided.`)
 	fmt.Fprintln(os.Stderr, `    delete-mcp-server: Delete an MCP server`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
@@ -7085,7 +7085,7 @@ func mcpServersCreateMcpServerUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-servers create-mcp-server --body '{\n      \"environment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"remote_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"visibility\": \"private\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-servers create-mcp-server --body '{\n      \"environment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"remote_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"visibility\": \"private\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func mcpServersGetMcpServerUsage() {
@@ -7149,7 +7149,7 @@ func mcpServersUpdateMcpServerUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Update an MCP server. This is a full-record replace: fields omitted from the request become null on the stored record. The id and visibility fields are required; exactly one of remote_mcp_server_id or toolset_id must be provided.`)
+	fmt.Fprintln(os.Stderr, `Update an MCP server. This is a full-record replace for the optional UUID references: fields omitted from the request become null on the stored record. name is an exception — omitting it leaves the existing display name unchanged, while providing it requires a non-empty value and recomputes the server-side slug. The id and visibility fields are required; exactly one of remote_mcp_server_id or toolset_id must be provided.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -7159,7 +7159,7 @@ func mcpServersUpdateMcpServerUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-servers update-mcp-server --body '{\n      \"environment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"remote_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"visibility\": \"private\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-servers update-mcp-server --body '{\n      \"environment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"remote_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"visibility\": \"private\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func mcpServersDeleteMcpServerUsage() {

@@ -26,9 +26,12 @@ type Service interface {
 	// toolset_id filters to scope the result to a single backend; at most one
 	// filter may be supplied since the two backends are mutually exclusive.
 	ListMcpServers(context.Context, *ListMcpServersPayload) (res *ListMcpServersResult, err error)
-	// Update an MCP server. This is a full-record replace: fields omitted from the
-	// request become null on the stored record. The id and visibility fields are
-	// required; exactly one of remote_mcp_server_id or toolset_id must be provided.
+	// Update an MCP server. This is a full-record replace for the optional UUID
+	// references: fields omitted from the request become null on the stored
+	// record. name is an exception — omitting it leaves the existing display name
+	// unchanged, while providing it requires a non-empty value and recomputes the
+	// server-side slug. The id and visibility fields are required; exactly one of
+	// remote_mcp_server_id or toolset_id must be provided.
 	UpdateMcpServer(context.Context, *UpdateMcpServerPayload) (res *types.McpServer, err error)
 	// Delete an MCP server
 	DeleteMcpServer(context.Context, *DeleteMcpServerPayload) (err error)
@@ -62,6 +65,8 @@ type CreateMcpServerPayload struct {
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
+	// A human-readable display name for the server
+	Name string
 	// The ID of the environment to associate with the server
 	EnvironmentID *string
 	// The ID of the remote MCP server to use as the backend
@@ -118,6 +123,9 @@ type UpdateMcpServerPayload struct {
 	ProjectSlugInput *string
 	// The ID of the MCP server to update
 	ID string
+	// A human-readable display name for the server. Omit to leave the existing
+	// name unchanged; if provided, must be non-empty.
+	Name *string
 	// The ID of the environment to associate with the server
 	EnvironmentID *string
 	// The ID of the remote MCP server to use as the backend

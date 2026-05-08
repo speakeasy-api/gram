@@ -23,13 +23,14 @@ func TestGetMcpServer(t *testing.T) {
 	serverID := seedRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
 
 	created, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
-		SessionToken:      nil,
-		ApikeyToken:       nil,
-		ProjectSlugInput:  nil,
-		EnvironmentID:     nil,
-		RemoteMcpServerID: &serverID,
-		ToolsetID:         nil,
-		Visibility:        types.McpServerVisibility("private"),
+		SessionToken:          nil,
+		ApikeyToken:           nil,
+		ProjectSlugInput:      nil,
+		Name:                  "test mcp server",
+		EnvironmentID:         nil,
+		RemoteMcpServerID:     &serverID,
+		ToolsetID:             nil,
+		Visibility:            types.McpServerVisibility("private"),
 	})
 	require.NoError(t, err)
 

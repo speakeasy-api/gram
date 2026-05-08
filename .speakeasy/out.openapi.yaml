@@ -11369,7 +11369,7 @@ paths:
         name: McpServers
   /rpc/mcpServers.update:
     post:
-      description: 'Update an MCP server. This is a full-record replace: fields omitted from the request become null on the stored record. The id and visibility fields are required; exactly one of remote_mcp_server_id or toolset_id must be provided.'
+      description: 'Update an MCP server. This is a full-record replace for the optional UUID references: fields omitted from the request become null on the stored record. name is an exception — omitting it leaves the existing display name unchanged, while providing it requires a non-empty value and recomputes the server-side slug. The id and visibility fields are required; exactly one of remote_mcp_server_id or toolset_id must be provided.'
       operationId: updateMcpServer
       parameters:
         - allowEmptyValue: true
@@ -27952,6 +27952,9 @@ components:
           type: string
           description: The ID of the environment to associate with the server
           format: uuid
+        name:
+          type: string
+          description: A human-readable display name for the server
         remote_mcp_server_id:
           type: string
           description: The ID of the remote MCP server to use as the backend
@@ -27969,6 +27972,7 @@ components:
             - public
       description: Form for creating a new MCP server. Exactly one of remote_mcp_server_id or toolset_id must be provided.
       required:
+        - name
         - visibility
     CreatePackageForm:
       type: object
@@ -31939,6 +31943,9 @@ components:
           type: string
           description: The ID of the MCP server
           format: uuid
+        name:
+          type: string
+          description: A human-readable display name for the server
         project_id:
           type: string
           description: The project ID this MCP server belongs to
@@ -31947,6 +31954,9 @@ components:
           type: string
           description: The ID of the remote MCP server used as the backend
           format: uuid
+        slug:
+          type: string
+          description: A URL-safe, project-unique slug derived server-side from the name and ID
         toolset_id:
           type: string
           description: The ID of the toolset used as the backend
@@ -36250,6 +36260,9 @@ components:
           type: string
           description: The ID of the MCP server to update
           format: uuid
+        name:
+          type: string
+          description: A human-readable display name for the server. Omit to leave the existing name unchanged; if provided, must be non-empty.
         remote_mcp_server_id:
           type: string
           description: The ID of the remote MCP server to use as the backend
@@ -36265,7 +36278,7 @@ components:
             - disabled
             - private
             - public
-      description: 'Form for updating an MCP server. This is a full-record replace: fields omitted from the request become null on the stored record. Exactly one of remote_mcp_server_id or toolset_id must be provided.'
+      description: 'Form for updating an MCP server. This is a full-record replace: fields omitted from the request become null on the stored record. Exactly one of remote_mcp_server_id or toolset_id must be provided. Omit name to leave the existing display name unchanged; the slug is recomputed server-side from the resulting name.'
       required:
         - id
         - visibility

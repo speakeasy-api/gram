@@ -9,11 +9,15 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const createMCPServer = `-- name: CreateMCPServer :one
 INSERT INTO mcp_servers (
+    id,
     project_id,
+    name,
+    slug,
     environment_id,
     remote_mcp_server_id,
     toolset_id,
@@ -24,13 +28,19 @@ VALUES (
     $2,
     $3,
     $4,
-    $5
+    $5,
+    $6,
+    $7,
+    $8
 )
 RETURNING id, project_id, name, slug, environment_id, user_session_issuer_id, remote_mcp_server_id, toolset_id, visibility, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateMCPServerParams struct {
+	ID                uuid.UUID
 	ProjectID         uuid.UUID
+	Name              pgtype.Text
+	Slug              pgtype.Text
 	EnvironmentID     uuid.NullUUID
 	RemoteMcpServerID uuid.NullUUID
 	ToolsetID         uuid.NullUUID
@@ -39,7 +49,10 @@ type CreateMCPServerParams struct {
 
 func (q *Queries) CreateMCPServer(ctx context.Context, arg CreateMCPServerParams) (McpServer, error) {
 	row := q.db.QueryRow(ctx, createMCPServer,
+		arg.ID,
 		arg.ProjectID,
+		arg.Name,
+		arg.Slug,
 		arg.EnvironmentID,
 		arg.RemoteMcpServerID,
 		arg.ToolsetID,
@@ -182,16 +195,20 @@ func (q *Queries) ListMCPServersByProjectID(ctx context.Context, arg ListMCPServ
 const updateMCPServer = `-- name: UpdateMCPServer :one
 UPDATE mcp_servers
 SET
-    environment_id = $1,
-    remote_mcp_server_id = $2,
-    toolset_id = $3,
-    visibility = $4,
+    name = $1,
+    slug = $2,
+    environment_id = $3,
+    remote_mcp_server_id = $4,
+    toolset_id = $5,
+    visibility = $6,
     updated_at = clock_timestamp()
-WHERE id = $5 AND project_id = $6 AND deleted IS FALSE
+WHERE id = $7 AND project_id = $8 AND deleted IS FALSE
 RETURNING id, project_id, name, slug, environment_id, user_session_issuer_id, remote_mcp_server_id, toolset_id, visibility, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateMCPServerParams struct {
+	Name              pgtype.Text
+	Slug              pgtype.Text
 	EnvironmentID     uuid.NullUUID
 	RemoteMcpServerID uuid.NullUUID
 	ToolsetID         uuid.NullUUID
@@ -202,6 +219,8 @@ type UpdateMCPServerParams struct {
 
 func (q *Queries) UpdateMCPServer(ctx context.Context, arg UpdateMCPServerParams) (McpServer, error) {
 	row := q.db.QueryRow(ctx, updateMCPServer,
+		arg.Name,
+		arg.Slug,
 		arg.EnvironmentID,
 		arg.RemoteMcpServerID,
 		arg.ToolsetID,

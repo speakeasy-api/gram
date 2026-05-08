@@ -30,6 +30,10 @@ export type CreateMcpServerForm = {
    */
   environmentId?: string | undefined;
   /**
+   * A human-readable display name for the server
+   */
+  name: string;
+  /**
    * The ID of the remote MCP server to use as the backend
    */
   remoteMcpServerId?: string | undefined;
@@ -51,6 +55,7 @@ export const CreateMcpServerFormVisibility$outboundSchema: z.ZodMiniEnum<
 /** @internal */
 export type CreateMcpServerForm$Outbound = {
   environment_id?: string | undefined;
+  name: string;
   remote_mcp_server_id?: string | undefined;
   toolset_id?: string | undefined;
   visibility: string;
@@ -63,6 +68,7 @@ export const CreateMcpServerForm$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     environmentId: z.optional(z.string()),
+    name: z.string(),
     remoteMcpServerId: z.optional(z.string()),
     toolsetId: z.optional(z.string()),
     visibility: CreateMcpServerFormVisibility$outboundSchema,
