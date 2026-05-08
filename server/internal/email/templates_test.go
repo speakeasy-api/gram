@@ -44,17 +44,17 @@ func TestTeamInvite_Variables_RendersExpectedKeys(t *testing.T) {
 	t.Parallel()
 
 	tmpl := TeamInvite{
-		InviteLink:    "https://app.gram.sh/invite?token=abc",
-		InviterName:   "Alice",
-		InviterEmail:  "alice@example.com",
-		WorkspaceName: "Acme Inc",
+		InviteLink:       "https://app.gram.sh/invite?token=abc",
+		InviterName:      "Alice",
+		InviterEmail:     "alice@example.com",
+		OrganizationName: "Acme Inc",
 	}
 
 	require.Equal(t, map[string]string{
-		"invite_link":    "https://app.gram.sh/invite?token=abc",
-		"teammate_fn":    "Alice",
-		"teammate_email": "alice@example.com",
-		"workspace_name": "Acme Inc",
+		"invite_link":       "https://app.gram.sh/invite?token=abc",
+		"inviter_name":      "Alice",
+		"inviter_email":     "alice@example.com",
+		"organization_name": "Acme Inc",
 	}, tmpl.Variables())
 }
 
@@ -62,18 +62,18 @@ func TestTeamInvite_Variables_PassesEmptyFieldsThrough(t *testing.T) {
 	t.Parallel()
 
 	tmpl := TeamInvite{
-		InviteLink:    "",
-		InviterName:   "",
-		InviterEmail:  "",
-		WorkspaceName: "",
+		InviteLink:       "",
+		InviterName:      "",
+		InviterEmail:     "",
+		OrganizationName: "",
 	}
 
 	vars := tmpl.Variables()
 	require.Len(t, vars, 4, "all merge keys should still be present even if values are empty")
 	require.Empty(t, vars["invite_link"])
-	require.Empty(t, vars["teammate_fn"])
-	require.Empty(t, vars["teammate_email"])
-	require.Empty(t, vars["workspace_name"])
+	require.Empty(t, vars["inviter_name"])
+	require.Empty(t, vars["inviter_email"])
+	require.Empty(t, vars["organization_name"])
 }
 
 func TestTeamInvite_AddToAudience(t *testing.T) {

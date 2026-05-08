@@ -49,9 +49,9 @@ type Template interface {
 // AddToAudience), never to render an actual email.
 var RegisteredTemplates = []Template{
 	TeamInvite{
-		InviteLink:    "",
-		InviterName:   "",
-		InviterEmail:  "",
-		WorkspaceName: "",
+		InviteLink:       "",
+		InviterName:      "",
+		InviterEmail:     "",
+		OrganizationName: "",
 	},
 }

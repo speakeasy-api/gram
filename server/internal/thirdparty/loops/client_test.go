@@ -96,7 +96,7 @@ func TestHTTPClient_SendTransactional_SendsExpectedRequest(t *testing.T) {
 	err := c.SendTransactional(t.Context(), SendTransactionalInput{
 		TransactionalID: "tid-abc",
 		Email:           "alice@example.com",
-		DataVariables:   map[string]string{"workspace_name": "Acme"},
+		DataVariables:   map[string]string{"organization_name": "Acme"},
 		AddToAudience:   true,
 	})
 	require.NoError(t, err)
@@ -110,7 +110,7 @@ func TestHTTPClient_SendTransactional_SendsExpectedRequest(t *testing.T) {
 	require.Equal(t, "application/json", captured.contentType)
 	require.Equal(t, "tid-abc", captured.body.TransactionalID)
 	require.Equal(t, "alice@example.com", captured.body.Email)
-	require.Equal(t, map[string]string{"workspace_name": "Acme"}, captured.body.DataVariables)
+	require.Equal(t, map[string]string{"organization_name": "Acme"}, captured.body.DataVariables)
 	require.True(t, captured.body.AddToAudience)
 }
 

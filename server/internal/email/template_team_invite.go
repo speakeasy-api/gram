@@ -12,9 +12,9 @@ type TeamInvite struct {
 	InviterName string
 	// InviterEmail is the email address of the person who sent the invite.
 	InviterEmail string
-	// WorkspaceName is the human-readable name of the organization the
+	// OrganizationName is the human-readable name of the organization the
 	// recipient is being invited to.
-	WorkspaceName string
+	OrganizationName string
 }
 
 func (TeamInvite) TransactionalID() TransactionalID {
@@ -23,10 +23,10 @@ func (TeamInvite) TransactionalID() TransactionalID {
 
 func (t TeamInvite) Variables() map[string]string {
 	return map[string]string{
-		"invite_link":    t.InviteLink,
-		"teammate_fn":    t.InviterName,
-		"teammate_email": t.InviterEmail,
-		"workspace_name": t.WorkspaceName,
+		"invite_link":       t.InviteLink,
+		"inviter_name":      t.InviterName,
+		"inviter_email":     t.InviterEmail,
+		"organization_name": t.OrganizationName,
 	}
 }
 

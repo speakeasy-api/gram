@@ -35,20 +35,20 @@ func TestService_Send_TranslatesTemplateToLoopsInput(t *testing.T) {
 	svc := NewService(testenv.NewLogger(t), sender)
 
 	tmpl := TeamInvite{
-		InviteLink:    "https://app.gram.sh/invite?token=xyz",
-		InviterName:   "Bob",
-		InviterEmail:  "bob@example.com",
-		WorkspaceName: "Workspace",
+		InviteLink:       "https://app.gram.sh/invite?token=xyz",
+		InviterName:      "Bob",
+		InviterEmail:     "bob@example.com",
+		OrganizationName: "Acme Corp",
 	}
 
 	expected := loops.SendTransactionalInput{
 		TransactionalID: string(transactionalIDTeamInvite),
 		Email:           "carol@example.com",
 		DataVariables: map[string]string{
-			"invite_link":    "https://app.gram.sh/invite?token=xyz",
-			"teammate_fn":    "Bob",
-			"teammate_email": "bob@example.com",
-			"workspace_name": "Workspace",
+			"invite_link":       "https://app.gram.sh/invite?token=xyz",
+			"inviter_name":      "Bob",
+			"inviter_email":     "bob@example.com",
+			"organization_name": "Acme Corp",
 		},
 		AddToAudience: true,
 	}
@@ -66,10 +66,10 @@ func TestService_Send_EmptyRecipientReturnsSentinel(t *testing.T) {
 	svc := NewService(testenv.NewLogger(t), sender)
 
 	err := svc.Send(t.Context(), "", TeamInvite{
-		InviteLink:    "https://example.com",
-		InviterName:   "Bob",
-		InviterEmail:  "bob@example.com",
-		WorkspaceName: "WS",
+		InviteLink:       "https://example.com",
+		InviterName:      "Bob",
+		InviterEmail:     "bob@example.com",
+		OrganizationName: "Acme Corp",
 	})
 	require.ErrorIs(t, err, ErrEmptyRecipient)
 }
@@ -94,10 +94,10 @@ func TestService_Send_PropagatesSenderError(t *testing.T) {
 	sender.On("SendTransactional", mock.Anything, mock.Anything).Return(transportErr).Once()
 
 	err := svc.Send(t.Context(), "user@example.com", TeamInvite{
-		InviteLink:    "https://example.com",
-		InviterName:   "Bob",
-		InviterEmail:  "bob@example.com",
-		WorkspaceName: "WS",
+		InviteLink:       "https://example.com",
+		InviterName:      "Bob",
+		InviterEmail:     "bob@example.com",
+		OrganizationName: "Acme Corp",
 	})
 	require.Error(t, err)
 	require.ErrorIs(t, err, transportErr)
