@@ -10,6 +10,7 @@ import (
 	"io"
 	"log/slog"
 	"net/url"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -116,7 +117,11 @@ func (s *Service) GenerateDeployScript(ctx context.Context, _ *gen.GenerateDeplo
 
 	kr := s.keysRepo.WithTx(dbtx)
 
-	keyName := "gram-mdm-hooks"
+	email := ""
+	if authCtx.Email != nil {
+		email = *authCtx.Email
+	}
+	keyName := fmt.Sprintf("mdm-hooks %s %s", email, time.Now().UTC().Format("2006-01-02"))
 	createdKey, err := kr.CreateAPIKey(ctx, keysrepo.CreateAPIKeyParams{
 		OrganizationID:  authCtx.ActiveOrganizationID,
 		Name:            keyName,
