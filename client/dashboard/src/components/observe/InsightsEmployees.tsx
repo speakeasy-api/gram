@@ -24,7 +24,7 @@ import type {
 import { useGramContext, useMembers, useRoles } from "@gram/client/react-query";
 import { unwrapAsync } from "@gram/client/types/fp";
 import { useQuery } from "@tanstack/react-query";
-import { ShieldCheck, Sparkles, UserRoundCheck } from "lucide-react";
+import { Sparkles } from "lucide-react";
 import { useMemo } from "react";
 
 type EmployeeStatus = "compliant" | "not_compliant";
@@ -157,63 +157,42 @@ export function InsightsEmployeesContent() {
       />
       <div className="min-h-0 w-full flex-1 overflow-y-auto p-8 pb-24">
         <div className="mx-auto flex max-w-7xl flex-col gap-6">
-          <section className="from-card via-card to-muted/40 relative overflow-hidden rounded-2xl border bg-gradient-to-br p-6">
-            <div className="pointer-events-none absolute top-0 right-0 h-48 w-48 translate-x-12 -translate-y-16 rounded-full bg-emerald-500/10 blur-3xl" />
-            <div className="relative flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-              <div className="max-w-3xl space-y-3">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="border-border bg-background/80 text-muted-foreground inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium">
-                    <Sparkles className="size-3.5" />
-                    Live data
-                  </span>
-                  <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700">
-                    <ShieldCheck className="size-3.5" />
-                    Enrollment visibility
-                  </span>
-                </div>
-                <div>
-                  <p className="text-muted-foreground text-sm font-medium">
-                    Employees
-                  </p>
-                  <h1 className="mt-1 text-3xl font-semibold tracking-tight">
-                    Are all employees compliant?
-                  </h1>
-                </div>
-                <p className="text-muted-foreground max-w-2xl text-sm leading-6">
-                  Compliance is project-scoped for this first version: if an
-                  employee has Gram token usage in the selected project during
-                  the last {LOOKBACK_DAYS} days, they are compliant. If no data
-                  is present, they are not compliant.
-                </p>
-              </div>
-              <div className="bg-background/90 min-w-[220px] rounded-xl border p-4 shadow-sm">
-                <div className="flex items-center gap-3">
-                  <div className="rounded-full bg-emerald-500/10 p-2">
-                    <UserRoundCheck className="size-5 text-emerald-600" />
-                  </div>
-                  <div>
-                    <p className="text-2xl font-semibold">
-                      {compliantEmployees}/{totalEmployees}
-                    </p>
-                    <p className="text-muted-foreground text-xs">
-                      compliant employees
-                    </p>
-                  </div>
-                </div>
-                <Button
-                  className="mt-4 w-full"
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    setIsExpanded(true);
-                    sendPrompt(prompt);
-                  }}
-                >
-                  Ask AI to summarize
-                </Button>
-              </div>
+          <div
+            className={cn(
+              "flex gap-4 transition-all duration-300",
+              isInsightsOpen
+                ? "flex-col items-stretch"
+                : "flex-row items-center justify-between",
+            )}
+          >
+            <div className="flex min-w-0 flex-col gap-1">
+              <h1 className="text-xl font-semibold">Employee Compliance</h1>
+              <p className="text-muted-foreground text-sm">
+                Compliance is project-scoped: if an employee has Gram token
+                usage in the selected project during the last {LOOKBACK_DAYS}{" "}
+                days, they are compliant. If no data is present, they are not
+                compliant.
+              </p>
             </div>
-          </section>
+            <div
+              className={cn(
+                "flex items-center gap-3",
+                isInsightsOpen ? "justify-start" : "shrink-0",
+              )}
+            >
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  setIsExpanded(true);
+                  sendPrompt(prompt);
+                }}
+              >
+                <Sparkles className="mr-1.5 size-3.5" />
+                Ask AI to summarize
+              </Button>
+            </div>
+          </div>
 
           {error ? (
             <ErrorAlert
