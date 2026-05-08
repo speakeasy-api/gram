@@ -29,10 +29,6 @@ import { DeleteRoleDialog } from "./DeleteRoleDialog";
 import { Ellipsis } from "lucide-react";
 import { RequireScope } from "@/components/require-scope";
 import { cn } from "@/lib/utils";
-import { useOrgRoutes } from "@/routes";
-import { useChallenges } from "@gram/client/react-query/challenges.js";
-import { useChallengeRowColumns } from "./useChallengeRowColumns";
-import { useGrantFlow } from "./useGrantFlow";
 
 function RoleActionsMenu({
   role,
@@ -75,12 +71,9 @@ function RoleActionsMenu({
 }
 
 export function RolesTab() {
-  const orgRoutes = useOrgRoutes();
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [editingRole, setEditingRole] = useState<Role | null>(null);
   const [deletingRole, setDeletingRole] = useState<Role | null>(null);
-  const { actionsColumn, grantFlowPortals } = useGrantFlow();
-  const challengeRowColumns = useChallengeRowColumns();
   const queryClient = useQueryClient();
   const { data: rolesData, isLoading } = useRoles();
   const roles = [...(rolesData?.roles ?? [])].sort(
@@ -91,11 +84,6 @@ export function RolesTab() {
 
   const defaultRole =
     roles.find((r) => r.isSystem && r.name === "Member") ?? null;
-
-  const { data: challengesData } = useChallenges({ limit: 5 });
-  const recentChallenges = (challengesData?.challenges ?? []).filter(
-    (c) => !!c.scope,
-  );
 
   const membersOfDeletingRole = deletingRole
     ? members.filter((m) => m.roleId === deletingRole.id)
@@ -228,21 +216,6 @@ export function RolesTab() {
         </div>
       </div>
 
-      {/* Recent Challenges */}
-      <div className="mt-12">
-        <div className="mb-3 flex items-center justify-between">
-          <Heading variant="h4">Recent Challenges</Heading>
-          <orgRoutes.access.challenges.Link className="text-primary cursor-pointer text-sm font-medium hover:underline">
-            Show more
-          </orgRoutes.access.challenges.Link>
-        </div>
-        <Table
-          columns={[...challengeRowColumns, actionsColumn]}
-          data={recentChallenges}
-          rowKey={(row) => row.id}
-        />
-      </div>
-
       <CreateRoleDialog
         open={isCreateOpen || !!editingRole}
         onOpenChange={(open) => {
@@ -253,8 +226,6 @@ export function RolesTab() {
         }}
         editingRole={editingRole}
       />
-
-      {grantFlowPortals}
 
       <DeleteRoleDialog
         isOpen={!!deletingRole}
