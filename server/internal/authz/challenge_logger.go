@@ -51,6 +51,12 @@ func (l challengeLogger) Log(ctx context.Context, conn clickhouse.Conn, logger *
 		return
 	}
 
+	// Skip challenge logging when a Speakeasy admin is impersonating a
+	// customer org — challenges belong to the admin, not the customer.
+	if _, impersonating := contextvalues.GetAdminOverrideFromContext(ctx); impersonating {
+		return
+	}
+
 	enabled, err := isEnabled(ctx, authCtx.ActiveOrganizationID)
 	if err != nil {
 		logger.WarnContext(ctx, "failed to check authz challenge logging feature flag",
