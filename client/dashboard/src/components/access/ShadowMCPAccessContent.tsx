@@ -1,6 +1,7 @@
 import { RequireScope } from "@/components/require-scope";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Heading } from "@/components/ui/heading";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   Select,
   SelectContent,
@@ -8,6 +9,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { Type } from "@/components/ui/type";
 import type { Role } from "@gram/client/models/components/role.js";
 import { useRoles } from "@gram/client/react-query/roles.js";
@@ -16,7 +25,6 @@ import {
   Button,
   cn,
   Column,
-  Dialog,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -25,7 +33,7 @@ import {
   Separator,
   Table,
 } from "@speakeasy-api/moonshine";
-import { Check, Ellipsis, ShieldCheck, ShieldX, X } from "lucide-react";
+import { Ellipsis, Plus } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { ChangeEvent } from "react";
 import {
@@ -45,12 +53,46 @@ import {
   getDecisionLabel,
   getMatchBreadthLabel,
   getMatchValue,
-  getShadowMCPSummary,
 } from "./shadow-mcp-utils";
 
 type ReviewAction = "approve" | "deny";
 type RuleDecisionFilter = "all" | ShadowMCPServerListEntry["decision"];
 type TextInputChangeEvent = ChangeEvent<HTMLInputElement | HTMLTextAreaElement>;
+
+const RULE_DECISION_OPTIONS: {
+  value: ShadowMCPServerListEntry["decision"];
+  label: string;
+  description: string;
+}[] = [
+  {
+    value: "allowed",
+    label: "Allow",
+    description: "Make this Shadow MCP server available to selected roles.",
+  },
+  {
+    value: "denied",
+    label: "Deny",
+    description:
+      "Block this Shadow MCP server even if a broader allow applies.",
+  },
+];
+
+const REVIEW_ACTION_OPTIONS: {
+  value: ReviewAction;
+  label: string;
+  description: string;
+}[] = [
+  {
+    value: "approve",
+    label: "Approve",
+    description: "Add an allow rule and optionally grant role access.",
+  },
+  {
+    value: "deny",
+    label: "Deny",
+    description: "Add a deny rule that blocks this server.",
+  },
+];
 
 function handleStringInputChange(onChange: (value: string) => void) {
   return (event: TextInputChangeEvent) => onChange(event.currentTarget.value);
@@ -224,15 +266,23 @@ function EntryActionsMenu({
   );
 }
 
-function ReviewRequestDialog({
+function ReviewActionBadge({ action }: { action: ReviewAction }) {
+  return (
+    <Badge variant={action === "approve" ? "success" : "destructive"}>
+      <Badge.Text>{action === "approve" ? "Approve" : "Deny"}</Badge.Text>
+    </Badge>
+  );
+}
+
+function ReviewRequestSheet({
+  open,
   request,
-  action,
   roles,
   onOpenChange,
   onSubmit,
 }: {
+  open: boolean;
   request: ShadowMCPApprovalRequest | null;
-  action: ReviewAction | null;
   roles: ShadowMCPRoleOption[];
   onOpenChange: (open: boolean) => void;
   onSubmit: (input: {
@@ -243,15 +293,24 @@ function ReviewRequestDialog({
     reason: string;
   }) => void;
 }) {
+  const [action, setAction] = useState<ReviewAction>("approve");
   const [matchBreadth, setMatchBreadth] =
     useState<ShadowMCPMatchBreadth>("full_url");
   const [roleIds, setRoleIds] = useState<string[]>([]);
   const [reason, setReason] = useState("");
 
-  const open = !!request && !!action;
   const isApprove = action === "approve";
 
+  useEffect(() => {
+    if (!open) return;
+    setAction("approve");
+    setMatchBreadth("full_url");
+    setRoleIds([]);
+    setReason("");
+  }, [open, request]);
+
   const close = () => {
+    setAction("approve");
     setMatchBreadth("full_url");
     setRoleIds([]);
     setReason("");
@@ -259,21 +318,66 @@ function ReviewRequestDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && close()}>
-      <Dialog.Content className="sm:max-w-2xl">
-        <Dialog.Header>
-          <Dialog.Title>
-            {isApprove ? "Approve Shadow MCP Server" : "Deny Shadow MCP Server"}
-          </Dialog.Title>
-          <Dialog.Description>
-            {isApprove
-              ? "Approving adds this server to the allowed list and can grant roles access to connect."
-              : "Denying adds this server to the denied list. Denied entries override role grants."}
-          </Dialog.Description>
-        </Dialog.Header>
+    <Sheet open={open} onOpenChange={(nextOpen) => !nextOpen && close()}>
+      <SheetContent
+        side="right"
+        className="flex w-full flex-col overflow-hidden sm:max-w-lg"
+      >
+        <SheetHeader>
+          <SheetTitle>Review Shadow MCP Request</SheetTitle>
+          <SheetDescription>
+            Approve or deny this blocked Shadow MCP server request.
+          </SheetDescription>
+        </SheetHeader>
 
-        {request && action && (
-          <div className="space-y-4">
+        {request && (
+          <div className="flex-1 space-y-4 overflow-y-auto px-4">
+            <div className="space-y-2">
+              <Type variant="body" className="text-sm font-medium">
+                Decision
+              </Type>
+              <RadioGroup
+                value={action}
+                onValueChange={(value) => {
+                  const nextAction = value as ReviewAction;
+                  setAction(nextAction);
+                  if (nextAction === "deny") {
+                    setRoleIds([]);
+                  }
+                }}
+              >
+                <div className="border-border divide-border divide-y rounded-md border">
+                  {REVIEW_ACTION_OPTIONS.map((option) => (
+                    <label
+                      key={option.value}
+                      htmlFor={`shadow-mcp-review-${option.value}`}
+                      className="hover:bg-muted/50 flex cursor-pointer items-start gap-3 p-3"
+                    >
+                      <RadioGroupItem
+                        id={`shadow-mcp-review-${option.value}`}
+                        value={option.value}
+                        className="mt-0.5"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <ReviewActionBadge action={option.value} />
+                          <Type variant="body" className="text-sm font-medium">
+                            {option.label}
+                          </Type>
+                        </div>
+                        <Type
+                          variant="body"
+                          className="text-muted-foreground mt-1 text-xs"
+                        >
+                          {option.description}
+                        </Type>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              </RadioGroup>
+            </div>
+
             <div className="border-border bg-muted/30 rounded-md border p-3">
               <EvidenceCell evidence={request.evidence} />
             </div>
@@ -353,46 +457,41 @@ function ReviewRequestDialog({
           </div>
         )}
 
-        <Dialog.Footer>
+        <SheetFooter className="border-border flex-row justify-end border-t">
           <Button variant="secondary" onClick={close}>
             Cancel
           </Button>
           <Button
-            disabled={!request || !action}
+            disabled={!request}
             onClick={() => {
-              if (!request || !action) return;
+              if (!request) return;
               onSubmit({ request, action, matchBreadth, roleIds, reason });
               close();
             }}
           >
-            <Button.LeftIcon>
-              {isApprove ? (
-                <Check className="h-4 w-4" />
-              ) : (
-                <X className="h-4 w-4" />
-              )}
-            </Button.LeftIcon>
             <Button.Text>{isApprove ? "Approve" : "Deny"}</Button.Text>
           </Button>
-        </Dialog.Footer>
-      </Dialog.Content>
-    </Dialog>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
   );
 }
 
-function ServerEntryDialog({
+function ServerEntrySheet({
+  open,
   entry,
-  decision,
   roles,
   onOpenChange,
   onSubmit,
 }: {
+  open: boolean;
   entry: ShadowMCPServerListEntry | null;
-  decision: ShadowMCPServerListEntry["decision"] | null;
   roles: ShadowMCPRoleOption[];
   onOpenChange: (open: boolean) => void;
   onSubmit: (entry: ShadowMCPServerListEntry) => void;
 }) {
+  const [decision, setDecision] =
+    useState<ShadowMCPServerListEntry["decision"]>("allowed");
   const [name, setName] = useState("");
   const [fullUrl, setFullUrl] = useState("");
   const [urlHost, setUrlHost] = useState("");
@@ -402,12 +501,22 @@ function ServerEntryDialog({
   const [roleIds, setRoleIds] = useState<string[]>([]);
   const [reason, setReason] = useState("");
 
-  const open = !!decision || !!entry;
-  const effectiveDecision = entry?.decision ?? decision ?? "allowed";
   const isEditing = !!entry;
 
   useEffect(() => {
-    if (!entry || !open) return;
+    if (!open) return;
+    if (!entry) {
+      setDecision("allowed");
+      setName("");
+      setFullUrl("");
+      setUrlHost("");
+      setNormalizedIdentity("");
+      setMatchBreadth("full_url");
+      setRoleIds([]);
+      setReason("");
+      return;
+    }
+    setDecision(entry.decision);
     setName(entry.evidence.name);
     setFullUrl(entry.evidence.fullUrl);
     setUrlHost(entry.evidence.urlHost);
@@ -418,6 +527,7 @@ function ServerEntryDialog({
   }, [entry, open]);
 
   const close = () => {
+    setDecision("allowed");
     setName("");
     setFullUrl("");
     setUrlHost("");
@@ -431,117 +541,165 @@ function ServerEntryDialog({
   const canSave = name.trim() && fullUrl.trim() && urlHost.trim();
 
   return (
-    <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && close()}>
-      <Dialog.Content className="sm:max-w-2xl">
-        <Dialog.Header>
-          <Dialog.Title>
-            {isEditing
-              ? "Edit Shadow MCP Rule"
-              : effectiveDecision === "allowed"
-                ? "Add Allow Rule"
-                : "Add Deny Rule"}
-          </Dialog.Title>
-          <Dialog.Description>
+    <Sheet open={open} onOpenChange={(nextOpen) => !nextOpen && close()}>
+      <SheetContent
+        side="right"
+        className="flex w-full flex-col overflow-hidden sm:max-w-lg"
+      >
+        <SheetHeader>
+          <SheetTitle>
+            {isEditing ? "Edit Shadow MCP Rule" : "Add Access Rule"}
+          </SheetTitle>
+          <SheetDescription>
             Maintain the managed access rules that role permissions use during
             Shadow MCP enforcement.
-          </Dialog.Description>
-        </Dialog.Header>
+          </SheetDescription>
+        </SheetHeader>
 
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="flex-1 space-y-4 overflow-y-auto px-4">
           <div className="space-y-2">
             <Type variant="body" className="text-sm font-medium">
-              Server name
+              Rule type
             </Type>
-            <Input
-              value={name}
-              onChange={handleStringInputChange(setName)}
-              placeholder="linear"
-            />
-          </div>
-          <div className="space-y-2">
-            <Type variant="body" className="text-sm font-medium">
-              Normalized identity
-            </Type>
-            <Input
-              value={normalizedIdentity}
-              onChange={handleStringInputChange(setNormalizedIdentity)}
-              placeholder="linear"
-            />
-          </div>
-          <div className="space-y-2 sm:col-span-2">
-            <Type variant="body" className="text-sm font-medium">
-              Full URL
-            </Type>
-            <Input
-              value={fullUrl}
-              onChange={(event) => {
-                const value = event.currentTarget.value;
-                setFullUrl(value);
-                try {
-                  setUrlHost(new URL(value).host);
-                } catch {
-                  // Keep manual host edits when URL is incomplete.
+            <RadioGroup
+              value={decision}
+              onValueChange={(value) => {
+                const nextDecision =
+                  value as ShadowMCPServerListEntry["decision"];
+                setDecision(nextDecision);
+                if (nextDecision === "denied") {
+                  setRoleIds([]);
                 }
               }}
-              placeholder="https://mcp.example.com/sse"
-            />
+            >
+              <div className="border-border divide-border divide-y rounded-md border">
+                {RULE_DECISION_OPTIONS.map((option) => (
+                  <label
+                    key={option.value}
+                    htmlFor={`shadow-mcp-rule-${option.value}`}
+                    className="hover:bg-muted/50 flex cursor-pointer items-start gap-3 p-3"
+                  >
+                    <RadioGroupItem
+                      id={`shadow-mcp-rule-${option.value}`}
+                      value={option.value}
+                      className="mt-0.5"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <DecisionBadge decision={option.value} />
+                        <Type variant="body" className="text-sm font-medium">
+                          {option.label}
+                        </Type>
+                      </div>
+                      <Type
+                        variant="body"
+                        className="text-muted-foreground mt-1 text-xs"
+                      >
+                        {option.description}
+                      </Type>
+                    </div>
+                  </label>
+                ))}
+              </div>
+            </RadioGroup>
           </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Type variant="body" className="text-sm font-medium">
+                Server name
+              </Type>
+              <Input
+                value={name}
+                onChange={handleStringInputChange(setName)}
+                placeholder="linear"
+              />
+            </div>
+            <div className="space-y-2">
+              <Type variant="body" className="text-sm font-medium">
+                Normalized identity
+              </Type>
+              <Input
+                value={normalizedIdentity}
+                onChange={handleStringInputChange(setNormalizedIdentity)}
+                placeholder="linear"
+              />
+            </div>
+            <div className="space-y-2 sm:col-span-2">
+              <Type variant="body" className="text-sm font-medium">
+                Full URL
+              </Type>
+              <Input
+                value={fullUrl}
+                onChange={(event) => {
+                  const value = event.currentTarget.value;
+                  setFullUrl(value);
+                  try {
+                    setUrlHost(new URL(value).host);
+                  } catch {
+                    // Keep manual host edits when URL is incomplete.
+                  }
+                }}
+                placeholder="https://mcp.example.com/sse"
+              />
+            </div>
+            <div className="space-y-2">
+              <Type variant="body" className="text-sm font-medium">
+                URL host
+              </Type>
+              <Input
+                value={urlHost}
+                onChange={handleStringInputChange(setUrlHost)}
+                placeholder="mcp.example.com"
+              />
+            </div>
+            <div className="space-y-2">
+              <Type variant="body" className="text-sm font-medium">
+                Match breadth
+              </Type>
+              <Select
+                value={matchBreadth}
+                onValueChange={(value) =>
+                  setMatchBreadth(value as ShadowMCPMatchBreadth)
+                }
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="full_url">Full URL</SelectItem>
+                  <SelectItem value="url_host">URL host</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {decision === "allowed" && (
+            <div className="space-y-2">
+              <Type variant="body" className="text-sm font-medium">
+                Grant access to roles
+              </Type>
+              <RolePicker
+                roles={roles}
+                selectedRoleIds={roleIds}
+                onChange={setRoleIds}
+              />
+            </div>
+          )}
+
           <div className="space-y-2">
             <Type variant="body" className="text-sm font-medium">
-              URL host
+              Admin note
             </Type>
             <Input
-              value={urlHost}
-              onChange={handleStringInputChange(setUrlHost)}
-              placeholder="mcp.example.com"
+              value={reason}
+              onChange={handleStringInputChange(setReason)}
+              placeholder="Reason"
             />
-          </div>
-          <div className="space-y-2">
-            <Type variant="body" className="text-sm font-medium">
-              Match breadth
-            </Type>
-            <Select
-              value={matchBreadth}
-              onValueChange={(value) =>
-                setMatchBreadth(value as ShadowMCPMatchBreadth)
-              }
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="full_url">Full URL</SelectItem>
-                <SelectItem value="url_host">URL host</SelectItem>
-              </SelectContent>
-            </Select>
           </div>
         </div>
 
-        {effectiveDecision === "allowed" && (
-          <div className="space-y-2">
-            <Type variant="body" className="text-sm font-medium">
-              Grant access to roles
-            </Type>
-            <RolePicker
-              roles={roles}
-              selectedRoleIds={roleIds}
-              onChange={setRoleIds}
-            />
-          </div>
-        )}
-
-        <div className="space-y-2">
-          <Type variant="body" className="text-sm font-medium">
-            Admin note
-          </Type>
-          <Input
-            value={reason}
-            onChange={handleStringInputChange(setReason)}
-            placeholder="Reason"
-          />
-        </div>
-
-        <Dialog.Footer>
+        <SheetFooter className="border-border flex-row justify-end border-t">
           <Button variant="secondary" onClick={close}>
             Cancel
           </Button>
@@ -552,7 +710,7 @@ function ServerEntryDialog({
                 id:
                   entry?.id ??
                   `entry-${normalizedIdentity || name}-${Date.now()}`,
-                decision: effectiveDecision,
+                decision,
                 evidence: {
                   name,
                   fullUrl,
@@ -560,7 +718,7 @@ function ServerEntryDialog({
                   normalizedIdentity: normalizedIdentity || name,
                 },
                 matchBreadth,
-                roleIds: effectiveDecision === "allowed" ? roleIds : [],
+                roleIds: decision === "allowed" ? roleIds : [],
                 createdAt: entry?.createdAt ?? new Date().toISOString(),
                 createdBy: entry?.createdBy ?? "Current Admin",
                 sourceRequestId: entry?.sourceRequestId,
@@ -572,9 +730,9 @@ function ServerEntryDialog({
           >
             <Button.Text>{isEditing ? "Save Changes" : "Add Rule"}</Button.Text>
           </Button>
-        </Dialog.Footer>
-      </Dialog.Content>
-    </Dialog>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
   );
 }
 
@@ -588,16 +746,13 @@ export function ShadowMCPAccessContent() {
   const [entries, setEntries] = useState(MOCK_SHADOW_MCP_SERVER_LIST);
   const [reviewRequest, setReviewRequest] =
     useState<ShadowMCPApprovalRequest | null>(null);
-  const [reviewAction, setReviewAction] = useState<ReviewAction | null>(null);
-  const [entryDialogDecision, setEntryDialogDecision] = useState<
-    ShadowMCPServerListEntry["decision"] | null
-  >(null);
+  const [reviewSheetOpen, setReviewSheetOpen] = useState(false);
+  const [entrySheetOpen, setEntrySheetOpen] = useState(false);
   const [ruleDecisionFilter, setRuleDecisionFilter] =
     useState<RuleDecisionFilter>("all");
   const [editingEntry, setEditingEntry] =
     useState<ShadowMCPServerListEntry | null>(null);
 
-  const summary = getShadowMCPSummary({ requests, entries });
   const allowedEntries = entries.filter((e) => e.decision === "allowed");
   const deniedEntries = entries.filter((e) => e.decision === "denied");
   const pendingRequests = requests.filter((r) => r.status === "requested");
@@ -606,12 +761,19 @@ export function ShadowMCPAccessContent() {
       ? entries
       : entries.filter((entry) => entry.decision === ruleDecisionFilter);
 
-  const openReview = (
-    request: ShadowMCPApprovalRequest,
-    action: ReviewAction,
-  ) => {
+  const openReview = (request: ShadowMCPApprovalRequest) => {
     setReviewRequest(request);
-    setReviewAction(action);
+    setReviewSheetOpen(true);
+  };
+
+  const openCreateRule = () => {
+    setEditingEntry(null);
+    setEntrySheetOpen(true);
+  };
+
+  const openEditRule = (entry: ShadowMCPServerListEntry) => {
+    setEditingEntry(entry);
+    setEntrySheetOpen(true);
   };
 
   const upsertEntry = (nextEntry: ShadowMCPServerListEntry) => {
@@ -687,20 +849,13 @@ export function ShadowMCPAccessContent() {
     {
       key: "actions",
       header: "",
-      width: "170px",
+      width: "110px",
       render: (request) =>
         request.status === "requested" ? (
           <RequireScope scope="org:admin" level="component">
-            <div className="flex justify-end gap-2">
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => openReview(request, "deny")}
-              >
-                <Button.Text>Deny</Button.Text>
-              </Button>
-              <Button size="sm" onClick={() => openReview(request, "approve")}>
-                <Button.Text>Approve</Button.Text>
+            <div className="flex justify-end">
+              <Button size="sm" onClick={() => openReview(request)}>
+                <Button.Text>Review</Button.Text>
               </Button>
             </div>
           </RequireScope>
@@ -768,7 +923,7 @@ export function ShadowMCPAccessContent() {
         <div className="flex justify-end">
           <EntryActionsMenu
             entry={entry}
-            onEdit={setEditingEntry}
+            onEdit={openEditRule}
             onDelete={(target) =>
               setEntries((prev) =>
                 prev.filter((entry) => entry.id !== target.id),
@@ -840,20 +995,11 @@ export function ShadowMCPAccessContent() {
                 </SelectContent>
               </Select>
               <RequireScope scope="org:admin" level="component">
-                <Button
-                  variant="secondary"
-                  onClick={() => setEntryDialogDecision("denied")}
-                >
+                <Button onClick={openCreateRule} size="md" variant="secondary">
                   <Button.LeftIcon>
-                    <ShieldX className="h-4 w-4" />
+                    <Plus className="h-4 w-4" />
                   </Button.LeftIcon>
-                  <Button.Text>Add Deny Rule</Button.Text>
-                </Button>
-                <Button onClick={() => setEntryDialogDecision("allowed")}>
-                  <Button.LeftIcon>
-                    <ShieldCheck className="h-4 w-4" />
-                  </Button.LeftIcon>
-                  <Button.Text>Add Allow Rule</Button.Text>
+                  <Button.Text>Add Access Rule</Button.Text>
                 </Button>
               </RequireScope>
             </div>
@@ -866,14 +1012,14 @@ export function ShadowMCPAccessContent() {
         </section>
       </div>
 
-      <ReviewRequestDialog
+      <ReviewRequestSheet
+        open={reviewSheetOpen}
         request={reviewRequest}
-        action={reviewAction}
         roles={roles}
         onOpenChange={(open) => {
+          setReviewSheetOpen(open);
           if (!open) {
             setReviewRequest(null);
-            setReviewAction(null);
           }
         }}
         onSubmit={({ request, action, matchBreadth, roleIds, reason }) => {
@@ -902,14 +1048,14 @@ export function ShadowMCPAccessContent() {
         }}
       />
 
-      <ServerEntryDialog
+      <ServerEntrySheet
+        open={entrySheetOpen}
         entry={editingEntry}
-        decision={entryDialogDecision}
         roles={roles}
         onOpenChange={(open) => {
+          setEntrySheetOpen(open);
           if (!open) {
             setEditingEntry(null);
-            setEntryDialogDecision(null);
           }
         }}
         onSubmit={upsertEntry}
