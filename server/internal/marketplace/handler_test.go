@@ -33,9 +33,9 @@ func TestMalformedTokensSkipResolver(t *testing.T) {
 		name string
 		req  *http.Request
 	}{
-		{"info/refs: no .git suffix", httptest.NewRequest(http.MethodGet, "/marketplace/p/short/info/refs?service=git-upload-pack", nil)},
-		{"info/refs: bad chars before .git", httptest.NewRequest(http.MethodGet, "/marketplace/p/bad!chars1234567890123456789012345678901234567.git/info/refs?service=git-upload-pack", nil)},
-		{"upload-pack: too short", httptest.NewRequest(http.MethodPost, "/marketplace/p/short.git/git-upload-pack", nil)},
+		{"info/refs: no .git suffix", httptest.NewRequest(http.MethodGet, "/marketplace/short/info/refs?service=git-upload-pack", nil)},
+		{"info/refs: bad chars before .git", httptest.NewRequest(http.MethodGet, "/marketplace/bad!chars1234567890123456789012345678901234567.git/info/refs?service=git-upload-pack", nil)},
+		{"upload-pack: too short", httptest.NewRequest(http.MethodPost, "/marketplace/short.git/git-upload-pack", nil)},
 	}
 
 	for _, tc := range cases {

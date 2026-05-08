@@ -46,8 +46,8 @@ func (s *Server) Routes() http.Handler {
 	mux := http.NewServeMux()
 	// {slug} captures "<token>.git"; the handler strips the suffix. Go 1.22's
 	// ServeMux disallows mixing literals with wildcards inside one segment.
-	mux.HandleFunc("GET "+RoutePrefix+"p/{slug}/info/refs", s.handleInfoRefs)
-	mux.HandleFunc("POST "+RoutePrefix+"p/{slug}/git-upload-pack", s.handleUploadPack)
+	mux.HandleFunc("GET "+RoutePrefix+"{slug}/info/refs", s.handleInfoRefs)
+	mux.HandleFunc("POST "+RoutePrefix+"{slug}/git-upload-pack", s.handleUploadPack)
 	mux.HandleFunc("GET "+RoutePrefix+"healthz", func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = io.WriteString(w, "ok")
 	})
