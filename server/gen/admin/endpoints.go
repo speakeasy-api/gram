@@ -3,7 +3,7 @@
 // admin endpoints
 //
 // Command:
-// $ goa gen github.com/speakeasy-api/gram/server/design
+// $ goa gen github.com/speakeasy-api/gram/server/design -o server
 
 package admin
 

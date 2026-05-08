@@ -3,7 +3,7 @@
 // telemetry service
 //
 // Command:
-// $ goa gen github.com/speakeasy-api/gram/server/design
+// $ goa gen github.com/speakeasy-api/gram/server/design -o server
 
 package telemetry
 
@@ -273,14 +273,6 @@ type GetUserMetricsSummaryPayload struct {
 type GetUserMetricsSummaryResult struct {
 	// Aggregated metrics for the user
 	Metrics *ProjectSummary
-}
-
-// Hook source usage statistics
-type HookSourceUsage struct {
-	// Hook source (from attributes.gram.hook.source)
-	Source string
-	// Total hook events for this source
-	EventCount int64
 }
 
 // Summary information for a hook trace
@@ -747,9 +739,6 @@ type SearchUsersFilter struct {
 	To string
 	// Deployment ID filter
 	DeploymentID *string
-	// Optional list of user identifiers to include. Matches user_id for internal
-	// searches and external_user_id for external searches.
-	UserIds []string
 }
 
 // SearchUsersPayload is the payload type of the telemetry service searchUsers
@@ -978,8 +967,6 @@ type UserSummary struct {
 	ToolCallFailure int64
 	// Per-tool usage breakdown
 	Tools []*ToolUsage
-	// Per-hook-source usage breakdown
-	HookSources []*HookSourceUsage
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.
