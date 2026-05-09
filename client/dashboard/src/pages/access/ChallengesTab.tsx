@@ -316,7 +316,7 @@ export function ChallengesTab() {
         </Select>
       </div>
 
-      {isLoading ? (
+      {isLoading && accumulated.length === 0 ? (
         <SkeletonTable />
       ) : filtered.length === 0 ? (
         <ChallengesEmptyState outcomeFilter={outcomeFilter} />
