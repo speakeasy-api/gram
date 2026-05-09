@@ -88,14 +88,18 @@ export function useRBAC() {
   }, [data?.grants]);
 
   /**
-   * Check if a grant's scope matches the required scope (including sub-scopes).
+   * Check if a grant's scope matches the required scope.
+   * For allow grants, sub-scope inheritance applies (e.g. org:admin implies org:read).
+   * For deny grants, only exact scope match — deny must not cascade to child scopes.
    */
   const grantMatchesScope = useCallback(
     (
-      grant: { scope?: string; subScopes?: string[] },
+      grant: { scope?: string; effect?: string; subScopes?: string[] },
       scope: Scope,
     ): boolean => {
-      return grant.scope === scope || !!grant.subScopes?.includes(scope);
+      if (grant.scope === scope) return true;
+      const effect = grant.effect || "allow";
+      return effect === "allow" && !!grant.subScopes?.includes(scope);
     },
     [],
   );

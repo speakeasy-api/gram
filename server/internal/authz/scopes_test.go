@@ -294,6 +294,29 @@ func TestDeny_projectWriteDenyDoesNotBlockProjectRead(t *testing.T) {
 	require.True(t, denied)
 }
 
+func TestDeny_projectWriteDenyWithInheritedRead(t *testing.T) {
+	t.Parallel()
+
+	// User has ONLY project:write (which inherits project:read via scope expansion).
+	// Deny project:write should block writes but NOT block the inherited read.
+	grants := []Grant{
+		NewGrant(ScopeProjectWrite, "proj_123"),
+		NewDenyGrant(ScopeProjectWrite, "proj_123"),
+	}
+
+	// project:read check should still work via inheritance from the (now-denied) write grant.
+	// The allow on project:write satisfies the expanded project:read check,
+	// and the deny on project:write does not cascade to project:read.
+	allow, _, denied := evaluateGrants(grants, Check{Scope: ScopeProjectRead, ResourceID: "proj_123"}.expand())
+	require.NotNil(t, allow, "inherited project:read should still be allowed when project:write is denied")
+	require.False(t, denied)
+
+	// project:write itself should be denied.
+	allow, _, denied = evaluateGrants(grants, Check{Scope: ScopeProjectWrite, ResourceID: "proj_123"}.expand())
+	require.Nil(t, allow)
+	require.True(t, denied)
+}
+
 func TestDeny_orgAdminDenyDoesNotBlockOrgRead(t *testing.T) {
 	t.Parallel()
 
