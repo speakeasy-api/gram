@@ -162,7 +162,8 @@ function useOutcomeApiParam(outcomeFilter: OutcomeFilter): {
   outcome?: Outcome;
   resolved?: boolean;
 } {
-  if (outcomeFilter === "deny") return { outcome: Outcome.Deny };
+  if (outcomeFilter === "deny")
+    return { outcome: Outcome.Deny, resolved: false };
   if (outcomeFilter === "allow") return { outcome: Outcome.Allow };
   if (outcomeFilter === "resolved") return { resolved: true };
   return {};
@@ -318,6 +319,7 @@ export function ChallengesTab() {
   const { data: denyData } = useChallengeBuckets({
     ...baseFilters,
     outcome: Outcome.Deny,
+    resolved: false,
   });
   const { data: resolvedData } = useChallengeBuckets({
     ...baseFilters,
