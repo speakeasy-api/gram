@@ -55,13 +55,6 @@ export function useGrantFlow() {
     timersRef.current.set(id, [fadeTimer, removeTimer]);
   }, []);
 
-  const markManyResolved = useCallback(
-    (ids: string[]) => {
-      for (const id of ids) markResolved(id);
-    },
-    [markResolved],
-  );
-
   useEffect(() => {
     const ref = timersRef.current;
     return () => {
@@ -116,7 +109,9 @@ export function useGrantFlow() {
         }}
         challenge={grantChallenge}
         challengeIds={challengeIds}
-        onResolved={markManyResolved}
+        onResolved={() => {
+          if (grantChallenge) markResolved(grantChallenge.id);
+        }}
         onCreateNew={() => {
           setCreateChallenge(grantChallenge);
           setIsCreateOpen(true);
@@ -150,7 +145,7 @@ export function useGrantFlow() {
                 },
               },
             },
-            { onSuccess: () => markManyResolved(ids) },
+            { onSuccess: () => markResolved(createChallenge.id) },
           );
         }}
       />

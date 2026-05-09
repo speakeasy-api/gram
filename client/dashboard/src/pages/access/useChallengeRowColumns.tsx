@@ -23,6 +23,7 @@ export function useChallengeRowColumns(
   outcomeFilter?: string,
   onToggleBucket?: (bucketId: string) => void,
   expandedChildIds?: Set<string>,
+  recentlyResolvedIds?: Set<string>,
 ): Column<ChallengeBucket>[] {
   const { orgSlug } = useSlugs();
   const { organization } = useSession();
@@ -50,7 +51,9 @@ export function useChallengeRowColumns(
       animatingOutIds?.has(row.id)
         ? "opacity-0 transition-opacity duration-1000"
         : outcomeFilter === "deny" &&
-          (row.outcome === "allow" || row.resolvedAt) &&
+          (row.outcome === "allow" ||
+            row.resolvedAt ||
+            recentlyResolvedIds?.has(row.id)) &&
           "opacity-40 transition-opacity duration-1000";
 
     return [
@@ -114,9 +117,11 @@ export function useChallengeRowColumns(
         width: "80px",
         render: (row: ChallengeBucket) => {
           if (isChild(row)) return null;
+          const resolved =
+            !!row.resolvedAt || (recentlyResolvedIds?.has(row.id) ?? false);
           return (
             <div className={cn(rowFade(row))}>
-              <OutcomeBadge outcome={row.outcome} resolved={!!row.resolvedAt} />
+              <OutcomeBadge outcome={row.outcome} resolved={resolved} />
             </div>
           );
         },
@@ -234,5 +239,6 @@ export function useChallengeRowColumns(
     outcomeFilter,
     onToggleBucket,
     expandedChildIds,
+    recentlyResolvedIds,
   ]);
 }

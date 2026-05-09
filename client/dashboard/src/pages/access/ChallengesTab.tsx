@@ -243,7 +243,12 @@ export function ChallengesTab() {
   }
   const [scopeFilter, setScopeFilter] = useState("all");
 
-  const { actionsColumn, grantFlowPortals, animatingOutIds } = useGrantFlow();
+  const {
+    actionsColumn,
+    grantFlowPortals,
+    animatingOutIds,
+    recentlyResolvedIds,
+  } = useGrantFlow();
 
   const PAGE_SIZE = 50;
   const [accumulated, setAccumulated] = useState<ChallengeBucket[]>([]);
@@ -355,6 +360,7 @@ export function ChallengesTab() {
     outcomeFilter,
     toggleBucket,
     expandedChildIds,
+    recentlyResolvedIds,
   );
 
   const wrappedActionsColumn: Column<ChallengeBucket> = useMemo(

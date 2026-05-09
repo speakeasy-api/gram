@@ -29,7 +29,7 @@ interface GrantDrawerProps {
   challenge: ChallengeBucket | null;
   challengeIds?: string[];
   onCreateNew: () => void;
-  onResolved?: (challengeIds: string[]) => void;
+  onResolved?: () => void;
 }
 
 export function GrantDrawer({
@@ -99,7 +99,7 @@ export function GrantDrawer({
       },
       {
         onSuccess: () => {
-          onResolved?.(ids);
+          onResolved?.();
           handleClose();
         },
       },
