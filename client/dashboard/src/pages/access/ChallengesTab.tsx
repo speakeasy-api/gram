@@ -356,13 +356,17 @@ export function ChallengesTab() {
   );
 
   // IDs of individual challenge rows (expanded children) for styling and column hiding.
+  // Exclude bucket trigger row IDs so they keep their avatar/identity/outcome.
   const expandedChildIds = useMemo(() => {
+    const bucketIds = new Set(accumulated.map((b) => b.id));
     const ids = new Set<string>();
     for (const rows of expandedMap.values()) {
-      for (const r of rows) ids.add(r.id);
+      for (const r of rows) {
+        if (!bucketIds.has(r.id)) ids.add(r.id);
+      }
     }
     return ids;
-  }, [expandedMap]);
+  }, [expandedMap, accumulated]);
 
   const challengeRowColumns = useChallengeRowColumns(
     animatingOutIds,
