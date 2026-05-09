@@ -269,3 +269,239 @@ func (q *Queries) CountChallenges(ctx context.Context, f ChallengeListFilters) (
 	}
 	return count, nil
 }
+
+// ListChallengesByIDs fetches full challenge rows for a set of IDs.
+func (q *Queries) ListChallengesByIDs(ctx context.Context, orgID string, ids []string) ([]ChallengeSummary, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	query := `SELECT
+		id,
+		formatDateTime(timestamp, '%Y-%m-%dT%H:%i:%S.000Z', 'UTC') AS ts,
+		organization_id,
+		project_id,
+		principal_urn,
+		principal_type,
+		user_id,
+		user_email,
+		operation,
+		outcome,
+		reason,
+		scope,
+		resource_kind,
+		resource_id,
+		role_slugs,
+		evaluated_grant_count,
+		length(matched_grants.scope) AS matched_grant_count
+	FROM authz_challenges
+	WHERE organization_id = ? AND id IN ?
+	ORDER BY timestamp DESC`
+
+	rows, err := q.conn.Query(ctx, query, orgID, ids)
+	if err != nil {
+		return nil, fmt.Errorf("exec list challenges by ids: %w", err)
+	}
+	defer rows.Close() //nolint:errcheck // best-effort close
+
+	var results []ChallengeSummary
+	for rows.Next() {
+		var r ChallengeSummary
+		if err := rows.Scan(
+			&r.ID,
+			&r.Timestamp,
+			&r.OrganizationID,
+			&r.ProjectID,
+			&r.PrincipalURN,
+			&r.PrincipalType,
+			&r.UserID,
+			&r.UserEmail,
+			&r.Operation,
+			&r.Outcome,
+			&r.Reason,
+			&r.Scope,
+			&r.ResourceKind,
+			&r.ResourceID,
+			&r.RoleSlugs,
+			&r.EvaluatedGrantCount,
+			&r.MatchedGrantCount,
+		); err != nil {
+			return nil, fmt.Errorf("scan challenge by id row: %w", err)
+		}
+		results = append(results, r)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate challenges by ids: %w", err)
+	}
+	return results, nil
+}
+
+// BurstGapSeconds is the minimum gap (in seconds) between consecutive challenges
+// with the same dimensions before they are split into separate buckets.
+const BurstGapSeconds = 600 // 10 minutes
+
+// burstCTE returns a CTE that assigns a burst_id to each challenge row.
+// Consecutive challenges within the same (principal_urn, scope, outcome,
+// resource_kind, resource_id) group that are less than BurstGapSeconds apart
+// share the same burst_id. A gap larger than the threshold starts a new burst.
+func burstCTE(where string) string {
+	return `WITH lagged AS (
+	SELECT
+		*,
+		length(matched_grants.scope) AS matched_grant_count,
+		if(
+			lagInFrame(timestamp, 1) OVER (
+				PARTITION BY principal_urn, scope, outcome, resource_kind, resource_id
+				ORDER BY timestamp ASC
+				ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+			) < toDateTime('2000-01-01')
+			OR dateDiff('second',
+				lagInFrame(timestamp, 1) OVER (
+					PARTITION BY principal_urn, scope, outcome, resource_kind, resource_id
+					ORDER BY timestamp ASC
+					ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+				),
+				timestamp
+			) > ` + fmt.Sprintf("%d", BurstGapSeconds) + `,
+			1, 0
+		) AS is_new_burst
+	FROM authz_challenges
+	WHERE ` + where + `
+),
+bucketed AS (
+	SELECT
+		*,
+		sum(is_new_burst) OVER (
+			PARTITION BY principal_urn, scope, outcome, resource_kind, resource_id
+			ORDER BY timestamp ASC
+			ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+		) AS burst_id
+	FROM lagged
+)`
+}
+
+// ChallengeBucket is one burst-group of challenges that share the same
+// dimensions and occur within BurstGapSeconds of each other.
+type ChallengeBucket struct {
+	// Representative fields (from the most recent challenge in the bucket).
+	ID                  string
+	LastSeen            string // RFC 3339
+	OrganizationID      string
+	ProjectID           string
+	PrincipalURN        string
+	PrincipalType       string
+	UserID              *string
+	UserEmail           *string
+	Operation           string
+	Outcome             string
+	Reason              string
+	Scope               string
+	ResourceKind        string
+	ResourceID          string
+	RoleSlugs           []string
+	EvaluatedGrantCount uint32
+	MatchedGrantCount   uint64
+
+	// Bucket metadata.
+	ChallengeCount uint64
+	ChallengeIDs   []string
+	FirstSeen      string // RFC 3339
+}
+
+// ListChallengeBuckets returns challenges grouped into burst-buckets, paginated.
+func (q *Queries) ListChallengeBuckets(ctx context.Context, f ChallengeListFilters) ([]ChallengeBucket, error) {
+	where, args := challengeWhereClause(f)
+	query := burstCTE(where) + `
+SELECT
+	argMax(id, timestamp) AS rep_id,
+	formatDateTime(max(timestamp), '%Y-%m-%dT%H:%i:%S.000Z', 'UTC') AS last_seen,
+	any(organization_id) AS organization_id,
+	any(project_id) AS project_id,
+	principal_urn,
+	argMax(principal_type, timestamp) AS principal_type,
+	argMax(user_id, timestamp) AS user_id,
+	argMax(user_email, timestamp) AS user_email,
+	argMax(operation, timestamp) AS operation,
+	outcome,
+	argMax(reason, timestamp) AS reason,
+	scope,
+	resource_kind,
+	resource_id,
+	argMax(role_slugs, timestamp) AS role_slugs,
+	argMax(evaluated_grant_count, timestamp) AS evaluated_grant_count,
+	argMax(matched_grant_count, timestamp) AS matched_grant_count,
+	count(*) AS challenge_count,
+	arrayMap(x -> toString(x), groupArray(id)) AS challenge_ids,
+	formatDateTime(min(timestamp), '%Y-%m-%dT%H:%i:%S.000Z', 'UTC') AS first_seen
+FROM bucketed
+GROUP BY principal_urn, scope, outcome, resource_kind, resource_id, burst_id
+ORDER BY max(timestamp) DESC`
+
+	if !f.SkipPagination {
+		query += fmt.Sprintf(" LIMIT %d OFFSET %d", f.Limit, f.Offset)
+	}
+
+	rows, err := q.conn.Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("exec list challenge buckets: %w", err)
+	}
+	defer rows.Close() //nolint:errcheck // best-effort close
+
+	var results []ChallengeBucket
+	for rows.Next() {
+		var r ChallengeBucket
+		if err := rows.Scan(
+			&r.ID,
+			&r.LastSeen,
+			&r.OrganizationID,
+			&r.ProjectID,
+			&r.PrincipalURN,
+			&r.PrincipalType,
+			&r.UserID,
+			&r.UserEmail,
+			&r.Operation,
+			&r.Outcome,
+			&r.Reason,
+			&r.Scope,
+			&r.ResourceKind,
+			&r.ResourceID,
+			&r.RoleSlugs,
+			&r.EvaluatedGrantCount,
+			&r.MatchedGrantCount,
+			&r.ChallengeCount,
+			&r.ChallengeIDs,
+			&r.FirstSeen,
+		); err != nil {
+			return nil, fmt.Errorf("scan challenge bucket row: %w", err)
+		}
+		results = append(results, r)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate challenge bucket rows: %w", err)
+	}
+	return results, nil
+}
+
+// CountChallengeBuckets returns the total number of burst-buckets for pagination.
+func (q *Queries) CountChallengeBuckets(ctx context.Context, f ChallengeListFilters) (uint64, error) {
+	where, args := challengeWhereClause(f)
+	query := burstCTE(where) + `
+SELECT count(*) FROM (
+	SELECT 1
+	FROM bucketed
+	GROUP BY principal_urn, scope, outcome, resource_kind, resource_id, burst_id
+)`
+
+	rows, err := q.conn.Query(ctx, query, args...)
+	if err != nil {
+		return 0, fmt.Errorf("exec count challenge buckets: %w", err)
+	}
+	defer rows.Close() //nolint:errcheck // best-effort close
+
+	var count uint64
+	if rows.Next() {
+		if err := rows.Scan(&count); err != nil {
+			return 0, fmt.Errorf("scan bucket count: %w", err)
+		}
+	}
+	return count, nil
+}

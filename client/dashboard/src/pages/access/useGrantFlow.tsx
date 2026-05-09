@@ -1,10 +1,11 @@
+import type { ChallengeBucket } from "@gram/client/models/components/challengebucket.js";
 import { ResolveChallengeFormResolutionType } from "@gram/client/models/components/resolvechallengeform.js";
 import { invalidateAllChallenges } from "@gram/client/react-query/challenges.js";
+import { invalidateAllChallengeBuckets } from "@gram/client/react-query/challengeBuckets.js";
 import { useResolveChallengeMutation } from "@gram/client/react-query/resolveChallenge.js";
 import { Button, type Column } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { AuthzChallenge } from "./ChallengesTab";
 import { CreateRoleDialog } from "./CreateRoleDialog";
 import { GrantDrawer } from "./GrantDrawer";
 import { toRoleSlug } from "./types";
@@ -12,17 +13,14 @@ import { toRoleSlug } from "./types";
 const RESOLVE_LINGER_MS = 3_000;
 const FADE_OUT_MS = 1_000;
 
-export function useGrantFlow(
-  getGroupChallengeIds?: (challengeId: string) => string[],
-) {
-  const [grantChallenge, setGrantChallenge] = useState<AuthzChallenge | null>(
+export function useGrantFlow() {
+  const [grantChallenge, setGrantChallenge] = useState<ChallengeBucket | null>(
     null,
   );
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
-  const [createChallenge, setCreateChallenge] = useState<AuthzChallenge | null>(
-    null,
-  );
+  const [createChallenge, setCreateChallenge] =
+    useState<ChallengeBucket | null>(null);
   const [recentlyResolvedIds, setRecentlyResolvedIds] = useState<Set<string>>(
     () => new Set(),
   );
@@ -77,16 +75,19 @@ export function useGrantFlow(
   const queryClient = useQueryClient();
   const resolveChallenge = useResolveChallengeMutation({
     onSuccess: async () => {
-      await invalidateAllChallenges(queryClient);
+      await Promise.all([
+        invalidateAllChallenges(queryClient),
+        invalidateAllChallengeBuckets(queryClient),
+      ]);
     },
   });
 
-  const actionsColumn: Column<AuthzChallenge> = useMemo(
+  const actionsColumn: Column<ChallengeBucket> = useMemo(
     () => ({
       key: "actions",
       header: "",
       width: "100px",
-      render: (row: AuthzChallenge) =>
+      render: (row: ChallengeBucket) =>
         row.outcome === "deny" && !row.resolvedAt ? (
           <Button
             variant="primary"
@@ -103,9 +104,7 @@ export function useGrantFlow(
     [],
   );
 
-  const challengeIds = grantChallenge
-    ? (getGroupChallengeIds?.(grantChallenge.id) ?? [grantChallenge.id])
-    : [];
+  const challengeIds = grantChallenge?.challengeIds ?? [];
 
   const grantFlowPortals = (
     <>
@@ -113,7 +112,6 @@ export function useGrantFlow(
         open={isDrawerOpen}
         onOpenChange={(isOpen) => {
           setIsDrawerOpen(isOpen);
-          // Delay clearing challenge so Sheet exit animation can complete
           if (!isOpen) setTimeout(() => setGrantChallenge(null), 350);
         }}
         challenge={grantChallenge}
@@ -136,9 +134,7 @@ export function useGrantFlow(
         editingRole={null}
         onRoleCreated={(roleName) => {
           if (!createChallenge) return;
-          const ids = getGroupChallengeIds?.(createChallenge.id) ?? [
-            createChallenge.id,
-          ];
+          const ids = createChallenge.challengeIds;
           resolveChallenge.mutate(
             {
               request: {
@@ -148,7 +144,7 @@ export function useGrantFlow(
                   scope: createChallenge.scope,
                   resolutionType:
                     ResolveChallengeFormResolutionType.RoleAssigned,
-                  roleSlug: toRoleSlug(roleName), // new roles always get org- prefix
+                  roleSlug: toRoleSlug(roleName),
                   resourceKind: createChallenge.resourceKind,
                   resourceId: createChallenge.resourceId,
                 },

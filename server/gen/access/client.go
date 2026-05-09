@@ -15,39 +15,41 @@ import (
 
 // Client is the "access" service client.
 type Client struct {
-	ListRolesEndpoint        goa.Endpoint
-	GetRoleEndpoint          goa.Endpoint
-	CreateRoleEndpoint       goa.Endpoint
-	UpdateRoleEndpoint       goa.Endpoint
-	DeleteRoleEndpoint       goa.Endpoint
-	ListScopesEndpoint       goa.Endpoint
-	ListMembersEndpoint      goa.Endpoint
-	ListGrantsEndpoint       goa.Endpoint
-	UpdateMemberRoleEndpoint goa.Endpoint
-	GetRBACStatusEndpoint    goa.Endpoint
-	EnableRBACEndpoint       goa.Endpoint
-	DisableRBACEndpoint      goa.Endpoint
-	ListChallengesEndpoint   goa.Endpoint
-	ResolveChallengeEndpoint goa.Endpoint
+	ListRolesEndpoint            goa.Endpoint
+	GetRoleEndpoint              goa.Endpoint
+	CreateRoleEndpoint           goa.Endpoint
+	UpdateRoleEndpoint           goa.Endpoint
+	DeleteRoleEndpoint           goa.Endpoint
+	ListScopesEndpoint           goa.Endpoint
+	ListMembersEndpoint          goa.Endpoint
+	ListGrantsEndpoint           goa.Endpoint
+	UpdateMemberRoleEndpoint     goa.Endpoint
+	GetRBACStatusEndpoint        goa.Endpoint
+	EnableRBACEndpoint           goa.Endpoint
+	DisableRBACEndpoint          goa.Endpoint
+	ListChallengesEndpoint       goa.Endpoint
+	ListChallengeBucketsEndpoint goa.Endpoint
+	ResolveChallengeEndpoint     goa.Endpoint
 }
 
 // NewClient initializes a "access" service client given the endpoints.
-func NewClient(listRoles, getRole, createRole, updateRole, deleteRole, listScopes, listMembers, listGrants, updateMemberRole, getRBACStatus, enableRBAC, disableRBAC, listChallenges, resolveChallenge goa.Endpoint) *Client {
+func NewClient(listRoles, getRole, createRole, updateRole, deleteRole, listScopes, listMembers, listGrants, updateMemberRole, getRBACStatus, enableRBAC, disableRBAC, listChallenges, listChallengeBuckets, resolveChallenge goa.Endpoint) *Client {
 	return &Client{
-		ListRolesEndpoint:        listRoles,
-		GetRoleEndpoint:          getRole,
-		CreateRoleEndpoint:       createRole,
-		UpdateRoleEndpoint:       updateRole,
-		DeleteRoleEndpoint:       deleteRole,
-		ListScopesEndpoint:       listScopes,
-		ListMembersEndpoint:      listMembers,
-		ListGrantsEndpoint:       listGrants,
-		UpdateMemberRoleEndpoint: updateMemberRole,
-		GetRBACStatusEndpoint:    getRBACStatus,
-		EnableRBACEndpoint:       enableRBAC,
-		DisableRBACEndpoint:      disableRBAC,
-		ListChallengesEndpoint:   listChallenges,
-		ResolveChallengeEndpoint: resolveChallenge,
+		ListRolesEndpoint:            listRoles,
+		GetRoleEndpoint:              getRole,
+		CreateRoleEndpoint:           createRole,
+		UpdateRoleEndpoint:           updateRole,
+		DeleteRoleEndpoint:           deleteRole,
+		ListScopesEndpoint:           listScopes,
+		ListMembersEndpoint:          listMembers,
+		ListGrantsEndpoint:           listGrants,
+		UpdateMemberRoleEndpoint:     updateMemberRole,
+		GetRBACStatusEndpoint:        getRBACStatus,
+		EnableRBACEndpoint:           enableRBAC,
+		DisableRBACEndpoint:          disableRBAC,
+		ListChallengesEndpoint:       listChallenges,
+		ListChallengeBucketsEndpoint: listChallengeBuckets,
+		ResolveChallengeEndpoint:     resolveChallenge,
 	}
 }
 
@@ -324,6 +326,29 @@ func (c *Client) ListChallenges(ctx context.Context, p *ListChallengesPayload) (
 		return
 	}
 	return ires.(*ListChallengesResult), nil
+}
+
+// ListChallengeBuckets calls the "listChallengeBuckets" endpoint of the
+// "access" service.
+// ListChallengeBuckets may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListChallengeBuckets(ctx context.Context, p *ListChallengeBucketsPayload) (res *ListChallengeBucketsResult, err error) {
+	var ires any
+	ires, err = c.ListChallengeBucketsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListChallengeBucketsResult), nil
 }
 
 // ResolveChallenge calls the "resolveChallenge" endpoint of the "access"

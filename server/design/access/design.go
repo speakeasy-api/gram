@@ -328,6 +328,7 @@ var _ = Service("access", func() {
 			Attribute("scope", String, "Filter by scope.")
 			Attribute("project_id", String, "Filter to a specific project.")
 			Attribute("resolved", Boolean, "Filter by resolution state. True = only resolved, false = only unresolved.")
+			Attribute("ids", ArrayOf(String), "Fetch specific challenges by ID. When set, other filters and pagination are ignored.")
 			Attribute("limit", Int, func() {
 				Description("Maximum number of results to return.")
 				Default(50)
@@ -352,6 +353,7 @@ var _ = Service("access", func() {
 			Param("scope")
 			Param("project_id")
 			Param("resolved")
+			Param("ids")
 			Param("limit")
 			Param("offset")
 			security.ByKeyHeader()
@@ -362,6 +364,58 @@ var _ = Service("access", func() {
 		Meta("openapi:operationId", "listChallenges")
 		Meta("openapi:extension:x-speakeasy-name-override", "listChallenges")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "Challenges"}`)
+	})
+
+	Method("listChallengeBuckets", func() {
+		Description("List authz challenges grouped into time-based burst buckets. Consecutive challenges with the same dimensions within a 10-minute window are collapsed into a single bucket.")
+		Security(security.ByKey, func() {
+			Scope("consumer")
+		})
+		Security(security.Session)
+
+		Payload(func() {
+			Attribute("outcome", String, func() {
+				Description("Filter by outcome.")
+				Enum("allow", "deny")
+			})
+			Attribute("principal_urn", String, "Filter by principal URN.")
+			Attribute("scope", String, "Filter by scope.")
+			Attribute("project_id", String, "Filter to a specific project.")
+			Attribute("resolved", Boolean, "Filter by resolution state. True = only resolved, false = only unresolved.")
+			Attribute("limit", Int, func() {
+				Description("Maximum number of buckets to return.")
+				Default(50)
+				Minimum(1)
+				Maximum(200)
+			})
+			Attribute("offset", Int, func() {
+				Description("Number of buckets to skip.")
+				Default(0)
+				Minimum(0)
+			})
+			security.ByKeyPayload()
+			security.SessionPayload()
+		})
+
+		Result(ListChallengeBucketsResult)
+
+		HTTP(func() {
+			GET("/rpc/access.listChallengeBuckets")
+			Param("outcome")
+			Param("principal_urn")
+			Param("scope")
+			Param("project_id")
+			Param("resolved")
+			Param("limit")
+			Param("offset")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listChallengeBuckets")
+		Meta("openapi:extension:x-speakeasy-name-override", "listChallengeBuckets")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ChallengeBuckets"}`)
 	})
 
 	Method("resolveChallenge", func() {
@@ -594,6 +648,68 @@ var ListChallengesResult = Type("ListChallengesResult", func() {
 	Required("challenges", "total")
 	Attribute("challenges", ArrayOf(AuthzChallengeModel), "The challenge events.")
 	Attribute("total", Int, "Total number of matching challenges for pagination.")
+})
+
+var ChallengeBucketModel = Type("ChallengeBucket", func() {
+	Description("A group of consecutive challenges with the same dimensions that occurred within a 10-minute window.")
+	Required("id", "last_seen", "first_seen", "organization_id", "principal_urn", "principal_type",
+		"operation", "outcome", "reason", "scope", "role_slugs",
+		"evaluated_grant_count", "matched_grant_count",
+		"challenge_count", "challenge_ids")
+
+	Attribute("id", String, "ID of the most recent challenge in the bucket.")
+	Attribute("last_seen", String, func() {
+		Description("Timestamp of the most recent challenge in the bucket.")
+		Format(FormatDateTime)
+	})
+	Attribute("first_seen", String, func() {
+		Description("Timestamp of the earliest challenge in the bucket.")
+		Format(FormatDateTime)
+	})
+	Attribute("organization_id", String, "Organization the principal was acting in.")
+	Attribute("project_id", String, "Project scope (empty for org-level checks).")
+	Attribute("principal_urn", String, "Principal URN e.g. user:<uuid> or api_key:<id>.")
+	Attribute("principal_type", String, func() {
+		Description("Kind of principal.")
+		Enum("user", "api_key", "assistant")
+	})
+	Attribute("user_email", String, "Email when available.")
+	Attribute("photo_url", String, "User avatar URL when available.")
+	Attribute("operation", String, func() {
+		Enum("require", "require_any", "filter")
+	})
+	Attribute("outcome", String, func() {
+		Enum("allow", "deny", "error")
+	})
+	Attribute("reason", String, func() {
+		Enum("grant_matched", "no_grants", "scope_unsatisfied", "invalid_check", "rbac_skipped_apikey", "dev_override")
+	})
+	Attribute("scope", String, "Scope that was checked.")
+	Attribute("resource_kind", String, "Resource kind of the check.")
+	Attribute("resource_id", String, "Resource ID of the check.")
+	Attribute("role_slugs", ArrayOf(String), "Roles the principal had loaded.")
+	Attribute("evaluated_grant_count", Int, "Total grants evaluated.")
+	Attribute("matched_grant_count", Int, "Number of grants that matched.")
+	Attribute("challenge_count", Int, "Number of individual challenges in this bucket.")
+	Attribute("challenge_ids", ArrayOf(String), "IDs of all challenges in this bucket.")
+
+	// Resolution fields — null when unresolved.
+	Attribute("resolved_at", String, func() {
+		Description("When the bucket was resolved by an admin.")
+		Format(FormatDateTime)
+	})
+	Attribute("resolution_type", String, func() {
+		Description("How the bucket was resolved.")
+		Enum("role_assigned", "dismissed")
+	})
+	Attribute("resolved_by", String, "URN of the admin who resolved.")
+	Attribute("resolution_role_slug", String, "Role slug assigned (when resolution_type=role_assigned).")
+})
+
+var ListChallengeBucketsResult = Type("ListChallengeBucketsResult", func() {
+	Required("buckets", "total")
+	Attribute("buckets", ArrayOf(ChallengeBucketModel), "The challenge buckets.")
+	Attribute("total", Int, "Total number of matching buckets for pagination.")
 })
 
 var ResolveChallengeForm = Type("ResolveChallengeForm", func() {

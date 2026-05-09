@@ -2841,6 +2841,9 @@ func EncodeListChallengesRequest(encoder func(*http.Request) goahttp.Encoder) fu
 		if p.Resolved != nil {
 			values.Add("resolved", fmt.Sprintf("%v", *p.Resolved))
 		}
+		for _, value := range p.Ids {
+			values.Add("ids", value)
+		}
 		values.Add("limit", fmt.Sprintf("%v", p.Limit))
 		values.Add("offset", fmt.Sprintf("%v", p.Offset))
 		req.URL.RawQuery = values.Encode()
@@ -3043,6 +3046,260 @@ func DecodeListChallengesResponse(decoder func(*http.Response) goahttp.Decoder, 
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("access", "listChallenges", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildListChallengeBucketsRequest instantiates a HTTP request object with
+// method and path set to call the "access" service "listChallengeBuckets"
+// endpoint
+func (c *Client) BuildListChallengeBucketsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListChallengeBucketsAccessPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("access", "listChallengeBuckets", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListChallengeBucketsRequest returns an encoder for requests sent to
+// the access listChallengeBuckets server.
+func EncodeListChallengeBucketsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*access.ListChallengeBucketsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("access", "listChallengeBuckets", "*access.ListChallengeBucketsPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		values := req.URL.Query()
+		if p.Outcome != nil {
+			values.Add("outcome", *p.Outcome)
+		}
+		if p.PrincipalUrn != nil {
+			values.Add("principal_urn", *p.PrincipalUrn)
+		}
+		if p.Scope != nil {
+			values.Add("scope", *p.Scope)
+		}
+		if p.ProjectID != nil {
+			values.Add("project_id", *p.ProjectID)
+		}
+		if p.Resolved != nil {
+			values.Add("resolved", fmt.Sprintf("%v", *p.Resolved))
+		}
+		values.Add("limit", fmt.Sprintf("%v", p.Limit))
+		values.Add("offset", fmt.Sprintf("%v", p.Offset))
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeListChallengeBucketsResponse returns a decoder for responses returned
+// by the access listChallengeBuckets endpoint. restoreBody controls whether
+// the response body should be restored after having been read.
+// DecodeListChallengeBucketsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListChallengeBucketsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListChallengeBucketsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listChallengeBuckets", err)
+			}
+			err = ValidateListChallengeBucketsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listChallengeBuckets", err)
+			}
+			res := NewListChallengeBucketsResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListChallengeBucketsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listChallengeBuckets", err)
+			}
+			err = ValidateListChallengeBucketsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listChallengeBuckets", err)
+			}
+			return nil, NewListChallengeBucketsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListChallengeBucketsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listChallengeBuckets", err)
+			}
+			err = ValidateListChallengeBucketsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listChallengeBuckets", err)
+			}
+			return nil, NewListChallengeBucketsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListChallengeBucketsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listChallengeBuckets", err)
+			}
+			err = ValidateListChallengeBucketsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listChallengeBuckets", err)
+			}
+			return nil, NewListChallengeBucketsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListChallengeBucketsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listChallengeBuckets", err)
+			}
+			err = ValidateListChallengeBucketsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listChallengeBuckets", err)
+			}
+			return nil, NewListChallengeBucketsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListChallengeBucketsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listChallengeBuckets", err)
+			}
+			err = ValidateListChallengeBucketsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listChallengeBuckets", err)
+			}
+			return nil, NewListChallengeBucketsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListChallengeBucketsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listChallengeBuckets", err)
+			}
+			err = ValidateListChallengeBucketsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listChallengeBuckets", err)
+			}
+			return nil, NewListChallengeBucketsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListChallengeBucketsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listChallengeBuckets", err)
+			}
+			err = ValidateListChallengeBucketsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listChallengeBuckets", err)
+			}
+			return nil, NewListChallengeBucketsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListChallengeBucketsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "listChallengeBuckets", err)
+				}
+				err = ValidateListChallengeBucketsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "listChallengeBuckets", err)
+				}
+				return nil, NewListChallengeBucketsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListChallengeBucketsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "listChallengeBuckets", err)
+				}
+				err = ValidateListChallengeBucketsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "listChallengeBuckets", err)
+				}
+				return nil, NewListChallengeBucketsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("access", "listChallengeBuckets", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListChallengeBucketsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listChallengeBuckets", err)
+			}
+			err = ValidateListChallengeBucketsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listChallengeBuckets", err)
+			}
+			return nil, NewListChallengeBucketsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("access", "listChallengeBuckets", resp.StatusCode, string(body))
 		}
 	}
 }
@@ -3499,6 +3756,46 @@ func unmarshalAuthzChallengeResponseBodyToAccessAuthzChallenge(v *AuthzChallenge
 	res.RoleSlugs = make([]string, len(v.RoleSlugs))
 	for i, val := range v.RoleSlugs {
 		res.RoleSlugs[i] = val
+	}
+
+	return res
+}
+
+// unmarshalChallengeBucketResponseBodyToAccessChallengeBucket builds a value
+// of type *access.ChallengeBucket from a value of type
+// *ChallengeBucketResponseBody.
+func unmarshalChallengeBucketResponseBodyToAccessChallengeBucket(v *ChallengeBucketResponseBody) *access.ChallengeBucket {
+	res := &access.ChallengeBucket{
+		ID:                  *v.ID,
+		LastSeen:            *v.LastSeen,
+		FirstSeen:           *v.FirstSeen,
+		OrganizationID:      *v.OrganizationID,
+		ProjectID:           v.ProjectID,
+		PrincipalUrn:        *v.PrincipalUrn,
+		PrincipalType:       *v.PrincipalType,
+		UserEmail:           v.UserEmail,
+		PhotoURL:            v.PhotoURL,
+		Operation:           *v.Operation,
+		Outcome:             *v.Outcome,
+		Reason:              *v.Reason,
+		Scope:               *v.Scope,
+		ResourceKind:        v.ResourceKind,
+		ResourceID:          v.ResourceID,
+		EvaluatedGrantCount: *v.EvaluatedGrantCount,
+		MatchedGrantCount:   *v.MatchedGrantCount,
+		ChallengeCount:      *v.ChallengeCount,
+		ResolvedAt:          v.ResolvedAt,
+		ResolutionType:      v.ResolutionType,
+		ResolvedBy:          v.ResolvedBy,
+		ResolutionRoleSlug:  v.ResolutionRoleSlug,
+	}
+	res.RoleSlugs = make([]string, len(v.RoleSlugs))
+	for i, val := range v.RoleSlugs {
+		res.RoleSlugs[i] = val
+	}
+	res.ChallengeIds = make([]string, len(v.ChallengeIds))
+	for i, val := range v.ChallengeIds {
+		res.ChallengeIds[i] = val
 	}
 
 	return res

@@ -8,23 +8,23 @@ import {
   QueryKey,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { accessListChallenges } from "../funcs/accessListChallenges.js";
+import { accessListChallengeBuckets } from "../funcs/accessListChallengeBuckets.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
 import * as operations from "../models/operations/index.js";
 import { unwrapAsync } from "../types/fp.js";
-export type ChallengesQueryData = components.ListChallengesResult;
+export type ChallengeBucketsQueryData = components.ListChallengeBucketsResult;
 
-export function prefetchChallenges(
+export function prefetchChallengeBuckets(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.ListChallengesRequest | undefined,
-  security?: operations.ListChallengesSecurity | undefined,
+  request?: operations.ListChallengeBucketsRequest | undefined,
+  security?: operations.ListChallengeBucketsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
-    ...buildChallengesQuery(
+    ...buildChallengeBucketsQuery(
       client$,
       request,
       security,
@@ -33,31 +33,32 @@ export function prefetchChallenges(
   });
 }
 
-export function buildChallengesQuery(
+export function buildChallengeBucketsQuery(
   client$: GramCore,
-  request?: operations.ListChallengesRequest | undefined,
-  security?: operations.ListChallengesSecurity | undefined,
+  request?: operations.ListChallengeBucketsRequest | undefined,
+  security?: operations.ListChallengeBucketsSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
-  queryFn: (context: QueryFunctionContext) => Promise<ChallengesQueryData>;
+  queryFn: (
+    context: QueryFunctionContext,
+  ) => Promise<ChallengeBucketsQueryData>;
 } {
   return {
-    queryKey: queryKeyChallenges({
+    queryKey: queryKeyChallengeBuckets({
       outcome: request?.outcome,
       principalUrn: request?.principalUrn,
       scope: request?.scope,
       projectId: request?.projectId,
       resolved: request?.resolved,
-      ids: request?.ids,
       limit: request?.limit,
       offset: request?.offset,
       gramKey: request?.gramKey,
       gramSession: request?.gramSession,
     }),
-    queryFn: async function challengesQueryFn(
+    queryFn: async function challengeBucketsQueryFn(
       ctx,
-    ): Promise<ChallengesQueryData> {
+    ): Promise<ChallengeBucketsQueryData> {
       const sig = combineSignals(
         ctx.signal,
         options?.signal,
@@ -69,7 +70,7 @@ export function buildChallengesQuery(
         signal: sig,
       };
 
-      return unwrapAsync(accessListChallenges(
+      return unwrapAsync(accessListChallengeBuckets(
         client$,
         request,
         security,
@@ -79,19 +80,18 @@ export function buildChallengesQuery(
   };
 }
 
-export function queryKeyChallenges(
+export function queryKeyChallengeBuckets(
   parameters: {
-    outcome?: operations.QueryParamOutcome | undefined;
+    outcome?: operations.Outcome | undefined;
     principalUrn?: string | undefined;
     scope?: string | undefined;
     projectId?: string | undefined;
     resolved?: boolean | undefined;
-    ids?: Array<string> | undefined;
     limit?: number | undefined;
     offset?: number | undefined;
     gramKey?: string | undefined;
     gramSession?: string | undefined;
   },
 ): QueryKey {
-  return ["@gram/client", "access", "listChallenges", parameters];
+  return ["@gram/client", "access", "listChallengeBuckets", parameters];
 }
