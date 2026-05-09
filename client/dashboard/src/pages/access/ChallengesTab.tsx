@@ -168,17 +168,19 @@ function useOutcomeApiParam(outcomeFilter: OutcomeFilter): {
   return {};
 }
 
-/** Fetch individual challenges for all currently-expanded buckets and build a lookup. */
+const EXPANDED_PREVIEW_LIMIT = 10;
+
+/** Fetch individual challenges for all currently-expanded buckets (first 10 only). */
 function useExpandedChallenges(
   expandedIds: Set<string>,
   buckets: ChallengeBucket[],
 ): Map<string, ChallengeBucket[]> {
-  // Collect all challenge IDs from expanded buckets into a single request.
+  // Only fetch the first EXPANDED_PREVIEW_LIMIT IDs per bucket.
   const allIds = useMemo(() => {
     const ids: string[] = [];
     for (const b of buckets) {
       if (expandedIds.has(b.id) && b.challengeCount > 1) {
-        ids.push(...b.challengeIds);
+        ids.push(...b.challengeIds.slice(0, EXPANDED_PREVIEW_LIMIT));
       }
     }
     return ids;
@@ -192,17 +194,15 @@ function useExpandedChallenges(
     const map = new Map<string, ChallengeBucket[]>();
     if (!data?.challenges) return map;
 
-    // Index challenges by ID for fast lookup.
     const byId = new Map<string, AuthzChallenge>();
     for (const c of data.challenges) {
       byId.set(c.id, c);
     }
 
-    // For each expanded bucket, map its challengeIds to bucket-shaped rows.
     for (const b of buckets) {
       if (!expandedIds.has(b.id) || b.challengeCount <= 1) continue;
       const rows: ChallengeBucket[] = [];
-      for (const id of b.challengeIds) {
+      for (const id of b.challengeIds.slice(0, EXPANDED_PREVIEW_LIMIT)) {
         const c = byId.get(id);
         if (c) rows.push(challengeToBucket(c));
       }
@@ -212,17 +212,29 @@ function useExpandedChallenges(
   }, [data, buckets, expandedIds]);
 }
 
-/** Flatten buckets with expanded rows interleaved. */
+type FlatRow =
+  | { kind: "bucket"; bucket: ChallengeBucket }
+  | { kind: "child"; bucket: ChallengeBucket }
+  | { kind: "overflow"; bucketId: string; remaining: number };
+
+/** Flatten buckets with expanded rows and overflow indicators interleaved. */
 function flattenWithExpanded(
   buckets: ChallengeBucket[],
   expandedMap: Map<string, ChallengeBucket[]>,
-): ChallengeBucket[] {
-  if (expandedMap.size === 0) return buckets;
-  const result: ChallengeBucket[] = [];
+): FlatRow[] {
+  const result: FlatRow[] = [];
   for (const b of buckets) {
-    result.push(b);
+    result.push({ kind: "bucket", bucket: b });
     const expanded = expandedMap.get(b.id);
-    if (expanded) result.push(...expanded);
+    if (expanded) {
+      for (const child of expanded) {
+        result.push({ kind: "child", bucket: child });
+      }
+      const remaining = b.challengeCount - EXPANDED_PREVIEW_LIMIT;
+      if (remaining > 0) {
+        result.push({ kind: "overflow", bucketId: b.id, remaining });
+      }
+    }
   }
   return result;
 }
@@ -343,17 +355,14 @@ export function ChallengesTab() {
     [accumulated, expandedMap],
   );
 
-  // IDs of individual challenge rows (expanded children, excluding the bucket trigger row) for grey styling.
+  // IDs of individual challenge rows (expanded children) for styling and column hiding.
   const expandedChildIds = useMemo(() => {
     const ids = new Set<string>();
-    const bucketIds = new Set(accumulated.map((b) => b.id));
     for (const rows of expandedMap.values()) {
-      for (const r of rows) {
-        if (!bucketIds.has(r.id)) ids.add(r.id);
-      }
+      for (const r of rows) ids.add(r.id);
     }
     return ids;
-  }, [expandedMap, accumulated]);
+  }, [expandedMap]);
 
   const challengeRowColumns = useChallengeRowColumns(
     animatingOutIds,
@@ -442,16 +451,31 @@ export function ChallengesTab() {
           <Table columns={columns}>
             <Table.Header columns={columns} />
             <Table.Body>
-              {flatData.map((row) => (
-                <Table.Row
-                  key={row.id}
-                  row={row}
-                  columns={columns}
-                  className={
-                    expandedChildIds.has(row.id) ? "bg-muted/50" : undefined
-                  }
-                />
-              ))}
+              {flatData.map((row) => {
+                if (row.kind === "overflow") {
+                  return (
+                    <tr
+                      key={`overflow-${row.bucketId}`}
+                      className="bg-muted/50"
+                    >
+                      <td
+                        colSpan={columns.length}
+                        className="text-muted-foreground px-4 py-2 text-center text-xs"
+                      >
+                        + {row.remaining.toLocaleString()} more
+                      </td>
+                    </tr>
+                  );
+                }
+                return (
+                  <Table.Row
+                    key={row.bucket.id}
+                    row={row.bucket}
+                    columns={columns}
+                    className={row.kind === "child" ? "bg-muted/50" : undefined}
+                  />
+                );
+              })}
             </Table.Body>
           </Table>
           {(accumulated.length > 0 || isLoadingMore) && (

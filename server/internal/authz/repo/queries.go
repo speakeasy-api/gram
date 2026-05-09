@@ -335,52 +335,8 @@ func (q *Queries) ListChallengesByIDs(ctx context.Context, orgID string, ids []s
 	return results, nil
 }
 
-// BurstGapSeconds is the minimum gap (in seconds) between consecutive challenges
-// with the same dimensions before they are split into separate buckets.
-const BurstGapSeconds = 600 // 10 minutes
-
-// burstCTE returns a CTE that assigns a burst_id to each challenge row.
-// Consecutive challenges within the same (principal_urn, scope, outcome,
-// resource_kind, resource_id) group that are less than BurstGapSeconds apart
-// share the same burst_id. A gap larger than the threshold starts a new burst.
-func burstCTE(where string) string {
-	return `WITH lagged AS (
-	SELECT
-		*,
-		length(matched_grants.scope) AS matched_grant_count,
-		if(
-			lagInFrame(timestamp, 1) OVER (
-				PARTITION BY principal_urn, scope, outcome, resource_kind, resource_id
-				ORDER BY timestamp ASC
-				ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
-			) < toDateTime('2000-01-01')
-			OR dateDiff('second',
-				lagInFrame(timestamp, 1) OVER (
-					PARTITION BY principal_urn, scope, outcome, resource_kind, resource_id
-					ORDER BY timestamp ASC
-					ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
-				),
-				timestamp
-			) > ` + fmt.Sprintf("%d", BurstGapSeconds) + `,
-			1, 0
-		) AS is_new_burst
-	FROM authz_challenges
-	WHERE ` + where + `
-),
-bucketed AS (
-	SELECT
-		*,
-		sum(is_new_burst) OVER (
-			PARTITION BY principal_urn, scope, outcome, resource_kind, resource_id
-			ORDER BY timestamp ASC
-			ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
-		) AS burst_id
-	FROM lagged
-)`
-}
-
-// ChallengeBucket is one burst-group of challenges that share the same
-// dimensions and occur within BurstGapSeconds of each other.
+// ChallengeBucket is a group of challenges that share the same dimensions
+// (principal, scope, outcome, resource) across all time.
 type ChallengeBucket struct {
 	// Representative fields (from the most recent challenge in the bucket).
 	ID                  string
@@ -407,15 +363,14 @@ type ChallengeBucket struct {
 	FirstSeen      string // RFC 3339
 }
 
-// ListChallengeBuckets returns challenges grouped into burst-buckets, paginated.
+// ListChallengeBuckets returns challenges grouped by dimensions, paginated.
 func (q *Queries) ListChallengeBuckets(ctx context.Context, f ChallengeListFilters) ([]ChallengeBucket, error) {
 	where, args := challengeWhereClause(f)
-	query := burstCTE(where) + `
-SELECT
+	query := `SELECT
 	argMax(id, timestamp) AS rep_id,
 	formatDateTime(max(timestamp), '%Y-%m-%dT%H:%i:%S.000Z', 'UTC') AS last_seen,
-	any(organization_id) AS organization_id,
-	any(project_id) AS project_id,
+	organization_id,
+	project_id,
 	principal_urn,
 	argMax(principal_type, timestamp) AS principal_type,
 	argMax(user_id, timestamp) AS user_id,
@@ -428,12 +383,13 @@ SELECT
 	resource_id,
 	argMax(role_slugs, timestamp) AS role_slugs,
 	argMax(evaluated_grant_count, timestamp) AS evaluated_grant_count,
-	argMax(matched_grant_count, timestamp) AS matched_grant_count,
+	max(length(matched_grants.scope)) AS matched_grant_count,
 	count(*) AS challenge_count,
 	arrayMap(x -> toString(x), groupArray(id)) AS challenge_ids,
 	formatDateTime(min(timestamp), '%Y-%m-%dT%H:%i:%S.000Z', 'UTC') AS first_seen
-FROM bucketed
-GROUP BY principal_urn, scope, outcome, resource_kind, resource_id, burst_id
+FROM authz_challenges
+WHERE ` + where + `
+GROUP BY organization_id, project_id, principal_urn, scope, outcome, resource_kind, resource_id
 ORDER BY max(timestamp) DESC`
 
 	if !f.SkipPagination {
@@ -481,14 +437,14 @@ ORDER BY max(timestamp) DESC`
 	return results, nil
 }
 
-// CountChallengeBuckets returns the total number of burst-buckets for pagination.
+// CountChallengeBuckets returns the total number of dimension groups for pagination.
 func (q *Queries) CountChallengeBuckets(ctx context.Context, f ChallengeListFilters) (uint64, error) {
 	where, args := challengeWhereClause(f)
-	query := burstCTE(where) + `
-SELECT count(*) FROM (
+	query := `SELECT count(*) FROM (
 	SELECT 1
-	FROM bucketed
-	GROUP BY principal_urn, scope, outcome, resource_kind, resource_id, burst_id
+	FROM authz_challenges
+	WHERE ` + where + `
+	GROUP BY organization_id, project_id, principal_urn, scope, outcome, resource_kind, resource_id
 )`
 
 	rows, err := q.conn.Query(ctx, query, args...)
