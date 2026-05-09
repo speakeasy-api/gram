@@ -15,10 +15,12 @@ import {
   type Column,
   Table,
 } from "@speakeasy-api/moonshine";
-import { Check } from "lucide-react";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Check, Loader2 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
 import { countChallenges, scopeChallenges } from "./challengeHelpers";
+import { useChallengeGroups } from "./useChallengeGroups";
 import { useChallengeRowColumns } from "./useChallengeRowColumns";
 import { useGrantFlow } from "./useGrantFlow";
 
@@ -137,6 +139,18 @@ export function ChallengesTab() {
     setPrincipalFilter(identity ?? "all");
   }
   const [scopeFilter, setScopeFilter] = useState("all");
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const toggleGroup = useCallback((groupKey: string) => {
+    setExpandedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(groupKey)) next.delete(groupKey);
+      else next.add(groupKey);
+      return next;
+    });
+  }, []);
+
   const groupSiblingIdsRef = useRef<Map<string, string[]>>(new Map());
   const getGroupChallengeIds = useCallback(
     (id: string) => groupSiblingIdsRef.current.get(id) ?? [id],
@@ -149,10 +163,39 @@ export function ChallengesTab() {
     animatingOutIds,
   } = useGrantFlow(getGroupChallengeIds);
 
-  const { data, isLoading } = useChallenges({ limit: 200 });
+  const PAGE_SIZE = 200;
+  const [pageCount, setPageCount] = useState(1);
+  const [accumulated, setAccumulated] = useState<AuthzChallenge[]>([]);
+  const [totalServer, setTotalServer] = useState(0);
+
+  // Fetch current page
+  const offset = (pageCount - 1) * PAGE_SIZE;
+  const { data, isLoading, isFetching } = useChallenges({
+    limit: PAGE_SIZE,
+    offset,
+  });
+
+  // Accumulate results as pages load
+  useEffect(() => {
+    if (!data?.challenges) return;
+    setTotalServer(data.total);
+    if (pageCount === 1) {
+      setAccumulated(data.challenges);
+    } else {
+      setAccumulated((prev) => {
+        const existingIds = new Set(prev.map((c) => c.id));
+        const newItems = data.challenges.filter((c) => !existingIds.has(c.id));
+        return [...prev, ...newItems];
+      });
+    }
+  }, [data, pageCount]);
+
+  const hasMore = accumulated.length < totalServer;
+  const isLoadingMore = isFetching && pageCount > 1;
+
   const challenges = useMemo(
-    () => (data?.challenges ?? []).filter((c) => !!c.scope),
-    [data?.challenges],
+    () => accumulated.filter((c) => !!c.scope),
+    [accumulated],
   );
 
   const scopedChallenges = useMemo(
@@ -175,19 +218,7 @@ export function ChallengesTab() {
     return [...set].filter(Boolean).sort();
   }, [challenges]);
 
-  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(
-    () => new Set(),
-  );
-  const toggleGroup = useCallback((groupKey: string) => {
-    setExpandedGroups((prev) => {
-      const next = new Set(prev);
-      if (next.has(groupKey)) next.delete(groupKey);
-      else next.add(groupKey);
-      return next;
-    });
-  }, []);
-
-  const { filtered, groupCounts, groupKeys } = useMemo(() => {
+  const filteredAndSorted = useMemo(() => {
     let base = scopedChallenges;
     if (outcomeFilter === "resolved") {
       base = base.filter(
@@ -200,43 +231,39 @@ export function ChallengesTab() {
           recentlyResolvedIds.has(c.id),
       );
     }
-    const sorted = [...base].sort((a, b) => {
+    return [...base].sort((a, b) => {
       const order = (o: Outcome) => (o === "deny" ? 0 : o === "error" ? 1 : 2);
       const diff = order(a.outcome) - order(b.outcome);
       if (diff !== 0) return diff;
       return b.timestamp.getTime() - a.timestamp.getTime();
     });
+  }, [scopedChallenges, outcomeFilter, recentlyResolvedIds]);
 
-    // Group by (principal, scope, outcome, resource)
-    const groups = new Map<string, AuthzChallenge[]>();
-    for (const c of sorted) {
-      const displayIdentity = c.userEmail ?? c.principalUrn;
-      const key = `${displayIdentity}|${c.scope}|${c.outcome}|${c.resourceKind ?? ""}|${c.resourceId ?? ""}`;
-      const arr = groups.get(key);
-      if (arr) arr.push(c);
-      else groups.set(key, [c]);
-    }
+  const {
+    grouped: allFiltered,
+    groupCounts,
+    groupKeys,
+    groupSiblingIdsRef: siblingIdsRef,
+  } = useChallengeGroups(filteredAndSorted, expandedGroups);
+  groupSiblingIdsRef.current = siblingIdsRef.current;
 
-    const result: AuthzChallenge[] = [];
-    const counts = new Map<string, number>();
-    const keys = new Map<string, string>();
-    const siblingIds = new Map<string, string[]>();
-    for (const [key, members] of groups) {
-      const memberIds = members.map((m) => m.id);
-      counts.set(members[0].id, members.length);
-      for (const m of members) {
-        keys.set(m.id, key);
-        siblingIds.set(m.id, memberIds);
-      }
-      if (expandedGroups.has(key)) {
-        result.push(...members);
-      } else {
-        result.push(members[0]);
-      }
-    }
-    groupSiblingIdsRef.current = siblingIds;
-    return { filtered: result, groupCounts: counts, groupKeys: keys };
-  }, [scopedChallenges, outcomeFilter, recentlyResolvedIds, expandedGroups]);
+  const VISIBLE_PAGE_SIZE = 15;
+  const [visibleLimit, setVisibleLimit] = useState(VISIBLE_PAGE_SIZE);
+
+  // Reset visible limit when filters change
+  const filterKey = `${outcomeFilter}|${principalFilter}|${scopeFilter}`;
+  const prevFilterKeyRef = useRef(filterKey);
+  if (filterKey !== prevFilterKeyRef.current) {
+    prevFilterKeyRef.current = filterKey;
+    setVisibleLimit(VISIBLE_PAGE_SIZE);
+  }
+
+  const filtered = useMemo(
+    () => allFiltered.slice(0, visibleLimit),
+    [allFiltered, visibleLimit],
+  );
+  const hasMoreVisible = visibleLimit < allFiltered.length;
+  const needsServerPage = !hasMoreVisible && hasMore;
 
   const challengeRowColumns = useChallengeRowColumns(
     animatingOutIds,
@@ -307,12 +334,52 @@ export function ChallengesTab() {
         </Select>
       </div>
 
-      {isLoading ? (
+      {isLoading && accumulated.length === 0 ? (
         <SkeletonTable />
       ) : filtered.length === 0 ? (
         <ChallengesEmptyState outcomeFilter={outcomeFilter} />
       ) : (
-        <Table columns={columns} data={filtered} rowKey={(row) => row.id} />
+        <>
+          <Table columns={columns} data={filtered} rowKey={(row) => row.id} />
+          {(filtered.length > 0 || isLoadingMore) && (
+            <div className="bg-muted/20 flex items-center justify-between border-t px-4 py-3">
+              <Type muted small>
+                {filtered.length.toLocaleString()} of{" "}
+                {allFiltered.length.toLocaleString()} challenge
+                {allFiltered.length === 1 ? "" : "s"}
+              </Type>
+              {hasMoreVisible ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setVisibleLimit((v) => v + VISIBLE_PAGE_SIZE)}
+                >
+                  Load more
+                </Button>
+              ) : needsServerPage ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPageCount((p) => p + 1)}
+                  disabled={isLoadingMore}
+                >
+                  {isLoadingMore ? (
+                    <>
+                      <Loader2 className="size-4 animate-spin" />
+                      Loading...
+                    </>
+                  ) : (
+                    "Load more"
+                  )}
+                </Button>
+              ) : (
+                <Type muted small>
+                  All challenges loaded
+                </Type>
+              )}
+            </div>
+          )}
+        </>
       )}
 
       <div className="border-border/50 bg-muted/30 mt-8 rounded-md border px-4 py-3">

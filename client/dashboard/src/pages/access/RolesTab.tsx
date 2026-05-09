@@ -23,7 +23,8 @@ import {
   Table,
 } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router";
 import { CreateRoleDialog } from "./CreateRoleDialog";
 import { DeleteRoleDialog } from "./DeleteRoleDialog";
 import { Ellipsis } from "lucide-react";
@@ -74,6 +75,7 @@ export function RolesTab() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [editingRole, setEditingRole] = useState<Role | null>(null);
   const [deletingRole, setDeletingRole] = useState<Role | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const { data: rolesData, isLoading } = useRoles();
   const roles = [...(rolesData?.roles ?? [])].sort(
@@ -81,6 +83,23 @@ export function RolesTab() {
   );
   const { data: membersData } = useMembers();
   const members = membersData?.members ?? [];
+
+  useEffect(() => {
+    const editRoleId = searchParams.get("editRole");
+    if (editRoleId && roles.length > 0) {
+      const role = roles.find((r) => r.id === editRoleId);
+      if (role) {
+        setEditingRole(role);
+        setSearchParams(
+          (prev) => {
+            prev.delete("editRole");
+            return prev;
+          },
+          { replace: true },
+        );
+      }
+    }
+  }, [searchParams, roles, setSearchParams]);
 
   const defaultRole =
     roles.find((r) => r.isSystem && r.name === "Member") ?? null;
