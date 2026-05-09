@@ -6,7 +6,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useState, useEffect } from "react";
+import { AGENT_PROVIDERS } from "@/lib/agent-providers";
+import { useState, useEffect, useMemo } from "react";
 
 const resolutionStatusOptions = [
   {
@@ -36,17 +37,23 @@ const resolutionStatusOptions = [
   },
 ];
 
-const sourceOptions = [
-  {
-    value: "all",
-    label: "All Sources",
-    description: "Show sessions from any client",
-  },
-  {
-    value: "claude-code",
-    label: "Claude Code",
-    description: "Sessions originating from the Claude Code CLI",
-  },
+type SourceOption = {
+  value: string;
+  label: string;
+  description?: string;
+};
+
+const ALL_SOURCES_OPTION: SourceOption = {
+  value: "all",
+  label: "All Sources",
+  description: "Show sessions from any client",
+};
+
+// First-party callers that set X-Gram-Source from inside Gram itself.
+// External agent clients (claude-code, cursor, cowork, …) come from
+// AGENT_PROVIDERS so the chat-logs filter and the install dialog stay
+// in lockstep as new providers are added.
+const FIRST_PARTY_SOURCES: SourceOption[] = [
   {
     value: "dashboard-ai-insights",
     label: "AI Insights",
@@ -79,6 +86,49 @@ const sourceOptions = [
   },
 ];
 
+const AGENT_CLIENT_SOURCES: SourceOption[] = AGENT_PROVIDERS.map((p) => ({
+  value: p.source,
+  label: p.label,
+  description: p.available
+    ? `Sessions originating from ${p.label}`
+    : `Sessions originating from ${p.label} (coming soon)`,
+}));
+
+function buildSourceOptions(
+  selectedSource: string,
+  observedSources: readonly string[],
+): SourceOption[] {
+  const byValue = new Map<string, SourceOption>();
+  byValue.set(ALL_SOURCES_OPTION.value, ALL_SOURCES_OPTION);
+
+  for (const opt of [...FIRST_PARTY_SOURCES, ...AGENT_CLIENT_SOURCES]) {
+    if (!byValue.has(opt.value)) byValue.set(opt.value, opt);
+  }
+
+  // Anything actually seen in chat traffic that we don't already curate —
+  // surface it with the raw value as both label and value.
+  for (const value of observedSources) {
+    if (!value || byValue.has(value)) continue;
+    byValue.set(value, {
+      value,
+      label: value,
+      description: "Custom source detected from chat traffic",
+    });
+  }
+
+  // Round-trip an unknown URL value (e.g. a deep-linked filter) so the
+  // dropdown doesn't blank out before observedSources resolves.
+  if (selectedSource && !byValue.has(selectedSource)) {
+    byValue.set(selectedSource, {
+      value: selectedSource,
+      label: selectedSource,
+      description: "Custom source detected from chat traffic",
+    });
+  }
+
+  return Array.from(byValue.values());
+}
+
 interface ChatLogsFiltersProps {
   searchQuery: string;
   onSearchQueryChange: (value: string) => void;
@@ -86,6 +136,7 @@ interface ChatLogsFiltersProps {
   onResolutionStatusChange: (value: string) => void;
   source: string;
   onSourceChange: (value: string) => void;
+  observedSources?: readonly string[];
   disabled?: boolean;
 }
 
@@ -96,6 +147,7 @@ export function ChatLogsFilters({
   onResolutionStatusChange,
   source,
   onSourceChange,
+  observedSources,
   disabled,
 }: ChatLogsFiltersProps) {
   const [localSearch, setLocalSearch] = useState(searchQuery);
@@ -126,20 +178,10 @@ export function ChatLogsFilters({
     onSourceChange(value === "all" ? "" : value);
   };
 
-  // If the current `source` value isn't one of the predefined options
-  // (e.g. a custom X-Gram-Source value set by an external client), inject it
-  // as an extra option so it round-trips through the dropdown.
-  const sourceItems =
-    source && !sourceOptions.some((o) => o.value === source)
-      ? [
-          ...sourceOptions,
-          {
-            value: source,
-            label: source,
-            description: "Custom source detected from chat traffic",
-          },
-        ]
-      : sourceOptions;
+  const sourceItems = useMemo(
+    () => buildSourceOptions(source, observedSources ?? []),
+    [source, observedSources],
+  );
 
   return (
     <div className="flex flex-1 items-center gap-3">

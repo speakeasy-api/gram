@@ -986,6 +986,37 @@ func (q *Queries) ListChatResolutions(ctx context.Context, chatID uuid.UUID) ([]
 	return items, nil
 }
 
+const listChatSources = `-- name: ListChatSources :many
+SELECT DISTINCT m.source AS source
+FROM chat_messages m
+JOIN chats c ON c.id = m.chat_id
+WHERE c.project_id = $1
+  AND c.deleted IS FALSE
+  AND m.source IS NOT NULL
+  AND m.source <> ''
+ORDER BY m.source ASC
+`
+
+func (q *Queries) ListChatSources(ctx context.Context, projectID uuid.UUID) ([]pgtype.Text, error) {
+	rows, err := q.db.Query(ctx, listChatSources, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []pgtype.Text
+	for rows.Next() {
+		var source pgtype.Text
+		if err := rows.Scan(&source); err != nil {
+			return nil, err
+		}
+		items = append(items, source)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listChatsForExternalUser = `-- name: ListChatsForExternalUser :many
 SELECT
     c.id, c.project_id, c.organization_id, c.user_id, c.external_user_id, c.title, c.created_at, c.updated_at, c.deleted_at, c.deleted,

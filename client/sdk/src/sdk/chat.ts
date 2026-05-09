@@ -6,6 +6,7 @@ import { chatCreditUsage } from "../funcs/chatCreditUsage.js";
 import { chatDelete } from "../funcs/chatDelete.js";
 import { chatGenerateTitle } from "../funcs/chatGenerateTitle.js";
 import { chatList } from "../funcs/chatList.js";
+import { chatListChatSources } from "../funcs/chatListChatSources.js";
 import { chatListChatsWithResolutions } from "../funcs/chatListChatsWithResolutions.js";
 import { chatLoad } from "../funcs/chatLoad.js";
 import { chatSubmitFeedback } from "../funcs/chatSubmitFeedback.js";
@@ -84,6 +85,25 @@ export class Chat extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.ListChatsResult> {
     return unwrapAsync(chatList(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listChatSources chat
+   *
+   * @remarks
+   * List the distinct chat source values observed for the project so the dashboard can populate the source filter dropdown.
+   */
+  async listChatSources(
+    request?: operations.ListChatSourcesRequest | undefined,
+    security?: operations.ListChatSourcesSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.ListChatSourcesResponseBody> {
+    return unwrapAsync(chatListChatSources(
       this,
       request,
       security,

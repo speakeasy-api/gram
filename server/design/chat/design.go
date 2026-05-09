@@ -182,6 +182,33 @@ var _ = Service("chat", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListChatsWithResolutions", "type": "query"}`)
 	})
 
+	Method("listChatSources", func() {
+		Description("List the distinct chat source values observed for the project so the dashboard can populate the source filter dropdown.")
+
+		Payload(func() {
+			security.SessionPayload()
+			security.ProjectPayload()
+			security.ChatSessionsTokenPayload()
+		})
+
+		Result(func() {
+			Attribute("sources", ArrayOf(String), "Distinct non-empty source values seen on chat messages, sorted alphabetically.")
+			Required("sources")
+		})
+
+		HTTP(func() {
+			GET("/rpc/chat.listChatSources")
+			security.SessionHeader()
+			security.ProjectHeader()
+			security.ChatSessionsTokenHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listChatSources")
+		Meta("openapi:extension:x-speakeasy-name-override", "listChatSources")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListChatSources", "type": "query"}`)
+	})
+
 	Method("deleteChat", func() {
 		Description("Soft-delete a chat by its ID")
 		Security(security.Session, security.ProjectSlug)

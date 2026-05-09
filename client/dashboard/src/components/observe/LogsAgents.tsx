@@ -12,6 +12,7 @@ import {
 } from "@gram/client/models/operations/listchatswithresolutions";
 import {
   useListChatsWithResolutions,
+  useListChatSources,
   useChatDeleteMutation,
   invalidateAllListChatsWithResolutions,
 } from "@gram/client/react-query";
@@ -284,6 +285,19 @@ export function LogsAgentsContent() {
       ),
     );
 
+  // Distinct source values actually observed for this project — surfaced in
+  // the dropdown so unexpected custom values (set via X-Gram-Source by
+  // external clients) become discoverable instead of only round-tripping
+  // through the URL. The query is independent of the active filter so it
+  // doesn't shrink as the user narrows the table.
+  const { data: sourcesData } = useListChatSources({}, undefined, {
+    throwOnError: false,
+  });
+  const observedSources = useMemo(
+    () => sourcesData?.sources ?? [],
+    [sourcesData?.sources],
+  );
+
   const chats = useMemo(() => data?.chats ?? [], [data?.chats]);
   const lastTotalRef = useRef(0);
   if (data?.total !== undefined && data.total > 0) {
@@ -387,6 +401,7 @@ export function LogsAgentsContent() {
         setResolutionStatus={setResolutionStatus}
         sourceFilter={sourceFilter}
         setSourceFilter={setSourceFilter}
+        observedSources={observedSources}
         sortField={sortField}
         setSortField={setSortField}
         sortOrder={sortOrder}
@@ -421,6 +436,7 @@ function AgentSessionsPageContent({
   setResolutionStatus,
   sourceFilter,
   setSourceFilter,
+  observedSources,
   sortField,
   setSortField,
   sortOrder,
@@ -450,6 +466,7 @@ function AgentSessionsPageContent({
   setResolutionStatus: (value: string) => void;
   sourceFilter: string;
   setSourceFilter: (value: string) => void;
+  observedSources: readonly string[];
   sortField: SortField;
   setSortField: (value: SortField) => void;
   sortOrder: SortOrder;
@@ -508,6 +525,7 @@ function AgentSessionsPageContent({
               onResolutionStatusChange={setResolutionStatus}
               source={sourceFilter}
               onSourceChange={setSourceFilter}
+              observedSources={observedSources}
             />
             <div className="ml-auto flex shrink-0 items-center gap-3">
               <div className="border-border flex h-10 items-center rounded-md border">

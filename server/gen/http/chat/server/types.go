@@ -96,6 +96,14 @@ type ListChatsWithResolutionsResponseBody struct {
 	Total int `form:"total" json:"total" xml:"total"`
 }
 
+// ListChatSourcesResponseBody is the type of the "chat" service
+// "listChatSources" endpoint HTTP response body.
+type ListChatSourcesResponseBody struct {
+	// Distinct non-empty source values seen on chat messages, sorted
+	// alphabetically.
+	Sources []string `form:"sources" json:"sources" xml:"sources"`
+}
+
 // SubmitFeedbackResponseBody is the type of the "chat" service
 // "submitFeedback" endpoint HTTP response body.
 type SubmitFeedbackResponseBody struct {
@@ -1016,6 +1024,188 @@ type ListChatsWithResolutionsGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// ListChatSourcesUnauthorizedResponseBody is the type of the "chat" service
+// "listChatSources" endpoint HTTP response body for the "unauthorized" error.
+type ListChatSourcesUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListChatSourcesForbiddenResponseBody is the type of the "chat" service
+// "listChatSources" endpoint HTTP response body for the "forbidden" error.
+type ListChatSourcesForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListChatSourcesBadRequestResponseBody is the type of the "chat" service
+// "listChatSources" endpoint HTTP response body for the "bad_request" error.
+type ListChatSourcesBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListChatSourcesNotFoundResponseBody is the type of the "chat" service
+// "listChatSources" endpoint HTTP response body for the "not_found" error.
+type ListChatSourcesNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListChatSourcesConflictResponseBody is the type of the "chat" service
+// "listChatSources" endpoint HTTP response body for the "conflict" error.
+type ListChatSourcesConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListChatSourcesUnsupportedMediaResponseBody is the type of the "chat"
+// service "listChatSources" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ListChatSourcesUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListChatSourcesInvalidResponseBody is the type of the "chat" service
+// "listChatSources" endpoint HTTP response body for the "invalid" error.
+type ListChatSourcesInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListChatSourcesInvariantViolationResponseBody is the type of the "chat"
+// service "listChatSources" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ListChatSourcesInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListChatSourcesUnexpectedResponseBody is the type of the "chat" service
+// "listChatSources" endpoint HTTP response body for the "unexpected" error.
+type ListChatSourcesUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListChatSourcesGatewayErrorResponseBody is the type of the "chat" service
+// "listChatSources" endpoint HTTP response body for the "gateway_error" error.
+type ListChatSourcesGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // DeleteChatUnauthorizedResponseBody is the type of the "chat" service
 // "deleteChat" endpoint HTTP response body for the "unauthorized" error.
 type DeleteChatUnauthorizedResponseBody struct {
@@ -1577,6 +1767,21 @@ func NewListChatsWithResolutionsResponseBody(res *chat.ListChatsWithResolutionsR
 		}
 	} else {
 		body.Chats = []*ChatOverviewWithResolutionsResponseBody{}
+	}
+	return body
+}
+
+// NewListChatSourcesResponseBody builds the HTTP response body from the result
+// of the "listChatSources" endpoint of the "chat" service.
+func NewListChatSourcesResponseBody(res *chat.ListChatSourcesResult) *ListChatSourcesResponseBody {
+	body := &ListChatSourcesResponseBody{}
+	if res.Sources != nil {
+		body.Sources = make([]string, len(res.Sources))
+		for i, val := range res.Sources {
+			body.Sources[i] = val
+		}
+	} else {
+		body.Sources = []string{}
 	}
 	return body
 }
@@ -2300,6 +2505,146 @@ func NewListChatsWithResolutionsGatewayErrorResponseBody(res *goa.ServiceError) 
 	return body
 }
 
+// NewListChatSourcesUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "listChatSources" endpoint of the "chat" service.
+func NewListChatSourcesUnauthorizedResponseBody(res *goa.ServiceError) *ListChatSourcesUnauthorizedResponseBody {
+	body := &ListChatSourcesUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListChatSourcesForbiddenResponseBody builds the HTTP response body from
+// the result of the "listChatSources" endpoint of the "chat" service.
+func NewListChatSourcesForbiddenResponseBody(res *goa.ServiceError) *ListChatSourcesForbiddenResponseBody {
+	body := &ListChatSourcesForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListChatSourcesBadRequestResponseBody builds the HTTP response body from
+// the result of the "listChatSources" endpoint of the "chat" service.
+func NewListChatSourcesBadRequestResponseBody(res *goa.ServiceError) *ListChatSourcesBadRequestResponseBody {
+	body := &ListChatSourcesBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListChatSourcesNotFoundResponseBody builds the HTTP response body from
+// the result of the "listChatSources" endpoint of the "chat" service.
+func NewListChatSourcesNotFoundResponseBody(res *goa.ServiceError) *ListChatSourcesNotFoundResponseBody {
+	body := &ListChatSourcesNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListChatSourcesConflictResponseBody builds the HTTP response body from
+// the result of the "listChatSources" endpoint of the "chat" service.
+func NewListChatSourcesConflictResponseBody(res *goa.ServiceError) *ListChatSourcesConflictResponseBody {
+	body := &ListChatSourcesConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListChatSourcesUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "listChatSources" endpoint of the "chat" service.
+func NewListChatSourcesUnsupportedMediaResponseBody(res *goa.ServiceError) *ListChatSourcesUnsupportedMediaResponseBody {
+	body := &ListChatSourcesUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListChatSourcesInvalidResponseBody builds the HTTP response body from the
+// result of the "listChatSources" endpoint of the "chat" service.
+func NewListChatSourcesInvalidResponseBody(res *goa.ServiceError) *ListChatSourcesInvalidResponseBody {
+	body := &ListChatSourcesInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListChatSourcesInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "listChatSources" endpoint of the "chat" service.
+func NewListChatSourcesInvariantViolationResponseBody(res *goa.ServiceError) *ListChatSourcesInvariantViolationResponseBody {
+	body := &ListChatSourcesInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListChatSourcesUnexpectedResponseBody builds the HTTP response body from
+// the result of the "listChatSources" endpoint of the "chat" service.
+func NewListChatSourcesUnexpectedResponseBody(res *goa.ServiceError) *ListChatSourcesUnexpectedResponseBody {
+	body := &ListChatSourcesUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListChatSourcesGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "listChatSources" endpoint of the "chat" service.
+func NewListChatSourcesGatewayErrorResponseBody(res *goa.ServiceError) *ListChatSourcesGatewayErrorResponseBody {
+	body := &ListChatSourcesGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewDeleteChatUnauthorizedResponseBody builds the HTTP response body from the
 // result of the "deleteChat" endpoint of the "chat" service.
 func NewDeleteChatUnauthorizedResponseBody(res *goa.ServiceError) *DeleteChatUnauthorizedResponseBody {
@@ -2635,6 +2980,17 @@ func NewListChatsWithResolutionsPayload(search *string, externalUserID *string, 
 	v.Offset = offset
 	v.SortBy = sortBy
 	v.SortOrder = sortOrder
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+	v.ChatSessionsToken = chatSessionsToken
+
+	return v
+}
+
+// NewListChatSourcesPayload builds a chat service listChatSources endpoint
+// payload.
+func NewListChatSourcesPayload(sessionToken *string, projectSlugInput *string, chatSessionsToken *string) *chat.ListChatSourcesPayload {
+	v := &chat.ListChatSourcesPayload{}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 	v.ChatSessionsToken = chatSessionsToken

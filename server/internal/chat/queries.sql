@@ -251,6 +251,16 @@ SELECT * FROM chat_resolutions
 WHERE chat_id = @chat_id
 ORDER BY created_at DESC;
 
+-- name: ListChatSources :many
+SELECT DISTINCT m.source AS source
+FROM chat_messages m
+JOIN chats c ON c.id = m.chat_id
+WHERE c.project_id = @project_id
+  AND c.deleted IS FALSE
+  AND m.source IS NOT NULL
+  AND m.source <> ''
+ORDER BY m.source ASC;
+
 -- name: CountChatsWithResolutions :one
 SELECT COUNT(DISTINCT c.id) as total
 FROM chats c

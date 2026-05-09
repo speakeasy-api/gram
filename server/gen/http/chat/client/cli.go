@@ -278,6 +278,35 @@ func BuildListChatsWithResolutionsPayload(chatListChatsWithResolutionsSearch str
 	return v, nil
 }
 
+// BuildListChatSourcesPayload builds the payload for the chat listChatSources
+// endpoint from CLI flags.
+func BuildListChatSourcesPayload(chatListChatSourcesSessionToken string, chatListChatSourcesProjectSlugInput string, chatListChatSourcesChatSessionsToken string) (*chat.ListChatSourcesPayload, error) {
+	var sessionToken *string
+	{
+		if chatListChatSourcesSessionToken != "" {
+			sessionToken = &chatListChatSourcesSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if chatListChatSourcesProjectSlugInput != "" {
+			projectSlugInput = &chatListChatSourcesProjectSlugInput
+		}
+	}
+	var chatSessionsToken *string
+	{
+		if chatListChatSourcesChatSessionsToken != "" {
+			chatSessionsToken = &chatListChatSourcesChatSessionsToken
+		}
+	}
+	v := &chat.ListChatSourcesPayload{}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+	v.ChatSessionsToken = chatSessionsToken
+
+	return v, nil
+}
+
 // BuildDeleteChatPayload builds the payload for the chat deleteChat endpoint
 // from CLI flags.
 func BuildDeleteChatPayload(chatDeleteChatID string, chatDeleteChatSessionToken string, chatDeleteChatProjectSlugInput string) (*chat.DeleteChatPayload, error) {

@@ -1121,6 +1121,31 @@ func (s *Service) GenerateTitle(ctx context.Context, payload *gen.GenerateTitleP
 	return &gen.GenerateTitleResult{Title: title}, nil
 }
 
+func (s *Service) ListChatSources(ctx context.Context, payload *gen.ListChatSourcesPayload) (*gen.ListChatSourcesResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.telemetryService.CheckLogsEnabled(ctx, authCtx.ActiveOrganizationID); err != nil {
+		return nil, fmt.Errorf("checking logs enabled: %w", err)
+	}
+
+	rows, err := s.repo.ListChatSources(ctx, *authCtx.ProjectID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to list chat sources").Log(ctx, s.logger)
+	}
+
+	sources := make([]string, 0, len(rows))
+	for _, r := range rows {
+		if r.Valid && r.String != "" {
+			sources = append(sources, r.String)
+		}
+	}
+
+	return &gen.ListChatSourcesResult{Sources: sources}, nil
+}
+
 func (s *Service) DeleteChat(ctx context.Context, payload *gen.DeleteChatPayload) error {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {

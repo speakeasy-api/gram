@@ -32,6 +32,11 @@ func ListChatsWithResolutionsChatPath() string {
 	return "/rpc/chat.listChatsWithResolutions"
 }
 
+// ListChatSourcesChatPath returns the URL path to the chat service listChatSources HTTP endpoint.
+func ListChatSourcesChatPath() string {
+	return "/rpc/chat.listChatSources"
+}
+
 // DeleteChatChatPath returns the URL path to the chat service deleteChat HTTP endpoint.
 func DeleteChatChatPath() string {
 	return "/rpc/chat.delete"
