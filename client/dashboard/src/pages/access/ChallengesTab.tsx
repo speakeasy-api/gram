@@ -240,12 +240,30 @@ export function ChallengesTab() {
   }, [scopedChallenges, outcomeFilter, recentlyResolvedIds]);
 
   const {
-    grouped: filtered,
+    grouped: allFiltered,
     groupCounts,
     groupKeys,
     groupSiblingIdsRef: siblingIdsRef,
   } = useChallengeGroups(filteredAndSorted, expandedGroups);
   groupSiblingIdsRef.current = siblingIdsRef.current;
+
+  const VISIBLE_PAGE_SIZE = 15;
+  const [visibleLimit, setVisibleLimit] = useState(VISIBLE_PAGE_SIZE);
+
+  // Reset visible limit when filters change
+  const filterKey = `${outcomeFilter}|${principalFilter}|${scopeFilter}`;
+  const prevFilterKeyRef = useRef(filterKey);
+  if (filterKey !== prevFilterKeyRef.current) {
+    prevFilterKeyRef.current = filterKey;
+    setVisibleLimit(VISIBLE_PAGE_SIZE);
+  }
+
+  const filtered = useMemo(
+    () => allFiltered.slice(0, visibleLimit),
+    [allFiltered, visibleLimit],
+  );
+  const hasMoreVisible = visibleLimit < allFiltered.length;
+  const needsServerPage = !hasMoreVisible && hasMore;
 
   const challengeRowColumns = useChallengeRowColumns(
     animatingOutIds,
@@ -326,10 +344,19 @@ export function ChallengesTab() {
           {(filtered.length > 0 || isLoadingMore) && (
             <div className="bg-muted/20 flex items-center justify-between border-t px-4 py-3">
               <Type muted small>
-                {filtered.length.toLocaleString()} challenge
-                {filtered.length === 1 ? "" : "s"}
+                {filtered.length.toLocaleString()} of{" "}
+                {allFiltered.length.toLocaleString()} challenge
+                {allFiltered.length === 1 ? "" : "s"}
               </Type>
-              {hasMore ? (
+              {hasMoreVisible ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setVisibleLimit((v) => v + VISIBLE_PAGE_SIZE)}
+                >
+                  Load more
+                </Button>
+              ) : needsServerPage ? (
                 <Button
                   variant="outline"
                   size="sm"
