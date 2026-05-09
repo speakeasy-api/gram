@@ -311,16 +311,24 @@ func evaluateGrants(grants []Grant, checks []Check) (allowGrant *Grant, allowChe
 		effect := effectOrDefault(grant.Effect)
 		for j := range checks {
 			check := &checks[j]
-			if grant.Scope != check.Scope || !grant.Selector.Matches(check.selector()) {
+			checkSel := check.selector()
+			if grant.Scope != check.Scope {
 				continue
 			}
-			// Deny grants only match the original requested scope, not
-			// expanded parent scopes. See RFC: "Deny applies to the denied
-			// scope and any explicitly defined deny sub-scopes."
-			if effect == PolicyEffectDeny && !check.expanded {
-				return nil, nil, true
-			}
+
 			if effect == PolicyEffectDeny {
+				// Deny only matches the original scope, not expanded parents.
+				// Uses StrictMatches: every dimension in the deny selector must
+				// be present in the check. This prevents a tool-scoped deny
+				// from blocking a dimensionless server-level connect probe.
+				if !check.expanded && grant.Selector.StrictMatches(checkSel) {
+					return nil, nil, true
+				}
+				continue
+			}
+
+			// Allow: permissive matching (skip missing dimensions).
+			if !grant.Selector.Matches(checkSel) {
 				continue
 			}
 			if firstAllow == nil {

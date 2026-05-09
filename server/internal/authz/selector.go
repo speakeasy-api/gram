@@ -35,6 +35,24 @@ func (s Selector) Matches(check Selector) bool {
 	return true
 }
 
+// StrictMatches is like Matches but requires every key in the grant selector
+// to be present in the check selector. Used for deny grants: a deny on
+// {resource_kind:"mcp", resource_id:"srv", tool:"rm"} must NOT match a
+// server-level connect check that doesn't carry a "tool" dimension — otherwise
+// the deny would lock out the entire server instead of just the one tool.
+func (s Selector) StrictMatches(check Selector) bool {
+	for k, grantVal := range s {
+		checkVal, ok := check[k]
+		if !ok {
+			return false
+		}
+		if grantVal != "*" && grantVal != checkVal {
+			return false
+		}
+	}
+	return true
+}
+
 // ResourceKindForScope derives the resource kind from a scope's family prefix.
 func ResourceKindForScope(scope Scope) string {
 	s := string(scope)

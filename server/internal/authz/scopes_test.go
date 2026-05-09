@@ -686,6 +686,84 @@ func TestDeny_serverConnectDenyDoesNotBlockReadOrWrite(t *testing.T) {
 	require.False(t, denied)
 }
 
+// --- Dimensionless connect probe must not be blocked by tool-scoped deny ---
+// Production MCP connect checks carry no tool/disposition dimensions.
+// A deny scoped to a specific tool must NOT block the server-level probe.
+
+func TestDeny_toolDenyDoesNotBlockDimensionlessConnectProbe(t *testing.T) {
+	t.Parallel()
+
+	allowSel := Selector{"resource_kind": "mcp", "resource_id": "toolset_1"}
+	denySel := Selector{"resource_kind": "mcp", "resource_id": "toolset_1", "tool": "dangerous_tool"}
+
+	grants := []Grant{
+		NewGrantWithSelector(ScopeMCPConnect, allowSel),
+		NewDenyGrantWithSelector(ScopeMCPConnect, denySel),
+	}
+
+	// Server-level connect probe (no tool dimension) — must be ALLOWED.
+	// This is the exact check production runs at mcp/impl.go and xmcp/handler.go.
+	connectCheck := Check{Scope: ScopeMCPConnect, ResourceID: "toolset_1"}
+	allow, _, denied := evaluateGrants(grants, connectCheck.expand())
+	require.NotNil(t, allow, "dimensionless connect probe must not be blocked by tool-scoped deny")
+	require.False(t, denied)
+
+	// Tool-level check WITH the dimension — deny must fire.
+	toolCheck := Check{
+		Scope:      ScopeMCPConnect,
+		ResourceID: "toolset_1",
+		Dimensions: map[string]string{"tool": "dangerous_tool"},
+	}
+	allow, _, denied = evaluateGrants(grants, toolCheck.expand())
+	require.Nil(t, allow)
+	require.True(t, denied)
+
+	// Different tool — allowed.
+	safeCheck := Check{
+		Scope:      ScopeMCPConnect,
+		ResourceID: "toolset_1",
+		Dimensions: map[string]string{"tool": "safe_tool"},
+	}
+	allow, _, denied = evaluateGrants(grants, safeCheck.expand())
+	require.NotNil(t, allow)
+	require.False(t, denied)
+}
+
+func TestDeny_dispositionDenyDoesNotBlockDimensionlessProbe(t *testing.T) {
+	t.Parallel()
+
+	allowSel := Selector{"resource_kind": "mcp", "resource_id": "srv"}
+	denySel := Selector{"resource_kind": "mcp", "resource_id": "srv", "disposition": "destructive"}
+
+	grants := []Grant{
+		NewGrantWithSelector(ScopeMCPConnect, allowSel),
+		NewDenyGrantWithSelector(ScopeMCPConnect, denySel),
+	}
+
+	// Dimensionless connect — allowed.
+	allow, _, denied := evaluateGrants(grants, Check{Scope: ScopeMCPConnect, ResourceID: "srv"}.expand())
+	require.NotNil(t, allow)
+	require.False(t, denied)
+
+	// Destructive disposition — denied.
+	allow, _, denied = evaluateGrants(grants, Check{
+		Scope:      ScopeMCPConnect,
+		ResourceID: "srv",
+		Dimensions: map[string]string{"disposition": "destructive"},
+	}.expand())
+	require.Nil(t, allow)
+	require.True(t, denied)
+
+	// Read-only disposition — allowed.
+	allow, _, denied = evaluateGrants(grants, Check{
+		Scope:      ScopeMCPConnect,
+		ResourceID: "srv",
+		Dimensions: map[string]string{"disposition": "read_only"},
+	}.expand())
+	require.NotNil(t, allow)
+	require.False(t, denied)
+}
+
 // --- Grant order independence (RFC: "unordered set") ---
 
 func TestDeny_orderIndependence(t *testing.T) {
