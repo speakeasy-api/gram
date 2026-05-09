@@ -323,12 +323,11 @@ export function ChallengesTab() {
       ) : (
         <>
           <Table columns={columns} data={filtered} rowKey={(row) => row.id} />
-          {(challenges.length > 0 || isLoadingMore) && (
+          {(filtered.length > 0 || isLoadingMore) && (
             <div className="bg-muted/20 flex items-center justify-between border-t px-4 py-3">
               <Type muted small>
-                {challenges.length.toLocaleString()} challenge
-                {challenges.length === 1 ? "" : "s"}
-                {totalServer > 0 && ` of ${totalServer.toLocaleString()}`}
+                {filtered.length.toLocaleString()} challenge
+                {filtered.length === 1 ? "" : "s"}
               </Type>
               {hasMore ? (
                 <Button
