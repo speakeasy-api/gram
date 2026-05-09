@@ -314,8 +314,14 @@ func evaluateGrants(grants []Grant, checks []Check) (allowGrant *Grant, allowChe
 			if grant.Scope != check.Scope || !grant.Selector.Matches(check.selector()) {
 				continue
 			}
-			if effect == PolicyEffectDeny {
+			// Deny grants only match the original requested scope, not
+			// expanded parent scopes. See RFC: "Deny applies to the denied
+			// scope and any explicitly defined deny sub-scopes."
+			if effect == PolicyEffectDeny && !check.expanded {
 				return nil, nil, true
+			}
+			if effect == PolicyEffectDeny {
+				continue
 			}
 			if firstAllow == nil {
 				firstAllow = grant
