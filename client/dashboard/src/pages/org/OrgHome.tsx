@@ -15,10 +15,11 @@ import { useRBAC } from "@/hooks/useRBAC";
 import { useChallenges } from "@gram/client/react-query/challenges.js";
 import { ChallengesEmptyState } from "@/pages/access/ChallengesTab";
 import { useChallengeRowColumns } from "@/pages/access/useChallengeRowColumns";
+import { useChallengeGroups } from "@/pages/access/useChallengeGroups";
 import { useGrantFlow } from "@/pages/access/useGrantFlow";
 import { Table } from "@speakeasy-api/moonshine";
 import { ArrowRight, ChevronDown, ChevronUp } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router";
 
 const PROJECT_LIMIT = 5;
@@ -223,15 +224,38 @@ function RecentChallenges() {
   const orgRoutes = useOrgRoutes();
   const { hasScope } = useRBAC();
   const canAdmin = hasScope("org:admin");
-  const { actionsColumn, grantFlowPortals } = useGrantFlow();
-  const challengeRowColumns = useChallengeRowColumns();
+  const groupSiblingIdsRef = useRef<Map<string, string[]>>(new Map());
+  const getGroupChallengeIds = useCallback(
+    (id: string) => groupSiblingIdsRef.current.get(id) ?? [id],
+    [],
+  );
+  const { actionsColumn, grantFlowPortals } =
+    useGrantFlow(getGroupChallengeIds);
   const { data: challengesData, isLoading } = useChallenges({
     outcome: "deny",
     resolved: false,
-    limit: 5,
+    limit: 50,
   });
-  const recentChallenges = (challengesData?.challenges ?? []).filter(
-    (c) => !!c.scope,
+
+  const scopeFiltered = useMemo(
+    () => (challengesData?.challenges ?? []).filter((c) => !!c.scope),
+    [challengesData?.challenges],
+  );
+
+  const {
+    grouped: allGrouped,
+    groupCounts,
+    groupKeys,
+    groupSiblingIdsRef: siblingIdsRef,
+  } = useChallengeGroups(scopeFiltered);
+  groupSiblingIdsRef.current = siblingIdsRef.current;
+
+  const grouped = useMemo(() => allGrouped.slice(0, 5), [allGrouped]);
+
+  const challengeRowColumns = useChallengeRowColumns(
+    undefined,
+    groupCounts,
+    groupKeys,
   );
 
   const columns = useMemo(
@@ -250,14 +274,10 @@ function RecentChallenges() {
           Show more
         </orgRoutes.access.challenges.Link>
       </div>
-      {recentChallenges.length === 0 ? (
+      {grouped.length === 0 ? (
         <ChallengesEmptyState outcomeFilter="deny" />
       ) : (
-        <Table
-          columns={columns}
-          data={recentChallenges}
-          rowKey={(row) => row.id}
-        />
+        <Table columns={columns} data={grouped} rowKey={(row) => row.id} />
       )}
       {grantFlowPortals}
     </div>

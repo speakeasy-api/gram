@@ -19,6 +19,7 @@ import { Check } from "lucide-react";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
 import { countChallenges, scopeChallenges } from "./challengeHelpers";
+import { useChallengeGroups } from "./useChallengeGroups";
 import { useChallengeRowColumns } from "./useChallengeRowColumns";
 import { useGrantFlow } from "./useGrantFlow";
 
@@ -137,6 +138,18 @@ export function ChallengesTab() {
     setPrincipalFilter(identity ?? "all");
   }
   const [scopeFilter, setScopeFilter] = useState("all");
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const toggleGroup = useCallback((groupKey: string) => {
+    setExpandedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(groupKey)) next.delete(groupKey);
+      else next.add(groupKey);
+      return next;
+    });
+  }, []);
+
   const groupSiblingIdsRef = useRef<Map<string, string[]>>(new Map());
   const getGroupChallengeIds = useCallback(
     (id: string) => groupSiblingIdsRef.current.get(id) ?? [id],
@@ -175,19 +188,7 @@ export function ChallengesTab() {
     return [...set].filter(Boolean).sort();
   }, [challenges]);
 
-  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(
-    () => new Set(),
-  );
-  const toggleGroup = useCallback((groupKey: string) => {
-    setExpandedGroups((prev) => {
-      const next = new Set(prev);
-      if (next.has(groupKey)) next.delete(groupKey);
-      else next.add(groupKey);
-      return next;
-    });
-  }, []);
-
-  const { filtered, groupCounts, groupKeys } = useMemo(() => {
+  const filteredAndSorted = useMemo(() => {
     let base = scopedChallenges;
     if (outcomeFilter === "resolved") {
       base = base.filter(
@@ -200,43 +201,21 @@ export function ChallengesTab() {
           recentlyResolvedIds.has(c.id),
       );
     }
-    const sorted = [...base].sort((a, b) => {
+    return [...base].sort((a, b) => {
       const order = (o: Outcome) => (o === "deny" ? 0 : o === "error" ? 1 : 2);
       const diff = order(a.outcome) - order(b.outcome);
       if (diff !== 0) return diff;
       return b.timestamp.getTime() - a.timestamp.getTime();
     });
+  }, [scopedChallenges, outcomeFilter, recentlyResolvedIds]);
 
-    // Group by (principal, scope, outcome, resource)
-    const groups = new Map<string, AuthzChallenge[]>();
-    for (const c of sorted) {
-      const displayIdentity = c.userEmail ?? c.principalUrn;
-      const key = `${displayIdentity}|${c.scope}|${c.outcome}|${c.resourceKind ?? ""}|${c.resourceId ?? ""}`;
-      const arr = groups.get(key);
-      if (arr) arr.push(c);
-      else groups.set(key, [c]);
-    }
-
-    const result: AuthzChallenge[] = [];
-    const counts = new Map<string, number>();
-    const keys = new Map<string, string>();
-    const siblingIds = new Map<string, string[]>();
-    for (const [key, members] of groups) {
-      const memberIds = members.map((m) => m.id);
-      counts.set(members[0].id, members.length);
-      for (const m of members) {
-        keys.set(m.id, key);
-        siblingIds.set(m.id, memberIds);
-      }
-      if (expandedGroups.has(key)) {
-        result.push(...members);
-      } else {
-        result.push(members[0]);
-      }
-    }
-    groupSiblingIdsRef.current = siblingIds;
-    return { filtered: result, groupCounts: counts, groupKeys: keys };
-  }, [scopedChallenges, outcomeFilter, recentlyResolvedIds, expandedGroups]);
+  const {
+    grouped: filtered,
+    groupCounts,
+    groupKeys,
+    groupSiblingIdsRef: siblingIdsRef,
+  } = useChallengeGroups(filteredAndSorted, expandedGroups);
+  groupSiblingIdsRef.current = siblingIdsRef.current;
 
   const challengeRowColumns = useChallengeRowColumns(
     animatingOutIds,
