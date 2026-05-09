@@ -223,168 +223,176 @@ function SecurityOverviewContent() {
 
   return (
     <>
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-lg font-semibold">Risk Overview</h2>
-          <p className="text-muted-foreground text-sm">
-            Recent findings from risk analysis scans across your project.
-          </p>
-        </div>
-        <Button variant="outline" onClick={() => routes.policyCenter.goTo()}>
-          Manage Policies
-        </Button>
-      </div>
+      <Page.Section>
+        <Page.Section.Title>Risk Overview</Page.Section.Title>
 
-      <div className="mt-4 grid grid-cols-2 gap-4">
-        <MetricCard
-          title="Events Scanned"
-          value={totalScanned}
-          format="number"
-          icon="scan-search"
-        />
-        <MetricCard
-          title="Recent Findings"
-          value={totalFindings}
-          format="number"
-          icon="flag"
-        />
-      </div>
+        <Page.Section.Description>
+          Recent findings from risk analysis scans across your project.
+        </Page.Section.Description>
+
+        <Page.Section.CTA>
+          <Button variant="outline" onClick={() => routes.policyCenter.goTo()}>
+            Manage Policies
+          </Button>
+        </Page.Section.CTA>
+
+        <Page.Section.Body>
+          <div className="mt-4 grid grid-cols-2 gap-4">
+            <MetricCard
+              title="Events Scanned"
+              value={totalScanned}
+              format="number"
+              icon="scan-search"
+            />
+            <MetricCard
+              title="Recent Findings"
+              value={totalFindings}
+              format="number"
+              icon="flag"
+            />
+          </div>
+        </Page.Section.Body>
+      </Page.Section>
 
       {hasData ? (
         <>
           {recentChats.length > 0 && (
-            <div className="mt-6">
-              <h3 className="mb-2 text-sm font-semibold">Recent Chats</h3>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-6/12">Chat</TableHead>
-                    <TableHead className="w-3/12">User</TableHead>
-                    <TableHead className="w-1/12">Findings</TableHead>
-                    <TableHead className="w-2/12">Latest Detected</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {recentChats.map((chat) => (
-                    <TableRow
-                      key={chat.chatId}
-                      className="cursor-pointer"
-                      onClick={() => setSelectedChatId(chat.chatId)}
-                    >
-                      <TableCell className="text-muted-foreground truncate">
-                        {chat.chatTitle ?? "Untitled"}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {chat.userId ?? "-"}
-                      </TableCell>
-                      <TableCell className="text-foreground font-mono">
-                        {chat.findingsCount}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {chat.latestDetected
-                          ? new Date(chat.latestDetected).toLocaleString()
-                          : "-"}
-                      </TableCell>
+            <Page.Section>
+              <Page.Section.Title>Recent Chats</Page.Section.Title>
+              <Page.Section.Body>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-6/12">Chat</TableHead>
+                      <TableHead className="w-3/12">User</TableHead>
+                      <TableHead className="w-1/12">Findings</TableHead>
+                      <TableHead className="w-2/12">Latest Detected</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-              {chatSummaryQuery.hasNextPage && (
-                <div className="mt-2 flex justify-center">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    disabled={chatSummaryQuery.isFetchingNextPage}
-                    onClick={() => chatSummaryQuery.fetchNextPage()}
-                  >
-                    {chatSummaryQuery.isFetchingNextPage
-                      ? "Loading..."
-                      : "Load More"}
-                  </Button>
-                </div>
-              )}
-            </div>
-          )}
-
-          {results.length > 0 && (
-            <div className="mt-6">
-              <h3 className="mb-2 text-sm font-semibold">Recent Findings</h3>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-1/12">Category</TableHead>
-                    <TableHead className="w-1/12">Rule</TableHead>
-                    <TableHead className="w-1/12">Chat</TableHead>
-                    <TableHead className="w-1/12">User</TableHead>
-                    <TableHead className="w-1/12">Match</TableHead>
-                    <TableHead className="w-1/12">Policy Note</TableHead>
-                    <TableHead className="w-1/12">Detected</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {results.map((result) => {
-                    const policyNote = policyMessageById.get(result.policyId);
-                    return (
+                  </TableHeader>
+                  <TableBody>
+                    {recentChats.map((chat) => (
                       <TableRow
-                        key={result.id}
+                        key={chat.chatId}
                         className="cursor-pointer"
-                        onClick={() => {
-                          if (result.chatId) {
-                            setSelectedChatId(result.chatId);
-                          }
-                        }}
+                        onClick={() => setSelectedChatId(chat.chatId)}
                       >
-                        <TableCell>
-                          <CategoryLabel
-                            source={result.source}
-                            ruleId={result.ruleId}
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <span className="font-mono text-xs">
-                            {result.ruleId ? result.ruleId : "-"}
-                          </span>
-                        </TableCell>
                         <TableCell className="text-muted-foreground truncate">
-                          {result.chatTitle ?? "Untitled"}
+                          {chat.chatTitle ?? "Untitled"}
                         </TableCell>
                         <TableCell className="text-muted-foreground">
-                          {result.userId ?? "-"}
+                          {chat.userId ?? "-"}
                         </TableCell>
-                        <TableCell className="truncate">
-                          <MaskedMatch value={result.match} />
-                        </TableCell>
-                        <TableCell
-                          className="text-muted-foreground truncate italic"
-                          title={policyNote ?? undefined}
-                        >
-                          {policyNote ?? "-"}
+                        <TableCell className="text-foreground font-mono">
+                          {chat.findingsCount}
                         </TableCell>
                         <TableCell className="text-muted-foreground">
-                          {result.createdAt
-                            ? new Date(result.createdAt).toLocaleString()
+                          {chat.latestDetected
+                            ? new Date(chat.latestDetected).toLocaleString()
                             : "-"}
                         </TableCell>
                       </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-              {resultsQuery.hasNextPage && (
-                <div className="mt-2 flex justify-center">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    disabled={resultsQuery.isFetchingNextPage}
-                    onClick={() => resultsQuery.fetchNextPage()}
-                  >
-                    {resultsQuery.isFetchingNextPage
-                      ? "Loading..."
-                      : "Load More"}
-                  </Button>
-                </div>
-              )}
-            </div>
+                    ))}
+                  </TableBody>
+                </Table>
+                {chatSummaryQuery.hasNextPage && (
+                  <div className="mt-2 flex justify-center">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={chatSummaryQuery.isFetchingNextPage}
+                      onClick={() => chatSummaryQuery.fetchNextPage()}
+                    >
+                      {chatSummaryQuery.isFetchingNextPage
+                        ? "Loading..."
+                        : "Load More"}
+                    </Button>
+                  </div>
+                )}
+              </Page.Section.Body>
+            </Page.Section>
+          )}
+
+          {results.length > 0 && (
+            <Page.Section>
+              <Page.Section.Title>Recent Findings</Page.Section.Title>
+              <Page.Section.Body>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-1/12">Category</TableHead>
+                      <TableHead className="w-1/12">Rule</TableHead>
+                      <TableHead className="w-1/12">Chat</TableHead>
+                      <TableHead className="w-1/12">User</TableHead>
+                      <TableHead className="w-1/12">Match</TableHead>
+                      <TableHead className="w-1/12">Policy Note</TableHead>
+                      <TableHead className="w-1/12">Detected</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {results.map((result) => {
+                      const policyNote = policyMessageById.get(result.policyId);
+                      return (
+                        <TableRow
+                          key={result.id}
+                          className="cursor-pointer"
+                          onClick={() => {
+                            if (result.chatId) {
+                              setSelectedChatId(result.chatId);
+                            }
+                          }}
+                        >
+                          <TableCell>
+                            <CategoryLabel
+                              source={result.source}
+                              ruleId={result.ruleId}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <span className="font-mono text-xs">
+                              {result.ruleId ? result.ruleId : "-"}
+                            </span>
+                          </TableCell>
+                          <TableCell className="text-muted-foreground truncate">
+                            {result.chatTitle ?? "Untitled"}
+                          </TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {result.userId ?? "-"}
+                          </TableCell>
+                          <TableCell className="truncate">
+                            <MaskedMatch value={result.match} />
+                          </TableCell>
+                          <TableCell
+                            className="text-muted-foreground truncate italic"
+                            title={policyNote ?? undefined}
+                          >
+                            {policyNote ?? "-"}
+                          </TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {result.createdAt
+                              ? new Date(result.createdAt).toLocaleString()
+                              : "-"}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+                {resultsQuery.hasNextPage && (
+                  <div className="mt-2 flex justify-center">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={resultsQuery.isFetchingNextPage}
+                      onClick={() => resultsQuery.fetchNextPage()}
+                    >
+                      {resultsQuery.isFetchingNextPage
+                        ? "Loading..."
+                        : "Load More"}
+                    </Button>
+                  </div>
+                )}
+              </Page.Section.Body>
+            </Page.Section>
           )}
         </>
       ) : (
