@@ -15,8 +15,9 @@ import {
   type Column,
   Table,
 } from "@speakeasy-api/moonshine";
-import { Check } from "lucide-react";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Check, Loader2 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
 import { countChallenges, scopeChallenges } from "./challengeHelpers";
 import { useChallengeGroups } from "./useChallengeGroups";
@@ -162,10 +163,39 @@ export function ChallengesTab() {
     animatingOutIds,
   } = useGrantFlow(getGroupChallengeIds);
 
-  const { data, isLoading } = useChallenges({ limit: 200 });
+  const PAGE_SIZE = 200;
+  const [pageCount, setPageCount] = useState(1);
+  const [accumulated, setAccumulated] = useState<AuthzChallenge[]>([]);
+  const [totalServer, setTotalServer] = useState(0);
+
+  // Fetch current page
+  const offset = (pageCount - 1) * PAGE_SIZE;
+  const { data, isLoading, isFetching } = useChallenges({
+    limit: PAGE_SIZE,
+    offset,
+  });
+
+  // Accumulate results as pages load
+  useEffect(() => {
+    if (!data?.challenges) return;
+    setTotalServer(data.total);
+    if (pageCount === 1) {
+      setAccumulated(data.challenges);
+    } else {
+      setAccumulated((prev) => {
+        const existingIds = new Set(prev.map((c) => c.id));
+        const newItems = data.challenges.filter((c) => !existingIds.has(c.id));
+        return [...prev, ...newItems];
+      });
+    }
+  }, [data, pageCount]);
+
+  const hasMore = accumulated.length < totalServer;
+  const isLoadingMore = isFetching && pageCount > 1;
+
   const challenges = useMemo(
-    () => (data?.challenges ?? []).filter((c) => !!c.scope),
-    [data?.challenges],
+    () => accumulated.filter((c) => !!c.scope),
+    [accumulated],
   );
 
   const scopedChallenges = useMemo(
@@ -291,7 +321,39 @@ export function ChallengesTab() {
       ) : filtered.length === 0 ? (
         <ChallengesEmptyState outcomeFilter={outcomeFilter} />
       ) : (
-        <Table columns={columns} data={filtered} rowKey={(row) => row.id} />
+        <>
+          <Table columns={columns} data={filtered} rowKey={(row) => row.id} />
+          {(challenges.length > 0 || isLoadingMore) && (
+            <div className="bg-muted/20 flex items-center justify-between border-t px-4 py-3">
+              <Type muted small>
+                {challenges.length.toLocaleString()} challenge
+                {challenges.length === 1 ? "" : "s"}
+                {totalServer > 0 && ` of ${totalServer.toLocaleString()}`}
+              </Type>
+              {hasMore ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPageCount((p) => p + 1)}
+                  disabled={isLoadingMore}
+                >
+                  {isLoadingMore ? (
+                    <>
+                      <Loader2 className="size-4 animate-spin" />
+                      Loading...
+                    </>
+                  ) : (
+                    "Load more"
+                  )}
+                </Button>
+              ) : (
+                <Type muted small>
+                  All challenges loaded
+                </Type>
+              )}
+            </div>
+          )}
+        </>
       )}
 
       <div className="border-border/50 bg-muted/30 mt-8 rounded-md border px-4 py-3">
