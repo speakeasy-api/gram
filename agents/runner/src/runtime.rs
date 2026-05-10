@@ -30,6 +30,12 @@ use crate::workdir::ASSISTANT_WORKDIR;
 
 const MCP_CMD_CAPACITY: usize = 32;
 
+/// Maximum time the agent loop waits for `connect_all` before serving its first
+/// turn. Bounded so a single slow server can't gate the whole runtime; servers
+/// still connecting after this deadline keep registering their tools as they
+/// come online via the catalog reader handed to the agent.
+const MCP_STARTUP_DEADLINE: Duration = Duration::from_secs(3);
+
 pub type AppState = Arc<AsyncMutex<RuntimeHost>>;
 
 /// Commands routed to the MCP manager actor task. Instead of sharing the
@@ -144,7 +150,8 @@ pub async fn build_runtime(
     let mcp_source = manager.source();
 
     let (mcp_cmd_tx, mcp_cmd_rx) = mpsc::channel(MCP_CMD_CAPACITY);
-    let mcp_actor = tokio::spawn(run_mcp_actor(manager, mcp_cmd_rx));
+    let (mcp_ready_tx, mcp_ready_rx) = oneshot::channel::<()>();
+    let mcp_actor = tokio::spawn(run_mcp_actor(manager, mcp_cmd_rx, mcp_ready_tx));
 
     let native_tools = ToolRegistry::new().with(tools::bun_run::bun_run).with(
         tools::mcp_force_reconnect::McpForceReconnectTool::new(mcp_cmd_tx.clone(), mcp_server_ids),
@@ -207,7 +214,7 @@ pub async fn build_runtime(
 
     let loop_idle_since = Arc::clone(&idle_since);
     let loop_handle = tokio::spawn(async move {
-        let outcome = run_loop(driver, inbox_rx, loop_idle_since).await;
+        let outcome = run_loop(driver, inbox_rx, loop_idle_since, mcp_ready_rx).await;
         match outcome {
             Ok(reason) => tracing::info!(reason = %reason, "loop exited"),
             Err(err) => tracing::error!(error = %err, "loop exited with error"),
@@ -264,7 +271,17 @@ fn build_mcp_server_config(
 /// Owns the [`McpServerManager`] for the lifetime of a runtime. Connects every
 /// registered server in the background — `/configure` does not wait — and
 /// processes [`McpCmd`]s serially so the manager never needs to be shared.
-async fn run_mcp_actor(mut manager: McpServerManager, mut cmd_rx: mpsc::Receiver<McpCmd>) {
+///
+/// `ready_tx` resolves once `connect_all` returns (success or aggregate error),
+/// letting the loop start its first turn with a fully-populated tool registry
+/// rather than racing the model against in-flight handshakes. Subsequent
+/// reconnects do not re-arm it — late tools register through the catalog
+/// reader the same way they do today.
+async fn run_mcp_actor(
+    mut manager: McpServerManager,
+    mut cmd_rx: mpsc::Receiver<McpCmd>,
+    ready_tx: oneshot::Sender<()>,
+) {
     match manager.connect_all().await {
         Ok(handles) => tracing::info!(servers = handles.len(), "mcp connect_all ok"),
         Err(e) => tracing::warn!(
@@ -272,6 +289,7 @@ async fn run_mcp_actor(mut manager: McpServerManager, mut cmd_rx: mpsc::Receiver
             "mcp connect_all failed; affected tools will surface errors and the model can call mcp_force_reconnect"
         ),
     }
+    let _ = ready_tx.send(());
 
     while let Some(cmd) = cmd_rx.recv().await {
         match cmd {
@@ -320,10 +338,14 @@ async fn run_loop<S>(
     mut driver: LoopDriver<S>,
     mut inbox: UnboundedReceiver<String>,
     idle_since: Arc<Mutex<Option<Instant>>>,
+    mcp_ready_rx: oneshot::Receiver<()>,
 ) -> Result<&'static str, RunnerError>
 where
     S: ModelSession,
 {
+    // Consumed before the first `req.submit` and never re-armed. Late servers
+    // surface their tools through the catalog reader without further blocking.
+    let mut mcp_ready: Option<oneshot::Receiver<()>> = Some(mcp_ready_rx);
     loop {
         match driver.next().await? {
             LoopStep::Finished(_turn) => {
@@ -331,18 +353,19 @@ where
             }
             LoopStep::Interrupt(LoopInterrupt::AwaitingInput(req)) => {
                 let drained = drain(&mut inbox);
-                if !drained.is_empty() {
-                    mark_busy(&idle_since);
-                    req.submit(&mut driver, drained_into_items(drained))?;
-                    continue;
-                }
-                match inbox.recv().await {
-                    Some(msg) => {
-                        mark_busy(&idle_since);
-                        req.submit(&mut driver, vec![Item::text(ItemKind::User, &msg)])?;
+                let items = if !drained.is_empty() {
+                    drained_into_items(drained)
+                } else {
+                    match inbox.recv().await {
+                        Some(msg) => vec![Item::text(ItemKind::User, &msg)],
+                        None => return Ok("inbox closed"),
                     }
-                    None => return Ok("inbox closed"),
+                };
+                if let Some(rx) = mcp_ready.take() {
+                    await_mcp_ready(rx).await;
                 }
+                mark_busy(&idle_since);
+                req.submit(&mut driver, items)?;
             }
             LoopStep::Interrupt(LoopInterrupt::AfterToolResult(info)) => {
                 let drained = drain(&mut inbox);
@@ -358,6 +381,20 @@ where
                 pending.approve(&mut driver)?;
             }
         }
+    }
+}
+
+/// Wait for the MCP actor's connect_all to finish, capped at
+/// `MCP_STARTUP_DEADLINE`. Logs which side won so an operator can correlate a
+/// thin first-turn registry with a slow upstream.
+async fn await_mcp_ready(rx: oneshot::Receiver<()>) {
+    match tokio::time::timeout(MCP_STARTUP_DEADLINE, rx).await {
+        Ok(Ok(())) => tracing::debug!("mcp ready before first turn"),
+        Ok(Err(_)) => tracing::debug!("mcp actor dropped ready signal; proceeding"),
+        Err(_) => tracing::warn!(
+            deadline_ms = MCP_STARTUP_DEADLINE.as_millis() as u64,
+            "mcp connect_all deadline hit; first turn proceeds with partial tool registry"
+        ),
     }
 }
 
