@@ -106,6 +106,7 @@ export function setListToolsData(
       limit?: number | undefined;
       deploymentId?: string | undefined;
       urnPrefix?: string | undefined;
+      includeHidden?: boolean | undefined;
       gramSession?: string | undefined;
       gramProject?: string | undefined;
     },
@@ -125,6 +126,7 @@ export function invalidateListTools(
       limit?: number | undefined;
       deploymentId?: string | undefined;
       urnPrefix?: string | undefined;
+      includeHidden?: boolean | undefined;
       gramSession?: string | undefined;
       gramProject?: string | undefined;
     }]

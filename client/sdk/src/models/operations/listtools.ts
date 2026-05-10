@@ -28,6 +28,10 @@ export type ListToolsRequest = {
    */
   urnPrefix?: string | undefined;
   /**
+   * Include platform tools marked hidden from list endpoints.
+   */
+  includeHidden?: boolean | undefined;
+  /**
    * Session header
    */
   gramSession?: string | undefined;
@@ -74,6 +78,7 @@ export type ListToolsRequest$Outbound = {
   limit?: number | undefined;
   deployment_id?: string | undefined;
   urn_prefix?: string | undefined;
+  include_hidden: boolean;
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
 };
@@ -88,6 +93,7 @@ export const ListToolsRequest$outboundSchema: z.ZodMiniType<
     limit: z.optional(z.int()),
     deploymentId: z.optional(z.string()),
     urnPrefix: z.optional(z.string()),
+    includeHidden: z._default(z.boolean(), false),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
   }),
@@ -95,6 +101,7 @@ export const ListToolsRequest$outboundSchema: z.ZodMiniType<
     return remap$(v, {
       deploymentId: "deployment_id",
       urnPrefix: "urn_prefix",
+      includeHidden: "include_hidden",
       gramSession: "Gram-Session",
       gramProject: "Gram-Project",
     });
