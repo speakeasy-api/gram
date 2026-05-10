@@ -213,24 +213,11 @@ func buildToolListEntries(
 			})
 		}
 	}
-	hiddenPlatformURNs := make(map[string]struct{})
-	for _, desc := range platformtools.ListPlatformTools(true, platformExtras...) {
-		if desc.Hidden {
-			hiddenPlatformURNs[desc.ToolURN().String()] = struct{}{}
-		}
-	}
-
 	for _, tool := range toolset.Tools {
-		if conv.IsProxyTool(tool) {
-			continue
-		}
-		if tool.PlatformToolDefinition != nil {
-			if _, hidden := hiddenPlatformURNs[tool.PlatformToolDefinition.ToolUrn]; hidden {
-				continue
+		if !conv.IsProxyTool(tool) {
+			if entry := toolToListEntry(tool); entry != nil {
+				tools = append(tools, entry)
 			}
-		}
-		if entry := toolToListEntry(tool); entry != nil {
-			tools = append(tools, entry)
 		}
 	}
 
