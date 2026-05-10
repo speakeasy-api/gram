@@ -15,7 +15,28 @@ type CompletionClient interface {
 	GetCompletion(ctx context.Context, request CompletionRequest) (*CompletionResponse, error)
 	GetCompletionStream(ctx context.Context, request CompletionRequest) (StreamReader, error)
 	GetObjectCompletion(ctx context.Context, request ObjectCompletionRequest) (*CompletionResponse, error)
-	CreateEmbeddings(ctx context.Context, orgID string, model string, inputs []string) ([][]float32, error)
+	CreateEmbeddings(ctx context.Context, orgID string, model string, inputs []string, opts ...EmbeddingOption) ([][]float32, error)
+}
+
+// EmbeddingOption tunes a CreateEmbeddings call. Options are applied in order;
+// later options override earlier ones.
+type EmbeddingOption func(*EmbeddingOptions)
+
+// EmbeddingOptions is the resolved option set passed to the embedding backend.
+// Fields are nil/zero when the corresponding option was not supplied.
+type EmbeddingOptions struct {
+	// Dimensions requests Matryoshka truncation to N dimensions when set.
+	Dimensions *int64
+}
+
+// WithEmbeddingDimensions requests a specific output dimensionality from the
+// embedding model. Providers that support Matryoshka embeddings will truncate
+// to N dimensions. Must be positive.
+func WithEmbeddingDimensions(dimensions int) EmbeddingOption {
+	return func(o *EmbeddingOptions) {
+		d := int64(dimensions)
+		o.Dimensions = &d
+	}
 }
 
 // StreamReader is an interface for reading streaming completion responses.
@@ -67,6 +88,7 @@ type ObjectCompletionRequest struct {
 	Model          string
 	SystemPrompt   string
 	Prompt         string
+	Temperature    *float64
 	UsageSource    billing.ModelUsageSource
 	UserID         string
 	ExternalUserID string

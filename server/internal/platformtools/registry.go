@@ -1,6 +1,7 @@
 package platformtools
 
 import (
+	"context"
 	"strings"
 
 	"github.com/google/uuid"
@@ -65,17 +66,33 @@ var registry = []toolFactory{
 	},
 }
 
-func BuildExecutors(deps Dependencies) map[string]PlatformToolExecutor {
-	executors := make(map[string]PlatformToolExecutor, len(registry))
+// BuildExecutors materializes executors for built-in plus caller-supplied
+// platform tools. The second return value maps URN to the required feature
+// gate; absent entries are ungated.
+func BuildExecutors(deps Dependencies, extras ...ExternalTool) (map[string]PlatformToolExecutor, map[string]string) {
+	executors := make(map[string]PlatformToolExecutor, len(registry)+len(extras))
+	gates := map[string]string{}
 	for _, factory := range registry {
 		executor := factory(deps)
 		executors[executor.Descriptor().ToolURN().String()] = executor
 	}
-	return executors
+	for _, extra := range extras {
+		if extra.Executor == nil {
+			continue
+		}
+		urnStr := extra.Executor.Descriptor().ToolURN().String()
+		executors[urnStr] = extra.Executor
+		if extra.RequiredFeature != "" {
+			gates[urnStr] = extra.RequiredFeature
+		}
+	}
+	return executors, gates
 }
 
-func ListPlatformTools() []ToolDescriptor {
-	tools := make([]ToolDescriptor, 0, len(registry))
+// ListPlatformTools returns descriptors without applying feature gates; callers
+// that need per-org gating should use ListTypedTools instead.
+func ListPlatformTools(extras ...ExternalTool) []ToolDescriptor {
+	tools := make([]ToolDescriptor, 0, len(registry)+len(extras))
 	deps := Dependencies{
 		Logger:           nil,
 		DB:               nil,
@@ -87,12 +104,52 @@ func ListPlatformTools() []ToolDescriptor {
 	for _, factory := range registry {
 		tools = append(tools, factory(deps).Descriptor())
 	}
+	for _, extra := range extras {
+		if extra.Executor == nil {
+			continue
+		}
+		tools = append(tools, extra.Executor.Descriptor())
+	}
 	return tools
 }
 
-func ListTypedTools(projectID uuid.UUID, urnPrefix string) []*types.Tool {
-	tools := make([]*types.Tool, 0, len(registry))
-	for _, descriptor := range ListPlatformTools() {
+// ListTypedTools enumerates platform tools available to organizationID,
+// excluding any whose required feature flag is disabled. A nil checker grants
+// access to every gated tool.
+func ListTypedTools(
+	ctx context.Context,
+	organizationID string,
+	projectID uuid.UUID,
+	urnPrefix string,
+	checker FeatureChecker,
+	extras ...ExternalTool,
+) []*types.Tool {
+	tools := make([]*types.Tool, 0, len(registry)+len(extras))
+	deps := Dependencies{
+		Logger:           nil,
+		DB:               nil,
+		TelemetryService: nil,
+		TriggerApp:       nil,
+		SlackHTTPClient:  nil,
+		Audit:            nil,
+	}
+	for _, factory := range registry {
+		descriptor := factory(deps).Descriptor()
+		if urnPrefix != "" && !strings.HasPrefix(descriptor.ToolURN().String(), urnPrefix) {
+			continue
+		}
+		tools = append(tools, descriptor.ToTool(projectID))
+	}
+	for _, extra := range extras {
+		if extra.Executor == nil {
+			continue
+		}
+		if extra.RequiredFeature != "" && checker != nil {
+			if !checker(ctx, organizationID, extra.RequiredFeature) {
+				continue
+			}
+		}
+		descriptor := extra.Executor.Descriptor()
 		if urnPrefix != "" && !strings.HasPrefix(descriptor.ToolURN().String(), urnPrefix) {
 			continue
 		}
@@ -101,8 +158,8 @@ func ListTypedTools(projectID uuid.UUID, urnPrefix string) []*types.Tool {
 	return tools
 }
 
-func FindToolDescriptor(toolURN urn.Tool) (ToolDescriptor, bool) {
-	for _, descriptor := range ListPlatformTools() {
+func FindToolDescriptor(toolURN urn.Tool, extras ...ExternalTool) (ToolDescriptor, bool) {
+	for _, descriptor := range ListPlatformTools(extras...) {
 		if descriptor.ToolURN().String() == toolURN.String() {
 			return descriptor, true
 		}
@@ -112,7 +169,7 @@ func FindToolDescriptor(toolURN urn.Tool) (ToolDescriptor, bool) {
 	return zero, false
 }
 
-func FindToolEntries(toolURNs []string) []*types.ToolEntry {
+func FindToolEntries(toolURNs []string, extras ...ExternalTool) []*types.ToolEntry {
 	entries := make([]*types.ToolEntry, 0, len(toolURNs))
 	seen := make(map[string]struct{}, len(toolURNs))
 	for _, rawURN := range toolURNs {
@@ -120,7 +177,7 @@ func FindToolEntries(toolURNs []string) []*types.ToolEntry {
 		if err := toolURN.UnmarshalText([]byte(rawURN)); err != nil {
 			continue
 		}
-		descriptor, ok := FindToolDescriptor(toolURN)
+		descriptor, ok := FindToolDescriptor(toolURN, extras...)
 		if !ok {
 			continue
 		}
@@ -134,7 +191,7 @@ func FindToolEntries(toolURNs []string) []*types.ToolEntry {
 	return entries
 }
 
-func FindTypedTools(projectID uuid.UUID, toolURNs []string) []*types.Tool {
+func FindTypedTools(projectID uuid.UUID, toolURNs []string, extras ...ExternalTool) []*types.Tool {
 	tools := make([]*types.Tool, 0, len(toolURNs))
 	seen := make(map[string]struct{}, len(toolURNs))
 	for _, rawURN := range toolURNs {
@@ -142,7 +199,7 @@ func FindTypedTools(projectID uuid.UUID, toolURNs []string) []*types.Tool {
 		if err := toolURN.UnmarshalText([]byte(rawURN)); err != nil {
 			continue
 		}
-		descriptor, ok := FindToolDescriptor(toolURN)
+		descriptor, ok := FindToolDescriptor(toolURN, extras...)
 		if !ok {
 			continue
 		}

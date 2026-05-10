@@ -33,6 +33,8 @@ type GetProductFeaturesResponseBody struct {
 	SessionCaptureEnabled *bool `form:"session_capture_enabled,omitempty" json:"session_capture_enabled,omitempty" xml:"session_capture_enabled,omitempty"`
 	// Whether authz challenge logging to ClickHouse is enabled
 	AuthzChallengeLoggingEnabled *bool `form:"authz_challenge_logging_enabled,omitempty" json:"authz_challenge_logging_enabled,omitempty" xml:"authz_challenge_logging_enabled,omitempty"`
+	// Whether assistant memory is enabled
+	AssistantMemoryEnabled *bool `form:"assistant_memory_enabled,omitempty" json:"assistant_memory_enabled,omitempty" xml:"assistant_memory_enabled,omitempty"`
 }
 
 // GetProductFeaturesUnauthorizedResponseBody is the type of the "features"
@@ -426,6 +428,7 @@ func NewGetProductFeaturesGramProductFeaturesOK(body *GetProductFeaturesResponse
 		ToolIoLogsEnabled:            body.ToolIoLogsEnabled,
 		SessionCaptureEnabled:        body.SessionCaptureEnabled,
 		AuthzChallengeLoggingEnabled: body.AuthzChallengeLoggingEnabled,
+		AssistantMemoryEnabled:       body.AssistantMemoryEnabled,
 	}
 
 	return v

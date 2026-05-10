@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/temporal"
@@ -56,10 +57,11 @@ func handleToolsList(
 	vectorToolStore *rag.ToolsetVectorStore,
 	temporalEnv *temporal.Environment,
 	shadowMCPClient *shadowmcp.Client,
+	platformExtras []platformtools.ExternalTool,
 ) (json.RawMessage, error) {
 	projectID := mv.ProjectID(payload.projectID)
 
-	toolset, err := mv.DescribeToolset(ctx, logger, db, projectID, mv.ToolsetSlug(conv.ToLower(payload.toolset)), toolsetCache)
+	toolset, err := mv.DescribeToolset(ctx, logger, db, projectID, mv.ToolsetSlug(conv.ToLower(payload.toolset)), toolsetCache, platformExtras...)
 	if err != nil {
 		return nil, err
 	}
@@ -92,7 +94,7 @@ func handleToolsList(
 	case ToolModeStatic:
 		fallthrough
 	default:
-		tools, err = buildToolListEntries(ctx, logger, guardianPolicy, db, env, payload, toolset)
+		tools, err = buildToolListEntries(ctx, logger, guardianPolicy, db, env, payload, toolset, platformExtras)
 		if err != nil {
 			return nil, err
 		}
@@ -157,8 +159,9 @@ func buildToolListEntries(
 	envLoader toolconfig.EnvironmentLoader,
 	payload *mcpInputs,
 	toolset *types.Toolset,
+	platformExtras []platformtools.ExternalTool,
 ) ([]*toolListEntry, error) {
-	toolsetHelpers := toolsets.NewToolsets(db)
+	toolsetHelpers := toolsets.NewToolsets(db, platformExtras...)
 
 	toolsetID, err := uuid.Parse(toolset.ID)
 	if err != nil {

@@ -318,6 +318,7 @@ If there are no tool calls, return an empty array.`, userPromptText)
 			Model:          "", // Use default model
 			SystemPrompt:   systemPrompt,
 			Prompt:         userPrompt,
+			Temperature:    nil,
 			JSONSchema:     &jsonSchemaConfig,
 			UsageSource:    billing.ModelUsageSourceGram,
 			UserID:         "",

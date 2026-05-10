@@ -136,7 +136,9 @@ pub async fn build_runtime(
         .build()?;
 
     let mut manager = McpServerManager::new();
+    let mut mcp_server_ids = Vec::with_capacity(config.mcp_servers.len());
     for server in &config.mcp_servers {
+        mcp_server_ids.push(server.id.clone());
         manager.register_server(build_mcp_server_config(server, &http_client, &tokens)?);
     }
     let mcp_source = manager.source();
@@ -145,7 +147,7 @@ pub async fn build_runtime(
     let mcp_actor = tokio::spawn(run_mcp_actor(manager, mcp_cmd_rx));
 
     let native_tools = ToolRegistry::new().with(tools::bun_run::bun_run).with(
-        tools::mcp_force_reconnect::McpForceReconnectTool::new(mcp_cmd_tx.clone()),
+        tools::mcp_force_reconnect::McpForceReconnectTool::new(mcp_cmd_tx.clone(), mcp_server_ids),
     );
 
     // Sandbox helpers stay readable so user code can `import` them, but writes
