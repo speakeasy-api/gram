@@ -26,12 +26,6 @@ var registry = []toolFactory{
 		return platformtriggers.NewConfigureTriggerTool(deps.DB, deps.TriggerApp, deps.Audit)
 	},
 	func(deps Dependencies) PlatformToolExecutor {
-		return platformtriggers.NewScheduleWakeTool(deps.DB, deps.TriggerApp, deps.Audit)
-	},
-	func(deps Dependencies) PlatformToolExecutor {
-		return platformtriggers.NewCancelWakeTool(deps.DB, deps.TriggerApp, deps.Audit)
-	},
-	func(deps Dependencies) PlatformToolExecutor {
 		return platformslack.NewReadChannelMessagesTool(deps.SlackHTTPClient)
 	},
 	func(deps Dependencies) PlatformToolExecutor {

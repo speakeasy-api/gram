@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/gen/types"
+	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -26,13 +27,14 @@ import (
 )
 
 const (
-	sourceTriggers       = "triggers"
-	toolNameListTriggers = "platform_list_triggers"
-	toolNameConfigure    = "platform_configure_trigger"
-	targetKindAssistant  = bgtriggers.TargetKindAssistant
-	targetKindNoop       = bgtriggers.TargetKindNoop
-	triggerStatusActive  = bgtriggers.StatusActive
-	triggerStatusPaused  = bgtriggers.StatusPaused
+	sourceTriggers         = "triggers"
+	toolNameListTriggers   = "platform_list_triggers"
+	toolNameConfigure      = "platform_configure_trigger"
+	targetKindAssistant    = bgtriggers.TargetKindAssistant
+	targetKindNoop         = bgtriggers.TargetKindNoop
+	triggerStatusActive    = bgtriggers.StatusActive
+	triggerStatusPaused    = bgtriggers.StatusPaused
+	triggerStatusCancelled = bgtriggers.StatusCancelled
 )
 
 type listTriggersInput struct {
@@ -127,7 +129,7 @@ func buildConfigureTriggerInputSchema() []byte {
 	inner := schemaBytesToMap(core.BuildInputSchema[configureTriggerSharedInput](
 		core.WithPropertyFormat("trigger_id", "uuid"),
 		core.WithPropertyEnum("definition_slug", stringSliceToAny(definitionSlugs)...),
-		core.WithPropertyEnum("status", triggerStatusActive, triggerStatusPaused),
+		core.WithPropertyEnum("status", triggerStatusActive, triggerStatusPaused, triggerStatusCancelled),
 		core.WithPropertyEnum("target_kind", targetKindAssistant, targetKindNoop),
 	))
 
@@ -146,12 +148,19 @@ func buildConfigureTriggerInputSchema() []byte {
 		if !ok {
 			panic(fmt.Errorf("missing trigger definition %q", slug))
 		}
+		configSchema := schemaBytesToMap(definition.ConfigSchema)
+		if slug == bgtriggers.DefinitionSlugWake {
+			// correlation_id is injected by the platform tool from the calling
+			// assistant principal; the LLM must not be allowed to forge one
+			// pointing at another thread.
+			stripSchemaProperty(configSchema, "correlation_id")
+		}
 		branches = append(branches, map[string]any{
 			"properties": map[string]any{
 				"definition_slug": map[string]any{
 					"const": slug,
 				},
-				"config": schemaBytesToMap(definition.ConfigSchema),
+				"config": configSchema,
 			},
 			"required": []string{"definition_slug", "config"},
 		})
@@ -168,16 +177,26 @@ func buildConfigureTriggerInputSchema() []byte {
 	})
 }
 
+func stripSchemaProperty(schema map[string]any, name string) {
+	if props, ok := schema["properties"].(map[string]any); ok {
+		delete(props, name)
+	}
+	if required, ok := schema["required"].([]any); ok {
+		filtered := required[:0]
+		for _, item := range required {
+			if s, ok := item.(string); ok && s == name {
+				continue
+			}
+			filtered = append(filtered, item)
+		}
+		schema["required"] = filtered
+	}
+}
+
 func listDefinitionSlugs() []string {
 	definitions := bgtriggers.List()
 	slugs := make([]string, 0, len(definitions))
 	for _, definition := range definitions {
-		// Wake triggers are created exclusively via platform_schedule_wake;
-		// keep them out of configure_trigger's discriminated union so the
-		// JSON-schema oneOf can't be exploited to construct a wake by hand.
-		if definition.Slug == bgtriggers.DefinitionSlugWake {
-			continue
-		}
 		slugs = append(slugs, definition.Slug)
 	}
 	sort.Strings(slugs)
@@ -384,6 +403,9 @@ func (t *ConfigureTrigger) upsertTrigger(
 	if _, ok := bgtriggers.GetDefinition(params.DefinitionSlug); !ok {
 		return nil, fmt.Errorf("unsupported trigger definition %q", params.DefinitionSlug)
 	}
+	if params.DefinitionSlug == bgtriggers.DefinitionSlugWake {
+		return t.upsertWake(ctx, authCtx, params)
+	}
 	if strings.TrimSpace(params.Name) == "" {
 		return nil, fmt.Errorf("name is required")
 	}
@@ -512,6 +534,154 @@ func (t *ConfigureTrigger) upsertTrigger(
 		Action:  action,
 		Trigger: view,
 	}, nil
+}
+
+// upsertWake handles the wake-specific create/cancel path. Wake triggers are
+// always assistant-scoped — target_kind, target_ref, and correlation_id come
+// from the calling assistant principal, not the LLM. environment_slug is
+// optional (wake has no env requirements). The only update operation
+// supported is cancellation (status='cancelled').
+func (t *ConfigureTrigger) upsertWake(
+	ctx context.Context,
+	authCtx *contextvalues.AuthContext,
+	params configureTriggerParams,
+) (*configureTriggerResult, error) {
+	principal, ok := contextvalues.GetAssistantPrincipal(ctx)
+	if !ok {
+		return nil, fmt.Errorf("wake triggers require an assistant principal")
+	}
+
+	envQueries := environmentsrepo.New(t.db)
+	actorPrincipal := urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)
+
+	if params.TriggerID != nil && strings.TrimSpace(*params.TriggerID) != "" {
+		return t.cancelWake(ctx, authCtx, envQueries, actorPrincipal, principal, params)
+	}
+
+	if strings.TrimSpace(params.Name) == "" {
+		return nil, fmt.Errorf("name is required")
+	}
+
+	thread, err := assistantrepo.New(t.db).ResolveThreadCorrelation(ctx, principal.ThreadID)
+	if err != nil {
+		return nil, fmt.Errorf("resolve thread correlation: %w", err)
+	}
+	if thread.ProjectID != *authCtx.ProjectID || thread.AssistantID != principal.AssistantID {
+		return nil, fmt.Errorf("thread does not belong to the calling assistant")
+	}
+
+	fireAt, note, err := decodeWakeInput(params.Config)
+	if err != nil {
+		return nil, err
+	}
+
+	targetDisplay := strings.TrimSpace(params.TargetDisplay)
+	if targetDisplay == "" {
+		targetDisplay = strings.TrimSpace(params.Name)
+	}
+
+	instance, err := t.app.CreateWakeInstance(ctx, bgtriggers.CreateWakeInstanceParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      *authCtx.ProjectID,
+		Name:           strings.TrimSpace(params.Name),
+		AssistantID:    principal.AssistantID,
+		TargetDisplay:  targetDisplay,
+		FireAt:         fireAt.UTC(),
+		Note:           note,
+		CorrelationID:  thread.CorrelationID,
+	}, func(ctx context.Context, dbtx pgx.Tx, item triggerrepo.TriggerInstance) error {
+		return t.audit.LogWakeScheduled(ctx, dbtx, audit.LogWakeEvent{
+			OrganizationID:     authCtx.ActiveOrganizationID,
+			ProjectID:          *authCtx.ProjectID,
+			Actor:              actorPrincipal,
+			ActorDisplayName:   authCtx.Email,
+			ActorSlug:          nil,
+			TriggerInstanceURN: urn.NewTriggerInstance(item.ID),
+			Name:               item.Name,
+			Correlation:        thread.CorrelationID,
+			FireAt:             fireAt.UTC().Format(time.RFC3339Nano),
+		})
+	})
+	if err != nil {
+		return nil, fmt.Errorf("create wake instance: %w", err)
+	}
+
+	view, err := buildTriggerToolView(ctx, envQueries, *authCtx.ProjectID, instance, t.app)
+	if err != nil {
+		return nil, err
+	}
+	return &configureTriggerResult{Action: "created", Trigger: view}, nil
+}
+
+func (t *ConfigureTrigger) cancelWake(
+	ctx context.Context,
+	authCtx *contextvalues.AuthContext,
+	envQueries *environmentsrepo.Queries,
+	actorPrincipal urn.Principal,
+	principal contextvalues.AssistantPrincipal,
+	params configureTriggerParams,
+) (*configureTriggerResult, error) {
+	if params.Status == nil || strings.TrimSpace(*params.Status) != triggerStatusCancelled {
+		return nil, fmt.Errorf("wake triggers only support status=cancelled on update")
+	}
+	triggerID, err := uuid.Parse(strings.TrimSpace(*params.TriggerID))
+	if err != nil {
+		return nil, fmt.Errorf("parse trigger_id: %w", err)
+	}
+
+	existing, err := t.app.GetInstance(ctx, *authCtx.ProjectID, triggerID)
+	if err != nil {
+		return nil, fmt.Errorf("get wake instance: %w", err)
+	}
+	if existing.DefinitionSlug != bgtriggers.DefinitionSlugWake {
+		return nil, fmt.Errorf("trigger is not a wake")
+	}
+	if existing.TargetKind != bgtriggers.TargetKindAssistant || existing.TargetRef != principal.AssistantID.String() {
+		return nil, fmt.Errorf("wake does not belong to the calling assistant")
+	}
+
+	correlationID, fireAt := bgtriggers.WakeConfigFields(existing.ConfigJson)
+
+	item, err := t.app.CancelWakeInstance(ctx, *authCtx.ProjectID, triggerID, func(ctx context.Context, dbtx pgx.Tx, instance triggerrepo.TriggerInstance) error {
+		return t.audit.LogWakeCancelled(ctx, dbtx, audit.LogWakeEvent{
+			OrganizationID:     authCtx.ActiveOrganizationID,
+			ProjectID:          *authCtx.ProjectID,
+			Actor:              actorPrincipal,
+			ActorDisplayName:   authCtx.Email,
+			ActorSlug:          nil,
+			TriggerInstanceURN: urn.NewTriggerInstance(instance.ID),
+			Name:               instance.Name,
+			Correlation:        correlationID,
+			FireAt:             fireAt,
+		})
+	})
+	if err != nil {
+		return nil, fmt.Errorf("cancel wake instance: %w", err)
+	}
+
+	view, err := buildTriggerToolView(ctx, envQueries, *authCtx.ProjectID, item, t.app)
+	if err != nil {
+		return nil, err
+	}
+	return &configureTriggerResult{Action: "updated", Trigger: view}, nil
+}
+
+func decodeWakeInput(config map[string]any) (time.Time, *string, error) {
+	rawFireAt, ok := config["fire_at"].(string)
+	if !ok || strings.TrimSpace(rawFireAt) == "" {
+		return time.Time{}, nil, fmt.Errorf("config.fire_at is required")
+	}
+	fireAt, err := time.Parse(time.RFC3339, strings.TrimSpace(rawFireAt))
+	if err != nil {
+		return time.Time{}, nil, fmt.Errorf("parse fire_at: %w", err)
+	}
+	var note *string
+	if raw, ok := config["note"]; ok && raw != nil {
+		if s, ok := raw.(string); ok && s != "" {
+			note = &s
+		}
+	}
+	return fireAt, note, nil
 }
 
 func buildTriggerToolView(
