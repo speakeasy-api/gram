@@ -37,7 +37,7 @@ func NewScheduleMessageTool(httpClient *guardian.HTTPClient) core.PlatformToolEx
 			Managed:     true,
 			OwnerKind:   nil,
 			OwnerID:     nil,
-			Hidden:      false,
+			Hidden:      true,
 		},
 		client: newAPIClient(defaultSlackAPIBaseURL, httpClient),
 		callFn: callScheduleMessage,

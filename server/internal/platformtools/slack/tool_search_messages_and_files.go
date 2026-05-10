@@ -42,7 +42,7 @@ func NewSearchMessagesAndFilesTool(httpClient *guardian.HTTPClient) core.Platfor
 			Managed:     true,
 			OwnerKind:   nil,
 			OwnerID:     nil,
-			Hidden:      false,
+			Hidden:      true,
 		},
 		client: newAPIClient(defaultSlackAPIBaseURL, httpClient),
 		callFn: callSearchMessagesAndFiles,

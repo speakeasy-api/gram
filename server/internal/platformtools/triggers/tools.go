@@ -265,7 +265,7 @@ func (t *ListTriggers) Descriptor() core.ToolDescriptor {
 		Variables:   nil,
 		OwnerKind:   nil,
 		OwnerID:     nil,
-		Hidden:      false,
+		Hidden:      true,
 	}
 }
 
@@ -327,7 +327,7 @@ func (t *ConfigureTrigger) Descriptor() core.ToolDescriptor {
 		Variables:   nil,
 		OwnerKind:   nil,
 		OwnerID:     nil,
-		Hidden:      false,
+		Hidden:      true,
 	}
 }
 

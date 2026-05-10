@@ -42,7 +42,7 @@ func NewSearchChannelsTool(httpClient *guardian.HTTPClient) core.PlatformToolExe
 			Managed:     true,
 			OwnerKind:   nil,
 			OwnerID:     nil,
-			Hidden:      false,
+			Hidden:      true,
 		},
 		client: newAPIClient(defaultSlackAPIBaseURL, httpClient),
 		callFn: callSearchChannels,

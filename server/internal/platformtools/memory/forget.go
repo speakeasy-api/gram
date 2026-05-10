@@ -56,7 +56,7 @@ func NewForgetTool(svc Service) *ForgetTool {
 			Managed:     true,
 			OwnerKind:   nil,
 			OwnerID:     nil,
-			Hidden:      false,
+			Hidden:      true,
 		},
 	}
 }
