@@ -36,6 +36,7 @@ func NewAddReactionTool(httpClient *guardian.HTTPClient) core.PlatformToolExecut
 			Managed:     true,
 			OwnerKind:   nil,
 			OwnerID:     nil,
+			Hidden:      false,
 		},
 		client: newAPIClient(defaultSlackAPIBaseURL, httpClient),
 		callFn: callAddReaction,

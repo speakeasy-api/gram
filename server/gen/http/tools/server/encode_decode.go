@@ -42,6 +42,7 @@ func DecodeListToolsRequest(mux goahttp.Muxer, decoder func(*http.Request) goaht
 			limit            *int32
 			deploymentID     *string
 			urnPrefix        *string
+			includeHidden    bool
 			sessionToken     *string
 			projectSlugInput *string
 			err              error
@@ -70,6 +71,16 @@ func DecodeListToolsRequest(mux goahttp.Muxer, decoder func(*http.Request) goaht
 		if urnPrefixRaw != "" {
 			urnPrefix = &urnPrefixRaw
 		}
+		{
+			includeHiddenRaw := qp.Get("include_hidden")
+			if includeHiddenRaw != "" {
+				v, err2 := strconv.ParseBool(includeHiddenRaw)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("include_hidden", includeHiddenRaw, "boolean"))
+				}
+				includeHidden = v
+			}
+		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
@@ -81,7 +92,7 @@ func DecodeListToolsRequest(mux goahttp.Muxer, decoder func(*http.Request) goaht
 		if err != nil {
 			return payload, err
 		}
-		payload = NewListToolsPayload(cursor, limit, deploymentID, urnPrefix, sessionToken, projectSlugInput)
+		payload = NewListToolsPayload(cursor, limit, deploymentID, urnPrefix, includeHidden, sessionToken, projectSlugInput)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")

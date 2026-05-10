@@ -162,7 +162,7 @@ func TestToolsService_ListTools_EmptyList(t *testing.T) {
 	})
 	require.NoError(t, err, "should not error when no tools exist")
 	require.NotNil(t, result.Tools, "tools should not be nil")
-	require.Len(t, result.Tools, len(platformtools.ListPlatformTools()), "platform tools should still be listed when no project tools exist")
+	require.Len(t, result.Tools, len(platformtools.ListPlatformTools(false)), "platform tools should still be listed when no project tools exist")
 	for _, tool := range result.Tools {
 		require.NotNil(t, tool.PlatformToolDefinition, "tools should all be platform tools when no project tools exist")
 	}
@@ -235,7 +235,7 @@ func TestToolsService_ListTools_WithCursor(t *testing.T) {
 	})
 	require.NoError(t, err, "get first page of tools")
 	require.NotNil(t, firstPage.Tools, "first page tools should not be nil")
-	require.Len(t, firstPage.Tools, int(*limit)+len(platformtools.ListPlatformTools()), "should include the paged tools plus platform tools on the first page")
+	require.Len(t, firstPage.Tools, int(*limit)+len(platformtools.ListPlatformTools(false)), "should include the paged tools plus platform tools on the first page")
 	require.NotNil(t, firstPage.NextCursor, "should have a next cursor with this many tools")
 	require.NotNil(t, firstPage.Tools[len(firstPage.Tools)-1].PlatformToolDefinition, "first page should retain the platform tool after trimming the pagination sentinel")
 

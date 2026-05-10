@@ -50,6 +50,7 @@ func NewRememberTool(svc Service) *RememberTool {
 			Managed:     true,
 			OwnerKind:   nil,
 			OwnerID:     nil,
+			Hidden:      false,
 		},
 	}
 }

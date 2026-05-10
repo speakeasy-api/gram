@@ -25,6 +25,9 @@ type ToolDescriptor struct {
 	Managed     bool
 	OwnerKind   *string
 	OwnerID     *string
+	// Hidden excludes the tool from list endpoints by default. Execution is
+	// unaffected — callers that look up tools by URN still find hidden tools.
+	Hidden bool
 }
 
 func (d ToolDescriptor) ToolURN() urn.Tool {

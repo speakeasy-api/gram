@@ -60,6 +60,7 @@ func NewRecallTool(svc Service) *RecallTool {
 			Managed:     true,
 			OwnerKind:   nil,
 			OwnerID:     nil,
+			Hidden:      false,
 		},
 	}
 }

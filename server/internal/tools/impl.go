@@ -306,6 +306,7 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 			authCtx.ActiveOrganizationID,
 			*authCtx.ProjectID,
 			conv.PtrValOrEmpty(payload.UrnPrefix, ""),
+			payload.IncludeHidden,
 			s.featureChecker,
 			s.platformExtras...,
 		)...)

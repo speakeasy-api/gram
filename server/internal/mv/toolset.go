@@ -784,7 +784,9 @@ func GetToolsetsSummary(
 
 	// Build platform tool index from the static registry (11 tools), not from 17k URNs.
 	platformIndex := make(map[string]*types.ToolEntry)
-	for _, desc := range platformtools.ListPlatformTools(platformExtras...) {
+	// includeHidden=true: this index also feeds the toolset execution path via
+	// readToolsetTools, so hidden tools must still resolve to entries here.
+	for _, desc := range platformtools.ListPlatformTools(true, platformExtras...) {
 		entry := desc.ToToolEntry()
 		platformIndex[entry.ToolUrn] = entry
 	}

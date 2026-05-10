@@ -36,6 +36,7 @@ func NewRemoveReactionTool(httpClient *guardian.HTTPClient) core.PlatformToolExe
 			Managed:     true,
 			OwnerKind:   nil,
 			OwnerID:     nil,
+			Hidden:      false,
 		},
 		client: newAPIClient(defaultSlackAPIBaseURL, httpClient),
 		callFn: callRemoveReaction,

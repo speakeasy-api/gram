@@ -56,6 +56,8 @@ type ListToolsPayload struct {
 	// Filter tools by URN prefix (e.g. 'tools:http:kitchen-sink' to match all
 	// tools starting with that prefix)
 	UrnPrefix *string
+	// Include platform tools marked hidden from list endpoints.
+	IncludeHidden bool
 }
 
 // ListToolsResult is the result type of the tools service listTools method.
