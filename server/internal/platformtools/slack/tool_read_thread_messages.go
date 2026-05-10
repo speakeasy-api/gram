@@ -42,6 +42,7 @@ func NewReadThreadMessagesTool(httpClient *guardian.HTTPClient) core.PlatformToo
 			Managed:     true,
 			OwnerKind:   nil,
 			OwnerID:     nil,
+			Hidden:      true,
 		},
 		client: newAPIClient(defaultSlackAPIBaseURL, httpClient),
 		callFn: callReadThreadMessages,

@@ -35,6 +35,7 @@ func NewGetReactionsTool(httpClient *guardian.HTTPClient) core.PlatformToolExecu
 			Managed:     true,
 			OwnerKind:   nil,
 			OwnerID:     nil,
+			Hidden:      true,
 		},
 		client: newAPIClient(defaultSlackAPIBaseURL, httpClient),
 		callFn: callGetReactions,

@@ -16,7 +16,7 @@ import (
 
 // BuildListToolsPayload builds the payload for the tools listTools endpoint
 // from CLI flags.
-func BuildListToolsPayload(toolsListToolsCursor string, toolsListToolsLimit string, toolsListToolsDeploymentID string, toolsListToolsUrnPrefix string, toolsListToolsSessionToken string, toolsListToolsProjectSlugInput string) (*tools.ListToolsPayload, error) {
+func BuildListToolsPayload(toolsListToolsCursor string, toolsListToolsLimit string, toolsListToolsDeploymentID string, toolsListToolsUrnPrefix string, toolsListToolsIncludeHidden string, toolsListToolsSessionToken string, toolsListToolsProjectSlugInput string) (*tools.ListToolsPayload, error) {
 	var err error
 	var cursor *string
 	{
@@ -48,6 +48,15 @@ func BuildListToolsPayload(toolsListToolsCursor string, toolsListToolsLimit stri
 			urnPrefix = &toolsListToolsUrnPrefix
 		}
 	}
+	var includeHidden bool
+	{
+		if toolsListToolsIncludeHidden != "" {
+			includeHidden, err = strconv.ParseBool(toolsListToolsIncludeHidden)
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for includeHidden, must be BOOL")
+			}
+		}
+	}
 	var sessionToken *string
 	{
 		if toolsListToolsSessionToken != "" {
@@ -65,6 +74,7 @@ func BuildListToolsPayload(toolsListToolsCursor string, toolsListToolsLimit stri
 	v.Limit = limit
 	v.DeploymentID = deploymentID
 	v.UrnPrefix = urnPrefix
+	v.IncludeHidden = includeHidden
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 

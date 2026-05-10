@@ -21,6 +21,9 @@ var _ = Service("tools", func() {
 			Attribute("cursor", String, "The cursor to fetch results from")
 			Attribute("limit", Int32, "The number of tools to return per page")
 			Attribute("urn_prefix", String, "Filter tools by URN prefix (e.g. 'tools:http:kitchen-sink' to match all tools starting with that prefix)")
+			Attribute("include_hidden", Boolean, "Include platform tools marked hidden from list endpoints.", func() {
+				Default(false)
+			})
 		})
 
 		Result(ListToolsResult)
@@ -31,6 +34,7 @@ var _ = Service("tools", func() {
 			Param("limit")
 			Param("deployment_id")
 			Param("urn_prefix")
+			Param("include_hidden")
 			security.SessionHeader()
 			security.ProjectHeader()
 			Response(StatusOK)

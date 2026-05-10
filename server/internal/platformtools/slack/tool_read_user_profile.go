@@ -34,6 +34,7 @@ func NewReadUserProfileTool(httpClient *guardian.HTTPClient) core.PlatformToolEx
 			Managed:     true,
 			OwnerKind:   nil,
 			OwnerID:     nil,
+			Hidden:      true,
 		},
 		client: newAPIClient(defaultSlackAPIBaseURL, httpClient),
 		callFn: callReadUserProfile,

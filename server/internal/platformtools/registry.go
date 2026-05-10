@@ -90,8 +90,9 @@ func BuildExecutors(deps Dependencies, extras ...ExternalTool) (map[string]Platf
 }
 
 // ListPlatformTools returns descriptors without applying feature gates; callers
-// that need per-org gating should use ListTypedTools instead.
-func ListPlatformTools(extras ...ExternalTool) []ToolDescriptor {
+// that need per-org gating should use ListTypedTools instead. Hidden tools are
+// included only when includeHidden is true.
+func ListPlatformTools(includeHidden bool, extras ...ExternalTool) []ToolDescriptor {
 	tools := make([]ToolDescriptor, 0, len(registry)+len(extras))
 	deps := Dependencies{
 		Logger:           nil,
@@ -102,25 +103,35 @@ func ListPlatformTools(extras ...ExternalTool) []ToolDescriptor {
 		Audit:            nil,
 	}
 	for _, factory := range registry {
-		tools = append(tools, factory(deps).Descriptor())
+		descriptor := factory(deps).Descriptor()
+		if descriptor.Hidden && !includeHidden {
+			continue
+		}
+		tools = append(tools, descriptor)
 	}
 	for _, extra := range extras {
 		if extra.Executor == nil {
 			continue
 		}
-		tools = append(tools, extra.Executor.Descriptor())
+		descriptor := extra.Executor.Descriptor()
+		if descriptor.Hidden && !includeHidden {
+			continue
+		}
+		tools = append(tools, descriptor)
 	}
 	return tools
 }
 
 // ListTypedTools enumerates platform tools available to organizationID,
 // excluding any whose required feature flag is disabled. A nil checker grants
-// access to every gated tool.
+// access to every gated tool. Hidden tools are included only when includeHidden
+// is true.
 func ListTypedTools(
 	ctx context.Context,
 	organizationID string,
 	projectID uuid.UUID,
 	urnPrefix string,
+	includeHidden bool,
 	checker FeatureChecker,
 	extras ...ExternalTool,
 ) []*types.Tool {
@@ -135,6 +146,9 @@ func ListTypedTools(
 	}
 	for _, factory := range registry {
 		descriptor := factory(deps).Descriptor()
+		if descriptor.Hidden && !includeHidden {
+			continue
+		}
 		if urnPrefix != "" && !strings.HasPrefix(descriptor.ToolURN().String(), urnPrefix) {
 			continue
 		}
@@ -150,6 +164,9 @@ func ListTypedTools(
 			}
 		}
 		descriptor := extra.Executor.Descriptor()
+		if descriptor.Hidden && !includeHidden {
+			continue
+		}
 		if urnPrefix != "" && !strings.HasPrefix(descriptor.ToolURN().String(), urnPrefix) {
 			continue
 		}
@@ -158,8 +175,10 @@ func ListTypedTools(
 	return tools
 }
 
+// FindToolDescriptor locates a descriptor by URN. Hidden tools are searched —
+// execution must succeed regardless of list visibility.
 func FindToolDescriptor(toolURN urn.Tool, extras ...ExternalTool) (ToolDescriptor, bool) {
-	for _, descriptor := range ListPlatformTools(extras...) {
+	for _, descriptor := range ListPlatformTools(true, extras...) {
 		if descriptor.ToolURN().String() == toolURN.String() {
 			return descriptor, true
 		}

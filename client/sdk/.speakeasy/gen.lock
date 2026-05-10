@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 64a1989aada3fae2eadc8aaa3b1668af
+  docChecksum: 421160b0f1c4ddb3fd8158cdb4ea0835
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -1845,7 +1845,7 @@ trackedFiles:
   docs/models/operations/listtoolsetssecurityoption2.md:
     last_write_checksum: sha1:dc55d0d71acd977a1dde3cbf23a9ae862ac64aef
   docs/models/operations/listtoolsrequest.md:
-    last_write_checksum: sha1:e63bca064db9178d5df3d9d31d17c14e4dc29cc3
+    last_write_checksum: sha1:e43ac90267599c95c5f25af3711c3d8d047c9213
   docs/models/operations/listtoolssecurity.md:
     last_write_checksum: sha1:fe699c3eb51ce60ae161334d3f16bdeddb656597
   docs/models/operations/listtriggerdefinitionsrequest.md:
@@ -2421,7 +2421,7 @@ trackedFiles:
   docs/sdks/templates/README.md:
     last_write_checksum: sha1:ef637e7fa604cc11f4cd5a22d4b3e478b47ad375
   docs/sdks/tools/README.md:
-    last_write_checksum: sha1:73c0e5a99b2d5a2bfa29e1937f9255e5228d1a86
+    last_write_checksum: sha1:019ae301d006ec98882437c54500cbc4643d1166
   docs/sdks/toolsets/README.md:
     last_write_checksum: sha1:dfc7e57a0d89efb2b755730311c8f6e891c89066
   docs/sdks/triggers/README.md:
@@ -3002,7 +3002,7 @@ trackedFiles:
     pristine_git_object: 02aa1188e10f4f5f84c86784afeed8242573b6d3
   src/funcs/toolsList.ts:
     id: c18fc748ebd2
-    last_write_checksum: sha1:2ae71b11138d8df5e502ebcbf1f31a30fee676c6
+    last_write_checksum: sha1:3e98a04a168de231ea98bfafb62a99553cd089ba
     pristine_git_object: 7ed78fc20e7eb3d198069a239818b8babafe3383
   src/funcs/toolsetsAddExternalOAuthServer.ts:
     id: df880a2c183f
@@ -4666,7 +4666,7 @@ trackedFiles:
     pristine_git_object: 807f68cc50a2d1fcb236cfc3a7c3509be7025a18
   src/models/operations/listtools.ts:
     id: 42a61de0bc0f
-    last_write_checksum: sha1:1848e1b31b22be2bc66324207dc3b75859144a31
+    last_write_checksum: sha1:c495266627611d6f804796b08006387c7af05ca5
     pristine_git_object: bad4534a0ba5924d3de100319ff98b162cc5a476
   src/models/operations/listtoolsets.ts:
     id: 8ae98143690b
@@ -5434,11 +5434,11 @@ trackedFiles:
     last_write_checksum: sha1:078c63dc6280e465f9b26d83f2bc76801a17ff31
   src/react-query/listTools.core.ts:
     id: 8a5317c58f41
-    last_write_checksum: sha1:04d59567c8d93f3ad8bcb067713745424f9b6f19
+    last_write_checksum: sha1:be44cb932ac6522761b81fbb26ae12a43c2007ad
     pristine_git_object: ab8d16b4a78d3dcddfb023027f5016b6c4a84933
   src/react-query/listTools.ts:
     id: 6faf7a56fca1
-    last_write_checksum: sha1:a9edd7791cb42ed63a60140a45c9f62c42977e89
+    last_write_checksum: sha1:09230c43c1c990306fb1449743c7d62dd80f86b5
     pristine_git_object: c6275084f9c088f4c3d44dedd17a7ce9850f6f80
   src/react-query/listToolsets.core.ts:
     id: f4bd7c6441a6
@@ -6525,6 +6525,9 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   listTools:
     speakeasy-default-list-tools:
+      parameters:
+        query:
+          include_hidden: false
       responses:
         "200":
           application/json: {"tools": []}

@@ -64,6 +64,7 @@ func (s *SearchLogs) Descriptor() core.ToolDescriptor {
 		Managed:   true,
 		OwnerKind: nil,
 		OwnerID:   nil,
+		Hidden:    false,
 	}
 }
 

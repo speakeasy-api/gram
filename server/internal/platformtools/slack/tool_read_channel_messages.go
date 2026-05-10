@@ -41,6 +41,7 @@ func NewReadChannelMessagesTool(httpClient *guardian.HTTPClient) core.PlatformTo
 			Managed:     true,
 			OwnerKind:   nil,
 			OwnerID:     nil,
+			Hidden:      true,
 		},
 		client: newAPIClient(defaultSlackAPIBaseURL, httpClient),
 		callFn: callReadChannelMessages,

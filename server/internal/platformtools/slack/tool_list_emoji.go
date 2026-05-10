@@ -33,6 +33,7 @@ func NewListEmojiTool(httpClient *guardian.HTTPClient) core.PlatformToolExecutor
 			Managed:     true,
 			OwnerKind:   nil,
 			OwnerID:     nil,
+			Hidden:      true,
 		},
 		client: newAPIClient(defaultSlackAPIBaseURL, httpClient),
 		callFn: callListEmoji,
