@@ -73,6 +73,26 @@ type Assistant struct {
 	Deleted         bool
 }
 
+type AssistantMemory struct {
+	ID             uuid.UUID
+	AssistantID    uuid.NullUUID
+	ProjectID      uuid.NullUUID
+	OrganizationID string
+	Content        string
+	Embedding      pgvector_go.HalfVector
+	SupersedesID   uuid.NullUUID
+	SupersededAt   pgtype.Timestamptz
+	ValidAt        pgtype.Timestamptz
+	Tags           []string
+	OriginThreadID uuid.NullUUID
+	OriginChatID   uuid.NullUUID
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	LastAccess     pgtype.Timestamptz
+	DeletedAt      pgtype.Timestamptz
+	Deleted        bool
+}
+
 type AssistantRuntime struct {
 	ID                  uuid.UUID
 	AssistantThreadID   uuid.UUID
