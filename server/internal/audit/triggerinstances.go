@@ -18,6 +18,9 @@ const (
 	ActionTriggerInstanceDelete Action = "trigger-instance:delete"
 	ActionTriggerInstancePause  Action = "trigger-instance:pause"
 	ActionTriggerInstanceResume Action = "trigger-instance:resume"
+	ActionWakeScheduled         Action = "wake:scheduled"
+	ActionWakeFired             Action = "wake:fired"
+	ActionWakeCancelled         Action = "wake:cancelled"
 )
 
 type LogTriggerInstanceCreateEvent struct {
@@ -246,4 +249,69 @@ func (l *Logger) LogTriggerInstanceResume(ctx context.Context, dbtx repo.DBTX, e
 	}
 
 	return nil
+}
+
+// LogWakeEvent is shared by wake.scheduled / wake.fired / wake.cancelled.
+// Subject is the wake's trigger_instance URN; metadata carries the target
+// thread's correlation_id and the wake's scheduled fire_at.
+type LogWakeEvent struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+
+	Actor            urn.Principal
+	ActorDisplayName *string
+	ActorSlug        *string
+
+	TriggerInstanceURN urn.TriggerInstance
+	Name               string
+	Correlation        string
+	FireAt             string
+}
+
+func (l *Logger) logWakeEvent(ctx context.Context, dbtx repo.DBTX, action Action, event LogWakeEvent) error {
+	metadata, err := marshalAuditPayload(map[string]string{
+		"correlation_id": event.Correlation,
+		"fire_at":        event.FireAt,
+	})
+	if err != nil {
+		return fmt.Errorf("marshal %s metadata: %w", action, err)
+	}
+
+	entry := repo.InsertAuditLogParams{
+		OrganizationID: event.OrganizationID,
+		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
+
+		ActorID:          event.Actor.ID,
+		ActorType:        string(event.Actor.Type),
+		ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName),
+		ActorSlug:        conv.PtrToPGTextEmpty(event.ActorSlug),
+
+		Action: string(action),
+
+		SubjectID:          event.TriggerInstanceURN.ID.String(),
+		SubjectType:        string(subjectTypeTriggerInstance),
+		SubjectDisplayName: conv.ToPGTextEmpty(event.Name),
+		SubjectSlug:        conv.ToPGTextEmpty("wake"),
+
+		BeforeSnapshot: nil,
+		AfterSnapshot:  nil,
+		Metadata:       metadata,
+	}
+
+	if _, err := repo.New(dbtx).InsertAuditLog(ctx, entry); err != nil {
+		return fmt.Errorf("log %s: %w", action, err)
+	}
+	return nil
+}
+
+func (l *Logger) LogWakeScheduled(ctx context.Context, dbtx repo.DBTX, event LogWakeEvent) error {
+	return l.logWakeEvent(ctx, dbtx, ActionWakeScheduled, event)
+}
+
+func (l *Logger) LogWakeFired(ctx context.Context, dbtx repo.DBTX, event LogWakeEvent) error {
+	return l.logWakeEvent(ctx, dbtx, ActionWakeFired, event)
+}
+
+func (l *Logger) LogWakeCancelled(ctx context.Context, dbtx repo.DBTX, event LogWakeEvent) error {
+	return l.logWakeEvent(ctx, dbtx, ActionWakeCancelled, event)
 }

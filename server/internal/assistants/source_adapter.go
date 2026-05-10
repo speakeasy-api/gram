@@ -14,6 +14,7 @@ type sourceAdapter interface {
 var sourceAdapters = map[string]sourceAdapter{
 	sourceKindSlack: slackAdapter{},
 	sourceKindCron:  cronAdapter{},
+	sourceKindWake:  wakeAdapter{},
 }
 
 func getSourceAdapter(kind string) (sourceAdapter, error) {
@@ -168,6 +169,59 @@ func (cronAdapter) DecodeTurn(event assistantThreadEventRecord) (string, error) 
 		fmt.Fprintf(&b, "Scheduled run fired for schedule %q at %s. Execute the assistant's configured task for this tick.", payload.Schedule, payload.FiredAt)
 	} else {
 		fmt.Fprintf(&b, "Scheduled run fired at %s. Execute the assistant's configured task for this tick.", payload.FiredAt)
+	}
+	return b.String(), nil
+}
+
+type wakeSourceRef struct {
+	TriggerInstanceID string `json:"trigger_instance_id"`
+	ScheduledAt       string `json:"scheduled_at,omitempty"`
+}
+
+type wakeEventPayload struct {
+	FiredAt           string `json:"fired_at"`
+	ScheduledAt       string `json:"scheduled_at,omitempty"`
+	TriggerInstanceID string `json:"trigger_instance_id"`
+	Note              string `json:"note,omitempty"`
+}
+
+type wakeAdapter struct{}
+
+func (wakeAdapter) ThreadContext(sourceRefJSON []byte) (string, error) {
+	var ref wakeSourceRef
+	if err := json.Unmarshal(sourceRefJSON, &ref); err != nil {
+		return "", fmt.Errorf("decode wake source ref: %w", err)
+	}
+	var b bytes.Buffer
+	b.WriteString("## Conversation context\n\n")
+	b.WriteString("Conversation originated on: Wake trigger\n")
+	if ref.TriggerInstanceID != "" {
+		fmt.Fprintf(&b, "TriggerInstanceID: %s\n", ref.TriggerInstanceID)
+	}
+	if ref.ScheduledAt != "" {
+		fmt.Fprintf(&b, "ScheduledAt: %s\n", ref.ScheduledAt)
+	}
+	return b.String(), nil
+}
+
+func (wakeAdapter) DecodeTurn(event assistantThreadEventRecord) (string, error) {
+	var payload wakeEventPayload
+	if err := json.Unmarshal(event.NormalizedPayloadJSON, &payload); err != nil {
+		return "", fmt.Errorf("decode wake event payload: %w", err)
+	}
+	var b bytes.Buffer
+	b.WriteString("<message-context>\n")
+	fmt.Fprintf(&b, "EventID: %s\n", event.EventID)
+	if payload.FiredAt != "" {
+		fmt.Fprintf(&b, "FiredAt: %s\n", payload.FiredAt)
+	}
+	if payload.ScheduledAt != "" {
+		fmt.Fprintf(&b, "ScheduledAt: %s\n", payload.ScheduledAt)
+	}
+	b.WriteString("</message-context>\n\n")
+	b.WriteString("Wake trigger fired. You scheduled this earlier to resume work in this thread.")
+	if payload.Note != "" {
+		fmt.Fprintf(&b, " Self-note: %s", payload.Note)
 	}
 	return b.String(), nil
 }

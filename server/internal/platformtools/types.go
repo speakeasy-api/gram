@@ -20,6 +20,8 @@ const (
 	ToolNameSearchLogs             = "platform_search_logs"
 	ToolNameListTriggers           = "platform_list_triggers"
 	ToolNameConfigureTrigger       = "platform_configure_trigger"
+	ToolNameScheduleWake           = "platform_schedule_wake"
+	ToolNameCancelWake             = "platform_cancel_wake"
 	ToolNameMemoryForget           = "platform_memory_forget"
 	ToolNameMemoryRecall           = "platform_memory_recall"
 	ToolNameMemoryRemember         = "platform_memory_remember"

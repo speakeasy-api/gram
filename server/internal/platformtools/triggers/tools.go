@@ -172,6 +172,12 @@ func listDefinitionSlugs() []string {
 	definitions := bgtriggers.List()
 	slugs := make([]string, 0, len(definitions))
 	for _, definition := range definitions {
+		// Wake triggers are created exclusively via platform_schedule_wake;
+		// keep them out of configure_trigger's discriminated union so the
+		// JSON-schema oneOf can't be exploited to construct a wake by hand.
+		if definition.Slug == bgtriggers.DefinitionSlugWake {
+			continue
+		}
 		slugs = append(slugs, definition.Slug)
 	}
 	sort.Strings(slugs)

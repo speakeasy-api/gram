@@ -39,6 +39,7 @@ const (
 
 	sourceKindSlack      = "slack"
 	sourceKindCron       = "cron"
+	sourceKindWake       = "wake"
 	runtimeStateStarting = "starting"
 	runtimeStateActive   = "active"
 	runtimeStateExpiring = "expiring"
@@ -263,6 +264,13 @@ type ExpireThreadRuntimeResult struct {
 	RemainingSeconds int
 }
 
+// WakeCanceller cancels every pending wake trigger owned by an assistant on
+// deletion. The trigger app implements this; assistants owns the interface to
+// avoid a dependency back into the triggers package.
+type WakeCanceller interface {
+	CancelAssistantWakes(ctx context.Context, projectID, assistantID uuid.UUID) error
+}
+
 type ServiceCore struct {
 	logger          *slog.Logger
 	tracer          trace.Tracer
@@ -272,6 +280,7 @@ type ServiceCore struct {
 	assistantTokens *assistanttokens.Manager
 	serverURL       *url.URL
 	telemetryLogger *telemetry.Logger
+	wakeCanceller   WakeCanceller
 }
 
 func NewServiceCore(
@@ -293,7 +302,14 @@ func NewServiceCore(
 		assistantTokens: assistantTokens,
 		serverURL:       serverURL,
 		telemetryLogger: telemetryLogger,
+		wakeCanceller:   nil,
 	}
+}
+
+// SetWakeCanceller is set after construction to break an import cycle:
+// assistants must not import triggers.
+func (s *ServiceCore) SetWakeCanceller(c WakeCanceller) {
+	s.wakeCanceller = c
 }
 
 // emitAssistantTelemetry writes a single assistant-pipeline log event to the
@@ -896,6 +912,16 @@ func (s *ServiceCore) DeleteAssistant(ctx context.Context, projectID uuid.UUID, 
 		)
 	}
 
+	if s.wakeCanceller != nil {
+		if cancelErr := s.wakeCanceller.CancelAssistantWakes(ctx, projectID, assistantID); cancelErr != nil {
+			s.logger.WarnContext(ctx, "cancel pending wakes on assistant delete failed",
+				attr.SlogAssistantID(assistantID.String()),
+				attr.SlogProjectID(projectID.String()),
+				attr.SlogError(cancelErr),
+			)
+		}
+	}
+
 	return nil
 }
 
@@ -1163,6 +1189,26 @@ func buildAssistantEventPayload(task bgtriggers.Task) (string, []byte, []byte, [
 			}
 		}
 		return sourceKindCron, sourceRefJSON, task.EventJSON, sourcePayloadJSON, nil
+	case sourceKindWake:
+		var event wakeEventPayload
+		if err := json.Unmarshal(task.EventJSON, &event); err != nil {
+			return "", nil, nil, nil, fmt.Errorf("decode wake trigger event: %w", err)
+		}
+		sourceRefJSON, err := json.Marshal(wakeSourceRef{
+			TriggerInstanceID: event.TriggerInstanceID,
+			ScheduledAt:       event.ScheduledAt,
+		})
+		if err != nil {
+			return "", nil, nil, nil, fmt.Errorf("marshal wake source ref: %w", err)
+		}
+		sourcePayloadJSON := task.RawPayload
+		if !json.Valid(sourcePayloadJSON) {
+			sourcePayloadJSON, err = json.Marshal(map[string]string{"raw": string(task.RawPayload)})
+			if err != nil {
+				return "", nil, nil, nil, fmt.Errorf("marshal fallback source payload: %w", err)
+			}
+		}
+		return sourceKindWake, sourceRefJSON, task.EventJSON, sourcePayloadJSON, nil
 	default:
 		return "", nil, nil, nil, fmt.Errorf("assistant source %q is not supported", task.DefinitionSlug)
 	}

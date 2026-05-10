@@ -61,6 +61,7 @@ type Activities struct {
 	generateToolsetEmbeddings       *activities.GenerateToolsetEmbeddings
 	dispatchTrigger                 *activities.DispatchTrigger
 	processScheduledTrigger         *activities.ProcessScheduledTrigger
+	markTriggerFired                *activities.MarkTriggerFired
 	segmentChat                     *resolution_activities.SegmentChat
 	deleteChatResolutions           *resolution_activities.DeleteChatResolutions
 	analyzeSegment                  *resolution_activities.AnalyzeSegment
@@ -146,6 +147,7 @@ func NewActivities(
 		generateToolsetEmbeddings:       activities.NewGenerateToolsetEmbeddingsActivity(tracerProvider, db, ragService, logger),
 		dispatchTrigger:                 activities.NewDispatchTrigger(triggerApp),
 		processScheduledTrigger:         activities.NewProcessScheduledTrigger(triggerApp),
+		markTriggerFired:                activities.NewMarkTriggerFired(triggerApp),
 		segmentChat:                     resolution_activities.NewSegmentChat(logger, db, chatClient),
 		deleteChatResolutions:           resolution_activities.NewDeleteChatResolutions(db),
 		analyzeSegment:                  resolution_activities.NewAnalyzeSegment(logger, db, chatClient, telemetryLogger),
@@ -296,6 +298,10 @@ func (a *Activities) DispatchTrigger(ctx context.Context, input activities.Dispa
 
 func (a *Activities) ProcessScheduledTrigger(ctx context.Context, input activities.ProcessScheduledTriggerInput) (*activities.ProcessScheduledTriggerResult, error) {
 	return a.processScheduledTrigger.Do(ctx, input)
+}
+
+func (a *Activities) MarkTriggerFired(ctx context.Context, input activities.MarkTriggerFiredInput) error {
+	return a.markTriggerFired.Do(ctx, input)
 }
 
 func (a *Activities) FetchUnanalyzedMessages(ctx context.Context, input risk_analysis.FetchUnanalyzedArgs) (*risk_analysis.FetchUnanalyzedResult, error) {
