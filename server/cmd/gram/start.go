@@ -74,6 +74,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oauth"
 	"github.com/speakeasy-api/gram/server/internal/organizations"
 	"github.com/speakeasy-api/gram/server/internal/packages"
+	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	platformtoolsruntime "github.com/speakeasy-api/gram/server/internal/platformtools/runtime"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/projects"
@@ -723,6 +724,7 @@ func newStartCommand() *cli.Command {
 			platformFeatureChecker := productFeatures.PlatformFeatureCheck
 
 			memoryTools := platformtoolsruntime.MemoryExternalTools(memorySvc)
+			assistantsPlatformToolset := platformtools.NewAssistantsToolset(memoryTools...)
 
 			platformSvc := platformtoolsruntime.NewService(
 				logger,
@@ -763,6 +765,7 @@ func newStartCommand() *cli.Command {
 				auditLogger,
 				memoryTools,
 				platformFeatureChecker,
+				[]platformtools.Toolset{assistantsPlatformToolset},
 				speakeasyIDPClient,
 				usersessions.NewSigner(c.String(usersessions.JWTSigningKeyFlag)),
 			)

@@ -25,6 +25,7 @@ import (
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	slackclient "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
@@ -1762,8 +1763,10 @@ func composeInstructions(base string, thread assistantThreadRecord) (string, err
 	return strings.Join(parts, "\n\n"), nil
 }
 
+const assistantPlatformMCPServerID = "_platform-assistants"
+
 func resolveAssistantMCPServers(serverURL *url.URL, toolsets []assistantToolsetRow) ([]runtimeMCPServer, error) {
-	servers := make([]runtimeMCPServer, 0, len(toolsets))
+	servers := make([]runtimeMCPServer, 0, len(toolsets)+1)
 	for _, t := range toolsets {
 		if !t.McpEnabled {
 			return nil, fmt.Errorf("toolset %q does not have MCP enabled", t.ToolsetSlug)
@@ -1789,6 +1792,15 @@ func resolveAssistantMCPServers(serverURL *url.URL, toolsets []assistantToolsetR
 			Headers: headers,
 		})
 	}
+
+	// Implicit platform toolset granted to every assistant runtime; not
+	// surfaced as a user-managed toolset and not persisted in
+	// assistant_toolsets so users can't detach it.
+	servers = append(servers, runtimeMCPServer{
+		ID:      assistantPlatformMCPServerID,
+		URL:     platformtools.PlatformToolsetURL(serverURL, platformtools.AssistantsPlatformToolsetSlug),
+		Headers: map[string]string{},
+	})
 
 	return servers, nil
 }
