@@ -1012,9 +1012,12 @@ func (s *Service) GetProjectOverview(ctx context.Context, payload *telem_gen.Get
 		GramProjectID:  projectID,
 		TimeStart:      timeStart,
 		TimeEnd:        timeEnd,
+		UserID:         "",
 		ExternalUserID: "",
 		APIKeyID:       "",
 		ToolsetSlug:    "",
+		EventSource:    "",
+		HookSource:     "",
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving tool call metrics")
@@ -1035,9 +1038,12 @@ func (s *Service) GetProjectOverview(ctx context.Context, payload *telem_gen.Get
 		GramProjectID:  projectID,
 		TimeStart:      comparisonStart,
 		TimeEnd:        comparisonEnd,
+		UserID:         "",
 		ExternalUserID: "",
 		APIKeyID:       "",
 		ToolsetSlug:    "",
+		EventSource:    "",
+		HookSource:     "",
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving comparison tool call metrics")
