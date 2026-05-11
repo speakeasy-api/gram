@@ -312,7 +312,7 @@ export function ShowSlackAppGuideComponent({
   );
 
   const webhookLive = !!a.webhook_url;
-  const { deepLink, scopes, userScopes, botEvents } = manifestResult;
+  const { deepLink } = manifestResult;
 
   const isPending = isExecuting(status);
   const settled = !isPending;
@@ -362,34 +362,25 @@ export function ShowSlackAppGuideComponent({
 
   const steps: React.ReactNode[] = [
     <>
-      Click <strong>Open Slack</strong> below. A new tab opens with the setup
-      already filled in for you.
+      Click <strong>Open Slack</strong> below.
     </>,
     <>
-      In Slack, pick the workspace this assistant should live in, then click{" "}
+      Pick the workspace this assistant should live in, then click{" "}
       <strong>Create</strong>.
     </>,
     <>
       In Slack's left sidebar, click <strong>Install App</strong>, then{" "}
-      <strong>Install to Workspace</strong>, then approve. Slack will only hand
-      out a login token <em>after</em> this step — skipping it is the most
-      common reason setup gets stuck.
+      <strong>Install to Workspace</strong>, then approve.
     </>,
     webhookLive ? (
       <>
-        <span className="text-amber-600 dark:text-amber-400">
-          Easy to miss, but required.
-        </span>{" "}
-        In Slack's left sidebar, click <strong>Event Subscriptions</strong>.
-        Next to the request URL we filled in, click <strong>Retry</strong>, then
-        click <strong>Save Changes</strong> in the bottom-right. Without this,
-        Slack won't deliver any messages to your assistant and it will look
-        broken.
+        In Slack's left sidebar, click <strong>Event Subscriptions</strong>,
+        click <strong>Retry</strong> next to the request URL, then click{" "}
+        <strong>Save Changes</strong>.
       </>
     ) : null,
     <>
-      Come back here and click <strong>I'm done</strong> below. I'll ask for
-      your tokens next.
+      Come back here and click <strong>I'm done</strong> below.
     </>,
   ].filter(Boolean);
 
@@ -399,13 +390,6 @@ export function ShowSlackAppGuideComponent({
       tone="info"
       icon={<Icon name="bot" className="text-muted-foreground h-4 w-4" />}
     >
-      <p className="text-muted-foreground mb-4 text-sm leading-relaxed">
-        Slack calls each integration an "app" in their dashboard — same thing.
-        I've pre-filled the setup so you just need to install it in your
-        workspace
-        {webhookLive ? " and tell Slack our webhook is ready" : ""}.
-      </p>
-
       <ol className="space-y-3 text-sm leading-relaxed">
         {steps.map((step, i) => (
           <li key={i} className="flex gap-3">
@@ -416,36 +400,6 @@ export function ShowSlackAppGuideComponent({
           </li>
         ))}
       </ol>
-
-      {(scopes.length > 0 || userScopes.length > 0 || botEvents.length > 0) && (
-        <details className="border-border bg-muted/30 mt-4 rounded-md border p-3 text-xs">
-          <summary className="text-muted-foreground cursor-pointer font-medium">
-            What's pre-filled (advanced)
-          </summary>
-          <div className="mt-2 space-y-1.5">
-            {scopes.length > 0 && (
-              <div>
-                <span className="text-muted-foreground">Bot permissions: </span>
-                <span className="font-mono">{scopes.join(", ")}</span>
-              </div>
-            )}
-            {userScopes.length > 0 && (
-              <div>
-                <span className="text-muted-foreground">
-                  User permissions:{" "}
-                </span>
-                <span className="font-mono">{userScopes.join(", ")}</span>
-              </div>
-            )}
-            {botEvents.length > 0 && (
-              <div>
-                <span className="text-muted-foreground">Listens for: </span>
-                <span className="font-mono">{botEvents.join(", ")}</span>
-              </div>
-            )}
-          </div>
-        </details>
-      )}
 
       <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
         <Button asChild>
