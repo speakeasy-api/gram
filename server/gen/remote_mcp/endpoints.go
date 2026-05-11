@@ -20,6 +20,7 @@ type Endpoints struct {
 	ListServers  goa.Endpoint
 	GetServer    goa.Endpoint
 	UpdateServer goa.Endpoint
+	VerifyURL    goa.Endpoint
 	DeleteServer goa.Endpoint
 }
 
@@ -32,6 +33,7 @@ func NewEndpoints(s Service) *Endpoints {
 		ListServers:  NewListServersEndpoint(s, a.APIKeyAuth),
 		GetServer:    NewGetServerEndpoint(s, a.APIKeyAuth),
 		UpdateServer: NewUpdateServerEndpoint(s, a.APIKeyAuth),
+		VerifyURL:    NewVerifyURLEndpoint(s, a.APIKeyAuth),
 		DeleteServer: NewDeleteServerEndpoint(s, a.APIKeyAuth),
 	}
 }
@@ -42,6 +44,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ListServers = m(e.ListServers)
 	e.GetServer = m(e.GetServer)
 	e.UpdateServer = m(e.UpdateServer)
+	e.VerifyURL = m(e.VerifyURL)
 	e.DeleteServer = m(e.DeleteServer)
 }
 
@@ -278,6 +281,65 @@ func NewUpdateServerEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) go
 			return nil, err
 		}
 		return s.UpdateServer(ctx, p)
+	}
+}
+
+// NewVerifyURLEndpoint returns an endpoint function that calls the method
+// "verifyURL" of service "remoteMcp".
+func NewVerifyURLEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*VerifyURLPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{"producer"},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.VerifyURL(ctx, p)
 	}
 }
 

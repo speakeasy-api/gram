@@ -42,6 +42,7 @@ import (
 	oauthrepo "github.com/speakeasy-api/gram/server/internal/oauth/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/rag"
+	"github.com/speakeasy-api/gram/server/internal/remotemcp/remotemcptest"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -138,7 +139,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	assistantTokens := assistanttokens.New("test-jwt-secret", conn, authzEngine)
 	shadowMCPClient := shadowmcp.NewClient(logger, conn, cacheAdapter)
 	auditLogger := audit.NewLogger()
-	mcpService := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthogClient, serverURL, enc, cacheAdapter, guardianPolicy, funcs, oauthService, billingClient, billingClient, telemLogger, telemService, vectorToolStore, nil, temporalEnv, authzEngine, assistantTokens, shadowMCPClient, auditLogger)
+	mcpService := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthogClient, serverURL, enc, cacheAdapter, guardianPolicy, funcs, oauthService, billingClient, billingClient, telemLogger, telemService, vectorToolStore, nil, temporalEnv, authzEngine, assistantTokens, shadowMCPClient, auditLogger, nil, nil)
 
 	svc := xmcp.NewService(logger, tracerProvider, meterProvider, conn, enc, authzEngine, guardianPolicy, billingClient, billingClient, mcpService, serverURL)
 
@@ -192,12 +193,11 @@ func seedRemoteMCPServer(t *testing.T, ctx context.Context, ti *testInstance, pr
 	t.Helper()
 
 	r := remotemcprepo.New(ti.conn)
-	server, err := r.CreateServer(ctx, remotemcprepo.CreateServerParams{
+	server := remotemcptest.SeedServer(t, ctx, ti.conn, remotemcprepo.CreateServerParams{
 		ProjectID:     projectID,
 		TransportType: "streamable-http",
 		Url:           url,
 	})
-	require.NoError(t, err)
 
 	for _, h := range headers {
 		params := h
@@ -209,7 +209,7 @@ func seedRemoteMCPServer(t *testing.T, ctx context.Context, ti *testInstance, pr
 			params.Value = pgtype.Text{String: encrypted, Valid: true}
 		}
 
-		_, err = r.CreateHeader(ctx, params)
+		_, err := r.CreateHeader(ctx, params)
 		require.NoError(t, err)
 	}
 

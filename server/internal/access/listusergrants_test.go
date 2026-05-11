@@ -26,6 +26,8 @@ var expectedFullAccessScopes = []string{
 	string(authz.ScopeMCPRead),
 	string(authz.ScopeMCPWrite),
 	string(authz.ScopeMCPConnect),
+	string(authz.ScopeEnvironmentRead),
+	string(authz.ScopeEnvironmentWrite),
 }
 
 func TestService_ListGrants(t *testing.T) {

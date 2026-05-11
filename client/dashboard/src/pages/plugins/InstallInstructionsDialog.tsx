@@ -95,7 +95,7 @@ function ClaudeCodeInstallContent({
             [repoName]: {
               autoUpdate: true,
               source: {
-                source: "url",
+                source: "git",
                 url: marketplaceUrl,
               },
             },
@@ -107,7 +107,7 @@ function ClaudeCodeInstallContent({
     : null;
 
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 space-y-6">
       <div>
         <h3 className="mb-2 text-sm font-semibold">
           Install in your Claude Code instance
@@ -257,7 +257,7 @@ function ClaudeCoworkInstallContent({
   const repoSlug = `${repoOwner}/${repoName}`;
 
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 space-y-6">
       <div>
         <h3 className="mb-2 text-sm font-semibold">
           Roll out to your organization
@@ -361,7 +361,7 @@ function CursorInstallContent({
   const repoUrl = `https://github.com/${repoOwner}/${repoName}`;
 
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 space-y-6">
       <div>
         <h3 className="mb-2 text-sm font-semibold">
           Roll out to your team in Cursor

@@ -61,6 +61,7 @@ func DescribeToolsetEntry(
 	tx DBTX,
 	projectID ProjectID,
 	toolsetSlug ToolsetSlug,
+	platformExtras ...platformtools.ExternalTool,
 ) (*types.ToolsetEntry, error) {
 	toolsetRepo := tsr.New(tx)
 	toolsRepo := tr.New(tx)
@@ -212,7 +213,7 @@ func DescribeToolsetEntry(
 			})
 		}
 
-		tools = append(tools, platformtools.FindToolEntries(toolUrns)...)
+		tools = append(tools, platformtools.FindToolEntries(toolUrns, platformExtras...)...)
 
 		// Fetch external MCP tool entries
 		externalmcpRepo := externalmcpR.New(tx)
@@ -338,6 +339,7 @@ func DescribeToolset(
 	projectID ProjectID,
 	toolsetSlug ToolsetSlug,
 	toolsetCache *cache.TypedCacheObject[ToolsetBaseContents],
+	platformExtras ...platformtools.ExternalTool,
 ) (*types.Toolset, error) {
 	toolsetRepo := tsr.New(tx)
 	orgRepo := org.New(tx)
@@ -395,7 +397,7 @@ func DescribeToolset(
 		return nil, err
 	}
 
-	toolsetTools, err := readToolsetTools(ctx, logger, tx, pid, activeDeploymentID, toolset.ID, toolsetVersion, toolUrns, resourceUrns, toolsetCache)
+	toolsetTools, err := readToolsetTools(ctx, logger, tx, pid, activeDeploymentID, toolset.ID, toolsetVersion, toolUrns, resourceUrns, toolsetCache, platformExtras...)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to get toolset tools").Log(ctx, logger)
 	}
@@ -606,6 +608,7 @@ func GetToolsetsSummary(
 	logger *slog.Logger,
 	tx DBTX,
 	toolsets []tsr.ListToolsetsWithVersionsByOrganizationRow,
+	platformExtras ...platformtools.ExternalTool,
 ) ([]*types.ToolsetSummary, error) {
 	if len(toolsets) == 0 {
 		return []*types.ToolsetSummary{}, nil
@@ -781,7 +784,7 @@ func GetToolsetsSummary(
 
 	// Build platform tool index from the static registry (11 tools), not from 17k URNs.
 	platformIndex := make(map[string]*types.ToolEntry)
-	for _, desc := range platformtools.ListPlatformTools() {
+	for _, desc := range platformtools.ListPlatformTools(platformExtras...) {
 		entry := desc.ToToolEntry()
 		platformIndex[entry.ToolUrn] = entry
 	}
@@ -856,6 +859,7 @@ func readToolsetTools(
 	toolUrns []string,
 	resourceUrns []string,
 	toolsetCache *cache.TypedCacheObject[ToolsetBaseContents],
+	platformExtras ...platformtools.ExternalTool,
 ) (*ToolsetBaseContents, error) {
 	toolsRepo := tr.New(tx)
 	templatesRepo := templatesR.New(tx)
@@ -995,7 +999,7 @@ func readToolsetTools(
 			})
 		}
 
-		tools = append(tools, platformtools.FindTypedTools(pid, toolUrns)...)
+		tools = append(tools, platformtools.FindTypedTools(pid, toolUrns, platformExtras...)...)
 
 		functionDefinitions, err := toolsRepo.FindFunctionToolsByUrn(ctx, tr.FindFunctionToolsByUrnParams{
 			ProjectID: pid,

@@ -5,6 +5,7 @@
 import { ClientSDK } from "../lib/sdks.js";
 import { Access } from "./access.js";
 import { Assets } from "./assets.js";
+import { AssistantMemories } from "./assistantmemories.js";
 import { Assistants } from "./assistants.js";
 import { Auditlogs } from "./auditlogs.js";
 import { Auth } from "./auth.js";
@@ -53,6 +54,11 @@ export class Gram extends ClientSDK {
   private _assets?: Assets;
   get assets(): Assets {
     return (this._assets ??= new Assets(this._options));
+  }
+
+  private _assistantMemories?: AssistantMemories;
+  get assistantMemories(): AssistantMemories {
+    return (this._assistantMemories ??= new AssistantMemories(this._options));
   }
 
   private _assistants?: Assistants;

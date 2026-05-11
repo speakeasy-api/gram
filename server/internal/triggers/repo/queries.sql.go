@@ -190,6 +190,65 @@ func (q *Queries) GetTriggerInstanceByIDPublic(ctx context.Context, id uuid.UUID
 	return i, err
 }
 
+const listActiveTriggerInstancesByTarget = `-- name: ListActiveTriggerInstancesByTarget :many
+SELECT id, organization_id, project_id, definition_slug, name, environment_id, target_kind, target_ref, target_display, config_json, status, created_at, updated_at, deleted_at, deleted
+FROM trigger_instances ti
+WHERE ti.project_id = $1
+  AND ti.definition_slug = $2
+  AND ti.target_kind = $3
+  AND ti.target_ref = $4
+  AND ti.status = 'active'
+  AND ti.deleted IS FALSE
+`
+
+type ListActiveTriggerInstancesByTargetParams struct {
+	ProjectID      uuid.UUID
+	DefinitionSlug string
+	TargetKind     string
+	TargetRef      string
+}
+
+func (q *Queries) ListActiveTriggerInstancesByTarget(ctx context.Context, arg ListActiveTriggerInstancesByTargetParams) ([]TriggerInstance, error) {
+	rows, err := q.db.Query(ctx, listActiveTriggerInstancesByTarget,
+		arg.ProjectID,
+		arg.DefinitionSlug,
+		arg.TargetKind,
+		arg.TargetRef,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []TriggerInstance
+	for rows.Next() {
+		var i TriggerInstance
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.ProjectID,
+			&i.DefinitionSlug,
+			&i.Name,
+			&i.EnvironmentID,
+			&i.TargetKind,
+			&i.TargetRef,
+			&i.TargetDisplay,
+			&i.ConfigJson,
+			&i.Status,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listTriggerInstances = `-- name: ListTriggerInstances :many
 SELECT id, organization_id, project_id, definition_slug, name, environment_id, target_kind, target_ref, target_display, config_json, status, created_at, updated_at, deleted_at, deleted
 FROM trigger_instances ti
@@ -253,6 +312,46 @@ type SetTriggerInstanceStatusParams struct {
 
 func (q *Queries) SetTriggerInstanceStatus(ctx context.Context, arg SetTriggerInstanceStatusParams) (TriggerInstance, error) {
 	row := q.db.QueryRow(ctx, setTriggerInstanceStatus, arg.Status, arg.ID, arg.ProjectID)
+	var i TriggerInstance
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.DefinitionSlug,
+		&i.Name,
+		&i.EnvironmentID,
+		&i.TargetKind,
+		&i.TargetRef,
+		&i.TargetDisplay,
+		&i.ConfigJson,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const setTriggerInstanceStatusByID = `-- name: SetTriggerInstanceStatusByID :one
+UPDATE trigger_instances
+SET
+    status = $1,
+    updated_at = clock_timestamp()
+WHERE id = $2
+  AND status = $3
+  AND deleted IS FALSE
+RETURNING id, organization_id, project_id, definition_slug, name, environment_id, target_kind, target_ref, target_display, config_json, status, created_at, updated_at, deleted_at, deleted
+`
+
+type SetTriggerInstanceStatusByIDParams struct {
+	Status         string
+	ID             uuid.UUID
+	ExpectedStatus string
+}
+
+func (q *Queries) SetTriggerInstanceStatusByID(ctx context.Context, arg SetTriggerInstanceStatusByIDParams) (TriggerInstance, error) {
+	row := q.db.QueryRow(ctx, setTriggerInstanceStatusByID, arg.Status, arg.ID, arg.ExpectedStatus)
 	var i TriggerInstance
 	err := row.Scan(
 		&i.ID,

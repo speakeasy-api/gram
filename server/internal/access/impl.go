@@ -1123,6 +1123,8 @@ func allScopesGrants() []*gen.ListRoleGrant {
 		{Scope: string(authz.ScopeMCPRead), Selectors: nil},
 		{Scope: string(authz.ScopeMCPWrite), Selectors: nil},
 		{Scope: string(authz.ScopeMCPConnect), Selectors: nil},
+		{Scope: string(authz.ScopeEnvironmentRead), Selectors: nil},
+		{Scope: string(authz.ScopeEnvironmentWrite), Selectors: nil},
 	}
 }
 

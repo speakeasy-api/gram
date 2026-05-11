@@ -69,6 +69,23 @@ func (c *Client) IsFeatureEnabled(ctx context.Context, organizationID string, fe
 	return res, nil
 }
 
+// PlatformFeatureCheck adapts IsFeatureEnabled to the
+// platformtools.FeatureChecker signature so it can gate platform-tool
+// dispatch. Errors degrade to "disabled" so a transient lookup failure does
+// not silently grant access; the underlying error is logged for ops.
+func (c *Client) PlatformFeatureCheck(ctx context.Context, organizationID string, feature string) bool {
+	enabled, err := c.IsFeatureEnabled(ctx, organizationID, Feature(feature))
+	if err != nil {
+		c.logger.ErrorContext(ctx, "platform tool feature check failed",
+			attr.SlogError(err),
+			attr.SlogOrganizationID(organizationID),
+			attr.SlogProductFeatureName(feature),
+		)
+		return false
+	}
+	return enabled
+}
+
 // UpdateFeatureCache stores the given enabled state for the feature directly
 // into the cache. Call this after writing the feature flag to the database
 // from a code path that bypasses this client, so the cache stays consistent.

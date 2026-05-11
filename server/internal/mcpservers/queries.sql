@@ -27,7 +27,10 @@ WHERE id = @id AND project_id = @project_id AND deleted IS FALSE;
 -- name: ListMCPServersByProjectID :many
 SELECT *
 FROM mcp_servers
-WHERE project_id = @project_id AND deleted IS FALSE
+WHERE project_id = @project_id
+  AND deleted IS FALSE
+  AND (sqlc.narg('remote_mcp_server_id')::uuid IS NULL OR remote_mcp_server_id = sqlc.narg('remote_mcp_server_id')::uuid)
+  AND (sqlc.narg('toolset_id')::uuid IS NULL OR toolset_id = sqlc.narg('toolset_id')::uuid)
 ORDER BY created_at DESC;
 
 -- name: UpdateMCPServer :one

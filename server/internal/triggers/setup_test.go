@@ -101,19 +101,20 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	serverURL, err := url.Parse("https://gram.test.local")
 	require.NoError(t, err)
 
+	chConn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+
+	auditLogger := audit.NewLogger()
+
 	app := bgtriggers.NewApp(
 		logger,
 		conn,
 		nil,
 		loader,
 		bgtriggers.NewTriggerDeliveryLogger(func(_ context.Context, _ bgtriggers.TriggerDeliveryLog) {}),
+		auditLogger,
 		serverURL,
 	)
-
-	chConn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-
-	auditLogger := audit.NewLogger()
 
 	svc := triggers.NewService(
 		logger,

@@ -6,10 +6,6 @@ import { TextArea } from "@/components/ui/textarea";
 import { Type } from "@/components/ui/type";
 import { cn } from "@/lib/utils";
 import { ToolCallMessagePartProps } from "@assistant-ui/react";
-import {
-  useListToolsets,
-  useTriggers,
-} from "@gram/client/react-query/index.js";
 import { Icon } from "@speakeasy-api/moonshine";
 import {
   Check,
@@ -22,7 +18,7 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import { useAssistantDraft } from "../useAssistantDraft";
 import { PERSONALITIES, getPersonality } from "../personalities";
-import { buildSlackManifest, deriveSlackContext } from "../slackManifest";
+import { buildSlackManifest } from "../slackManifest";
 
 type Status = ToolCallMessagePartProps["status"];
 
@@ -288,67 +284,80 @@ type SlackAppArgs = {
   webhook_url?: string;
 };
 
-export function ShowSlackAppGuideComponent({ args }: ToolCallMessagePartProps) {
+type SlackAppGuideResult = {
+  success: boolean;
+  installed?: boolean;
+  cancelled?: boolean;
+};
+
+export function ShowSlackAppGuideComponent({
+  args,
+  status,
+  result,
+  toolCallId,
+}: ToolCallMessagePartProps) {
   const a = (args ?? {}) as Partial<SlackAppArgs>;
   const draft = useAssistantDraft();
   const assistantName = draft.assistant?.name;
-  const assistantId = draft.assistantId;
-  const attachedToolsetSlugs = useMemo(
-    () => (draft.assistant?.toolsets ?? []).map((t) => t.toolsetSlug),
-    [draft.assistant?.toolsets],
-  );
-
-  const { data: toolsetsData } = useListToolsets(undefined, undefined, {
-    retry: false,
-    throwOnError: false,
-  });
-  const { data: triggersData } = useTriggers(undefined, undefined, {
-    retry: false,
-    throwOnError: false,
-    enabled: !!assistantId,
-  });
-
-  const toolsetsBySlug = useMemo(() => {
-    const map = new Map<string, { toolUrns: readonly string[] }>();
-    for (const ts of toolsetsData?.toolsets ?? []) {
-      map.set(ts.slug, { toolUrns: ts.toolUrns ?? [] });
-    }
-    return map;
-  }, [toolsetsData?.toolsets]);
-
-  const derived = useMemo(
-    () =>
-      deriveSlackContext({
-        attachedToolsetSlugs,
-        toolsetsBySlug,
-        triggers: triggersData?.triggers ?? [],
-        assistantId,
-      }),
-    [attachedToolsetSlugs, toolsetsBySlug, triggersData?.triggers, assistantId],
-  );
 
   const manifestResult = useMemo(
     () =>
       buildSlackManifest({
         appName: a.app_name ?? assistantName ?? "Gram Assistant",
-        toolUrns: derived.toolUrns,
         webhookUrl: a.webhook_url,
         extraScopes: a.bot_scopes,
         extraBotEvents: a.bot_events,
       }),
-    [
-      a.app_name,
-      a.webhook_url,
-      a.bot_scopes,
-      a.bot_events,
-      assistantName,
-      derived.toolUrns,
-    ],
+    [a.app_name, a.webhook_url, a.bot_scopes, a.bot_events, assistantName],
   );
 
   const webhookLive = !!a.webhook_url;
-  const { deepLink, scopes, botEvents, searchToolNeedsUserToken } =
-    manifestResult;
+  const { deepLink, scopes, userScopes, botEvents } = manifestResult;
+
+  const isPending = isExecuting(status);
+  const settled = !isPending;
+  const r = result as SlackAppGuideResult | undefined;
+
+  useEffect(() => {
+    if (!isPending) return;
+    return () => {
+      draft.resolvePending(toolCallId, {
+        success: false,
+        cancelled: true,
+      });
+    };
+  }, [draft, toolCallId, isPending]);
+
+  if (settled && r?.installed) {
+    return (
+      <ToolCard
+        title="Slack app installed"
+        tone="success"
+        icon={<Check className="text-emerald-600" size={16} />}
+      >
+        <Type small muted>
+          Ready to paste your tokens.
+        </Type>
+      </ToolCard>
+    );
+  }
+
+  if (settled && r?.cancelled) {
+    return (
+      <ToolCard title="Slack app guide — skipped">
+        <Type small muted>
+          You can come back to this from the Environments page later.
+        </Type>
+      </ToolCard>
+    );
+  }
+
+  const markInstalled = () => {
+    draft.resolvePending(toolCallId, { success: true, installed: true });
+  };
+  const skip = () => {
+    draft.resolvePending(toolCallId, { success: false, cancelled: true });
+  };
 
   return (
     <ToolCard
@@ -359,8 +368,9 @@ export function ShowSlackAppGuideComponent({ args }: ToolCallMessagePartProps) {
       <p className="text-muted-foreground mb-4 text-sm leading-relaxed">
         This link opens Slack with a manifest pre-filled — name
         {scopes.length > 0 ? ", bot scopes" : ""}
+        {userScopes.length > 0 ? ", user scopes" : ""}
         {webhookLive ? ", and webhook URL" : ""}. You'll still need to install
-        it to your workspace and copy two secrets back here.
+        it to your workspace and copy your tokens back here.
       </p>
 
       <ol className="space-y-3 text-sm leading-relaxed">
@@ -386,23 +396,38 @@ export function ShowSlackAppGuideComponent({ args }: ToolCallMessagePartProps) {
             <em>OAuth &amp; Permissions</em>. It starts with <code>xoxb-</code>.
             Not <code>xoxp-</code>; not the Client Secret.
           </>,
+          webhookLive ? (
+            <>
+              Copy the <strong>Signing Secret</strong> from{" "}
+              <em>Basic Information → App Credentials</em>. Not the Verification
+              Token (deprecated) and not the Client Secret.
+            </>
+          ) : null,
+          userScopes.length > 0 ? (
+            <>
+              Copy the <strong>User OAuth Token</strong> from{" "}
+              <em>OAuth &amp; Permissions</em>. It starts with{" "}
+              <code>xoxp-</code>. User scopes were pre-granted by the manifest —
+              no extra setup needed.
+            </>
+          ) : null,
           <>
-            Copy the <strong>Signing Secret</strong> from{" "}
-            <em>Basic Information → App Credentials</em>. Not the Verification
-            Token (deprecated) and not the Client Secret.
+            Click <strong>I've installed it</strong> below when done. The token
+            form will appear next.
           </>,
-          <>Paste both into the form that appears next.</>,
-        ].map((step, i) => (
-          <li key={i} className="flex gap-3">
-            <span className="text-muted-foreground shrink-0 tabular-nums">
-              {i + 1}.
-            </span>
-            <div className="flex-1">{step}</div>
-          </li>
-        ))}
+        ]
+          .filter(Boolean)
+          .map((step, i) => (
+            <li key={i} className="flex gap-3">
+              <span className="text-muted-foreground shrink-0 tabular-nums">
+                {i + 1}.
+              </span>
+              <div className="flex-1">{step}</div>
+            </li>
+          ))}
       </ol>
 
-      {(scopes.length > 0 || botEvents.length > 0) && (
+      {(scopes.length > 0 || userScopes.length > 0 || botEvents.length > 0) && (
         <div className="border-border bg-muted/30 mt-4 rounded-md border p-3 text-xs">
           <Type small muted className="mb-1.5 font-medium">
             Pre-filled in the manifest
@@ -411,6 +436,12 @@ export function ShowSlackAppGuideComponent({ args }: ToolCallMessagePartProps) {
             <div className="mb-1.5">
               <span className="text-muted-foreground">Bot scopes: </span>
               <span className="font-mono">{scopes.join(", ")}</span>
+            </div>
+          )}
+          {userScopes.length > 0 && (
+            <div className="mb-1.5">
+              <span className="text-muted-foreground">User scopes: </span>
+              <span className="font-mono">{userScopes.join(", ")}</span>
             </div>
           )}
           {botEvents.length > 0 && (
@@ -423,28 +454,23 @@ export function ShowSlackAppGuideComponent({ args }: ToolCallMessagePartProps) {
       )}
 
       <p className="text-muted-foreground mt-4 text-xs leading-relaxed">
-        Heads up: if you need to add a bot scope later, Slack requires a
-        re-install to grant it. We've included every scope this assistant needs
-        upfront.
+        Heads up: if you need to add a scope later, Slack requires a re-install
+        to grant it. We've included every scope this assistant needs upfront.
       </p>
 
-      {searchToolNeedsUserToken && (
-        <p className="text-muted-foreground mt-2 text-xs leading-relaxed">
-          The message-and-file search tool needs a Slack <em>user</em> token (
-          <code>search:read</code>), which Slack only grants on user tokens —
-          not bot tokens. After install, generate a user token from{" "}
-          <em>OAuth &amp; Permissions → User Token Scopes → search:read</em> and
-          store it as <code>SLACK_USER_TOKEN</code>.
-        </p>
-      )}
-
-      <div className="mt-4 flex gap-2">
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
         <Button asChild>
           <a href={deepLink} target="_blank" rel="noopener noreferrer">
             <ExternalLink className="mr-2 h-4 w-4" />
             Open Slack
           </a>
         </Button>
+        <div className="flex gap-2">
+          <Button variant="ghost" onClick={skip}>
+            Skip
+          </Button>
+          <Button onClick={markInstalled}>I've installed it</Button>
+        </div>
       </div>
     </ToolCard>
   );

@@ -2677,6 +2677,340 @@ paths:
             schema:
               type: string
               format: binary
+  /rpc/assistantMemories.delete:
+    delete:
+      description: Delete an assistant memory by ID.
+      operationId: deleteAssistantMemory
+      parameters:
+        - allowEmptyValue: true
+          description: The assistant memory ID.
+          in: query
+          name: id
+          required: true
+          schema:
+            description: The assistant memory ID.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: deleteAssistantMemory assistantMemories
+      tags:
+        - assistantMemories
+      x-speakeasy-name-override: delete
+  /rpc/assistantMemories.get:
+    get:
+      description: Get an assistant memory by ID.
+      operationId: getAssistantMemory
+      parameters:
+        - allowEmptyValue: true
+          description: The assistant memory ID.
+          in: query
+          name: id
+          required: true
+          schema:
+            description: The assistant memory ID.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssistantMemory'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: getAssistantMemory assistantMemories
+      tags:
+        - assistantMemories
+      x-speakeasy-name-override: get
+      x-speakeasy-react-hook:
+        name: GetAssistantMemory
+  /rpc/assistantMemories.list:
+    get:
+      description: List assistant memories for an assistant.
+      operationId: listAssistantMemories
+      parameters:
+        - allowEmptyValue: true
+          description: The assistant ID.
+          in: query
+          name: assistant_id
+          required: true
+          schema:
+            description: The assistant ID.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Optional tags to filter memories by.
+          in: query
+          name: tags
+          schema:
+            description: Optional tags to filter memories by.
+            items:
+              type: string
+            type: array
+        - allowEmptyValue: true
+          description: Whether to include soft-deleted memories.
+          in: query
+          name: include_deleted
+          schema:
+            default: false
+            description: Whether to include soft-deleted memories.
+            type: boolean
+        - allowEmptyValue: true
+          description: The cursor to fetch results from.
+          in: query
+          name: cursor
+          schema:
+            description: The cursor to fetch results from.
+            type: string
+        - allowEmptyValue: true
+          description: The number of memories to return per page.
+          in: query
+          name: limit
+          schema:
+            default: 50
+            description: The number of memories to return per page.
+            format: int64
+            maximum: 200
+            minimum: 1
+            type: integer
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListAssistantMemoriesResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: listAssistantMemories assistantMemories
+      tags:
+        - assistantMemories
+      x-speakeasy-name-override: list
+      x-speakeasy-pagination:
+        inputs:
+          - in: parameters
+            name: cursor
+            type: cursor
+        outputs:
+          nextCursor: $.next_cursor
+        type: cursor
+      x-speakeasy-react-hook:
+        name: ListAssistantMemories
   /rpc/assistants.create:
     post:
       description: Create an assistant.
@@ -10648,9 +10982,25 @@ paths:
         name: GetMcpServer
   /rpc/mcpServers.list:
     get:
-      description: List all MCP servers for a project
+      description: List MCP servers for a project. Accepts optional remote_mcp_server_id or toolset_id filters to scope the result to a single backend; at most one filter may be supplied since the two backends are mutually exclusive.
       operationId: listMcpServers
       parameters:
+        - allowEmptyValue: true
+          description: Filter to MCP servers backed by this remote MCP server
+          in: query
+          name: remote_mcp_server_id
+          schema:
+            description: Filter to MCP servers backed by this remote MCP server
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Filter to MCP servers backed by this toolset
+          in: query
+          name: toolset_id
+          schema:
+            description: Filter to MCP servers backed by this toolset
+            format: uuid
+            type: string
         - allowEmptyValue: true
           description: Session header
           in: header
@@ -14305,16 +14655,23 @@ paths:
         name: DeleteRemoteMcpServer
   /rpc/remoteMcp.getServer:
     get:
-      description: Get a remote MCP server by ID
+      description: Get a remote MCP server by ID or slug. Exactly one of id or slug must be provided.
       operationId: getRemoteMcpServer
       parameters:
         - allowEmptyValue: true
-          description: The ID of the remote MCP server
+          description: The ID of the remote MCP server. Mutually exclusive with slug.
           in: query
           name: id
-          required: true
           schema:
-            description: The ID of the remote MCP server
+            description: The ID of the remote MCP server. Mutually exclusive with slug.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: The slug of the remote MCP server. Mutually exclusive with id.
+          in: query
+          name: slug
+          schema:
+            description: The slug of the remote MCP server. Mutually exclusive with id.
             type: string
         - allowEmptyValue: true
           description: Session header
@@ -14614,6 +14971,111 @@ paths:
       x-speakeasy-name-override: updateServer
       x-speakeasy-react-hook:
         name: UpdateRemoteMcpServer
+  /rpc/remoteMcp.verifyURL:
+    post:
+      description: Probe a candidate remote MCP server URL by issuing an MCP initialize request and reporting the outcome. Used to give users a reachability signal before they save a new or updated remote MCP server. Treats reachable-but-401/403 responses as verified — auth verification is intentionally out of scope.
+      operationId: verifyRemoteMcpURL
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifyURLForm'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerifyURLResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: verifyURL remoteMcp
+      tags:
+        - remoteMcp
+      x-speakeasy-name-override: verifyURL
+      x-speakeasy-react-hook:
+        name: VerifyRemoteMcpURL
   /rpc/resources.list:
     get:
       description: List all resources for a project
@@ -23038,6 +23500,62 @@ components:
         - status
         - created_at
         - updated_at
+    AssistantMemory:
+      type: object
+      properties:
+        assistant_id:
+          type: string
+          description: The assistant ID owning the memory.
+          format: uuid
+        content:
+          type: string
+          description: The memory content.
+        created_at:
+          type: string
+          description: Creation timestamp.
+          format: date-time
+        deleted_at:
+          type: string
+          description: Timestamp at which the memory was soft-deleted.
+          format: date-time
+        id:
+          type: string
+          description: The assistant memory ID.
+          format: uuid
+        last_access:
+          type: string
+          description: Timestamp of the most recent access.
+          format: date-time
+        superseded_at:
+          type: string
+          description: Timestamp at which the memory was superseded by another memory.
+          format: date-time
+        supersedes_id:
+          type: string
+          description: The ID of the memory this one supersedes, if any.
+          format: uuid
+        tags:
+          type: array
+          items:
+            type: string
+          description: Tags associated with the memory.
+        updated_at:
+          type: string
+          description: Last update timestamp.
+          format: date-time
+        valid_at:
+          type: string
+          description: Timestamp at which the memory becomes valid.
+          format: date-time
+      required:
+        - id
+        - assistant_id
+        - content
+        - tags
+        - created_at
+        - updated_at
+        - last_access
+        - valid_at
     AssistantToolsetRef:
       type: object
       properties:
@@ -24434,6 +24952,9 @@ components:
           items:
             $ref: '#/components/schemas/HeaderInput'
           description: Headers to send when proxying requests to the remote server
+        name:
+          type: string
+          description: Optional human-readable name for the remote MCP server. Empty values are stored as null.
         transport_type:
           type: string
           description: The transport type for the remote MCP server (e.g. streamable-http)
@@ -26320,6 +26841,9 @@ components:
     GramProductFeatures:
       type: object
       properties:
+        assistant_memory_enabled:
+          type: boolean
+          description: Whether assistant memory is enabled
         authz_challenge_logging_enabled:
           type: boolean
           description: Whether authz challenge logging to ClickHouse is enabled
@@ -26338,6 +26862,7 @@ components:
         - tool_io_logs_enabled
         - session_capture_enabled
         - authz_challenge_logging_enabled
+        - assistant_memory_enabled
     HTTPToolDefinition:
       type: object
       properties:
@@ -26466,6 +26991,20 @@ components:
       description: Input for a remote MCP server header
       required:
         - name
+    HookSourceUsage:
+      type: object
+      properties:
+        event_count:
+          type: integer
+          description: Total hook events for this source
+          format: int64
+        source:
+          type: string
+          description: Hook source (from attributes.gram.hook.source)
+      description: Hook source usage statistics
+      required:
+        - source
+        - event_count
     HookTraceSummary:
       type: object
       properties:
@@ -26864,6 +27403,19 @@ components:
           description: The list of assets
       required:
         - assets
+    ListAssistantMemoriesResult:
+      type: object
+      properties:
+        memories:
+          type: array
+          items:
+            $ref: '#/components/schemas/AssistantMemory'
+          description: Assistant memories matching the query.
+        next_cursor:
+          type: string
+          description: The cursor to be used for the next page of results.
+      required:
+        - memories
     ListAssistantsResult:
       type: object
       properties:
@@ -29286,7 +29838,7 @@ components:
           description: Whether this project has a GitHub connection.
         marketplace_url:
           type: string
-          description: URL-based Claude Code marketplace install URL — the value to pass to `/plugin marketplace add`. Present once a marketplace token has been minted, which happens automatically on the first publish.
+          description: Git-based Claude Code marketplace URL — the value to pass to `/plugin marketplace add` or set as the source URL in `extraKnownMarketplaces`. Present once a marketplace token has been minted, which happens automatically on the first publish.
         repo_name:
           type: string
           description: GitHub repo name, if connected.
@@ -29344,10 +29896,16 @@ components:
           type: string
           description: The ID of the remote MCP server
           format: uuid
+        name:
+          type: string
+          description: Optional human-readable name for the remote MCP server
         project_id:
           type: string
           description: The project ID this remote MCP server belongs to
           format: uuid
+        slug:
+          type: string
+          description: URL-friendly slug derived from the URL and ID.
         transport_type:
           type: string
           description: The transport type for the remote MCP server
@@ -30114,6 +30672,9 @@ components:
           type: string
           description: Deployment ID filter
           format: uuid
+        event_source:
+          type: string
+          description: Optional event source filter (e.g. 'hook'). When set, only rows with a matching event_source are included.
         from:
           type: string
           description: Start time in ISO 8601 format (e.g., '2025-12-19T10:00:00Z')
@@ -30124,6 +30685,11 @@ components:
           description: End time in ISO 8601 format (e.g., '2025-12-19T11:00:00Z')
           example: "2025-12-19T11:00:00Z"
           format: date-time
+        user_ids:
+          type: array
+          items:
+            type: string
+          description: Optional list of user identifiers to include. Matches user_id for internal searches and external_user_id for external searches.
       description: Filter criteria for searching user usage summaries
       required:
         - from
@@ -30527,6 +31093,7 @@ components:
             - tool_io_logs
             - session_capture
             - authz_challenge_logging
+            - assistant_memory
           maxLength: 60
       required:
         - feature_name
@@ -32075,6 +32642,9 @@ components:
         id:
           type: string
           description: The ID of the remote MCP server to update
+        name:
+          type: string
+          description: Optional human-readable name. Pass an empty string to clear the existing name.
         transport_type:
           type: string
           description: The transport type for the remote MCP server
@@ -32655,6 +33225,11 @@ components:
         first_seen_unix_nano:
           type: string
           description: Earliest activity timestamp in Unix nanoseconds
+        hook_sources:
+          type: array
+          items:
+            $ref: '#/components/schemas/HookSourceUsage'
+          description: Per-hook-source usage breakdown
         last_seen_unix_nano:
           type: string
           description: Latest activity timestamp in Unix nanoseconds
@@ -32720,6 +33295,7 @@ components:
         - tool_call_success
         - tool_call_failure
         - tools
+        - hook_sources
     ValidateKeyOrganization:
       type: object
       properties:
@@ -32771,6 +33347,37 @@ components:
         - organization
         - projects
         - scopes
+    VerifyURLForm:
+      type: object
+      properties:
+        transport_type:
+          type: string
+          description: The transport type for the remote MCP server (e.g. streamable-http)
+        url:
+          type: string
+          description: The URL of the remote MCP server to probe
+          format: uri
+      description: Form for probing a remote MCP server URL
+      required:
+        - url
+        - transport_type
+    VerifyURLResult:
+      type: object
+      properties:
+        http_status:
+          type: integer
+          description: HTTP status code returned by the URL, if any
+          format: int64
+        message:
+          type: string
+          description: Human-readable summary of the verification outcome
+        verified:
+          type: boolean
+          description: Whether the URL responded in a way consistent with a remote MCP server
+      description: Outcome of a remote MCP server URL verification
+      required:
+        - verified
+        - message
   securitySchemes:
     apikey_header_Authorization:
       type: apiKey
@@ -32807,6 +33414,8 @@ tags:
     description: Operational endpoints for administrative tasks.
   - name: assets
     description: Manages assets used by Gram projects.
+  - name: assistantMemories
+    description: Manage assistant memory records.
   - name: assistants
     description: Manage assistants and their runtime configuration.
   - name: auditlogs

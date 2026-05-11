@@ -1,3 +1,4 @@
+mod compaction;
 mod errors;
 mod http_layer;
 mod idempotency;

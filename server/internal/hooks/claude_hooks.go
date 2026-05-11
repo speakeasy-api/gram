@@ -89,10 +89,13 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 		return nil
 	}
 
+	userID := s.resolveUserByEmail(ctx, claudeMetadata.UserEmail, authCtx.ActiveOrganizationID)
+
 	completeMetadata := SessionMetadata{
 		SessionID:   claudeMetadata.SessionID,
 		ServiceName: claudeMetadata.ServiceName,
 		UserEmail:   claudeMetadata.UserEmail,
+		UserID:      userID,
 		ClaudeOrgID: claudeMetadata.ClaudeOrgID,
 		GramOrgID:   authCtx.ActiveOrganizationID,
 		ProjectID:   authCtx.ProjectID.String(),
@@ -398,6 +401,7 @@ func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePaylo
 			SessionID:   sessionID,
 			ServiceName: "",
 			UserEmail:   "",
+			UserID:      "",
 			ClaudeOrgID: "",
 			GramOrgID:   authCtx.ActiveOrganizationID,
 			ProjectID:   authCtx.ProjectID.String(),
@@ -405,6 +409,7 @@ func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePaylo
 		if cached, err := s.getSessionMetadata(ctx, sessionID); err == nil {
 			metadata.ServiceName = cached.ServiceName
 			metadata.UserEmail = cached.UserEmail
+			metadata.UserID = cached.UserID
 			metadata.ClaudeOrgID = cached.ClaudeOrgID
 		}
 	} else {

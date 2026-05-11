@@ -205,12 +205,12 @@ export function useChallengeRowColumns(
                   {row.timestamp.toLocaleString()}
                 </TooltipContent>
               </Tooltip>
-              {count > 1 && (
+              {count > 1 && onToggleGroup && (
                 <button
                   type="button"
                   onClick={() => {
                     const key = groupKeys?.get(row.id);
-                    if (key) onToggleGroup?.(key);
+                    if (key) onToggleGroup(key);
                   }}
                   className="text-muted-foreground bg-muted hover:bg-primary/10 hover:text-primary cursor-pointer rounded-full px-1.5 py-0.5 text-[10px] font-medium tabular-nums transition-colors"
                 >

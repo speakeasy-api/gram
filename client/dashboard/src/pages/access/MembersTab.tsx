@@ -19,7 +19,7 @@ import {
 } from "@speakeasy-api/moonshine";
 import { Ellipsis } from "lucide-react";
 import { useState } from "react";
-import { useNavigate } from "react-router";
+import { Link, useNavigate } from "react-router";
 import { ChangeRoleDialog } from "./ChangeRoleDialog";
 import { RequireScope } from "@/components/require-scope";
 import { useOrganization } from "@/contexts/Auth";
@@ -84,11 +84,9 @@ export function MembersTab() {
   const { data: membersData, isLoading: membersLoading } = useMembers();
   const { data: rolesData } = useRoles();
   const roles = rolesData?.roles ?? [];
-  const members = [...(membersData?.members ?? [])].sort((a, b) => {
-    const aSystem = roles.find((r) => r.id === a.roleId)?.isSystem ?? false;
-    const bSystem = roles.find((r) => r.id === b.roleId)?.isSystem ?? false;
-    return Number(bSystem) - Number(aSystem);
-  });
+  const members = [...(membersData?.members ?? [])].sort((a, b) =>
+    a.name.localeCompare(b.name),
+  );
 
   const getRoleName = (roleId: string) =>
     roles.find((r) => r.id === roleId)?.name ?? "Unknown";
@@ -99,8 +97,8 @@ export function MembersTab() {
       header: "Member",
       width: "200px",
       render: (member) => (
-        <div className="flex items-center gap-3">
-          <Avatar className="h-8 w-8">
+        <div className="flex items-center gap-3 overflow-hidden">
+          <Avatar className="h-8 w-8 shrink-0">
             {member.photoUrl && (
               <AvatarImage src={member.photoUrl} alt={member.name} />
             )}
@@ -108,7 +106,7 @@ export function MembersTab() {
               {getInitials(member.name)}
             </AvatarFallback>
           </Avatar>
-          <Type variant="body" className="font-medium">
+          <Type variant="body" className="truncate font-medium">
             {member.name}
           </Type>
         </div>
@@ -129,14 +127,25 @@ export function MembersTab() {
       header: "Role",
       width: "140px",
       render: (member) => (
-        <Type variant="body">{getRoleName(member.roleId)}</Type>
+        <Type variant="body">
+          <Link
+            to={`${orgRoutes.access.roles.href()}?editRole=${member.roleId}`}
+            className="text-primary hover:text-primary/80 underline decoration-dotted underline-offset-4 transition-colors"
+          >
+            {getRoleName(member.roleId)}
+          </Link>
+        </Type>
       ),
     },
     {
       key: "joinedAt",
       header: "Joined",
       width: "160px",
-      render: (member) => <HumanizeDateTime date={member.joinedAt} />,
+      render: (member) => (
+        <Type variant="body" className="text-muted-foreground">
+          <HumanizeDateTime date={member.joinedAt} />
+        </Type>
+      ),
     },
     {
       key: "actions",
@@ -178,7 +187,7 @@ export function MembersTab() {
           className="mt-4 rounded-b-none"
         />
       )}
-      <div className="border-border flex justify-center rounded-b-lg border border-t-0 py-3">
+      <div className="border-border bg-muted/20 flex justify-center rounded-b-lg border border-t-0 py-3">
         <RequireScope scope="org:admin" level="component">
           {isTeamPageEnabled ? (
             <Button

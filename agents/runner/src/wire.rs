@@ -16,6 +16,11 @@ pub struct RunnerConfig {
     /// comes up already hydrated; /turn carries only new user input after that.
     #[serde(default)]
     pub history: Vec<RunnerMessage>,
+    /// Smallest `context_length` the gram backend resolved for `model`.
+    /// Sized in tokens; `None` disables the token-aware compaction trigger
+    /// (the loop falls back to never compacting on input-token budget).
+    #[serde(default)]
+    pub context_window: Option<u64>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, Hash)]

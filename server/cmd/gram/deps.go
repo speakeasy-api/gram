@@ -710,6 +710,7 @@ func newTriggersApp(
 	enc *encryption.Client,
 	temporalEnv *temporal.Environment,
 	telemetryLogger *telemetry.Logger,
+	auditLogger *audit.Logger,
 	serverURL *url.URL,
 ) *bgtriggers.App {
 	envEntries := environments.NewEnvironmentEntries(logger, db, enc, nil)
@@ -738,6 +739,7 @@ func newTriggersApp(
 				Attributes: entry.Attributes,
 			})
 		}),
+		auditLogger,
 		serverURL,
 		bgtriggers.NewNoopDispatcher(logger),
 	)

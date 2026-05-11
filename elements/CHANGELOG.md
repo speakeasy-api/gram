@@ -1,5 +1,11 @@
 # @gram-ai/elements
 
+## 1.31.0
+
+### Minor Changes
+
+- 50433e1: Upgraded dashboard and elements Tailwind dependencies to 4.2.4
+
 ## 1.30.1
 
 ### Patch Changes

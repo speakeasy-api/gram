@@ -23,7 +23,7 @@ func BuildCreateServerPayload(remoteMcpCreateServerBody string, remoteMcpCreateS
 	{
 		err = json.Unmarshal([]byte(remoteMcpCreateServerBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"headers\": [\n         {\n            \"description\": \"abc123\",\n            \"is_required\": false,\n            \"is_secret\": false,\n            \"name\": \"abc123\",\n            \"value\": \"abc123\",\n            \"value_from_request_header\": \"abc123\"\n         }\n      ],\n      \"transport_type\": \"abc123\",\n      \"url\": \"https://example.com/foo\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"headers\": [\n         {\n            \"description\": \"abc123\",\n            \"is_required\": false,\n            \"is_secret\": false,\n            \"name\": \"abc123\",\n            \"value\": \"abc123\",\n            \"value_from_request_header\": \"abc123\"\n         }\n      ],\n      \"name\": \"abc123\",\n      \"transport_type\": \"abc123\",\n      \"url\": \"https://example.com/foo\"\n   }'")
 		}
 		if body.Headers == nil {
 			err = goa.MergeErrors(err, goa.MissingFieldError("headers", "body"))
@@ -52,6 +52,7 @@ func BuildCreateServerPayload(remoteMcpCreateServerBody string, remoteMcpCreateS
 		}
 	}
 	v := &remotemcp.CreateServerPayload{
+		Name:          body.Name,
 		URL:           body.URL,
 		TransportType: body.TransportType,
 	}
@@ -105,10 +106,23 @@ func BuildListServersPayload(remoteMcpListServersSessionToken string, remoteMcpL
 
 // BuildGetServerPayload builds the payload for the remoteMcp getServer
 // endpoint from CLI flags.
-func BuildGetServerPayload(remoteMcpGetServerID string, remoteMcpGetServerSessionToken string, remoteMcpGetServerApikeyToken string, remoteMcpGetServerProjectSlugInput string) (*remotemcp.GetServerPayload, error) {
-	var id string
+func BuildGetServerPayload(remoteMcpGetServerID string, remoteMcpGetServerSlug string, remoteMcpGetServerSessionToken string, remoteMcpGetServerApikeyToken string, remoteMcpGetServerProjectSlugInput string) (*remotemcp.GetServerPayload, error) {
+	var err error
+	var id *string
 	{
-		id = remoteMcpGetServerID
+		if remoteMcpGetServerID != "" {
+			id = &remoteMcpGetServerID
+			err = goa.MergeErrors(err, goa.ValidateFormat("id", *id, goa.FormatUUID))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var slug *string
+	{
+		if remoteMcpGetServerSlug != "" {
+			slug = &remoteMcpGetServerSlug
+		}
 	}
 	var sessionToken *string
 	{
@@ -130,6 +144,7 @@ func BuildGetServerPayload(remoteMcpGetServerID string, remoteMcpGetServerSessio
 	}
 	v := &remotemcp.GetServerPayload{}
 	v.ID = id
+	v.Slug = slug
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
@@ -145,7 +160,7 @@ func BuildUpdateServerPayload(remoteMcpUpdateServerBody string, remoteMcpUpdateS
 	{
 		err = json.Unmarshal([]byte(remoteMcpUpdateServerBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"headers\": [\n         {\n            \"description\": \"abc123\",\n            \"is_required\": false,\n            \"is_secret\": false,\n            \"name\": \"abc123\",\n            \"value\": \"abc123\",\n            \"value_from_request_header\": \"abc123\"\n         }\n      ],\n      \"id\": \"abc123\",\n      \"transport_type\": \"abc123\",\n      \"url\": \"https://example.com/foo\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"headers\": [\n         {\n            \"description\": \"abc123\",\n            \"is_required\": false,\n            \"is_secret\": false,\n            \"name\": \"abc123\",\n            \"value\": \"abc123\",\n            \"value_from_request_header\": \"abc123\"\n         }\n      ],\n      \"id\": \"abc123\",\n      \"name\": \"abc123\",\n      \"transport_type\": \"abc123\",\n      \"url\": \"https://example.com/foo\"\n   }'")
 		}
 		if body.URL != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("body.url", *body.URL, goa.FormatURI))
@@ -174,6 +189,7 @@ func BuildUpdateServerPayload(remoteMcpUpdateServerBody string, remoteMcpUpdateS
 	}
 	v := &remotemcp.UpdateServerPayload{
 		ID:            body.ID,
+		Name:          body.Name,
 		URL:           body.URL,
 		TransportType: body.TransportType,
 	}
@@ -186,6 +202,50 @@ func BuildUpdateServerPayload(remoteMcpUpdateServerBody string, remoteMcpUpdateS
 			}
 			v.Headers[i] = marshalHeaderInputRequestBodyToRemotemcpHeaderInput(val)
 		}
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildVerifyURLPayload builds the payload for the remoteMcp verifyURL
+// endpoint from CLI flags.
+func BuildVerifyURLPayload(remoteMcpVerifyURLBody string, remoteMcpVerifyURLSessionToken string, remoteMcpVerifyURLApikeyToken string, remoteMcpVerifyURLProjectSlugInput string) (*remotemcp.VerifyURLPayload, error) {
+	var err error
+	var body VerifyURLRequestBody
+	{
+		err = json.Unmarshal([]byte(remoteMcpVerifyURLBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"transport_type\": \"abc123\",\n      \"url\": \"https://example.com/foo\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.url", body.URL, goa.FormatURI))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if remoteMcpVerifyURLSessionToken != "" {
+			sessionToken = &remoteMcpVerifyURLSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if remoteMcpVerifyURLApikeyToken != "" {
+			apikeyToken = &remoteMcpVerifyURLApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if remoteMcpVerifyURLProjectSlugInput != "" {
+			projectSlugInput = &remoteMcpVerifyURLProjectSlugInput
+		}
+	}
+	v := &remotemcp.VerifyURLPayload{
+		URL:           body.URL,
+		TransportType: body.TransportType,
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken

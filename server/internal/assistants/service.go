@@ -39,6 +39,7 @@ const (
 
 	sourceKindSlack      = "slack"
 	sourceKindCron       = "cron"
+	sourceKindWake       = "wake"
 	runtimeStateStarting = "starting"
 	runtimeStateActive   = "active"
 	runtimeStateExpiring = "expiring"
@@ -263,6 +264,13 @@ type ExpireThreadRuntimeResult struct {
 	RemainingSeconds int
 }
 
+// WakeCanceller cancels every pending wake trigger owned by an assistant on
+// deletion. The trigger app implements this; assistants owns the interface to
+// avoid a dependency back into the triggers package.
+type WakeCanceller interface {
+	CancelAssistantWakes(ctx context.Context, projectID, assistantID uuid.UUID) error
+}
+
 type ServiceCore struct {
 	logger          *slog.Logger
 	tracer          trace.Tracer
@@ -272,6 +280,8 @@ type ServiceCore struct {
 	assistantTokens *assistanttokens.Manager
 	serverURL       *url.URL
 	telemetryLogger *telemetry.Logger
+	contextWindow   *openrouter.ContextWindowResolver
+	wakeCanceller   WakeCanceller
 }
 
 func NewServiceCore(
@@ -283,6 +293,7 @@ func NewServiceCore(
 	assistantTokens *assistanttokens.Manager,
 	serverURL *url.URL,
 	telemetryLogger *telemetry.Logger,
+	contextWindow *openrouter.ContextWindowResolver,
 ) *ServiceCore {
 	return &ServiceCore{
 		logger:          logger,
@@ -293,7 +304,38 @@ func NewServiceCore(
 		assistantTokens: assistantTokens,
 		serverURL:       serverURL,
 		telemetryLogger: telemetryLogger,
+		contextWindow:   contextWindow,
+		wakeCanceller:   nil,
 	}
+}
+
+// SetWakeCanceller is set after construction to break an import cycle:
+// assistants must not import triggers.
+func (s *ServiceCore) SetWakeCanceller(c WakeCanceller) {
+	s.wakeCanceller = c
+}
+
+// resolveAssistantContextWindow returns the smallest context_length the gram
+// backend has cached for the assistant's model, or 0 on lookup failure. The
+// runner reads this from `runtimeStartupConfig` and uses it to threshold
+// input-token-aware compaction.
+func (s *ServiceCore) resolveAssistantContextWindow(ctx context.Context, model string) uint64 {
+	if s.contextWindow == nil || model == "" {
+		return 0
+	}
+	resolved := model
+	if alias := openrouter.ResolveModel(model); alias != "" {
+		resolved = alias
+	}
+	tokens, err := s.contextWindow.Resolve(ctx, resolved)
+	if err != nil {
+		s.logger.WarnContext(ctx, "resolve assistant model context window", attr.SlogError(err), attr.SlogGenAIRequestModel(resolved))
+		return 0
+	}
+	if tokens <= 0 {
+		return 0
+	}
+	return uint64(tokens)
 }
 
 // emitAssistantTelemetry writes a single assistant-pipeline log event to the
@@ -896,6 +938,16 @@ func (s *ServiceCore) DeleteAssistant(ctx context.Context, projectID uuid.UUID, 
 		)
 	}
 
+	if s.wakeCanceller != nil {
+		if cancelErr := s.wakeCanceller.CancelAssistantWakes(ctx, projectID, assistantID); cancelErr != nil {
+			s.logger.WarnContext(ctx, "cancel pending wakes on assistant delete failed",
+				attr.SlogAssistantID(assistantID.String()),
+				attr.SlogProjectID(projectID.String()),
+				attr.SlogError(cancelErr),
+			)
+		}
+	}
+
 	return nil
 }
 
@@ -1163,6 +1215,26 @@ func buildAssistantEventPayload(task bgtriggers.Task) (string, []byte, []byte, [
 			}
 		}
 		return sourceKindCron, sourceRefJSON, task.EventJSON, sourcePayloadJSON, nil
+	case sourceKindWake:
+		var event wakeEventPayload
+		if err := json.Unmarshal(task.EventJSON, &event); err != nil {
+			return "", nil, nil, nil, fmt.Errorf("decode wake trigger event: %w", err)
+		}
+		sourceRefJSON, err := json.Marshal(wakeSourceRef{
+			TriggerInstanceID: event.TriggerInstanceID,
+			ScheduledAt:       event.ScheduledAt,
+		})
+		if err != nil {
+			return "", nil, nil, nil, fmt.Errorf("marshal wake source ref: %w", err)
+		}
+		sourcePayloadJSON := task.RawPayload
+		if !json.Valid(sourcePayloadJSON) {
+			sourcePayloadJSON, err = json.Marshal(map[string]string{"raw": string(task.RawPayload)})
+			if err != nil {
+				return "", nil, nil, nil, fmt.Errorf("marshal fallback source payload: %w", err)
+			}
+		}
+		return sourceKindWake, sourceRefJSON, task.EventJSON, sourcePayloadJSON, nil
 	default:
 		return "", nil, nil, nil, fmt.Errorf("assistant source %q is not supported", task.DefinitionSlug)
 	}
@@ -1612,6 +1684,9 @@ func (s *ServiceCore) buildRuntimeStartupConfig(
 	completionsQuery.Set("unstable_normalizeOutboundMessages", "1")
 	completionsEndpoint.RawQuery = completionsQuery.Encode()
 	completionsURL := completionsEndpoint.String()
+
+	contextWindow := s.resolveAssistantContextWindow(ctx, assistant.Model)
+
 	return runtimeStartupConfig{
 		Model:          assistant.Model,
 		Instructions:   conv.PtrEmpty(instructions),
@@ -1620,6 +1695,7 @@ func (s *ServiceCore) buildRuntimeStartupConfig(
 		ChatID:         thread.ChatID.String(),
 		MCPServers:     mcpServers,
 		History:        history,
+		ContextWindow:  contextWindow,
 	}, nil
 }
 

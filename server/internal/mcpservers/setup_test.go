@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotemcp/remotemcptest"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -130,12 +131,11 @@ func requireOopsCode(t *testing.T, err error, code oops.Code) {
 func seedRemoteMcpServer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID) uuid.UUID {
 	t.Helper()
 
-	server, err := remotemcprepo.New(conn).CreateServer(ctx, remotemcprepo.CreateServerParams{
+	server := remotemcptest.SeedServer(t, ctx, conn, remotemcprepo.CreateServerParams{
 		ProjectID:     projectID,
 		TransportType: "streamable-http",
 		Url:           "https://test.example.com/mcp/" + uuid.NewString(),
 	})
-	require.NoError(t, err)
 
 	return server.ID
 }

@@ -537,6 +537,14 @@ func EncodeListMcpServersRequest(encoder func(*http.Request) goahttp.Encoder) fu
 			head := *p.ProjectSlugInput
 			req.Header.Set("Gram-Project", head)
 		}
+		values := req.URL.Query()
+		if p.RemoteMcpServerID != nil {
+			values.Add("remote_mcp_server_id", *p.RemoteMcpServerID)
+		}
+		if p.ToolsetID != nil {
+			values.Add("toolset_id", *p.ToolsetID)
+		}
+		req.URL.RawQuery = values.Encode()
 		return nil
 	}
 }
