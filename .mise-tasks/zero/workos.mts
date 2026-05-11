@@ -19,7 +19,7 @@ async function run() {
     const apiKey = process.env["WORKOS_API_KEY"];
     const hasExplicitChoice =
       (typeof apiKey === "string" && apiKey !== "" && apiKey !== "unset") ||
-      process.env["WORKOS_SKIPPED"] === "true";
+      process.env["GRAM_IDP_SKIPPED"] === "true";
     if (hasExplicitChoice) {
       console.log("✅ IDP mode: mock-workos (already configured).");
       process.exit(0);
@@ -50,6 +50,7 @@ async function run() {
     await setupRealWorkOS();
   } else {
     await $`mise set --file mise.local.toml GRAM_IDP_MODE=mock-workos`;
+    await $`mise set --file mise.local.toml GRAM_IDP_SKIPPED=true`;
     console.log();
     console.log("✅ IDP mode: mock-workos. No additional config needed.");
   }
