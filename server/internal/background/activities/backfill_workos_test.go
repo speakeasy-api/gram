@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
@@ -78,6 +79,43 @@ func TestBackfillWorkOSOrganization_CreatesUnlinkedOrganizationWithExternalID(t 
 	require.Equal(t, "backfill-created-org", org.Slug)
 	require.Equal(t, workosOrgID, org.WorkosID.String)
 	require.Empty(t, org.WorkosLastEventID.String)
+}
+
+func TestBackfillWorkOSOrganization_ExternalIDChangeDoesNotChangeOrganizationID(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	conn := newOrgEventsTestConn(t, "workos_backfill_external_id_immutable")
+	logger := testenv.NewLogger(t)
+
+	const organizationID = "gram_org_original_external_id"
+	const changedExternalID = "gram_org_changed_external_id"
+	const workosOrgID = "org_01JBACKFILLIMMUTABLE"
+
+	seedLinkedWorkOSOrganization(t, ctx, conn, organizationID, workosOrgID)
+
+	activity := activities.NewBackfillWorkOSOrganization(logger, conn, &stubWorkOSBackfillClient{
+		org: workos.Organization{
+			ID:         workosOrgID,
+			Name:       "Backfill Immutable Org",
+			ExternalID: changedExternalID,
+			CreatedAt:  "2026-05-07T11:00:00Z",
+			UpdatedAt:  "2026-05-07T11:00:00Z",
+		},
+		roles:   []workos.Role{},
+		members: []workos.Member{},
+	})
+
+	err := activity.Do(ctx, activities.BackfillWorkOSOrganizationParams{WorkOSOrganizationID: workosOrgID})
+	require.NoError(t, err)
+
+	org, err := orgrepo.New(conn).GetOrganizationByWorkosID(ctx, conv.ToPGText(workosOrgID))
+	require.NoError(t, err)
+	require.Equal(t, organizationID, org.ID)
+	require.Equal(t, "Backfill Immutable Org", org.Name)
+
+	_, err = orgrepo.New(conn).GetOrganizationMetadata(ctx, changedExternalID)
+	require.ErrorIs(t, err, pgx.ErrNoRows)
 }
 
 func TestBackfillWorkOSOrganization_UnknownUserSyncsSingleRoleAssignment(t *testing.T) {
