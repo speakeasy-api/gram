@@ -7703,9 +7703,9 @@ paths:
             responses:
                 "204":
                     description: No Content response.
-            summary: receiveWorkOSWebhook workos
+            summary: receiveWorkOSWebhook external
             tags:
-                - workos
+                - external
             x-speakeasy-name-override: receiveWorkOSWebhook
             x-speakeasy-react-hook:
                 disabled: true
@@ -32929,5 +32929,5 @@ tags:
       description: Operator visibility into issued user_sessions. List + revoke; sessions are written by /mcp/{slug}/token.
     - name: variations
       description: Manage variations of tools.
-    - name: workos
-      description: WorkOS webhook ingestion endpoints.
+    - name: external
+      description: Endpoints for external services to interact with gram.

@@ -1,11 +1,11 @@
-package workos
+package external
 
 import (
 	. "goa.design/goa/v3/dsl"
 )
 
-var _ = Service("workos", func() {
-	Description("WorkOS webhook ingestion endpoints.")
+var _ = Service("external", func() {
+	Description("Endpoints for external services to interact with gram.")
 
 	Method("receiveWorkOSWebhook", func() {
 		Description("Receive and enqueue a WorkOS webhook event.")

@@ -1,4 +1,4 @@
-package workos
+package external
 
 import (
 	"context"
@@ -13,8 +13,8 @@ import (
 	goahttp "goa.design/goa/v3/http"
 	goapkg "goa.design/goa/v3/pkg"
 
-	srv "github.com/speakeasy-api/gram/server/gen/http/workos/server"
-	gen "github.com/speakeasy-api/gram/server/gen/workos"
+	gen "github.com/speakeasy-api/gram/server/gen/external"
+	srv "github.com/speakeasy-api/gram/server/gen/http/external/server"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/background"
 	"github.com/speakeasy-api/gram/server/internal/middleware"

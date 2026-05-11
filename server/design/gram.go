@@ -18,6 +18,7 @@ import (
 	_ "github.com/speakeasy-api/gram/server/design/deployments"
 	_ "github.com/speakeasy-api/gram/server/design/domains"
 	_ "github.com/speakeasy-api/gram/server/design/environments"
+	_ "github.com/speakeasy-api/gram/server/design/external"
 	_ "github.com/speakeasy-api/gram/server/design/externalmcp"
 	_ "github.com/speakeasy-api/gram/server/design/functions"
 	_ "github.com/speakeasy-api/gram/server/design/hooks"
@@ -47,7 +48,6 @@ import (
 	_ "github.com/speakeasy-api/gram/server/design/usersessionissuers"
 	_ "github.com/speakeasy-api/gram/server/design/usersessions"
 	_ "github.com/speakeasy-api/gram/server/design/variations"
-	_ "github.com/speakeasy-api/gram/server/design/workos"
 )
 
 var _ = API("gram", func() {
