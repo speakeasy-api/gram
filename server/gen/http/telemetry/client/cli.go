@@ -440,7 +440,7 @@ func BuildGetObservabilityOverviewPayload(telemetryGetObservabilityOverviewBody 
 	{
 		err = json.Unmarshal([]byte(telemetryGetObservabilityOverviewBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"api_key_id\": \"abc123\",\n      \"external_user_id\": \"abc123\",\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"include_time_series\": false,\n      \"to\": \"2025-12-19T11:00:00Z\",\n      \"toolset_slug\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"api_key_id\": \"abc123\",\n      \"external_user_id\": \"abc123\",\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"include_time_series\": false,\n      \"to\": \"2025-12-19T11:00:00Z\",\n      \"toolset_slug\": \"abc123\",\n      \"user_id\": \"abc123\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", body.From, goa.FormatDateTime))
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", body.To, goa.FormatDateTime))
@@ -469,6 +469,7 @@ func BuildGetObservabilityOverviewPayload(telemetryGetObservabilityOverviewBody 
 	v := &telemetry.GetObservabilityOverviewPayload{
 		From:              body.From,
 		To:                body.To,
+		UserID:            body.UserID,
 		ExternalUserID:    body.ExternalUserID,
 		APIKeyID:          body.APIKeyID,
 		ToolsetSlug:       body.ToolsetSlug,
@@ -544,8 +545,8 @@ func BuildListFilterOptionsPayload(telemetryListFilterOptionsBody string, teleme
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", body.From, goa.FormatDateTime))
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", body.To, goa.FormatDateTime))
-		if !(body.FilterType == "api_key" || body.FilterType == "user") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.filter_type", body.FilterType, []any{"api_key", "user"}))
+		if !(body.FilterType == "api_key" || body.FilterType == "user" || body.FilterType == "internal_user" || body.FilterType == "agent") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.filter_type", body.FilterType, []any{"api_key", "user", "internal_user", "agent"}))
 		}
 		if err != nil {
 			return nil, err
@@ -570,9 +571,10 @@ func BuildListFilterOptionsPayload(telemetryListFilterOptionsBody string, teleme
 		}
 	}
 	v := &telemetry.ListFilterOptionsPayload{
-		From:       body.From,
-		To:         body.To,
-		FilterType: body.FilterType,
+		From:        body.From,
+		To:          body.To,
+		FilterType:  body.FilterType,
+		EventSource: body.EventSource,
 	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken

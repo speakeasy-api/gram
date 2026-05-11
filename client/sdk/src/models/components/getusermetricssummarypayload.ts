@@ -14,9 +14,17 @@ export type GetUserMetricsSummaryPayload = {
    */
   externalUserId?: string | undefined;
   /**
+   * Optional event source filter (e.g. 'hook')
+   */
+  eventSource?: string | undefined;
+  /**
    * Start time in ISO 8601 format
    */
   from: Date;
+  /**
+   * Optional hook source filter (e.g. 'cursor', 'claude-code')
+   */
+  hookSource?: string | undefined;
   /**
    * End time in ISO 8601 format
    */
@@ -30,7 +38,9 @@ export type GetUserMetricsSummaryPayload = {
 /** @internal */
 export type GetUserMetricsSummaryPayload$Outbound = {
   external_user_id?: string | undefined;
+  event_source?: string | undefined;
   from: string;
+  hook_source?: string | undefined;
   to: string;
   user_id?: string | undefined;
 };
@@ -42,13 +52,17 @@ export const GetUserMetricsSummaryPayload$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     externalUserId: z.optional(z.string()),
+    eventSource: z.optional(z.string()),
     from: z.pipe(z.date(), z.transform(v => v.toISOString())),
+    hookSource: z.optional(z.string()),
     to: z.pipe(z.date(), z.transform(v => v.toISOString())),
     userId: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
       externalUserId: "external_user_id",
+      eventSource: "event_source",
+      hookSource: "hook_source",
       userId: "user_id",
     });
   }),

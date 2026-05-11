@@ -26800,6 +26800,9 @@ components:
                 toolset_slug:
                     type: string
                     description: Optional toolset/MCP server slug filter
+                user_id:
+                    type: string
+                    description: Optional internal user ID filter
             description: Payload for getting observability overview metrics
             required:
                 - from

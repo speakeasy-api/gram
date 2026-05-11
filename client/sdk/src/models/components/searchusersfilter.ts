@@ -18,6 +18,10 @@ export type SearchUsersFilter = {
    */
   eventSource?: string | undefined;
   /**
+   * Optional hook source filter (e.g. 'cursor', 'claude-code').
+   */
+  hookSource?: string | undefined;
+  /**
    * Start time in ISO 8601 format (e.g., '2025-12-19T10:00:00Z')
    */
   from: Date;
@@ -35,6 +39,7 @@ export type SearchUsersFilter = {
 export type SearchUsersFilter$Outbound = {
   deployment_id?: string | undefined;
   event_source?: string | undefined;
+  hook_source?: string | undefined;
   from: string;
   to: string;
   user_ids?: Array<string> | undefined;
@@ -48,6 +53,7 @@ export const SearchUsersFilter$outboundSchema: z.ZodMiniType<
   z.object({
     deploymentId: z.optional(z.string()),
     eventSource: z.optional(z.string()),
+    hookSource: z.optional(z.string()),
     from: z.pipe(z.date(), z.transform(v => v.toISOString())),
     to: z.pipe(z.date(), z.transform(v => v.toISOString())),
     userIds: z.optional(z.array(z.string())),
@@ -56,6 +62,7 @@ export const SearchUsersFilter$outboundSchema: z.ZodMiniType<
     return remap$(v, {
       deploymentId: "deployment_id",
       eventSource: "event_source",
+      hookSource: "hook_source",
       userIds: "user_ids",
     });
   }),

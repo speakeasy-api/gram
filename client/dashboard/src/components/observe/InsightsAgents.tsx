@@ -40,7 +40,7 @@ import {
   type ChartOptions,
 } from "chart.js";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Line } from "react-chartjs-2";
 import { useSearchParams } from "react-router";
 import { useQuery } from "@tanstack/react-query";
@@ -61,16 +61,67 @@ ChartJS.register(
 
 const PAGE_SIZE = 25;
 const CHART_COLOR = "#60a5fa";
+const USER_SOURCE_COLORS = [
+  "#60a5fa",
+  "#fb923c",
+  "#34d399",
+  "#f87171",
+  "#a78bfa",
+  "#facc15",
+  "#22d3ee",
+  "#f472b6",
+  "#a3e635",
+];
+const LINE_CHART_HEIGHT = { collapsed: 250, expanded: 600 };
+const MAX_CHART_USERS = USER_SOURCE_COLORS.length;
 
 export function InsightsAgentsContent() {
+  const {
+    data: membersData,
+    isLoading: membersLoading,
+    error: membersError,
+  } = useMembers();
+  const members = useMemo(() => membersData?.members ?? [], [membersData]);
+  const memberById = useMemo(
+    () => new Map(members.map((member) => [member.id, member])),
+    [members],
+  );
+  const mapFilterOptions = useCallback(
+    (
+      options: Array<{ id: string; label: string; count: number }>,
+      dimension: string,
+    ) => {
+      if (dimension !== "user") return options;
+
+      return options.map((option) => {
+        const member = memberById.get(option.id);
+        return member
+          ? { ...option, label: member.name || member.email || option.label }
+          : option;
+      });
+    },
+    [memberById],
+  );
+
   return (
     <InsightsOverviewShell
       noDataKind="chats"
       showMcpFilter={false}
-      title="Token & Usage Overview"
-      subtitle="Monitor token consumption, costs, and tool usage across your team"
+      filterDimensions={["all", "user", "agent"]}
+      userFilterType="internal"
+      fixedEventSource="hook"
+      mapFilterOptions={mapFilterOptions}
+      title="Token Usage Overview"
+      subtitle="Monitor token consumption and tool usage across your team"
     >
-      {(props) => <InsightsAgentsInner {...props} />}
+      {(props) => (
+        <InsightsAgentsInner
+          {...props}
+          members={members}
+          membersLoading={membersLoading}
+          membersError={membersError}
+        />
+      )}
     </InsightsOverviewShell>
   );
 }
@@ -80,21 +131,28 @@ function InsightsAgentsInner({
   comparison,
   comparisonLabel,
   isInsightsOpen,
-  timeSeries,
   effectiveFrom,
   effectiveTo,
   timeRangeMs,
-}: InsightsContentProps) {
+  filterDimension,
+  selectedFilterValue,
+  members,
+  membersLoading,
+  membersError,
+}: InsightsContentProps & {
+  members: AccessMember[];
+  membersLoading: boolean;
+  membersError: unknown;
+}) {
   const client = useGramContext();
   const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState("");
   const [expandedChart, setExpandedChart] = useState<string | null>(null);
   const selectedUserId = searchParams.get("user");
-  const {
-    data: membersData,
-    isLoading: membersLoading,
-    error: membersError,
-  } = useMembers();
+  const selectedTopLevelUserId =
+    filterDimension === "user" ? selectedFilterValue : null;
+  const selectedAgent =
+    filterDimension === "agent" ? selectedFilterValue : null;
   const usersQuery = useQuery({
     queryKey: [
       "insights",
@@ -102,15 +160,42 @@ function InsightsAgentsInner({
       "users",
       effectiveFrom.toISOString(),
       effectiveTo.toISOString(),
+      selectedTopLevelUserId,
+      selectedAgent,
     ],
-    queryFn: () => fetchUserSummaries(client, effectiveFrom, effectiveTo),
+    queryFn: () =>
+      fetchUserSummaries(client, effectiveFrom, effectiveTo, {
+        userId: selectedTopLevelUserId,
+        hookSource: selectedAgent,
+      }),
     throwOnError: false,
   });
-  const members = useMemo(() => membersData?.members ?? [], [membersData]);
   const userRows = useMemo(
     () => buildUserRows(usersQuery.data ?? [], members),
     [usersQuery.data, members],
   );
+  const chartUsers = useMemo(() => selectChartUsers(userRows), [userRows]);
+  const userTimeSeriesQuery = useQuery({
+    queryKey: [
+      "insights",
+      "agents",
+      "user-time-series",
+      effectiveFrom.toISOString(),
+      effectiveTo.toISOString(),
+      chartUsers.map((user) => user.id),
+      selectedAgent,
+    ],
+    queryFn: () =>
+      fetchUserTimeSeries(
+        client,
+        effectiveFrom,
+        effectiveTo,
+        chartUsers,
+        selectedAgent,
+      ),
+    enabled: chartUsers.length > 0,
+    throwOnError: false,
+  });
   const filteredUsers = useMemo(() => {
     const term = search.trim().toLowerCase();
     if (!term) return userRows;
@@ -122,11 +207,19 @@ function InsightsAgentsInner({
         .includes(term),
     );
   }, [search, userRows]);
-  const selectedUser =
-    userRows.find((row) => row.id === selectedUserId) ?? null;
+  const selectedUser = useMemo(
+    () => getSelectedUserRow(selectedUserId, userRows, members),
+    [selectedUserId, userRows, members],
+  );
   const isLoading = usersQuery.isLoading || membersLoading;
-  const error = usersQuery.error ?? membersError;
-  const hasTokenTimeSeries = timeSeries.some((point) => point.totalTokens > 0);
+  const membersErrorMessage =
+    membersError instanceof Error || typeof membersError === "string"
+      ? membersError
+      : null;
+  const error = usersQuery.error ?? membersErrorMessage;
+  const userTimeSeries = userTimeSeriesQuery.data ?? [];
+  const isUserTimeSeriesLoading =
+    usersQuery.isLoading || userTimeSeriesQuery.isLoading;
 
   const openUser = (userId: string) => {
     setSearchParams((prev) => {
@@ -153,11 +246,11 @@ function InsightsAgentsInner({
             "grid gap-4 transition-all duration-300",
             isInsightsOpen
               ? "grid-cols-1 md:grid-cols-2"
-              : "grid-cols-1 md:grid-cols-2 lg:grid-cols-4",
+              : "grid-cols-1 md:grid-cols-3",
           )}
         >
           <MetricCard
-            title="Total Chats"
+            title="Total Sessions"
             value={summary?.totalChats ?? 0}
             previousValue={comparison?.totalChats ?? 0}
             icon="message-circle"
@@ -169,14 +262,6 @@ function InsightsAgentsInner({
             previousValue={comparison?.totalTokens ?? 0}
             icon="gauge"
             comparisonLabel={comparisonLabel}
-          />
-          <MetricCard
-            title="Total Cost"
-            value={summary?.totalCost ?? 0}
-            previousValue={comparison?.totalCost ?? 0}
-            icon="circle-dollar-sign"
-            comparisonLabel={comparisonLabel}
-            tooltip="Estimated cost in USD. Cost data is available for Claude Code; Cursor does not report cost."
           />
           <MetricCard
             title="Total Tool Calls"
@@ -196,19 +281,29 @@ function InsightsAgentsInner({
             : "grid-cols-1 lg:grid-cols-2",
         )}
       >
-        <TokenTimeSeriesChart
+        <UserBreakdownTimeSeriesChart
           title="Token Use Over Time"
           chartId="tokens-over-time"
-          timeSeries={timeSeries}
+          userTimeSeries={userTimeSeries}
+          users={chartUsers}
           timeRangeMs={timeRangeMs}
-          hasData={hasTokenTimeSeries}
+          valueKey="totalTokens"
+          valueLabel="Tokens"
+          isLoading={isUserTimeSeriesLoading}
+          error={userTimeSeriesQuery.error}
           expandedChart={expandedChart}
           onExpand={setExpandedChart}
         />
-        <ToolTimeSeriesChart
-          timeSeries={timeSeries}
+        <UserBreakdownTimeSeriesChart
+          title="Tool Calls Over Time"
+          chartId="tool-calls-over-time"
+          userTimeSeries={userTimeSeries}
+          users={chartUsers}
           timeRangeMs={timeRangeMs}
-          hasData={timeSeries.some((point) => point.totalToolCalls > 0)}
+          valueKey="totalToolCalls"
+          valueLabel="Tool calls"
+          isLoading={isUserTimeSeriesLoading}
+          error={userTimeSeriesQuery.error}
           expandedChart={expandedChart}
           onExpand={setExpandedChart}
         />
@@ -252,6 +347,7 @@ function InsightsAgentsInner({
         from={effectiveFrom}
         to={effectiveTo}
         timeRangeMs={timeRangeMs}
+        hookSource={selectedAgent}
         onClose={closeUser}
       />
     </>
@@ -264,13 +360,30 @@ type UserUsageRow = {
   email: string;
   platforms: string[];
   totalTokens: number;
-  totalCost: number;
   totalToolCalls: number;
   toolCallSuccess: number;
   toolCallFailure: number;
   lastActivity: string;
   firstActivity: string;
   summary: UserSummary;
+};
+
+type UserTimeSeries = {
+  userId: string;
+  timeSeries: TimeSeriesBucket[];
+};
+
+type TimeSeriesDataset = {
+  label: string;
+  data: number[];
+  borderColor: string;
+  backgroundColor: string;
+  pointBackgroundColor: string;
+  fill: boolean;
+  tension: number;
+  borderWidth: number;
+  pointRadius: number;
+  pointHoverRadius: number;
 };
 
 function TokenTimeSeriesChart({
@@ -288,7 +401,7 @@ function TokenTimeSeriesChart({
   chartId: string;
   timeSeries: TimeSeriesBucket[];
   timeRangeMs: number;
-  valueKey?: "totalTokens" | "totalToolCalls" | "totalCost";
+  valueKey?: "totalTokens" | "totalToolCalls";
   label?: string;
   hasData: boolean;
   expandedChart: string | null;
@@ -316,39 +429,149 @@ function TokenTimeSeriesChart({
   );
 }
 
-function ToolTimeSeriesChart({
-  timeSeries,
+function UserBreakdownTimeSeriesChart({
+  title,
+  chartId,
+  userTimeSeries,
+  users,
   timeRangeMs,
-  hasData,
+  valueKey,
+  valueLabel,
+  isLoading,
+  error,
   expandedChart,
   onExpand,
 }: {
-  timeSeries: TimeSeriesBucket[];
+  title: string;
+  chartId: string;
+  userTimeSeries: UserTimeSeries[];
+  users: UserUsageRow[];
   timeRangeMs: number;
-  hasData: boolean;
+  valueKey: "totalTokens" | "totalToolCalls";
+  valueLabel: string;
+  isLoading: boolean;
+  error: Error | null;
   expandedChart: string | null;
   onExpand: (id: string | null) => void;
 }) {
-  const chartId = "tool-calls-over-time";
   const isExpanded = expandedChart === chartId;
+  const userLabels = useMemo(
+    () => new Map(users.map((user) => [user.id, user.name || user.email])),
+    [users],
+  );
+  const chartData = useMemo(
+    () =>
+      buildUserTimeSeriesChartData(
+        userTimeSeries,
+        userLabels,
+        timeRangeMs,
+        valueKey,
+      ),
+    [userTimeSeries, userLabels, timeRangeMs, valueKey],
+  );
+  const hasData = chartData.datasets.length > 0;
 
   return (
     <ChartCard
-      title="Tool Calls Over Time"
+      title={title}
       chartId={chartId}
       expandedChart={expandedChart}
       onExpand={onExpand}
-      hasData={hasData}
+      hasData={hasData || isLoading}
     >
-      <SimpleLineChart
-        timeSeries={timeSeries}
-        timeRangeMs={timeRangeMs}
-        valueKey="totalToolCalls"
-        label="Tool calls"
-        hasData={hasData}
-        height={isExpanded ? 420 : 220}
-      />
+      {error ? (
+        <ErrorAlert
+          title={`Unable to load ${title.toLowerCase()}`}
+          error={error}
+        />
+      ) : isLoading ? (
+        <Skeleton
+          className="rounded-lg"
+          style={{
+            height: isExpanded
+              ? LINE_CHART_HEIGHT.expanded
+              : LINE_CHART_HEIGHT.collapsed,
+          }}
+        />
+      ) : (
+        <MultiLineChart
+          labels={chartData.labels}
+          tooltipLabels={chartData.tooltipLabels}
+          datasets={chartData.datasets}
+          valueLabel={valueLabel}
+          height={
+            isExpanded
+              ? LINE_CHART_HEIGHT.expanded
+              : LINE_CHART_HEIGHT.collapsed
+          }
+        />
+      )}
     </ChartCard>
+  );
+}
+
+function MultiLineChart({
+  labels,
+  tooltipLabels,
+  datasets,
+  valueLabel,
+  height = LINE_CHART_HEIGHT.collapsed,
+}: {
+  labels: string[];
+  tooltipLabels: string[];
+  datasets: TimeSeriesDataset[];
+  valueLabel: string;
+  height?: number;
+}) {
+  const options = useMemo<ChartOptions<"line">>(
+    () => ({
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: "index", intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            title: (items) => tooltipLabels[items[0]?.dataIndex ?? 0] ?? "",
+            label: (item) => {
+              if ((item.parsed.y ?? 0) === 0) return undefined;
+              return `${item.dataset.label}: ${Number(
+                item.parsed.y ?? 0,
+              ).toLocaleString()} ${valueLabel.toLowerCase()}`;
+            },
+          },
+        },
+      },
+      scales: {
+        x: {
+          grid: { display: true, color: "rgba(128, 128, 128, 0.1)" },
+          ticks: { maxTicksLimit: 8 },
+        },
+        y: {
+          beginAtZero: true,
+          grid: { color: "rgba(128, 128, 128, 0.2)" },
+          ticks: { precision: 0 },
+        },
+      },
+      transitions: {
+        resize: { animation: { duration: 0 } },
+      },
+    }),
+    [tooltipLabels, valueLabel],
+  );
+
+  if (labels.length === 0 || datasets.length === 0) {
+    return (
+      <div className="text-muted-foreground flex h-[220px] items-center justify-center text-sm">
+        No data for selected time range
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ height }}>
+      <Line data={{ labels, datasets }} options={options} />
+    </div>
   );
 }
 
@@ -362,7 +585,7 @@ function SimpleLineChart({
 }: {
   timeSeries: TimeSeriesBucket[];
   timeRangeMs: number;
-  valueKey: "totalTokens" | "totalToolCalls" | "totalCost";
+  valueKey: "totalTokens" | "totalToolCalls";
   label: string;
   hasData: boolean;
   height?: number;
@@ -413,11 +636,11 @@ function SimpleLineChart({
         y: {
           beginAtZero: true,
           grid: { color: "rgba(128, 128, 128, 0.2)" },
-          ticks: { precision: valueKey === "totalCost" ? undefined : 0 },
+          ticks: { precision: 0 },
         },
       },
     }),
-    [chartData.tooltipLabels, label, valueKey],
+    [chartData.tooltipLabels, label],
   );
 
   if (!hasData) {
@@ -477,7 +700,6 @@ function UserUsageTable({
             <TableHead>Employee</TableHead>
             <TableHead>Platform(s)</TableHead>
             <TableHead>Tokens</TableHead>
-            <TableHead>Cost</TableHead>
             <TableHead>Tool Calls</TableHead>
             <TableHead>Last Activity</TableHead>
           </TableRow>
@@ -509,9 +731,6 @@ function UserUsageTable({
                 <TableCell className="font-mono text-sm">
                   {user.totalTokens.toLocaleString()}
                 </TableCell>
-                <TableCell className="font-mono text-sm">
-                  {formatCurrency(user.totalCost)}
-                </TableCell>
                 <TableCell className="text-sm">
                   <span className="font-mono">
                     {user.totalToolCalls.toLocaleString()}
@@ -529,7 +748,7 @@ function UserUsageTable({
           ) : (
             <TableRow>
               <TableCell
-                colSpan={6}
+                colSpan={5}
                 className="text-muted-foreground py-10 text-center text-sm"
               >
                 No employees found for the selected filters.
@@ -574,12 +793,14 @@ function UserDetailDialog({
   from,
   to,
   timeRangeMs,
+  hookSource,
   onClose,
 }: {
   user: UserUsageRow | null;
   from: Date;
   to: Date;
   timeRangeMs: number;
+  hookSource: string | null;
   onClose: () => void;
 }) {
   const client = useGramContext();
@@ -591,8 +812,9 @@ function UserDetailDialog({
       user?.id,
       from.toISOString(),
       to.toISOString(),
+      hookSource,
     ],
-    queryFn: () => fetchUserMetrics(client, from, to, user!.id),
+    queryFn: () => fetchUserMetrics(client, from, to, user!.id, hookSource),
     enabled: user != null,
     throwOnError: false,
   });
@@ -604,8 +826,9 @@ function UserDetailDialog({
       user?.id,
       from.toISOString(),
       to.toISOString(),
+      hookSource,
     ],
-    queryFn: () => fetchUserOverview(client, from, to, user!.id),
+    queryFn: () => fetchUserOverview(client, from, to, user!.id, hookSource),
     enabled: user != null,
     throwOnError: false,
   });
@@ -627,12 +850,8 @@ function UserDetailDialog({
         </Dialog.Header>
         {user && (
           <div className="min-h-0 flex-1 space-y-5 overflow-y-auto pr-1">
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-3 sm:grid-cols-3">
               <DetailStat label="Join Date" value={user.firstActivity} />
-              <DetailStat
-                label="Spend"
-                value={formatCurrency(user.totalCost)}
-              />
               <DetailStat
                 label="Tokens"
                 value={user.totalTokens.toLocaleString()}
@@ -698,32 +917,17 @@ function UserDetailDialog({
             ) : overviewQuery.isLoading ? (
               <Skeleton className="h-72 rounded-lg" />
             ) : (
-              <div className="grid gap-4 lg:grid-cols-2">
-                <TokenTimeSeriesChart
-                  title="User Token Use Over Time"
-                  chartId="user-tokens-over-time"
-                  timeSeries={detailTimeSeries}
-                  timeRangeMs={timeRangeMs}
-                  hasData={detailTimeSeries.some(
-                    (point) => point.totalTokens > 0,
-                  )}
-                  expandedChart={detailExpandedChart}
-                  onExpand={setDetailExpandedChart}
-                />
-                <TokenTimeSeriesChart
-                  title="User Cost Over Time"
-                  chartId="user-cost-over-time"
-                  timeSeries={detailTimeSeries}
-                  timeRangeMs={timeRangeMs}
-                  valueKey="totalCost"
-                  label="Cost"
-                  hasData={detailTimeSeries.some(
-                    (point) => point.totalCost > 0,
-                  )}
-                  expandedChart={detailExpandedChart}
-                  onExpand={setDetailExpandedChart}
-                />
-              </div>
+              <TokenTimeSeriesChart
+                title="User Token Use Over Time"
+                chartId="user-tokens-over-time"
+                timeSeries={detailTimeSeries}
+                timeRangeMs={timeRangeMs}
+                hasData={detailTimeSeries.some(
+                  (point) => point.totalTokens > 0,
+                )}
+                expandedChart={detailExpandedChart}
+                onExpand={setDetailExpandedChart}
+              />
             )}
           </div>
         )}
@@ -818,10 +1022,102 @@ function UsersLoadingState() {
   );
 }
 
+function selectChartUsers(users: UserUsageRow[]): UserUsageRow[] {
+  const selected = new Map<string, UserUsageRow>();
+  const byTokens = users.slice().sort((a, b) => b.totalTokens - a.totalTokens);
+  const byToolCalls = users
+    .slice()
+    .sort((a, b) => b.totalToolCalls - a.totalToolCalls);
+
+  for (const user of byTokens.slice(0, 5)) {
+    if (user.totalTokens > 0) selected.set(user.id, user);
+  }
+
+  for (const user of byToolCalls) {
+    if (selected.size >= MAX_CHART_USERS) break;
+    if (user.totalToolCalls > 0) selected.set(user.id, user);
+  }
+
+  for (const user of byTokens) {
+    if (selected.size >= MAX_CHART_USERS) break;
+    if (user.totalTokens > 0 || user.totalToolCalls > 0) {
+      selected.set(user.id, user);
+    }
+  }
+
+  return Array.from(selected.values());
+}
+
+function buildUserTimeSeriesChartData(
+  userTimeSeries: UserTimeSeries[],
+  userLabels: Map<string, string>,
+  timeRangeMs: number,
+  valueKey: "totalTokens" | "totalToolCalls",
+) {
+  if (userTimeSeries.length === 0) {
+    return { labels: [], tooltipLabels: [], datasets: [] };
+  }
+
+  const allTimestamps = new Set<number>();
+  const valuesByUser = new Map<string, Map<number, number>>();
+
+  for (const series of userTimeSeries) {
+    const values = new Map<number, number>();
+    for (const point of series.timeSeries) {
+      const date = unixNanoToDate(point.bucketTimeUnixNano);
+      const timestamp = date.getTime();
+      allTimestamps.add(timestamp);
+      values.set(timestamp, (values.get(timestamp) ?? 0) + point[valueKey]);
+    }
+    valuesByUser.set(series.userId, values);
+  }
+
+  const sortedTimestamps = Array.from(allTimestamps).sort((a, b) => a - b);
+  const labels = sortedTimestamps.map((timestamp) =>
+    formatChartLabel(new Date(timestamp), timeRangeMs),
+  );
+  const tooltipLabels = sortedTimestamps.map((timestamp) =>
+    new Date(timestamp).toLocaleString([], {
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    }),
+  );
+
+  const datasets = userTimeSeries
+    .map((series, index) => {
+      const values = valuesByUser.get(series.userId) ?? new Map();
+      const data = sortedTimestamps.map(
+        (timestamp) => values.get(timestamp) ?? 0,
+      );
+      const total = data.reduce((sum, value) => sum + value, 0);
+      if (total === 0) return null;
+
+      const color = USER_SOURCE_COLORS[index % USER_SOURCE_COLORS.length]!;
+      return {
+        label: userLabels.get(series.userId) ?? series.userId,
+        data,
+        borderColor: color,
+        backgroundColor: `${color}1a`,
+        pointBackgroundColor: color,
+        fill: false,
+        tension: 0.45,
+        borderWidth: 1.5,
+        pointRadius: 0,
+        pointHoverRadius: 4,
+      };
+    })
+    .filter((dataset): dataset is TimeSeriesDataset => dataset != null);
+
+  return { labels, tooltipLabels, datasets };
+}
+
 async function fetchUserSummaries(
   client: Parameters<typeof telemetrySearchUsers>[0],
   from: Date,
   to: Date,
+  filters: { userId: string | null; hookSource: string | null },
 ): Promise<UserSummary[]> {
   const users: UserSummary[] = [];
   let cursor: string | undefined;
@@ -835,10 +1131,12 @@ async function fetchUserSummaries(
             from,
             to,
             eventSource: "hook",
+            hookSource: filters.hookSource ?? undefined,
+            userIds: filters.userId ? [filters.userId] : undefined,
           },
           limit: 1000,
           sort: "desc",
-          userType: "external",
+          userType: "internal",
         },
       }),
     );
@@ -854,14 +1152,17 @@ async function fetchUserMetrics(
   client: Parameters<typeof telemetryGetUserMetricsSummary>[0],
   from: Date,
   to: Date,
-  externalUserId: string,
+  userId: string,
+  hookSource: string | null = null,
 ): Promise<ProjectSummary> {
   const result = await unwrapAsync(
     telemetryGetUserMetricsSummary(client, {
       getUserMetricsSummaryPayload: {
         from,
         to,
-        externalUserId,
+        userId,
+        eventSource: "hook",
+        hookSource: hookSource ?? undefined,
       },
     }),
   );
@@ -869,11 +1170,38 @@ async function fetchUserMetrics(
   return result.metrics;
 }
 
+async function fetchUserTimeSeries(
+  client: Parameters<typeof telemetryGetObservabilityOverview>[0],
+  from: Date,
+  to: Date,
+  users: UserUsageRow[],
+  hookSource: string | null,
+): Promise<UserTimeSeries[]> {
+  const result: UserTimeSeries[] = [];
+
+  for (const user of users) {
+    const overview = await fetchUserOverview(
+      client,
+      from,
+      to,
+      user.id,
+      hookSource,
+    );
+    result.push({
+      userId: user.id,
+      timeSeries: overview.timeSeries,
+    });
+  }
+
+  return result;
+}
+
 async function fetchUserOverview(
   client: Parameters<typeof telemetryGetObservabilityOverview>[0],
   from: Date,
   to: Date,
-  externalUserId: string,
+  userId: string,
+  hookSource: string | null = null,
 ): Promise<GetObservabilityOverviewResult> {
   return unwrapAsync(
     telemetryGetObservabilityOverview(client, {
@@ -881,7 +1209,9 @@ async function fetchUserOverview(
         from,
         to,
         includeTimeSeries: true,
-        externalUserId,
+        userId,
+        eventSource: "hook",
+        hookSource: hookSource ?? undefined,
       },
     }),
   );
@@ -891,22 +1221,19 @@ function buildUserRows(
   summaries: UserSummary[],
   members: AccessMember[],
 ): UserUsageRow[] {
-  const memberByEmail = new Map(
-    members.map((member) => [member.email.toLowerCase(), member]),
-  );
+  const memberById = new Map(members.map((member) => [member.id, member]));
 
   return summaries
     .map((summary) => {
-      const member = memberByEmail.get(summary.userId.toLowerCase());
+      const member = memberById.get(summary.userId);
       const displayId = summary.userId;
 
       return {
         id: displayId,
         name: member?.name ?? displayId,
-        email: member?.email ?? displayId,
+        email: member?.email ?? "Unknown email",
         platforms: summary.hookSources.map((source) => source.source),
         totalTokens: summary.totalTokens,
-        totalCost: summary.totalCost,
         totalToolCalls: summary.totalToolCalls,
         toolCallSuccess: summary.toolCallSuccess,
         toolCallFailure: summary.toolCallFailure,
@@ -916,6 +1243,56 @@ function buildUserRows(
       };
     })
     .sort((a, b) => b.totalTokens - a.totalTokens);
+}
+
+function getSelectedUserRow(
+  selectedUserId: string | null,
+  userRows: UserUsageRow[],
+  members: AccessMember[],
+): UserUsageRow | null {
+  if (!selectedUserId) return null;
+
+  const usageRow = userRows.find((row) => row.id === selectedUserId);
+  if (usageRow) return usageRow;
+
+  const member = members.find((item) => item.id === selectedUserId);
+  if (!member) return null;
+
+  return {
+    id: member.id,
+    name: member.name,
+    email: member.email,
+    platforms: [],
+    totalTokens: 0,
+    totalToolCalls: 0,
+    toolCallSuccess: 0,
+    toolCallFailure: 0,
+    firstActivity: "No activity found",
+    lastActivity: "No activity found",
+    summary: emptyUserSummary(member.id),
+  };
+}
+
+function emptyUserSummary(userId: string): UserSummary {
+  return {
+    userId,
+    avgTokensPerRequest: 0,
+    cacheCreationInputTokens: 0,
+    cacheReadInputTokens: 0,
+    firstSeenUnixNano: "0",
+    hookSources: [],
+    lastSeenUnixNano: "0",
+    toolCallFailure: 0,
+    toolCallSuccess: 0,
+    tools: [],
+    totalChatRequests: 0,
+    totalChats: 0,
+    totalCost: 0,
+    totalInputTokens: 0,
+    totalOutputTokens: 0,
+    totalTokens: 0,
+    totalToolCalls: 0,
+  };
 }
 
 function getInitials(name: string) {
@@ -937,14 +1314,6 @@ function unixNanoToDate(value: string) {
   const millis = Number(nanos / 1_000_000n);
 
   return new Date(millis);
-}
-
-function formatCurrency(value: number) {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: value < 1 ? 4 : 2,
-  }).format(value);
 }
 
 function formatPlatform(value: string) {

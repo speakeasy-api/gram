@@ -324,7 +324,7 @@ function EmployeeTable({
                 </TableCell>
                 <TableCell>
                   <Link
-                    to={`${agentsHref}?user=${encodeURIComponent(item.email)}`}
+                    to={`${agentsHref}?user=${encodeURIComponent(item.id)}`}
                     className="text-primary text-sm font-medium no-underline hover:underline"
                   >
                     View usage
