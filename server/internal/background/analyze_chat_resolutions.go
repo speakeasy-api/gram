@@ -138,6 +138,15 @@ func AnalyzeChatResolutionsWorkflow(ctx workflow.Context, params AnalyzeChatReso
 				)
 				return workflow.NewContinueAsNewError(ctx, AnalyzeChatResolutionsWorkflow, params)
 			}
+			if activities.IsInsufficientCredits(err) {
+				workflow.GetLogger(ctx).Warn("skipping segment analysis: organization has insufficient OpenRouter credits",
+					"chat_id", params.ChatID.String(),
+					"org_id", params.OrgID,
+					"start_index", segment.StartIndex,
+					"end_index", segment.EndIndex,
+				)
+				continue
+			}
 			// Log but continue with other segments
 			workflow.GetLogger(ctx).Error("failed to analyze segment",
 				"error", err.Error(),
