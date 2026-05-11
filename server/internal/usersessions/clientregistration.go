@@ -1,0 +1,122 @@
+// Client registration logic for the user-session OAuth Authorization Server
+// surface. Defines the RFC 7591 §3.1 request shape, RFC 7591 §3.2.2 error
+// shape, and the validate / defaults rules that determine which clients
+// are accepted by /mcp/{slug}/register.
+//
+// The mcp package's HandleRegister handler wraps this with HTTP plumbing
+// (Content-Type sniffing, body cap, response writing). The supported sets
+// declared here are advertised verbatim in the AS metadata document so
+// registered clients can only request what the AS will accept.
+
+package usersessions
+
+import (
+	"fmt"
+	"net/url"
+	"slices"
+)
+
+// SupportedGrantTypes / SupportedResponseTypes / SupportedAuthMethods are
+// the OAuth values the user-session AS supports. Mirrored into the RFC 8414
+// metadata document by mcp.HandleGetAuthorizationServer; enforced on the
+// /register handler by RegistrationRequest.Validate.
+var (
+	SupportedGrantTypes    = []string{"authorization_code", "refresh_token"}
+	SupportedResponseTypes = []string{"code"}
+	// `none` covers public PKCE-only clients (mobile, CLI, MCP SDK). Real
+	// MCP clients in the wild use it. PKCE provides per-flow integrity; the
+	// only guard against cross-flow client-id confusion is the consent
+	// prompt itself, which we always render (HandleConsent never skips).
+	SupportedAuthMethods = []string{"client_secret_basic", "client_secret_post", "none"}
+)
+
+// RegistrationRequest is the RFC 7591 §3.1 client metadata document. Only
+// the fields we honour are listed; unknown fields are ignored.
+//
+// `scope` is intentionally absent: RFC 7591 §3.2.1 requires the registration
+// response to reflect actually-registered metadata, and we have no scope
+// enforcement to back it up — echoing a `scope` field would assert server
+// state we don't hold. Add it back when we ship a scope-aware /token.
+type RegistrationRequest struct {
+	ClientName              string   `json:"client_name"`
+	RedirectURIs            []string `json:"redirect_uris"`
+	GrantTypes              []string `json:"grant_types,omitempty"`
+	ResponseTypes           []string `json:"response_types,omitempty"`
+	TokenEndpointAuthMethod string   `json:"token_endpoint_auth_method,omitempty"`
+}
+
+// RegistrationError is an RFC 7591 §3.2.2 client registration error in
+// structured form. Carries the wire-protocol error code and human-readable
+// description to the response writer without leaking either into the
+// function signatures of upstream validators.
+type RegistrationError struct {
+	Code        string
+	Description string
+}
+
+func (e *RegistrationError) Error() string { return e.Code + ": " + e.Description }
+
+// SetDefaults populates the RFC 7591 §2 defaults for fields the client
+// didn't supply. Must be called before Validate so the §2.1 grant/response
+// correlation check sees materialized values.
+func (r *RegistrationRequest) SetDefaults() {
+	if len(r.GrantTypes) == 0 {
+		r.GrantTypes = []string{"authorization_code"}
+	}
+	if len(r.ResponseTypes) == 0 {
+		r.ResponseTypes = []string{"code"}
+	}
+	if r.TokenEndpointAuthMethod == "" {
+		r.TokenEndpointAuthMethod = "client_secret_basic"
+	}
+}
+
+// Validate checks the (defaulted) fields of an RFC 7591 §3.1 client metadata
+// document. Returns a *RegistrationError on a spec-defined rejection.
+// Callers must invoke SetDefaults first so grant_types / response_types /
+// auth method are populated.
+func (r *RegistrationRequest) Validate() error {
+	if r.ClientName == "" {
+		return &RegistrationError{Code: "invalid_client_metadata", Description: "client_name is required"}
+	}
+	if len(r.RedirectURIs) == 0 {
+		return &RegistrationError{Code: "invalid_redirect_uri", Description: "redirect_uris is required"}
+	}
+	for _, u := range r.RedirectURIs {
+		parsed, parseErr := url.Parse(u)
+		if parseErr != nil || parsed.Scheme == "" || parsed.Host == "" {
+			return &RegistrationError{Code: "invalid_redirect_uri", Description: "redirect_uri must be an absolute URL"}
+		}
+	}
+	for _, gt := range r.GrantTypes {
+		if !slices.Contains(SupportedGrantTypes, gt) {
+			return &RegistrationError{Code: "invalid_client_metadata", Description: fmt.Sprintf("unsupported grant_type %q", gt)}
+		}
+	}
+	for _, rt := range r.ResponseTypes {
+		if !slices.Contains(SupportedResponseTypes, rt) {
+			return &RegistrationError{Code: "invalid_client_metadata", Description: fmt.Sprintf("unsupported response_type %q", rt)}
+		}
+	}
+	if !slices.Contains(SupportedAuthMethods, r.TokenEndpointAuthMethod) {
+		return &RegistrationError{Code: "invalid_client_metadata", Description: fmt.Sprintf("unsupported token_endpoint_auth_method %q", r.TokenEndpointAuthMethod)}
+	}
+
+	// RFC 7591 §2.1 correlation: response_type "code" requires grant_type
+	// "authorization_code" and vice versa.
+	hasCodeResponse := slices.Contains(r.ResponseTypes, "code")
+	hasAuthCodeGrant := slices.Contains(r.GrantTypes, "authorization_code")
+	if hasCodeResponse && !hasAuthCodeGrant {
+		return &RegistrationError{Code: "invalid_client_metadata", Description: `response_type "code" requires grant_type "authorization_code"`}
+	}
+	if hasAuthCodeGrant && !hasCodeResponse {
+		return &RegistrationError{Code: "invalid_client_metadata", Description: `grant_type "authorization_code" requires response_type "code"`}
+	}
+	// refresh_token can only follow an initial authorization_code in our
+	// supported set; a client registering refresh_token alone has no way
+	// to ever obtain one.
+	if slices.Contains(r.GrantTypes, "refresh_token") && !hasAuthCodeGrant {
+		return &RegistrationError{Code: "invalid_client_metadata", Description: `grant_type "refresh_token" requires grant_type "authorization_code"`}
+	}
+	return nil
+}

@@ -25,7 +25,6 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
-	"slices"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -38,123 +37,32 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
+	"github.com/speakeasy-api/gram/server/internal/usersessions"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
-// supportedGrantTypes / supportedResponseTypes / supportedAuthMethods /
-// supportedBearerMethods mirror the values HandleGetAuthorizationServer and
-// HandleGetProtectedResource advertise. Keep in sync — registered clients
-// must request only what the AS metadata claims to support.
+// supportedBearerMethods / supportedCodeChallengeMethods are the values
+// HandleGetProtectedResource and HandleGetAuthorizationServer advertise.
+// The OAuth grant/response/auth-method sets live in the usersessions
+// package (alongside RegistrationRequest.Validate).
 var (
-	supportedGrantTypes    = []string{"authorization_code", "refresh_token"}
-	supportedResponseTypes = []string{"code"}
-	// `none` covers public PKCE-only clients (mobile, CLI, MCP SDK). Real
-	// MCP clients in the wild use it. PKCE provides per-flow integrity; the
-	// only guard against cross-flow client-id confusion is the consent
-	// prompt itself, which we always render (HandleConsent never skips).
-	supportedAuthMethods          = []string{"client_secret_basic", "client_secret_post", "none"}
 	supportedBearerMethods        = []string{"header"}
 	supportedCodeChallengeMethods = []string{"S256"}
 )
+
 
 // dcrMaxBodyBytes caps the RFC 7591 §3.1 client metadata document size on
 // HandleRegister. The spec doesn't mandate a limit; 64 KiB is well past any
 // real document and defends against memory-exhaustion (gosec G120).
 const dcrMaxBodyBytes int64 = 64 * 1024
-
-// dcrRegistrationRequest is the RFC 7591 §3.1 client metadata document. Only
-// the fields we honour are listed; unknown fields are ignored.
-type dcrRegistrationRequest struct {
-	ClientName              string   `json:"client_name"`
-	RedirectURIs            []string `json:"redirect_uris"`
-	GrantTypes              []string `json:"grant_types,omitempty"`
-	ResponseTypes           []string `json:"response_types,omitempty"`
-	TokenEndpointAuthMethod string   `json:"token_endpoint_auth_method,omitempty"`
-	Scope                   string   `json:"scope,omitempty"`
-}
-
-// dcrError is an RFC 7591 §3.2.2 client registration error in structured
-// form. Carries the wire-protocol error code and human-readable description
-// to the response writer without leaking either into the function signatures
-// of upstream validators.
-type dcrError struct {
-	Code        string
-	Description string
-}
-
-func (e *dcrError) Error() string { return e.Code + ": " + e.Description }
-
-// SetDefaults populates the RFC 7591 §2 defaults for fields the client
-// didn't supply. Must be called before Validate so the §2.1 grant/response
-// correlation check sees materialized values.
-func (r *dcrRegistrationRequest) SetDefaults() {
-	if len(r.GrantTypes) == 0 {
-		r.GrantTypes = []string{"authorization_code"}
-	}
-	if len(r.ResponseTypes) == 0 {
-		r.ResponseTypes = []string{"code"}
-	}
-	if r.TokenEndpointAuthMethod == "" {
-		r.TokenEndpointAuthMethod = "client_secret_basic"
-	}
-}
-
-// Validate checks the (defaulted) fields of an RFC 7591 §3.1 client metadata
-// document. Returns a *dcrError on a spec-defined rejection. Callers must
-// invoke SetDefaults first so grant_types / response_types / auth method
-// are populated.
-func (r *dcrRegistrationRequest) Validate() error {
-	if r.ClientName == "" {
-		return &dcrError{Code: "invalid_client_metadata", Description: "client_name is required"}
-	}
-	if len(r.RedirectURIs) == 0 {
-		return &dcrError{Code: "invalid_redirect_uri", Description: "redirect_uris is required"}
-	}
-	for _, u := range r.RedirectURIs {
-		parsed, parseErr := url.Parse(u)
-		if parseErr != nil || parsed.Scheme == "" || parsed.Host == "" {
-			return &dcrError{Code: "invalid_redirect_uri", Description: "redirect_uri must be an absolute URL"}
-		}
-	}
-	for _, gt := range r.GrantTypes {
-		if !slices.Contains(supportedGrantTypes, gt) {
-			return &dcrError{Code: "invalid_client_metadata", Description: fmt.Sprintf("unsupported grant_type %q", gt)}
-		}
-	}
-	for _, rt := range r.ResponseTypes {
-		if !slices.Contains(supportedResponseTypes, rt) {
-			return &dcrError{Code: "invalid_client_metadata", Description: fmt.Sprintf("unsupported response_type %q", rt)}
-		}
-	}
-	if !slices.Contains(supportedAuthMethods, r.TokenEndpointAuthMethod) {
-		return &dcrError{Code: "invalid_client_metadata", Description: fmt.Sprintf("unsupported token_endpoint_auth_method %q", r.TokenEndpointAuthMethod)}
-	}
-
-	// RFC 7591 §2.1 correlation: response_type "code" requires grant_type
-	// "authorization_code" and vice versa.
-	hasCodeResponse := slices.Contains(r.ResponseTypes, "code")
-	hasAuthCodeGrant := slices.Contains(r.GrantTypes, "authorization_code")
-	if hasCodeResponse && !hasAuthCodeGrant {
-		return &dcrError{Code: "invalid_client_metadata", Description: `response_type "code" requires grant_type "authorization_code"`}
-	}
-	if hasAuthCodeGrant && !hasCodeResponse {
-		return &dcrError{Code: "invalid_client_metadata", Description: `grant_type "authorization_code" requires response_type "code"`}
-	}
-	// refresh_token can only follow an initial authorization_code in our
-	// supported set; a client registering refresh_token alone has no way
-	// to ever obtain one.
-	if slices.Contains(r.GrantTypes, "refresh_token") && !hasAuthCodeGrant {
-		return &dcrError{Code: "invalid_client_metadata", Description: `grant_type "refresh_token" requires grant_type "authorization_code"`}
-	}
-	return nil
-}
-
 // dcrRegistrationResponse is the RFC 7591 §3.2.1 successful registration
 // response. `client_secret` is included exactly once, on this response. Both
 // `client_secret` and `client_secret_expires_at` are omitted entirely for
 // public (`token_endpoint_auth_method=none`) clients per RFC 7591 §3.2.1
 // — emitting an empty string for `client_secret` confuses some MCP SDKs into
 // preferring `client_secret_basic` for the token call.
+//
+// `scope` is intentionally absent (see usersessions.RegistrationRequest comment).
 type dcrRegistrationResponse struct {
 	ClientID                string   `json:"client_id"`
 	ClientSecret            string   `json:"client_secret,omitempty"`
@@ -165,7 +73,6 @@ type dcrRegistrationResponse struct {
 	GrantTypes              []string `json:"grant_types"`
 	ResponseTypes           []string `json:"response_types"`
 	TokenEndpointAuthMethod string   `json:"token_endpoint_auth_method"`
-	Scope                   string   `json:"scope,omitempty"`
 }
 
 // WriteAuthenticateChallenge sets the WWW-Authenticate header and returns an
@@ -333,9 +240,9 @@ func (s *Service) HandleGetAuthorizationServer(w http.ResponseWriter, r *http.Re
 			RegistrationEndpoint:              root + "/register",
 			RevocationEndpoint:                root + "/revoke",
 			ScopesSupported:                   nil,
-			ResponseTypesSupported:            supportedResponseTypes,
-			GrantTypesSupported:               supportedGrantTypes,
-			TokenEndpointAuthMethodsSupported: supportedAuthMethods,
+			ResponseTypesSupported:            usersessions.SupportedResponseTypes,
+			GrantTypesSupported:               usersessions.SupportedGrantTypes,
+			TokenEndpointAuthMethodsSupported: usersessions.SupportedAuthMethods,
 			CodeChallengeMethodsSupported:     supportedCodeChallengeMethods,
 		})
 	}
@@ -434,7 +341,7 @@ func (s *Service) HandleRegister(w http.ResponseWriter, r *http.Request) error {
 
 	r.Body = http.MaxBytesReader(w, r.Body, dcrMaxBodyBytes)
 
-	var req dcrRegistrationRequest
+	var req usersessions.RegistrationRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		var maxBytesErr *http.MaxBytesError
 		if errors.As(err, &maxBytesErr) {
@@ -445,9 +352,9 @@ func (s *Service) HandleRegister(w http.ResponseWriter, r *http.Request) error {
 
 	req.SetDefaults()
 	if err := req.Validate(); err != nil {
-		var dcrErr *dcrError
-		if errors.As(err, &dcrErr) {
-			return writeDCRError(ctx, w, logger, dcrErr.Code, dcrErr.Description)
+		var regErr *usersessions.RegistrationError
+		if errors.As(err, &regErr) {
+			return writeDCRError(ctx, w, logger, regErr.Code, regErr.Description)
 		}
 		return oops.E(oops.CodeUnexpected, err, "validate DCR request").Log(ctx, logger)
 	}
@@ -509,7 +416,6 @@ func (s *Service) HandleRegister(w http.ResponseWriter, r *http.Request) error {
 		GrantTypes:              req.GrantTypes,
 		ResponseTypes:           req.ResponseTypes,
 		TokenEndpointAuthMethod: req.TokenEndpointAuthMethod,
-		Scope:                   req.Scope,
 	}
 
 	body, err := json.Marshal(resp)
