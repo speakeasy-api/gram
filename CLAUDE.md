@@ -17,9 +17,7 @@ If you've just cloned this repository, then consider running `./zero --agent` to
   - `go.mod`: Go module definition for the entire project
   - `mprocs.yaml`: Process manager config for `madprocs` — runs all local services (mock-idp, server, worker, dashboard, elements) in a single terminal with a tabbed UI. Run `madprocs` to start the TUI, or use `madprocs status|logs|start|stop|restart <proc>` from the CLI. Use `/madprocs` slash command for agent-assisted process control.
   - `server/`: Main backend service codebase
-  - `cli/`: Command-line interface for Gram that users use to interact with the Gram service
   - `functions/`: Serverless function runner powering the Gram Functions feature
-  - `ts-framework/functions/`: TypeScript SDK for function authors (`Gram.tool()` API, manifest generation, MCP passthrough)
   - `client/`: Frontend React application for Gram
   - `elements/`: Frontend React application for Gram Elements, a chat interface that integrates with Gram MCP servers.
 
