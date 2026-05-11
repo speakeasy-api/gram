@@ -15,11 +15,12 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/dev-idp/pkg/devidptest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oauth"
-	"github.com/speakeasy-api/gram/server/internal/oauthtest"
 	oauth_repo "github.com/speakeasy-api/gram/server/internal/oauth/repo"
+	"github.com/speakeasy-api/gram/server/internal/oauthtest"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
@@ -543,10 +544,11 @@ func TestService_HandleWellKnownOAuthProtectedResourceMetadata(t *testing.T) {
 func TestClientDance_ExternalOAuth_FullFlow(t *testing.T) {
 	t.Parallel()
 
-	// 1. Stand up a real in-memory OAuth authorization server.
-	authServer := oauthtest.NewAuthorizationServer(t)
+	// 1. Stand up a real upstream OAuth server via dev-idp.
+	idp := devidptest.Launch(t, devidptest.LaunchOpts{})
 
-	// 2. Create an external OAuth toolset wired to the auth server.
+	// 2. Create an external OAuth toolset wired to dev-idp's oauth2-1
+	//    authorization-server metadata.
 	ctx, ti := newTestMCPService(t)
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -554,9 +556,9 @@ func TestClientDance_ExternalOAuth_FullFlow(t *testing.T) {
 	require.NotNil(t, authCtx.ProjectID)
 
 	result := oauthtest.CreateExternalOAuthToolset(t, ctx, ti.conn, authCtx, oauthtest.ExternalOAuthToolsetOpts{
-		Slug:       "ext-dance",
-		IsPublic:   true,
-		AuthServer: authServer,
+		Slug:     "ext-dance",
+		IsPublic: true,
+		Metadata: idp.OAuth21Metadata(t),
 	})
 
 	mcpSlug := result.Toolset.McpSlug.String

@@ -16,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/dev-idp/pkg/devidptest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oauth"
@@ -319,11 +320,16 @@ func TestServePublic_CustomProxy_UpstreamRefreshSucceeds(t *testing.T) {
 	t.Parallel()
 
 	// Stand up a real upstream OAuth server for the refresh.
-	authServer := oauthtest.NewAuthorizationServer(t)
-	authServer.SeedRefreshToken("upstream-refresh", "cid", "")
+	idp := devidptest.Launch(t, devidptest.LaunchOpts{})
 
 	ctx, ti := newTestMCPService(t)
-	mcpSlug, toolsetID := setupCustomOAuthToolset(t, ctx, ti, authServer.TokenEndpoint)
+	devidptest.CreateRefreshToken(t, ctx, idp.Repo, devidptest.RefreshTokenOpts{
+		Token:  "upstream-refresh",
+		Mode:   devidptest.OAuth21Mode,
+		UserID: idp.DefaultUser.ID,
+	})
+
+	mcpSlug, toolsetID := setupCustomOAuthToolset(t, ctx, ti, idp.OAuth21URL+"/token")
 
 	// Issue a Gram token with expired upstream credentials.
 	pastExpiry := time.Now().Add(-1 * time.Minute)
