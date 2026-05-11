@@ -89,6 +89,9 @@ func (a *AnalyzeSegment) Do(ctx context.Context, args AnalyzeSegmentArgs) error 
 
 	result, err := a.analyzeWithLLM(ctx, args.OrgID, args.ProjectID, segmentText, applicableUserFeedback)
 	if err != nil {
+		if openrouter.IsInsufficientCredits(err) {
+			return newInsufficientCreditsError(fmt.Errorf("failed to analyze segment with LLM: %w", err))
+		}
 		return fmt.Errorf("failed to analyze segment with LLM: %w", err)
 	}
 

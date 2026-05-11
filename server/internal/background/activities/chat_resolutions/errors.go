@@ -9,6 +9,7 @@ import (
 	"go.temporal.io/sdk/temporal"
 
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
 
 // ErrTypeGenerationBumped is the Temporal application error type returned when
@@ -40,6 +41,31 @@ func IsGenerationBumped(err error) bool {
 	var appErr *temporal.ApplicationError
 	if errors.As(err, &appErr) {
 		return appErr.Type() == ErrTypeGenerationBumped
+	}
+	return false
+}
+
+// ErrTypeInsufficientCredits tags the non-retryable Temporal application error
+// emitted when an LLM call fails with OpenRouter 402.
+const ErrTypeInsufficientCredits = "ChatResolutionInsufficientCredits"
+
+func newInsufficientCreditsError(cause error) error {
+	return temporal.NewNonRetryableApplicationError(
+		"insufficient openrouter credits",
+		ErrTypeInsufficientCredits,
+		cause,
+	)
+}
+
+// IsInsufficientCredits reports whether err is an insufficient-credits failure,
+// either pre- or post-activity boundary.
+func IsInsufficientCredits(err error) bool {
+	if openrouter.IsInsufficientCredits(err) {
+		return true
+	}
+	var appErr *temporal.ApplicationError
+	if errors.As(err, &appErr) {
+		return appErr.Type() == ErrTypeInsufficientCredits
 	}
 	return false
 }
