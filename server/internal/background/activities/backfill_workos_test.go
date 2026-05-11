@@ -19,34 +19,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
 
-type stubWorkOSBackfillClient struct {
-	org         workos.Organization
-	orgs        []workos.Organization
-	roles       []workos.Role
-	globalRoles []workos.Role
-	members     []workos.Member
-}
-
-func (s *stubWorkOSBackfillClient) GetOrganization(_ context.Context, _ string) (*workos.Organization, error) {
-	return &s.org, nil
-}
-
-func (s *stubWorkOSBackfillClient) ListOrganizations(_ context.Context) ([]workos.Organization, error) {
-	return s.orgs, nil
-}
-
-func (s *stubWorkOSBackfillClient) ListRoles(_ context.Context, _ string) ([]workos.Role, error) {
-	return s.roles, nil
-}
-
-func (s *stubWorkOSBackfillClient) ListOrgMemberships(_ context.Context, _ string) ([]workos.Member, error) {
-	return s.members, nil
-}
-
-func (s *stubWorkOSBackfillClient) ListGlobalRoles(_ context.Context) ([]workos.Role, error) {
-	return s.globalRoles, nil
-}
-
 func TestBackfillWorkOSOrganization_CreatesUnlinkedOrganizationWithExternalID(t *testing.T) {
 	t.Parallel()
 
@@ -57,17 +29,18 @@ func TestBackfillWorkOSOrganization_CreatesUnlinkedOrganizationWithExternalID(t 
 	const organizationID = "gram_org_from_workos_external_id"
 	const workosOrgID = "org_01JBACKFILLCREATE"
 
-	activity := activities.NewBackfillWorkOSOrganization(logger, conn, &stubWorkOSBackfillClient{
-		org: workos.Organization{
+	workosClient := newStubWorkOSBackfillClient(t, ctx,
+		workos.Organization{
 			ID:         workosOrgID,
 			Name:       "Backfill Created Org",
 			ExternalID: organizationID,
 			CreatedAt:  "2026-05-07T11:00:00Z",
 			UpdatedAt:  "2026-05-07T11:00:00Z",
 		},
-		roles:   []workos.Role{},
-		members: []workos.Member{},
-	})
+		nil,
+		nil,
+	)
+	activity := activities.NewBackfillWorkOSOrganization(logger, conn, workosClient)
 
 	err := activity.Do(ctx, activities.BackfillWorkOSOrganizationParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
@@ -94,17 +67,18 @@ func TestBackfillWorkOSOrganization_ExternalIDChangeDoesNotChangeOrganizationID(
 
 	seedLinkedWorkOSOrganization(t, ctx, conn, organizationID, workosOrgID)
 
-	activity := activities.NewBackfillWorkOSOrganization(logger, conn, &stubWorkOSBackfillClient{
-		org: workos.Organization{
+	workosClient := newStubWorkOSBackfillClient(t, ctx,
+		workos.Organization{
 			ID:         workosOrgID,
 			Name:       "Backfill Immutable Org",
 			ExternalID: changedExternalID,
 			CreatedAt:  "2026-05-07T11:00:00Z",
 			UpdatedAt:  "2026-05-07T11:00:00Z",
 		},
-		roles:   []workos.Role{},
-		members: []workos.Member{},
-	})
+		nil,
+		nil,
+	)
+	activity := activities.NewBackfillWorkOSOrganization(logger, conn, workosClient)
 
 	err := activity.Do(ctx, activities.BackfillWorkOSOrganizationParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
@@ -133,15 +107,15 @@ func TestBackfillWorkOSOrganization_UnknownUserSyncsSingleRoleAssignment(t *test
 
 	seedLinkedWorkOSOrganization(t, ctx, conn, organizationID, workosOrgID)
 
-	activity := activities.NewBackfillWorkOSOrganization(logger, conn, &stubWorkOSBackfillClient{
-		org: workos.Organization{
+	workosClient := newStubWorkOSBackfillClient(t, ctx,
+		workos.Organization{
 			ID:         workosOrgID,
 			Name:       "Backfill Unknown User",
 			ExternalID: "",
 			CreatedAt:  "2026-05-07T11:00:00Z",
 			UpdatedAt:  "2026-05-07T11:00:00Z",
 		},
-		roles: []workos.Role{{
+		[]workos.Role{{
 			ID:          "role_01JSUPPORT",
 			Name:        "Support",
 			Slug:        roleSlug,
@@ -150,7 +124,7 @@ func TestBackfillWorkOSOrganization_UnknownUserSyncsSingleRoleAssignment(t *test
 			CreatedAt:   "2026-05-07T11:00:00Z",
 			UpdatedAt:   "2026-05-07T11:00:00Z",
 		}},
-		members: []workos.Member{{
+		[]workos.Member{{
 			ID:             membershipID,
 			UserID:         workosUserID,
 			OrganizationID: workosOrgID,
@@ -160,7 +134,8 @@ func TestBackfillWorkOSOrganization_UnknownUserSyncsSingleRoleAssignment(t *test
 			CreatedAt:      "2026-05-07T11:05:00Z",
 			UpdatedAt:      "2026-05-07T11:05:00Z",
 		}},
-	})
+	)
+	activity := activities.NewBackfillWorkOSOrganization(logger, conn, workosClient)
 
 	err := activity.Do(ctx, activities.BackfillWorkOSOrganizationParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
@@ -197,15 +172,15 @@ func TestBackfillWorkOSOrganization_RoleWithLastEventIDSkipsSnapshot(t *testing.
 	seedLinkedWorkOSOrganization(t, ctx, conn, organizationID, workosOrgID)
 	seedOrganizationRoleWithCursor(t, ctx, conn, organizationID, roleSlug, "Billing From Event", "event_01JNEWER")
 
-	activity := activities.NewBackfillWorkOSOrganization(logger, conn, &stubWorkOSBackfillClient{
-		org: workos.Organization{
+	workosClient := newStubWorkOSBackfillClient(t, ctx,
+		workos.Organization{
 			ID:         workosOrgID,
 			Name:       "Backfill Event Wins",
 			ExternalID: "",
 			CreatedAt:  "2026-05-07T11:00:00Z",
 			UpdatedAt:  "2026-05-07T11:00:00Z",
 		},
-		roles: []workos.Role{{
+		[]workos.Role{{
 			ID:          "role_01JBILLING",
 			Name:        "Billing From Snapshot",
 			Slug:        roleSlug,
@@ -214,7 +189,9 @@ func TestBackfillWorkOSOrganization_RoleWithLastEventIDSkipsSnapshot(t *testing.
 			CreatedAt:   "2026-05-07T11:00:00Z",
 			UpdatedAt:   "2026-05-07T12:00:00Z",
 		}},
-	})
+		nil,
+	)
+	activity := activities.NewBackfillWorkOSOrganization(logger, conn, workosClient)
 
 	err := activity.Do(ctx, activities.BackfillWorkOSOrganizationParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
@@ -242,16 +219,18 @@ func TestBackfillWorkOSOrganization_MissingRoleSoftDeleted(t *testing.T) {
 	seedLinkedWorkOSOrganization(t, ctx, conn, organizationID, workosOrgID)
 	seedOrganizationRoleWithCursor(t, ctx, conn, organizationID, roleSlug, "Obsolete", "")
 
-	activity := activities.NewBackfillWorkOSOrganization(logger, conn, &stubWorkOSBackfillClient{
-		org: workos.Organization{
+	workosClient := newStubWorkOSBackfillClient(t, ctx,
+		workos.Organization{
 			ID:         workosOrgID,
 			Name:       "Backfill Delete Role",
 			ExternalID: "",
 			CreatedAt:  "2026-05-07T11:00:00Z",
 			UpdatedAt:  "2026-05-07T11:00:00Z",
 		},
-		roles: []workos.Role{},
-	})
+		nil,
+		nil,
+	)
+	activity := activities.NewBackfillWorkOSOrganization(logger, conn, workosClient)
 
 	err := activity.Do(ctx, activities.BackfillWorkOSOrganizationParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
@@ -264,6 +243,26 @@ func TestBackfillWorkOSOrganization_MissingRoleSoftDeleted(t *testing.T) {
 	require.True(t, role.Deleted)
 	require.True(t, role.WorkosDeleted)
 	require.Empty(t, role.WorkosLastEventID.String)
+}
+
+func newStubWorkOSBackfillClient(t *testing.T, ctx context.Context, org workos.Organization, roles []workos.Role, members []workos.Member) *workos.StubClient {
+	t.Helper()
+
+	client := workos.NewStubClient()
+	client.UpsertOrganization(org)
+	for _, role := range roles {
+		_, err := client.CreateRole(ctx, org.ID, workos.CreateRoleOpts{
+			Name:        role.Name,
+			Slug:        role.Slug,
+			Description: role.Description,
+		})
+		require.NoError(t, err)
+	}
+	for _, member := range members {
+		client.UpsertOrganizationMembership(member)
+	}
+
+	return client
 }
 
 func seedLinkedWorkOSOrganization(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID, workosOrgID string) {

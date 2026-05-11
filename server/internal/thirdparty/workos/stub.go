@@ -11,6 +11,7 @@ import (
 type StubClient struct {
 	mut         sync.Mutex
 	orgs        map[string]*stubOrgState
+	orgOrder    []string
 	globalRoles map[string]Role
 	globalOrder []string
 	next        int
@@ -18,23 +19,58 @@ type StubClient struct {
 }
 
 type stubOrgState struct {
-	roles       map[string]Role
-	roleOrder   []string
-	memberships map[string]Member
-	users       map[string]User
-	invites     map[string]Invitation
-	inviteOrder []string
+	organization Organization
+	roles        map[string]Role
+	roleOrder    []string
+	memberships  map[string]Member
+	users        map[string]User
+	invites      map[string]Invitation
+	inviteOrder  []string
 }
 
 func NewStubClient() *StubClient {
 	return &StubClient{
 		mut:         sync.Mutex{},
 		orgs:        make(map[string]*stubOrgState),
+		orgOrder:    make([]string, 0),
 		globalRoles: stubDefaultGlobalRoles(),
 		globalOrder: []string{"admin", "member"},
 		next:        1,
 		nowFn:       time.Now,
 	}
+}
+
+func (s *StubClient) UpsertOrganization(org Organization) {
+	s.mut.Lock()
+	defer s.mut.Unlock()
+
+	state := s.orgState(org.ID)
+	state.organization = org
+}
+
+func (s *StubClient) GetOrganization(_ context.Context, orgID string) (*Organization, error) {
+	s.mut.Lock()
+	defer s.mut.Unlock()
+
+	state, ok := s.orgs[orgID]
+	if !ok {
+		return nil, &APIError{Method: "GET", Path: "/stub/organizations/" + orgID, StatusCode: 404, Body: "organization not found"}
+	}
+
+	org := state.organization
+	return &org, nil
+}
+
+func (s *StubClient) ListOrganizations(_ context.Context) ([]Organization, error) {
+	s.mut.Lock()
+	defer s.mut.Unlock()
+
+	orgs := make([]Organization, 0, len(s.orgOrder))
+	for _, orgID := range s.orgOrder {
+		orgs = append(orgs, s.orgs[orgID].organization)
+	}
+
+	return orgs, nil
 }
 
 func (s *StubClient) ListRoles(_ context.Context, orgID string) ([]Role, error) {
@@ -136,6 +172,14 @@ func (s *StubClient) ListMembers(_ context.Context, orgID string) ([]Member, err
 	}
 
 	return members, nil
+}
+
+func (s *StubClient) UpsertOrganizationMembership(member Member) {
+	s.mut.Lock()
+	defer s.mut.Unlock()
+
+	state := s.orgState(member.OrganizationID)
+	state.memberships[member.ID] = member
 }
 
 func (s *StubClient) UpdateMemberRole(_ context.Context, membershipID string, roleSlug string) (*Member, error) {
@@ -344,6 +388,7 @@ func (s *StubClient) orgState(orgID string) *stubOrgState {
 	}
 
 	state = &stubOrgState{
+		organization: Organization{ID: orgID, Name: orgID, ExternalID: "", CreatedAt: stubRoleTimestamp, UpdatedAt: stubRoleTimestamp},
 		roles: map[string]Role{
 			"admin":  {ID: "role_admin", Name: "Admin", Slug: "admin", Description: "", Type: "EnvironmentRole", CreatedAt: stubRoleTimestamp, UpdatedAt: stubRoleTimestamp},
 			"member": {ID: "role_member", Name: "Member", Slug: "member", Description: "", Type: "EnvironmentRole", CreatedAt: stubRoleTimestamp, UpdatedAt: stubRoleTimestamp},
@@ -355,6 +400,7 @@ func (s *StubClient) orgState(orgID string) *stubOrgState {
 		inviteOrder: make([]string, 0),
 	}
 	s.orgs[orgID] = state
+	s.orgOrder = append(s.orgOrder, orgID)
 
 	return state
 }
