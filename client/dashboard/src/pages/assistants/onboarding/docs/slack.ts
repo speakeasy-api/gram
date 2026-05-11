@@ -7,7 +7,7 @@ export const SLACK_DOCS: IntegrationDoc = {
     "Wire an assistant to a Slack workspace end-to-end: respond to events, talk to users, and react to schedules.",
   body: `# Slack integration
 
-Wire the assistant end-to-end with the user's Slack workspace: it reads/sends messages via the bot AND can be triggered by Slack events. The user installs a Slack connection in their workspace, then pastes credentials into the assistant's environment — Slack does not let us OAuth on their behalf for a brand-new integration. The user-facing flow is split into TWO cards: an install card (\`show_slack_app_guide\` — handles workspace pick, install, and Event Subscriptions Retry) followed by a tokens card (\`request_environment_secrets\`). Never collapse these into a single step in conversation — they have to land back-to-back as separate tool calls.
+Wire the assistant end-to-end with the user's Slack workspace: it reads/sends messages via the bot AND can be triggered by Slack events. The user installs a Slack connection in their workspace, then pastes credentials into the assistant's environment — Slack does not let us OAuth on their behalf for a brand-new integration. The user-facing flow is split into TWO cards: an install card (\`show_slack_app_guide\` — handles workspace pick, install, and Event Subscriptions Retry) followed by a tokens card (\`request_environment_secrets\`). Never call these two tools in the same turn — emit \`show_slack_app_guide\` alone, wait for it to resolve, then emit \`request_environment_secrets\` in a later turn.
 
 ## Default rule: always create a slack trigger
 
