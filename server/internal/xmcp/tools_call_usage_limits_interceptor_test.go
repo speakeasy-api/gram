@@ -18,7 +18,7 @@ import (
 )
 
 // fakeBillingRepo implements the subset of [billing.Repository] exercised by
-// ToolUsageLimitsInterceptor. Methods the interceptor does not call panic so
+// ToolsCallUsageLimitsInterceptor. Methods the interceptor does not call panic so
 // accidental use is loud in tests. Tests set storedUsage / storedErr to
 // control what GetStoredPeriodUsage returns.
 type fakeBillingRepo struct {
@@ -46,20 +46,20 @@ func newToolsCallRequestForInterceptor(t *testing.T, ctx context.Context) *proxy
 	}
 }
 
-func TestToolUsageLimitsInterceptor_Name(t *testing.T) {
+func TestToolsCallUsageLimitsInterceptor_Name(t *testing.T) {
 	t.Parallel()
 
-	interceptor := xmcp.NewToolUsageLimitsInterceptor(&fakeBillingRepo{storedUsage: nil, storedErr: nil}, testenv.NewLogger(t))
-	require.Equal(t, "tool-usage-limits", interceptor.Name())
+	interceptor := xmcp.NewToolsCallUsageLimitsInterceptor(&fakeBillingRepo{storedUsage: nil, storedErr: nil}, testenv.NewLogger(t))
+	require.Equal(t, "tools-call-usage-limits", interceptor.Name())
 }
 
-func TestToolUsageLimitsInterceptor_NoAuthContextPassesThrough(t *testing.T) {
+func TestToolsCallUsageLimitsInterceptor_NoAuthContextPassesThrough(t *testing.T) {
 	t.Parallel()
 
 	// Billing repo deliberately left without behavior: the interceptor must
 	// not reach it when auth context is missing.
 	repo := &fakeBillingRepo{storedUsage: nil, storedErr: errors.New("must not be called")}
-	interceptor := xmcp.NewToolUsageLimitsInterceptor(repo, testenv.NewLogger(t))
+	interceptor := xmcp.NewToolsCallUsageLimitsInterceptor(repo, testenv.NewLogger(t))
 
 	ctx := t.Context()
 	call := newToolsCallRequestForInterceptor(t, ctx)
@@ -67,11 +67,11 @@ func TestToolUsageLimitsInterceptor_NoAuthContextPassesThrough(t *testing.T) {
 	require.NoError(t, interceptor.InterceptToolsCallRequest(ctx, call))
 }
 
-func TestToolUsageLimitsInterceptor_NonBaseTierPassesThrough(t *testing.T) {
+func TestToolsCallUsageLimitsInterceptor_NonBaseTierPassesThrough(t *testing.T) {
 	t.Parallel()
 
 	repo := &fakeBillingRepo{storedUsage: nil, storedErr: errors.New("must not be called")}
-	interceptor := xmcp.NewToolUsageLimitsInterceptor(repo, testenv.NewLogger(t))
+	interceptor := xmcp.NewToolsCallUsageLimitsInterceptor(repo, testenv.NewLogger(t))
 
 	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{
 		ActiveOrganizationID: "org-pro",
@@ -82,13 +82,13 @@ func TestToolUsageLimitsInterceptor_NonBaseTierPassesThrough(t *testing.T) {
 	require.NoError(t, interceptor.InterceptToolsCallRequest(ctx, call))
 }
 
-func TestToolUsageLimitsInterceptor_BillingErrorPassesThrough(t *testing.T) {
+func TestToolsCallUsageLimitsInterceptor_BillingErrorPassesThrough(t *testing.T) {
 	t.Parallel()
 
 	// Billing cache miss must not take down tool invocation — the interceptor
 	// logs and continues.
 	repo := &fakeBillingRepo{storedUsage: nil, storedErr: errors.New("cache miss")}
-	interceptor := xmcp.NewToolUsageLimitsInterceptor(repo, testenv.NewLogger(t))
+	interceptor := xmcp.NewToolsCallUsageLimitsInterceptor(repo, testenv.NewLogger(t))
 
 	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{
 		ActiveOrganizationID: "org-free",
@@ -99,7 +99,7 @@ func TestToolUsageLimitsInterceptor_BillingErrorPassesThrough(t *testing.T) {
 	require.NoError(t, interceptor.InterceptToolsCallRequest(ctx, call))
 }
 
-func TestToolUsageLimitsInterceptor_ActiveSubscriptionPassesThrough(t *testing.T) {
+func TestToolsCallUsageLimitsInterceptor_ActiveSubscriptionPassesThrough(t *testing.T) {
 	t.Parallel()
 
 	repo := &fakeBillingRepo{
@@ -110,7 +110,7 @@ func TestToolUsageLimitsInterceptor_ActiveSubscriptionPassesThrough(t *testing.T
 		},
 		storedErr: nil,
 	}
-	interceptor := xmcp.NewToolUsageLimitsInterceptor(repo, testenv.NewLogger(t))
+	interceptor := xmcp.NewToolsCallUsageLimitsInterceptor(repo, testenv.NewLogger(t))
 
 	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{
 		ActiveOrganizationID: "org-free-with-sub",
@@ -121,7 +121,7 @@ func TestToolUsageLimitsInterceptor_ActiveSubscriptionPassesThrough(t *testing.T
 	require.NoError(t, interceptor.InterceptToolsCallRequest(ctx, call))
 }
 
-func TestToolUsageLimitsInterceptor_UnderHardLimitPassesThrough(t *testing.T) {
+func TestToolsCallUsageLimitsInterceptor_UnderHardLimitPassesThrough(t *testing.T) {
 	t.Parallel()
 
 	// IncludedToolCalls=100 → hardLimit=200. Usage at 199 is under.
@@ -133,7 +133,7 @@ func TestToolUsageLimitsInterceptor_UnderHardLimitPassesThrough(t *testing.T) {
 		},
 		storedErr: nil,
 	}
-	interceptor := xmcp.NewToolUsageLimitsInterceptor(repo, testenv.NewLogger(t))
+	interceptor := xmcp.NewToolsCallUsageLimitsInterceptor(repo, testenv.NewLogger(t))
 
 	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{
 		ActiveOrganizationID: "org-free",
@@ -144,7 +144,7 @@ func TestToolUsageLimitsInterceptor_UnderHardLimitPassesThrough(t *testing.T) {
 	require.NoError(t, interceptor.InterceptToolsCallRequest(ctx, call))
 }
 
-func TestToolUsageLimitsInterceptor_AtOrOverHardLimitRejects(t *testing.T) {
+func TestToolsCallUsageLimitsInterceptor_AtOrOverHardLimitRejects(t *testing.T) {
 	t.Parallel()
 
 	// IncludedToolCalls=100 → hardLimit=200. Usage at 200 is exactly at the
@@ -157,7 +157,7 @@ func TestToolUsageLimitsInterceptor_AtOrOverHardLimitRejects(t *testing.T) {
 		},
 		storedErr: nil,
 	}
-	interceptor := xmcp.NewToolUsageLimitsInterceptor(repo, testenv.NewLogger(t))
+	interceptor := xmcp.NewToolsCallUsageLimitsInterceptor(repo, testenv.NewLogger(t))
 
 	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{
 		ActiveOrganizationID: "org-free",
@@ -172,7 +172,7 @@ func TestToolUsageLimitsInterceptor_AtOrOverHardLimitRejects(t *testing.T) {
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }
 
-func TestToolUsageLimitsInterceptor_ZeroIncludedUsesDefaultLimit(t *testing.T) {
+func TestToolsCallUsageLimitsInterceptor_ZeroIncludedUsesDefaultLimit(t *testing.T) {
 	t.Parallel()
 
 	// IncludedToolCalls=0 → hardLimit falls back to 2000. Usage at 2000
@@ -185,7 +185,7 @@ func TestToolUsageLimitsInterceptor_ZeroIncludedUsesDefaultLimit(t *testing.T) {
 		},
 		storedErr: nil,
 	}
-	interceptor := xmcp.NewToolUsageLimitsInterceptor(repo, testenv.NewLogger(t))
+	interceptor := xmcp.NewToolsCallUsageLimitsInterceptor(repo, testenv.NewLogger(t))
 
 	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{
 		ActiveOrganizationID: "org-free",
