@@ -14,6 +14,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
@@ -263,16 +264,95 @@ func (s *Service) callPlatformToolsetTool(
 		statusCode: http.StatusOK,
 	}
 
+	gramEmail := conv.PtrValOrEmpty(authCtx.Email, "")
 	toolCallEnv := toolconfig.ToolCallEnv{
 		UserConfig: toolconfig.NewCaseInsensitiveEnv(),
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		OAuthToken: "",
-		GramEmail:  conv.PtrValOrEmpty(authCtx.Email, ""),
+		GramEmail:  gramEmail,
 	}
 
-	if err := s.toolProxy.Do(ctx, rw, bytes.NewReader(params.Arguments), toolCallEnv, plan, tm.HTTPLogAttributes{}); err != nil {
+	var mcpURL string
+	if requestContext, _ := contextvalues.GetRequestContext(ctx); requestContext != nil {
+		mcpURL = requestContext.Host + requestContext.ReqURL
+		s.metrics.RecordMCPToolCall(ctx, authCtx.ActiveOrganizationID, mcpURL, params.Name)
+	}
+
+	if err := checkToolUsageLimits(ctx, logger, authCtx.ActiveOrganizationID, authCtx.AccountType, s.billingRepository); err != nil {
+		return nil, err
+	}
+
+	requestBodyBytes := params.Arguments
+	requestBytes := int64(len(requestBodyBytes))
+	var outputBytes int64
+	platformToolsetSlug := toolset.Slug
+	var chatID string
+	if principal, ok := contextvalues.GetAssistantPrincipal(ctx); ok {
+		chatID = principal.ThreadID.String()
+	}
+
+	logAttrs := tm.HTTPLogAttributes{}
+	defer func() {
+		go s.billingTracker.TrackToolCallUsage(context.WithoutCancel(ctx), billing.ToolCallUsageEvent{
+			OrganizationID:        authCtx.ActiveOrganizationID,
+			RequestBytes:          requestBytes,
+			OutputBytes:           outputBytes,
+			ToolURN:               descriptor.URN.String(),
+			ToolName:              params.Name,
+			ProjectID:             authCtx.ProjectID.String(),
+			ProjectSlug:           &descriptor.ProjectSlug,
+			OrganizationSlug:      &descriptor.OrganizationSlug,
+			ToolsetSlug:           &platformToolsetSlug,
+			ToolsetID:             nil,
+			ResponseStatusCode:    rw.statusCode,
+			MCPURL:                &mcpURL,
+			MCPSessionID:          nil,
+			ChatID:                conv.PtrEmpty(chatID),
+			Type:                  plan.BillingType,
+			ResourceURI:           "",
+			FunctionCPUUsage:      nil,
+			FunctionMemUsage:      nil,
+			FunctionExecutionTime: nil,
+		})
+
+		logAttrs[attr.EventSourceKey] = string(tm.EventSourceToolCall)
+		logAttrs.RecordStatusCode(rw.statusCode)
+		logAttrs.RecordRequestBody(requestBytes)
+		logAttrs.RecordResponseBody(outputBytes)
+		logAttrs.RecordTraceContext(ctx)
+		logAttrs.RecordRequestBodyContent(requestBodyBytes)
+		logAttrs.RecordResponseBodyContent(rw.body.Bytes())
+
+		if chatID != "" {
+			logAttrs[attr.GenAIConversationIDKey] = chatID
+		}
+		if authCtx.UserID != "" {
+			logAttrs[attr.UserIDKey] = authCtx.UserID
+		}
+		if gramEmail != "" {
+			logAttrs[attr.UserEmailKey] = gramEmail
+		}
+		logAttrs.RecordToolsetSlug(platformToolsetSlug)
+		logAttrs.RecordMCPURL(mcpURL)
+		s.telemLogger.Log(ctx, tm.LogParams{
+			Timestamp: time.Now(),
+			ToolInfo: tm.ToolInfo{
+				ID:             descriptor.ID,
+				URN:            descriptor.URN.String(),
+				Name:           descriptor.Name,
+				ProjectID:      descriptor.ProjectID,
+				DeploymentID:   descriptor.DeploymentID,
+				OrganizationID: descriptor.OrganizationID,
+				FunctionID:     nil,
+			},
+			Attributes: logAttrs,
+		})
+	}()
+
+	if err := s.toolProxy.Do(ctx, rw, bytes.NewReader(requestBodyBytes), toolCallEnv, plan, logAttrs); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to execute platform tool call").Log(ctx, logger, attr.SlogToolName(params.Name))
 	}
+	outputBytes = int64(rw.body.Len())
 
 	chunk, err := formatResult(*rw, plan.Kind)
 	if err != nil {
