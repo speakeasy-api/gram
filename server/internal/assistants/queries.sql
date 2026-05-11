@@ -35,6 +35,12 @@ SELECT project_id
 FROM assistant_threads
 WHERE id = @thread_id;
 
+-- name: ResolveThreadCorrelation :one
+SELECT id, project_id, assistant_id, correlation_id
+FROM assistant_threads
+WHERE id = @thread_id
+  AND deleted IS FALSE;
+
 -- name: ResolveToolsetsForWrite :many
 SELECT id, slug
 FROM toolsets

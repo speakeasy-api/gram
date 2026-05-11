@@ -35,6 +35,8 @@ type GetProductFeaturesResponseBody struct {
 	SessionCaptureEnabled bool `form:"session_capture_enabled" json:"session_capture_enabled" xml:"session_capture_enabled"`
 	// Whether authz challenge logging to ClickHouse is enabled
 	AuthzChallengeLoggingEnabled bool `form:"authz_challenge_logging_enabled" json:"authz_challenge_logging_enabled" xml:"authz_challenge_logging_enabled"`
+	// Whether assistant memory is enabled
+	AssistantMemoryEnabled bool `form:"assistant_memory_enabled" json:"assistant_memory_enabled" xml:"assistant_memory_enabled"`
 }
 
 // GetProductFeaturesUnauthorizedResponseBody is the type of the "features"
@@ -418,6 +420,7 @@ func NewGetProductFeaturesResponseBody(res *featuresviews.GramProductFeaturesVie
 		ToolIoLogsEnabled:            *res.ToolIoLogsEnabled,
 		SessionCaptureEnabled:        *res.SessionCaptureEnabled,
 		AuthzChallengeLoggingEnabled: *res.AuthzChallengeLoggingEnabled,
+		AssistantMemoryEnabled:       *res.AssistantMemoryEnabled,
 	}
 	return body
 }
@@ -746,8 +749,8 @@ func ValidateSetProductFeatureRequestBody(body *SetProductFeatureRequestBody) (e
 		err = goa.MergeErrors(err, goa.MissingFieldError("enabled", "body"))
 	}
 	if body.FeatureName != nil {
-		if !(*body.FeatureName == "logs" || *body.FeatureName == "tool_io_logs" || *body.FeatureName == "session_capture" || *body.FeatureName == "authz_challenge_logging") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.feature_name", *body.FeatureName, []any{"logs", "tool_io_logs", "session_capture", "authz_challenge_logging"}))
+		if !(*body.FeatureName == "logs" || *body.FeatureName == "tool_io_logs" || *body.FeatureName == "session_capture" || *body.FeatureName == "authz_challenge_logging" || *body.FeatureName == "assistant_memory") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.feature_name", *body.FeatureName, []any{"logs", "tool_io_logs", "session_capture", "authz_challenge_logging", "assistant_memory"}))
 		}
 	}
 	if body.FeatureName != nil {

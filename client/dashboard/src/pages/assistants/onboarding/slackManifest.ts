@@ -23,10 +23,30 @@ export const SLACK_TOOL_SCOPES: Record<string, readonly string[]> = {
   get_reactions: ["reactions:read"],
   list_reactions: ["reactions:read"],
   list_emoji: ["emoji:read"],
-  // search_messages_and_files (search.all) requires a USER token scope
-  // (search:read) that Slack will not grant on a bot token, so it is omitted
-  // from the bot-scope manifest deliberately.
 };
+
+// Always grant the full user-scope superset alongside bot scopes. Slack mints
+// both xoxb- and xoxp- at install; the assistant uses whichever fits each
+// call site. No per-tool gating — same rationale as ALL_BOT_SCOPES: adding a
+// scope post-install forces a re-install.
+export const SLACK_USER_SCOPES: readonly string[] = [
+  "channels:history",
+  "channels:read",
+  "emoji:read",
+  "files:read",
+  "groups:history",
+  "groups:read",
+  "im:history",
+  "im:read",
+  "links:read",
+  "mpim:history",
+  "mpim:read",
+  "pins:read",
+  "reactions:read",
+  "search:read",
+  "users:read",
+  "users:read.email",
+];
 
 export type SlackEventBinding = {
   bot_events: readonly string[];
@@ -144,7 +164,6 @@ const SLACK_DISPLAY_NAME_LIMIT = 35;
 
 export type SlackManifestInput = {
   appName: string;
-  toolUrns?: readonly string[];
   webhookUrl?: string | undefined;
   extraScopes?: readonly string[];
   extraBotEvents?: readonly string[];
@@ -156,8 +175,8 @@ export type SlackManifestResult = {
   deepLink: string;
   displayName: string;
   scopes: string[];
+  userScopes: string[];
   botEvents: string[];
-  searchToolNeedsUserToken: boolean;
 };
 
 function uniqueSorted(values: Iterable<string>): string[] {
@@ -173,15 +192,25 @@ export function buildSlackManifest(
   );
 
   const scopes = new Set<string>(ALL_BOT_SCOPES);
-  const botEvents = new Set<string>(ALL_EVENT_BOT_EVENTS);
-  const searchUrn = `${SLACK_TOOL_URN_PREFIX}search_messages_and_files`;
-  const searchToolNeedsUserToken = (input.toolUrns ?? []).includes(searchUrn);
-
   for (const s of input.extraScopes ?? []) scopes.add(s);
-  for (const e of input.extraBotEvents ?? []) botEvents.add(e);
+
+  const userScopes = new Set<string>(SLACK_USER_SCOPES);
+
+  // Slack rejects an event_subscriptions block whose request_url is missing
+  // or unverified. Only emit bot_events when we have a webhook to anchor them
+  // to — otherwise produce a scope-only manifest that Slack will accept.
+  const botEvents = new Set<string>();
+  if (input.webhookUrl) {
+    for (const e of ALL_EVENT_BOT_EVENTS) botEvents.add(e);
+    for (const e of input.extraBotEvents ?? []) botEvents.add(e);
+  }
 
   const sortedScopes = uniqueSorted(scopes);
+  const sortedUserScopes = uniqueSorted(userScopes);
   const sortedEvents = uniqueSorted(botEvents);
+
+  const oauthScopes: { bot: string[]; user?: string[] } = { bot: sortedScopes };
+  if (sortedUserScopes.length > 0) oauthScopes.user = sortedUserScopes;
 
   const manifest: Record<string, unknown> = {
     _metadata: { major_version: 1, minor_version: 1 },
@@ -189,7 +218,7 @@ export function buildSlackManifest(
     features: {
       bot_user: { display_name: displayName, always_online: true },
     },
-    oauth_config: { scopes: { bot: sortedScopes } },
+    oauth_config: { scopes: oauthScopes },
   };
   if (input.webhookUrl) {
     manifest.settings = {
@@ -197,10 +226,6 @@ export function buildSlackManifest(
         request_url: input.webhookUrl,
         bot_events: sortedEvents,
       },
-    };
-  } else if (sortedEvents.length > 0) {
-    manifest.settings = {
-      event_subscriptions: { bot_events: sortedEvents },
     };
   }
 
@@ -213,55 +238,7 @@ export function buildSlackManifest(
     deepLink,
     displayName,
     scopes: sortedScopes,
+    userScopes: sortedUserScopes,
     botEvents: sortedEvents,
-    searchToolNeedsUserToken,
-  };
-}
-
-export type SlackContextSources = {
-  attachedToolsetSlugs: readonly string[];
-  toolsetsBySlug: ReadonlyMap<string, { toolUrns: readonly string[] }>;
-  triggers: readonly {
-    definitionSlug: string;
-    targetKind?: string;
-    targetRef?: string;
-    config: { [k: string]: unknown };
-  }[];
-  assistantId?: string | null;
-};
-
-export function deriveSlackContext(sources: SlackContextSources): {
-  toolUrns: string[];
-  eventTypes: string[];
-} {
-  const toolUrns = new Set<string>();
-  for (const slug of sources.attachedToolsetSlugs) {
-    const ts = sources.toolsetsBySlug.get(slug);
-    if (!ts) continue;
-    for (const urn of ts.toolUrns) {
-      if (urn.startsWith(SLACK_TOOL_URN_PREFIX)) toolUrns.add(urn);
-    }
-  }
-
-  const eventTypes = new Set<string>();
-  for (const trigger of sources.triggers) {
-    if (trigger.definitionSlug !== "slack") continue;
-    if (
-      sources.assistantId &&
-      trigger.targetKind === "assistant" &&
-      trigger.targetRef !== sources.assistantId
-    ) {
-      continue;
-    }
-    const raw = trigger.config["event_types"];
-    if (!Array.isArray(raw)) continue;
-    for (const e of raw) {
-      if (typeof e === "string" && e.length > 0) eventTypes.add(e);
-    }
-  }
-
-  return {
-    toolUrns: Array.from(toolUrns).sort(),
-    eventTypes: Array.from(eventTypes).sort(),
   };
 }

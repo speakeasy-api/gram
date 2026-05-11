@@ -200,7 +200,6 @@ func newManagerWithFakeWorkOSConfig(t *testing.T, fake *fakeWorkOSServer, idpCfg
 		fakePylon,
 		fakePosthog,
 		billingClient,
-		workosClient,
 		speakeasyIDPClient,
 	)
 
@@ -513,7 +512,6 @@ func TestSyncWorkOSIDs_NilWorkOSClient(t *testing.T) {
 		fakePylon,
 		fakePosthog,
 		billingClient,
-		nil,
 		speakeasyIDPClient,
 	)
 

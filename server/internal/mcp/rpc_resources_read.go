@@ -27,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
@@ -61,6 +62,7 @@ func handleResourcesRead(
 	billingTracker billing.Tracker,
 	billingRepository billing.Repository,
 	telemLogger *tm.Logger,
+	platformExtras []platformtools.ExternalTool,
 ) (json.RawMessage, error) {
 	var params resourceReadParams
 	if err := json.Unmarshal(req.Params, &params); err != nil {
@@ -73,8 +75,8 @@ func handleResourcesRead(
 
 	projectID := mv.ProjectID(payload.projectID)
 
-	toolsetHelpers := toolsets.NewToolsets(db)
-	toolset, err := mv.DescribeToolset(ctx, logger, db, projectID, mv.ToolsetSlug(conv.ToLower(payload.toolset)), nil)
+	toolsetHelpers := toolsets.NewToolsets(db, platformExtras...)
+	toolset, err := mv.DescribeToolset(ctx, logger, db, projectID, mv.ToolsetSlug(conv.ToLower(payload.toolset)), nil, platformExtras...)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to get toolset").Log(ctx, logger)
 	}

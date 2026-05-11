@@ -1,6 +1,7 @@
 package platformtools
 
 import (
+	"context"
 	"log/slog"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -13,11 +14,15 @@ import (
 
 const (
 	SourceLogs                     = "logs"
+	SourceMemory                   = "memory"
 	SourceSlack                    = "slack"
 	SourceTriggers                 = "triggers"
 	ToolNameSearchLogs             = "platform_search_logs"
 	ToolNameListTriggers           = "platform_list_triggers"
 	ToolNameConfigureTrigger       = "platform_configure_trigger"
+	ToolNameMemoryForget           = "platform_memory_forget"
+	ToolNameMemoryRecall           = "platform_memory_recall"
+	ToolNameMemoryRemember         = "platform_memory_remember"
 	ToolNameReadChannelMessages    = "platform_slack_read_channel_messages"
 	ToolNameReadThreadMessages     = "platform_slack_read_thread_messages"
 	ToolNameReadUserProfile        = "platform_slack_read_user_profile"
@@ -40,6 +45,17 @@ type Dependencies struct {
 	TriggerApp       *bgtriggers.App
 	SlackHTTPClient  *guardian.HTTPClient
 	Audit            *audit.Logger
+}
+
+// FeatureChecker reports whether a product feature is enabled for an
+// organization. Features are referenced by string name to avoid a
+// productfeatures import cycle through openrouter -> productfeatures ->
+// auth -> mv -> platformtools.
+type FeatureChecker func(ctx context.Context, organizationID string, feature string) bool
+
+type ExternalTool struct {
+	Executor        PlatformToolExecutor
+	RequiredFeature string // empty string = always available
 }
 
 type ToolDescriptor = core.ToolDescriptor

@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -15,11 +16,13 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	triggerrepo "github.com/speakeasy-api/gram/server/internal/triggers/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 const (
@@ -27,6 +30,10 @@ const (
 	TargetKindNoop      = "noop"
 	StatusActive        = "active"
 	StatusPaused        = "paused"
+	StatusFired         = "fired"
+	StatusCancelled     = "cancelled"
+
+	DefinitionSlugWake = "wake"
 )
 
 var (
@@ -122,6 +129,7 @@ type App struct {
 	temporalEnv    *tenv.Environment
 	serverURL      *url.URL
 	dispatchers    map[string]Dispatcher
+	audit          *audit.Logger
 }
 
 // InstanceDBHook runs inside the transaction that mutates a trigger instance,
@@ -166,6 +174,7 @@ func NewApp(
 	temporalEnv *tenv.Environment,
 	envLoader EnvironmentLoader,
 	deliveryLogger DeliveryLogger,
+	auditLogger *audit.Logger,
 	serverURL *url.URL,
 	dispatchers ...Dispatcher,
 ) *App {
@@ -185,6 +194,7 @@ func NewApp(
 		temporalEnv:    temporalEnv,
 		serverURL:      serverURL,
 		dispatchers:    dispatcherMap,
+		audit:          auditLogger,
 	}
 }
 
@@ -212,6 +222,9 @@ func (a *App) GetInstance(ctx context.Context, projectID uuid.UUID, id uuid.UUID
 }
 
 func (a *App) Create(ctx context.Context, params CreateParams, hooks ...InstanceDBHook) (triggerrepo.TriggerInstance, error) {
+	if params.DefinitionSlug == DefinitionSlugWake {
+		return triggerrepo.TriggerInstance{}, fmt.Errorf("%w: wake triggers must use CreateWakeInstance", ErrBadRequest)
+	}
 	if err := ValidateTargetKind(params.TargetKind); err != nil {
 		return triggerrepo.TriggerInstance{}, fmt.Errorf("%w: %w", ErrBadRequest, err)
 	}
@@ -273,6 +286,9 @@ func (a *App) Create(ctx context.Context, params CreateParams, hooks ...Instance
 }
 
 func (a *App) Update(ctx context.Context, params UpdateParams, hooks ...InstanceDBHook) (triggerrepo.TriggerInstance, error) {
+	if params.DefinitionSlug == DefinitionSlugWake {
+		return triggerrepo.TriggerInstance{}, fmt.Errorf("%w: wake triggers are not updatable", ErrBadRequest)
+	}
 	if err := ValidateTargetKind(params.TargetKind); err != nil {
 		return triggerrepo.TriggerInstance{}, fmt.Errorf("%w: %w", ErrBadRequest, err)
 	}
@@ -408,6 +424,242 @@ func (a *App) SetStatus(ctx context.Context, projectID uuid.UUID, id uuid.UUID, 
 	}
 
 	return item, nil
+}
+
+// CreateWakeInstanceParams configures a one-shot self-wake for an assistant
+// thread. CorrelationID must match the originating thread's correlation ID so
+// the firing event lands on the same `assistant_threads` row.
+type CreateWakeInstanceParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+	Name           string
+	AssistantID    uuid.UUID
+	TargetDisplay  string
+	FireAt         time.Time
+	Note           *string
+	CorrelationID  string
+}
+
+func (a *App) CreateWakeInstance(ctx context.Context, params CreateWakeInstanceParams, hooks ...InstanceDBHook) (triggerrepo.TriggerInstance, error) {
+	if params.AssistantID == uuid.Nil {
+		return triggerrepo.TriggerInstance{}, fmt.Errorf("%w: assistant_id is required", ErrBadRequest)
+	}
+	if strings.TrimSpace(params.CorrelationID) == "" {
+		return triggerrepo.TriggerInstance{}, fmt.Errorf("%w: correlation_id is required", ErrBadRequest)
+	}
+
+	if err := ValidateWakeFireAt(params.FireAt, time.Now().UTC()); err != nil {
+		return triggerrepo.TriggerInstance{}, fmt.Errorf("%w: %w", ErrBadRequest, err)
+	}
+
+	configMap := map[string]any{
+		"fire_at":        params.FireAt.UTC().Format(time.RFC3339Nano),
+		"correlation_id": params.CorrelationID,
+	}
+	if params.Note != nil {
+		configMap["note"] = *params.Note
+	}
+
+	if _, _, err := a.validateInstance(ctx, params.ProjectID, uuid.Nil, DefinitionSlugWake, configMap); err != nil {
+		return triggerrepo.TriggerInstance{}, fmt.Errorf("%w: validate wake config: %w", ErrBadRequest, err)
+	}
+
+	configJSON, err := marshalConfigJSON(configMap)
+	if err != nil {
+		return triggerrepo.TriggerInstance{}, fmt.Errorf("marshal wake config: %w", err)
+	}
+
+	tx, err := a.db.Begin(ctx)
+	if err != nil {
+		return triggerrepo.TriggerInstance{}, fmt.Errorf("begin wake create transaction: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+
+	item, err := triggerrepo.New(tx).CreateTriggerInstance(ctx, triggerrepo.CreateTriggerInstanceParams{
+		OrganizationID: params.OrganizationID,
+		ProjectID:      params.ProjectID,
+		DefinitionSlug: DefinitionSlugWake,
+		Name:           params.Name,
+		EnvironmentID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		TargetKind:     TargetKindAssistant,
+		TargetRef:      params.AssistantID.String(),
+		TargetDisplay:  params.TargetDisplay,
+		ConfigJson:     configJSON,
+		Status:         StatusActive,
+	})
+	if err != nil {
+		return triggerrepo.TriggerInstance{}, fmt.Errorf("create wake instance: %w", err)
+	}
+
+	for _, hook := range hooks {
+		if err := hook(ctx, tx, item); err != nil {
+			return triggerrepo.TriggerInstance{}, fmt.Errorf("wake create hook: %w", err)
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return triggerrepo.TriggerInstance{}, fmt.Errorf("commit wake create transaction: %w", err)
+	}
+
+	if err := ExecuteTriggerWakeWorkflow(ctx, a.temporalEnv, item.ID, params.FireAt); err != nil {
+		// Roll back the DB row so the caller can retry cleanly. The audit
+		// log entry stays — it records the attempt regardless of outcome.
+		_, _ = a.repo.DeleteTriggerInstance(ctx, triggerrepo.DeleteTriggerInstanceParams{
+			ID:        item.ID,
+			ProjectID: params.ProjectID,
+		})
+		return triggerrepo.TriggerInstance{}, fmt.Errorf("start wake workflow: %w", err)
+	}
+
+	return item, nil
+}
+
+// CancelWakeInstance flips an active wake to 'cancelled' and cancels its
+// pending workflow. Idempotent for already-cancelled or already-fired wakes.
+func (a *App) CancelWakeInstance(ctx context.Context, projectID uuid.UUID, instanceID uuid.UUID, hooks ...InstanceDBHook) (triggerrepo.TriggerInstance, error) {
+	existing, err := a.repo.GetTriggerInstanceByID(ctx, triggerrepo.GetTriggerInstanceByIDParams{
+		ID:        instanceID,
+		ProjectID: projectID,
+	})
+	if err != nil {
+		return triggerrepo.TriggerInstance{}, fmt.Errorf("get wake instance: %w", err)
+	}
+	if existing.DefinitionSlug != DefinitionSlugWake {
+		return triggerrepo.TriggerInstance{}, fmt.Errorf("%w: not a wake trigger", ErrBadRequest)
+	}
+	if existing.Status != StatusActive {
+		return existing, nil
+	}
+
+	tx, err := a.db.Begin(ctx)
+	if err != nil {
+		return triggerrepo.TriggerInstance{}, fmt.Errorf("begin wake cancel transaction: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+
+	item, err := triggerrepo.New(tx).SetTriggerInstanceStatus(ctx, triggerrepo.SetTriggerInstanceStatusParams{
+		Status:    StatusCancelled,
+		ID:        instanceID,
+		ProjectID: projectID,
+	})
+	if err != nil {
+		return triggerrepo.TriggerInstance{}, fmt.Errorf("cancel wake instance: %w", err)
+	}
+
+	for _, hook := range hooks {
+		if err := hook(ctx, tx, item); err != nil {
+			return triggerrepo.TriggerInstance{}, fmt.Errorf("wake cancel hook: %w", err)
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return triggerrepo.TriggerInstance{}, fmt.Errorf("commit wake cancel transaction: %w", err)
+	}
+
+	if err := CancelTriggerWakeWorkflow(ctx, a.temporalEnv, instanceID); err != nil {
+		return triggerrepo.TriggerInstance{}, err
+	}
+
+	return item, nil
+}
+
+// MarkInstanceFired transitions an active wake instance to 'fired' and
+// records a wake:fired audit log. The UPDATE is guarded on status='active' so
+// a cancel that won the race is preserved (the workflow returns nil; the
+// already-cancelled row keeps its terminal state).
+func (a *App) MarkInstanceFired(ctx context.Context, instanceID string) error {
+	id, err := uuid.Parse(instanceID)
+	if err != nil {
+		return fmt.Errorf("parse trigger instance id: %w", err)
+	}
+
+	tx, err := a.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin mark fired transaction: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+
+	item, err := triggerrepo.New(tx).SetTriggerInstanceStatusByID(ctx, triggerrepo.SetTriggerInstanceStatusByIDParams{
+		Status:         StatusFired,
+		ID:             id,
+		ExpectedStatus: StatusActive,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("mark trigger fired: %w", err)
+	}
+
+	if a.audit != nil {
+		correlationID, fireAt := WakeConfigFields(item.ConfigJson)
+		if err := a.audit.LogWakeFired(ctx, tx, audit.LogWakeEvent{
+			OrganizationID:     item.OrganizationID,
+			ProjectID:          item.ProjectID,
+			Actor:              urn.NewPrincipal(urn.PrincipalTypeUser, "system"),
+			ActorDisplayName:   nil,
+			ActorSlug:          nil,
+			TriggerInstanceURN: urn.NewTriggerInstance(item.ID),
+			Name:               item.Name,
+			Correlation:        correlationID,
+			FireAt:             fireAt,
+		}); err != nil {
+			return fmt.Errorf("log wake fired: %w", err)
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit mark fired transaction: %w", err)
+	}
+	return nil
+}
+
+// CancelAssistantWakes is the cascade hook on assistant deletion: errors per
+// instance are folded into the returned error so a partial sweep still
+// cancels what it can.
+func (a *App) CancelAssistantWakes(ctx context.Context, projectID, assistantID uuid.UUID) error {
+	rows, err := a.ListActiveAssistantWakes(ctx, projectID, assistantID)
+	if err != nil {
+		return err
+	}
+
+	var firstErr error
+	for _, row := range rows {
+		_, err := a.CancelWakeInstance(ctx, projectID, row.ID, func(ctx context.Context, dbtx pgx.Tx, instance triggerrepo.TriggerInstance) error {
+			if a.audit == nil {
+				return nil
+			}
+			correlationID, fireAt := WakeConfigFields(instance.ConfigJson)
+			return a.audit.LogWakeCancelled(ctx, dbtx, audit.LogWakeEvent{
+				OrganizationID:     instance.OrganizationID,
+				ProjectID:          instance.ProjectID,
+				Actor:              urn.NewPrincipal(urn.PrincipalTypeUser, "system"),
+				ActorDisplayName:   nil,
+				ActorSlug:          nil,
+				TriggerInstanceURN: urn.NewTriggerInstance(instance.ID),
+				Name:               instance.Name,
+				Correlation:        correlationID,
+				FireAt:             fireAt,
+			})
+		})
+		if err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	return firstErr
+}
+
+func (a *App) ListActiveAssistantWakes(ctx context.Context, projectID uuid.UUID, assistantID uuid.UUID) ([]triggerrepo.TriggerInstance, error) {
+	rows, err := a.repo.ListActiveTriggerInstancesByTarget(ctx, triggerrepo.ListActiveTriggerInstancesByTargetParams{
+		ProjectID:      projectID,
+		DefinitionSlug: DefinitionSlugWake,
+		TargetKind:     TargetKindAssistant,
+		TargetRef:      assistantID.String(),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list active wake instances: %w", err)
+	}
+	return rows, nil
 }
 
 func (a *App) ProcessWebhook(ctx context.Context, instanceID uuid.UUID, body []byte, headers http.Header) (*WebhookIngressResult, error) {

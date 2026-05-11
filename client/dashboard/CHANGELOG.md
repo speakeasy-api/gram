@@ -1,5 +1,17 @@
 # dashboard
 
+## 0.49.0
+
+### Minor Changes
+
+- 5b1da59: Add an Employees tab to the AI Insights section that tracks Gram uptake and compliance across organization members. Shows per-member token usage, compliance status, and last activity over the last 30 days, paginated at 25 per page. Usage is attributed by matching the email reported by each AI coding tool (Claude Code, Cursor) to the member's Gram account.
+
+### Patch Changes
+
+- 79d57ad: Always grant the full Slack bot-scope superset in the assistant onboarding manifest builder, regardless of which platform tools are attached. Slack manifests are static post-install — adding a scope later forces the user to delete the app and re-OAuth — so per-tool scope gating only locked future capabilities behind a forced re-install.
+- 2c84295: Surface `environment:read` / `environment:write` in the RBAC dev toolbar and the
+  `access.listGrants` fallback so the env-clone permission picker works end-to-end.
+
 ## 0.48.0
 
 ### Minor Changes

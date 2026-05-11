@@ -73,6 +73,10 @@ type runtimeStartupConfig struct {
 	ChatID         string             `json:"chat_id"`
 	MCPServers     []runtimeMCPServer `json:"mcp_servers"`
 	History        []runtimeMessage   `json:"history,omitempty"`
+	// ContextWindow is the smallest context_length the gram backend resolved
+	// for Model. The runner uses it to threshold input-token-aware compaction.
+	// Zero means "unknown" — the runner skips compaction rather than guessing.
+	ContextWindow uint64 `json:"context_window,omitempty"`
 }
 
 type runtimeMCPServer struct {

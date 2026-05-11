@@ -145,6 +145,9 @@ const (
 	AssistantAppCreatedKey         = attribute.Key("gram.assistant.app_created")
 	AssistantSetupFailureClassKey  = attribute.Key("gram.assistant.setup_failure_class")
 	AssistantServerIPKey           = attribute.Key("gram.assistant.server_ip")
+	AssistantImageRecycleKey       = attribute.Key("gram.assistant.image_recycle")
+	AssistantImageDesiredKey       = attribute.Key("gram.assistant.image_desired")
+	AssistantImageActualKey        = attribute.Key("gram.assistant.image_actual")
 	ChatModelKey                   = attribute.Key("gram.chat.model")
 	ChatToolCountKey               = attribute.Key("gram.chat.tool_count")
 	ChatToolNamesKey               = attribute.Key("gram.chat.tool_names")
@@ -1324,6 +1327,18 @@ func AssistantAppCreated(v bool) attribute.KeyValue { return AssistantAppCreated
 
 func AssistantSetupFailureClass(v string) attribute.KeyValue {
 	return AssistantSetupFailureClassKey.String(v)
+}
+
+func AssistantImageRecycle(v bool) attribute.KeyValue { return AssistantImageRecycleKey.Bool(v) }
+
+func AssistantImageDesired(v string) attribute.KeyValue { return AssistantImageDesiredKey.String(v) }
+func SlogAssistantImageDesired(v string) slog.Attr {
+	return slog.String(string(AssistantImageDesiredKey), v)
+}
+
+func AssistantImageActual(v string) attribute.KeyValue { return AssistantImageActualKey.String(v) }
+func SlogAssistantImageActual(v string) slog.Attr {
+	return slog.String(string(AssistantImageActualKey), v)
 }
 
 func ChatModel(v string) attribute.KeyValue { return ChatModelKey.String(v) }

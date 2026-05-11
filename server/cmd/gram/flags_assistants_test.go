@@ -33,34 +33,6 @@ func TestAssistantRuntimeConfigFromCLIRejectsUnknownProvider(t *testing.T) {
 	require.Empty(t, cfg.Provider)
 }
 
-func TestAssistantRuntimeConfigFromCLIDefaultsToLocalProvider(t *testing.T) {
-	t.Parallel()
-
-	ctx := newAssistantRuntimeCLIContext(t, map[string]string{})
-
-	cfg, err := assistantRuntimeConfigFromCLI(ctx)
-	require.NoError(t, err)
-	require.Equal(t, assistants.RuntimeProviderLocal, cfg.Provider)
-}
-
-func TestAssistantRuntimeConfigFromCLIPreviewDoesNotSelectFly(t *testing.T) {
-	t.Parallel()
-
-	ctx := newAssistantRuntimeCLIContext(t, map[string]string{
-		"server-url":                 "https://pr-123.dev.getgram.ai",
-		"functions-provider":         "flyio",
-		"functions-runner-oci-image": "registry.fly.io/gfr-dev-dca1j103",
-		"functions-flyio-api-token":  "FlyV1 test-token",
-		"functions-flyio-org":        "speakeasy-lab",
-		"functions-flyio-region":     "ord",
-		"functions-runner-version":   "pr-123-deadbeef",
-	})
-
-	cfg, err := assistantRuntimeConfigFromCLI(ctx)
-	require.NoError(t, err)
-	require.Equal(t, assistants.RuntimeProviderLocal, cfg.Provider)
-}
-
 func newAssistantRuntimeCLIContext(t *testing.T, values map[string]string) *cli.Context {
 	t.Helper()
 

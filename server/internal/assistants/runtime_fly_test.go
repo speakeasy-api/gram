@@ -463,6 +463,310 @@ func TestFlyRuntimeBackendReapTreatsAppNotFoundAsSuccess(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestFlyRuntimeBackendEnsureSkipsRecycleWhenImageMatches(t *testing.T) {
+	t.Parallel()
+
+	server := newTestAssistantRuntimeServer(t, true)
+	backend, apiClient, flapsClient := newTestFlyRuntimeBackend(t, server)
+
+	threadID := uuid.New()
+	apiClient.app = &fly.App{ID: "app-1", Name: "gram-asst-test"}
+	flapsClient.machine = &fly.Machine{
+		ID:         "machine-1",
+		State:      fly.MachineStateStarted,
+		Region:     "iad",
+		InstanceID: "boot-1",
+		ImageRef: fly.MachineImageRef{
+			Registry:   "registry.fly.io",
+			Repository: "assistant-runtime",
+			Tag:        "dev",
+		},
+		Config: &fly.MachineConfig{
+			Metadata: map[string]string{flyMachineMetadataThreadID: threadID.String()},
+		},
+	}
+
+	rawMetadata, err := json.Marshal(flyRuntimeMetadata{
+		AppName:    "gram-asst-test",
+		AppID:      "app-1",
+		AppURL:     server.URL,
+		MachineID:  "machine-1",
+		Region:     "iad",
+		LastBootID: "boot-1",
+	})
+	require.NoError(t, err)
+
+	result, err := backend.Ensure(context.Background(), assistantRuntimeRecord{
+		AssistantThreadID:   threadID,
+		AssistantID:         uuid.New(),
+		ProjectID:           uuid.New(),
+		Backend:             runtimeBackendFlyIO,
+		BackendMetadataJSON: rawMetadata,
+	})
+	require.NoError(t, err)
+	require.Equal(t, 0, flapsClient.updateCalls)
+	require.False(t, result.ColdStart)
+	require.False(t, result.NeedsConfigure)
+}
+
+func TestFlyRuntimeBackendEnsureRecyclesStaleImageWhenIdle(t *testing.T) {
+	t.Parallel()
+
+	idle := uint64(10)
+	server := newTestAssistantRuntimeServerWithState(t, runnerStateResponse{
+		Configured:  true,
+		IdleSeconds: &idle,
+	})
+	backend, apiClient, flapsClient := newTestFlyRuntimeBackend(t, server)
+
+	threadID := uuid.New()
+	apiClient.app = &fly.App{ID: "app-1", Name: "gram-asst-test"}
+	flapsClient.machine = &fly.Machine{
+		ID:         "machine-1",
+		State:      fly.MachineStateStarted,
+		Region:     "iad",
+		InstanceID: "boot-1",
+		ImageRef: fly.MachineImageRef{
+			Registry:   "registry.fly.io",
+			Repository: "assistant-runtime",
+			Tag:        "v0",
+		},
+		Config: &fly.MachineConfig{
+			Metadata: map[string]string{flyMachineMetadataThreadID: threadID.String()},
+		},
+	}
+	flapsClient.updateMachine = &fly.Machine{
+		ID:         "machine-1",
+		State:      fly.MachineStateStarted,
+		Region:     "iad",
+		InstanceID: "boot-2",
+		ImageRef: fly.MachineImageRef{
+			Registry:   "registry.fly.io",
+			Repository: "assistant-runtime",
+			Tag:        "dev",
+		},
+		Config: &fly.MachineConfig{
+			Metadata: map[string]string{flyMachineMetadataThreadID: threadID.String()},
+		},
+	}
+
+	rawMetadata, err := json.Marshal(flyRuntimeMetadata{
+		AppName:    "gram-asst-test",
+		AppID:      "app-1",
+		AppURL:     server.URL,
+		MachineID:  "machine-1",
+		Region:     "iad",
+		LastBootID: "boot-1",
+	})
+	require.NoError(t, err)
+
+	result, err := backend.Ensure(context.Background(), assistantRuntimeRecord{
+		AssistantThreadID:   threadID,
+		AssistantID:         uuid.New(),
+		ProjectID:           uuid.New(),
+		Backend:             runtimeBackendFlyIO,
+		BackendMetadataJSON: rawMetadata,
+	})
+	require.NoError(t, err)
+	require.Equal(t, 1, flapsClient.updateCalls)
+	require.True(t, result.ColdStart)
+
+	var metadata flyRuntimeMetadata
+	require.NoError(t, json.Unmarshal(result.BackendMetadataJSON, &metadata))
+	require.Equal(t, "boot-2", metadata.LastBootID)
+}
+
+func TestFlyRuntimeBackendEnsureSkipsRecycleWhileTurnInFlight(t *testing.T) {
+	t.Parallel()
+
+	busy := uint64(0)
+	server := newTestAssistantRuntimeServerWithState(t, runnerStateResponse{
+		Configured:  true,
+		IdleSeconds: &busy,
+	})
+	backend, apiClient, flapsClient := newTestFlyRuntimeBackend(t, server)
+
+	threadID := uuid.New()
+	apiClient.app = &fly.App{ID: "app-1", Name: "gram-asst-test"}
+	flapsClient.machine = &fly.Machine{
+		ID:         "machine-1",
+		State:      fly.MachineStateStarted,
+		Region:     "iad",
+		InstanceID: "boot-1",
+		ImageRef: fly.MachineImageRef{
+			Registry:   "registry.fly.io",
+			Repository: "assistant-runtime",
+			Tag:        "v0",
+		},
+		Config: &fly.MachineConfig{
+			Metadata: map[string]string{flyMachineMetadataThreadID: threadID.String()},
+		},
+	}
+
+	rawMetadata, err := json.Marshal(flyRuntimeMetadata{
+		AppName:    "gram-asst-test",
+		AppID:      "app-1",
+		AppURL:     server.URL,
+		MachineID:  "machine-1",
+		Region:     "iad",
+		LastBootID: "boot-1",
+	})
+	require.NoError(t, err)
+
+	result, err := backend.Ensure(context.Background(), assistantRuntimeRecord{
+		AssistantThreadID:   threadID,
+		AssistantID:         uuid.New(),
+		ProjectID:           uuid.New(),
+		Backend:             runtimeBackendFlyIO,
+		BackendMetadataJSON: rawMetadata,
+	})
+	require.NoError(t, err)
+	require.Equal(t, 0, flapsClient.updateCalls)
+	require.False(t, result.ColdStart)
+	require.False(t, result.NeedsConfigure)
+}
+
+func TestFlyRuntimeBackendEnsureRecyclesStaleImageOnStoppedMachine(t *testing.T) {
+	t.Parallel()
+
+	server := newTestAssistantRuntimeServer(t, false)
+	backend, apiClient, flapsClient := newTestFlyRuntimeBackend(t, server)
+
+	threadID := uuid.New()
+	apiClient.app = &fly.App{ID: "app-1", Name: "gram-asst-test"}
+	flapsClient.machine = &fly.Machine{
+		ID:         "machine-1",
+		State:      fly.MachineStateStopped,
+		Region:     "iad",
+		InstanceID: "boot-1",
+		ImageRef: fly.MachineImageRef{
+			Registry:   "registry.fly.io",
+			Repository: "assistant-runtime",
+			Tag:        "v0",
+		},
+		Config: &fly.MachineConfig{
+			Metadata: map[string]string{flyMachineMetadataThreadID: threadID.String()},
+		},
+	}
+	flapsClient.updateMachine = &fly.Machine{
+		ID:         "machine-1",
+		State:      fly.MachineStateStarted,
+		Region:     "iad",
+		InstanceID: "boot-2",
+		ImageRef: fly.MachineImageRef{
+			Registry:   "registry.fly.io",
+			Repository: "assistant-runtime",
+			Tag:        "dev",
+		},
+		Config: &fly.MachineConfig{
+			Metadata: map[string]string{flyMachineMetadataThreadID: threadID.String()},
+		},
+	}
+
+	rawMetadata, err := json.Marshal(flyRuntimeMetadata{
+		AppName:    "gram-asst-test",
+		AppID:      "app-1",
+		AppURL:     server.URL,
+		MachineID:  "machine-1",
+		Region:     "iad",
+		LastBootID: "boot-1",
+	})
+	require.NoError(t, err)
+
+	result, err := backend.Ensure(context.Background(), assistantRuntimeRecord{
+		AssistantThreadID:   threadID,
+		AssistantID:         uuid.New(),
+		ProjectID:           uuid.New(),
+		Backend:             runtimeBackendFlyIO,
+		BackendMetadataJSON: rawMetadata,
+	})
+	require.NoError(t, err)
+	require.Equal(t, 1, flapsClient.updateCalls)
+	require.True(t, result.ColdStart)
+	require.True(t, result.NeedsConfigure)
+}
+
+func TestFlyRuntimeBackendEnsureRecyclesWhenStateProbeErrors(t *testing.T) {
+	t.Parallel()
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ok"))
+	})
+	stateCalls := 0
+	mux.HandleFunc("/state", func(w http.ResponseWriter, _ *http.Request) {
+		stateCalls++
+		// Probe-time call from maybeRecycleImage fails; the post-recycle
+		// runtimeState lookup gets a configured response so Ensure completes.
+		if stateCalls == 1 {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(runnerStateResponse{Configured: true})
+	})
+	mux.HandleFunc("/configure", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	backend, apiClient, flapsClient := newTestFlyRuntimeBackend(t, srv)
+
+	threadID := uuid.New()
+	apiClient.app = &fly.App{ID: "app-1", Name: "gram-asst-test"}
+	flapsClient.machine = &fly.Machine{
+		ID:         "machine-1",
+		State:      fly.MachineStateStarted,
+		Region:     "iad",
+		InstanceID: "boot-1",
+		ImageRef: fly.MachineImageRef{
+			Registry:   "registry.fly.io",
+			Repository: "assistant-runtime",
+			Tag:        "v0",
+		},
+		Config: &fly.MachineConfig{
+			Metadata: map[string]string{flyMachineMetadataThreadID: threadID.String()},
+		},
+	}
+	flapsClient.updateMachine = &fly.Machine{
+		ID:         "machine-1",
+		State:      fly.MachineStateStarted,
+		Region:     "iad",
+		InstanceID: "boot-2",
+		ImageRef: fly.MachineImageRef{
+			Registry:   "registry.fly.io",
+			Repository: "assistant-runtime",
+			Tag:        "dev",
+		},
+		Config: &fly.MachineConfig{
+			Metadata: map[string]string{flyMachineMetadataThreadID: threadID.String()},
+		},
+	}
+
+	rawMetadata, err := json.Marshal(flyRuntimeMetadata{
+		AppName:    "gram-asst-test",
+		AppID:      "app-1",
+		AppURL:     srv.URL,
+		MachineID:  "machine-1",
+		Region:     "iad",
+		LastBootID: "boot-1",
+	})
+	require.NoError(t, err)
+
+	result, err := backend.Ensure(context.Background(), assistantRuntimeRecord{
+		AssistantThreadID:   threadID,
+		AssistantID:         uuid.New(),
+		ProjectID:           uuid.New(),
+		Backend:             runtimeBackendFlyIO,
+		BackendMetadataJSON: rawMetadata,
+	})
+	require.NoError(t, err)
+	require.Equal(t, 1, flapsClient.updateCalls)
+	require.True(t, result.ColdStart)
+}
+
 func TestFlyRuntimeBackendServerURLRejectsLoopback(t *testing.T) {
 	t.Parallel()
 
@@ -542,6 +846,10 @@ type testFlyRuntimeFlapsClient struct {
 	startErr      error
 	stopErr       error
 	stopCalls     int
+	updateMachine *fly.Machine
+	updateErr     error
+	updateCalls   int
+	updateInputs  []fly.LaunchMachineInput
 	waitErr       error
 }
 
@@ -594,6 +902,19 @@ func (c *testFlyRuntimeFlapsClient) Stop(_ context.Context, _ string, _ fly.Stop
 	return nil
 }
 
+func (c *testFlyRuntimeFlapsClient) Update(_ context.Context, _ string, input fly.LaunchMachineInput, _ string) (*fly.Machine, error) {
+	c.updateCalls++
+	c.updateInputs = append(c.updateInputs, input)
+	if c.updateErr != nil {
+		return nil, c.updateErr
+	}
+	if c.updateMachine != nil {
+		c.machine = c.updateMachine
+		return c.updateMachine, nil
+	}
+	return nil, errors.New("update machine not configured")
+}
+
 func (c *testFlyRuntimeFlapsClient) Wait(_ context.Context, _ string, _ *fly.Machine, _ string, _ time.Duration) error {
 	return c.waitErr
 }
@@ -608,6 +929,11 @@ func (f *testFlyRuntimeFlapsFactory) New(context.Context) (flyRuntimeFlapsClient
 
 func newTestAssistantRuntimeServer(t *testing.T, configured bool) *httptest.Server {
 	t.Helper()
+	return newTestAssistantRuntimeServerWithState(t, runnerStateResponse{Configured: configured})
+}
+
+func newTestAssistantRuntimeServerWithState(t *testing.T, state runnerStateResponse) *httptest.Server {
+	t.Helper()
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
@@ -616,7 +942,7 @@ func newTestAssistantRuntimeServer(t *testing.T, configured bool) *httptest.Serv
 	})
 	mux.HandleFunc("/state", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(runnerStateResponse{Configured: configured})
+		_ = json.NewEncoder(w).Encode(state)
 	})
 	mux.HandleFunc("/configure", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
