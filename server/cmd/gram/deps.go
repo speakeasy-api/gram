@@ -29,6 +29,7 @@ import (
 	"github.com/urfave/cli/v2"
 	"github.com/urfave/cli/v2/altsrc"
 	"github.com/workos/workos-go/v6/pkg/events"
+	"github.com/workos/workos-go/v6/pkg/usermanagement"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/metric"
 	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
@@ -509,6 +510,25 @@ func newWorkOSEventsClient(c *cli.Context, guardianPolicy *guardian.Policy) (*ev
 		HTTPClient: guardianPolicy.PooledClient(),
 		Endpoint:   workosClientOpts(c).Endpoint,
 	}, nil
+}
+
+// newIDPUserManagementClient creates a WorkOS user-management SDK client
+// scoped to the IDP application key. Returns nil when the key is empty
+// (local dev with mock IDP).
+func newIDPUserManagementClient(guardianPolicy *guardian.Policy, apiKey string, c *cli.Context) *usermanagement.Client {
+	if apiKey == "" || apiKey == "unset" {
+		return nil
+	}
+
+	retryCfg := guardian.DefaultRetryConfig()
+	retryCfg.WaitMax = 10 * time.Second
+
+	um := usermanagement.NewClient(apiKey)
+	um.HTTPClient = guardianPolicy.PooledClient(guardian.WithRetryConfig(retryCfg))
+	if ep := c.String("workos-endpoint"); ep != "" {
+		um.Endpoint = ep
+	}
+	return um
 }
 
 func newTigrisStore(ctx context.Context, c *cli.Context, logger *slog.Logger) (*assets.TigrisStore, func(context.Context) error, error) {

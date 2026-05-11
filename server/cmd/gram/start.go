@@ -167,6 +167,11 @@ func newStartCommand() *cli.Command {
 			EnvVars:  []string{"GRAM_IDP_CLIENT_ID"},
 			Required: true,
 		},
+		&cli.StringFlag{
+			Name:    "idp-client-secret",
+			Usage:   "WorkOS API key scoped to the IDP application (falls back to workos-api-key if unset)",
+			EnvVars: []string{"GRAM_IDP_CLIENT_SECRET"},
+		},
 		&cli.BoolFlag{
 			Name:    "with-otel-tracing",
 			Usage:   "Enable OpenTelemetry traces",
@@ -507,6 +512,11 @@ func newStartCommand() *cli.Command {
 				return fmt.Errorf("failed to create billing provider: %w", err)
 			}
 
+			idpClientSecret := c.String("idp-client-secret")
+			if idpClientSecret == "" {
+				idpClientSecret = c.String("workos-api-key")
+			}
+
 			sessionManager := sessions.NewManager(
 				logger,
 				tracerProvider,
@@ -516,8 +526,8 @@ func newStartCommand() *cli.Command {
 				cache.SuffixNone,
 				c.String("idp-base-url"),
 				c.String("idp-client-id"),
-				c.String("workos-api-key"),
-				workosClient.UserManagement(),
+				idpClientSecret,
+				newIDPUserManagementClient(guardianPolicy, idpClientSecret, c),
 				pylonClient,
 				posthogClient,
 				billingRepo,

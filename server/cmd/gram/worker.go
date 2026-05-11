@@ -272,6 +272,11 @@ func newWorkerCommand() *cli.Command {
 			Required: true,
 		},
 		&cli.StringFlag{
+			Name:    "idp-client-secret",
+			Usage:   "WorkOS API key scoped to the IDP application (falls back to workos-api-key if unset)",
+			EnvVars: []string{"GRAM_IDP_CLIENT_SECRET"},
+		},
+		&cli.StringFlag{
 			Name:     "jwt-signing-key",
 			Usage:    "Key for JWT signing",
 			Required: true,
@@ -547,7 +552,12 @@ func newWorkerCommand() *cli.Command {
 				return fmt.Errorf("failed to create pylon client: %w", err)
 			}
 
-			sessionManager := sessions.NewManager(logger, tracerProvider, guardianPolicy, db, redisClient, cache.SuffixNone, c.String("idp-base-url"), c.String("idp-client-id"), c.String("workos-api-key"), nil, pylonClient, posthogClient, billingRepo)
+			idpClientSecret := c.String("idp-client-secret")
+			if idpClientSecret == "" {
+				idpClientSecret = c.String("workos-api-key")
+			}
+
+			sessionManager := sessions.NewManager(logger, tracerProvider, guardianPolicy, db, redisClient, cache.SuffixNone, c.String("idp-base-url"), c.String("idp-client-id"), idpClientSecret, newIDPUserManagementClient(guardianPolicy, idpClientSecret, c), pylonClient, posthogClient, billingRepo)
 
 			chatSessionsManager := chatsessions.NewManager(logger, redisClient, c.String("jwt-signing-key"))
 
