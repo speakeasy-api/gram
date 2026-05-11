@@ -39,14 +39,14 @@ type ClassifierResult struct {
 // LabelInjection is the positive class returned by the deberta-v3 model.
 const LabelInjection = "INJECTION"
 
-// piClassifierHTTPBatchSize is the per-request item cap. Matches the Python
+// promptInjectionClassifierHTTPBatchSize is the per-request item cap. Matches the Python
 // service's MAX_BATCH default. Keeps payload size and inference time per call
 // bounded; AnalyzeBatch fan-out across batches when n > this.
-const piClassifierHTTPBatchSize = 50
+const promptInjectionClassifierHTTPBatchSize = 50
 
-// piClassifierPerBatchConcurrency is the number of in-flight HTTP requests
+// promptInjectionClassifierPerBatchConcurrency is the number of in-flight HTTP requests
 // per Classify call. Mirrors the presidio client's perBatchRequestConcurrency.
-const piClassifierPerBatchConcurrency = 2
+const promptInjectionClassifierPerBatchConcurrency = 2
 
 // DebertaClassifierClient calls the gram-pi-classifier sidecar's POST /detect.
 // Like PresidioClient, this is a trusted cluster-internal service so the
@@ -86,7 +86,7 @@ func NewPromptInjectionClassifier(baseURL string, tracerProvider trace.TracerPro
 		httpClient:         httpClient,
 		tracer:             tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis/pi_classifier"),
 		logger:             logger,
-		requestConcurrency: piClassifierPerBatchConcurrency,
+		requestConcurrency: promptInjectionClassifierPerBatchConcurrency,
 		requestDuration:    requestDuration,
 		requestFailures:    requestFailures,
 	}
@@ -129,7 +129,7 @@ func (c *DebertaClassifierClient) Classify(ctx context.Context, texts []string) 
 
 	ctx, span := c.tracer.Start(ctx, "pi_classifier.classify", trace.WithAttributes(
 		attribute.Int("pi_classifier.batch_size", n),
-		attribute.Int("pi_classifier.http_batch_size", piClassifierHTTPBatchSize),
+		attribute.Int("pi_classifier.http_batch_size", promptInjectionClassifierHTTPBatchSize),
 	))
 	defer func() {
 		if err != nil {
@@ -139,7 +139,7 @@ func (c *DebertaClassifierClient) Classify(ctx context.Context, texts []string) 
 	}()
 
 	results := make([]ClassifierResult, n)
-	batches := chunkTextIndexes(n, piClassifierHTTPBatchSize)
+	batches := chunkTextIndexes(n, promptInjectionClassifierHTTPBatchSize)
 	workers := min(max(1, c.requestConcurrency), len(batches))
 
 	ch := make(chan indexRange, len(batches))

@@ -891,11 +891,11 @@ func newStartCommand() *cli.Command {
 			// Same shape for the L1 prompt-injection classifier sidecar. Empty URL
 			// → stub classifier (L1 disabled; L0 heuristics still run when a policy
 			// has the prompt_injection source enabled).
-			var hookPIClassifier risk_analysis.PromptInjectionClassifier = risk_analysis.StubClassifier{}
+			var hookPromptInjectionClassifier risk_analysis.PromptInjectionClassifier = risk_analysis.StubClassifier{}
 			if piURL := c.String("pi-classifier-url"); piURL != "" {
-				hookPIClassifier = risk_analysis.NewPromptInjectionClassifier(piURL, tracerProvider, meterProvider, logger)
+				hookPromptInjectionClassifier = risk_analysis.NewPromptInjectionClassifier(piURL, tracerProvider, meterProvider, logger)
 			}
-			hookPIScanner := risk_analysis.NewPromptInjectionScanner(logger, hookPIClassifier, c.Float64("pi-classifier-threshold"))
+			hookPIScanner := risk_analysis.NewPromptInjectionScanner(logger, hookPromptInjectionClassifier, c.Float64("pi-classifier-threshold"))
 
 			riskScanner, err := risk.NewScanner(logger, db, hookPIIScanner, hookPIScanner, meterProvider)
 			if err != nil {
@@ -1024,11 +1024,11 @@ func newStartCommand() *cli.Command {
 						piiScanner = risk_analysis.NewPresidioClient(presidioURL, tracerProvider, meterProvider, logger)
 					}
 
-					var piClassifier risk_analysis.PromptInjectionClassifier = risk_analysis.StubClassifier{}
+					var promptInjectionClassifier risk_analysis.PromptInjectionClassifier = risk_analysis.StubClassifier{}
 					if piURL := c.String("pi-classifier-url"); piURL != "" {
-						piClassifier = risk_analysis.NewPromptInjectionClassifier(piURL, tracerProvider, meterProvider, logger)
+						promptInjectionClassifier = risk_analysis.NewPromptInjectionClassifier(piURL, tracerProvider, meterProvider, logger)
 					}
-					piScanner := risk_analysis.NewPromptInjectionScanner(logger, piClassifier, c.Float64("pi-classifier-threshold"))
+					piScanner := risk_analysis.NewPromptInjectionScanner(logger, promptInjectionClassifier, c.Float64("pi-classifier-threshold"))
 
 					temporalWorker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, &background.WorkerOptions{
 						GuardianPolicy:      guardianPolicy,

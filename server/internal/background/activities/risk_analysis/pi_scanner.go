@@ -15,15 +15,15 @@ import (
 // action='block' policies).
 const SourcePromptInjection = "prompt_injection"
 
-// RulePIClassifierDeberta is the rule id stored in
+// RulePromptInjectionClassifierDeberta is the rule id stored in
 // risk_policies.prompt_injection_rules to opt a policy in to L1
 // classifier-backed detection on top of the always-on L0 heuristics.
-const RulePIClassifierDeberta = "deberta-v3-classifier"
+const RulePromptInjectionClassifierDeberta = "deberta-v3-classifier"
 
-// piClassifierFindingDescription is the human-readable description carried
+// promptInjectionClassifierFindingDescription is the human-readable description carried
 // on the Finding emitted when the L1 model flags a text. Kept short — the
 // dashboard renders this verbatim under the policy result row.
-const piClassifierFindingDescription = "ML classifier flagged prompt injection"
+const promptInjectionClassifierFindingDescription = "ML classifier flagged prompt injection"
 
 // PromptInjectionScanner runs the always-on L0 heuristic rules and, when a
 // policy opts in via prompt_injection_rules, the L1 ML classifier.
@@ -48,7 +48,7 @@ func NewPromptInjectionScanner(logger *slog.Logger, classifier PromptInjectionCl
 }
 
 // Scan runs the heuristic rules unconditionally; runs the L1 classifier when
-// rules contains RulePIClassifierDeberta. Used by the realtime risk scanner.
+// rules contains RulePromptInjectionClassifierDeberta. Used by the realtime risk scanner.
 func (s *PromptInjectionScanner) Scan(ctx context.Context, text string, rules []string) ([]Finding, error) {
 	if text == "" {
 		return nil, nil
@@ -56,7 +56,7 @@ func (s *PromptInjectionScanner) Scan(ctx context.Context, text string, rules []
 
 	findings := runHeuristics(text)
 
-	if !slices.Contains(rules, RulePIClassifierDeberta) {
+	if !slices.Contains(rules, RulePromptInjectionClassifierDeberta) {
 		return findings, nil
 	}
 
@@ -91,7 +91,7 @@ func (s *PromptInjectionScanner) ScanBatch(ctx context.Context, texts []string, 
 		out[i] = runHeuristics(t)
 	}
 
-	if !slices.Contains(rules, RulePIClassifierDeberta) {
+	if !slices.Contains(rules, RulePromptInjectionClassifierDeberta) {
 		return out, nil
 	}
 
@@ -124,8 +124,8 @@ func (s *PromptInjectionScanner) findingFromResult(text string, r ClassifierResu
 		return nil
 	}
 	return &Finding{
-		RuleID:           "pi." + RulePIClassifierDeberta,
-		Description:      piClassifierFindingDescription,
+		RuleID:           "pi." + RulePromptInjectionClassifierDeberta,
+		Description:      promptInjectionClassifierFindingDescription,
 		Match:            text,
 		StartPos:         0,
 		EndPos:           len(text),

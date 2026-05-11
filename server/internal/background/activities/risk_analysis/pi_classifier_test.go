@@ -40,7 +40,7 @@ func newClassifierTestServer(t *testing.T, handler http.HandlerFunc) (*httptest.
 	return srv, c
 }
 
-func TestPIClassifier_StubReportsSafe(t *testing.T) {
+func TestPromptInjectionClassifier_StubReportsSafe(t *testing.T) {
 	t.Parallel()
 	stub := risk_analysis.StubClassifier{}
 	results, err := stub.Classify(context.Background(), []string{"a", "b", "c"})
@@ -52,7 +52,7 @@ func TestPIClassifier_StubReportsSafe(t *testing.T) {
 	}
 }
 
-func TestPIClassifier_SingleBatchHappyPath(t *testing.T) {
+func TestPromptInjectionClassifier_SingleBatchHappyPath(t *testing.T) {
 	t.Parallel()
 	_, c := newClassifierTestServer(t, func(w http.ResponseWriter, r *http.Request) {
 		var req detectRequest
@@ -80,7 +80,7 @@ func TestPIClassifier_SingleBatchHappyPath(t *testing.T) {
 	assert.InDelta(t, 0.97, results[1].Score, 0.001)
 }
 
-func TestPIClassifier_BatchesLargerThanCapAreSplit(t *testing.T) {
+func TestPromptInjectionClassifier_BatchesLargerThanCapAreSplit(t *testing.T) {
 	t.Parallel()
 	var totalCalls atomic.Int32
 	_, c := newClassifierTestServer(t, func(w http.ResponseWriter, r *http.Request) {
@@ -110,7 +110,7 @@ func TestPIClassifier_BatchesLargerThanCapAreSplit(t *testing.T) {
 	assert.Equal(t, int32(3), totalCalls.Load(), "should fan out across the batch cap")
 }
 
-func TestPIClassifier_ServerErrorReturnsError(t *testing.T) {
+func TestPromptInjectionClassifier_ServerErrorReturnsError(t *testing.T) {
 	t.Parallel()
 	_, c := newClassifierTestServer(t, func(w http.ResponseWriter, _ *http.Request) {
 		http.Error(w, "boom", http.StatusInternalServerError)
@@ -121,7 +121,7 @@ func TestPIClassifier_ServerErrorReturnsError(t *testing.T) {
 	assert.Contains(t, err.Error(), "status 500")
 }
 
-func TestPIClassifier_LengthMismatchIsRejected(t *testing.T) {
+func TestPromptInjectionClassifier_LengthMismatchIsRejected(t *testing.T) {
 	t.Parallel()
 	_, c := newClassifierTestServer(t, func(w http.ResponseWriter, _ *http.Request) {
 		// Return one result for two inputs — must be rejected.
@@ -135,7 +135,7 @@ func TestPIClassifier_LengthMismatchIsRejected(t *testing.T) {
 	assert.Contains(t, err.Error(), "results for")
 }
 
-func TestPIClassifier_EmptyInputIsNoop(t *testing.T) {
+func TestPromptInjectionClassifier_EmptyInputIsNoop(t *testing.T) {
 	t.Parallel()
 	_, c := newClassifierTestServer(t, func(_ http.ResponseWriter, _ *http.Request) {
 		t.Fatal("server should not be called with empty input")
