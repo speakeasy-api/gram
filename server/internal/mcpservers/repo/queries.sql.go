@@ -142,6 +142,38 @@ func (q *Queries) GetMCPServerByID(ctx context.Context, arg GetMCPServerByIDPara
 	return i, err
 }
 
+const getMCPServerBySlug = `-- name: GetMCPServerBySlug :one
+SELECT id, project_id, name, slug, environment_id, user_session_issuer_id, remote_mcp_server_id, toolset_id, visibility, created_at, updated_at, deleted_at, deleted
+FROM mcp_servers
+WHERE slug = $1 AND project_id = $2 AND deleted IS FALSE
+`
+
+type GetMCPServerBySlugParams struct {
+	Slug      pgtype.Text
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) GetMCPServerBySlug(ctx context.Context, arg GetMCPServerBySlugParams) (McpServer, error) {
+	row := q.db.QueryRow(ctx, getMCPServerBySlug, arg.Slug, arg.ProjectID)
+	var i McpServer
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Slug,
+		&i.EnvironmentID,
+		&i.UserSessionIssuerID,
+		&i.RemoteMcpServerID,
+		&i.ToolsetID,
+		&i.Visibility,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const listMCPServersByProjectID = `-- name: ListMCPServersByProjectID :many
 SELECT id, project_id, name, slug, environment_id, user_session_issuer_id, remote_mcp_server_id, toolset_id, visibility, created_at, updated_at, deleted_at, deleted
 FROM mcp_servers

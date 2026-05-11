@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 491349de7114f5e4cd08fb16354e19db
+  docChecksum: f172923e3537d1335c3d2e48d4f22730
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -1585,7 +1585,7 @@ trackedFiles:
   docs/models/operations/getmcpserverdetailssecurityoption2.md:
     last_write_checksum: sha1:97ba9a8f64052e9980ba35a5df252ee6f1d86130
   docs/models/operations/getmcpserverrequest.md:
-    last_write_checksum: sha1:6685f73b3629048f1ee7b0327353a7fe466d085e
+    last_write_checksum: sha1:f46c3ea052236168e65a32540c28ec7d1e6a7865
   docs/models/operations/getmcpserversecurity.md:
     last_write_checksum: sha1:a76431c757baa48a204de8778d418b8d87b665c1
   docs/models/operations/getmcpserversecurityoption1.md:
@@ -2699,7 +2699,7 @@ trackedFiles:
   docs/sdks/mcpregistries/README.md:
     last_write_checksum: sha1:6e0e53ab4f9d91a9685bc9bfd5517dc99fc47f4c
   docs/sdks/mcpservers/README.md:
-    last_write_checksum: sha1:752f58eead58ae8883fda9272d0db49ca43d74c1
+    last_write_checksum: sha1:a3759b86c8c8ce239ad8b350857662b043299fa8
   docs/sdks/organizations/README.md:
     last_write_checksum: sha1:c6dfb016efc31136253cfc3b3d9afd259886ecbd
   docs/sdks/otelforwarding/README.md:
@@ -3119,7 +3119,7 @@ trackedFiles:
   src/funcs/mcpServersDelete.ts:
     last_write_checksum: sha1:132c70172bb360c277db18b320f891a8efa4a18c
   src/funcs/mcpServersGet.ts:
-    last_write_checksum: sha1:27268a990f19439d29f4489a4ca059eef4b57716
+    last_write_checksum: sha1:f9cd0277509ec021a0dc4a32c1edbe56842253a5
   src/funcs/mcpServersList.ts:
     last_write_checksum: sha1:fb63dfc3f2d22cf77128555c9e3777b4421d0ada
   src/funcs/mcpServersUpdate.ts:
@@ -4939,7 +4939,7 @@ trackedFiles:
     last_write_checksum: sha1:ced18a4cf28bcf240897c5a580d38dcd44006c38
     pristine_git_object: 68b334a669fc30a8ed985415c92d9851ae71ca9b
   src/models/operations/getmcpserver.ts:
-    last_write_checksum: sha1:0237a880b10aed2d1b8007f24821efb9bc6ced93
+    last_write_checksum: sha1:27680c0cbc8f2fd9e294d710a1117089f8fba3fa
   src/models/operations/getmcpserverdetails.ts:
     last_write_checksum: sha1:d2f8088de6c1a6daf9e160425975a26af60d0505
   src/models/operations/getobservabilityoverview.ts:
@@ -5701,9 +5701,9 @@ trackedFiles:
     last_write_checksum: sha1:36d623a09015ee0502b88a1b8f14f0b968eb6f79
     pristine_git_object: 39db0fdfee07973ec5020aae68ad4d57d2219f67
   src/react-query/getMcpServer.core.ts:
-    last_write_checksum: sha1:41d9badf25856acf61d33c9e319d809d57b4fdda
+    last_write_checksum: sha1:5c0495e136904e40d9bf524d5563a0f7766197a7
   src/react-query/getMcpServer.ts:
-    last_write_checksum: sha1:d36f8dda174f725c8c81f533a77b8bef89f34972
+    last_write_checksum: sha1:edad2155d5c90a90ef404903baf6288cbfc4f9b5
   src/react-query/getObservabilityOverview.core.ts:
     last_write_checksum: sha1:f21bd773d09bf22f8d5986f1c141dcb3599ec854
   src/react-query/getObservabilityOverview.ts:
@@ -6507,7 +6507,7 @@ trackedFiles:
     last_write_checksum: sha1:3f43cbc58c4fda6b886ab4f80f73b4993de92d3f
     pristine_git_object: dfebfc79f3a9812d656d81002e00f583178b86dd
   src/sdk/mcpservers.ts:
-    last_write_checksum: sha1:6203ce26d3755bd3a3136109e20e999213d54068
+    last_write_checksum: sha1:3e45664e9634dbdbfc2ec9b2c8a1b7af83a3a87b
   src/sdk/organizations.ts:
     last_write_checksum: sha1:4b8ba486c1d36f572cf4e577f249d0fa3f3512aa
   src/sdk/otelforwarding.ts:

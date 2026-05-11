@@ -1880,9 +1880,10 @@ func NewCreateMcpServerPayload(body *CreateMcpServerRequestBody, sessionToken *s
 
 // NewGetMcpServerPayload builds a mcpServers service getMcpServer endpoint
 // payload.
-func NewGetMcpServerPayload(id string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *mcpservers.GetMcpServerPayload {
+func NewGetMcpServerPayload(id *string, slug *string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *mcpservers.GetMcpServerPayload {
 	v := &mcpservers.GetMcpServerPayload{}
 	v.ID = id
+	v.Slug = slug
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput

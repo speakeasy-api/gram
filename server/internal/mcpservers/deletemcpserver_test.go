@@ -54,7 +54,8 @@ func TestDeleteMcpServer(t *testing.T) {
 
 	// Confirm subsequent get returns not-found.
 	_, err = ti.service.GetMcpServer(ctx, &gen.GetMcpServerPayload{
-		ID:               created.ID,
+		ID:               &created.ID,
+		Slug:             nil,
 		SessionToken:     nil,
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,

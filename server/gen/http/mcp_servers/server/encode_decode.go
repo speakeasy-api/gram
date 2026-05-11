@@ -275,17 +275,25 @@ func DecodeGetMcpServerRequest(mux goahttp.Muxer, decoder func(*http.Request) go
 	return func(r *http.Request) (*mcpservers.GetMcpServerPayload, error) {
 		var payload *mcpservers.GetMcpServerPayload
 		var (
-			id               string
+			id               *string
+			slug             *string
 			sessionToken     *string
 			apikeyToken      *string
 			projectSlugInput *string
 			err              error
 		)
-		id = r.URL.Query().Get("id")
-		if id == "" {
-			err = goa.MergeErrors(err, goa.MissingFieldError("id", "query string"))
+		qp := r.URL.Query()
+		idRaw := qp.Get("id")
+		if idRaw != "" {
+			id = &idRaw
 		}
-		err = goa.MergeErrors(err, goa.ValidateFormat("id", id, goa.FormatUUID))
+		if id != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("id", *id, goa.FormatUUID))
+		}
+		slugRaw := qp.Get("slug")
+		if slugRaw != "" {
+			slug = &slugRaw
+		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
@@ -301,7 +309,7 @@ func DecodeGetMcpServerRequest(mux goahttp.Muxer, decoder func(*http.Request) go
 		if err != nil {
 			return payload, err
 		}
-		payload = NewGetMcpServerPayload(id, sessionToken, apikeyToken, projectSlugInput)
+		payload = NewGetMcpServerPayload(id, slug, sessionToken, apikeyToken, projectSlugInput)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")

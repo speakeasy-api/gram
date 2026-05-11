@@ -297,7 +297,12 @@ func EncodeGetMcpServerRequest(encoder func(*http.Request) goahttp.Encoder) func
 			req.Header.Set("Gram-Project", head)
 		}
 		values := req.URL.Query()
-		values.Add("id", p.ID)
+		if p.ID != nil {
+			values.Add("id", *p.ID)
+		}
+		if p.Slug != nil {
+			values.Add("slug", *p.Slug)
+		}
 		req.URL.RawQuery = values.Encode()
 		return nil
 	}
