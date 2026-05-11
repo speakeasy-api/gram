@@ -1,5 +1,15 @@
 # dashboard
 
+## 0.50.0
+
+### Minor Changes
+
+- 575c0ac: Overhauled MultiSelect component: new onValueChange/defaultValue API, option grouping, per-option styling, and singleLine fixed-height mode.
+
+### Patch Changes
+
+- 0ac8dba: Refactor Security Overview to use Page.Section wrappers, scrollable tables, and a lighter category label.
+
 ## 0.49.1
 
 ### Patch Changes
