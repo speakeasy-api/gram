@@ -21,6 +21,9 @@ use serde_json::Value;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::sync::{Mutex as AsyncMutex, Notify, oneshot};
 
+use agentkit_compaction::AgentBuilderCompactorExt;
+
+use crate::compaction::build_compactor;
 use crate::errors::RunnerError;
 use crate::http_layer::{McpRotatingClient, TokenRegistry, build_http};
 use crate::idempotency::IdempotencyCache;
@@ -135,6 +138,10 @@ pub async fn build_runtime(
         http::HeaderValue::from_str(&config.chat_id)
             .map_err(|source| RunnerError::HeaderValue { source })?,
     );
+    default_headers.insert(
+        http::HeaderName::from_static("x-gram-source"),
+        http::HeaderValue::from_static("assistant"),
+    );
 
     let http_client = reqwest::Client::builder()
         .user_agent(concat!("gram-assistant-runner/", env!("CARGO_PKG_VERSION")))
@@ -179,8 +186,32 @@ pub async fn build_runtime(
     let openrouter_config =
         OpenRouterConfig::new(String::new(), config.model.clone()).with_base_url(base_url);
     let provider = OpenRouterProvider::from(openrouter_config);
+
     let completions_http = build_http(http_client.clone(), tokens.clone());
-    let adapter = CompletionsAdapter::with_client(provider, completions_http);
+    let adapter = CompletionsAdapter::with_client(provider.clone(), completions_http);
+
+    // Compactor calls reuse the model and bearer rotation but must omit the
+    // Gram-Chat-ID header so they bypass chat-message capture; otherwise gram
+    // treats the compactor's "summarise this transcript" turn as a divergence
+    // and the next replay loads the compactor's transcript instead of the
+    // user's.
+    let mut compactor_headers = http::HeaderMap::new();
+    compactor_headers.insert(
+        http::HeaderName::from_static("x-gram-source"),
+        http::HeaderValue::from_static("assistant"),
+    );
+    let compactor_http_client = reqwest::Client::builder()
+        .user_agent(concat!("gram-assistant-runner/", env!("CARGO_PKG_VERSION")))
+        .default_headers(compactor_headers)
+        .build()?;
+    let compactor_http = build_http(compactor_http_client, tokens.clone());
+    let compactor_adapter = CompletionsAdapter::with_client(provider, compactor_http);
+
+    let compactor = build_compactor(
+        &config.chat_id,
+        config.context_window.unwrap_or(0),
+        compactor_adapter,
+    )?;
 
     let mut transcript = Vec::new();
     if let Some(instructions) = &config.instructions {
@@ -188,7 +219,7 @@ pub async fn build_runtime(
     }
     transcript.extend(normalize_history(&config.history)?);
 
-    let agent = Agent::builder()
+    let mut builder = Agent::builder()
         .model(adapter)
         .add_tool_source(native_tools)
         .add_tool_source(agentkit_tool_fs::registry())
@@ -196,7 +227,13 @@ pub async fn build_runtime(
         .permissions(permissions)
         .resources(fs_resources)
         .observer(TracingReporter::new())
-        .transcript(transcript)
+        .transcript(transcript);
+
+    if let Some(compactor) = compactor {
+        builder = builder.compactor(compactor);
+    }
+
+    let agent = builder
         .build()
         .map_err(|e| RunnerError::AgentBuild(e.to_string()))?;
 
