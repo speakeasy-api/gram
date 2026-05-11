@@ -2,7 +2,6 @@ package audit
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/google/uuid"
 
@@ -51,11 +50,7 @@ func (l *Logger) LogCustomDomainCreate(ctx context.Context, dbtx repo.DBTX, even
 		AfterSnapshot:  nil,
 	}
 
-	if _, err := repo.New(dbtx).InsertAuditLog(ctx, entry); err != nil {
-		return fmt.Errorf("log %s: %w", action, err)
-	}
-
-	return nil
+	return l.log(ctx, dbtx, entry)
 }
 
 type LogCustomDomainDeleteEvent struct {
@@ -93,9 +88,5 @@ func (l *Logger) LogCustomDomainDelete(ctx context.Context, dbtx repo.DBTX, even
 		AfterSnapshot:  nil,
 	}
 
-	if _, err := repo.New(dbtx).InsertAuditLog(ctx, entry); err != nil {
-		return fmt.Errorf("log %s: %w", action, err)
-	}
-
-	return nil
+	return l.log(ctx, dbtx, entry)
 }

@@ -57,9 +57,6 @@ func (l *Logger) LogAssetCreate(ctx context.Context, dbtx repo.DBTX, event LogAs
 		BeforeSnapshot: nil,
 		AfterSnapshot:  nil,
 	}
-	if _, err := repo.New(dbtx).InsertAuditLog(ctx, entry); err != nil {
-		return fmt.Errorf("log %s: %w", action, err)
-	}
 
-	return nil
+	return l.log(ctx, dbtx, entry)
 }

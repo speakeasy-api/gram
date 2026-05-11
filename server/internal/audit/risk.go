@@ -54,11 +54,7 @@ func (l *Logger) LogRiskPolicyCreate(ctx context.Context, dbtx repo.DBTX, event 
 		Metadata:       nil,
 	}
 
-	if _, err := repo.New(dbtx).InsertAuditLog(ctx, entry); err != nil {
-		return fmt.Errorf("log %s: %w", action, err)
-	}
-
-	return nil
+	return l.log(ctx, dbtx, entry)
 }
 
 type LogRiskPolicyUpdateEvent struct {
@@ -110,11 +106,7 @@ func (l *Logger) LogRiskPolicyUpdate(ctx context.Context, dbtx repo.DBTX, event 
 		Metadata:       nil,
 	}
 
-	if _, err := repo.New(dbtx).InsertAuditLog(ctx, entry); err != nil {
-		return fmt.Errorf("log %s: %w", action, err)
-	}
-
-	return nil
+	return l.log(ctx, dbtx, entry)
 }
 
 type LogRiskPolicyDeleteEvent struct {
@@ -152,11 +144,7 @@ func (l *Logger) LogRiskPolicyDelete(ctx context.Context, dbtx repo.DBTX, event 
 		Metadata:       nil,
 	}
 
-	if _, err := repo.New(dbtx).InsertAuditLog(ctx, entry); err != nil {
-		return fmt.Errorf("log %s: %w", action, err)
-	}
-
-	return nil
+	return l.log(ctx, dbtx, entry)
 }
 
 type LogRiskPolicyTriggerEvent struct {
@@ -194,9 +182,5 @@ func (l *Logger) LogRiskPolicyTrigger(ctx context.Context, dbtx repo.DBTX, event
 		Metadata:       nil,
 	}
 
-	if _, err := repo.New(dbtx).InsertAuditLog(ctx, entry); err != nil {
-		return fmt.Errorf("log %s: %w", action, err)
-	}
-
-	return nil
+	return l.log(ctx, dbtx, entry)
 }
