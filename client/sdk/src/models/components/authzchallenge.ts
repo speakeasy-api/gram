@@ -9,24 +9,26 @@ import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
-export const Operation = {
+export const AuthzChallengeOperation = {
   Require: "require",
   RequireAny: "require_any",
   Filter: "filter",
 } as const;
-export type Operation = ClosedEnum<typeof Operation>;
+export type AuthzChallengeOperation = ClosedEnum<
+  typeof AuthzChallengeOperation
+>;
 
-export const Outcome = {
+export const AuthzChallengeOutcome = {
   Allow: "allow",
   Deny: "deny",
   Error: "error",
 } as const;
-export type Outcome = ClosedEnum<typeof Outcome>;
+export type AuthzChallengeOutcome = ClosedEnum<typeof AuthzChallengeOutcome>;
 
 /**
  * Kind of principal.
  */
-export const PrincipalType = {
+export const AuthzChallengePrincipalType = {
   User: "user",
   ApiKey: "api_key",
   Assistant: "assistant",
@@ -34,9 +36,11 @@ export const PrincipalType = {
 /**
  * Kind of principal.
  */
-export type PrincipalType = ClosedEnum<typeof PrincipalType>;
+export type AuthzChallengePrincipalType = ClosedEnum<
+  typeof AuthzChallengePrincipalType
+>;
 
-export const Reason = {
+export const AuthzChallengeReason = {
   GrantMatched: "grant_matched",
   NoGrants: "no_grants",
   ScopeUnsatisfied: "scope_unsatisfied",
@@ -44,19 +48,21 @@ export const Reason = {
   RbacSkippedApikey: "rbac_skipped_apikey",
   DevOverride: "dev_override",
 } as const;
-export type Reason = ClosedEnum<typeof Reason>;
+export type AuthzChallengeReason = ClosedEnum<typeof AuthzChallengeReason>;
 
 /**
  * How the challenge was resolved.
  */
-export const ResolutionType = {
+export const AuthzChallengeResolutionType = {
   RoleAssigned: "role_assigned",
   Dismissed: "dismissed",
 } as const;
 /**
  * How the challenge was resolved.
  */
-export type ResolutionType = ClosedEnum<typeof ResolutionType>;
+export type AuthzChallengeResolutionType = ClosedEnum<
+  typeof AuthzChallengeResolutionType
+>;
 
 export type AuthzChallenge = {
   /**
@@ -71,12 +77,12 @@ export type AuthzChallenge = {
    * Number of grants that matched.
    */
   matchedGrantCount: number;
-  operation: Operation;
+  operation: AuthzChallengeOperation;
   /**
    * Organization the principal was acting in.
    */
   organizationId: string;
-  outcome: Outcome;
+  outcome: AuthzChallengeOutcome;
   /**
    * User avatar URL when available.
    */
@@ -84,7 +90,7 @@ export type AuthzChallenge = {
   /**
    * Kind of principal.
    */
-  principalType: PrincipalType;
+  principalType: AuthzChallengePrincipalType;
   /**
    * Principal URN e.g. user:<uuid> or api_key:<id>.
    */
@@ -93,7 +99,7 @@ export type AuthzChallenge = {
    * Project scope (empty for org-level checks).
    */
   projectId?: string | undefined;
-  reason: Reason;
+  reason: AuthzChallengeReason;
   /**
    * Role slug assigned (when resolution_type=role_assigned).
    */
@@ -101,7 +107,7 @@ export type AuthzChallenge = {
   /**
    * How the challenge was resolved.
    */
-  resolutionType?: ResolutionType | undefined;
+  resolutionType?: AuthzChallengeResolutionType | undefined;
   /**
    * When the challenge was resolved by an admin.
    */
@@ -137,28 +143,29 @@ export type AuthzChallenge = {
 };
 
 /** @internal */
-export const Operation$inboundSchema: z.ZodMiniEnum<typeof Operation> = z.enum(
-  Operation,
-);
+export const AuthzChallengeOperation$inboundSchema: z.ZodMiniEnum<
+  typeof AuthzChallengeOperation
+> = z.enum(AuthzChallengeOperation);
 
 /** @internal */
-export const Outcome$inboundSchema: z.ZodMiniEnum<typeof Outcome> = z.enum(
-  Outcome,
-);
+export const AuthzChallengeOutcome$inboundSchema: z.ZodMiniEnum<
+  typeof AuthzChallengeOutcome
+> = z.enum(AuthzChallengeOutcome);
 
 /** @internal */
-export const PrincipalType$inboundSchema: z.ZodMiniEnum<typeof PrincipalType> =
-  z.enum(PrincipalType);
+export const AuthzChallengePrincipalType$inboundSchema: z.ZodMiniEnum<
+  typeof AuthzChallengePrincipalType
+> = z.enum(AuthzChallengePrincipalType);
 
 /** @internal */
-export const Reason$inboundSchema: z.ZodMiniEnum<typeof Reason> = z.enum(
-  Reason,
-);
+export const AuthzChallengeReason$inboundSchema: z.ZodMiniEnum<
+  typeof AuthzChallengeReason
+> = z.enum(AuthzChallengeReason);
 
 /** @internal */
-export const ResolutionType$inboundSchema: z.ZodMiniEnum<
-  typeof ResolutionType
-> = z.enum(ResolutionType);
+export const AuthzChallengeResolutionType$inboundSchema: z.ZodMiniEnum<
+  typeof AuthzChallengeResolutionType
+> = z.enum(AuthzChallengeResolutionType);
 
 /** @internal */
 export const AuthzChallenge$inboundSchema: z.ZodMiniType<
@@ -169,16 +176,16 @@ export const AuthzChallenge$inboundSchema: z.ZodMiniType<
     evaluated_grant_count: z.int(),
     id: z.string(),
     matched_grant_count: z.int(),
-    operation: Operation$inboundSchema,
+    operation: AuthzChallengeOperation$inboundSchema,
     organization_id: z.string(),
-    outcome: Outcome$inboundSchema,
+    outcome: AuthzChallengeOutcome$inboundSchema,
     photo_url: z.optional(z.string()),
-    principal_type: PrincipalType$inboundSchema,
+    principal_type: AuthzChallengePrincipalType$inboundSchema,
     principal_urn: z.string(),
     project_id: z.optional(z.string()),
-    reason: Reason$inboundSchema,
+    reason: AuthzChallengeReason$inboundSchema,
     resolution_role_slug: z.optional(z.string()),
-    resolution_type: z.optional(ResolutionType$inboundSchema),
+    resolution_type: z.optional(AuthzChallengeResolutionType$inboundSchema),
     resolved_at: z.optional(
       z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
     ),

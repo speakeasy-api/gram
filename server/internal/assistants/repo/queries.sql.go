@@ -1546,6 +1546,32 @@ func (q *Queries) ResolveEnvironmentsForWrite(ctx context.Context, arg ResolveEn
 	return items, nil
 }
 
+const resolveThreadCorrelation = `-- name: ResolveThreadCorrelation :one
+SELECT id, project_id, assistant_id, correlation_id
+FROM assistant_threads
+WHERE id = $1
+  AND deleted IS FALSE
+`
+
+type ResolveThreadCorrelationRow struct {
+	ID            uuid.UUID
+	ProjectID     uuid.UUID
+	AssistantID   uuid.UUID
+	CorrelationID string
+}
+
+func (q *Queries) ResolveThreadCorrelation(ctx context.Context, threadID uuid.UUID) (ResolveThreadCorrelationRow, error) {
+	row := q.db.QueryRow(ctx, resolveThreadCorrelation, threadID)
+	var i ResolveThreadCorrelationRow
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.AssistantID,
+		&i.CorrelationID,
+	)
+	return i, err
+}
+
 const resolveThreadProjectID = `-- name: ResolveThreadProjectID :one
 SELECT project_id
 FROM assistant_threads

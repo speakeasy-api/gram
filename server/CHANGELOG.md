@@ -1,5 +1,17 @@
 # server
 
+## 0.50.0
+
+### Minor Changes
+
+- 2609588: Add assistant memory: per-assistant long-term memory backed by vector embeddings. Agents can remember, recall, and forget facts across threads via three new platform tools (gated by the `assistant_memory` product feature). Includes a management API for listing and deleting memories, and a background reaper that hard-deletes soft-deleted rows on schedule.
+- ca625e0: Propagate assistant runtime image upgrades to existing fly.io machines: on the next admission, an idle machine running an older runtime image is recycled in place to the latest version. Mid-turn admissions are left alone so a future idle window picks up the upgrade.
+
+### Patch Changes
+
+- 2c84295: Surface `environment:read` / `environment:write` in the RBAC dev toolbar and the
+  `access.listGrants` fallback so the env-clone permission picker works end-to-end.
+
 ## 0.49.0
 
 ### Minor Changes

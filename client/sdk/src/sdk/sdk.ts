@@ -5,6 +5,7 @@
 import { ClientSDK } from "../lib/sdks.js";
 import { Access } from "./access.js";
 import { Assets } from "./assets.js";
+import { AssistantMemories } from "./assistantmemories.js";
 import { Assistants } from "./assistants.js";
 import { Auditlogs } from "./auditlogs.js";
 import { Auth } from "./auth.js";
@@ -14,6 +15,7 @@ import { Collections } from "./collections.js";
 import { Deployments } from "./deployments.js";
 import { Domains } from "./domains.js";
 import { Environments } from "./environments.js";
+import { External } from "./external.js";
 import { Features } from "./features.js";
 import { Hooks } from "./hooks.js";
 import { HooksServerNames } from "./hooksservernames.js";
@@ -53,6 +55,11 @@ export class Gram extends ClientSDK {
   private _assets?: Assets;
   get assets(): Assets {
     return (this._assets ??= new Assets(this._options));
+  }
+
+  private _assistantMemories?: AssistantMemories;
+  get assistantMemories(): AssistantMemories {
+    return (this._assistantMemories ??= new AssistantMemories(this._options));
   }
 
   private _assistants?: Assistants;
@@ -98,6 +105,11 @@ export class Gram extends ClientSDK {
   private _environments?: Environments;
   get environments(): Environments {
     return (this._environments ??= new Environments(this._options));
+  }
+
+  private _external?: External;
+  get external(): External {
+    return (this._external ??= new External(this._options));
   }
 
   private _hooks?: Hooks;

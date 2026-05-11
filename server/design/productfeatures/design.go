@@ -15,7 +15,8 @@ var ProductFeaturesResult = ResultType("application/vnd.gram.product-features", 
 		Attribute("tool_io_logs_enabled", Boolean, "Whether tool I/O logging is enabled")
 		Attribute("session_capture_enabled", Boolean, "Whether Claude Code session capture is enabled")
 		Attribute("authz_challenge_logging_enabled", Boolean, "Whether authz challenge logging to ClickHouse is enabled")
-		Required("logs_enabled", "tool_io_logs_enabled", "session_capture_enabled", "authz_challenge_logging_enabled")
+		Attribute("assistant_memory_enabled", Boolean, "Whether assistant memory is enabled")
+		Required("logs_enabled", "tool_io_logs_enabled", "session_capture_enabled", "authz_challenge_logging_enabled", "assistant_memory_enabled")
 	})
 })
 
@@ -50,7 +51,7 @@ var _ = Service("features", func() {
 		Payload(func() {
 			Attribute("feature_name", String, "Name of the feature to update", func() {
 				MaxLength(60)
-				Enum("logs", "tool_io_logs", "session_capture", "authz_challenge_logging")
+				Enum("logs", "tool_io_logs", "session_capture", "authz_challenge_logging", "assistant_memory")
 			})
 			Attribute("enabled", Boolean, "Whether the feature should be enabled")
 			Required("feature_name", "enabled")

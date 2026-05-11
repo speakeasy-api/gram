@@ -58,6 +58,10 @@ overrides:
         go_type:
           import: github.com/pgvector/pgvector-go
           type: Vector
+      - db_type: "halfvec"
+        go_type:
+          import: github.com/pgvector/pgvector-go
+          type: HalfVector
       - column: external_mcp_tool_definitions.transport_type
         go_type:
           import: github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types
@@ -535,5 +539,15 @@ sql:
       go:
         package: "repo"
         out: "../internal/auth/assistanttokens/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: schema.sql
+    queries: ../internal/memory/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/memory/repo"
         sql_package: "pgx/v5"
         omit_unused_structs: true

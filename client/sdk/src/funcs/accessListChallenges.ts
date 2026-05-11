@@ -100,6 +100,7 @@ async function $do(
   const path = pathToFunc("/rpc/access.listChallenges")();
 
   const query = encodeFormQuery({
+    "ids": payload?.ids,
     "limit": payload?.limit,
     "offset": payload?.offset,
     "outcome": payload?.outcome,

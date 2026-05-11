@@ -1373,7 +1373,7 @@ function buildAssistantTools(deps: ToolDeps) {
   >(
     {
       description:
-        "Display a Slack app creation guide with a deep link that pre-fills the Slack app manifest. Use this ONLY when the user needs to create a brand-new Slack app for this assistant — i.e. SLACK_BOT_TOKEN is not yet populated on the assistant's env (check list_environments → populated_entry_names). If the bot token is already populated, the app already exists and was already installed; do not call this tool. The component derives the manifest automatically: name from the assistant's name, bot scopes from the slack platform tools attached to the assistant, and bot_events from the assistant's slack triggers. Pass the webhook_url from the Slack trigger you already created so Slack verifies it on Create. Only pass app_name / bot_scopes / bot_events to override the derived defaults. The component walks the user through Create → Install-to-Workspace → copying the xoxb- bot token and signing secret. Pure UI — no return value the model needs to act on.",
+        "Display a Slack app creation guide with a deep link that pre-fills the Slack app manifest. Use this ONLY when the user needs to create a brand-new Slack app for this assistant — i.e. SLACK_BOT_TOKEN is not yet populated on the assistant's env (check list_environments → populated_entry_names). If the bot token is already populated, the app already exists and was already installed; do not call this tool. This tool BLOCKS until the user clicks 'I've installed it' (or Skip). Do not call other tools in parallel with it — wait for it to resolve before calling request_environment_secrets so the user has tokens to paste. The tool errors if a slack trigger exists for this assistant and webhook_url was not supplied (the manifest's event_subscriptions block would be invalid). The manifest always grants both the full bot-scope and user-scope supersets so Slack issues both xoxb- and xoxp- in one install — don't reason about which scopes are needed for which tool. Returns { installed: true } on confirmation or { cancelled: true } if the user skipped — if cancelled, do not ask for credentials until the user revisits installation.",
       parameters: z.object({
         app_name: z
           .string()
@@ -1386,7 +1386,7 @@ function buildAssistantTools(deps: ToolDeps) {
           .array(z.string())
           .optional()
           .describe(
-            "Extra bot scopes to add on top of the ones derived from attached slack tools. Omit unless you know a tool needs a scope the catalog doesn't cover.",
+            "Extra bot scopes to add on top of the catalog superset. Omit in the normal flow.",
           ),
         bot_events: z
           .array(z.string())
@@ -1398,10 +1398,73 @@ function buildAssistantTools(deps: ToolDeps) {
           .string()
           .optional()
           .describe(
-            "Webhook URL of the slack trigger to pre-fill in the manifest's request_url so Slack verifies it on Create.",
+            "Webhook URL of the slack trigger to pre-fill in the manifest's request_url so Slack verifies it on Create. Required when the assistant has a slack trigger.",
           ),
       }),
-      execute: async () => okResult({ shown: true }),
+      execute: async (args, ctx) => {
+        const { webhook_url } = args as ShowSlackGuideArgs;
+        const toolCallId = ctx.toolCallId ?? "";
+
+        if (!webhook_url) {
+          try {
+            const list = await sdk.triggers.list();
+            const slackTriggers = (list.triggers ?? []).filter(
+              (t) =>
+                t.definitionSlug === "slack" &&
+                t.targetKind === "assistant" &&
+                t.targetRef === draft.assistantId,
+            );
+            if (slackTriggers.length > 0) {
+              const first = slackTriggers[0]!;
+              return errResult(
+                "Cannot show the Slack app guide without webhook_url because this assistant has a slack trigger — Slack rejects an event_subscriptions block whose request_url is missing or unverified. Pass the webhook_url from the slack trigger's create_trigger response and call this tool again.",
+                {
+                  slack_trigger: {
+                    id: first.id,
+                    name: first.name,
+                    webhook_url: first.webhookUrl,
+                  },
+                },
+              );
+            }
+          } catch (e) {
+            return errResult(
+              e instanceof Error ? e.message : "trigger lookup failed",
+            );
+          }
+        }
+
+        type GuideResult = {
+          success: boolean;
+          installed?: boolean;
+          cancelled?: boolean;
+        };
+        const userInput: GuideResult = await withTimeout(
+          new Promise<GuideResult>((resolve) => {
+            draft.registerPending(toolCallId, (r) => resolve(r as GuideResult));
+          }),
+          30 * 60 * 1000,
+          "show_slack_app_guide",
+        ).catch(
+          (): GuideResult => ({
+            success: false,
+            cancelled: true,
+            installed: false,
+          }),
+        );
+
+        if (userInput.installed) {
+          return okResult({
+            installed: true,
+            note: "User confirmed the Slack app is installed. Proceed to request_environment_secrets for SLACK_BOT_TOKEN, SLACK_SIGNING_SECRET (if a slack trigger exists), and SLACK_USER_TOKEN (if any attached tool needs a user token).",
+          });
+        }
+        return okResult({
+          installed: false,
+          cancelled: true,
+          note: "User skipped the Slack app guide. Acknowledge briefly and do NOT call request_environment_secrets for Slack credentials in this turn — they have nothing to paste. Suggest they revisit installation later from the Environments page or by asking you to retry.",
+        });
+      },
     },
     "show_slack_app_guide",
   );

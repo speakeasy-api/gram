@@ -593,6 +593,154 @@ paths:
             x-speakeasy-name-override: getRole
             x-speakeasy-react-hook:
                 name: Role
+    /rpc/access.listChallengeBuckets:
+        get:
+            description: List authz challenges grouped into time-based burst buckets. Consecutive challenges with the same dimensions within a 10-minute window are collapsed into a single bucket.
+            operationId: listChallengeBuckets
+            parameters:
+                - allowEmptyValue: true
+                  description: Filter by outcome.
+                  in: query
+                  name: outcome
+                  schema:
+                    description: Filter by outcome.
+                    enum:
+                        - allow
+                        - deny
+                    type: string
+                - allowEmptyValue: true
+                  description: Filter by principal URN.
+                  in: query
+                  name: principal_urn
+                  schema:
+                    description: Filter by principal URN.
+                    type: string
+                - allowEmptyValue: true
+                  description: Filter by scope.
+                  in: query
+                  name: scope
+                  schema:
+                    description: Filter by scope.
+                    type: string
+                - allowEmptyValue: true
+                  description: Filter to a specific project.
+                  in: query
+                  name: project_id
+                  schema:
+                    description: Filter to a specific project.
+                    type: string
+                - allowEmptyValue: true
+                  description: Filter by resolution state. True = only resolved, false = only unresolved.
+                  in: query
+                  name: resolved
+                  schema:
+                    description: Filter by resolution state. True = only resolved, false = only unresolved.
+                    type: boolean
+                - allowEmptyValue: true
+                  description: Maximum number of buckets to return.
+                  in: query
+                  name: limit
+                  schema:
+                    default: 50
+                    description: Maximum number of buckets to return.
+                    format: int64
+                    maximum: 200
+                    minimum: 1
+                    type: integer
+                - allowEmptyValue: true
+                  description: Number of buckets to skip.
+                  in: query
+                  name: offset
+                  schema:
+                    default: 0
+                    description: Number of buckets to skip.
+                    format: int64
+                    minimum: 0
+                    type: integer
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListChallengeBucketsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                - session_header_Gram-Session: []
+            summary: listChallengeBuckets access
+            tags:
+                - access
+            x-speakeasy-name-override: listChallengeBuckets
+            x-speakeasy-react-hook:
+                name: ChallengeBuckets
     /rpc/access.listChallenges:
         get:
             description: List authz challenge events from ClickHouse, enriched with resolution state from PostgreSQL.
@@ -636,6 +784,15 @@ paths:
                   schema:
                     description: Filter by resolution state. True = only resolved, false = only unresolved.
                     type: boolean
+                - allowEmptyValue: true
+                  description: Fetch specific challenges by ID. When set, other filters and pagination are ignored.
+                  in: query
+                  name: ids
+                  schema:
+                    description: Fetch specific challenges by ID. When set, other filters and pagination are ignored.
+                    items:
+                        type: string
+                    type: array
                 - allowEmptyValue: true
                   description: Maximum number of results to return.
                   in: query
@@ -2699,6 +2856,337 @@ paths:
             x-speakeasy-name-override: uploadOpenAPIv3
             x-speakeasy-react-hook:
                 name: UploadOpenAPIv3
+    /rpc/assistantMemories.delete:
+        delete:
+            description: Delete an assistant memory by ID.
+            operationId: deleteAssistantMemory
+            parameters:
+                - allowEmptyValue: true
+                  description: The assistant memory ID.
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The assistant memory ID.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: deleteAssistantMemory assistantMemories
+            tags:
+                - assistantMemories
+            x-speakeasy-name-override: delete
+    /rpc/assistantMemories.get:
+        get:
+            description: Get an assistant memory by ID.
+            operationId: getAssistantMemory
+            parameters:
+                - allowEmptyValue: true
+                  description: The assistant memory ID.
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The assistant memory ID.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AssistantMemory'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: getAssistantMemory assistantMemories
+            tags:
+                - assistantMemories
+            x-speakeasy-name-override: get
+            x-speakeasy-react-hook:
+                name: GetAssistantMemory
+    /rpc/assistantMemories.list:
+        get:
+            description: List assistant memories for an assistant.
+            operationId: listAssistantMemories
+            parameters:
+                - allowEmptyValue: true
+                  description: The assistant ID.
+                  in: query
+                  name: assistant_id
+                  required: true
+                  schema:
+                    description: The assistant ID.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Optional tags to filter memories by.
+                  in: query
+                  name: tags
+                  schema:
+                    description: Optional tags to filter memories by.
+                    items:
+                        type: string
+                    type: array
+                - allowEmptyValue: true
+                  description: Whether to include soft-deleted memories.
+                  in: query
+                  name: include_deleted
+                  schema:
+                    default: false
+                    description: Whether to include soft-deleted memories.
+                    type: boolean
+                - allowEmptyValue: true
+                  description: The cursor to fetch results from.
+                  in: query
+                  name: cursor
+                  schema:
+                    description: The cursor to fetch results from.
+                    type: string
+                - allowEmptyValue: true
+                  description: The number of memories to return per page.
+                  in: query
+                  name: limit
+                  schema:
+                    default: 50
+                    description: The number of memories to return per page.
+                    format: int64
+                    maximum: 200
+                    minimum: 1
+                    type: integer
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListAssistantMemoriesResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: listAssistantMemories assistantMemories
+            tags:
+                - assistantMemories
+            x-speakeasy-name-override: list
+            x-speakeasy-pagination:
+                inputs:
+                    - in: parameters
+                      name: cursor
+                      type: cursor
+                outputs:
+                    nextCursor: $.next_cursor
+                type: cursor
+            x-speakeasy-react-hook:
+                name: ListAssistantMemories
     /rpc/assistants.create:
         post:
             description: Create an assistant.
@@ -7688,6 +8176,27 @@ paths:
             x-speakeasy-name-override: updateBySlug
             x-speakeasy-react-hook:
                 name: UpdateEnvironment
+    /rpc/external.receiveWorkOSWebhook:
+        post:
+            description: Receive and enqueue a WorkOS webhook event.
+            operationId: receiveWorkOSWebhook
+            parameters:
+                - allowEmptyValue: true
+                  description: WorkOS webhook signature header
+                  in: header
+                  name: WorkOS-Signature
+                  schema:
+                    description: WorkOS webhook signature header
+                    type: string
+            responses:
+                "204":
+                    description: No Content response.
+            summary: receiveWorkOSWebhook external
+            tags:
+                - external
+            x-speakeasy-name-override: receiveWorkOSWebhook
+            x-speakeasy-react-hook:
+                disabled: true
     /rpc/hooks.claude:
         post:
             tags:
@@ -22994,6 +23503,62 @@ components:
                 - status
                 - created_at
                 - updated_at
+        AssistantMemory:
+            type: object
+            properties:
+                assistant_id:
+                    type: string
+                    description: The assistant ID owning the memory.
+                    format: uuid
+                content:
+                    type: string
+                    description: The memory content.
+                created_at:
+                    type: string
+                    description: Creation timestamp.
+                    format: date-time
+                deleted_at:
+                    type: string
+                    description: Timestamp at which the memory was soft-deleted.
+                    format: date-time
+                id:
+                    type: string
+                    description: The assistant memory ID.
+                    format: uuid
+                last_access:
+                    type: string
+                    description: Timestamp of the most recent access.
+                    format: date-time
+                superseded_at:
+                    type: string
+                    description: Timestamp at which the memory was superseded by another memory.
+                    format: date-time
+                supersedes_id:
+                    type: string
+                    description: The ID of the memory this one supersedes, if any.
+                    format: uuid
+                tags:
+                    type: array
+                    items:
+                        type: string
+                    description: Tags associated with the memory.
+                updated_at:
+                    type: string
+                    description: Last update timestamp.
+                    format: date-time
+                valid_at:
+                    type: string
+                    description: Timestamp at which the memory becomes valid.
+                    format: date-time
+            required:
+                - id
+                - assistant_id
+                - content
+                - tags
+                - created_at
+                - updated_at
+                - last_access
+                - valid_at
         AssistantToolsetRef:
             type: object
             properties:
@@ -23348,6 +23913,127 @@ components:
             description: Result of capturing a telemetry event
             required:
                 - success
+        ChallengeBucket:
+            type: object
+            properties:
+                challenge_count:
+                    type: integer
+                    description: Number of individual challenges in this bucket.
+                    format: int64
+                challenge_ids:
+                    type: array
+                    items:
+                        type: string
+                    description: IDs of all challenges in this bucket.
+                evaluated_grant_count:
+                    type: integer
+                    description: Total grants evaluated.
+                    format: int64
+                first_seen:
+                    type: string
+                    description: Timestamp of the earliest challenge in the bucket.
+                    format: date-time
+                id:
+                    type: string
+                    description: ID of the most recent challenge in the bucket.
+                last_seen:
+                    type: string
+                    description: Timestamp of the most recent challenge in the bucket.
+                    format: date-time
+                matched_grant_count:
+                    type: integer
+                    description: Number of grants that matched.
+                    format: int64
+                operation:
+                    type: string
+                    enum:
+                        - require
+                        - require_any
+                        - filter
+                organization_id:
+                    type: string
+                    description: Organization the principal was acting in.
+                outcome:
+                    type: string
+                    enum:
+                        - allow
+                        - deny
+                        - error
+                photo_url:
+                    type: string
+                    description: User avatar URL when available.
+                principal_type:
+                    type: string
+                    description: Kind of principal.
+                    enum:
+                        - user
+                        - api_key
+                        - assistant
+                principal_urn:
+                    type: string
+                    description: Principal URN e.g. user:<uuid> or api_key:<id>.
+                project_id:
+                    type: string
+                    description: Project scope (empty for org-level checks).
+                reason:
+                    type: string
+                    enum:
+                        - grant_matched
+                        - no_grants
+                        - scope_unsatisfied
+                        - invalid_check
+                        - rbac_skipped_apikey
+                        - dev_override
+                resolution_role_slug:
+                    type: string
+                    description: Role slug assigned (when resolution_type=role_assigned).
+                resolution_type:
+                    type: string
+                    description: How the bucket was resolved.
+                    enum:
+                        - role_assigned
+                        - dismissed
+                resolved_at:
+                    type: string
+                    description: When the bucket was resolved by an admin.
+                    format: date-time
+                resolved_by:
+                    type: string
+                    description: URN of the admin who resolved.
+                resource_id:
+                    type: string
+                    description: Resource ID of the check.
+                resource_kind:
+                    type: string
+                    description: Resource kind of the check.
+                role_slugs:
+                    type: array
+                    items:
+                        type: string
+                    description: Roles the principal had loaded.
+                scope:
+                    type: string
+                    description: Scope that was checked.
+                user_email:
+                    type: string
+                    description: Email when available.
+            description: A group of consecutive challenges with the same dimensions that occurred within a 10-minute window.
+            required:
+                - id
+                - last_seen
+                - first_seen
+                - organization_id
+                - principal_urn
+                - principal_type
+                - operation
+                - outcome
+                - reason
+                - scope
+                - role_slugs
+                - evaluated_grant_count
+                - matched_grant_count
+                - challenge_count
+                - challenge_ids
         ChallengeResolution:
             type: object
             properties:
@@ -26278,6 +26964,9 @@ components:
         GramProductFeatures:
             type: object
             properties:
+                assistant_memory_enabled:
+                    type: boolean
+                    description: Whether assistant memory is enabled
                 authz_challenge_logging_enabled:
                     type: boolean
                     description: Whether authz challenge logging to ClickHouse is enabled
@@ -26296,6 +26985,7 @@ components:
                 - tool_io_logs_enabled
                 - session_capture_enabled
                 - authz_challenge_logging_enabled
+                - assistant_memory_enabled
         HTTPToolDefinition:
             type: object
             properties:
@@ -26836,6 +27526,19 @@ components:
                     description: The list of assets
             required:
                 - assets
+        ListAssistantMemoriesResult:
+            type: object
+            properties:
+                memories:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AssistantMemory'
+                    description: Assistant memories matching the query.
+                next_cursor:
+                    type: string
+                    description: The cursor to be used for the next page of results.
+            required:
+                - memories
         ListAssistantsResult:
             type: object
             properties:
@@ -26937,6 +27640,21 @@ components:
                     description: List of available MCP servers
             required:
                 - servers
+        ListChallengeBucketsResult:
+            type: object
+            properties:
+                buckets:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ChallengeBucket'
+                    description: The challenge buckets.
+                total:
+                    type: integer
+                    description: Total number of matching buckets for pagination.
+                    format: int64
+            required:
+                - buckets
+                - total
         ListChallengesResult:
             type: object
             properties:
@@ -30516,6 +31234,7 @@ components:
                         - tool_io_logs
                         - session_capture
                         - authz_challenge_logging
+                        - assistant_memory
                     maxLength: 60
             required:
                 - feature_name
@@ -32836,6 +33555,8 @@ tags:
       description: Operational endpoints for administrative tasks.
     - name: assets
       description: Manages assets used by Gram projects.
+    - name: assistantMemories
+      description: Manage assistant memory records.
     - name: assistants
       description: Manage assistants and their runtime configuration.
     - name: auditlogs
@@ -32914,3 +33635,5 @@ tags:
       description: Operator visibility into issued user_sessions. List + revoke; sessions are written by /mcp/{slug}/token.
     - name: variations
       description: Manage variations of tools.
+    - name: external
+      description: Endpoints for external services to interact with gram.

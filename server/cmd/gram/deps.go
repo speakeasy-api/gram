@@ -29,6 +29,7 @@ import (
 	"github.com/urfave/cli/v2"
 	"github.com/urfave/cli/v2/altsrc"
 	"github.com/workos/workos-go/v6/pkg/events"
+	"github.com/workos/workos-go/v6/pkg/webhooks"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/metric"
 	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
@@ -511,6 +512,14 @@ func newWorkOSEventsClient(c *cli.Context, guardianPolicy *guardian.Policy) (*ev
 	}, nil
 }
 
+func newWorkOSWebhooksClient(c *cli.Context) *webhooks.Client {
+	secret := c.String("workos-webhook-secret")
+	if secret == "" {
+		return nil
+	}
+	return webhooks.NewClient(secret)
+}
+
 func newTigrisStore(ctx context.Context, c *cli.Context, logger *slog.Logger) (*assets.TigrisStore, func(context.Context) error, error) {
 	nilShutdown := func(context.Context) error { return nil }
 
@@ -710,6 +719,7 @@ func newTriggersApp(
 	enc *encryption.Client,
 	temporalEnv *temporal.Environment,
 	telemetryLogger *telemetry.Logger,
+	auditLogger *audit.Logger,
 	serverURL *url.URL,
 ) *bgtriggers.App {
 	envEntries := environments.NewEnvironmentEntries(logger, db, enc, nil)
@@ -738,6 +748,7 @@ func newTriggersApp(
 				Attributes: entry.Attributes,
 			})
 		}),
+		auditLogger,
 		serverURL,
 		bgtriggers.NewNoopDispatcher(logger),
 	)

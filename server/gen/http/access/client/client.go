@@ -69,6 +69,10 @@ type Client struct {
 	// listChallenges endpoint.
 	ListChallengesDoer goahttp.Doer
 
+	// ListChallengeBuckets Doer is the HTTP client used to make requests to the
+	// listChallengeBuckets endpoint.
+	ListChallengeBucketsDoer goahttp.Doer
+
 	// ResolveChallenge Doer is the HTTP client used to make requests to the
 	// resolveChallenge endpoint.
 	ResolveChallengeDoer goahttp.Doer
@@ -93,25 +97,26 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		ListRolesDoer:        doer,
-		GetRoleDoer:          doer,
-		CreateRoleDoer:       doer,
-		UpdateRoleDoer:       doer,
-		DeleteRoleDoer:       doer,
-		ListScopesDoer:       doer,
-		ListMembersDoer:      doer,
-		ListGrantsDoer:       doer,
-		UpdateMemberRoleDoer: doer,
-		GetRBACStatusDoer:    doer,
-		EnableRBACDoer:       doer,
-		DisableRBACDoer:      doer,
-		ListChallengesDoer:   doer,
-		ResolveChallengeDoer: doer,
-		RestoreResponseBody:  restoreBody,
-		scheme:               scheme,
-		host:                 host,
-		decoder:              dec,
-		encoder:              enc,
+		ListRolesDoer:            doer,
+		GetRoleDoer:              doer,
+		CreateRoleDoer:           doer,
+		UpdateRoleDoer:           doer,
+		DeleteRoleDoer:           doer,
+		ListScopesDoer:           doer,
+		ListMembersDoer:          doer,
+		ListGrantsDoer:           doer,
+		UpdateMemberRoleDoer:     doer,
+		GetRBACStatusDoer:        doer,
+		EnableRBACDoer:           doer,
+		DisableRBACDoer:          doer,
+		ListChallengesDoer:       doer,
+		ListChallengeBucketsDoer: doer,
+		ResolveChallengeDoer:     doer,
+		RestoreResponseBody:      restoreBody,
+		scheme:                   scheme,
+		host:                     host,
+		decoder:                  dec,
+		encoder:                  enc,
 	}
 }
 
@@ -422,6 +427,30 @@ func (c *Client) ListChallenges() goa.Endpoint {
 		resp, err := c.ListChallengesDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("access", "listChallenges", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListChallengeBuckets returns an endpoint that makes HTTP requests to the
+// access service listChallengeBuckets server.
+func (c *Client) ListChallengeBuckets() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListChallengeBucketsRequest(c.encoder)
+		decodeResponse = DecodeListChallengeBucketsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListChallengeBucketsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListChallengeBucketsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("access", "listChallengeBuckets", err)
 		}
 		return decodeResponse(resp)
 	}

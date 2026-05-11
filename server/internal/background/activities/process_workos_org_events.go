@@ -24,10 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-const (
-	workosOrgEventsPageSize   = 100
-	workosRoleTypeEnvironment = "EnvironmentRole"
-)
+const workosOrgEventsPageSize = 100
 
 // EventsLister is the subset of the WorkOS events client used by this activity.
 type EventsLister interface {
@@ -96,6 +93,10 @@ func (p *ProcessWorkOSOrganizationEvents) Do(ctx context.Context, params Process
 			string(workos.EventKindOrganizationRoleCreated),
 			string(workos.EventKindOrganizationRoleDeleted),
 			string(workos.EventKindOrganizationRoleUpdated),
+
+			string(workos.EventKindOrganizationMembershipCreated),
+			string(workos.EventKindOrganizationMembershipUpdated),
+			string(workos.EventKindOrganizationMembershipDeleted),
 		},
 		Limit:          workosOrgEventsPageSize,
 		After:          sinceEventID,
@@ -196,8 +197,8 @@ func (p *ProcessWorkOSOrganizationEvents) handleEvent(ctx context.Context, logge
 	return event.ID, nil
 }
 
-// handleOrganizationEvent dispatches an organization.* or organization_role.*
-// WorkOS event to its handler. Each handler is responsible for the
+// handleOrganizationEvent dispatches a WorkOS event scoped to a specific
+// organization to its handler. Each handler is responsible for the
 // ShouldProcessEvent guard against duplicate apply.
 func handleOrganizationEvent(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, event events.Event) error {
 	switch event.Event {
@@ -209,6 +210,10 @@ func handleOrganizationEvent(ctx context.Context, logger *slog.Logger, dbtx data
 		return handleRoleUpsert(ctx, logger, dbtx, event)
 	case string(workos.EventKindOrganizationRoleDeleted):
 		return handleRoleDeleted(ctx, logger, dbtx, event)
+	case string(workos.EventKindOrganizationMembershipCreated), string(workos.EventKindOrganizationMembershipUpdated):
+		return handleOrganizationMembershipUpsert(ctx, logger, dbtx, event)
+	case string(workos.EventKindOrganizationMembershipDeleted):
+		return handleOrganizationMembershipDeleted(ctx, logger, dbtx, event)
 	}
 
 	return oops.Permanent(fmt.Errorf("unhandled workos organization event type: %s", event.Event))
@@ -239,7 +244,13 @@ func handleOrganizationUpsert(ctx context.Context, logger *slog.Logger, dbtx dat
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		if payload.ExternalID == "" {
-			return oops.Permanent(fmt.Errorf("workos organization %q has no external_id and no existing mapping", payload.ID))
+			// Unlinked org with no external_id: skip + advance cursor so a
+			// later event in the same stream that does carry an external_id
+			// (or sets workos_id via another path) can still land. A
+			// permanent error here would stall the per-org workflow and
+			// block every subsequent event for this org.
+			logger.WarnContext(ctx, "skipping organization event for unlinked org with no external_id", attr.SlogWorkOSOrganizationID(payload.ID))
+			return nil
 		}
 	case err != nil:
 		return fmt.Errorf("get organization by workos id %q: %w", payload.ID, err)
@@ -329,51 +340,14 @@ type workosRoleEventPayload struct {
 }
 
 // handleRoleUpsert applies an organization_role.created or
-// organization_role.updated event. Routes EnvironmentRole types to
-// global_roles and everything else to organization_roles.
+// organization_role.updated event.
 func handleRoleUpsert(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, event events.Event) error {
 	var payload workosRoleEventPayload
 	if err := json.Unmarshal(event.Data, &payload); err != nil {
 		return oops.Permanent(fmt.Errorf("unmarshal role event payload: %w", err))
 	}
 
-	if payload.Type == workosRoleTypeEnvironment {
-		return upsertGlobalRole(ctx, dbtx, event, payload)
-	}
-
 	return upsertOrganizationRole(ctx, logger, dbtx, event, payload)
-}
-
-func upsertGlobalRole(ctx context.Context, dbtx database.DBTX, event events.Event, payload workosRoleEventPayload) error {
-	repo := accessrepo.New(dbtx)
-
-	existing, err := repo.GetGlobalRoleBySlug(ctx, payload.Slug)
-	// if the error is due to no rows found, we're ok to proceed (new role)
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return fmt.Errorf("get global role %q: %w", payload.Slug, err)
-	}
-
-	var lastEventID *string
-	if existing.WorkosLastEventID.Valid {
-		lastEventID = &existing.WorkosLastEventID.String
-	}
-	rowUpdatedAt := existing.WorkosUpdatedAt.Time
-	if !ShouldProcessEvent(lastEventID, &rowUpdatedAt, event.ID, payload.UpdatedAt) {
-		return nil
-	}
-
-	if err := repo.UpsertGlobalRole(ctx, accessrepo.UpsertGlobalRoleParams{
-		WorkosSlug:        payload.Slug,
-		WorkosName:        payload.Name,
-		WorkosDescription: conv.ToPGTextEmpty(payload.Description),
-		WorkosCreatedAt:   conv.ToPGTimestamptz(payload.CreatedAt),
-		WorkosUpdatedAt:   conv.ToPGTimestamptz(payload.UpdatedAt),
-		WorkosLastEventID: conv.ToPGText(event.ID),
-	}); err != nil {
-		return fmt.Errorf("upsert global role %q: %w", payload.Slug, err)
-	}
-
-	return nil
 }
 
 func upsertOrganizationRole(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, event events.Event, payload workosRoleEventPayload) error {
@@ -428,35 +402,6 @@ func handleRoleDeleted(ctx context.Context, logger *slog.Logger, dbtx database.D
 	deletedAt := payload.DeletedAt
 	if deletedAt == nil || deletedAt.IsZero() {
 		deletedAt = &event.CreatedAt
-	}
-
-	if payload.Type == workosRoleTypeEnvironment {
-		repo := accessrepo.New(dbtx)
-		existing, err := repo.GetGlobalRoleBySlug(ctx, payload.Slug)
-		switch {
-		case errors.Is(err, pgx.ErrNoRows):
-			return nil
-		case err != nil:
-			return fmt.Errorf("get global role %q: %w", payload.Slug, err)
-		}
-
-		var lastEventID *string
-		if existing.WorkosLastEventID.Valid {
-			lastEventID = &existing.WorkosLastEventID.String
-		}
-		rowUpdatedAt := existing.WorkosUpdatedAt.Time
-		if !ShouldProcessEvent(lastEventID, &rowUpdatedAt, event.ID, payload.UpdatedAt) {
-			return nil
-		}
-
-		if _, err := repo.MarkGlobalRoleDeleted(ctx, accessrepo.MarkGlobalRoleDeletedParams{
-			WorkosSlug:        payload.Slug,
-			WorkosDeletedAt:   conv.ToPGTimestamptz(*deletedAt),
-			WorkosLastEventID: conv.ToPGText(event.ID),
-		}); err != nil {
-			return fmt.Errorf("mark global role %q deleted: %w", payload.Slug, err)
-		}
-		return nil
 	}
 
 	org, err := orgrepo.New(dbtx).GetOrganizationByWorkosID(ctx, conv.ToPGText(payload.OrganizationID))

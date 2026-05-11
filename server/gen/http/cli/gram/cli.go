@@ -17,6 +17,7 @@ import (
 	accessc "github.com/speakeasy-api/gram/server/gen/http/access/client"
 	adminc "github.com/speakeasy-api/gram/server/gen/http/admin/client"
 	assetsc "github.com/speakeasy-api/gram/server/gen/http/assets/client"
+	assistantmemoriesc "github.com/speakeasy-api/gram/server/gen/http/assistant_memories/client"
 	assistantsc "github.com/speakeasy-api/gram/server/gen/http/assistants/client"
 	auditlogsc "github.com/speakeasy-api/gram/server/gen/http/auditlogs/client"
 	authc "github.com/speakeasy-api/gram/server/gen/http/auth/client"
@@ -26,6 +27,7 @@ import (
 	deploymentsc "github.com/speakeasy-api/gram/server/gen/http/deployments/client"
 	domainsc "github.com/speakeasy-api/gram/server/gen/http/domains/client"
 	environmentsc "github.com/speakeasy-api/gram/server/gen/http/environments/client"
+	externalc "github.com/speakeasy-api/gram/server/gen/http/external/client"
 	featuresc "github.com/speakeasy-api/gram/server/gen/http/features/client"
 	functionsc "github.com/speakeasy-api/gram/server/gen/http/functions/client"
 	hooksc "github.com/speakeasy-api/gram/server/gen/http/hooks/client"
@@ -65,10 +67,12 @@ import (
 //	command (subcommand1|subcommand2|...)
 func UsageCommands() []string {
 	return []string{
+		"external receive-work-os-webhook",
 		"about openapi",
-		"access (list-roles|get-role|create-role|update-role|delete-role|list-scopes|list-members|list-grants|update-member-role|get-rbac-status|enable-rbac|disable-rbac|list-challenges|resolve-challenge)",
+		"access (list-roles|get-role|create-role|update-role|delete-role|list-scopes|list-members|list-grants|update-member-role|get-rbac-status|enable-rbac|disable-rbac|list-challenges|list-challenge-buckets|resolve-challenge)",
 		"admin poke",
 		"assets (serve-image|upload-image|upload-functions|upload-open-ap-iv3|fetch-open-ap-iv3-from-url|serve-open-ap-iv3|serve-function|list-assets|upload-chat-attachment|serve-chat-attachment|create-signed-chat-attachment-url|serve-chat-attachment-signed)",
+		"assistant-memories (list-assistant-memories|get-assistant-memory|delete-assistant-memory)",
 		"assistants (list-assistants|get-assistant|create-assistant|update-assistant|delete-assistant)",
 		"auditlogs (list|list-facets)",
 		"auth (callback|login|switch-scopes|logout|register|info)",
@@ -113,11 +117,11 @@ func UsageCommands() []string {
 
 // UsageExamples produces an example of a valid invocation of the CLI tool.
 func UsageExamples() string {
-	return os.Args[0] + " " + "about openapi" + "\n" +
+	return os.Args[0] + " " + "external receive-work-os-webhook --workos-signature \"abc123\" --stream \"goa.png\"" + "\n" +
+		os.Args[0] + " " + "about openapi" + "\n" +
 		os.Args[0] + " " + "access list-roles --apikey-token \"abc123\" --session-token \"abc123\"" + "\n" +
 		os.Args[0] + " " + "admin poke" + "\n" +
 		os.Args[0] + " " + "assets serve-image --id \"abc123\"" + "\n" +
-		os.Args[0] + " " + "assistants list-assistants --session-token \"abc123\" --project-slug-input \"abc123\"" + "\n" +
 		""
 }
 
@@ -131,6 +135,12 @@ func ParseEndpoint(
 	restore bool,
 ) (goa.Endpoint, any, error) {
 	var (
+		externalFlags = flag.NewFlagSet("external", flag.ContinueOnError)
+
+		externalReceiveWorkOSWebhookFlags               = flag.NewFlagSet("receive-work-os-webhook", flag.ExitOnError)
+		externalReceiveWorkOSWebhookWorkosSignatureFlag = externalReceiveWorkOSWebhookFlags.String("workos-signature", "", "")
+		externalReceiveWorkOSWebhookStreamFlag          = externalReceiveWorkOSWebhookFlags.String("stream", "REQUIRED", "path to file containing the streamed request body")
+
 		aboutFlags = flag.NewFlagSet("about", flag.ContinueOnError)
 
 		aboutOpenapiFlags = flag.NewFlagSet("openapi", flag.ExitOnError)
@@ -193,10 +203,22 @@ func ParseEndpoint(
 		accessListChallengesScopeFlag        = accessListChallengesFlags.String("scope", "", "")
 		accessListChallengesProjectIDFlag    = accessListChallengesFlags.String("project-id", "", "")
 		accessListChallengesResolvedFlag     = accessListChallengesFlags.String("resolved", "", "")
+		accessListChallengesIdsFlag          = accessListChallengesFlags.String("ids", "", "")
 		accessListChallengesLimitFlag        = accessListChallengesFlags.String("limit", "50", "")
 		accessListChallengesOffsetFlag       = accessListChallengesFlags.String("offset", "", "")
 		accessListChallengesApikeyTokenFlag  = accessListChallengesFlags.String("apikey-token", "", "")
 		accessListChallengesSessionTokenFlag = accessListChallengesFlags.String("session-token", "", "")
+
+		accessListChallengeBucketsFlags            = flag.NewFlagSet("list-challenge-buckets", flag.ExitOnError)
+		accessListChallengeBucketsOutcomeFlag      = accessListChallengeBucketsFlags.String("outcome", "", "")
+		accessListChallengeBucketsPrincipalUrnFlag = accessListChallengeBucketsFlags.String("principal-urn", "", "")
+		accessListChallengeBucketsScopeFlag        = accessListChallengeBucketsFlags.String("scope", "", "")
+		accessListChallengeBucketsProjectIDFlag    = accessListChallengeBucketsFlags.String("project-id", "", "")
+		accessListChallengeBucketsResolvedFlag     = accessListChallengeBucketsFlags.String("resolved", "", "")
+		accessListChallengeBucketsLimitFlag        = accessListChallengeBucketsFlags.String("limit", "50", "")
+		accessListChallengeBucketsOffsetFlag       = accessListChallengeBucketsFlags.String("offset", "", "")
+		accessListChallengeBucketsApikeyTokenFlag  = accessListChallengeBucketsFlags.String("apikey-token", "", "")
+		accessListChallengeBucketsSessionTokenFlag = accessListChallengeBucketsFlags.String("session-token", "", "")
 
 		accessResolveChallengeFlags            = flag.NewFlagSet("resolve-challenge", flag.ExitOnError)
 		accessResolveChallengeBodyFlag         = accessResolveChallengeFlags.String("body", "REQUIRED", "")
@@ -284,6 +306,27 @@ func ParseEndpoint(
 
 		assetsServeChatAttachmentSignedFlags     = flag.NewFlagSet("serve-chat-attachment-signed", flag.ExitOnError)
 		assetsServeChatAttachmentSignedTokenFlag = assetsServeChatAttachmentSignedFlags.String("token", "REQUIRED", "")
+
+		assistantMemoriesFlags = flag.NewFlagSet("assistant-memories", flag.ContinueOnError)
+
+		assistantMemoriesListAssistantMemoriesFlags                = flag.NewFlagSet("list-assistant-memories", flag.ExitOnError)
+		assistantMemoriesListAssistantMemoriesAssistantIDFlag      = assistantMemoriesListAssistantMemoriesFlags.String("assistant-id", "REQUIRED", "")
+		assistantMemoriesListAssistantMemoriesTagsFlag             = assistantMemoriesListAssistantMemoriesFlags.String("tags", "", "")
+		assistantMemoriesListAssistantMemoriesIncludeDeletedFlag   = assistantMemoriesListAssistantMemoriesFlags.String("include-deleted", "", "")
+		assistantMemoriesListAssistantMemoriesCursorFlag           = assistantMemoriesListAssistantMemoriesFlags.String("cursor", "", "")
+		assistantMemoriesListAssistantMemoriesLimitFlag            = assistantMemoriesListAssistantMemoriesFlags.String("limit", "50", "")
+		assistantMemoriesListAssistantMemoriesSessionTokenFlag     = assistantMemoriesListAssistantMemoriesFlags.String("session-token", "", "")
+		assistantMemoriesListAssistantMemoriesProjectSlugInputFlag = assistantMemoriesListAssistantMemoriesFlags.String("project-slug-input", "", "")
+
+		assistantMemoriesGetAssistantMemoryFlags                = flag.NewFlagSet("get-assistant-memory", flag.ExitOnError)
+		assistantMemoriesGetAssistantMemoryIDFlag               = assistantMemoriesGetAssistantMemoryFlags.String("id", "REQUIRED", "")
+		assistantMemoriesGetAssistantMemorySessionTokenFlag     = assistantMemoriesGetAssistantMemoryFlags.String("session-token", "", "")
+		assistantMemoriesGetAssistantMemoryProjectSlugInputFlag = assistantMemoriesGetAssistantMemoryFlags.String("project-slug-input", "", "")
+
+		assistantMemoriesDeleteAssistantMemoryFlags                = flag.NewFlagSet("delete-assistant-memory", flag.ExitOnError)
+		assistantMemoriesDeleteAssistantMemoryIDFlag               = assistantMemoriesDeleteAssistantMemoryFlags.String("id", "REQUIRED", "")
+		assistantMemoriesDeleteAssistantMemorySessionTokenFlag     = assistantMemoriesDeleteAssistantMemoryFlags.String("session-token", "", "")
+		assistantMemoriesDeleteAssistantMemoryProjectSlugInputFlag = assistantMemoriesDeleteAssistantMemoryFlags.String("project-slug-input", "", "")
 
 		assistantsFlags = flag.NewFlagSet("assistants", flag.ContinueOnError)
 
@@ -1457,6 +1500,9 @@ func ParseEndpoint(
 		variationsListGlobalApikeyTokenFlag      = variationsListGlobalFlags.String("apikey-token", "", "")
 		variationsListGlobalProjectSlugInputFlag = variationsListGlobalFlags.String("project-slug-input", "", "")
 	)
+	externalFlags.Usage = externalUsage
+	externalReceiveWorkOSWebhookFlags.Usage = externalReceiveWorkOSWebhookUsage
+
 	aboutFlags.Usage = aboutUsage
 	aboutOpenapiFlags.Usage = aboutOpenapiUsage
 
@@ -1474,6 +1520,7 @@ func ParseEndpoint(
 	accessEnableRBACFlags.Usage = accessEnableRBACUsage
 	accessDisableRBACFlags.Usage = accessDisableRBACUsage
 	accessListChallengesFlags.Usage = accessListChallengesUsage
+	accessListChallengeBucketsFlags.Usage = accessListChallengeBucketsUsage
 	accessResolveChallengeFlags.Usage = accessResolveChallengeUsage
 
 	adminFlags.Usage = adminUsage
@@ -1492,6 +1539,11 @@ func ParseEndpoint(
 	assetsServeChatAttachmentFlags.Usage = assetsServeChatAttachmentUsage
 	assetsCreateSignedChatAttachmentURLFlags.Usage = assetsCreateSignedChatAttachmentURLUsage
 	assetsServeChatAttachmentSignedFlags.Usage = assetsServeChatAttachmentSignedUsage
+
+	assistantMemoriesFlags.Usage = assistantMemoriesUsage
+	assistantMemoriesListAssistantMemoriesFlags.Usage = assistantMemoriesListAssistantMemoriesUsage
+	assistantMemoriesGetAssistantMemoryFlags.Usage = assistantMemoriesGetAssistantMemoryUsage
+	assistantMemoriesDeleteAssistantMemoryFlags.Usage = assistantMemoriesDeleteAssistantMemoryUsage
 
 	assistantsFlags.Usage = assistantsUsage
 	assistantsListAssistantsFlags.Usage = assistantsListAssistantsUsage
@@ -1786,6 +1838,8 @@ func ParseEndpoint(
 	{
 		svcn = flag.Arg(0)
 		switch svcn {
+		case "external":
+			svcf = externalFlags
 		case "about":
 			svcf = aboutFlags
 		case "access":
@@ -1794,6 +1848,8 @@ func ParseEndpoint(
 			svcf = adminFlags
 		case "assets":
 			svcf = assetsFlags
+		case "assistant-memories":
+			svcf = assistantMemoriesFlags
 		case "assistants":
 			svcf = assistantsFlags
 		case "auditlogs":
@@ -1887,6 +1943,13 @@ func ParseEndpoint(
 	{
 		epn = svcf.Arg(0)
 		switch svcn {
+		case "external":
+			switch epn {
+			case "receive-work-os-webhook":
+				epf = externalReceiveWorkOSWebhookFlags
+
+			}
+
 		case "about":
 			switch epn {
 			case "openapi":
@@ -1934,6 +1997,9 @@ func ParseEndpoint(
 
 			case "list-challenges":
 				epf = accessListChallengesFlags
+
+			case "list-challenge-buckets":
+				epf = accessListChallengeBucketsFlags
 
 			case "resolve-challenge":
 				epf = accessResolveChallengeFlags
@@ -1984,6 +2050,19 @@ func ParseEndpoint(
 
 			case "serve-chat-attachment-signed":
 				epf = assetsServeChatAttachmentSignedFlags
+
+			}
+
+		case "assistant-memories":
+			switch epn {
+			case "list-assistant-memories":
+				epf = assistantMemoriesListAssistantMemoriesFlags
+
+			case "get-assistant-memory":
+				epf = assistantMemoriesGetAssistantMemoryFlags
+
+			case "delete-assistant-memory":
+				epf = assistantMemoriesDeleteAssistantMemoryFlags
 
 			}
 
@@ -2763,6 +2842,16 @@ func ParseEndpoint(
 	)
 	{
 		switch svcn {
+		case "external":
+			c := externalc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "receive-work-os-webhook":
+				endpoint = c.ReceiveWorkOSWebhook()
+				data, err = externalc.BuildReceiveWorkOSWebhookPayload(*externalReceiveWorkOSWebhookWorkosSignatureFlag)
+				if err == nil {
+					data, err = externalc.BuildReceiveWorkOSWebhookStreamPayload(data, *externalReceiveWorkOSWebhookStreamFlag)
+				}
+			}
 		case "about":
 			c := aboutc.NewClient(scheme, host, doer, enc, dec, restore)
 			switch epn {
@@ -2810,7 +2899,10 @@ func ParseEndpoint(
 				data, err = accessc.BuildDisableRBACPayload(*accessDisableRBACSessionTokenFlag)
 			case "list-challenges":
 				endpoint = c.ListChallenges()
-				data, err = accessc.BuildListChallengesPayload(*accessListChallengesOutcomeFlag, *accessListChallengesPrincipalUrnFlag, *accessListChallengesScopeFlag, *accessListChallengesProjectIDFlag, *accessListChallengesResolvedFlag, *accessListChallengesLimitFlag, *accessListChallengesOffsetFlag, *accessListChallengesApikeyTokenFlag, *accessListChallengesSessionTokenFlag)
+				data, err = accessc.BuildListChallengesPayload(*accessListChallengesOutcomeFlag, *accessListChallengesPrincipalUrnFlag, *accessListChallengesScopeFlag, *accessListChallengesProjectIDFlag, *accessListChallengesResolvedFlag, *accessListChallengesIdsFlag, *accessListChallengesLimitFlag, *accessListChallengesOffsetFlag, *accessListChallengesApikeyTokenFlag, *accessListChallengesSessionTokenFlag)
+			case "list-challenge-buckets":
+				endpoint = c.ListChallengeBuckets()
+				data, err = accessc.BuildListChallengeBucketsPayload(*accessListChallengeBucketsOutcomeFlag, *accessListChallengeBucketsPrincipalUrnFlag, *accessListChallengeBucketsScopeFlag, *accessListChallengeBucketsProjectIDFlag, *accessListChallengeBucketsResolvedFlag, *accessListChallengeBucketsLimitFlag, *accessListChallengeBucketsOffsetFlag, *accessListChallengeBucketsApikeyTokenFlag, *accessListChallengeBucketsSessionTokenFlag)
 			case "resolve-challenge":
 				endpoint = c.ResolveChallenge()
 				data, err = accessc.BuildResolveChallengePayload(*accessResolveChallengeBodyFlag, *accessResolveChallengeApikeyTokenFlag, *accessResolveChallengeSessionTokenFlag)
@@ -2872,6 +2964,19 @@ func ParseEndpoint(
 			case "serve-chat-attachment-signed":
 				endpoint = c.ServeChatAttachmentSigned()
 				data, err = assetsc.BuildServeChatAttachmentSignedPayload(*assetsServeChatAttachmentSignedTokenFlag)
+			}
+		case "assistant-memories":
+			c := assistantmemoriesc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "list-assistant-memories":
+				endpoint = c.ListAssistantMemories()
+				data, err = assistantmemoriesc.BuildListAssistantMemoriesPayload(*assistantMemoriesListAssistantMemoriesAssistantIDFlag, *assistantMemoriesListAssistantMemoriesTagsFlag, *assistantMemoriesListAssistantMemoriesIncludeDeletedFlag, *assistantMemoriesListAssistantMemoriesCursorFlag, *assistantMemoriesListAssistantMemoriesLimitFlag, *assistantMemoriesListAssistantMemoriesSessionTokenFlag, *assistantMemoriesListAssistantMemoriesProjectSlugInputFlag)
+			case "get-assistant-memory":
+				endpoint = c.GetAssistantMemory()
+				data, err = assistantmemoriesc.BuildGetAssistantMemoryPayload(*assistantMemoriesGetAssistantMemoryIDFlag, *assistantMemoriesGetAssistantMemorySessionTokenFlag, *assistantMemoriesGetAssistantMemoryProjectSlugInputFlag)
+			case "delete-assistant-memory":
+				endpoint = c.DeleteAssistantMemory()
+				data, err = assistantmemoriesc.BuildDeleteAssistantMemoryPayload(*assistantMemoriesDeleteAssistantMemoryIDFlag, *assistantMemoriesDeleteAssistantMemorySessionTokenFlag, *assistantMemoriesDeleteAssistantMemoryProjectSlugInputFlag)
 			}
 		case "assistants":
 			c := assistantsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -3637,6 +3742,36 @@ func ParseEndpoint(
 	return endpoint, data, nil
 }
 
+// externalUsage displays the usage of the external command and its subcommands.
+func externalUsage() {
+	fmt.Fprintln(os.Stderr, `Endpoints for external services to interact with gram.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] external COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    receive-work-os-webhook: Receive and enqueue a WorkOS webhook event.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s external COMMAND --help\n", os.Args[0])
+}
+func externalReceiveWorkOSWebhookUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] external receive-work-os-webhook", os.Args[0])
+	fmt.Fprint(os.Stderr, " -workos-signature STRING")
+	fmt.Fprint(os.Stderr, " -stream STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Receive and enqueue a WorkOS webhook event.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -workos-signature STRING: `)
+	fmt.Fprintln(os.Stderr, `    -stream STRING: path to file containing the streamed request body`)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "external receive-work-os-webhook --workos-signature \"abc123\" --stream \"goa.png\"")
+}
+
 // aboutUsage displays the usage of the about command and its subcommands.
 func aboutUsage() {
 	fmt.Fprintln(os.Stderr, `Information about the Gram platform and its components.`)
@@ -3681,6 +3816,7 @@ func accessUsage() {
 	fmt.Fprintln(os.Stderr, `    enable-rbac: Enable RBAC for the current organization. Seeds default grants for system roles.`)
 	fmt.Fprintln(os.Stderr, `    disable-rbac: Disable RBAC enforcement for the current organization.`)
 	fmt.Fprintln(os.Stderr, `    list-challenges: List authz challenge events from ClickHouse, enriched with resolution state from PostgreSQL.`)
+	fmt.Fprintln(os.Stderr, `    list-challenge-buckets: List authz challenges grouped into time-based burst buckets. Consecutive challenges with the same dimensions within a 10-minute window are collapsed into a single bucket.`)
 	fmt.Fprintln(os.Stderr, `    resolve-challenge: Record resolutions for one or more denied authz challenges. The caller is responsible for assigning the role first.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
@@ -3938,6 +4074,7 @@ func accessListChallengesUsage() {
 	fmt.Fprint(os.Stderr, " -scope STRING")
 	fmt.Fprint(os.Stderr, " -project-id STRING")
 	fmt.Fprint(os.Stderr, " -resolved BOOL")
+	fmt.Fprint(os.Stderr, " -ids JSON")
 	fmt.Fprint(os.Stderr, " -limit INT")
 	fmt.Fprint(os.Stderr, " -offset INT")
 	fmt.Fprint(os.Stderr, " -apikey-token STRING")
@@ -3954,6 +4091,7 @@ func accessListChallengesUsage() {
 	fmt.Fprintln(os.Stderr, `    -scope STRING: `)
 	fmt.Fprintln(os.Stderr, `    -project-id STRING: `)
 	fmt.Fprintln(os.Stderr, `    -resolved BOOL: `)
+	fmt.Fprintln(os.Stderr, `    -ids JSON: `)
 	fmt.Fprintln(os.Stderr, `    -limit INT: `)
 	fmt.Fprintln(os.Stderr, `    -offset INT: `)
 	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
@@ -3961,7 +4099,41 @@ func accessListChallengesUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-challenges --outcome \"deny\" --principal-urn \"abc123\" --scope \"abc123\" --project-id \"abc123\" --resolved false --limit 2 --offset 1 --apikey-token \"abc123\" --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-challenges --outcome \"deny\" --principal-urn \"abc123\" --scope \"abc123\" --project-id \"abc123\" --resolved false --ids '[\n      \"abc123\"\n   ]' --limit 2 --offset 1 --apikey-token \"abc123\" --session-token \"abc123\"")
+}
+
+func accessListChallengeBucketsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access list-challenge-buckets", os.Args[0])
+	fmt.Fprint(os.Stderr, " -outcome STRING")
+	fmt.Fprint(os.Stderr, " -principal-urn STRING")
+	fmt.Fprint(os.Stderr, " -scope STRING")
+	fmt.Fprint(os.Stderr, " -project-id STRING")
+	fmt.Fprint(os.Stderr, " -resolved BOOL")
+	fmt.Fprint(os.Stderr, " -limit INT")
+	fmt.Fprint(os.Stderr, " -offset INT")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List authz challenges grouped into time-based burst buckets. Consecutive challenges with the same dimensions within a 10-minute window are collapsed into a single bucket.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -outcome STRING: `)
+	fmt.Fprintln(os.Stderr, `    -principal-urn STRING: `)
+	fmt.Fprintln(os.Stderr, `    -scope STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -resolved BOOL: `)
+	fmt.Fprintln(os.Stderr, `    -limit INT: `)
+	fmt.Fprintln(os.Stderr, `    -offset INT: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-challenge-buckets --outcome \"deny\" --principal-urn \"abc123\" --scope \"abc123\" --project-id \"abc123\" --resolved false --limit 2 --offset 1 --apikey-token \"abc123\" --session-token \"abc123\"")
 }
 
 func accessResolveChallengeUsage() {
@@ -4327,6 +4499,93 @@ func assetsServeChatAttachmentSignedUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assets serve-chat-attachment-signed --token \"abc123\"")
+}
+
+// assistantMemoriesUsage displays the usage of the assistant-memories command
+// and its subcommands.
+func assistantMemoriesUsage() {
+	fmt.Fprintln(os.Stderr, `Manage assistant memory records.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] assistant-memories COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    list-assistant-memories: List assistant memories for an assistant.`)
+	fmt.Fprintln(os.Stderr, `    get-assistant-memory: Get an assistant memory by ID.`)
+	fmt.Fprintln(os.Stderr, `    delete-assistant-memory: Delete an assistant memory by ID.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s assistant-memories COMMAND --help\n", os.Args[0])
+}
+func assistantMemoriesListAssistantMemoriesUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] assistant-memories list-assistant-memories", os.Args[0])
+	fmt.Fprint(os.Stderr, " -assistant-id STRING")
+	fmt.Fprint(os.Stderr, " -tags JSON")
+	fmt.Fprint(os.Stderr, " -include-deleted BOOL")
+	fmt.Fprint(os.Stderr, " -cursor STRING")
+	fmt.Fprint(os.Stderr, " -limit INT")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List assistant memories for an assistant.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -assistant-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -tags JSON: `)
+	fmt.Fprintln(os.Stderr, `    -include-deleted BOOL: `)
+	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
+	fmt.Fprintln(os.Stderr, `    -limit INT: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistant-memories list-assistant-memories --assistant-id \"550e8400-e29b-41d4-a716-446655440000\" --tags '[\n      \"abc123\"\n   ]' --include-deleted false --cursor \"abc123\" --limit 2 --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func assistantMemoriesGetAssistantMemoryUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] assistant-memories get-assistant-memory", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get an assistant memory by ID.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistant-memories get-assistant-memory --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func assistantMemoriesDeleteAssistantMemoryUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] assistant-memories delete-assistant-memory", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Delete an assistant memory by ID.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistant-memories delete-assistant-memory --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // assistantsUsage displays the usage of the assistants command and its

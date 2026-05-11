@@ -17,7 +17,8 @@ import { Badge, Button } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Check, ChevronRight, Plus, Users } from "lucide-react";
 import { useState } from "react";
-import type { AuthzChallenge } from "./ChallengesTab";
+import type { ChallengeBucket } from "@gram/client/models/components/challengebucket.js";
+import { invalidateAllChallengeBuckets } from "@gram/client/react-query/challengeBuckets.js";
 import { toRoleSlug } from "./types";
 
 type Step = "choose" | "select-role" | "confirm";
@@ -25,10 +26,10 @@ type Step = "choose" | "select-role" | "confirm";
 interface GrantDrawerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  challenge: AuthzChallenge | null;
+  challenge: ChallengeBucket | null;
   challengeIds?: string[];
   onCreateNew: () => void;
-  onResolved?: (challengeIds: string[]) => void;
+  onResolved?: () => void;
 }
 
 export function GrantDrawer({
@@ -52,7 +53,10 @@ export function GrantDrawer({
 
   const resolveChallenge = useResolveChallengeMutation({
     onSuccess: async () => {
-      await invalidateAllChallenges(queryClient);
+      await Promise.all([
+        invalidateAllChallenges(queryClient),
+        invalidateAllChallengeBuckets(queryClient),
+      ]);
     },
   });
 
@@ -95,7 +99,7 @@ export function GrantDrawer({
       },
       {
         onSuccess: () => {
-          onResolved?.(ids);
+          onResolved?.();
           handleClose();
         },
       },

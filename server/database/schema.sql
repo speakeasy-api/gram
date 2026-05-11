@@ -539,7 +539,7 @@ CREATE TABLE IF NOT EXISTS trigger_instances (
   target_ref TEXT NOT NULL CHECK (target_ref <> '' AND CHAR_LENGTH(target_ref) <= 255),
   target_display TEXT NOT NULL CHECK (target_display <> '' AND CHAR_LENGTH(target_display) <= 255),
   config_json JSONB NOT NULL DEFAULT '{}'::jsonb,
-  status TEXT NOT NULL CHECK (status IN ('active', 'paused')) DEFAULT 'active',
+  status TEXT NOT NULL DEFAULT 'active',
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -827,6 +827,10 @@ CREATE TABLE IF NOT EXISTS toolsets (
   external_oauth_server_id uuid,
   oauth_proxy_server_id uuid,
 
+  -- New unified gate (spike §4.1 Toolset link). Nullable opt-in; runtime
+  -- behaviour is gated only when this is set, so legacy paths stay unchanged.
+  user_session_issuer_id uuid,
+
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
@@ -837,6 +841,7 @@ CREATE TABLE IF NOT EXISTS toolsets (
   CONSTRAINT toolsets_custom_domain_id_fkey FOREIGN key (custom_domain_id) REFERENCES custom_domains (id) ON DELETE SET NULL,
   CONSTRAINT toolsets_external_oauth_server_id_fkey FOREIGN KEY (external_oauth_server_id) REFERENCES external_oauth_server_metadata (id) ON DELETE SET NULL,
   CONSTRAINT toolsets_oauth_proxy_server_id_fkey FOREIGN KEY (oauth_proxy_server_id) REFERENCES oauth_proxy_servers (id) ON DELETE SET NULL,
+  CONSTRAINT toolsets_user_session_issuer_id_fkey FOREIGN KEY (user_session_issuer_id) REFERENCES user_session_issuers (id) ON DELETE SET NULL,
   CONSTRAINT toolsets_oauth_exclusivity CHECK ((external_oauth_server_id IS NULL) != (oauth_proxy_server_id IS NULL) OR (external_oauth_server_id IS NULL AND oauth_proxy_server_id IS NULL))
 );
 
@@ -1667,6 +1672,47 @@ WHERE deleted IS FALSE;
 CREATE INDEX IF NOT EXISTS toolset_embeddings_tags_idx
 ON toolset_embeddings
 USING GIN (tags);
+
+CREATE TABLE IF NOT EXISTS assistant_memories (
+  id               uuid NOT NULL DEFAULT generate_uuidv7(),
+  assistant_id     uuid,
+  project_id       uuid,
+  organization_id  TEXT NOT NULL,
+  content          TEXT NOT NULL,
+  embedding        halfvec(4000) NOT NULL,
+  supersedes_id    uuid,
+  superseded_at    timestamptz,
+  valid_at         timestamptz NOT NULL DEFAULT clock_timestamp(),
+  tags             TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+  origin_thread_id uuid,
+  origin_chat_id   uuid,
+  created_at       timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at       timestamptz NOT NULL DEFAULT clock_timestamp(),
+  last_access      timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at       timestamptz,
+  deleted          boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT assistant_memories_pkey PRIMARY KEY (id),
+  CONSTRAINT assistant_memories_assistant_id_fkey
+    FOREIGN KEY (assistant_id) REFERENCES assistants(id) ON DELETE SET NULL,
+  CONSTRAINT assistant_memories_project_id_fkey
+    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL,
+  CONSTRAINT assistant_memories_supersedes_id_fkey
+    FOREIGN KEY (supersedes_id) REFERENCES assistant_memories(id) ON DELETE SET NULL,
+  CONSTRAINT assistant_memories_content_size_check CHECK (octet_length(content) <= 8192)
+);
+
+CREATE INDEX IF NOT EXISTS assistant_memories_embedding_hnsw
+  ON assistant_memories USING hnsw (embedding halfvec_cosine_ops)
+  WHERE deleted IS FALSE AND superseded_at IS NULL;
+
+CREATE INDEX IF NOT EXISTS assistant_memories_assistant_active
+  ON assistant_memories (assistant_id, created_at DESC)
+  WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS assistant_memories_tags_gin
+  ON assistant_memories USING gin (tags)
+  WHERE deleted IS FALSE;
 
 -- Agent executions table
 CREATE TABLE IF NOT EXISTS agent_executions (

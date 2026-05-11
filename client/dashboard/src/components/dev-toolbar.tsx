@@ -114,20 +114,39 @@ function loadState(): OverrideState {
       ) {
         return {
           enabled: parsed.enabled,
-          scopes: Object.fromEntries(
-            Object.entries(parsed.scopes).map(([scope, enabled]) => [
-              scope,
-              { enabled: enabled as boolean, resources: null },
-            ]),
+          scopes: mergeWithDefaults(
+            Object.fromEntries(
+              Object.entries(parsed.scopes).map(([scope, enabled]) => [
+                scope,
+                { enabled: enabled as boolean, resources: null },
+              ]),
+            ),
           ),
         };
       }
-      return parsed;
+      // Merge SCOPE_DEFS defaults so any newly added scopes (since the user last
+      // saved state) are materialized in localStorage. Without this, new entries
+      // render as visually "enabled" via the per-row fallback in the JSX, but
+      // getRBACScopeOverrideHeader only iterates keys that exist in state.scopes
+      // — so the override header omits them and the kebab is disabled despite
+      // looking checked.
+      return {
+        enabled: parsed.enabled ?? false,
+        scopes: mergeWithDefaults(parsed.scopes ?? {}),
+      };
     }
   } catch {
     // ignore malformed localStorage
   }
   return { enabled: false, scopes: defaultScopeState() };
+}
+
+// mergeWithDefaults overlays existing scope state on top of defaultScopeState
+// so every scope in SCOPE_DEFS is present, but explicit user toggles win.
+function mergeWithDefaults(
+  existing: Record<string, ScopeState>,
+): Record<string, ScopeState> {
+  return { ...defaultScopeState(), ...existing };
 }
 
 function saveState(state: OverrideState) {
