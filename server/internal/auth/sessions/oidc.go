@@ -271,12 +271,11 @@ func (s *Manager) BuildAuthorizationURL(ctx context.Context, params AuthURLParam
 	q.Set("scope", "openid email profile")
 	q.Set("provider", "authkit")
 
-	// WorkOS client IDs start with "client_". When detected, route authorize
-	// through the WorkOS API (AuthKit hosted domains don't serve authorize).
-	// Local dev-idp uses a non-prefixed client ID and handles /authorize directly.
-	authorizeBase := s.idpBaseURL + "/authorize"
-	if strings.HasPrefix(s.idpClientID, "client_") {
-		authorizeBase = workosAuthorizeEndpoint
+	// Authorize goes through the WorkOS API by default (AuthKit hosted domains
+	// don't serve /authorize). Dev-idp handles /authorize directly.
+	authorizeBase := workosAuthorizeEndpoint
+	if !strings.HasPrefix(s.idpClientID, "client_") {
+		authorizeBase = s.idpBaseURL + "/authorize"
 	}
 
 	authURL, err := url.Parse(fmt.Sprintf("%s?%s", authorizeBase, q.Encode()))
