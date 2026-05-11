@@ -209,6 +209,83 @@ func TestServePublic_RBAC_ToolLevelGrant_DeniesWrongServer(t *testing.T) {
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }
 
+func TestServePublic_RBAC_ProjectScopedGrant_AllowsServerInProject(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	toolset := createPrivateMCPToolset(t, ctx, ti, "rbac-proj-allowed-"+uuid.NewString()[:8])
+
+	chConn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+	authzEngine := authz.NewEngine(ti.logger, ti.conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), cache.NoopCache)
+	// Project-scoped grant: resource_id=*, project_id=toolset's project
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
+		Scope: authz.ScopeMCPConnect,
+		Selector: authz.Selector{
+			"resource_kind": "mcp",
+			"resource_id":   "*",
+			"project_id":    toolset.ProjectID.String(),
+		},
+	})
+
+	// Check with matching project_id should pass.
+	err = authzEngine.Require(ctx, authz.MCPCheck(authz.ScopeMCPConnect, toolset.ID.String(), toolset.ProjectID.String()))
+	require.NoError(t, err)
+}
+
+func TestServePublic_RBAC_ProjectScopedGrant_DeniesServerInOtherProject(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	toolset := createPrivateMCPToolset(t, ctx, ti, "rbac-proj-denied-"+uuid.NewString()[:8])
+
+	chConn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+	authzEngine := authz.NewEngine(ti.logger, ti.conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), cache.NoopCache)
+	// Project-scoped grant for a *different* project
+	otherProjectID := uuid.New()
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
+		Scope: authz.ScopeMCPConnect,
+		Selector: authz.Selector{
+			"resource_kind": "mcp",
+			"resource_id":   "*",
+			"project_id":    otherProjectID.String(),
+		},
+	})
+
+	// Check with toolset's actual project_id should be denied.
+	err = authzEngine.Require(ctx, authz.MCPCheck(authz.ScopeMCPConnect, toolset.ID.String(), toolset.ProjectID.String()))
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+}
+
+func TestServePublic_RBAC_ProjectScopedGrant_AllowsToolCallInProject(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	toolset := createPrivateMCPToolset(t, ctx, ti, "rbac-proj-tool-"+uuid.NewString()[:8])
+
+	chConn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+	authzEngine := authz.NewEngine(ti.logger, ti.conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), cache.NoopCache)
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
+		Scope: authz.ScopeMCPConnect,
+		Selector: authz.Selector{
+			"resource_kind": "mcp",
+			"resource_id":   "*",
+			"project_id":    toolset.ProjectID.String(),
+		},
+	})
+
+	// Tool-level check with project_id should pass.
+	err = authzEngine.Require(ctx, authz.MCPToolCallCheck(toolset.ID.String(), authz.MCPToolCallDimensions{
+		Tool:      "any_tool",
+		ProjectID: toolset.ProjectID.String(),
+	}))
+	require.NoError(t, err)
+}
+
 func createPrivateMCPToolset(t *testing.T, ctx context.Context, ti *testInstance, slug string) toolsets_repo.Toolset {
 	t.Helper()
 

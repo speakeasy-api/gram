@@ -208,6 +208,7 @@ func handleToolsCall(
 		if err := authzEngine.Require(ctx, authz.MCPToolCallCheck(toolset.ID, authz.MCPToolCallDimensions{
 			Tool:        params.Name,
 			Disposition: disposition,
+			ProjectID:   payload.projectID.String(),
 		})); err != nil {
 			return nil, err
 		}

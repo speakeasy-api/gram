@@ -30215,6 +30215,9 @@ components:
                         - destructive
                         - idempotent
                         - open_world
+                project_id:
+                    type: string
+                    description: Project filter (MCP scopes only). When set with resource_id='*', grants access to all servers in the project.
                 resource_id:
                     type: string
                     description: The resource identifier, or '*' for all resources of this kind.
