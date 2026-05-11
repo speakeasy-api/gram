@@ -59,3 +59,29 @@ export function buildLogFilters(
   }
   return filters.length > 0 ? filters : undefined;
 }
+
+export function mergeFilterChip(
+  activeFilters: FilterChip[],
+  chip: FilterChip,
+): { filters: FilterChip[]; merged: FilterChip | null } {
+  const existing = activeFilters.find((f) => f.path === chip.path);
+  const alreadyPresent = existing
+    ? chip.filters.every((v) => existing.filters.includes(v))
+    : false;
+  if (alreadyPresent) return { filters: activeFilters, merged: null };
+
+  const merged: FilterChip = existing
+    ? {
+        path: chip.path,
+        filters: [...new Set([...existing.filters, ...chip.filters])],
+        display: [...new Set([...existing.filters, ...chip.filters])].join(
+          ", ",
+        ),
+      }
+    : chip;
+
+  return {
+    filters: [...activeFilters.filter((f) => f.path !== chip.path), merged],
+    merged,
+  };
+}

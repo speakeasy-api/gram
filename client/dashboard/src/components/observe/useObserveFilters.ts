@@ -6,6 +6,7 @@ import type { FilterChip } from "@/components/observe/ObserveFilterBar";
 import {
   buildLogFilters,
   isValidPreset,
+  mergeFilterChip,
   safeBase64Decode,
   safeBase64Encode,
 } from "./observeFilterUtils";
@@ -244,26 +245,8 @@ export function useObserveFilters() {
   const addFilter = useCallback(
     (chip: FilterChip) => {
       setActiveFilters((prev) => {
-        const existing = prev.find((f) => f.path === chip.path);
-        const alreadyPresent = existing?.filters.some((v) =>
-          chip.filters.includes(v),
-        );
-        if (alreadyPresent) return prev;
-
-        const merged: FilterChip = existing
-          ? {
-              path: chip.path,
-              filters: [...new Set([...existing.filters, ...chip.filters])],
-              display: [
-                ...new Set([...existing.filters, ...chip.filters]),
-              ].join(", "),
-            }
-          : chip;
-
-        const newFilters = [
-          ...prev.filter((f) => f.path !== chip.path),
-          merged,
-        ];
+        const { filters: newFilters, merged } = mergeFilterChip(prev, chip);
+        if (!merged) return prev;
 
         setSearchParams(
           (urlPrev) => {
