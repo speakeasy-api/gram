@@ -1,5 +1,5 @@
 import { Type } from "@/components/ui/type";
-import type { AuthzChallenge } from "@gram/client/models/components/authzchallenge.js";
+import type { ChallengeBucket } from "@gram/client/models/components/challengebucket.js";
 import { Building2, ChevronRight, FolderOpen, Plug } from "lucide-react";
 import { Link } from "react-router";
 
@@ -8,7 +8,7 @@ export function ResourceLink({
   orgSlug,
   projectMap,
 }: {
-  challenge: AuthzChallenge;
+  challenge: ChallengeBucket;
   orgSlug: string;
   projectMap: Map<string, { slug: string; name: string }>;
 }) {

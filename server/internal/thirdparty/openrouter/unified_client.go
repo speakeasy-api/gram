@@ -297,7 +297,7 @@ func (c *ChatClient) GetCompletion(ctx context.Context, req CompletionRequest) (
 
 	// Handle non-200 responses
 	if httpResp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("OpenRouter API error (status %d): %s", httpResp.StatusCode, strings.TrimSpace(string(body)))
+		return nil, classifyHTTPError(httpResp.StatusCode, body)
 	}
 
 	// Parse response
@@ -385,7 +385,7 @@ func (c *ChatClient) GetCompletionStream(ctx context.Context, req CompletionRequ
 	if httpResp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(httpResp.Body)
 		o11y.NoLogDefer(func() error { return httpResp.Body.Close() })
-		return nil, fmt.Errorf("OpenRouter API error (status %d): %s", httpResp.StatusCode, strings.TrimSpace(string(body)))
+		return nil, classifyHTTPError(httpResp.StatusCode, body)
 	}
 
 	// Wrap the response body with SSE parser that accumulates metadata

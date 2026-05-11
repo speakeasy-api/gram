@@ -31,6 +31,19 @@ func (q *Queries) CountFunctionsAccess(ctx context.Context, arg CountFunctionsAc
 	return count, err
 }
 
+const countOutboxEntriesByEventType = `-- name: CountOutboxEntriesByEventType :one
+SELECT COUNT(*)
+FROM outbox
+WHERE event_type = $1
+`
+
+func (q *Queries) CountOutboxEntriesByEventType(ctx context.Context, eventType string) (int64, error) {
+	row := q.db.QueryRow(ctx, countOutboxEntriesByEventType, eventType)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const insertChatMessage = `-- name: InsertChatMessage :one
 INSERT INTO chat_messages (chat_id, project_id, role, content)
 VALUES ($1, $2, $3, $4)

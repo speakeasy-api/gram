@@ -2,20 +2,7 @@ import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
 import { InsightsConfig } from "@/components/insights-sidebar";
 import { ObservabilitySkeleton } from "@/components/ObservabilitySkeleton";
 import { Button } from "@/components/ui/button";
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
-import { McpIcon } from "@/components/ui/mcp-icon";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+import { MCPServerFilter } from "@/components/observe/ObserveFilterBar";
 import { useSlugs } from "@/contexts/Sdk";
 import { cn } from "@/lib/utils";
 import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
@@ -39,14 +26,7 @@ import {
 import { unwrapAsync } from "@gram/client/types/fp";
 import { Icon } from "@speakeasy-api/moonshine";
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  Check,
-  ChevronDown,
-  Loader2,
-  RefreshCw,
-  Settings,
-  XIcon,
-} from "lucide-react";
+import { Loader2, RefreshCw, Settings, XIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useOrgRoutes } from "@/routes";
 import { Link, useSearchParams } from "react-router";
@@ -63,135 +43,12 @@ import {
   useAttributeLogsQuery,
   type TraceSummary,
 } from "@/pages/logs/use-attribute-logs-query";
-
-const validPresets: DateRangePreset[] = [
-  "15m",
-  "1h",
-  "4h",
-  "1d",
-  "2d",
-  "3d",
-  "7d",
-  "15d",
-  "30d",
-  "90d",
-];
-
-function isValidPreset(value: string | null): value is DateRangePreset {
-  return value !== null && validPresets.includes(value as DateRangePreset);
-}
-
-function safeBase64Encode(str: string): string {
-  try {
-    return btoa(str);
-  } catch {
-    return btoa(encodeURIComponent(str));
-  }
-}
-
-function safeBase64Decode(str: string): string | null {
-  try {
-    const decoded = atob(str);
-    try {
-      return decodeURIComponent(decoded);
-    } catch {
-      return decoded;
-    }
-  } catch {
-    return null;
-  }
-}
-
-const perPage = 100;
-
-function MCPServerFilter({
-  selectedServer,
-  onServerChange,
-  toolsets,
-  isLoading,
-  disabled,
-}: {
-  selectedServer: string | null;
-  onServerChange: (serverId: string | null) => void;
-  toolsets: Array<{ slug: string; name: string }>;
-  isLoading?: boolean;
-  disabled?: boolean;
-}) {
-  const [open, setOpen] = useState(false);
-
-  const selectedToolset = toolsets.find((t) => t.slug === selectedServer);
-  const displayLabel = selectedToolset?.name ?? "All Servers";
-
-  return (
-    <div
-      className={`flex items-center gap-2 ${disabled ? "pointer-events-none opacity-50" : ""}`}
-    >
-      <div className="border-border flex h-[42px] items-center rounded-md border p-1">
-        <div className="flex h-8 items-center gap-1.5 px-3">
-          <McpIcon className="text-muted-foreground size-3.5" />
-          <span className="text-foreground text-sm font-medium">Server</span>
-        </div>
-        <div className="bg-border/50 mx-1 h-6 w-px" />
-        <Popover open={!disabled && open} onOpenChange={setOpen}>
-          <PopoverTrigger asChild>
-            <button
-              disabled={disabled || isLoading}
-              className={`flex h-8 min-w-[140px] items-center justify-between gap-2 rounded px-2 text-sm transition-colors ${
-                disabled || isLoading
-                  ? "cursor-not-allowed opacity-40"
-                  : "hover:bg-muted/50"
-              }`}
-            >
-              <span className="max-w-[120px] truncate">
-                {isLoading ? "Loading..." : displayLabel}
-              </span>
-              <ChevronDown className="text-muted-foreground size-3.5 shrink-0" />
-            </button>
-          </PopoverTrigger>
-          <PopoverContent className="w-[220px] p-0" align="end">
-            <Command>
-              <CommandInput placeholder="Search servers..." className="h-9" />
-              <CommandList>
-                <CommandEmpty>No servers found.</CommandEmpty>
-                <CommandGroup>
-                  <CommandItem
-                    value="__all__"
-                    onSelect={() => {
-                      onServerChange(null);
-                      setOpen(false);
-                    }}
-                    className="cursor-pointer"
-                  >
-                    <Check
-                      className={`mr-2 size-4 ${selectedServer === null ? "opacity-100" : "opacity-0"}`}
-                    />
-                    <span>All Servers</span>
-                  </CommandItem>
-                  {toolsets.map((toolset) => (
-                    <CommandItem
-                      key={toolset.slug}
-                      value={toolset.name}
-                      onSelect={() => {
-                        onServerChange(toolset.slug);
-                        setOpen(false);
-                      }}
-                      className="cursor-pointer"
-                    >
-                      <Check
-                        className={`mr-2 size-4 ${selectedServer === toolset.slug ? "opacity-100" : "opacity-0"}`}
-                      />
-                      <span className="truncate">{toolset.name}</span>
-                    </CommandItem>
-                  ))}
-                </CommandGroup>
-              </CommandList>
-            </Command>
-          </PopoverContent>
-        </Popover>
-      </div>
-    </div>
-  );
-}
+import {
+  isValidPreset,
+  safeBase64Encode,
+  safeBase64Decode,
+  perPage,
+} from "@/components/observe/observeFilterUtils";
 
 export function LogsMCPContent() {
   const [searchParams, setSearchParams] = useSearchParams();

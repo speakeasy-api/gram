@@ -6,24 +6,17 @@ import { ErrorAlert } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
-import { Checkbox } from "@/components/ui/checkbox";
-import { MultiSearch } from "@/components/ui/multi-search";
 import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+  FilterChip,
+  ObserveFilterBar,
+} from "@/components/observe/ObserveFilterBar";
 import { useSlugs } from "@/contexts/Sdk";
 import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
 import { useServerNameMappings } from "@/hooks/useServerNameMappings";
 import { cn } from "@/lib/utils";
 import { useOrgRoutes } from "@/routes";
-import {
-  getPresetRange,
-  TimeRangePicker,
-  type DateRangePreset,
-} from "@gram-ai/elements";
+import { getPresetRange, type DateRangePreset } from "@gram-ai/elements";
 import { telemetryGetHooksSummary } from "@gram/client/funcs/telemetryGetHooksSummary";
 import { telemetryListHooksTraces } from "@gram/client/funcs/telemetryListHooksTraces";
 import type {
@@ -33,7 +26,6 @@ import type {
   SkillBreakdownRow,
   SkillTimeSeriesPoint,
   HookTraceSummary as HookTrace,
-  LogFilter,
   TelemetryLogRecord,
   TypesToInclude,
 } from "@gram/client/models/components";
@@ -63,7 +55,9 @@ import {
 import { Bar, Line } from "react-chartjs-2";
 import { Settings } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link, useSearchParams } from "react-router";
+import { Link } from "react-router";
+import { useObserveFilters } from "@/components/observe/useObserveFilters";
+import { perPage } from "@/components/observe/observeFilterUtils";
 import { LogDetailSheet } from "@/pages/logs/LogDetailSheet";
 import { HooksEmptyState } from "@/pages/hooks/HooksEmptyState";
 import { HooksSetupButton } from "@/pages/hooks/HooksSetupDialog";
@@ -170,54 +164,7 @@ const SHARED_BAR_SCALES = {
   },
 } satisfies _BarScales;
 
-const validPresets: DateRangePreset[] = [
-  "15m",
-  "1h",
-  "4h",
-  "1d",
-  "2d",
-  "3d",
-  "7d",
-  "15d",
-  "30d",
-  "90d",
-];
-
-function isValidPreset(value: string | null): value is DateRangePreset {
-  return value !== null && validPresets.includes(value as DateRangePreset);
-}
-
-interface FilterChip {
-  display: string;
-  filters: string[];
-  path: string;
-}
-
-function safeBase64Encode(str: string): string {
-  try {
-    return btoa(str);
-  } catch {
-    return btoa(encodeURIComponent(str));
-  }
-}
-
-function safeBase64Decode(str: string): string | null {
-  try {
-    const decoded = atob(str);
-    try {
-      return decodeURIComponent(decoded);
-    } catch {
-      return decoded;
-    }
-  } catch {
-    return null;
-  }
-}
-
-const perPage = 100;
-
 export function InsightsToolsContent() {
-  const [searchParams, setSearchParams] = useSearchParams();
   const { projectSlug } = useSlugs();
 
   const mcpConfig = useObservabilityMcpConfig({
@@ -227,141 +174,33 @@ export function InsightsToolsContent() {
 
   const serverNameMappings = useServerNameMappings();
 
-  const initialServer = searchParams.get("server");
-  const initialUserEmail = searchParams.get("user");
+  const {
+    from,
+    to,
+    logFilters,
+    selectedHookTypes,
+    activeFilters,
+    addKnownServers,
+    serverOptions,
+    handleServerSelectionChange,
+    userEmailOptions,
+    addKnownUserEmails,
+    handleUserEmailSelectionChange,
+    addFilter,
+    handleHookTypesChange,
+    dateRange,
+    customRange,
+    customRangeLabel,
+    setDateRangeParam,
+    setCustomRangeParam,
+    clearCustomRange,
+  } = useObserveFilters();
 
-  const initialHookTypes = searchParams.get("hookTypes");
-  const defaultHookTypes: TypesToInclude[] = ["mcp", "skill"];
-  const parsedHookTypes: TypesToInclude[] = initialHookTypes
-    ? (initialHookTypes
-        .split(",")
-        .filter((t) =>
-          ["mcp", "local", "skill"].includes(t),
-        ) as TypesToInclude[])
-    : defaultHookTypes;
-
-  const [activeFilters, setActiveFilters] = useState<FilterChip[]>(() => {
-    const filters: FilterChip[] = [];
-
-    if (initialServer) {
-      const serverValues = initialServer
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean);
-      serverValues.forEach((value) => {
-        filters.push({
-          display: value,
-          filters: [value],
-          path: "gram.tool_call.source",
-        });
-      });
-    }
-
-    if (initialUserEmail) {
-      const userValues = initialUserEmail
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean);
-      userValues.forEach((value) => {
-        filters.push({
-          display: value,
-          filters: [value],
-          path: "user.email",
-        });
-      });
-    }
-
-    return filters;
-  });
-
-  const [serverInput, setServerInput] = useState("");
-  const [userEmailInput, setUserEmailInput] = useState("");
-  const [selectedHookTypes, setSelectedHookTypes] =
-    useState<TypesToInclude[]>(parsedHookTypes);
   const [selectedLog, setSelectedLog] = useState<TelemetryLogRecord | null>(
     null,
   );
 
   const client = useGramContext();
-
-  const urlRange = searchParams.get("range");
-  const urlFrom = searchParams.get("from");
-  const urlTo = searchParams.get("to");
-  const urlLabelEncoded = searchParams.get("label");
-  const urlLabel = useMemo(() => {
-    if (!urlLabelEncoded) return null;
-    return safeBase64Decode(urlLabelEncoded);
-  }, [urlLabelEncoded]);
-
-  const dateRange: DateRangePreset = isValidPreset(urlRange) ? urlRange : "7d";
-
-  const customRange = useMemo(() => {
-    if (urlFrom && urlTo) {
-      const from = new Date(urlFrom);
-      const to = new Date(urlTo);
-      if (!isNaN(from.getTime()) && !isNaN(to.getTime())) {
-        return { from, to };
-      }
-    }
-    return null;
-  }, [urlFrom, urlTo]);
-
-  const updateSearchParams = useCallback(
-    (updates: Record<string, string | null>) => {
-      setSearchParams((prev) => {
-        const next = new URLSearchParams(prev);
-        for (const [key, value] of Object.entries(updates)) {
-          if (value === null) {
-            next.delete(key);
-          } else {
-            next.set(key, value);
-          }
-        }
-        return next;
-      });
-    },
-    [setSearchParams],
-  );
-
-  const setDateRangeParam = useCallback(
-    (preset: DateRangePreset) => {
-      updateSearchParams({ range: preset, from: null, to: null, label: null });
-    },
-    [updateSearchParams],
-  );
-
-  const setCustomRangeParam = useCallback(
-    (from: Date, to: Date, label?: string) => {
-      updateSearchParams({
-        range: null,
-        from: from.toISOString(),
-        to: to.toISOString(),
-        label: label ? safeBase64Encode(label) : null,
-      });
-    },
-    [updateSearchParams],
-  );
-
-  const clearCustomRange = useCallback(() => {
-    updateSearchParams({ from: null, to: null, label: null });
-  }, [updateSearchParams]);
-
-  const { from, to } = useMemo(
-    () => customRange ?? getPresetRange(dateRange),
-    [customRange, dateRange],
-  );
-
-  const logFilters = useMemo(() => {
-    const filters: LogFilter[] = [];
-    for (const chip of activeFilters) {
-      filters.push({
-        path: chip.path,
-        operator: chip.filters.length > 1 ? "in" : "contains",
-        values: chip.filters,
-      });
-    }
-    return filters.length > 0 ? filters : undefined;
-  }, [activeFilters]);
 
   const {
     data: tracesData,
@@ -430,128 +269,18 @@ export function InsightsToolsContent() {
     throwOnError: false,
   });
 
-  const addFilter = useCallback(
-    (chip: FilterChip) => {
-      setActiveFilters((prev) => {
-        const exists = prev.some(
-          (f) => f.path === chip.path && f.display === chip.display,
-        );
-        if (exists) return prev;
+  useEffect(() => {
+    if (!summaryData) return;
+    addKnownServers(summaryData.breakdown.map((r) => r.serverName));
+  }, [summaryData, addKnownServers]);
 
-        const newFilters = [...prev, chip];
-
-        setSearchParams(
-          (urlPrev) => {
-            const next = new URLSearchParams(urlPrev);
-            if (chip.path === "gram.tool_call.source") {
-              const serverFilters = newFilters
-                .filter((f) => f.path === "gram.tool_call.source")
-                .map((f) => f.display);
-              next.set("server", serverFilters.join(","));
-            } else if (chip.path === "user.email") {
-              const userFilters = newFilters
-                .filter((f) => f.path === "user.email")
-                .map((f) => f.display);
-              next.set("user", userFilters.join(","));
-            }
-            return next;
-          },
-          { replace: true },
-        );
-
-        return newFilters;
-      });
-    },
-    [setSearchParams],
-  );
-
-  const removeFilter = useCallback(
-    (path: string, display?: string) => {
-      setActiveFilters((prev) => {
-        const newFilters = display
-          ? prev.filter((f) => !(f.path === path && f.display === display))
-          : prev.filter((f) => f.path !== path);
-
-        setSearchParams(
-          (urlPrev) => {
-            const next = new URLSearchParams(urlPrev);
-            if (path === "gram.tool_call.source") {
-              const serverFilters = newFilters
-                .filter((f) => f.path === "gram.tool_call.source")
-                .map((f) => f.display);
-              if (serverFilters.length > 0) {
-                next.set("server", serverFilters.join(","));
-              } else {
-                next.delete("server");
-              }
-            } else if (path === "user.email") {
-              const userFilters = newFilters
-                .filter((f) => f.path === "user.email")
-                .map((f) => f.display);
-              if (userFilters.length > 0) {
-                next.set("user", userFilters.join(","));
-              } else {
-                next.delete("user");
-              }
-            }
-            return next;
-          },
-          { replace: true },
-        );
-
-        return newFilters;
-      });
-    },
-    [setSearchParams],
-  );
-
-  const submitServerFilter = useCallback(() => {
-    const trimmed = serverInput.trim();
-    if (!trimmed) return;
-    addFilter({
-      display: trimmed,
-      filters: [trimmed],
-      path: "gram.tool_call.source",
-    });
-    setServerInput("");
-  }, [serverInput, addFilter]);
-
-  const submitUserEmailFilter = useCallback(() => {
-    const trimmed = userEmailInput.trim();
-    if (!trimmed) return;
-    addFilter({
-      display: trimmed,
-      filters: [trimmed],
-      path: "user.email",
-    });
-    setUserEmailInput("");
-  }, [userEmailInput, addFilter]);
-
-  const handleHookTypesChange = useCallback(
-    (types: TypesToInclude[]) => {
-      setSelectedHookTypes(types);
-      setSearchParams(
-        (prev) => {
-          const next = new URLSearchParams(prev);
-          const isDefault =
-            types.length === 2 &&
-            types.includes("mcp") &&
-            types.includes("skill") &&
-            !types.includes("local");
-          if (isDefault) {
-            next.delete("hookTypes");
-          } else if (types.length > 0) {
-            next.set("hookTypes", types.join(","));
-          } else {
-            next.set("hookTypes", "");
-          }
-          return next;
-        },
-        { replace: true },
-      );
-    },
-    [setSearchParams],
-  );
+  useEffect(() => {
+    addKnownUserEmails(
+      groupedTraces
+        .map((t) => t.userEmail)
+        .filter((e): e is string => Boolean(e)),
+    );
+  }, [groupedTraces, addKnownUserEmails]);
 
   const refetch = useCallback(() => {
     refetchLogs();
@@ -596,22 +325,19 @@ export function InsightsToolsContent() {
             isLoading={isLoading}
             error={error}
             groupedTraces={groupedTraces}
-            serverInput={serverInput}
-            setServerInput={setServerInput}
-            onSubmitServerFilter={submitServerFilter}
-            userEmailInput={userEmailInput}
-            setUserEmailInput={setUserEmailInput}
-            onSubmitUserEmailFilter={submitUserEmailFilter}
+            serverOptions={serverOptions}
+            onServerSelectionChange={handleServerSelectionChange}
+            userEmailOptions={userEmailOptions}
+            onUserEmailSelectionChange={handleUserEmailSelectionChange}
             activeFilters={activeFilters}
             addFilter={addFilter}
-            removeFilter={removeFilter}
             selectedHookTypes={selectedHookTypes}
             onHookTypesChange={handleHookTypesChange}
             selectedLog={selectedLog}
             setSelectedLog={setSelectedLog}
             dateRange={dateRange}
             customRange={customRange}
-            customRangeLabel={urlLabel}
+            customRangeLabel={customRangeLabel}
             onDateRangeChange={setDateRangeParam}
             onCustomRangeChange={setCustomRangeParam}
             onClearCustomRange={clearCustomRange}
@@ -631,15 +357,12 @@ function HooksInnerContent({
   isLoading,
   error,
   groupedTraces,
-  serverInput,
-  setServerInput,
-  onSubmitServerFilter,
-  userEmailInput,
-  setUserEmailInput,
-  onSubmitUserEmailFilter,
+  serverOptions,
+  onServerSelectionChange,
+  userEmailOptions,
+  onUserEmailSelectionChange,
   activeFilters,
   addFilter,
-  removeFilter,
   selectedHookTypes,
   onHookTypesChange,
   selectedLog,
@@ -660,15 +383,12 @@ function HooksInnerContent({
   isLoading: boolean;
   error: Error | null;
   groupedTraces: HookTrace[];
-  serverInput: string;
-  setServerInput: (value: string) => void;
-  onSubmitServerFilter: () => void;
-  userEmailInput: string;
-  setUserEmailInput: (value: string) => void;
-  onSubmitUserEmailFilter: () => void;
+  serverOptions: string[];
+  onServerSelectionChange: (values: string[]) => void;
+  userEmailOptions: string[];
+  onUserEmailSelectionChange: (values: string[]) => void;
   activeFilters: FilterChip[];
   addFilter: (chip: FilterChip) => void;
-  removeFilter: (path: string, display?: string) => void;
   selectedHookTypes: TypesToInclude[];
   onHookTypesChange: (types: TypesToInclude[]) => void;
   selectedLog: TelemetryLogRecord | null;
@@ -717,47 +437,22 @@ function HooksInnerContent({
             </div>
           </div>
 
-          <div className="flex shrink-0 flex-wrap items-center gap-2">
-            <MultiSearch
-              value={serverInput}
-              onChange={setServerInput}
-              onSubmit={onSubmitServerFilter}
-              placeholder="Filter by server name (press Enter to add)"
-              className="min-w-[200px] flex-1"
-              chips={activeFilters
-                .filter((f) => f.path === "gram.tool_call.source")
-                .map((f) => ({ display: f.display, value: f.display }))}
-              onRemoveChip={(display) =>
-                removeFilter("gram.tool_call.source", display)
-              }
-            />
-            <MultiSearch
-              value={userEmailInput}
-              onChange={setUserEmailInput}
-              onSubmit={onSubmitUserEmailFilter}
-              placeholder="Filter by user email (press Enter to add)"
-              className="min-w-[200px] flex-1"
-              chips={activeFilters
-                .filter((f) => f.path === "user.email")
-                .map((f) => ({ display: f.display, value: f.display }))}
-              onRemoveChip={(display) => removeFilter("user.email", display)}
-            />
-            <HookTypeFilter
-              selectedHookTypes={selectedHookTypes}
-              onHookTypesChange={onHookTypesChange}
-            />
-            <div className="ml-auto">
-              <TimeRangePicker
-                preset={customRange ? null : dateRange}
-                customRange={customRange}
-                customRangeLabel={customRangeLabel}
-                onPresetChange={onDateRangeChange}
-                onCustomRangeChange={onCustomRangeChange}
-                onClearCustomRange={onClearCustomRange}
-                projectSlug={projectSlug}
-              />
-            </div>
-          </div>
+          <ObserveFilterBar
+            serverOptions={serverOptions}
+            onServerSelectionChange={onServerSelectionChange}
+            userEmailOptions={userEmailOptions}
+            onUserEmailSelectionChange={onUserEmailSelectionChange}
+            activeFilters={activeFilters}
+            selectedTypes={selectedHookTypes}
+            onTypesChange={onHookTypesChange}
+            dateRange={dateRange}
+            customRange={customRange}
+            customRangeLabel={customRangeLabel}
+            onDateRangeChange={onDateRangeChange}
+            onCustomRangeChange={onCustomRangeChange}
+            onClearCustomRange={onClearCustomRange}
+            projectSlug={projectSlug}
+          />
 
           <div className="flex min-h-0 flex-1 overflow-hidden">
             <div className="min-h-0 flex-1 overflow-y-auto pb-4">
@@ -817,92 +512,6 @@ function HooksInnerContent({
         onOpenChange={(open) => !open && setSelectedLog(null)}
       />
     </>
-  );
-}
-
-const HOOK_TYPE_OPTIONS = [
-  {
-    label: "MCP Servers",
-    labelShort: "Servers",
-    value: "mcp" as TypesToInclude,
-  },
-  {
-    label: "Local Tools",
-    labelShort: "Local",
-    value: "local" as TypesToInclude,
-  },
-  { label: "Skills", labelShort: "Skills", value: "skill" as TypesToInclude },
-];
-
-function HookTypeFilter({
-  selectedHookTypes,
-  onHookTypesChange,
-}: {
-  selectedHookTypes: TypesToInclude[];
-  onHookTypesChange: (types: TypesToInclude[]) => void;
-}) {
-  const getButtonText = () => {
-    if (selectedHookTypes.length === 3) {
-      return "Showing all types";
-    }
-
-    if (selectedHookTypes.length === 0) {
-      return "No types selected";
-    }
-
-    if (selectedHookTypes.length === 1) {
-      const selected = HOOK_TYPE_OPTIONS.find(
-        (opt) => opt.value === selectedHookTypes[0],
-      );
-      return `Showing ${selected?.labelShort || selectedHookTypes[0]}`;
-    }
-
-    const labels = HOOK_TYPE_OPTIONS.filter((opt) =>
-      selectedHookTypes.includes(opt.value),
-    ).map((opt) => opt.labelShort);
-    return `Showing ${labels.join(" & ")}`;
-  };
-
-  return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-[42px] w-[200px] shrink-0 justify-between"
-        >
-          <span className="text-sm">{getButtonText()}</span>
-          <Icon name="chevron-down" className="ml-2 size-4" />
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent className="w-[200px] p-3" align="start">
-        <div className="space-y-2">
-          {HOOK_TYPE_OPTIONS.map((option) => (
-            <div key={option.value} className="flex items-center space-x-2">
-              <Checkbox
-                id={`hook-type-${option.value}`}
-                checked={selectedHookTypes.includes(option.value)}
-                onCheckedChange={(checked) => {
-                  if (checked) {
-                    onHookTypesChange([...selectedHookTypes, option.value]);
-                  } else {
-                    onHookTypesChange(
-                      selectedHookTypes.filter((t) => t !== option.value),
-                    );
-                  }
-                }}
-              />
-              <label
-                htmlFor={`hook-type-${option.value}`}
-                className="cursor-pointer text-sm leading-none font-medium"
-              >
-                {option.label}
-              </label>
-            </div>
-          ))}
-        </div>
-      </PopoverContent>
-    </Popover>
   );
 }
 

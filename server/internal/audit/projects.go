@@ -53,11 +53,8 @@ func (l *Logger) LogProjectCreate(ctx context.Context, dbtx repo.DBTX, event Log
 		BeforeSnapshot: nil,
 		AfterSnapshot:  nil,
 	}
-	if _, err := repo.New(dbtx).InsertAuditLog(ctx, entry); err != nil {
-		return fmt.Errorf("log %s: %w", action, err)
-	}
 
-	return nil
+	return l.log(ctx, dbtx, entry)
 }
 
 type LogProjectUpdateEvent struct {
@@ -108,11 +105,8 @@ func (l *Logger) LogProjectUpdate(ctx context.Context, dbtx repo.DBTX, event Log
 		BeforeSnapshot: beforeSnapshot,
 		AfterSnapshot:  afterSnapshot,
 	}
-	if _, err := repo.New(dbtx).InsertAuditLog(ctx, entry); err != nil {
-		return fmt.Errorf("log %s: %w", action, err)
-	}
 
-	return nil
+	return l.log(ctx, dbtx, entry)
 }
 
 type LogProjectDeleteEvent struct {
@@ -150,9 +144,6 @@ func (l *Logger) LogProjectDelete(ctx context.Context, dbtx repo.DBTX, event Log
 		BeforeSnapshot: nil,
 		AfterSnapshot:  nil,
 	}
-	if _, err := repo.New(dbtx).InsertAuditLog(ctx, entry); err != nil {
-		return fmt.Errorf("log %s: %w", action, err)
-	}
 
-	return nil
+	return l.log(ctx, dbtx, entry)
 }

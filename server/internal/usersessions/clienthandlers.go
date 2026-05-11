@@ -157,7 +157,7 @@ func (s *Service) RevokeUserSessionClient(ctx context.Context, payload *gen.Revo
 		return oops.E(oops.CodeUnexpected, err, "delete child user sessions").Log(ctx, logger)
 	}
 
-	if err := audit.LogUserSessionClientRevoke(ctx, dbtx, audit.LogUserSessionClientRevokeEvent{
+	if err := s.audit.LogUserSessionClientRevoke(ctx, dbtx, audit.LogUserSessionClientRevokeEvent{
 		OrganizationID:       authCtx.ActiveOrganizationID,
 		ProjectID:            *authCtx.ProjectID,
 		Actor:                urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),

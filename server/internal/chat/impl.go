@@ -828,6 +828,9 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 	if isStreaming {
 		streamBody, err := s.completionClient.GetCompletionStream(ctx, completionReq)
 		if err != nil {
+			if openrouter.IsInsufficientCredits(err) {
+				return oops.C(oops.CodeInsufficientCredits).Log(ctx, s.logger)
+			}
 			return oops.E(oops.CodeGatewayError, err, "get completion stream").Log(ctx, s.logger)
 		}
 		defer o11y.NoLogDefer(func() error { return streamBody.Close() })
@@ -849,6 +852,9 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 	 */
 	response, err := s.completionClient.GetCompletion(ctx, completionReq)
 	if err != nil {
+		if openrouter.IsInsufficientCredits(err) {
+			return oops.C(oops.CodeInsufficientCredits).Log(ctx, s.logger)
+		}
 		return oops.E(oops.CodeGatewayError, err, "completion failed").Log(ctx, s.logger)
 	}
 

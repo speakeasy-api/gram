@@ -102,11 +102,12 @@ export function setChallengesData(
   client: QueryClient,
   queryKeyBase: [
     parameters: {
-      outcome?: operations.Outcome | undefined;
+      outcome?: operations.QueryParamOutcome | undefined;
       principalUrn?: string | undefined;
       scope?: string | undefined;
       projectId?: string | undefined;
       resolved?: boolean | undefined;
+      ids?: Array<string> | undefined;
       limit?: number | undefined;
       offset?: number | undefined;
       gramKey?: string | undefined;
@@ -124,11 +125,12 @@ export function invalidateChallenges(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
     [parameters: {
-      outcome?: operations.Outcome | undefined;
+      outcome?: operations.QueryParamOutcome | undefined;
       principalUrn?: string | undefined;
       scope?: string | undefined;
       projectId?: string | undefined;
       resolved?: boolean | undefined;
+      ids?: Array<string> | undefined;
       limit?: number | undefined;
       offset?: number | undefined;
       gramKey?: string | undefined;

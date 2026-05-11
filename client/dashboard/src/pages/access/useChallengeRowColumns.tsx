@@ -9,7 +9,7 @@ import { HumanizeDateTime } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 import { useSession } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
-import type { AuthzChallenge } from "@gram/client/models/components/authzchallenge.js";
+import type { ChallengeBucket } from "@gram/client/models/components/challengebucket.js";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { Column } from "@speakeasy-api/moonshine";
 import { KeyRound } from "lucide-react";
@@ -20,11 +20,11 @@ import { getInitials, reasonLabel } from "./challengeHelpers";
 
 export function useChallengeRowColumns(
   animatingOutIds?: Set<string>,
-  groupCounts?: Map<string, number>,
-  groupKeys?: Map<string, string>,
-  onToggleGroup?: (groupKey: string) => void,
   outcomeFilter?: string,
-): Column<AuthzChallenge>[] {
+  onToggleBucket?: (bucketId: string) => void,
+  expandedChildIds?: Set<string>,
+  recentlyResolvedIds?: Set<string>,
+): Column<ChallengeBucket>[] {
   const { orgSlug } = useSlugs();
   const { organization } = useSession();
   const { data: membersData } = useMembers();
@@ -44,11 +44,16 @@ export function useChallengeRowColumns(
   }, [membersData]);
 
   return useMemo(() => {
-    const rowFade = (row: AuthzChallenge) =>
+    const isChild = (row: ChallengeBucket) =>
+      expandedChildIds?.has(row.id) ?? false;
+
+    const rowFade = (row: ChallengeBucket) =>
       animatingOutIds?.has(row.id)
         ? "opacity-0 transition-opacity duration-1000"
         : outcomeFilter === "deny" &&
-          (row.outcome === "allow" || row.resolvedAt) &&
+          (row.outcome === "allow" ||
+            row.resolvedAt ||
+            recentlyResolvedIds?.has(row.id)) &&
           "opacity-40 transition-opacity duration-1000";
 
     return [
@@ -56,7 +61,8 @@ export function useChallengeRowColumns(
         key: "avatar",
         header: "",
         width: "40px",
-        render: (row: AuthzChallenge) => {
+        render: (row: ChallengeBucket) => {
+          if (isChild(row)) return null;
           const isApiKey = row.principalType === "api_key";
           const display = row.userEmail ?? row.principalUrn;
           return (
@@ -81,42 +87,50 @@ export function useChallengeRowColumns(
         key: "identity",
         header: "Identity",
         width: "1.2fr",
-        render: (row: AuthzChallenge) => (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Type
-                variant="body"
-                className={cn(
-                  "min-w-0 truncate text-sm font-medium",
-                  rowFade(row),
-                )}
-              >
-                {row.userEmail ?? row.principalUrn}
-              </Type>
-            </TooltipTrigger>
-            {row.roleSlugs.length > 0 && (
-              <TooltipContent side="bottom">
-                Roles: {row.roleSlugs.join(", ")}
-              </TooltipContent>
-            )}
-          </Tooltip>
-        ),
+        render: (row: ChallengeBucket) => {
+          if (isChild(row)) return null;
+          return (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Type
+                  variant="body"
+                  className={cn(
+                    "min-w-0 truncate text-sm font-medium",
+                    rowFade(row),
+                  )}
+                >
+                  {row.userEmail ?? row.principalUrn}
+                </Type>
+              </TooltipTrigger>
+              {row.roleSlugs.length > 0 && (
+                <TooltipContent side="bottom">
+                  Roles: {row.roleSlugs.join(", ")}
+                </TooltipContent>
+              )}
+            </Tooltip>
+          );
+        },
       },
       {
         key: "outcome",
         header: "Outcome",
         width: "80px",
-        render: (row: AuthzChallenge) => (
-          <div className={cn(rowFade(row))}>
-            <OutcomeBadge outcome={row.outcome} resolved={!!row.resolvedAt} />
-          </div>
-        ),
+        render: (row: ChallengeBucket) => {
+          if (isChild(row)) return null;
+          const resolved =
+            !!row.resolvedAt || (recentlyResolvedIds?.has(row.id) ?? false);
+          return (
+            <div className={cn(rowFade(row))}>
+              <OutcomeBadge outcome={row.outcome} resolved={resolved} />
+            </div>
+          );
+        },
       },
       {
         key: "scope",
         header: "Required Scope",
         width: "1fr",
-        render: (row: AuthzChallenge) => (
+        render: (row: ChallengeBucket) => (
           <Tooltip>
             <TooltipTrigger asChild>
               <code
@@ -142,7 +156,7 @@ export function useChallengeRowColumns(
         key: "resource",
         header: "Resource",
         width: "1.2fr",
-        render: (row: AuthzChallenge) => (
+        render: (row: ChallengeBucket) => (
           <div className={cn("min-w-0 truncate", rowFade(row))}>
             <ResourceLink
               challenge={row}
@@ -156,7 +170,7 @@ export function useChallengeRowColumns(
         key: "resolvedBy",
         header: "Resolved By",
         width: "100px",
-        render: (row: AuthzChallenge) => {
+        render: (row: ChallengeBucket) => {
           if (!row.resolvedBy) {
             return (
               <Type variant="body" className="text-muted-foreground/40 text-sm">
@@ -188,8 +202,8 @@ export function useChallengeRowColumns(
         key: "timestamp",
         header: "Time",
         width: "1fr",
-        render: (row: AuthzChallenge) => {
-          const count = groupCounts?.get(row.id) ?? 1;
+        render: (row: ChallengeBucket) => {
+          const count = row.challengeCount;
           return (
             <div className={cn("flex items-center gap-1.5", rowFade(row))}>
               <Tooltip delayDuration={500}>
@@ -198,20 +212,15 @@ export function useChallengeRowColumns(
                     variant="body"
                     className="text-muted-foreground cursor-default text-sm whitespace-nowrap underline decoration-dotted underline-offset-4"
                   >
-                    <HumanizeDateTime date={row.timestamp} />
+                    <HumanizeDateTime date={row.lastSeen} />
                   </Type>
                 </TooltipTrigger>
-                <TooltipContent>
-                  {row.timestamp.toLocaleString()}
-                </TooltipContent>
+                <TooltipContent>{row.lastSeen.toLocaleString()}</TooltipContent>
               </Tooltip>
-              {count > 1 && onToggleGroup && (
+              {count > 1 && onToggleBucket && (
                 <button
                   type="button"
-                  onClick={() => {
-                    const key = groupKeys?.get(row.id);
-                    if (key) onToggleGroup(key);
-                  }}
+                  onClick={() => onToggleBucket(row.id)}
                   className="text-muted-foreground bg-muted hover:bg-primary/10 hover:text-primary cursor-pointer rounded-full px-1.5 py-0.5 text-[10px] font-medium tabular-nums transition-colors"
                 >
                   ×{count}
@@ -227,9 +236,9 @@ export function useChallengeRowColumns(
     projectMap,
     memberMap,
     animatingOutIds,
-    groupCounts,
-    groupKeys,
-    onToggleGroup,
     outcomeFilter,
+    onToggleBucket,
+    expandedChildIds,
+    recentlyResolvedIds,
   ]);
 }

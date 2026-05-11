@@ -14,20 +14,20 @@ export type ListChallengesSecurity = {
 /**
  * Filter by outcome.
  */
-export const Outcome = {
+export const QueryParamOutcome = {
   Allow: "allow",
   Deny: "deny",
 } as const;
 /**
  * Filter by outcome.
  */
-export type Outcome = ClosedEnum<typeof Outcome>;
+export type QueryParamOutcome = ClosedEnum<typeof QueryParamOutcome>;
 
 export type ListChallengesRequest = {
   /**
    * Filter by outcome.
    */
-  outcome?: Outcome | undefined;
+  outcome?: QueryParamOutcome | undefined;
   /**
    * Filter by principal URN.
    */
@@ -44,6 +44,10 @@ export type ListChallengesRequest = {
    * Filter by resolution state. True = only resolved, false = only unresolved.
    */
   resolved?: boolean | undefined;
+  /**
+   * Fetch specific challenges by ID. When set, other filters and pagination are ignored.
+   */
+  ids?: Array<string> | undefined;
   /**
    * Maximum number of results to return.
    */
@@ -94,9 +98,9 @@ export function listChallengesSecurityToJSON(
 }
 
 /** @internal */
-export const Outcome$outboundSchema: z.ZodMiniEnum<typeof Outcome> = z.enum(
-  Outcome,
-);
+export const QueryParamOutcome$outboundSchema: z.ZodMiniEnum<
+  typeof QueryParamOutcome
+> = z.enum(QueryParamOutcome);
 
 /** @internal */
 export type ListChallengesRequest$Outbound = {
@@ -105,6 +109,7 @@ export type ListChallengesRequest$Outbound = {
   scope?: string | undefined;
   project_id?: string | undefined;
   resolved?: boolean | undefined;
+  ids?: Array<string> | undefined;
   limit: number;
   offset: number;
   "Gram-Key"?: string | undefined;
@@ -117,11 +122,12 @@ export const ListChallengesRequest$outboundSchema: z.ZodMiniType<
   ListChallengesRequest
 > = z.pipe(
   z.object({
-    outcome: z.optional(Outcome$outboundSchema),
+    outcome: z.optional(QueryParamOutcome$outboundSchema),
     principalUrn: z.optional(z.string()),
     scope: z.optional(z.string()),
     projectId: z.optional(z.string()),
     resolved: z.optional(z.boolean()),
+    ids: z.optional(z.array(z.string())),
     limit: z._default(z.int(), 50),
     offset: z._default(z.int(), 0),
     gramKey: z.optional(z.string()),

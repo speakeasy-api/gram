@@ -637,7 +637,7 @@ func testAuthContext(t *testing.T, ctx context.Context) *contextvalues.AuthConte
 func insertAuditLog(t *testing.T, ctx context.Context, ti *testInstance, seed auditLogSeed) uuid.UUID {
 	t.Helper()
 
-	id, err := repo.New(ti.conn).InsertAuditLog(ctx, repo.InsertAuditLogParams{
+	row, err := repo.New(ti.conn).InsertAuditLog(ctx, repo.InsertAuditLogParams{
 		OrganizationID:     seed.organizationID,
 		ProjectID:          seed.projectID,
 		ActorID:            seed.actorID,
@@ -655,7 +655,7 @@ func insertAuditLog(t *testing.T, ctx context.Context, ti *testInstance, seed au
 	})
 	require.NoError(t, err)
 
-	return id
+	return row.ID
 }
 
 func createProject(t *testing.T, ctx context.Context, ti *testInstance, organizationID string) projectsrepo.Project {

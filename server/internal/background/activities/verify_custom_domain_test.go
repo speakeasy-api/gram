@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
@@ -13,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	customdomainsRepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/dns"
+	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -41,6 +43,15 @@ func newTestInstance(t *testing.T, orgID, domain string) (context.Context, *test
 	ctx := t.Context()
 
 	conn, err := infra.CloneTestDatabase(t, "verify_domain_test")
+	require.NoError(t, err)
+
+	_, err = orgRepo.New(conn).UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
+		ID:          orgID,
+		Name:        orgID,
+		Slug:        orgID,
+		WorkosID:    pgtype.Text{},
+		Whitelisted: pgtype.Bool{},
+	})
 	require.NoError(t, err)
 
 	return ctx, &testInstance{
