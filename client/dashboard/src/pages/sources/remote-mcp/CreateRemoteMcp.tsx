@@ -3,7 +3,7 @@ import { RequireScope } from "@/components/require-scope";
 import { Heading } from "@/components/ui/heading";
 import { Input } from "@/components/ui/input";
 import { Type } from "@/components/ui/type";
-import { remoteMcpRouteParam } from "@/lib/sources";
+import { mcpServerRouteParam } from "@/lib/sources";
 import { useRoutes } from "@/routes";
 import { Alert, Button, Stack } from "@speakeasy-api/moonshine";
 import { Loader2, Network } from "lucide-react";
@@ -78,15 +78,12 @@ function CreateRemoteMcpForm() {
     }
     try {
       const trimmedName = name.trim();
-      const { remoteMcpServer } = await createSource.mutateAsync({
+      const { mcpServer } = await createSource.mutateAsync({
         name: trimmedName === "" ? undefined : trimmedName,
         url: url.trim(),
       });
       toast.success("Remote MCP server added");
-      routes.sources.source.goTo(
-        "remotemcp",
-        remoteMcpRouteParam(remoteMcpServer),
-      );
+      routes.mcp.x.goTo(mcpServerRouteParam(mcpServer));
     } catch (error) {
       const message =
         error instanceof Error
