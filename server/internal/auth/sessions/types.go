@@ -50,7 +50,6 @@ type Organization struct {
 
 type CachedUserInfo struct {
 	UserID             string
-	UserWhitelisted    bool
 	Admin              bool
 	Email              string
 	DisplayName        *string

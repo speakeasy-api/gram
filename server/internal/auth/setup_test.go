@@ -69,11 +69,10 @@ type testInstance struct {
 
 // MockUserInfo represents the user info used by the mock OIDC server
 type MockUserInfo struct {
-	UserID          string
-	Email           string
-	Admin           bool
-	UserWhitelisted bool
-	Organizations   []MockOrganizationEntry
+	UserID        string
+	Email         string
+	Admin         bool
+	Organizations []MockOrganizationEntry
 }
 
 type MockOrganizationEntry struct {
@@ -219,10 +218,9 @@ func newTestAuthServiceResult(_ *testing.T, svc *auth.Service, conn *pgxpool.Poo
 // Helper function to create a default mock user info
 func defaultMockUserInfo() *MockUserInfo {
 	return &MockUserInfo{
-		UserID:          "test-user-123",
-		Email:           "test@example.com",
-		Admin:           false,
-		UserWhitelisted: true,
+		UserID: "test-user-123",
+		Email:  "test@example.com",
+		Admin:  false,
 		Organizations: []MockOrganizationEntry{
 			{
 				ID:                 "org-123",
@@ -237,10 +235,9 @@ func defaultMockUserInfo() *MockUserInfo {
 // Helper function to create a speakeasy user mock info
 func speakeasyMockUserInfo() *MockUserInfo {
 	return &MockUserInfo{
-		UserID:          "speakeasy-user-123",
-		Email:           "test@speakeasy.com",
-		Admin:           false,
-		UserWhitelisted: true,
+		UserID: "speakeasy-user-123",
+		Email:  "test@speakeasy.com",
+		Admin:  false,
 		Organizations: []MockOrganizationEntry{
 			{
 				ID:                 "speakeasy-team-123",
@@ -261,10 +258,9 @@ func speakeasyMockUserInfo() *MockUserInfo {
 // Helper function to create an admin user mock info
 func adminMockUserInfo() *MockUserInfo {
 	return &MockUserInfo{
-		UserID:          "admin-user-123",
-		Email:           "admin@speakeasyapi.dev",
-		Admin:           true,
-		UserWhitelisted: true,
+		UserID: "admin-user-123",
+		Email:  "admin@speakeasyapi.dev",
+		Admin:  true,
 		Organizations: []MockOrganizationEntry{
 			{
 				ID:                 "admin-org-123",

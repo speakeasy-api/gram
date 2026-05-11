@@ -192,7 +192,6 @@ func (s *Manager) BuildUserInfoFromDB(ctx context.Context, userID string) (*Cach
 
 	return &CachedUserInfo{
 		UserID:             user.ID,
-		UserWhitelisted:    true, // all DB-registered users are whitelisted post-Speakeasy
 		Email:              user.Email,
 		Admin:              user.Admin,
 		DisplayName:        &displayName,
@@ -242,7 +241,6 @@ func (s *Manager) HasAccessToOrganization(ctx context.Context, organizationID, u
 func (s *Manager) InvalidateUserInfoCache(ctx context.Context, userID string) error {
 	err := s.userInfoCache.Delete(ctx, CachedUserInfo{
 		UserID:             userID,
-		UserWhitelisted:    false,
 		Admin:              false,
 		Email:              "",
 		DisplayName:        nil,
