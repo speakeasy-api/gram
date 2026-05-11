@@ -1,6 +1,6 @@
 import { useProject } from "@/contexts/Auth";
 import { getServerURL } from "@/lib/utils";
-import { ToolsetEntry } from "@gram/client/models/components";
+import { McpEndpoint, ToolsetEntry } from "@gram/client/models/components";
 import { useGetDomain } from "@gram/client/react-query";
 
 export function useCustomDomain(enabled = true) {
@@ -16,6 +16,74 @@ export function useCustomDomain(enabled = true) {
   });
 
   return { domain: domain, refetch: refetch, isLoading };
+}
+
+// useCustomDomains is a forward-compatible shim around useGetDomain that
+// returns the org's custom domains as an array. The backend currently enforces
+// a single custom domain per organization (see custom_domains_organization_id_key
+// in schema.sql), so the array has at most one entry today. Tracked under
+// AGE-2227 (DB migration to drop the unique index) and AGE-2229 (list RPC +
+// dashboard call-site updates) — once both ship this shim swaps to a real
+// list-backed implementation without touching any callsites that already iterate
+// over `domains`.
+export function useCustomDomains(enabled = true): {
+  domains: ReturnType<typeof useGetDomain>["data"][];
+  isLoading: boolean;
+  refetch: ReturnType<typeof useGetDomain>["refetch"];
+} {
+  const { domain, isLoading, refetch } = useCustomDomain(enabled);
+
+  const domains = domain ? [domain] : [];
+
+  if (
+    import.meta.env.DEV &&
+    Array.isArray(domain) &&
+    (domain as unknown[]).length > 1
+  ) {
+    // Defensive logging for the AGE-2229 swap: if useGetDomain ever starts
+    // returning a list, callsites that still assume `domains[0]` semantics
+    // need an audit pass.
+    console.warn(
+      "useCustomDomains: useGetDomain returned multiple domains; audit callers assuming single-domain semantics (AGE-2229).",
+    );
+  }
+
+  return { domains, isLoading, refetch };
+}
+
+// useMcpEndpointUrl resolves the runtime install URL for a single mcp_endpoint
+// row. Platform-domain endpoints (`custom_domain_id` empty) resolve under the
+// Gram-hosted `/x/mcp/<slug>` runtime path; custom-domain endpoints resolve
+// under the matching `custom_domains.domain` value with the same suffix.
+// Returns `undefined` when the endpoint has no slug or when its custom domain
+// hasn't resolved yet (loading or denied), so callers can gracefully render an
+// empty state.
+export function useMcpEndpointUrl(endpoint: McpEndpoint | undefined): {
+  mcpUrl: string | undefined;
+  installPageUrl: string | undefined;
+} {
+  // Only fetch domain data when the endpoint actually has a custom domain so
+  // platform-domain endpoints don't pay the round trip.
+  const { domains } = useCustomDomains(!!endpoint?.customDomainId);
+
+  if (!endpoint || !endpoint.slug) {
+    return { mcpUrl: undefined, installPageUrl: undefined };
+  }
+
+  let serverURL = getServerURL();
+  if (endpoint.customDomainId) {
+    const match = domains.find((d) => d?.id === endpoint.customDomainId);
+    if (!match) {
+      // Domain not yet resolved (loading or denied); avoid emitting a partial
+      // URL that points at the Gram domain when the customer expected their
+      // custom domain.
+      return { mcpUrl: undefined, installPageUrl: undefined };
+    }
+    serverURL = `https://${match.domain}`;
+  }
+
+  const mcpUrl = `${serverURL}/x/mcp/${endpoint.slug}`;
+  return { mcpUrl, installPageUrl: `${mcpUrl}/install` };
 }
 
 export function useMcpUrl(

@@ -2,6 +2,8 @@ import { InputDialog } from "@/components/input-dialog";
 import { RequireScope } from "@/components/require-scope";
 import { BuiltInMCPCard } from "@/components/mcp/BuiltInMCPCard";
 import { MCPCard, MCPCardSkeleton } from "@/components/mcp/MCPCard";
+import { MCPServerCard } from "@/components/mcp/MCPServerCard";
+import { MCPServerTableRow } from "@/components/mcp/MCPServerTableRow";
 import { MCPTableRow, MCPTableRowSkeleton } from "@/components/mcp/MCPTableRow";
 import { Page } from "@/components/page-layout";
 import { DotTable } from "@/components/ui/dot-table";
@@ -10,7 +12,12 @@ import { Type } from "@/components/ui/type";
 import { ViewToggle } from "@/components/ui/view-toggle";
 import { useViewMode } from "@/components/ui/use-view-mode";
 import { useSdkClient } from "@/contexts/Sdk";
+import { useTelemetry } from "@/contexts/Telemetry";
 import { useRoutes } from "@/routes";
+import {
+  useMcpEndpoints,
+  useMcpServers,
+} from "@gram/client/react-query/index.js";
 import { Button } from "@speakeasy-api/moonshine";
 import { Plus } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -52,8 +59,42 @@ export function MCPOverview() {
   const routes = useRoutes();
   const navigate = useNavigate();
   const client = useSdkClient();
+  const telemetry = useTelemetry();
+  const isRemoteMcpEnabled =
+    telemetry.isFeatureEnabled("gram-remote-mcp") ?? false;
 
-  const isLoading = toolsets.isLoading;
+  // TODO(AGE-1902): collapse this fetch with useToolsets() once Hosted
+  // (toolset-backed) MCP servers also source from mcp_servers. Until then the
+  // listing merges two parallel collections — toolsets (Hosted) and
+  // mcp_servers (Remote-MCP-backed today) — in the same grid.
+  const { data: mcpServersResult, isLoading: isLoadingMcpServers } =
+    useMcpServers({}, undefined, { enabled: isRemoteMcpEnabled });
+  const { data: endpointsResult, isLoading: isLoadingEndpoints } =
+    useMcpEndpoints({}, undefined, { enabled: isRemoteMcpEnabled });
+  // Filter the listing to Remote-MCP-backed rows for now — the AGE-1902
+  // cutover will introduce toolset-backed rows that today still render
+  // through the existing Hosted MCPCard path via useToolsets().
+  const mcpServers = useMemo(
+    () =>
+      (mcpServersResult?.mcpServers ?? []).filter(
+        (server) => !!server.remoteMcpServerId,
+      ),
+    [mcpServersResult],
+  );
+  const endpointCountByServerId = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const endpoint of endpointsResult?.mcpEndpoints ?? []) {
+      counts.set(
+        endpoint.mcpServerId,
+        (counts.get(endpoint.mcpServerId) ?? 0) + 1,
+      );
+    }
+    return counts;
+  }, [endpointsResult]);
+
+  const isLoading =
+    toolsets.isLoading ||
+    (isRemoteMcpEnabled && (isLoadingMcpServers || isLoadingEndpoints));
 
   const [viewMode, setViewMode] = useViewMode();
   const [newMcpDialogOpen, setNewMcpDialogOpen] = useState(false);
@@ -73,9 +114,25 @@ export function MCPOverview() {
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [toolsets, search]);
 
-  const showSearch = !isLoading && toolsets.length > 6;
+  const filteredMcpServers = useMemo(() => {
+    const query = search.toLowerCase();
+    return [...mcpServers]
+      .filter((server) => {
+        if (!query) return true;
+        return (
+          (server.name?.toLowerCase().includes(query) ?? false) ||
+          server.slug.toLowerCase().includes(query)
+        );
+      })
+      .sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""));
+  }, [mcpServers, search]);
+
+  const showSearch = !isLoading && toolsets.length + mcpServers.length > 6;
   const showNoMatches =
-    !isLoading && search !== "" && filteredToolsets.length === 0;
+    !isLoading &&
+    search !== "" &&
+    filteredToolsets.length === 0 &&
+    filteredMcpServers.length === 0;
 
   const handleCreateMcpServerSubmit = async () => {
     const result = await client.toolsets.create({
@@ -143,7 +200,7 @@ export function MCPOverview() {
     </Page.Section>
   );
 
-  if (!isLoading && toolsets.length === 0) {
+  if (!isLoading && toolsets.length === 0 && mcpServers.length === 0) {
     return (
       <>
         <MCPEmptyState cta={newMcpServerButton} />
@@ -187,9 +244,20 @@ export function MCPOverview() {
                   <MCPCardSkeleton />
                 </>
               ) : (
-                filteredToolsets.map((toolset) => (
-                  <MCPCard key={toolset.id} toolset={toolset} />
-                ))
+                <>
+                  {filteredToolsets.map((toolset) => (
+                    <MCPCard key={toolset.id} toolset={toolset} />
+                  ))}
+                  {filteredMcpServers.map((server) => (
+                    <MCPServerCard
+                      key={server.id}
+                      server={server}
+                      endpointCount={
+                        endpointCountByServerId.get(server.id) ?? 0
+                      }
+                    />
+                  ))}
+                </>
               )}
             </div>
           ) : (
@@ -207,9 +275,20 @@ export function MCPOverview() {
                   <MCPTableRowSkeleton />
                 </>
               ) : (
-                filteredToolsets.map((toolset) => (
-                  <MCPTableRow key={toolset.id} toolset={toolset} />
-                ))
+                <>
+                  {filteredToolsets.map((toolset) => (
+                    <MCPTableRow key={toolset.id} toolset={toolset} />
+                  ))}
+                  {filteredMcpServers.map((server) => (
+                    <MCPServerTableRow
+                      key={server.id}
+                      server={server}
+                      endpointCount={
+                        endpointCountByServerId.get(server.id) ?? 0
+                      }
+                    />
+                  ))}
+                </>
               )}
             </DotTable>
           )}
