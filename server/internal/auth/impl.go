@@ -489,7 +489,7 @@ func (s *Service) Register(ctx context.Context, payload *gen.RegisterPayload) (e
 		Name:        payload.OrgName,
 		Slug:        slug,
 		WorkosID:    pgtype.Text{String: "", Valid: false},
-		Whitelisted: pgtype.Bool{Bool: true, Valid: true},
+		Whitelisted: pgtype.Bool{Bool: false, Valid: true},
 	})
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "error creating organization").Log(ctx, s.logger)
