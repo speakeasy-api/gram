@@ -313,11 +313,12 @@ func TestE2E_Callback_ExistingUserWithDBOrgs(t *testing.T) {
 		},
 	}
 
+	existingOrgWorkosID := "org_01DB_EXISTING"
 	orgEntry := MockOrganizationEntry{
 		ID:                 "org_01DB_EXISTING",
 		Name:               "DB Corp",
 		Slug:               "db-corp",
-		WorkosID:           new("org_01DB_EXISTING"),
+		WorkosID:           &existingOrgWorkosID,
 		UserWorkspaceSlugs: []string{"db-corp"},
 	}
 
@@ -391,11 +392,11 @@ func TestE2E_Callback_RejoinedOrg(t *testing.T) {
 	require.NoError(t, err)
 	require.NotContains(t, result.Location, "signin_error=")
 
-	// Soft-delete the relationship.
-	_, err = inst.conn.Exec(ctx,
-		`UPDATE organization_user_relationships SET deleted_at = clock_timestamp() WHERE organization_id = $1 AND user_id = $2`,
-		workosOrgID, workosUserID,
-	)
+	// Soft-delete the relationship via the SQLc method.
+	err = orgRepo.New(inst.conn).DeleteOrganizationUserRelationship(ctx, orgRepo.DeleteOrganizationUserRelationshipParams{
+		OrganizationID: workosOrgID,
+		UserID:         workosUserID,
+	})
 	require.NoError(t, err)
 
 	// Invalidate cache so the next login re-reads from DB.
@@ -856,6 +857,3 @@ func TestE2E_FullOnboardingFlow(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, logoutResult.SessionCookie)
 }
-
-//go:fix inline
-func ptr[T any](v T) *T { return new(v) }

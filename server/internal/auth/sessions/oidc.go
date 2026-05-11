@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/workos/workos-go/v6/pkg/usermanagement"
@@ -250,7 +251,7 @@ func (s *Manager) syncMembershipsFromWorkOS(ctx context.Context, gramUserID, wor
 			Name:        org.Name,
 			Slug:        slug,
 			WorkosID:    pgtype.Text{String: m.OrganizationID, Valid: true},
-			Whitelisted: pgtype.Bool{Valid: false},
+			Whitelisted: pgtype.Bool{Bool: false, Valid: false},
 		}); err != nil {
 			s.logger.ErrorContext(ctx, "upsert org metadata from workos failed", attr.SlogError(err))
 			continue
@@ -260,15 +261,19 @@ func (s *Manager) syncMembershipsFromWorkOS(ctx context.Context, gramUserID, wor
 			OrganizationID:     m.OrganizationID,
 			UserID:             gramUserID,
 			WorkosMembershipID: pgtype.Text{String: m.ID, Valid: m.ID != ""},
-			WorkosUpdatedAt:    pgtype.Timestamptz{Valid: false},
-			WorkosLastEventID:  pgtype.Text{Valid: false},
+			WorkosUpdatedAt:    pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
+			WorkosLastEventID:  pgtype.Text{String: "", Valid: false},
 		}); err != nil {
 			s.logger.ErrorContext(ctx, "upsert org user relationship from workos failed", attr.SlogError(err))
 		}
 	}
 
 	// Re-read from DB to get the canonical rows with all columns populated.
-	return s.orgRepo.ListOrganizationsForUser(ctx, gramUserID)
+	rows, err := s.orgRepo.ListOrganizationsForUser(ctx, gramUserID)
+	if err != nil {
+		return nil, fmt.Errorf("re-read organizations after workos sync: %w", err)
+	}
+	return rows, nil
 }
 
 // GetUserInfo returns cached user info, falling back to a DB lookup on cache
