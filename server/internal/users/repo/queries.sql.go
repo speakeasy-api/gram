@@ -12,7 +12,7 @@ import (
 )
 
 const getConnectedUserByEmail = `-- name: GetConnectedUserByEmail :one
-SELECT u.id, u.email, u.display_name, u.photo_url, u.admin, u.last_login, u.workos_id, u.created_at, u.updated_at FROM users u
+SELECT u.id, u.email, u.display_name, u.photo_url, u.admin, u.last_login, u.workos_id, u.deleted_at, u.created_at, u.updated_at FROM users u
 JOIN organization_user_relationships our ON our.user_id = u.id
 WHERE u.email = $1
   AND our.organization_id = $2
@@ -36,6 +36,7 @@ func (q *Queries) GetConnectedUserByEmail(ctx context.Context, arg GetConnectedU
 		&i.Admin,
 		&i.LastLogin,
 		&i.WorkosID,
+		&i.DeletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -43,7 +44,7 @@ func (q *Queries) GetConnectedUserByEmail(ctx context.Context, arg GetConnectedU
 }
 
 const getConnectedUsersByWorkosIDs = `-- name: GetConnectedUsersByWorkosIDs :many
-SELECT u.id, u.email, u.display_name, u.photo_url, u.admin, u.last_login, u.workos_id, u.created_at, u.updated_at FROM users u
+SELECT u.id, u.email, u.display_name, u.photo_url, u.admin, u.last_login, u.workos_id, u.deleted_at, u.created_at, u.updated_at FROM users u
 JOIN organization_user_relationships our ON our.user_id = u.id
 WHERE u.workos_id = ANY($1::text[])
   AND our.organization_id = $2
@@ -72,6 +73,7 @@ func (q *Queries) GetConnectedUsersByWorkosIDs(ctx context.Context, arg GetConne
 			&i.Admin,
 			&i.LastLogin,
 			&i.WorkosID,
+			&i.DeletedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -86,7 +88,7 @@ func (q *Queries) GetConnectedUsersByWorkosIDs(ctx context.Context, arg GetConne
 }
 
 const getUser = `-- name: GetUser :one
-SELECT id, email, display_name, photo_url, admin, last_login, workos_id, created_at, updated_at FROM users
+SELECT id, email, display_name, photo_url, admin, last_login, workos_id, deleted_at, created_at, updated_at FROM users
 WHERE id = $1
 `
 
@@ -101,6 +103,7 @@ func (q *Queries) GetUser(ctx context.Context, id string) (User, error) {
 		&i.Admin,
 		&i.LastLogin,
 		&i.WorkosID,
+		&i.DeletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -108,7 +111,7 @@ func (q *Queries) GetUser(ctx context.Context, id string) (User, error) {
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, email, display_name, photo_url, admin, last_login, workos_id, created_at, updated_at FROM users
+SELECT id, email, display_name, photo_url, admin, last_login, workos_id, deleted_at, created_at, updated_at FROM users
 WHERE email = $1
 `
 
@@ -123,6 +126,7 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error
 		&i.Admin,
 		&i.LastLogin,
 		&i.WorkosID,
+		&i.DeletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -143,7 +147,7 @@ func (q *Queries) GetUserIDByWorkosID(ctx context.Context, workosID pgtype.Text)
 }
 
 const getUsersByIDs = `-- name: GetUsersByIDs :many
-SELECT id, email, display_name, photo_url, admin, last_login, workos_id, created_at, updated_at FROM users
+SELECT id, email, display_name, photo_url, admin, last_login, workos_id, deleted_at, created_at, updated_at FROM users
 WHERE id = ANY($1::text[])
 `
 
@@ -164,6 +168,7 @@ func (q *Queries) GetUsersByIDs(ctx context.Context, ids []string) ([]User, erro
 			&i.Admin,
 			&i.LastLogin,
 			&i.WorkosID,
+			&i.DeletedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -178,7 +183,7 @@ func (q *Queries) GetUsersByIDs(ctx context.Context, ids []string) ([]User, erro
 }
 
 const getUsersByWorkosIDs = `-- name: GetUsersByWorkosIDs :many
-SELECT id, email, display_name, photo_url, admin, last_login, workos_id, created_at, updated_at FROM users
+SELECT id, email, display_name, photo_url, admin, last_login, workos_id, deleted_at, created_at, updated_at FROM users
 WHERE workos_id = ANY($1::text[])
 `
 
@@ -199,6 +204,7 @@ func (q *Queries) GetUsersByWorkosIDs(ctx context.Context, workosIds []string) (
 			&i.Admin,
 			&i.LastLogin,
 			&i.WorkosID,
+			&i.DeletedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -240,7 +246,7 @@ ON CONFLICT (id) DO UPDATE SET
   admin = EXCLUDED.admin,
   last_login = clock_timestamp(),
   updated_at = clock_timestamp()
-RETURNING id, email, display_name, photo_url, admin, last_login, workos_id, created_at, updated_at, (xmax = 0) AS was_created
+RETURNING id, email, display_name, photo_url, admin, last_login, workos_id, deleted_at, created_at, updated_at, (xmax = 0) AS was_created
 `
 
 type UpsertUserParams struct {
@@ -259,6 +265,7 @@ type UpsertUserRow struct {
 	Admin       bool
 	LastLogin   pgtype.Timestamptz
 	WorkosID    pgtype.Text
+	DeletedAt   pgtype.Timestamptz
 	CreatedAt   pgtype.Timestamptz
 	UpdatedAt   pgtype.Timestamptz
 	WasCreated  bool
@@ -281,6 +288,7 @@ func (q *Queries) UpsertUser(ctx context.Context, arg UpsertUserParams) (UpsertU
 		&i.Admin,
 		&i.LastLogin,
 		&i.WorkosID,
+		&i.DeletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.WasCreated,
