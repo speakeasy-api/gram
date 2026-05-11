@@ -2,6 +2,8 @@ package activities_test
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"testing"
 	"time"
 
@@ -17,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	workosrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/workos/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
 type stubWorkOSEventsClient struct {
@@ -164,25 +167,39 @@ func TestProcessWorkOSOrganizationEvents_EmptyPage(t *testing.T) {
 	require.ErrorIs(t, err, pgx.ErrNoRows)
 }
 
-func TestProcessWorkOSOrganizationEvents_RejectsMalformedEvent(t *testing.T) {
+func TestProcessWorkOSOrganizationEvents_SkipsUnlinkedOrgWithoutExternalID(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	conn := newOrgEventsTestConn(t, "workos_org_events_malformed")
+	conn := newOrgEventsTestConn(t, "workos_org_events_unlinked_no_external_id")
 	logger := testenv.NewLogger(t)
 
 	const workosOrgID = "org_01HZTESTBAD"
 
+	// First event has neither a Gram-side mapping nor an external_id — must
+	// not stall the stream. Second event in the same page carries the
+	// external_id and should be applied normally.
 	stub := &stubWorkOSEventsClient{
 		pages: [][]events.Event{{
-			{ID: "event_01HZBAD", Event: "organization.updated", CreatedAt: time.Now(), Data: []byte(`{"id":"","object":"organization"}`)},
+			{ID: "event_01HZBAD", Event: "organization.updated", CreatedAt: time.Now(), Data: []byte(`{"id":"` + workosOrgID + `","object":"organization","name":"Pending","updated_at":"2026-05-06T11:00:00Z"}`)},
+			{ID: "event_01HZGOOD", Event: "organization.updated", CreatedAt: time.Now(), Data: []byte(`{"id":"` + workosOrgID + `","object":"organization","name":"Resolved","external_id":"sb_resolved","updated_at":"2026-05-06T12:00:00Z"}`)},
 		}},
 	}
 
 	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
 
-	_, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
-	require.Error(t, err)
+	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
+	require.NoError(t, err)
+	require.Equal(t, "event_01HZGOOD", res.LastEventID)
+
+	row, err := orgrepo.New(conn).GetOrganizationByWorkosID(ctx, conv.ToPGText(workosOrgID))
+	require.NoError(t, err)
+	require.Equal(t, "sb_resolved", row.ID)
+	require.Equal(t, "Resolved", row.Name)
+
+	cursor, err := workosrepo.New(conn).GetOrganizationSyncLastEventID(ctx, workosOrgID)
+	require.NoError(t, err)
+	require.Equal(t, "event_01HZGOOD", cursor)
 }
 
 func TestProcessWorkOSOrganizationEvents_OrganizationCreatedAndUpdated(t *testing.T) {
@@ -314,39 +331,38 @@ func TestProcessWorkOSOrganizationEvents_OrganizationDeletedSetsDisabled(t *test
 	require.Equal(t, "event_01HZDEL", row.WorkosLastEventID.String)
 }
 
-func TestProcessWorkOSOrganizationEvents_GlobalRoleUpsertAndDelete(t *testing.T) {
+func TestProcessWorkOSGlobalRoleEvents_UpsertAndDelete(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	conn := newOrgEventsTestConn(t, "workos_org_events_global_role")
+	conn := newOrgEventsTestConn(t, "workos_global_role_events_upsert_delete")
 	logger := testenv.NewLogger(t)
 
-	const workosOrgID = "org_01HZGLOBALROLE"
 	const slug = "platform-admin"
 
 	stub := &stubWorkOSEventsClient{
 		pages: [][]events.Event{{
 			{
 				ID:        "event_01HZG1",
-				Event:     "organization_role.created",
+				Event:     "role.created",
 				CreatedAt: time.Now(),
-				Data: []byte(`{"id":"role_01","object":"role","organization_id":"","slug":"` + slug + `","name":"Platform Admin",` +
+				Data: []byte(`{"id":"role_01","object":"role","slug":"` + slug + `","name":"Platform Admin",` +
 					`"description":"env-level admin","type":"EnvironmentRole",` +
 					`"created_at":"2026-05-06T10:00:00Z","updated_at":"2026-05-06T10:00:00Z"}`),
 			},
 			{
 				ID:        "event_01HZG2",
-				Event:     "organization_role.deleted",
+				Event:     "role.deleted",
 				CreatedAt: time.Now(),
-				Data: []byte(`{"id":"role_01","object":"role","organization_id":"","slug":"` + slug + `","name":"Platform Admin",` +
+				Data: []byte(`{"id":"role_01","object":"role","slug":"` + slug + `","name":"Platform Admin",` +
 					`"type":"EnvironmentRole","created_at":"2026-05-06T10:00:00Z","updated_at":"2026-05-06T11:00:00Z",` +
 					`"deleted_at":"2026-05-06T11:00:00Z"}`),
 			},
 		}},
 	}
 
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
-	_, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
+	activity := activities.NewProcessWorkOSGlobalRoleEvents(logger, conn, stub)
+	_, err := activity.Do(ctx, activities.ProcessWorkOSGlobalRoleEventsParams{})
 	require.NoError(t, err)
 
 	role, err := accessrepo.New(conn).GetGlobalRoleBySlug(ctx, slug)
@@ -470,6 +486,295 @@ func TestProcessWorkOSOrganizationEvents_OrganizationDeletedSkippedWhenStale(t *
 	require.NoError(t, err)
 	require.False(t, row.DisabledAt.Valid, "stale delete event must not disable a fresher org row")
 	require.Equal(t, "event_99FRESH", row.WorkosLastEventID.String)
+}
+
+func newWorkOSMembershipEvent(t *testing.T, eventType, eventID, membershipID, workosOrgID, workosUserID string, updatedAt time.Time, roleSlugs ...string) events.Event {
+	t.Helper()
+
+	roles := make([]struct {
+		Slug string `json:"slug"`
+	}, 0, len(roleSlugs))
+	for _, slug := range roleSlugs {
+		roles = append(roles, struct {
+			Slug string `json:"slug"`
+		}{Slug: slug})
+	}
+
+	payload := struct {
+		ID             string `json:"id"`
+		Object         string `json:"object"`
+		OrganizationID string `json:"organization_id"`
+		UserID         string `json:"user_id"`
+		Roles          []struct {
+			Slug string `json:"slug"`
+		} `json:"roles"`
+		UpdatedAt time.Time `json:"updated_at"`
+	}{
+		ID:             membershipID,
+		Object:         "organization_membership",
+		OrganizationID: workosOrgID,
+		UserID:         workosUserID,
+		Roles:          roles,
+		UpdatedAt:      updatedAt,
+	}
+
+	data, err := json.Marshal(payload)
+	require.NoError(t, err)
+
+	return events.Event{
+		ID:        eventID,
+		Event:     eventType,
+		CreatedAt: updatedAt,
+		Data:      data,
+	}
+}
+
+func seedWorkOSOrganization(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID, workosOrgID string) {
+	t.Helper()
+
+	_, err := orgrepo.New(conn).UpsertOrganizationMetadataFromWorkOS(ctx, orgrepo.UpsertOrganizationMetadataFromWorkOSParams{
+		ID:                organizationID,
+		Name:              "Test Org",
+		Slug:              organizationID,
+		WorkosID:          conv.ToPGText(workosOrgID),
+		WorkosUpdatedAt:   conv.ToPGTimestamptz(time.Date(2026, 5, 6, 10, 0, 0, 0, time.UTC)),
+		WorkosLastEventID: conv.ToPGText("event_00SEED"),
+	})
+	require.NoError(t, err)
+}
+
+func seedWorkOSUser(t *testing.T, ctx context.Context, conn *pgxpool.Pool, userID, workosUserID string) {
+	t.Helper()
+
+	_, err := usersrepo.New(conn).UpsertUser(ctx, usersrepo.UpsertUserParams{
+		ID:          userID,
+		Email:       userID + "@example.com",
+		DisplayName: "Test User",
+		PhotoUrl:    conv.ToPGText(""),
+		Admin:       false,
+	})
+	require.NoError(t, err)
+
+	err = usersrepo.New(conn).SetUserWorkosID(ctx, usersrepo.SetUserWorkosIDParams{
+		WorkosID: conv.ToPGText(workosUserID),
+		ID:       userID,
+	})
+	require.NoError(t, err)
+}
+
+func seedOrganizationRole(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID, slug string) accessrepo.OrganizationRole {
+	t.Helper()
+
+	eventTime := time.Date(2026, 5, 6, 10, 0, 0, 0, time.UTC)
+	err := accessrepo.New(conn).UpsertOrganizationRole(ctx, accessrepo.UpsertOrganizationRoleParams{
+		OrganizationID:    organizationID,
+		WorkosSlug:        slug,
+		WorkosName:        slug,
+		WorkosDescription: conv.ToPGText(""),
+		WorkosCreatedAt:   conv.ToPGTimestamptz(eventTime),
+		WorkosUpdatedAt:   conv.ToPGTimestamptz(eventTime),
+		WorkosLastEventID: conv.ToPGText("event_00SEED"),
+	})
+	require.NoError(t, err)
+
+	role, err := accessrepo.New(conn).GetOrganizationRoleBySlug(ctx, accessrepo.GetOrganizationRoleBySlugParams{
+		OrganizationID: organizationID,
+		WorkosSlug:     slug,
+	})
+	require.NoError(t, err)
+	return role
+}
+
+func TestProcessWorkOSOrganizationEvents_MembershipFilterIncludesMembershipTypes(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	conn := newOrgEventsTestConn(t, "workos_org_events_membership_filter")
+	logger := testenv.NewLogger(t)
+
+	const workosOrgID = "org_01HZMEMFILTER"
+
+	stub := &stubWorkOSEventsClient{pages: [][]events.Event{nil}}
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
+
+	_, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
+	require.NoError(t, err)
+
+	require.Len(t, stub.calls, 1)
+	require.Equal(t, workosOrgID, stub.calls[0].OrganizationId)
+	require.ElementsMatch(t, []string{
+		"organization.created",
+		"organization.updated",
+		"organization.deleted",
+		"organization_role.created",
+		"organization_role.deleted",
+		"organization_role.updated",
+		"organization_membership.created",
+		"organization_membership.updated",
+		"organization_membership.deleted",
+	}, stub.calls[0].Events)
+}
+
+func TestProcessWorkOSOrganizationEvents_MembershipKnownUserSyncsRoles(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	conn := newOrgEventsTestConn(t, "workos_org_events_membership_known_user")
+	logger := testenv.NewLogger(t)
+
+	const organizationID = "gram_org_mem_known"
+	const workosOrgID = "org_01HZMEMKNOWN"
+	const userID = "user_mem_known"
+	const workosUserID = "user_01HZMEMKNOWN"
+
+	updatedAt := time.Date(2026, 5, 6, 12, 0, 0, 0, time.UTC)
+	seedWorkOSOrganization(t, ctx, conn, organizationID, workosOrgID)
+	seedWorkOSUser(t, ctx, conn, userID, workosUserID)
+	organizationRole := seedOrganizationRole(t, ctx, conn, organizationID, "member")
+
+	stub := &stubWorkOSEventsClient{
+		pages: [][]events.Event{{
+			newWorkOSMembershipEvent(t, "organization_membership.created", "event_01HZMEM1", "mem_01HZKNOWN", workosOrgID, workosUserID, updatedAt, "member"),
+		}},
+	}
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
+
+	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
+	require.NoError(t, err)
+	require.Equal(t, "event_01HZMEM1", res.LastEventID)
+
+	relationship, err := orgrepo.New(conn).GetOrganizationRelationshipForUser(ctx, orgrepo.GetOrganizationRelationshipForUserParams{
+		OrganizationID: organizationID,
+		UserID:         userID,
+	})
+	require.NoError(t, err)
+	require.False(t, relationship.Deleted)
+	require.Equal(t, "mem_01HZKNOWN", relationship.WorkosMembershipID.String)
+	require.Equal(t, "event_01HZMEM1", relationship.WorkosLastEventID.String)
+
+	assignments, err := orgrepo.New(conn).ListOrganizationRoleAssignmentsByWorkOSUser(ctx, orgrepo.ListOrganizationRoleAssignmentsByWorkOSUserParams{
+		OrganizationID: organizationID,
+		WorkosUserID:   workosUserID,
+	})
+	require.NoError(t, err)
+	require.Len(t, assignments, 1)
+	require.Equal(t, fmt.Sprintf("role:organization:%s", organizationRole.ID.String()), assignments[0].RoleUrn)
+
+	cursor, err := workosrepo.New(conn).GetOrganizationSyncLastEventID(ctx, workosOrgID)
+	require.NoError(t, err)
+	require.Equal(t, "event_01HZMEM1", cursor)
+}
+
+func TestProcessWorkOSOrganizationEvents_MembershipUnknownUserStillSyncsRoles(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	conn := newOrgEventsTestConn(t, "workos_org_events_membership_unknown_user")
+	logger := testenv.NewLogger(t)
+
+	const organizationID = "gram_org_mem_unknown_user"
+	const workosOrgID = "org_01HZMEMUNKNOWNUSER"
+	const workosUserID = "user_01HZMEMUNKNOWN"
+
+	seedWorkOSOrganization(t, ctx, conn, organizationID, workosOrgID)
+	memberRole := seedOrganizationRole(t, ctx, conn, organizationID, "member")
+
+	stub := &stubWorkOSEventsClient{
+		pages: [][]events.Event{{
+			newWorkOSMembershipEvent(t, "organization_membership.created", "event_01HZMEMUNK", "mem_01HZUNKNOWN", workosOrgID, workosUserID, time.Date(2026, 5, 6, 12, 0, 0, 0, time.UTC), "member"),
+		}},
+	}
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
+
+	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
+	require.NoError(t, err)
+	require.Equal(t, "event_01HZMEMUNK", res.LastEventID)
+
+	assignments, err := orgrepo.New(conn).ListOrganizationRoleAssignmentsByWorkOSUser(ctx, orgrepo.ListOrganizationRoleAssignmentsByWorkOSUserParams{
+		OrganizationID: organizationID,
+		WorkosUserID:   workosUserID,
+	})
+	require.NoError(t, err)
+	require.Len(t, assignments, 1)
+	require.Equal(t, fmt.Sprintf("role:organization:%s", memberRole.ID.String()), assignments[0].RoleUrn)
+	require.False(t, assignments[0].UserID.Valid)
+}
+
+func TestProcessWorkOSOrganizationEvents_MembershipDeleteSoftDeletesAndClearsAssignments(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	conn := newOrgEventsTestConn(t, "workos_org_events_membership_delete")
+	logger := testenv.NewLogger(t)
+
+	const organizationID = "gram_org_mem_delete"
+	const workosOrgID = "org_01HZMEMDELETE"
+	const userID = "user_mem_delete"
+	const workosUserID = "user_01HZMEMDELETE"
+	const membershipID = "mem_01HZDELETE"
+
+	seedWorkOSOrganization(t, ctx, conn, organizationID, workosOrgID)
+	seedWorkOSUser(t, ctx, conn, userID, workosUserID)
+	seedOrganizationRole(t, ctx, conn, organizationID, "member")
+
+	stub := &stubWorkOSEventsClient{
+		pages: [][]events.Event{{
+			newWorkOSMembershipEvent(t, "organization_membership.created", "event_01HZDEL1", membershipID, workosOrgID, workosUserID, time.Date(2026, 5, 6, 12, 0, 0, 0, time.UTC), "member"),
+			newWorkOSMembershipEvent(t, "organization_membership.deleted", "event_01HZDEL2", membershipID, workosOrgID, workosUserID, time.Date(2026, 5, 6, 13, 0, 0, 0, time.UTC)),
+		}},
+	}
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
+
+	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
+	require.NoError(t, err)
+	require.Equal(t, "event_01HZDEL2", res.LastEventID)
+
+	active, err := orgrepo.New(conn).HasOrganizationUserRelationship(ctx, orgrepo.HasOrganizationUserRelationshipParams{
+		OrganizationID: organizationID,
+		UserID:         userID,
+	})
+	require.NoError(t, err)
+	require.False(t, active)
+
+	relationship, err := orgrepo.New(conn).GetOrganizationRelationshipForUser(ctx, orgrepo.GetOrganizationRelationshipForUserParams{
+		OrganizationID: organizationID,
+		UserID:         userID,
+	})
+	require.NoError(t, err)
+	require.True(t, relationship.Deleted)
+	require.Equal(t, "event_01HZDEL2", relationship.WorkosLastEventID.String)
+
+	assignments, err := orgrepo.New(conn).ListOrganizationRoleAssignmentsByWorkOSUser(ctx, orgrepo.ListOrganizationRoleAssignmentsByWorkOSUserParams{
+		OrganizationID: organizationID,
+		WorkosUserID:   workosUserID,
+	})
+	require.NoError(t, err)
+	require.Empty(t, assignments)
+}
+
+func TestProcessWorkOSOrganizationEvents_MembershipUnknownOrganizationSkips(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	conn := newOrgEventsTestConn(t, "workos_org_events_membership_unknown_org")
+	logger := testenv.NewLogger(t)
+
+	const workosOrgID = "org_01HZMEMUNKORG"
+
+	stub := &stubWorkOSEventsClient{
+		pages: [][]events.Event{{
+			newWorkOSMembershipEvent(t, "organization_membership.created", "event_01HZMEMUNKORG", "mem_01HZUNKNOWNORG", workosOrgID, "user_01HZUNKNOWNORG", time.Date(2026, 5, 6, 12, 0, 0, 0, time.UTC), "member"),
+		}},
+	}
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
+
+	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
+	require.NoError(t, err)
+	require.Equal(t, "event_01HZMEMUNKORG", res.LastEventID)
+
+	cursor, err := workosrepo.New(conn).GetOrganizationSyncLastEventID(ctx, workosOrgID)
+	require.NoError(t, err)
+	require.Equal(t, "event_01HZMEMUNKORG", cursor)
 }
 
 func TestProcessWorkOSOrganizationEvents_OrganizationRoleSkippedForUnknownOrg(t *testing.T) {

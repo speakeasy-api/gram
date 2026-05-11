@@ -15,6 +15,7 @@ import { Collections } from "./collections.js";
 import { Deployments } from "./deployments.js";
 import { Domains } from "./domains.js";
 import { Environments } from "./environments.js";
+import { External } from "./external.js";
 import { Features } from "./features.js";
 import { Hooks } from "./hooks.js";
 import { HooksServerNames } from "./hooksservernames.js";
@@ -104,6 +105,11 @@ export class Gram extends ClientSDK {
   private _environments?: Environments;
   get environments(): Environments {
     return (this._environments ??= new Environments(this._options));
+  }
+
+  private _external?: External;
+  get external(): External {
+    return (this._external ??= new External(this._options));
   }
 
   private _hooks?: Hooks;
