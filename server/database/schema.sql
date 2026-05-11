@@ -1275,6 +1275,59 @@ CREATE TABLE IF NOT EXISTS slack_registrations (
   CONSTRAINT slack_registrations_slack_app_id_slack_account_id_key UNIQUE (slack_app_id, slack_account_id)
 );
 
+CREATE TABLE IF NOT EXISTS linear_apps (
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  linear_workspace_name TEXT,
+  linear_workspace_id TEXT,
+  linear_client_secret TEXT,
+  linear_signing_secret TEXT,
+  linear_access_token TEXT,
+  linear_client_id TEXT,
+  organization_id TEXT NOT NULL,
+  actor_mode TEXT NOT NULL DEFAULT 'app',
+  system_prompt TEXT,
+  name TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'unconfigured',
+  icon_asset_id uuid,
+  project_id uuid NOT NULL,
+  id uuid PRIMARY KEY DEFAULT generate_uuidv7(),
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT linear_apps_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS linear_apps_project_name_key
+  ON linear_apps (project_id, name) WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS linear_apps_linear_workspace_id_idx
+  ON linear_apps (linear_workspace_id) WHERE deleted IS FALSE AND linear_workspace_id IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS linear_app_toolsets (
+  id uuid PRIMARY KEY DEFAULT generate_uuidv7(),
+  linear_app_id uuid NOT NULL,
+  toolset_id uuid NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT linear_app_toolsets_linear_app_id_fkey FOREIGN KEY (linear_app_id) REFERENCES linear_apps (id) ON DELETE CASCADE,
+  CONSTRAINT linear_app_toolsets_toolset_id_fkey FOREIGN KEY (toolset_id) REFERENCES toolsets (id) ON DELETE CASCADE,
+  CONSTRAINT linear_app_toolsets_linear_app_id_toolset_id_key UNIQUE (linear_app_id, toolset_id)
+);
+
+CREATE TABLE IF NOT EXISTS linear_registrations (
+  id uuid PRIMARY KEY DEFAULT generate_uuidv7(),
+  linear_app_id uuid NOT NULL,
+  linear_account_id TEXT NOT NULL,
+  user_id uuid NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT linear_registrations_linear_app_id_fkey FOREIGN KEY (linear_app_id) REFERENCES linear_apps (id) ON DELETE CASCADE,
+  CONSTRAINT linear_registrations_linear_app_id_linear_account_id_key UNIQUE (linear_app_id, linear_account_id)
+);
+
 CREATE TABLE IF NOT EXISTS tool_variations_groups (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   project_id uuid NOT NULL,
