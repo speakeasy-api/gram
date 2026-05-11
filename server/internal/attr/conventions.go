@@ -200,6 +200,10 @@ const (
 	OrganizationSlugKey            = attribute.Key("gram.org.slug")
 	WorkOSOrganizationIDKey        = attribute.Key("gram.workos.organization_id")
 	WorkOSUserIDKey                = attribute.Key("gram.workos.user_id")
+	OutboxIDKey                    = attribute.Key("gram.outbox.id")
+	OutboxPublicIDKey              = attribute.Key("gram.outbox.public_id")
+	OutboxBatchSizeKey             = attribute.Key("gram.outbox.batch_size")
+	OutboxNoopRowsKey              = attribute.Key("gram.outbox.noop_rows")
 	OutcomeKey                     = attribute.Key("gram.outcome")
 	PackageNameKey                 = attribute.Key("gram.package.name")
 	PackageVersionKey              = attribute.Key("gram.package.version")
@@ -219,6 +223,8 @@ const (
 	SlackEventFullKey              = attribute.Key("gram.slack.event.full")
 	SlackEventTypeKey              = attribute.Key("gram.slack.event.type")
 	SlackTeamIDKey                 = attribute.Key("gram.slack.team.id")
+	SvixAppIDKey                   = attribute.Key("gram.svix.app_id")
+	PreviousSvixAppIDKey           = attribute.Key("gram.svix.previous_app_id")
 	ToolCallDurationKey            = attribute.Key("gram.tool_call.duration")
 	ToolCallKindKey                = attribute.Key("gram.tool_call.kind")
 	ToolCallSourceKey              = attribute.Key("gram.tool_call.source")
@@ -857,6 +863,18 @@ func SlogWorkOSOrganizationID(v string) slog.Attr {
 func WorkOSUserID(v string) attribute.KeyValue { return WorkOSUserIDKey.String(v) }
 func SlogWorkOSUserID(v string) slog.Attr      { return slog.String(string(WorkOSUserIDKey), v) }
 
+func OutboxID(v int64) attribute.KeyValue { return OutboxIDKey.Int64(v) }
+func SlogOutboxID(v int64) slog.Attr      { return slog.Int64(string(OutboxIDKey), v) }
+
+func OutboxPublicID(v string) attribute.KeyValue { return OutboxPublicIDKey.String(v) }
+func SlogOutboxPublicID(v string) slog.Attr      { return slog.String(string(OutboxPublicIDKey), v) }
+
+func OutboxBatchSize(v int) attribute.KeyValue { return OutboxBatchSizeKey.Int(v) }
+func SlogOutboxBatchSize(v int) slog.Attr      { return slog.Int(string(OutboxBatchSizeKey), v) }
+
+func OutboxNoopRows(v int) attribute.KeyValue { return OutboxNoopRowsKey.Int(v) }
+func SlogOutboxNoopRows(v int) slog.Attr      { return slog.Int(string(OutboxNoopRowsKey), v) }
+
 func OrganizationAccountType(v string) attribute.KeyValue {
 	return OrganizationAccountTypeKey.String(v)
 }
@@ -961,6 +979,12 @@ func SlogSlackEventType(v string) slog.Attr      { return slog.String(string(Sla
 
 func SlackTeamID(v string) attribute.KeyValue { return SlackTeamIDKey.String(v) }
 func SlogSlackTeamID(v string) slog.Attr      { return slog.String(string(SlackTeamIDKey), v) }
+
+func SvixAppID(v string) attribute.KeyValue { return SvixAppIDKey.String(v) }
+func SlogSvixAppID(v string) slog.Attr      { return slog.String(string(SvixAppIDKey), v) }
+
+func PreviousSvixAppID(v string) attribute.KeyValue { return PreviousSvixAppIDKey.String(v) }
+func SlogPreviousSvixAppID(v string) slog.Attr      { return slog.String(string(PreviousSvixAppIDKey), v) }
 
 func GenAIToolCallArguments(v string) attribute.KeyValue { return GenAIToolCallArgumentsKey.String(v) }
 func SlogGenAIToolCallArguments(v string) slog.Attr {

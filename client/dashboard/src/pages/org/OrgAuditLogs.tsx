@@ -210,6 +210,13 @@ function renderSubject(log: AuditLog, orgSlug: string) {
     );
   }
 
+  if (
+    log.action === "organization:webhooks_enabled" ||
+    log.action === "organization:webhooks_disabled"
+  ) {
+    return null;
+  }
+
   return <span className={monoClass}>{getSubjectLabel(log)}</span>;
 }
 
@@ -318,6 +325,10 @@ function renderVerb(log: AuditLog): string {
       return "updated plugin access assignments";
     case "plugin:publish":
       return "published plugins";
+    case "organization:webhooks_enabled":
+      return "enabled webhooks delivery";
+    case "organization:webhooks_disabled":
+      return "disabled webhooks delivery";
     default: {
       const [resource = "activity", verb = "updated"] = log.action.split(":");
       return `${verb.replace(/_/g, " ")} ${getResourceLabel(resource)}`;

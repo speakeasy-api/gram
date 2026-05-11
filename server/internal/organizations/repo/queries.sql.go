@@ -261,6 +261,19 @@ func (q *Queries) GetOrganizationUserRelationship(ctx context.Context, arg GetOr
 	return i, err
 }
 
+const getSvixAppID = `-- name: GetSvixAppID :one
+SELECT svix_app_id
+FROM organization_metadata
+WHERE id = $1 AND svix_app_id IS NOT NULL
+`
+
+func (q *Queries) GetSvixAppID(ctx context.Context, id string) (pgtype.Text, error) {
+	row := q.db.QueryRow(ctx, getSvixAppID, id)
+	var svix_app_id pgtype.Text
+	err := row.Scan(&svix_app_id)
+	return svix_app_id, err
+}
+
 const hasOrganizationUserRelationship = `-- name: HasOrganizationUserRelationship :one
 SELECT EXISTS(
   SELECT 1
@@ -535,6 +548,34 @@ type SetUserWorkOSMembershipsParams struct {
 func (q *Queries) SetUserWorkOSMemberships(ctx context.Context, arg SetUserWorkOSMembershipsParams) error {
 	_, err := q.db.Exec(ctx, setUserWorkOSMemberships, arg.UserID, arg.WorkosOrgIds, arg.WorkosMembershipIds)
 	return err
+}
+
+const setWebhooksEnabled = `-- name: SetWebhooksEnabled :one
+UPDATE organization_metadata
+SET webhooks_enabled = $1,
+    updated_at = clock_timestamp()
+WHERE
+    id = $2
+    AND COALESCE(webhooks_enabled, FALSE) IS DISTINCT FROM $1
+RETURNING id, svix_app_id, webhooks_enabled
+`
+
+type SetWebhooksEnabledParams struct {
+	Enabled pgtype.Bool
+	ID      string
+}
+
+type SetWebhooksEnabledRow struct {
+	ID              string
+	SvixAppID       pgtype.Text
+	WebhooksEnabled pgtype.Bool
+}
+
+func (q *Queries) SetWebhooksEnabled(ctx context.Context, arg SetWebhooksEnabledParams) (SetWebhooksEnabledRow, error) {
+	row := q.db.QueryRow(ctx, setWebhooksEnabled, arg.Enabled, arg.ID)
+	var i SetWebhooksEnabledRow
+	err := row.Scan(&i.ID, &i.SvixAppID, &i.WebhooksEnabled)
+	return i, err
 }
 
 const syncUserOrganizationRoleAssignments = `-- name: SyncUserOrganizationRoleAssignments :exec
@@ -825,4 +866,50 @@ func (q *Queries) UpsertOrganizationUserRelationshipFromWorkOS(ctx context.Conte
 		arg.WorkosLastEventID,
 	)
 	return err
+}
+
+const upsertSvixAppID = `-- name: UpsertSvixAppID :one
+WITH previous AS (
+    SELECT prev.svix_app_id
+    FROM organization_metadata prev
+    WHERE
+        prev.id = $2
+        AND prev.disabled_at IS NULL
+)
+UPDATE organization_metadata om
+SET svix_app_id = $1,
+    webhooks_enabled = TRUE,
+    updated_at = clock_timestamp()
+WHERE
+    om.id = $2
+    AND om.disabled_at IS NULL
+RETURNING
+    om.id,
+    om.svix_app_id,
+    (SELECT previous.svix_app_id FROM previous) AS previous_svix_app_id,
+    om.webhooks_enabled
+`
+
+type UpsertSvixAppIDParams struct {
+	SvixAppID pgtype.Text
+	ID        string
+}
+
+type UpsertSvixAppIDRow struct {
+	ID                string
+	SvixAppID         pgtype.Text
+	PreviousSvixAppID pgtype.Text
+	WebhooksEnabled   pgtype.Bool
+}
+
+func (q *Queries) UpsertSvixAppID(ctx context.Context, arg UpsertSvixAppIDParams) (UpsertSvixAppIDRow, error) {
+	row := q.db.QueryRow(ctx, upsertSvixAppID, arg.SvixAppID, arg.ID)
+	var i UpsertSvixAppIDRow
+	err := row.Scan(
+		&i.ID,
+		&i.SvixAppID,
+		&i.PreviousSvixAppID,
+		&i.WebhooksEnabled,
+	)
+	return i, err
 }

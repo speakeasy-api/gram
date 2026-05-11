@@ -407,6 +407,7 @@ func newStartCommand() *cli.Command {
 	flags = append(flags, pluginsFlags...)
 	flags = append(flags, assistantRuntimeFlags...)
 	flags = append(flags, pulseMCPFlags...)
+	flags = append(flags, svixFlags...)
 
 	return &cli.Command{
 		Name:  "start",
@@ -783,6 +784,14 @@ func newStartCommand() *cli.Command {
 			toolsetsSvc := toolsets.NewService(logger, tracerProvider, db, sessionManager, cache.NewRedisCacheAdapter(redisClient), authzEngine, auditLogger)
 			mcpMetadataService := mcpmetadata.NewService(logger, tracerProvider, db, sessionManager, serverURL, siteURL, cache.NewRedisCacheAdapter(redisClient), authzEngine, auditLogger)
 
+			svixClient, shutdown, err := newSvixClient(c, logger, guardianPolicy)
+			if shutdown != nil {
+				shutdownFuncs = append(shutdownFuncs, shutdown)
+			}
+			if err != nil {
+				return fmt.Errorf("failed to create svix webhook sender: %w", err)
+			}
+
 			// Construct the GitHub App client once; share with the plugin publish
 			// flow and the marketplace proxy so they hit the same token cache and
 			// the same App identity. nil when the App isn't configured.
@@ -895,7 +904,7 @@ func newStartCommand() *cli.Command {
 				&background.TemporalAssistantsSubscriptionCancelScheduler{TemporalEnv: temporalEnv},
 				posthogClient,
 			))
-			organizations.Attach(mux, organizations.NewService(logger, tracerProvider, db, sessionManager, workosClient, productFeatures, authzEngine))
+			organizations.Attach(mux, organizations.NewService(logger, tracerProvider, db, sessionManager, workosClient, productFeatures, authzEngine, auditLogger, svixClient))
 			projects.Attach(mux, projects.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger))
 			packages.Attach(mux, packages.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
 
@@ -1014,6 +1023,7 @@ func newStartCommand() *cli.Command {
 						ShadowMCPClient:     shadowMCPClient,
 						AuditLogger:         auditLogger,
 						WorkOSEventsClient:  workosEventsClient,
+						SvixClient:          svixClient,
 					})
 					if err := temporalWorker.Run(workerInterruptCh); err != nil {
 						logger.ErrorContext(ctx, "temporal worker failed", attr.SlogError(err))

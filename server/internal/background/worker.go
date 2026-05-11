@@ -8,6 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
+	svix "github.com/svix/svix-webhooks/go"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/sdk/interceptor"
@@ -69,6 +70,7 @@ type WorkerOptions struct {
 	ShadowMCPClient     *shadowmcp.Client
 	AuditLogger         *audit.Logger
 	WorkOSEventsClient  *events.Client
+	SvixClient          *svix.Svix
 }
 
 func ForDeploymentProcessing(
@@ -109,6 +111,7 @@ func ForDeploymentProcessing(
 		PIIScanner:          nil,
 		ShadowMCPClient:     nil,
 		WorkOSEventsClient:  nil,
+		SvixClient:          nil,
 	}
 }
 
@@ -147,6 +150,7 @@ func NewTemporalWorker(
 		ShadowMCPClient:     nil,
 		AuditLogger:         nil,
 		WorkOSEventsClient:  nil,
+		SvixClient:          nil,
 	}
 
 	for _, o := range options {
@@ -178,6 +182,7 @@ func NewTemporalWorker(
 			ShadowMCPClient:     conv.Default(o.ShadowMCPClient, opts.ShadowMCPClient),
 			AuditLogger:         conv.Default(o.AuditLogger, opts.AuditLogger),
 			WorkOSEventsClient:  conv.Default(o.WorkOSEventsClient, opts.WorkOSEventsClient),
+			SvixClient:          conv.Default(o.SvixClient, opts.SvixClient),
 		}
 	}
 
@@ -226,6 +231,7 @@ func NewTemporalWorker(
 		opts.ShadowMCPClient,
 		opts.AuditLogger,
 		opts.WorkOSEventsClient,
+		opts.SvixClient,
 	)
 
 	temporalWorker.RegisterActivity(activities.ProcessDeployment)
@@ -271,8 +277,11 @@ func NewTemporalWorker(
 	// WorkOS sync activities
 	temporalWorker.RegisterActivity(activities.ProcessWorkOSOrganizationEvents)
 	temporalWorker.RegisterActivity(activities.ProcessWorkOSGlobalRoleEvents)
-
 	temporalWorker.RegisterActivity(activities.CancelAssistantsSubscription)
+	// Outbox -> Svix relay activities
+	temporalWorker.RegisterActivity(activities.FetchPendingSvixEvents)
+	temporalWorker.RegisterActivity(activities.FilterNoopSvixEvents)
+	temporalWorker.RegisterActivity(activities.RelaySvixEvents)
 
 	temporalWorker.RegisterWorkflow(ProcessDeploymentWorkflow)
 	temporalWorker.RegisterWorkflow(FunctionsReaperWorkflow)
@@ -305,6 +314,8 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(ProcessWorkOSGlobalRoleEventsWorkflowDebounced)
 	// Assistants signup followups
 	temporalWorker.RegisterWorkflow(CancelAssistantsSubscriptionWorkflow)
+	// Outbox -> Svix relay workflow
+	temporalWorker.RegisterWorkflow(RelayOutboxToSvixWorkflow)
 
 	if err := AddPlatformUsageMetricsSchedule(context.Background(), env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
@@ -315,6 +326,12 @@ func NewTemporalWorker(
 	if err := AddRefreshBillingUsageSchedule(context.Background(), env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
 			logger.ErrorContext(context.Background(), "failed to add refresh billing usage schedule", attr.SlogError(err))
+		}
+	}
+
+	if err := AddRelayOutboxToSvixSchedule(context.Background(), env); err != nil {
+		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
+			logger.ErrorContext(context.Background(), "failed to add relay outbox to svix schedule", attr.SlogError(err))
 		}
 	}
 

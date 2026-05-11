@@ -92,7 +92,7 @@ func UsageCommands() []string {
 		"mcp-endpoints (create-mcp-endpoint|get-mcp-endpoint|list-mcp-endpoints|update-mcp-endpoint|delete-mcp-endpoint)",
 		"mcp-metadata (get-mcp-metadata|set-mcp-metadata|export-mcp-metadata)",
 		"mcp-servers (create-mcp-server|get-mcp-server|list-mcp-servers|update-mcp-server|delete-mcp-server)",
-		"organizations (send-invite|revoke-invite|list-invites|get-invite-by-token|list-users|remove-user)",
+		"organizations (get|send-invite|revoke-invite|list-invites|get-invite-by-token|list-users|remove-user|enable-webhooks|disable-webhooks|create-portal-session)",
 		"packages (create-package|update-package|list-packages|list-versions|publish)",
 		"plugins (list-plugins|get-plugin|create-plugin|update-plugin|delete-plugin|add-plugin-server|update-plugin-server|remove-plugin-server|set-plugin-assignments|download-plugin-package|download-observability-plugin|get-publish-status|publish-plugins)",
 		"features (get-product-features|set-product-feature)",
@@ -814,6 +814,9 @@ func ParseEndpoint(
 
 		organizationsFlags = flag.NewFlagSet("organizations", flag.ContinueOnError)
 
+		organizationsGetFlags            = flag.NewFlagSet("get", flag.ExitOnError)
+		organizationsGetSessionTokenFlag = organizationsGetFlags.String("session-token", "", "")
+
 		organizationsSendInviteFlags            = flag.NewFlagSet("send-invite", flag.ExitOnError)
 		organizationsSendInviteBodyFlag         = organizationsSendInviteFlags.String("body", "REQUIRED", "")
 		organizationsSendInviteSessionTokenFlag = organizationsSendInviteFlags.String("session-token", "", "")
@@ -834,6 +837,15 @@ func ParseEndpoint(
 		organizationsRemoveUserFlags            = flag.NewFlagSet("remove-user", flag.ExitOnError)
 		organizationsRemoveUserUserIDFlag       = organizationsRemoveUserFlags.String("user-id", "REQUIRED", "")
 		organizationsRemoveUserSessionTokenFlag = organizationsRemoveUserFlags.String("session-token", "", "")
+
+		organizationsEnableWebhooksFlags            = flag.NewFlagSet("enable-webhooks", flag.ExitOnError)
+		organizationsEnableWebhooksSessionTokenFlag = organizationsEnableWebhooksFlags.String("session-token", "", "")
+
+		organizationsDisableWebhooksFlags            = flag.NewFlagSet("disable-webhooks", flag.ExitOnError)
+		organizationsDisableWebhooksSessionTokenFlag = organizationsDisableWebhooksFlags.String("session-token", "", "")
+
+		organizationsCreatePortalSessionFlags            = flag.NewFlagSet("create-portal-session", flag.ExitOnError)
+		organizationsCreatePortalSessionSessionTokenFlag = organizationsCreatePortalSessionFlags.String("session-token", "", "")
 
 		packagesFlags = flag.NewFlagSet("packages", flag.ContinueOnError)
 
@@ -1667,12 +1679,16 @@ func ParseEndpoint(
 	mcpServersDeleteMcpServerFlags.Usage = mcpServersDeleteMcpServerUsage
 
 	organizationsFlags.Usage = organizationsUsage
+	organizationsGetFlags.Usage = organizationsGetUsage
 	organizationsSendInviteFlags.Usage = organizationsSendInviteUsage
 	organizationsRevokeInviteFlags.Usage = organizationsRevokeInviteUsage
 	organizationsListInvitesFlags.Usage = organizationsListInvitesUsage
 	organizationsGetInviteByTokenFlags.Usage = organizationsGetInviteByTokenUsage
 	organizationsListUsersFlags.Usage = organizationsListUsersUsage
 	organizationsRemoveUserFlags.Usage = organizationsRemoveUserUsage
+	organizationsEnableWebhooksFlags.Usage = organizationsEnableWebhooksUsage
+	organizationsDisableWebhooksFlags.Usage = organizationsDisableWebhooksUsage
+	organizationsCreatePortalSessionFlags.Usage = organizationsCreatePortalSessionUsage
 
 	packagesFlags.Usage = packagesUsage
 	packagesCreatePackageFlags.Usage = packagesCreatePackageUsage
@@ -2393,6 +2409,9 @@ func ParseEndpoint(
 
 		case "organizations":
 			switch epn {
+			case "get":
+				epf = organizationsGetFlags
+
 			case "send-invite":
 				epf = organizationsSendInviteFlags
 
@@ -2410,6 +2429,15 @@ func ParseEndpoint(
 
 			case "remove-user":
 				epf = organizationsRemoveUserFlags
+
+			case "enable-webhooks":
+				epf = organizationsEnableWebhooksFlags
+
+			case "disable-webhooks":
+				epf = organizationsDisableWebhooksFlags
+
+			case "create-portal-session":
+				epf = organizationsCreatePortalSessionFlags
 
 			}
 
@@ -3306,6 +3334,9 @@ func ParseEndpoint(
 		case "organizations":
 			c := organizationsc.NewClient(scheme, host, doer, enc, dec, restore)
 			switch epn {
+			case "get":
+				endpoint = c.Get()
+				data, err = organizationsc.BuildGetPayload(*organizationsGetSessionTokenFlag)
 			case "send-invite":
 				endpoint = c.SendInvite()
 				data, err = organizationsc.BuildSendInvitePayload(*organizationsSendInviteBodyFlag, *organizationsSendInviteSessionTokenFlag)
@@ -3324,6 +3355,15 @@ func ParseEndpoint(
 			case "remove-user":
 				endpoint = c.RemoveUser()
 				data, err = organizationsc.BuildRemoveUserPayload(*organizationsRemoveUserUserIDFlag, *organizationsRemoveUserSessionTokenFlag)
+			case "enable-webhooks":
+				endpoint = c.EnableWebhooks()
+				data, err = organizationsc.BuildEnableWebhooksPayload(*organizationsEnableWebhooksSessionTokenFlag)
+			case "disable-webhooks":
+				endpoint = c.DisableWebhooks()
+				data, err = organizationsc.BuildDisableWebhooksPayload(*organizationsDisableWebhooksSessionTokenFlag)
+			case "create-portal-session":
+				endpoint = c.CreatePortalSession()
+				data, err = organizationsc.BuildCreatePortalSessionPayload(*organizationsCreatePortalSessionSessionTokenFlag)
 			}
 		case "packages":
 			c := packagesc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -6750,16 +6790,38 @@ func organizationsUsage() {
 	fmt.Fprintln(os.Stderr, `Organization membership, invitations, and directory.`)
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] organizations COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    get: Get the active organization from the session.`)
 	fmt.Fprintln(os.Stderr, `    send-invite: Send a WorkOS invitation for the active organization.`)
 	fmt.Fprintln(os.Stderr, `    revoke-invite: Revoke a pending WorkOS invitation.`)
 	fmt.Fprintln(os.Stderr, `    list-invites: List pending WorkOS invitations for the active organization.`)
 	fmt.Fprintln(os.Stderr, `    get-invite-by-token: Resolve a WorkOS invitation from its token (e.g. accept-flow).`)
 	fmt.Fprintln(os.Stderr, `    list-users: List users in the active organization from Gram organization_user_relationships.`)
 	fmt.Fprintln(os.Stderr, `    remove-user: Remove a user from the active organization in Gram and delete their WorkOS organization membership.`)
+	fmt.Fprintln(os.Stderr, `    enable-webhooks: Enable  webhooks for the active organization.`)
+	fmt.Fprintln(os.Stderr, `    disable-webhooks: Disable  webhooks for the active organization.`)
+	fmt.Fprintln(os.Stderr, `    create-portal-session: Create a webhook portal session.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s organizations COMMAND --help\n", os.Args[0])
 }
+func organizationsGetUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] organizations get", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get the active organization from the session.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organizations get --session-token \"abc123\"")
+}
+
 func organizationsSendInviteUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] organizations send-invite", os.Args[0])
@@ -6872,6 +6934,60 @@ func organizationsRemoveUserUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organizations remove-user --user-id \"abc123\" --session-token \"abc123\"")
+}
+
+func organizationsEnableWebhooksUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] organizations enable-webhooks", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Enable  webhooks for the active organization.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organizations enable-webhooks --session-token \"abc123\"")
+}
+
+func organizationsDisableWebhooksUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] organizations disable-webhooks", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Disable  webhooks for the active organization.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organizations disable-webhooks --session-token \"abc123\"")
+}
+
+func organizationsCreatePortalSessionUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] organizations create-portal-session", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Create a webhook portal session.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organizations create-portal-session --session-token \"abc123\"")
 }
 
 // packagesUsage displays the usage of the packages command and its subcommands.

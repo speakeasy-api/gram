@@ -318,6 +318,10 @@ run();
 
 ### [Organizations](docs/sdks/organizations/README.md)
 
+* [createPortalSession](docs/sdks/organizations/README.md#createportalsession) - createPortalSession organizations
+* [disableWebhooks](docs/sdks/organizations/README.md#disablewebhooks) - disableWebhooks organizations
+* [enableWebhooks](docs/sdks/organizations/README.md#enablewebhooks) - enableWebhooks organizations
+* [get](docs/sdks/organizations/README.md#get) - get organizations
 * [getInviteByToken](docs/sdks/organizations/README.md#getinvitebytoken) - getInviteByToken organizations
 * [listInvites](docs/sdks/organizations/README.md#listinvites) - listInvites organizations
 * [listUsers](docs/sdks/organizations/README.md#listusers) - listUsers organizations
@@ -624,6 +628,10 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`mcpServersGet`](docs/sdks/mcpservers/README.md#get) - getMcpServer mcpServers
 - [`mcpServersList`](docs/sdks/mcpservers/README.md#list) - listMcpServers mcpServers
 - [`mcpServersUpdate`](docs/sdks/mcpservers/README.md#update) - updateMcpServer mcpServers
+- [`organizationsCreatePortalSession`](docs/sdks/organizations/README.md#createportalsession) - createPortalSession organizations
+- [`organizationsDisableWebhooks`](docs/sdks/organizations/README.md#disablewebhooks) - disableWebhooks organizations
+- [`organizationsEnableWebhooks`](docs/sdks/organizations/README.md#enablewebhooks) - enableWebhooks organizations
+- [`organizationsGet`](docs/sdks/organizations/README.md#get) - get organizations
 - [`organizationsGetInviteByToken`](docs/sdks/organizations/README.md#getinvitebytoken) - getInviteByToken organizations
 - [`organizationsListInvites`](docs/sdks/organizations/README.md#listinvites) - listInvites organizations
 - [`organizationsListUsers`](docs/sdks/organizations/README.md#listusers) - listUsers organizations
@@ -803,6 +811,7 @@ To learn about this feature and how to get started, check
 - [`useCreateMcpServerMutation`](docs/sdks/mcpservers/README.md#create) - createMcpServer mcpServers
 - [`useCreatePackageMutation`](docs/sdks/packages/README.md#create) - createPackage packages
 - [`useCreatePluginMutation`](docs/sdks/plugins/README.md#createplugin) - createPlugin plugins
+- [`useCreatePortalSessionMutation`](docs/sdks/organizations/README.md#createportalsession) - createPortalSession organizations
 - [`useCreateProjectMutation`](docs/sdks/projects/README.md#create) - createProject projects
 - [`useCreateRemoteMcpServerMutation`](docs/sdks/remotemcp/README.md#createserver) - createServer remoteMcp
 - [`useCreateRoleMutation`](docs/sdks/access/README.md#createrole) - createRole access
@@ -832,7 +841,9 @@ To learn about this feature and how to get started, check
 - [`useDeployment`](docs/sdks/deployments/README.md#getbyid) - getDeployment deployments
 - [`useDeploymentLogs`](docs/sdks/deployments/README.md#logs) - getDeploymentLogs deployments
 - [`useDisableRBACMutation`](docs/sdks/access/README.md#disablerbac) - disableRBAC access
+- [`useDisableWebhooksMutation`](docs/sdks/organizations/README.md#disablewebhooks) - disableWebhooks organizations
 - [`useEnableRBACMutation`](docs/sdks/access/README.md#enablerbac) - enableRBAC access
+- [`useEnableWebhooksMutation`](docs/sdks/organizations/README.md#enablewebhooks) - enableWebhooks organizations
 - [`useEvolveDeploymentMutation`](docs/sdks/deployments/README.md#evolvedeployment) - evolve deployments
 - [`useExportMcpMetadataMutation`](docs/sdks/mcpmetadata/README.md#export) - exportMcpMetadata mcpMetadata
 - [`useFeaturesGet`](docs/sdks/features/README.md#get) - getProductFeatures features
@@ -902,6 +913,7 @@ To learn about this feature and how to get started, check
 - [`useMcpRegistriesGetServerDetails`](docs/sdks/mcpregistries/README.md#getserverdetails) - getServerDetails mcpRegistries
 - [`useMcpServers`](docs/sdks/mcpservers/README.md#list) - listMcpServers mcpServers
 - [`useMembers`](docs/sdks/access/README.md#listmembers) - listMembers access
+- [`useOrganization`](docs/sdks/organizations/README.md#get) - get organizations
 - [`usePauseTriggerMutation`](docs/sdks/triggers/README.md#pause) - pauseTriggerInstance triggers
 - [`usePlugin`](docs/sdks/plugins/README.md#getplugin) - getPlugin plugins
 - [`usePlugins`](docs/sdks/plugins/README.md#listplugins) - listPlugins plugins
