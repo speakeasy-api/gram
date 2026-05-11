@@ -516,6 +516,7 @@ func newStartCommand() *cli.Command {
 				cache.SuffixNone,
 				c.String("idp-base-url"),
 				c.String("idp-client-id"),
+				c.String("workos-api-key"),
 				pylonClient,
 				posthogClient,
 				billingRepo,

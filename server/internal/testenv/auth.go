@@ -48,6 +48,7 @@ func NewTestManager(t *testing.T, logger *slog.Logger, tracerProvider trace.Trac
 		suffix,
 		srv.URL+"/oauth2",
 		"test-client-id",
+		"",
 		fakePylon,
 		fakePosthog,
 		billingRepo,

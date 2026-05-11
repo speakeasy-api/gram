@@ -38,6 +38,9 @@ func (s *Manager) ExchangeCodeForTokens(ctx context.Context, code, redirectURI s
 	data.Set("code", code)
 	data.Set("redirect_uri", redirectURI)
 	data.Set("client_id", s.idpClientID)
+	if s.idpClientSecret != "" {
+		data.Set("client_secret", s.idpClientSecret)
+	}
 
 	req, err := http.NewRequestWithContext(ctx, "POST", s.idpBaseURL+"/token", strings.NewReader(data.Encode()))
 	if err != nil {

@@ -144,7 +144,7 @@ func newTestAuthService(t *testing.T, userInfo *MockUserInfo) (context.Context, 
 
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 
-	sessionManager := sessions.NewManager(logger, testenv.NewTracerProvider(t), guardianPolicy, conn, redisClient, cache.Suffix("gram-test"), mockServer.URL+"/oauth2", "test-client-id", pylon, posthog, billingClient)
+	sessionManager := sessions.NewManager(logger, testenv.NewTracerProvider(t), guardianPolicy, conn, redisClient, cache.Suffix("gram-test"), mockServer.URL+"/oauth2", "test-client-id", "", pylon, posthog, billingClient)
 
 	authConfigs := auth.AuthConfigurations{
 		IDPBaseURL:        mockServer.URL + "/oauth2",
@@ -187,7 +187,7 @@ func newTestAuthServiceWithAuthz(t *testing.T, userInfo *MockUserInfo) (context.
 
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 
-	sessionManager := sessions.NewManager(logger, testenv.NewTracerProvider(t), guardianPolicy, conn, redisClient, cache.Suffix("gram-test"), mockServer.URL+"/oauth2", "test-client-id", pylon, posthog, billingClient)
+	sessionManager := sessions.NewManager(logger, testenv.NewTracerProvider(t), guardianPolicy, conn, redisClient, cache.Suffix("gram-test"), mockServer.URL+"/oauth2", "test-client-id", "", pylon, posthog, billingClient)
 
 	authConfigs := auth.AuthConfigurations{
 		IDPBaseURL:        mockServer.URL + "/oauth2",
