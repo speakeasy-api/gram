@@ -40,21 +40,12 @@ func (p *GramProvider) ExchangeToken(
 	serverURL *url.URL,
 	_ string,
 ) (*TokenExchangeResult, error) {
-	callbackURL := serverURL.String()
-	accessToken, err := p.sessions.ExchangeCodeForTokens(ctx, code, callbackURL)
+	idpUser, err := p.sessions.ExchangeCodeForTokens(ctx, code)
 	if err != nil {
 		p.logger.ErrorContext(ctx, "failed to exchange code for token from oauth gram provider",
 			attr.SlogOAuthProvider(provider.Slug),
 			attr.SlogError(err))
 		return nil, fmt.Errorf("exchange code for token: %w", err)
-	}
-
-	idpUser, err := p.sessions.FetchUserInfoFromIDP(ctx, accessToken)
-	if err != nil {
-		p.logger.ErrorContext(ctx, "failed to get user info from oauth gram provider",
-			attr.SlogOAuthProvider(provider.Slug),
-			attr.SlogError(err))
-		return nil, fmt.Errorf("retrieve user info: %w", err)
 	}
 
 	userID, err := p.sessions.UpsertUserFromIDP(ctx, idpUser)

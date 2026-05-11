@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
@@ -15,7 +14,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -25,56 +23,48 @@ import (
 )
 
 type Manager struct {
-	logger          *slog.Logger
-	tracer          trace.Tracer
-	sessionCache    cache.TypedCacheObject[Session]
-	userInfoCache   cache.TypedCacheObject[CachedUserInfo]
-	idpBaseURL      string
-	idpClientID     string
-	idpClientSecret string
-	idpHTTPClient   *guardian.HTTPClient
-	umClient        *usermanagement.Client // nil = fall back to raw OIDC HTTP (tests/dev-idp)
-	orgRepo         *orgRepo.Queries
-	userRepo        *userRepo.Queries
-	pylon           *pylon.Pylon
-	posthog         *posthog.Posthog // posthog metrics will no-op if the dependency is not provided
-	billingRepo     billing.Repository
+	logger        *slog.Logger
+	tracer        trace.Tracer
+	sessionCache  cache.TypedCacheObject[Session]
+	userInfoCache cache.TypedCacheObject[CachedUserInfo]
+	idpBaseURL    string
+	idpClientID   string
+	umClient      *usermanagement.Client
+	orgRepo       *orgRepo.Queries
+	userRepo      *userRepo.Queries
+	pylon         *pylon.Pylon
+	posthog       *posthog.Posthog
+	billingRepo   billing.Repository
 }
 
 func NewManager(
 	logger *slog.Logger,
 	tracerProvider trace.TracerProvider,
-	guardianPolicy *guardian.Policy,
 	db *pgxpool.Pool,
 	redisClient *redis.Client,
 	suffix cache.Suffix,
 	idpBaseURL string,
 	idpClientID string,
-	idpClientSecret string,
 	umClient *usermanagement.Client,
 	pylon *pylon.Pylon,
 	posthog *posthog.Posthog,
 	billingRepo billing.Repository,
 ) *Manager {
 	logger = logger.With(attr.SlogComponent("sessions"))
-	idpHTTPClient := guardianPolicy.PooledClient()
-	idpHTTPClient.Timeout = 10 * time.Second
 
 	return &Manager{
-		logger:          logger,
-		tracer:          tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/auth/sessions"),
-		sessionCache:    cache.NewTypedObjectCache[Session](logger.With(attr.SlogCacheNamespace("session")), cache.NewRedisCacheAdapter(redisClient), cache.SuffixNone),
-		userInfoCache:   cache.NewTypedObjectCache[CachedUserInfo](logger.With(attr.SlogCacheNamespace("user_info")), cache.NewRedisCacheAdapter(redisClient), cache.SuffixNone),
-		idpBaseURL:      idpBaseURL,
-		idpClientID:     idpClientID,
-		idpClientSecret: idpClientSecret,
-		idpHTTPClient:   idpHTTPClient,
-		umClient:        umClient,
-		orgRepo:         orgRepo.New(db),
-		userRepo:        userRepo.New(db),
-		pylon:           pylon,
-		posthog:         posthog,
-		billingRepo:     billingRepo,
+		logger:        logger,
+		tracer:        tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/auth/sessions"),
+		sessionCache:  cache.NewTypedObjectCache[Session](logger.With(attr.SlogCacheNamespace("session")), cache.NewRedisCacheAdapter(redisClient), cache.SuffixNone),
+		userInfoCache: cache.NewTypedObjectCache[CachedUserInfo](logger.With(attr.SlogCacheNamespace("user_info")), cache.NewRedisCacheAdapter(redisClient), cache.SuffixNone),
+		idpBaseURL:    idpBaseURL,
+		idpClientID:   idpClientID,
+		umClient:      umClient,
+		orgRepo:       orgRepo.New(db),
+		userRepo:      userRepo.New(db),
+		pylon:         pylon,
+		posthog:       posthog,
+		billingRepo:   billingRepo,
 	}
 }
 

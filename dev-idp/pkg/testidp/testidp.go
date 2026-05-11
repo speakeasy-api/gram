@@ -1,6 +1,7 @@
-// Package testidp serves an in-process mock OIDC identity provider for tests.
-// It implements /oauth2/token and /oauth2/userinfo against in-memory state,
-// matching the standard OIDC endpoints that Gram's session manager calls.
+// Package testidp serves an in-process mock identity provider for tests.
+// It implements /user_management/authenticate (the WorkOS SDK endpoint shape)
+// so that the sessions.Manager's single code path works in tests without
+// hitting real WorkOS.
 package testidp
 
 import (
@@ -9,7 +10,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"sync"
 )
 
 // Constants exported for tests that need to assert against the
@@ -65,103 +65,75 @@ func NewConfig() Config {
 	}
 }
 
-// Handler returns an http.Handler implementing mock OIDC endpoints
-// (/oauth2/token, /oauth2/userinfo).
+// Handler returns an http.Handler implementing the WorkOS SDK authenticate
+// endpoint (POST /user_management/authenticate). The WorkOS Go SDK sends
+// requests to {endpoint}/user_management/authenticate, so the test httptest
+// server URL should be passed as the SDK client's Endpoint.
 func Handler(cfg Config) http.Handler {
-	s := &server{
-		cfg:    cfg,
-		tokens: make(map[string]string),
-	}
+	s := &server{cfg: cfg}
 	mux := http.NewServeMux()
-	mux.HandleFunc("POST /oauth2/token", s.handleToken)
-	mux.HandleFunc("GET /oauth2/userinfo", s.handleUserinfo)
+	mux.HandleFunc("POST /user_management/authenticate", s.handleAuthenticate)
 	return mux
 }
 
-// =============================================================================
-// Server state
-// =============================================================================
-
 type server struct {
 	cfg Config
-
-	mu     sync.Mutex
-	tokens map[string]string // access_token → userID
 }
 
-// =============================================================================
-// Handlers
-// =============================================================================
+// authenticateResponse mirrors the WorkOS AuthenticateResponse shape that the
+// Go SDK deserialises. Only the fields the sessions package reads are included.
+type authenticateResponse struct {
+	User         authenticateUser `json:"user"`
+	AccessToken  string           `json:"access_token"`
+	RefreshToken string           `json:"refresh_token"`
+}
 
-// handleToken implements the OIDC token endpoint. Accepts
-// grant_type=authorization_code and returns a mock access_token.
-func (s *server) handleToken(w http.ResponseWriter, r *http.Request) {
-	if err := r.ParseForm(); err != nil {
+type authenticateUser struct {
+	ID                string `json:"id"`
+	Email             string `json:"email"`
+	FirstName         string `json:"first_name"`
+	LastName          string `json:"last_name"`
+	ProfilePictureURL string `json:"profile_picture_url"`
+}
+
+// handleAuthenticate implements the WorkOS /user_management/authenticate
+// endpoint. Accepts any non-empty code and returns the configured mock user.
+func (s *server) handleAuthenticate(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Code     string `json:"code"`
+		ClientID string `json:"client_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_request"})
 		return
 	}
-
-	grantType := r.FormValue("grant_type")
-	code := r.FormValue("code")
-
-	if grantType != "authorization_code" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "unsupported_grant_type"})
-		return
-	}
-	if code == "" {
+	if body.Code == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_grant"})
 		return
 	}
 
-	// Any non-empty code is accepted; map it to the configured user.
-	accessToken := randomID()
-	s.mu.Lock()
-	s.tokens[accessToken] = s.cfg.User.ID
-	s.mu.Unlock()
+	// Split display name into first/last for the WorkOS response shape.
+	firstName := s.cfg.User.DisplayName
+	lastName := ""
 
-	writeJSON(w, http.StatusOK, map[string]string{
-		"access_token": accessToken,
-		"token_type":   "Bearer",
-	})
-}
-
-// handleUserinfo implements the OIDC userinfo endpoint. Returns the
-// configured user's identity claims.
-func (s *server) handleUserinfo(w http.ResponseWriter, r *http.Request) {
-	auth := r.Header.Get("Authorization")
-	if len(auth) < 8 || auth[:7] != "Bearer " {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid_token"})
-		return
-	}
-	token := auth[7:]
-
-	s.mu.Lock()
-	_, ok := s.tokens[token]
-	s.mu.Unlock()
-
-	if !ok {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid_token"})
-		return
+	pictureURL := ""
+	if s.cfg.User.PhotoURL != nil {
+		pictureURL = *s.cfg.User.PhotoURL
 	}
 
-	resp := struct {
-		Sub     string  `json:"sub"`
-		Email   string  `json:"email"`
-		Name    string  `json:"name"`
-		Picture *string `json:"picture,omitempty"`
-	}{
-		Sub:     s.cfg.User.ID,
-		Email:   s.cfg.User.Email,
-		Name:    s.cfg.User.DisplayName,
-		Picture: s.cfg.User.PhotoURL,
+	resp := authenticateResponse{
+		User: authenticateUser{
+			ID:                s.cfg.User.ID,
+			Email:             s.cfg.User.Email,
+			FirstName:         firstName,
+			LastName:          lastName,
+			ProfilePictureURL: pictureURL,
+		},
+		AccessToken:  randomID(),
+		RefreshToken: randomID(),
 	}
-
 	writeJSON(w, http.StatusOK, resp)
 }
-
-// =============================================================================
-// Utility
-// =============================================================================
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")

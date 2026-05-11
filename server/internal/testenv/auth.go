@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
+	"github.com/workos/workos-go/v6/pkg/usermanagement"
 	"go.opentelemetry.io/otel/trace"
 
 	mockidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
@@ -19,20 +20,27 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/guardian"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/pylon"
 )
 
-// NewTestManager creates a sessions.Manager backed by a mock OIDC httptest.Server.
-func NewTestManager(t *testing.T, logger *slog.Logger, tracerProvider trace.TracerProvider, guardianPolicy *guardian.Policy, db *pgxpool.Pool, redisClient *redis.Client, suffix cache.Suffix, billingRepo billing.Repository) *sessions.Manager {
+// NewTestManager creates a sessions.Manager backed by a mock WorkOS httptest.Server.
+// The mock serves /user_management/authenticate (the WorkOS SDK endpoint) and
+// a usermanagement.Client is pointed at it, matching the single code path used
+// in production.
+func NewTestManager(t *testing.T, logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, redisClient *redis.Client, suffix cache.Suffix, billingRepo billing.Repository) *sessions.Manager {
 	t.Helper()
 
 	cfg := mockidp.NewConfig()
 	srv := httptest.NewServer(mockidp.Handler(cfg))
 	t.Cleanup(srv.Close)
+
+	// Point a real WorkOS SDK client at the mock server.
+	umClient := usermanagement.NewClient("test-api-key")
+	umClient.Endpoint = srv.URL
+	umClient.HTTPClient = srv.Client()
 
 	fakePylon, err := pylon.NewPylon(logger, "")
 	require.NoError(t, err)
@@ -42,14 +50,12 @@ func NewTestManager(t *testing.T, logger *slog.Logger, tracerProvider trace.Trac
 	return sessions.NewManager(
 		logger,
 		tracerProvider,
-		guardianPolicy,
 		db,
 		redisClient,
 		suffix,
-		srv.URL+"/oauth2",
+		srv.URL,
 		"test-client-id",
-		"",
-		nil, // no WorkOS SDK client in tests — uses mock OIDC IDP
+		umClient,
 		fakePylon,
 		fakePosthog,
 		billingRepo,
@@ -63,12 +69,8 @@ func NewTestManager(t *testing.T, logger *slog.Logger, tracerProvider trace.Trac
 func InitAuthContext(t *testing.T, ctx context.Context, conn *pgxpool.Pool, sessionManager *sessions.Manager) context.Context {
 	t.Helper()
 
-	// Exchange a mock code for an access token (calls mock IDP /oauth2/token)
-	accessToken, err := sessionManager.ExchangeCodeForTokens(ctx, "test-code", "http://localhost/callback")
-	require.NoError(t, err)
-
-	// Get user info from mock IDP (calls /oauth2/userinfo)
-	idpUser, err := sessionManager.FetchUserInfoFromIDP(ctx, accessToken)
+	// Exchange a mock code for user identity (calls mock-workos /user_management/authenticate)
+	idpUser, err := sessionManager.ExchangeCodeForTokens(ctx, "test-code")
 	require.NoError(t, err)
 
 	// Upsert user in DB

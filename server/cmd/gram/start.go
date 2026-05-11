@@ -527,13 +527,11 @@ func newStartCommand() *cli.Command {
 			sessionManager := sessions.NewManager(
 				logger,
 				tracerProvider,
-				guardianPolicy,
 				db,
 				redisClient,
 				cache.SuffixNone,
 				c.String("idp-base-url"),
 				c.String("idp-client-id"),
-				idpClientSecret,
 				newIDPUserManagementClient(guardianPolicy, idpClientSecret, c),
 				pylonClient,
 				posthogClient,

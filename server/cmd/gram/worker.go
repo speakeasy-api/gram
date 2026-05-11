@@ -557,7 +557,7 @@ func newWorkerCommand() *cli.Command {
 				idpClientSecret = c.String("workos-api-key")
 			}
 
-			sessionManager := sessions.NewManager(logger, tracerProvider, guardianPolicy, db, redisClient, cache.SuffixNone, c.String("idp-base-url"), c.String("idp-client-id"), idpClientSecret, newIDPUserManagementClient(guardianPolicy, idpClientSecret, c), pylonClient, posthogClient, billingRepo)
+			sessionManager := sessions.NewManager(logger, tracerProvider, db, redisClient, cache.SuffixNone, c.String("idp-base-url"), c.String("idp-client-id"), newIDPUserManagementClient(guardianPolicy, idpClientSecret, c), pylonClient, posthogClient, billingRepo)
 
 			chatSessionsManager := chatsessions.NewManager(logger, redisClient, c.String("jwt-signing-key"))
 

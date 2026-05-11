@@ -12,6 +12,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
+	"github.com/workos/workos-go/v6/pkg/usermanagement"
 
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
@@ -20,7 +21,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/guardian"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -83,34 +83,24 @@ type MockOrganizationEntry struct {
 	UserWorkspaceSlugs []string
 }
 
-// createMockOIDCServer creates an httptest.Server that serves mock OIDC responses.
-// It returns access tokens that map back to the provided userInfo.
-func createMockOIDCServer(userInfo *MockUserInfo) *httptest.Server {
+// createMockWorkOSServer creates an httptest.Server that serves the WorkOS
+// /user_management/authenticate endpoint. The WorkOS Go SDK sends requests here,
+// so this mock allows the sessions.Manager's single code path to work in tests.
+func createMockWorkOSServer(userInfo *MockUserInfo) *httptest.Server {
 	mux := http.NewServeMux()
-	accessToken := fmt.Sprintf("mock_access_token_%p", userInfo)
 
-	// Mock OIDC token endpoint
-	mux.HandleFunc("POST /oauth2/token", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("POST /user_management/authenticate", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		resp := map[string]string{
-			"access_token": accessToken,
-			"token_type":   "Bearer",
-		}
-		_ = json.NewEncoder(w).Encode(resp)
-	})
-
-	// Mock OIDC userinfo endpoint
-	mux.HandleFunc("GET /oauth2/userinfo", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		resp := struct {
-			Sub     string  `json:"sub"`
-			Email   string  `json:"email"`
-			Name    string  `json:"name"`
-			Picture *string `json:"picture,omitempty"`
-		}{
-			Sub:   userInfo.UserID,
-			Email: userInfo.Email,
-			Name:  userInfo.Email,
+		resp := map[string]any{
+			"access_token":  fmt.Sprintf("mock_access_token_%p", userInfo),
+			"refresh_token": "",
+			"user": map[string]string{
+				"id":                  userInfo.UserID,
+				"first_name":          userInfo.Email,
+				"last_name":           "",
+				"email":               userInfo.Email,
+				"profile_picture_url": "",
+			},
 		}
 		_ = json.NewEncoder(w).Encode(resp)
 	})
@@ -124,8 +114,6 @@ func newTestAuthService(t *testing.T, userInfo *MockUserInfo) (context.Context, 
 	ctx := t.Context()
 	logger := testenv.NewLogger(t)
 	tracerProvider := testenv.NewTracerProvider(t)
-	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
-	require.NoError(t, err)
 
 	conn, err := infra.CloneTestDatabase(t, "authtest")
 	require.NoError(t, err)
@@ -133,9 +121,12 @@ func newTestAuthService(t *testing.T, userInfo *MockUserInfo) (context.Context, 
 	redisClient, err := infra.NewRedisClient(t, 0)
 	require.NoError(t, err)
 
-	// Create mock OIDC server
-	mockServer := createMockOIDCServer(userInfo)
+	mockServer := createMockWorkOSServer(userInfo)
 	t.Cleanup(mockServer.Close)
+
+	umClient := usermanagement.NewClient("test-api-key")
+	umClient.Endpoint = mockServer.URL
+	umClient.HTTPClient = mockServer.Client()
 
 	pylon, err := pylon.NewPylon(logger, "")
 	require.NoError(t, err)
@@ -144,10 +135,10 @@ func newTestAuthService(t *testing.T, userInfo *MockUserInfo) (context.Context, 
 
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 
-	sessionManager := sessions.NewManager(logger, testenv.NewTracerProvider(t), guardianPolicy, conn, redisClient, cache.Suffix("gram-test"), mockServer.URL+"/oauth2", "test-client-id", "", nil, pylon, posthog, billingClient)
+	sessionManager := sessions.NewManager(logger, testenv.NewTracerProvider(t), conn, redisClient, cache.Suffix("gram-test"), mockServer.URL, "test-client-id", umClient, pylon, posthog, billingClient)
 
 	authConfigs := auth.AuthConfigurations{
-		IDPBaseURL:        mockServer.URL + "/oauth2",
+		IDPBaseURL:        mockServer.URL,
 		GramServerURL:     "http://localhost:8080",
 		SignInRedirectURL: "http://localhost:3000/dashboard",
 		Environment:       "test",
@@ -168,8 +159,6 @@ func newTestAuthServiceWithAuthz(t *testing.T, userInfo *MockUserInfo) (context.
 	ctx := t.Context()
 	logger := testenv.NewLogger(t)
 	tracerProvider := testenv.NewTracerProvider(t)
-	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
-	require.NoError(t, err)
 
 	conn, err := infra.CloneTestDatabase(t, "authtest")
 	require.NoError(t, err)
@@ -177,8 +166,12 @@ func newTestAuthServiceWithAuthz(t *testing.T, userInfo *MockUserInfo) (context.
 	redisClient, err := infra.NewRedisClient(t, 0)
 	require.NoError(t, err)
 
-	mockServer := createMockOIDCServer(userInfo)
+	mockServer := createMockWorkOSServer(userInfo)
 	t.Cleanup(mockServer.Close)
+
+	umClient := usermanagement.NewClient("test-api-key")
+	umClient.Endpoint = mockServer.URL
+	umClient.HTTPClient = mockServer.Client()
 
 	pylon, err := pylon.NewPylon(logger, "")
 	require.NoError(t, err)
@@ -187,10 +180,10 @@ func newTestAuthServiceWithAuthz(t *testing.T, userInfo *MockUserInfo) (context.
 
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 
-	sessionManager := sessions.NewManager(logger, testenv.NewTracerProvider(t), guardianPolicy, conn, redisClient, cache.Suffix("gram-test"), mockServer.URL+"/oauth2", "test-client-id", "", nil, pylon, posthog, billingClient)
+	sessionManager := sessions.NewManager(logger, testenv.NewTracerProvider(t), conn, redisClient, cache.Suffix("gram-test"), mockServer.URL, "test-client-id", umClient, pylon, posthog, billingClient)
 
 	authConfigs := auth.AuthConfigurations{
-		IDPBaseURL:        mockServer.URL + "/oauth2",
+		IDPBaseURL:        mockServer.URL,
 		GramServerURL:     "http://localhost:8080",
 		SignInRedirectURL: "http://localhost:3000/dashboard",
 		Environment:       "test",

@@ -145,13 +145,7 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		return redirectWithError(authErrCodeLookup, errors.New("code is required"))
 	}
 
-	callbackURL := s.buildCallbackURL(ctx)
-	accessToken, err := s.sessions.ExchangeCodeForTokens(ctx, payload.Code, callbackURL)
-	if err != nil {
-		return redirectWithError(authErrCodeLookup, err)
-	}
-
-	idpUser, err := s.sessions.FetchUserInfoFromIDP(ctx, accessToken)
+	idpUser, err := s.sessions.ExchangeCodeForTokens(ctx, payload.Code)
 	if err != nil {
 		return redirectWithError(authErrCodeLookup, err)
 	}

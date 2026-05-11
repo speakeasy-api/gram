@@ -2,9 +2,7 @@ package sessions
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"net/http"
 	"net/url"
 	"strings"
 
@@ -24,11 +22,11 @@ type IDPUserInfo struct {
 	Picture *string `json:"picture,omitempty"`
 }
 
-// ExchangeCodeForTokens exchanges an authorization code for an access token.
-// When a WorkOS user-management client is configured (production), this uses
-// the SDK's AuthenticateWithCode. Otherwise it falls back to a raw OIDC
-// /token POST (tests / dev-idp).
-func (s *Manager) ExchangeCodeForTokens(ctx context.Context, code, redirectURI string) (accessToken string, err error) {
+// ExchangeCodeForTokens exchanges an authorization code for user identity
+// via the WorkOS user-management SDK. Both production (api.workos.com) and
+// local dev (dev-idp mock-workos) implement the same authenticate endpoint,
+// so there is a single code path.
+func (s *Manager) ExchangeCodeForTokens(ctx context.Context, code string) (_ *IDPUserInfo, err error) {
 	ctx, span := s.tracer.Start(ctx, "sessions.exchangeCodeForTokens")
 	defer func() {
 		if err != nil {
@@ -37,14 +35,6 @@ func (s *Manager) ExchangeCodeForTokens(ctx context.Context, code, redirectURI s
 		span.End()
 	}()
 
-	if s.umClient != nil {
-		return s.exchangeCodeViaSDK(ctx, code)
-	}
-	return s.exchangeCodeViaHTTP(ctx, code, redirectURI)
-}
-
-// exchangeCodeViaSDK uses the WorkOS user-management SDK to exchange the code.
-func (s *Manager) exchangeCodeViaSDK(ctx context.Context, code string) (string, error) {
 	resp, err := s.umClient.AuthenticateWithCode(ctx, usermanagement.AuthenticateWithCodeOpts{
 		ClientID:     s.idpClientID,
 		Code:         code,
@@ -53,94 +43,21 @@ func (s *Manager) exchangeCodeViaSDK(ctx context.Context, code string) (string, 
 		UserAgent:    "",
 	})
 	if err != nil {
-		return "", fmt.Errorf("workos authenticate with code: %w", err)
+		return nil, fmt.Errorf("workos authenticate with code: %w", err)
 	}
 
-	return resp.AccessToken, nil
-}
-
-// exchangeCodeViaHTTP performs a standard OIDC token exchange against the
-// IDP's /token endpoint. Used when no WorkOS SDK client is available
-// (e.g. tests backed by the mock IDP).
-func (s *Manager) exchangeCodeViaHTTP(ctx context.Context, code, redirectURI string) (string, error) {
-	data := url.Values{}
-	data.Set("grant_type", "authorization_code")
-	data.Set("code", code)
-	data.Set("redirect_uri", redirectURI)
-	data.Set("client_id", s.idpClientID)
-	if s.idpClientSecret != "" {
-		data.Set("client_secret", s.idpClientSecret)
+	name := strings.TrimSpace(resp.User.FirstName + " " + resp.User.LastName)
+	var picture *string
+	if resp.User.ProfilePictureURL != "" {
+		picture = &resp.User.ProfilePictureURL
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", s.idpBaseURL+"/token", strings.NewReader(data.Encode()))
-	if err != nil {
-		return "", fmt.Errorf("create token request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("Accept", "application/json")
-
-	resp, err := s.idpHTTPClient.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("token exchange: %w", err)
-	}
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			s.logger.ErrorContext(context.Background(), "failed to close response body", attr.SlogError(err))
-		}
-	}()
-
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("token exchange failed with status %s", resp.Status)
-	}
-
-	var tokenResp struct {
-		AccessToken string `json:"access_token"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&tokenResp); err != nil {
-		return "", fmt.Errorf("decode token response: %w", err)
-	}
-
-	return tokenResp.AccessToken, nil
-}
-
-// FetchUserInfoFromIDP calls the IDP's /userinfo endpoint to retrieve
-// the authenticated user's identity claims.
-func (s *Manager) FetchUserInfoFromIDP(ctx context.Context, accessToken string) (info *IDPUserInfo, err error) {
-	ctx, span := s.tracer.Start(ctx, "sessions.fetchUserInfoFromIDP")
-	defer func() {
-		if err != nil {
-			span.SetStatus(codes.Error, err.Error())
-		}
-		span.End()
-	}()
-
-	req, err := http.NewRequestWithContext(ctx, "GET", s.idpBaseURL+"/userinfo", nil)
-	if err != nil {
-		return nil, fmt.Errorf("create userinfo request: %w", err)
-	}
-	req.Header.Set("Authorization", "Bearer "+accessToken)
-	req.Header.Set("Accept", "application/json")
-
-	resp, err := s.idpHTTPClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("fetch userinfo: %w", err)
-	}
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			s.logger.ErrorContext(context.Background(), "failed to close response body", attr.SlogError(err))
-		}
-	}()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("userinfo request failed with status %s", resp.Status)
-	}
-
-	var userInfo IDPUserInfo
-	if err := json.NewDecoder(resp.Body).Decode(&userInfo); err != nil {
-		return nil, fmt.Errorf("decode userinfo response: %w", err)
-	}
-
-	return &userInfo, nil
+	return &IDPUserInfo{
+		Sub:     resp.User.ID,
+		Email:   resp.User.Email,
+		Name:    name,
+		Picture: picture,
+	}, nil
 }
 
 // UpsertUserFromIDP upserts a user record from OIDC identity claims and

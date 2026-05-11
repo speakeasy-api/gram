@@ -58,6 +58,7 @@ const (
 // =============================================================================
 
 func (h *Handler) registerWorkosRoutes(mux *http.ServeMux) {
+	mux.HandleFunc("POST /user_management/authenticate", h.handleWorkosAuthenticate)
 	mux.HandleFunc("GET /user_management/users/{id}", h.handleWorkosGetUser)
 	mux.HandleFunc("GET /user_management/users", h.handleWorkosListUsers)
 
@@ -79,6 +80,67 @@ func (h *Handler) registerWorkosRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /authorization/organizations/{id}/roles", h.handleWorkosCreateRole)
 	mux.HandleFunc("PATCH /authorization/organizations/{id}/roles/{slug}", h.handleWorkosUpdateRole)
 	mux.HandleFunc("DELETE /authorization/organizations/{id}/roles/{slug}", h.handleWorkosDeleteRole)
+}
+
+// =============================================================================
+// Authenticate (code → user + access_token)
+// =============================================================================
+
+// handleWorkosAuthenticate implements the WorkOS SDK's AuthenticateWithCode
+// endpoint. Consumes an auth code issued by the oauth2 mode's /authorize
+// and returns a response matching the workos-go AuthenticateResponse shape.
+func (h *Handler) handleWorkosAuthenticate(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	var body struct {
+		ClientID     string `json:"client_id"`
+		Code         string `json:"code"`
+		ClientSecret string `json:"client_secret"`
+		GrantType    string `json:"grant_type"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeWorkosError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if body.Code == "" || body.GrantType != "authorization_code" {
+		writeWorkosError(w, http.StatusBadRequest, "code and grant_type=authorization_code required")
+		return
+	}
+
+	queries := repo.New(h.db)
+
+	// Consume the auth code — issued by oauth2 mode's /authorize handler.
+	stored, err := queries.ConsumeAuthCode(ctx, repo.ConsumeAuthCodeParams{
+		Code: body.Code,
+		Mode: "oauth2",
+		Ts:   time.Now(),
+	})
+	if err != nil {
+		writeWorkosError(w, http.StatusBadRequest, "auth code is unknown, consumed, or expired")
+		return
+	}
+
+	user, err := queries.GetUser(ctx, stored.UserID)
+	if err != nil {
+		h.logger.ErrorContext(ctx, "authenticate: load user", slog.Any("error", err))
+		writeWorkosError(w, http.StatusInternalServerError, "failed to load user")
+		return
+	}
+
+	first, last := splitName(user.DisplayName)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"user": map[string]any{
+			"id":                  user.ID.String(),
+			"first_name":          first,
+			"last_name":           last,
+			"email":               user.Email,
+			"email_verified":      true,
+			"profile_picture_url": pgTextOrEmpty(user.PhotoUrl),
+			"created_at":          user.CreatedAt.UTC().Format(time.RFC3339),
+			"updated_at":          user.UpdatedAt.UTC().Format(time.RFC3339),
+		},
+		"access_token":  randomToken(),
+		"refresh_token": randomToken(),
+	})
 }
 
 // =============================================================================
