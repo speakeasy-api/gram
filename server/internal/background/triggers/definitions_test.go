@@ -21,10 +21,11 @@ func TestListIncludesAllDefinitions(t *testing.T) {
 	t.Parallel()
 
 	definitions := List()
-	require.Len(t, definitions, 3)
+	require.Len(t, definitions, 4)
 	require.Equal(t, "cron", definitions[0].Slug)
 	require.Equal(t, "slack", definitions[1].Slug)
 	require.Equal(t, "wake", definitions[2].Slug)
+	require.Equal(t, "webhook", definitions[3].Slug)
 	for _, d := range definitions {
 		require.NotEmpty(t, d.ConfigSchema, d.Slug)
 	}

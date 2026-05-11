@@ -474,9 +474,10 @@ var supportedSlackEventTypes = []string{
 }
 
 var registry = map[string]Definition{
-	"slack": newSlackDefinition(),
-	"cron":  newCronDefinition(),
-	"wake":  newWakeDefinition(),
+	"slack":   newSlackDefinition(),
+	"webhook": newWebhookDefinition(),
+	"cron":    newCronDefinition(),
+	"wake":    newWakeDefinition(),
 }
 
 func List() []Definition {
