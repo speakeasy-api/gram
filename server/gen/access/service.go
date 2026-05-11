@@ -34,6 +34,22 @@ type Service interface {
 	ListGrants(context.Context, *ListGrantsPayload) (res *ListUserGrantsResult, err error)
 	// Change a team member's role assignment.
 	UpdateMemberRole(context.Context, *UpdateMemberRolePayload) (res *AccessMember, err error)
+	// List Shadow MCP approval requests for the current organization.
+	ListShadowMCPApprovalRequests(context.Context, *ListShadowMCPApprovalRequestsPayload) (res *ListShadowMCPApprovalRequestsResult, err error)
+	// Create or return an active Shadow MCP approval request.
+	CreateShadowMCPApprovalRequest(context.Context, *CreateShadowMCPApprovalRequestPayload) (res *ShadowMCPApprovalRequest, err error)
+	// Approve a Shadow MCP request, creating an allow rule and role grants.
+	ApproveShadowMCPApprovalRequest(context.Context, *ApproveShadowMCPApprovalRequestPayload) (res *ShadowMCPApprovalDecisionResult, err error)
+	// Deny a Shadow MCP request and optionally create a deny rule.
+	DenyShadowMCPApprovalRequest(context.Context, *DenyShadowMCPApprovalRequestPayload) (res *ShadowMCPApprovalDecisionResult, err error)
+	// List managed Shadow MCP allow and deny rules.
+	ListShadowMCPAccessRules(context.Context, *ListShadowMCPAccessRulesPayload) (res *ListShadowMCPAccessRulesResult, err error)
+	// Create a managed Shadow MCP access rule.
+	CreateShadowMCPAccessRule(context.Context, *CreateShadowMCPAccessRulePayload) (res *ShadowMCPAccessRule, err error)
+	// Update a managed Shadow MCP access rule.
+	UpdateShadowMCPAccessRule(context.Context, *UpdateShadowMCPAccessRulePayload) (res *ShadowMCPAccessRule, err error)
+	// Delete a managed Shadow MCP access rule.
+	DeleteShadowMCPAccessRule(context.Context, *DeleteShadowMCPAccessRulePayload) (err error)
 	// Returns whether RBAC is currently enabled for the current organization.
 	GetRBACStatus(context.Context, *GetRBACStatusPayload) (res *RBACStatus, err error)
 	// Enable RBAC for the current organization. Seeds default grants for system
@@ -73,7 +89,7 @@ const ServiceName = "access"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [15]string{"listRoles", "getRole", "createRole", "updateRole", "deleteRole", "listScopes", "listMembers", "listGrants", "updateMemberRole", "getRBACStatus", "enableRBAC", "disableRBAC", "listChallenges", "listChallengeBuckets", "resolveChallenge"}
+var MethodNames = [23]string{"listRoles", "getRole", "createRole", "updateRole", "deleteRole", "listScopes", "listMembers", "listGrants", "updateMemberRole", "listShadowMCPApprovalRequests", "createShadowMCPApprovalRequest", "approveShadowMCPApprovalRequest", "denyShadowMCPApprovalRequest", "listShadowMCPAccessRules", "createShadowMCPAccessRule", "updateShadowMCPAccessRule", "deleteShadowMCPAccessRule", "getRBACStatus", "enableRBAC", "disableRBAC", "listChallenges", "listChallengeBuckets", "resolveChallenge"}
 
 // AccessMember is the result type of the access service updateMemberRole
 // method.
@@ -90,6 +106,22 @@ type AccessMember struct {
 	RoleID string
 	// When the member joined the organization.
 	JoinedAt string
+}
+
+// ApproveShadowMCPApprovalRequestPayload is the payload type of the access
+// service approveShadowMCPApprovalRequest method.
+type ApproveShadowMCPApprovalRequestPayload struct {
+	ApikeyToken            *string
+	SessionToken           *string
+	ID                     string
+	MatchBreadth           string
+	MatchValue             string
+	DisplayName            string
+	ObservedFullURL        *string
+	ObservedURLHost        *string
+	ObservedServerIdentity *string
+	RoleIds                []string
+	Reason                 *string
 }
 
 type AuthzChallenge struct {
@@ -222,6 +254,38 @@ type CreateRolePayload struct {
 	MemberIds []string
 }
 
+// CreateShadowMCPAccessRulePayload is the payload type of the access service
+// createShadowMCPAccessRule method.
+type CreateShadowMCPAccessRulePayload struct {
+	ApikeyToken            *string
+	SessionToken           *string
+	Disposition            string
+	MatchBreadth           string
+	MatchValue             string
+	DisplayName            string
+	ObservedFullURL        *string
+	ObservedURLHost        *string
+	ObservedServerIdentity *string
+	RoleIds                []string
+	Reason                 *string
+}
+
+// CreateShadowMCPApprovalRequestPayload is the payload type of the access
+// service createShadowMCPApprovalRequest method.
+type CreateShadowMCPApprovalRequestPayload struct {
+	SessionToken           *string
+	ProjectID              string
+	ObservedName           *string
+	ObservedFullURL        *string
+	ObservedURLHost        *string
+	ObservedServerIdentity *string
+	ToolName               *string
+	ToolCall               *string
+	BlockReason            *string
+	RiskPolicyID           *string
+	RiskResultID           *string
+}
+
 // DeleteRolePayload is the payload type of the access service deleteRole
 // method.
 type DeleteRolePayload struct {
@@ -229,6 +293,30 @@ type DeleteRolePayload struct {
 	ID           string
 	ApikeyToken  *string
 	SessionToken *string
+}
+
+// DeleteShadowMCPAccessRulePayload is the payload type of the access service
+// deleteShadowMCPAccessRule method.
+type DeleteShadowMCPAccessRulePayload struct {
+	ID           string
+	ApikeyToken  *string
+	SessionToken *string
+}
+
+// DenyShadowMCPApprovalRequestPayload is the payload type of the access
+// service denyShadowMCPApprovalRequest method.
+type DenyShadowMCPApprovalRequestPayload struct {
+	ApikeyToken            *string
+	SessionToken           *string
+	ID                     string
+	CreateDenyRule         bool
+	MatchBreadth           *string
+	MatchValue             *string
+	DisplayName            *string
+	ObservedFullURL        *string
+	ObservedURLHost        *string
+	ObservedServerIdentity *string
+	Reason                 *string
 }
 
 // DisableRBACPayload is the payload type of the access service disableRBAC
@@ -375,6 +463,41 @@ type ListScopesResult struct {
 	Scopes []*ScopeDefinition
 }
 
+// ListShadowMCPAccessRulesPayload is the payload type of the access service
+// listShadowMCPAccessRules method.
+type ListShadowMCPAccessRulesPayload struct {
+	Disposition  *string
+	Limit        int
+	Offset       int
+	ApikeyToken  *string
+	SessionToken *string
+}
+
+// ListShadowMCPAccessRulesResult is the result type of the access service
+// listShadowMCPAccessRules method.
+type ListShadowMCPAccessRulesResult struct {
+	Rules []*ShadowMCPAccessRule
+	Total int
+}
+
+// ListShadowMCPApprovalRequestsPayload is the payload type of the access
+// service listShadowMCPApprovalRequests method.
+type ListShadowMCPApprovalRequestsPayload struct {
+	Status       *string
+	ProjectID    *string
+	Limit        int
+	Offset       int
+	ApikeyToken  *string
+	SessionToken *string
+}
+
+// ListShadowMCPApprovalRequestsResult is the result type of the access service
+// listShadowMCPApprovalRequests method.
+type ListShadowMCPApprovalRequestsResult struct {
+	Requests []*ShadowMCPApprovalRequest
+	Total    int
+}
+
 // ListUserGrantsResult is the result type of the access service listGrants
 // method.
 type ListUserGrantsResult struct {
@@ -465,6 +588,64 @@ type Selector struct {
 	ProjectID *string
 }
 
+// ShadowMCPAccessRule is the result type of the access service
+// createShadowMCPAccessRule method.
+type ShadowMCPAccessRule struct {
+	ID                     string
+	OrganizationID         string
+	Disposition            string
+	MatchBreadth           string
+	MatchValue             string
+	DisplayName            string
+	ObservedFullURL        *string
+	ObservedURLHost        *string
+	ObservedServerIdentity *string
+	SourceRequestID        *string
+	CreatedBy              *string
+	UpdatedBy              *string
+	Reason                 *string
+	RoleIds                []string
+	CreatedAt              string
+	UpdatedAt              string
+}
+
+// ShadowMCPApprovalDecisionResult is the result type of the access service
+// approveShadowMCPApprovalRequest method.
+type ShadowMCPApprovalDecisionResult struct {
+	Request *ShadowMCPApprovalRequest
+	Rule    *ShadowMCPAccessRule
+}
+
+// ShadowMCPApprovalRequest is the result type of the access service
+// createShadowMCPApprovalRequest method.
+type ShadowMCPApprovalRequest struct {
+	ID                     string
+	OrganizationID         string
+	ProjectID              string
+	RequesterUserID        *string
+	RequesterEmail         *string
+	RequesterDisplayName   *string
+	Status                 string
+	RiskPolicyID           *string
+	RiskResultID           *string
+	ObservedName           *string
+	ObservedFullURL        *string
+	ObservedURLHost        *string
+	ObservedServerIdentity *string
+	ToolName               *string
+	ToolCall               *string
+	BlockReason            *string
+	BlockedCount           int
+	FirstBlockedAt         *string
+	LastBlockedAt          *string
+	RequestedAt            string
+	DecidedAt              *string
+	DecidedBy              *string
+	DecisionNote           *string
+	CreatedAt              string
+	UpdatedAt              string
+}
+
 // UpdateMemberRolePayload is the payload type of the access service
 // updateMemberRole method.
 type UpdateMemberRolePayload struct {
@@ -492,6 +673,23 @@ type UpdateRolePayload struct {
 	// Optional member IDs to additionally assign to this role. Existing
 	// assignments are preserved.
 	MemberIds []string
+}
+
+// UpdateShadowMCPAccessRulePayload is the payload type of the access service
+// updateShadowMCPAccessRule method.
+type UpdateShadowMCPAccessRulePayload struct {
+	ApikeyToken            *string
+	SessionToken           *string
+	ID                     string
+	Disposition            string
+	MatchBreadth           string
+	MatchValue             string
+	DisplayName            string
+	ObservedFullURL        *string
+	ObservedURLHost        *string
+	ObservedServerIdentity *string
+	RoleIds                []string
+	Reason                 *string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

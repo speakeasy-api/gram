@@ -50,6 +50,78 @@ type UpdateMemberRoleRequestBody struct {
 	RoleID string `form:"role_id" json:"role_id" xml:"role_id"`
 }
 
+// CreateShadowMCPApprovalRequestRequestBody is the type of the "access"
+// service "createShadowMCPApprovalRequest" endpoint HTTP request body.
+type CreateShadowMCPApprovalRequestRequestBody struct {
+	ProjectID              string  `form:"project_id" json:"project_id" xml:"project_id"`
+	ObservedName           *string `form:"observed_name,omitempty" json:"observed_name,omitempty" xml:"observed_name,omitempty"`
+	ObservedFullURL        *string `form:"observed_full_url,omitempty" json:"observed_full_url,omitempty" xml:"observed_full_url,omitempty"`
+	ObservedURLHost        *string `form:"observed_url_host,omitempty" json:"observed_url_host,omitempty" xml:"observed_url_host,omitempty"`
+	ObservedServerIdentity *string `form:"observed_server_identity,omitempty" json:"observed_server_identity,omitempty" xml:"observed_server_identity,omitempty"`
+	ToolName               *string `form:"tool_name,omitempty" json:"tool_name,omitempty" xml:"tool_name,omitempty"`
+	ToolCall               *string `form:"tool_call,omitempty" json:"tool_call,omitempty" xml:"tool_call,omitempty"`
+	BlockReason            *string `form:"block_reason,omitempty" json:"block_reason,omitempty" xml:"block_reason,omitempty"`
+	RiskPolicyID           *string `form:"risk_policy_id,omitempty" json:"risk_policy_id,omitempty" xml:"risk_policy_id,omitempty"`
+	RiskResultID           *string `form:"risk_result_id,omitempty" json:"risk_result_id,omitempty" xml:"risk_result_id,omitempty"`
+}
+
+// ApproveShadowMCPApprovalRequestRequestBody is the type of the "access"
+// service "approveShadowMCPApprovalRequest" endpoint HTTP request body.
+type ApproveShadowMCPApprovalRequestRequestBody struct {
+	ID                     string   `form:"id" json:"id" xml:"id"`
+	MatchBreadth           string   `form:"match_breadth" json:"match_breadth" xml:"match_breadth"`
+	MatchValue             string   `form:"match_value" json:"match_value" xml:"match_value"`
+	DisplayName            string   `form:"display_name" json:"display_name" xml:"display_name"`
+	ObservedFullURL        *string  `form:"observed_full_url,omitempty" json:"observed_full_url,omitempty" xml:"observed_full_url,omitempty"`
+	ObservedURLHost        *string  `form:"observed_url_host,omitempty" json:"observed_url_host,omitempty" xml:"observed_url_host,omitempty"`
+	ObservedServerIdentity *string  `form:"observed_server_identity,omitempty" json:"observed_server_identity,omitempty" xml:"observed_server_identity,omitempty"`
+	RoleIds                []string `form:"role_ids" json:"role_ids" xml:"role_ids"`
+	Reason                 *string  `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+}
+
+// DenyShadowMCPApprovalRequestRequestBody is the type of the "access" service
+// "denyShadowMCPApprovalRequest" endpoint HTTP request body.
+type DenyShadowMCPApprovalRequestRequestBody struct {
+	ID                     string  `form:"id" json:"id" xml:"id"`
+	CreateDenyRule         bool    `form:"create_deny_rule" json:"create_deny_rule" xml:"create_deny_rule"`
+	MatchBreadth           *string `form:"match_breadth,omitempty" json:"match_breadth,omitempty" xml:"match_breadth,omitempty"`
+	MatchValue             *string `form:"match_value,omitempty" json:"match_value,omitempty" xml:"match_value,omitempty"`
+	DisplayName            *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
+	ObservedFullURL        *string `form:"observed_full_url,omitempty" json:"observed_full_url,omitempty" xml:"observed_full_url,omitempty"`
+	ObservedURLHost        *string `form:"observed_url_host,omitempty" json:"observed_url_host,omitempty" xml:"observed_url_host,omitempty"`
+	ObservedServerIdentity *string `form:"observed_server_identity,omitempty" json:"observed_server_identity,omitempty" xml:"observed_server_identity,omitempty"`
+	Reason                 *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+}
+
+// CreateShadowMCPAccessRuleRequestBody is the type of the "access" service
+// "createShadowMCPAccessRule" endpoint HTTP request body.
+type CreateShadowMCPAccessRuleRequestBody struct {
+	Disposition            string   `form:"disposition" json:"disposition" xml:"disposition"`
+	MatchBreadth           string   `form:"match_breadth" json:"match_breadth" xml:"match_breadth"`
+	MatchValue             string   `form:"match_value" json:"match_value" xml:"match_value"`
+	DisplayName            string   `form:"display_name" json:"display_name" xml:"display_name"`
+	ObservedFullURL        *string  `form:"observed_full_url,omitempty" json:"observed_full_url,omitempty" xml:"observed_full_url,omitempty"`
+	ObservedURLHost        *string  `form:"observed_url_host,omitempty" json:"observed_url_host,omitempty" xml:"observed_url_host,omitempty"`
+	ObservedServerIdentity *string  `form:"observed_server_identity,omitempty" json:"observed_server_identity,omitempty" xml:"observed_server_identity,omitempty"`
+	RoleIds                []string `form:"role_ids,omitempty" json:"role_ids,omitempty" xml:"role_ids,omitempty"`
+	Reason                 *string  `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+}
+
+// UpdateShadowMCPAccessRuleRequestBody is the type of the "access" service
+// "updateShadowMCPAccessRule" endpoint HTTP request body.
+type UpdateShadowMCPAccessRuleRequestBody struct {
+	ID                     string   `form:"id" json:"id" xml:"id"`
+	Disposition            string   `form:"disposition" json:"disposition" xml:"disposition"`
+	MatchBreadth           string   `form:"match_breadth" json:"match_breadth" xml:"match_breadth"`
+	MatchValue             string   `form:"match_value" json:"match_value" xml:"match_value"`
+	DisplayName            string   `form:"display_name" json:"display_name" xml:"display_name"`
+	ObservedFullURL        *string  `form:"observed_full_url,omitempty" json:"observed_full_url,omitempty" xml:"observed_full_url,omitempty"`
+	ObservedURLHost        *string  `form:"observed_url_host,omitempty" json:"observed_url_host,omitempty" xml:"observed_url_host,omitempty"`
+	ObservedServerIdentity *string  `form:"observed_server_identity,omitempty" json:"observed_server_identity,omitempty" xml:"observed_server_identity,omitempty"`
+	RoleIds                []string `form:"role_ids,omitempty" json:"role_ids,omitempty" xml:"role_ids,omitempty"`
+	Reason                 *string  `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+}
+
 // ResolveChallengeRequestBody is the type of the "access" service
 // "resolveChallenge" endpoint HTTP request body.
 type ResolveChallengeRequestBody struct {
@@ -169,6 +241,106 @@ type UpdateMemberRoleResponseBody struct {
 	RoleID *string `form:"role_id,omitempty" json:"role_id,omitempty" xml:"role_id,omitempty"`
 	// When the member joined the organization.
 	JoinedAt *string `form:"joined_at,omitempty" json:"joined_at,omitempty" xml:"joined_at,omitempty"`
+}
+
+// ListShadowMCPApprovalRequestsResponseBody is the type of the "access"
+// service "listShadowMCPApprovalRequests" endpoint HTTP response body.
+type ListShadowMCPApprovalRequestsResponseBody struct {
+	Requests []*ShadowMCPApprovalRequestResponseBody `form:"requests,omitempty" json:"requests,omitempty" xml:"requests,omitempty"`
+	Total    *int                                    `form:"total,omitempty" json:"total,omitempty" xml:"total,omitempty"`
+}
+
+// CreateShadowMCPApprovalRequestResponseBody is the type of the "access"
+// service "createShadowMCPApprovalRequest" endpoint HTTP response body.
+type CreateShadowMCPApprovalRequestResponseBody struct {
+	ID                     *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	OrganizationID         *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	ProjectID              *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	RequesterUserID        *string `form:"requester_user_id,omitempty" json:"requester_user_id,omitempty" xml:"requester_user_id,omitempty"`
+	RequesterEmail         *string `form:"requester_email,omitempty" json:"requester_email,omitempty" xml:"requester_email,omitempty"`
+	RequesterDisplayName   *string `form:"requester_display_name,omitempty" json:"requester_display_name,omitempty" xml:"requester_display_name,omitempty"`
+	Status                 *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
+	RiskPolicyID           *string `form:"risk_policy_id,omitempty" json:"risk_policy_id,omitempty" xml:"risk_policy_id,omitempty"`
+	RiskResultID           *string `form:"risk_result_id,omitempty" json:"risk_result_id,omitempty" xml:"risk_result_id,omitempty"`
+	ObservedName           *string `form:"observed_name,omitempty" json:"observed_name,omitempty" xml:"observed_name,omitempty"`
+	ObservedFullURL        *string `form:"observed_full_url,omitempty" json:"observed_full_url,omitempty" xml:"observed_full_url,omitempty"`
+	ObservedURLHost        *string `form:"observed_url_host,omitempty" json:"observed_url_host,omitempty" xml:"observed_url_host,omitempty"`
+	ObservedServerIdentity *string `form:"observed_server_identity,omitempty" json:"observed_server_identity,omitempty" xml:"observed_server_identity,omitempty"`
+	ToolName               *string `form:"tool_name,omitempty" json:"tool_name,omitempty" xml:"tool_name,omitempty"`
+	ToolCall               *string `form:"tool_call,omitempty" json:"tool_call,omitempty" xml:"tool_call,omitempty"`
+	BlockReason            *string `form:"block_reason,omitempty" json:"block_reason,omitempty" xml:"block_reason,omitempty"`
+	BlockedCount           *int    `form:"blocked_count,omitempty" json:"blocked_count,omitempty" xml:"blocked_count,omitempty"`
+	FirstBlockedAt         *string `form:"first_blocked_at,omitempty" json:"first_blocked_at,omitempty" xml:"first_blocked_at,omitempty"`
+	LastBlockedAt          *string `form:"last_blocked_at,omitempty" json:"last_blocked_at,omitempty" xml:"last_blocked_at,omitempty"`
+	RequestedAt            *string `form:"requested_at,omitempty" json:"requested_at,omitempty" xml:"requested_at,omitempty"`
+	DecidedAt              *string `form:"decided_at,omitempty" json:"decided_at,omitempty" xml:"decided_at,omitempty"`
+	DecidedBy              *string `form:"decided_by,omitempty" json:"decided_by,omitempty" xml:"decided_by,omitempty"`
+	DecisionNote           *string `form:"decision_note,omitempty" json:"decision_note,omitempty" xml:"decision_note,omitempty"`
+	CreatedAt              *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt              *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
+// ApproveShadowMCPApprovalRequestResponseBody is the type of the "access"
+// service "approveShadowMCPApprovalRequest" endpoint HTTP response body.
+type ApproveShadowMCPApprovalRequestResponseBody struct {
+	Request *ShadowMCPApprovalRequestResponseBody `form:"request,omitempty" json:"request,omitempty" xml:"request,omitempty"`
+	Rule    *ShadowMCPAccessRuleResponseBody      `form:"rule,omitempty" json:"rule,omitempty" xml:"rule,omitempty"`
+}
+
+// DenyShadowMCPApprovalRequestResponseBody is the type of the "access" service
+// "denyShadowMCPApprovalRequest" endpoint HTTP response body.
+type DenyShadowMCPApprovalRequestResponseBody struct {
+	Request *ShadowMCPApprovalRequestResponseBody `form:"request,omitempty" json:"request,omitempty" xml:"request,omitempty"`
+	Rule    *ShadowMCPAccessRuleResponseBody      `form:"rule,omitempty" json:"rule,omitempty" xml:"rule,omitempty"`
+}
+
+// ListShadowMCPAccessRulesResponseBody is the type of the "access" service
+// "listShadowMCPAccessRules" endpoint HTTP response body.
+type ListShadowMCPAccessRulesResponseBody struct {
+	Rules []*ShadowMCPAccessRuleResponseBody `form:"rules,omitempty" json:"rules,omitempty" xml:"rules,omitempty"`
+	Total *int                               `form:"total,omitempty" json:"total,omitempty" xml:"total,omitempty"`
+}
+
+// CreateShadowMCPAccessRuleResponseBody is the type of the "access" service
+// "createShadowMCPAccessRule" endpoint HTTP response body.
+type CreateShadowMCPAccessRuleResponseBody struct {
+	ID                     *string  `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	OrganizationID         *string  `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	Disposition            *string  `form:"disposition,omitempty" json:"disposition,omitempty" xml:"disposition,omitempty"`
+	MatchBreadth           *string  `form:"match_breadth,omitempty" json:"match_breadth,omitempty" xml:"match_breadth,omitempty"`
+	MatchValue             *string  `form:"match_value,omitempty" json:"match_value,omitempty" xml:"match_value,omitempty"`
+	DisplayName            *string  `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
+	ObservedFullURL        *string  `form:"observed_full_url,omitempty" json:"observed_full_url,omitempty" xml:"observed_full_url,omitempty"`
+	ObservedURLHost        *string  `form:"observed_url_host,omitempty" json:"observed_url_host,omitempty" xml:"observed_url_host,omitempty"`
+	ObservedServerIdentity *string  `form:"observed_server_identity,omitempty" json:"observed_server_identity,omitempty" xml:"observed_server_identity,omitempty"`
+	SourceRequestID        *string  `form:"source_request_id,omitempty" json:"source_request_id,omitempty" xml:"source_request_id,omitempty"`
+	CreatedBy              *string  `form:"created_by,omitempty" json:"created_by,omitempty" xml:"created_by,omitempty"`
+	UpdatedBy              *string  `form:"updated_by,omitempty" json:"updated_by,omitempty" xml:"updated_by,omitempty"`
+	Reason                 *string  `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+	RoleIds                []string `form:"role_ids,omitempty" json:"role_ids,omitempty" xml:"role_ids,omitempty"`
+	CreatedAt              *string  `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt              *string  `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
+// UpdateShadowMCPAccessRuleResponseBody is the type of the "access" service
+// "updateShadowMCPAccessRule" endpoint HTTP response body.
+type UpdateShadowMCPAccessRuleResponseBody struct {
+	ID                     *string  `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	OrganizationID         *string  `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	Disposition            *string  `form:"disposition,omitempty" json:"disposition,omitempty" xml:"disposition,omitempty"`
+	MatchBreadth           *string  `form:"match_breadth,omitempty" json:"match_breadth,omitempty" xml:"match_breadth,omitempty"`
+	MatchValue             *string  `form:"match_value,omitempty" json:"match_value,omitempty" xml:"match_value,omitempty"`
+	DisplayName            *string  `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
+	ObservedFullURL        *string  `form:"observed_full_url,omitempty" json:"observed_full_url,omitempty" xml:"observed_full_url,omitempty"`
+	ObservedURLHost        *string  `form:"observed_url_host,omitempty" json:"observed_url_host,omitempty" xml:"observed_url_host,omitempty"`
+	ObservedServerIdentity *string  `form:"observed_server_identity,omitempty" json:"observed_server_identity,omitempty" xml:"observed_server_identity,omitempty"`
+	SourceRequestID        *string  `form:"source_request_id,omitempty" json:"source_request_id,omitempty" xml:"source_request_id,omitempty"`
+	CreatedBy              *string  `form:"created_by,omitempty" json:"created_by,omitempty" xml:"created_by,omitempty"`
+	UpdatedBy              *string  `form:"updated_by,omitempty" json:"updated_by,omitempty" xml:"updated_by,omitempty"`
+	Reason                 *string  `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+	RoleIds                []string `form:"role_ids,omitempty" json:"role_ids,omitempty" xml:"role_ids,omitempty"`
+	CreatedAt              *string  `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt              *string  `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // GetRBACStatusResponseBody is the type of the "access" service
@@ -1826,6 +1998,1526 @@ type UpdateMemberRoleGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// ListShadowMCPApprovalRequestsUnauthorizedResponseBody is the type of the
+// "access" service "listShadowMCPApprovalRequests" endpoint HTTP response body
+// for the "unauthorized" error.
+type ListShadowMCPApprovalRequestsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListShadowMCPApprovalRequestsForbiddenResponseBody is the type of the
+// "access" service "listShadowMCPApprovalRequests" endpoint HTTP response body
+// for the "forbidden" error.
+type ListShadowMCPApprovalRequestsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListShadowMCPApprovalRequestsBadRequestResponseBody is the type of the
+// "access" service "listShadowMCPApprovalRequests" endpoint HTTP response body
+// for the "bad_request" error.
+type ListShadowMCPApprovalRequestsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListShadowMCPApprovalRequestsNotFoundResponseBody is the type of the
+// "access" service "listShadowMCPApprovalRequests" endpoint HTTP response body
+// for the "not_found" error.
+type ListShadowMCPApprovalRequestsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListShadowMCPApprovalRequestsConflictResponseBody is the type of the
+// "access" service "listShadowMCPApprovalRequests" endpoint HTTP response body
+// for the "conflict" error.
+type ListShadowMCPApprovalRequestsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListShadowMCPApprovalRequestsUnsupportedMediaResponseBody is the type of the
+// "access" service "listShadowMCPApprovalRequests" endpoint HTTP response body
+// for the "unsupported_media" error.
+type ListShadowMCPApprovalRequestsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListShadowMCPApprovalRequestsInvalidResponseBody is the type of the "access"
+// service "listShadowMCPApprovalRequests" endpoint HTTP response body for the
+// "invalid" error.
+type ListShadowMCPApprovalRequestsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListShadowMCPApprovalRequestsInvariantViolationResponseBody is the type of
+// the "access" service "listShadowMCPApprovalRequests" endpoint HTTP response
+// body for the "invariant_violation" error.
+type ListShadowMCPApprovalRequestsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListShadowMCPApprovalRequestsUnexpectedResponseBody is the type of the
+// "access" service "listShadowMCPApprovalRequests" endpoint HTTP response body
+// for the "unexpected" error.
+type ListShadowMCPApprovalRequestsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListShadowMCPApprovalRequestsGatewayErrorResponseBody is the type of the
+// "access" service "listShadowMCPApprovalRequests" endpoint HTTP response body
+// for the "gateway_error" error.
+type ListShadowMCPApprovalRequestsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateShadowMCPApprovalRequestUnauthorizedResponseBody is the type of the
+// "access" service "createShadowMCPApprovalRequest" endpoint HTTP response
+// body for the "unauthorized" error.
+type CreateShadowMCPApprovalRequestUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateShadowMCPApprovalRequestForbiddenResponseBody is the type of the
+// "access" service "createShadowMCPApprovalRequest" endpoint HTTP response
+// body for the "forbidden" error.
+type CreateShadowMCPApprovalRequestForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateShadowMCPApprovalRequestBadRequestResponseBody is the type of the
+// "access" service "createShadowMCPApprovalRequest" endpoint HTTP response
+// body for the "bad_request" error.
+type CreateShadowMCPApprovalRequestBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateShadowMCPApprovalRequestNotFoundResponseBody is the type of the
+// "access" service "createShadowMCPApprovalRequest" endpoint HTTP response
+// body for the "not_found" error.
+type CreateShadowMCPApprovalRequestNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateShadowMCPApprovalRequestConflictResponseBody is the type of the
+// "access" service "createShadowMCPApprovalRequest" endpoint HTTP response
+// body for the "conflict" error.
+type CreateShadowMCPApprovalRequestConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateShadowMCPApprovalRequestUnsupportedMediaResponseBody is the type of
+// the "access" service "createShadowMCPApprovalRequest" endpoint HTTP response
+// body for the "unsupported_media" error.
+type CreateShadowMCPApprovalRequestUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateShadowMCPApprovalRequestInvalidResponseBody is the type of the
+// "access" service "createShadowMCPApprovalRequest" endpoint HTTP response
+// body for the "invalid" error.
+type CreateShadowMCPApprovalRequestInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateShadowMCPApprovalRequestInvariantViolationResponseBody is the type of
+// the "access" service "createShadowMCPApprovalRequest" endpoint HTTP response
+// body for the "invariant_violation" error.
+type CreateShadowMCPApprovalRequestInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateShadowMCPApprovalRequestUnexpectedResponseBody is the type of the
+// "access" service "createShadowMCPApprovalRequest" endpoint HTTP response
+// body for the "unexpected" error.
+type CreateShadowMCPApprovalRequestUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateShadowMCPApprovalRequestGatewayErrorResponseBody is the type of the
+// "access" service "createShadowMCPApprovalRequest" endpoint HTTP response
+// body for the "gateway_error" error.
+type CreateShadowMCPApprovalRequestGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ApproveShadowMCPApprovalRequestUnauthorizedResponseBody is the type of the
+// "access" service "approveShadowMCPApprovalRequest" endpoint HTTP response
+// body for the "unauthorized" error.
+type ApproveShadowMCPApprovalRequestUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ApproveShadowMCPApprovalRequestForbiddenResponseBody is the type of the
+// "access" service "approveShadowMCPApprovalRequest" endpoint HTTP response
+// body for the "forbidden" error.
+type ApproveShadowMCPApprovalRequestForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ApproveShadowMCPApprovalRequestBadRequestResponseBody is the type of the
+// "access" service "approveShadowMCPApprovalRequest" endpoint HTTP response
+// body for the "bad_request" error.
+type ApproveShadowMCPApprovalRequestBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ApproveShadowMCPApprovalRequestNotFoundResponseBody is the type of the
+// "access" service "approveShadowMCPApprovalRequest" endpoint HTTP response
+// body for the "not_found" error.
+type ApproveShadowMCPApprovalRequestNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ApproveShadowMCPApprovalRequestConflictResponseBody is the type of the
+// "access" service "approveShadowMCPApprovalRequest" endpoint HTTP response
+// body for the "conflict" error.
+type ApproveShadowMCPApprovalRequestConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ApproveShadowMCPApprovalRequestUnsupportedMediaResponseBody is the type of
+// the "access" service "approveShadowMCPApprovalRequest" endpoint HTTP
+// response body for the "unsupported_media" error.
+type ApproveShadowMCPApprovalRequestUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ApproveShadowMCPApprovalRequestInvalidResponseBody is the type of the
+// "access" service "approveShadowMCPApprovalRequest" endpoint HTTP response
+// body for the "invalid" error.
+type ApproveShadowMCPApprovalRequestInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ApproveShadowMCPApprovalRequestInvariantViolationResponseBody is the type of
+// the "access" service "approveShadowMCPApprovalRequest" endpoint HTTP
+// response body for the "invariant_violation" error.
+type ApproveShadowMCPApprovalRequestInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ApproveShadowMCPApprovalRequestUnexpectedResponseBody is the type of the
+// "access" service "approveShadowMCPApprovalRequest" endpoint HTTP response
+// body for the "unexpected" error.
+type ApproveShadowMCPApprovalRequestUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ApproveShadowMCPApprovalRequestGatewayErrorResponseBody is the type of the
+// "access" service "approveShadowMCPApprovalRequest" endpoint HTTP response
+// body for the "gateway_error" error.
+type ApproveShadowMCPApprovalRequestGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DenyShadowMCPApprovalRequestUnauthorizedResponseBody is the type of the
+// "access" service "denyShadowMCPApprovalRequest" endpoint HTTP response body
+// for the "unauthorized" error.
+type DenyShadowMCPApprovalRequestUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DenyShadowMCPApprovalRequestForbiddenResponseBody is the type of the
+// "access" service "denyShadowMCPApprovalRequest" endpoint HTTP response body
+// for the "forbidden" error.
+type DenyShadowMCPApprovalRequestForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DenyShadowMCPApprovalRequestBadRequestResponseBody is the type of the
+// "access" service "denyShadowMCPApprovalRequest" endpoint HTTP response body
+// for the "bad_request" error.
+type DenyShadowMCPApprovalRequestBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DenyShadowMCPApprovalRequestNotFoundResponseBody is the type of the "access"
+// service "denyShadowMCPApprovalRequest" endpoint HTTP response body for the
+// "not_found" error.
+type DenyShadowMCPApprovalRequestNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DenyShadowMCPApprovalRequestConflictResponseBody is the type of the "access"
+// service "denyShadowMCPApprovalRequest" endpoint HTTP response body for the
+// "conflict" error.
+type DenyShadowMCPApprovalRequestConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DenyShadowMCPApprovalRequestUnsupportedMediaResponseBody is the type of the
+// "access" service "denyShadowMCPApprovalRequest" endpoint HTTP response body
+// for the "unsupported_media" error.
+type DenyShadowMCPApprovalRequestUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DenyShadowMCPApprovalRequestInvalidResponseBody is the type of the "access"
+// service "denyShadowMCPApprovalRequest" endpoint HTTP response body for the
+// "invalid" error.
+type DenyShadowMCPApprovalRequestInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DenyShadowMCPApprovalRequestInvariantViolationResponseBody is the type of
+// the "access" service "denyShadowMCPApprovalRequest" endpoint HTTP response
+// body for the "invariant_violation" error.
+type DenyShadowMCPApprovalRequestInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DenyShadowMCPApprovalRequestUnexpectedResponseBody is the type of the
+// "access" service "denyShadowMCPApprovalRequest" endpoint HTTP response body
+// for the "unexpected" error.
+type DenyShadowMCPApprovalRequestUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DenyShadowMCPApprovalRequestGatewayErrorResponseBody is the type of the
+// "access" service "denyShadowMCPApprovalRequest" endpoint HTTP response body
+// for the "gateway_error" error.
+type DenyShadowMCPApprovalRequestGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListShadowMCPAccessRulesUnauthorizedResponseBody is the type of the "access"
+// service "listShadowMCPAccessRules" endpoint HTTP response body for the
+// "unauthorized" error.
+type ListShadowMCPAccessRulesUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListShadowMCPAccessRulesForbiddenResponseBody is the type of the "access"
+// service "listShadowMCPAccessRules" endpoint HTTP response body for the
+// "forbidden" error.
+type ListShadowMCPAccessRulesForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListShadowMCPAccessRulesBadRequestResponseBody is the type of the "access"
+// service "listShadowMCPAccessRules" endpoint HTTP response body for the
+// "bad_request" error.
+type ListShadowMCPAccessRulesBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListShadowMCPAccessRulesNotFoundResponseBody is the type of the "access"
+// service "listShadowMCPAccessRules" endpoint HTTP response body for the
+// "not_found" error.
+type ListShadowMCPAccessRulesNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListShadowMCPAccessRulesConflictResponseBody is the type of the "access"
+// service "listShadowMCPAccessRules" endpoint HTTP response body for the
+// "conflict" error.
+type ListShadowMCPAccessRulesConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListShadowMCPAccessRulesUnsupportedMediaResponseBody is the type of the
+// "access" service "listShadowMCPAccessRules" endpoint HTTP response body for
+// the "unsupported_media" error.
+type ListShadowMCPAccessRulesUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListShadowMCPAccessRulesInvalidResponseBody is the type of the "access"
+// service "listShadowMCPAccessRules" endpoint HTTP response body for the
+// "invalid" error.
+type ListShadowMCPAccessRulesInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListShadowMCPAccessRulesInvariantViolationResponseBody is the type of the
+// "access" service "listShadowMCPAccessRules" endpoint HTTP response body for
+// the "invariant_violation" error.
+type ListShadowMCPAccessRulesInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListShadowMCPAccessRulesUnexpectedResponseBody is the type of the "access"
+// service "listShadowMCPAccessRules" endpoint HTTP response body for the
+// "unexpected" error.
+type ListShadowMCPAccessRulesUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListShadowMCPAccessRulesGatewayErrorResponseBody is the type of the "access"
+// service "listShadowMCPAccessRules" endpoint HTTP response body for the
+// "gateway_error" error.
+type ListShadowMCPAccessRulesGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateShadowMCPAccessRuleUnauthorizedResponseBody is the type of the
+// "access" service "createShadowMCPAccessRule" endpoint HTTP response body for
+// the "unauthorized" error.
+type CreateShadowMCPAccessRuleUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateShadowMCPAccessRuleForbiddenResponseBody is the type of the "access"
+// service "createShadowMCPAccessRule" endpoint HTTP response body for the
+// "forbidden" error.
+type CreateShadowMCPAccessRuleForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateShadowMCPAccessRuleBadRequestResponseBody is the type of the "access"
+// service "createShadowMCPAccessRule" endpoint HTTP response body for the
+// "bad_request" error.
+type CreateShadowMCPAccessRuleBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateShadowMCPAccessRuleNotFoundResponseBody is the type of the "access"
+// service "createShadowMCPAccessRule" endpoint HTTP response body for the
+// "not_found" error.
+type CreateShadowMCPAccessRuleNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateShadowMCPAccessRuleConflictResponseBody is the type of the "access"
+// service "createShadowMCPAccessRule" endpoint HTTP response body for the
+// "conflict" error.
+type CreateShadowMCPAccessRuleConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateShadowMCPAccessRuleUnsupportedMediaResponseBody is the type of the
+// "access" service "createShadowMCPAccessRule" endpoint HTTP response body for
+// the "unsupported_media" error.
+type CreateShadowMCPAccessRuleUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateShadowMCPAccessRuleInvalidResponseBody is the type of the "access"
+// service "createShadowMCPAccessRule" endpoint HTTP response body for the
+// "invalid" error.
+type CreateShadowMCPAccessRuleInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateShadowMCPAccessRuleInvariantViolationResponseBody is the type of the
+// "access" service "createShadowMCPAccessRule" endpoint HTTP response body for
+// the "invariant_violation" error.
+type CreateShadowMCPAccessRuleInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateShadowMCPAccessRuleUnexpectedResponseBody is the type of the "access"
+// service "createShadowMCPAccessRule" endpoint HTTP response body for the
+// "unexpected" error.
+type CreateShadowMCPAccessRuleUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateShadowMCPAccessRuleGatewayErrorResponseBody is the type of the
+// "access" service "createShadowMCPAccessRule" endpoint HTTP response body for
+// the "gateway_error" error.
+type CreateShadowMCPAccessRuleGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateShadowMCPAccessRuleUnauthorizedResponseBody is the type of the
+// "access" service "updateShadowMCPAccessRule" endpoint HTTP response body for
+// the "unauthorized" error.
+type UpdateShadowMCPAccessRuleUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateShadowMCPAccessRuleForbiddenResponseBody is the type of the "access"
+// service "updateShadowMCPAccessRule" endpoint HTTP response body for the
+// "forbidden" error.
+type UpdateShadowMCPAccessRuleForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateShadowMCPAccessRuleBadRequestResponseBody is the type of the "access"
+// service "updateShadowMCPAccessRule" endpoint HTTP response body for the
+// "bad_request" error.
+type UpdateShadowMCPAccessRuleBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateShadowMCPAccessRuleNotFoundResponseBody is the type of the "access"
+// service "updateShadowMCPAccessRule" endpoint HTTP response body for the
+// "not_found" error.
+type UpdateShadowMCPAccessRuleNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateShadowMCPAccessRuleConflictResponseBody is the type of the "access"
+// service "updateShadowMCPAccessRule" endpoint HTTP response body for the
+// "conflict" error.
+type UpdateShadowMCPAccessRuleConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateShadowMCPAccessRuleUnsupportedMediaResponseBody is the type of the
+// "access" service "updateShadowMCPAccessRule" endpoint HTTP response body for
+// the "unsupported_media" error.
+type UpdateShadowMCPAccessRuleUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateShadowMCPAccessRuleInvalidResponseBody is the type of the "access"
+// service "updateShadowMCPAccessRule" endpoint HTTP response body for the
+// "invalid" error.
+type UpdateShadowMCPAccessRuleInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateShadowMCPAccessRuleInvariantViolationResponseBody is the type of the
+// "access" service "updateShadowMCPAccessRule" endpoint HTTP response body for
+// the "invariant_violation" error.
+type UpdateShadowMCPAccessRuleInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateShadowMCPAccessRuleUnexpectedResponseBody is the type of the "access"
+// service "updateShadowMCPAccessRule" endpoint HTTP response body for the
+// "unexpected" error.
+type UpdateShadowMCPAccessRuleUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateShadowMCPAccessRuleGatewayErrorResponseBody is the type of the
+// "access" service "updateShadowMCPAccessRule" endpoint HTTP response body for
+// the "gateway_error" error.
+type UpdateShadowMCPAccessRuleGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DeleteShadowMCPAccessRuleUnauthorizedResponseBody is the type of the
+// "access" service "deleteShadowMCPAccessRule" endpoint HTTP response body for
+// the "unauthorized" error.
+type DeleteShadowMCPAccessRuleUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DeleteShadowMCPAccessRuleForbiddenResponseBody is the type of the "access"
+// service "deleteShadowMCPAccessRule" endpoint HTTP response body for the
+// "forbidden" error.
+type DeleteShadowMCPAccessRuleForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DeleteShadowMCPAccessRuleBadRequestResponseBody is the type of the "access"
+// service "deleteShadowMCPAccessRule" endpoint HTTP response body for the
+// "bad_request" error.
+type DeleteShadowMCPAccessRuleBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DeleteShadowMCPAccessRuleNotFoundResponseBody is the type of the "access"
+// service "deleteShadowMCPAccessRule" endpoint HTTP response body for the
+// "not_found" error.
+type DeleteShadowMCPAccessRuleNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DeleteShadowMCPAccessRuleConflictResponseBody is the type of the "access"
+// service "deleteShadowMCPAccessRule" endpoint HTTP response body for the
+// "conflict" error.
+type DeleteShadowMCPAccessRuleConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DeleteShadowMCPAccessRuleUnsupportedMediaResponseBody is the type of the
+// "access" service "deleteShadowMCPAccessRule" endpoint HTTP response body for
+// the "unsupported_media" error.
+type DeleteShadowMCPAccessRuleUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DeleteShadowMCPAccessRuleInvalidResponseBody is the type of the "access"
+// service "deleteShadowMCPAccessRule" endpoint HTTP response body for the
+// "invalid" error.
+type DeleteShadowMCPAccessRuleInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DeleteShadowMCPAccessRuleInvariantViolationResponseBody is the type of the
+// "access" service "deleteShadowMCPAccessRule" endpoint HTTP response body for
+// the "invariant_violation" error.
+type DeleteShadowMCPAccessRuleInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DeleteShadowMCPAccessRuleUnexpectedResponseBody is the type of the "access"
+// service "deleteShadowMCPAccessRule" endpoint HTTP response body for the
+// "unexpected" error.
+type DeleteShadowMCPAccessRuleUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DeleteShadowMCPAccessRuleGatewayErrorResponseBody is the type of the
+// "access" service "deleteShadowMCPAccessRule" endpoint HTTP response body for
+// the "gateway_error" error.
+type DeleteShadowMCPAccessRuleGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // GetRBACStatusUnauthorizedResponseBody is the type of the "access" service
 // "getRBACStatus" endpoint HTTP response body for the "unauthorized" error.
 type GetRBACStatusUnauthorizedResponseBody struct {
@@ -3020,6 +4712,57 @@ type ListRoleGrantResponseBody struct {
 	Selectors []*SelectorResponseBody `form:"selectors,omitempty" json:"selectors,omitempty" xml:"selectors,omitempty"`
 }
 
+// ShadowMCPApprovalRequestResponseBody is used to define fields on response
+// body types.
+type ShadowMCPApprovalRequestResponseBody struct {
+	ID                     *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	OrganizationID         *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	ProjectID              *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	RequesterUserID        *string `form:"requester_user_id,omitempty" json:"requester_user_id,omitempty" xml:"requester_user_id,omitempty"`
+	RequesterEmail         *string `form:"requester_email,omitempty" json:"requester_email,omitempty" xml:"requester_email,omitempty"`
+	RequesterDisplayName   *string `form:"requester_display_name,omitempty" json:"requester_display_name,omitempty" xml:"requester_display_name,omitempty"`
+	Status                 *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
+	RiskPolicyID           *string `form:"risk_policy_id,omitempty" json:"risk_policy_id,omitempty" xml:"risk_policy_id,omitempty"`
+	RiskResultID           *string `form:"risk_result_id,omitempty" json:"risk_result_id,omitempty" xml:"risk_result_id,omitempty"`
+	ObservedName           *string `form:"observed_name,omitempty" json:"observed_name,omitempty" xml:"observed_name,omitempty"`
+	ObservedFullURL        *string `form:"observed_full_url,omitempty" json:"observed_full_url,omitempty" xml:"observed_full_url,omitempty"`
+	ObservedURLHost        *string `form:"observed_url_host,omitempty" json:"observed_url_host,omitempty" xml:"observed_url_host,omitempty"`
+	ObservedServerIdentity *string `form:"observed_server_identity,omitempty" json:"observed_server_identity,omitempty" xml:"observed_server_identity,omitempty"`
+	ToolName               *string `form:"tool_name,omitempty" json:"tool_name,omitempty" xml:"tool_name,omitempty"`
+	ToolCall               *string `form:"tool_call,omitempty" json:"tool_call,omitempty" xml:"tool_call,omitempty"`
+	BlockReason            *string `form:"block_reason,omitempty" json:"block_reason,omitempty" xml:"block_reason,omitempty"`
+	BlockedCount           *int    `form:"blocked_count,omitempty" json:"blocked_count,omitempty" xml:"blocked_count,omitempty"`
+	FirstBlockedAt         *string `form:"first_blocked_at,omitempty" json:"first_blocked_at,omitempty" xml:"first_blocked_at,omitempty"`
+	LastBlockedAt          *string `form:"last_blocked_at,omitempty" json:"last_blocked_at,omitempty" xml:"last_blocked_at,omitempty"`
+	RequestedAt            *string `form:"requested_at,omitempty" json:"requested_at,omitempty" xml:"requested_at,omitempty"`
+	DecidedAt              *string `form:"decided_at,omitempty" json:"decided_at,omitempty" xml:"decided_at,omitempty"`
+	DecidedBy              *string `form:"decided_by,omitempty" json:"decided_by,omitempty" xml:"decided_by,omitempty"`
+	DecisionNote           *string `form:"decision_note,omitempty" json:"decision_note,omitempty" xml:"decision_note,omitempty"`
+	CreatedAt              *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt              *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
+// ShadowMCPAccessRuleResponseBody is used to define fields on response body
+// types.
+type ShadowMCPAccessRuleResponseBody struct {
+	ID                     *string  `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	OrganizationID         *string  `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	Disposition            *string  `form:"disposition,omitempty" json:"disposition,omitempty" xml:"disposition,omitempty"`
+	MatchBreadth           *string  `form:"match_breadth,omitempty" json:"match_breadth,omitempty" xml:"match_breadth,omitempty"`
+	MatchValue             *string  `form:"match_value,omitempty" json:"match_value,omitempty" xml:"match_value,omitempty"`
+	DisplayName            *string  `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
+	ObservedFullURL        *string  `form:"observed_full_url,omitempty" json:"observed_full_url,omitempty" xml:"observed_full_url,omitempty"`
+	ObservedURLHost        *string  `form:"observed_url_host,omitempty" json:"observed_url_host,omitempty" xml:"observed_url_host,omitempty"`
+	ObservedServerIdentity *string  `form:"observed_server_identity,omitempty" json:"observed_server_identity,omitempty" xml:"observed_server_identity,omitempty"`
+	SourceRequestID        *string  `form:"source_request_id,omitempty" json:"source_request_id,omitempty" xml:"source_request_id,omitempty"`
+	CreatedBy              *string  `form:"created_by,omitempty" json:"created_by,omitempty" xml:"created_by,omitempty"`
+	UpdatedBy              *string  `form:"updated_by,omitempty" json:"updated_by,omitempty" xml:"updated_by,omitempty"`
+	Reason                 *string  `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+	RoleIds                []string `form:"role_ids,omitempty" json:"role_ids,omitempty" xml:"role_ids,omitempty"`
+	CreatedAt              *string  `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt              *string  `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
 // AuthzChallengeResponseBody is used to define fields on response body types.
 type AuthzChallengeResponseBody struct {
 	// Unique challenge identifier.
@@ -3198,6 +4941,115 @@ func NewUpdateMemberRoleRequestBody(p *access.UpdateMemberRolePayload) *UpdateMe
 	body := &UpdateMemberRoleRequestBody{
 		UserID: p.UserID,
 		RoleID: p.RoleID,
+	}
+	return body
+}
+
+// NewCreateShadowMCPApprovalRequestRequestBody builds the HTTP request body
+// from the payload of the "createShadowMCPApprovalRequest" endpoint of the
+// "access" service.
+func NewCreateShadowMCPApprovalRequestRequestBody(p *access.CreateShadowMCPApprovalRequestPayload) *CreateShadowMCPApprovalRequestRequestBody {
+	body := &CreateShadowMCPApprovalRequestRequestBody{
+		ProjectID:              p.ProjectID,
+		ObservedName:           p.ObservedName,
+		ObservedFullURL:        p.ObservedFullURL,
+		ObservedURLHost:        p.ObservedURLHost,
+		ObservedServerIdentity: p.ObservedServerIdentity,
+		ToolName:               p.ToolName,
+		ToolCall:               p.ToolCall,
+		BlockReason:            p.BlockReason,
+		RiskPolicyID:           p.RiskPolicyID,
+		RiskResultID:           p.RiskResultID,
+	}
+	return body
+}
+
+// NewApproveShadowMCPApprovalRequestRequestBody builds the HTTP request body
+// from the payload of the "approveShadowMCPApprovalRequest" endpoint of the
+// "access" service.
+func NewApproveShadowMCPApprovalRequestRequestBody(p *access.ApproveShadowMCPApprovalRequestPayload) *ApproveShadowMCPApprovalRequestRequestBody {
+	body := &ApproveShadowMCPApprovalRequestRequestBody{
+		ID:                     p.ID,
+		MatchBreadth:           p.MatchBreadth,
+		MatchValue:             p.MatchValue,
+		DisplayName:            p.DisplayName,
+		ObservedFullURL:        p.ObservedFullURL,
+		ObservedURLHost:        p.ObservedURLHost,
+		ObservedServerIdentity: p.ObservedServerIdentity,
+		Reason:                 p.Reason,
+	}
+	if p.RoleIds != nil {
+		body.RoleIds = make([]string, len(p.RoleIds))
+		for i, val := range p.RoleIds {
+			body.RoleIds[i] = val
+		}
+	} else {
+		body.RoleIds = []string{}
+	}
+	return body
+}
+
+// NewDenyShadowMCPApprovalRequestRequestBody builds the HTTP request body from
+// the payload of the "denyShadowMCPApprovalRequest" endpoint of the "access"
+// service.
+func NewDenyShadowMCPApprovalRequestRequestBody(p *access.DenyShadowMCPApprovalRequestPayload) *DenyShadowMCPApprovalRequestRequestBody {
+	body := &DenyShadowMCPApprovalRequestRequestBody{
+		ID:                     p.ID,
+		CreateDenyRule:         p.CreateDenyRule,
+		MatchBreadth:           p.MatchBreadth,
+		MatchValue:             p.MatchValue,
+		DisplayName:            p.DisplayName,
+		ObservedFullURL:        p.ObservedFullURL,
+		ObservedURLHost:        p.ObservedURLHost,
+		ObservedServerIdentity: p.ObservedServerIdentity,
+		Reason:                 p.Reason,
+	}
+	return body
+}
+
+// NewCreateShadowMCPAccessRuleRequestBody builds the HTTP request body from
+// the payload of the "createShadowMCPAccessRule" endpoint of the "access"
+// service.
+func NewCreateShadowMCPAccessRuleRequestBody(p *access.CreateShadowMCPAccessRulePayload) *CreateShadowMCPAccessRuleRequestBody {
+	body := &CreateShadowMCPAccessRuleRequestBody{
+		Disposition:            p.Disposition,
+		MatchBreadth:           p.MatchBreadth,
+		MatchValue:             p.MatchValue,
+		DisplayName:            p.DisplayName,
+		ObservedFullURL:        p.ObservedFullURL,
+		ObservedURLHost:        p.ObservedURLHost,
+		ObservedServerIdentity: p.ObservedServerIdentity,
+		Reason:                 p.Reason,
+	}
+	if p.RoleIds != nil {
+		body.RoleIds = make([]string, len(p.RoleIds))
+		for i, val := range p.RoleIds {
+			body.RoleIds[i] = val
+		}
+	}
+	return body
+}
+
+// NewUpdateShadowMCPAccessRuleRequestBody builds the HTTP request body from
+// the payload of the "updateShadowMCPAccessRule" endpoint of the "access"
+// service.
+func NewUpdateShadowMCPAccessRuleRequestBody(p *access.UpdateShadowMCPAccessRulePayload) *UpdateShadowMCPAccessRuleRequestBody {
+	body := &UpdateShadowMCPAccessRuleRequestBody{
+		ID:                     p.ID,
+		Disposition:            p.Disposition,
+		MatchBreadth:           p.MatchBreadth,
+		MatchValue:             p.MatchValue,
+		DisplayName:            p.DisplayName,
+		ObservedFullURL:        p.ObservedFullURL,
+		ObservedURLHost:        p.ObservedURLHost,
+		ObservedServerIdentity: p.ObservedServerIdentity,
+		Reason:                 p.Reason,
+	}
+	if p.RoleIds != nil {
+		body.RoleIds = make([]string, len(p.RoleIds))
+		for i, val := range p.RoleIds {
+			body.RoleIds[i] = val
+		}
 	}
 	return body
 }
@@ -4720,6 +6572,1360 @@ func NewUpdateMemberRoleGatewayError(body *UpdateMemberRoleGatewayErrorResponseB
 	return v
 }
 
+// NewListShadowMCPApprovalRequestsResultOK builds a "access" service
+// "listShadowMCPApprovalRequests" endpoint result from a HTTP "OK" response.
+func NewListShadowMCPApprovalRequestsResultOK(body *ListShadowMCPApprovalRequestsResponseBody) *access.ListShadowMCPApprovalRequestsResult {
+	v := &access.ListShadowMCPApprovalRequestsResult{
+		Total: *body.Total,
+	}
+	v.Requests = make([]*access.ShadowMCPApprovalRequest, len(body.Requests))
+	for i, val := range body.Requests {
+		if val == nil {
+			v.Requests[i] = nil
+			continue
+		}
+		v.Requests[i] = unmarshalShadowMCPApprovalRequestResponseBodyToAccessShadowMCPApprovalRequest(val)
+	}
+
+	return v
+}
+
+// NewListShadowMCPApprovalRequestsUnauthorized builds a access service
+// listShadowMCPApprovalRequests endpoint unauthorized error.
+func NewListShadowMCPApprovalRequestsUnauthorized(body *ListShadowMCPApprovalRequestsUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListShadowMCPApprovalRequestsForbidden builds a access service
+// listShadowMCPApprovalRequests endpoint forbidden error.
+func NewListShadowMCPApprovalRequestsForbidden(body *ListShadowMCPApprovalRequestsForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListShadowMCPApprovalRequestsBadRequest builds a access service
+// listShadowMCPApprovalRequests endpoint bad_request error.
+func NewListShadowMCPApprovalRequestsBadRequest(body *ListShadowMCPApprovalRequestsBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListShadowMCPApprovalRequestsNotFound builds a access service
+// listShadowMCPApprovalRequests endpoint not_found error.
+func NewListShadowMCPApprovalRequestsNotFound(body *ListShadowMCPApprovalRequestsNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListShadowMCPApprovalRequestsConflict builds a access service
+// listShadowMCPApprovalRequests endpoint conflict error.
+func NewListShadowMCPApprovalRequestsConflict(body *ListShadowMCPApprovalRequestsConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListShadowMCPApprovalRequestsUnsupportedMedia builds a access service
+// listShadowMCPApprovalRequests endpoint unsupported_media error.
+func NewListShadowMCPApprovalRequestsUnsupportedMedia(body *ListShadowMCPApprovalRequestsUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListShadowMCPApprovalRequestsInvalid builds a access service
+// listShadowMCPApprovalRequests endpoint invalid error.
+func NewListShadowMCPApprovalRequestsInvalid(body *ListShadowMCPApprovalRequestsInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListShadowMCPApprovalRequestsInvariantViolation builds a access service
+// listShadowMCPApprovalRequests endpoint invariant_violation error.
+func NewListShadowMCPApprovalRequestsInvariantViolation(body *ListShadowMCPApprovalRequestsInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListShadowMCPApprovalRequestsUnexpected builds a access service
+// listShadowMCPApprovalRequests endpoint unexpected error.
+func NewListShadowMCPApprovalRequestsUnexpected(body *ListShadowMCPApprovalRequestsUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListShadowMCPApprovalRequestsGatewayError builds a access service
+// listShadowMCPApprovalRequests endpoint gateway_error error.
+func NewListShadowMCPApprovalRequestsGatewayError(body *ListShadowMCPApprovalRequestsGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateShadowMCPApprovalRequestShadowMCPApprovalRequestCreated builds a
+// "access" service "createShadowMCPApprovalRequest" endpoint result from a
+// HTTP "Created" response.
+func NewCreateShadowMCPApprovalRequestShadowMCPApprovalRequestCreated(body *CreateShadowMCPApprovalRequestResponseBody) *access.ShadowMCPApprovalRequest {
+	v := &access.ShadowMCPApprovalRequest{
+		ID:                     *body.ID,
+		OrganizationID:         *body.OrganizationID,
+		ProjectID:              *body.ProjectID,
+		RequesterUserID:        body.RequesterUserID,
+		RequesterEmail:         body.RequesterEmail,
+		RequesterDisplayName:   body.RequesterDisplayName,
+		Status:                 *body.Status,
+		RiskPolicyID:           body.RiskPolicyID,
+		RiskResultID:           body.RiskResultID,
+		ObservedName:           body.ObservedName,
+		ObservedFullURL:        body.ObservedFullURL,
+		ObservedURLHost:        body.ObservedURLHost,
+		ObservedServerIdentity: body.ObservedServerIdentity,
+		ToolName:               body.ToolName,
+		ToolCall:               body.ToolCall,
+		BlockReason:            body.BlockReason,
+		BlockedCount:           *body.BlockedCount,
+		FirstBlockedAt:         body.FirstBlockedAt,
+		LastBlockedAt:          body.LastBlockedAt,
+		RequestedAt:            *body.RequestedAt,
+		DecidedAt:              body.DecidedAt,
+		DecidedBy:              body.DecidedBy,
+		DecisionNote:           body.DecisionNote,
+		CreatedAt:              *body.CreatedAt,
+		UpdatedAt:              *body.UpdatedAt,
+	}
+
+	return v
+}
+
+// NewCreateShadowMCPApprovalRequestUnauthorized builds a access service
+// createShadowMCPApprovalRequest endpoint unauthorized error.
+func NewCreateShadowMCPApprovalRequestUnauthorized(body *CreateShadowMCPApprovalRequestUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateShadowMCPApprovalRequestForbidden builds a access service
+// createShadowMCPApprovalRequest endpoint forbidden error.
+func NewCreateShadowMCPApprovalRequestForbidden(body *CreateShadowMCPApprovalRequestForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateShadowMCPApprovalRequestBadRequest builds a access service
+// createShadowMCPApprovalRequest endpoint bad_request error.
+func NewCreateShadowMCPApprovalRequestBadRequest(body *CreateShadowMCPApprovalRequestBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateShadowMCPApprovalRequestNotFound builds a access service
+// createShadowMCPApprovalRequest endpoint not_found error.
+func NewCreateShadowMCPApprovalRequestNotFound(body *CreateShadowMCPApprovalRequestNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateShadowMCPApprovalRequestConflict builds a access service
+// createShadowMCPApprovalRequest endpoint conflict error.
+func NewCreateShadowMCPApprovalRequestConflict(body *CreateShadowMCPApprovalRequestConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateShadowMCPApprovalRequestUnsupportedMedia builds a access service
+// createShadowMCPApprovalRequest endpoint unsupported_media error.
+func NewCreateShadowMCPApprovalRequestUnsupportedMedia(body *CreateShadowMCPApprovalRequestUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateShadowMCPApprovalRequestInvalid builds a access service
+// createShadowMCPApprovalRequest endpoint invalid error.
+func NewCreateShadowMCPApprovalRequestInvalid(body *CreateShadowMCPApprovalRequestInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateShadowMCPApprovalRequestInvariantViolation builds a access service
+// createShadowMCPApprovalRequest endpoint invariant_violation error.
+func NewCreateShadowMCPApprovalRequestInvariantViolation(body *CreateShadowMCPApprovalRequestInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateShadowMCPApprovalRequestUnexpected builds a access service
+// createShadowMCPApprovalRequest endpoint unexpected error.
+func NewCreateShadowMCPApprovalRequestUnexpected(body *CreateShadowMCPApprovalRequestUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateShadowMCPApprovalRequestGatewayError builds a access service
+// createShadowMCPApprovalRequest endpoint gateway_error error.
+func NewCreateShadowMCPApprovalRequestGatewayError(body *CreateShadowMCPApprovalRequestGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewApproveShadowMCPApprovalRequestShadowMCPApprovalDecisionResultOK builds a
+// "access" service "approveShadowMCPApprovalRequest" endpoint result from a
+// HTTP "OK" response.
+func NewApproveShadowMCPApprovalRequestShadowMCPApprovalDecisionResultOK(body *ApproveShadowMCPApprovalRequestResponseBody) *access.ShadowMCPApprovalDecisionResult {
+	v := &access.ShadowMCPApprovalDecisionResult{}
+	v.Request = unmarshalShadowMCPApprovalRequestResponseBodyToAccessShadowMCPApprovalRequest(body.Request)
+	if body.Rule != nil {
+		v.Rule = unmarshalShadowMCPAccessRuleResponseBodyToAccessShadowMCPAccessRule(body.Rule)
+	}
+
+	return v
+}
+
+// NewApproveShadowMCPApprovalRequestUnauthorized builds a access service
+// approveShadowMCPApprovalRequest endpoint unauthorized error.
+func NewApproveShadowMCPApprovalRequestUnauthorized(body *ApproveShadowMCPApprovalRequestUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewApproveShadowMCPApprovalRequestForbidden builds a access service
+// approveShadowMCPApprovalRequest endpoint forbidden error.
+func NewApproveShadowMCPApprovalRequestForbidden(body *ApproveShadowMCPApprovalRequestForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewApproveShadowMCPApprovalRequestBadRequest builds a access service
+// approveShadowMCPApprovalRequest endpoint bad_request error.
+func NewApproveShadowMCPApprovalRequestBadRequest(body *ApproveShadowMCPApprovalRequestBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewApproveShadowMCPApprovalRequestNotFound builds a access service
+// approveShadowMCPApprovalRequest endpoint not_found error.
+func NewApproveShadowMCPApprovalRequestNotFound(body *ApproveShadowMCPApprovalRequestNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewApproveShadowMCPApprovalRequestConflict builds a access service
+// approveShadowMCPApprovalRequest endpoint conflict error.
+func NewApproveShadowMCPApprovalRequestConflict(body *ApproveShadowMCPApprovalRequestConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewApproveShadowMCPApprovalRequestUnsupportedMedia builds a access service
+// approveShadowMCPApprovalRequest endpoint unsupported_media error.
+func NewApproveShadowMCPApprovalRequestUnsupportedMedia(body *ApproveShadowMCPApprovalRequestUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewApproveShadowMCPApprovalRequestInvalid builds a access service
+// approveShadowMCPApprovalRequest endpoint invalid error.
+func NewApproveShadowMCPApprovalRequestInvalid(body *ApproveShadowMCPApprovalRequestInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewApproveShadowMCPApprovalRequestInvariantViolation builds a access service
+// approveShadowMCPApprovalRequest endpoint invariant_violation error.
+func NewApproveShadowMCPApprovalRequestInvariantViolation(body *ApproveShadowMCPApprovalRequestInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewApproveShadowMCPApprovalRequestUnexpected builds a access service
+// approveShadowMCPApprovalRequest endpoint unexpected error.
+func NewApproveShadowMCPApprovalRequestUnexpected(body *ApproveShadowMCPApprovalRequestUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewApproveShadowMCPApprovalRequestGatewayError builds a access service
+// approveShadowMCPApprovalRequest endpoint gateway_error error.
+func NewApproveShadowMCPApprovalRequestGatewayError(body *ApproveShadowMCPApprovalRequestGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDenyShadowMCPApprovalRequestShadowMCPApprovalDecisionResultOK builds a
+// "access" service "denyShadowMCPApprovalRequest" endpoint result from a HTTP
+// "OK" response.
+func NewDenyShadowMCPApprovalRequestShadowMCPApprovalDecisionResultOK(body *DenyShadowMCPApprovalRequestResponseBody) *access.ShadowMCPApprovalDecisionResult {
+	v := &access.ShadowMCPApprovalDecisionResult{}
+	v.Request = unmarshalShadowMCPApprovalRequestResponseBodyToAccessShadowMCPApprovalRequest(body.Request)
+	if body.Rule != nil {
+		v.Rule = unmarshalShadowMCPAccessRuleResponseBodyToAccessShadowMCPAccessRule(body.Rule)
+	}
+
+	return v
+}
+
+// NewDenyShadowMCPApprovalRequestUnauthorized builds a access service
+// denyShadowMCPApprovalRequest endpoint unauthorized error.
+func NewDenyShadowMCPApprovalRequestUnauthorized(body *DenyShadowMCPApprovalRequestUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDenyShadowMCPApprovalRequestForbidden builds a access service
+// denyShadowMCPApprovalRequest endpoint forbidden error.
+func NewDenyShadowMCPApprovalRequestForbidden(body *DenyShadowMCPApprovalRequestForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDenyShadowMCPApprovalRequestBadRequest builds a access service
+// denyShadowMCPApprovalRequest endpoint bad_request error.
+func NewDenyShadowMCPApprovalRequestBadRequest(body *DenyShadowMCPApprovalRequestBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDenyShadowMCPApprovalRequestNotFound builds a access service
+// denyShadowMCPApprovalRequest endpoint not_found error.
+func NewDenyShadowMCPApprovalRequestNotFound(body *DenyShadowMCPApprovalRequestNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDenyShadowMCPApprovalRequestConflict builds a access service
+// denyShadowMCPApprovalRequest endpoint conflict error.
+func NewDenyShadowMCPApprovalRequestConflict(body *DenyShadowMCPApprovalRequestConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDenyShadowMCPApprovalRequestUnsupportedMedia builds a access service
+// denyShadowMCPApprovalRequest endpoint unsupported_media error.
+func NewDenyShadowMCPApprovalRequestUnsupportedMedia(body *DenyShadowMCPApprovalRequestUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDenyShadowMCPApprovalRequestInvalid builds a access service
+// denyShadowMCPApprovalRequest endpoint invalid error.
+func NewDenyShadowMCPApprovalRequestInvalid(body *DenyShadowMCPApprovalRequestInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDenyShadowMCPApprovalRequestInvariantViolation builds a access service
+// denyShadowMCPApprovalRequest endpoint invariant_violation error.
+func NewDenyShadowMCPApprovalRequestInvariantViolation(body *DenyShadowMCPApprovalRequestInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDenyShadowMCPApprovalRequestUnexpected builds a access service
+// denyShadowMCPApprovalRequest endpoint unexpected error.
+func NewDenyShadowMCPApprovalRequestUnexpected(body *DenyShadowMCPApprovalRequestUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDenyShadowMCPApprovalRequestGatewayError builds a access service
+// denyShadowMCPApprovalRequest endpoint gateway_error error.
+func NewDenyShadowMCPApprovalRequestGatewayError(body *DenyShadowMCPApprovalRequestGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListShadowMCPAccessRulesResultOK builds a "access" service
+// "listShadowMCPAccessRules" endpoint result from a HTTP "OK" response.
+func NewListShadowMCPAccessRulesResultOK(body *ListShadowMCPAccessRulesResponseBody) *access.ListShadowMCPAccessRulesResult {
+	v := &access.ListShadowMCPAccessRulesResult{
+		Total: *body.Total,
+	}
+	v.Rules = make([]*access.ShadowMCPAccessRule, len(body.Rules))
+	for i, val := range body.Rules {
+		if val == nil {
+			v.Rules[i] = nil
+			continue
+		}
+		v.Rules[i] = unmarshalShadowMCPAccessRuleResponseBodyToAccessShadowMCPAccessRule(val)
+	}
+
+	return v
+}
+
+// NewListShadowMCPAccessRulesUnauthorized builds a access service
+// listShadowMCPAccessRules endpoint unauthorized error.
+func NewListShadowMCPAccessRulesUnauthorized(body *ListShadowMCPAccessRulesUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListShadowMCPAccessRulesForbidden builds a access service
+// listShadowMCPAccessRules endpoint forbidden error.
+func NewListShadowMCPAccessRulesForbidden(body *ListShadowMCPAccessRulesForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListShadowMCPAccessRulesBadRequest builds a access service
+// listShadowMCPAccessRules endpoint bad_request error.
+func NewListShadowMCPAccessRulesBadRequest(body *ListShadowMCPAccessRulesBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListShadowMCPAccessRulesNotFound builds a access service
+// listShadowMCPAccessRules endpoint not_found error.
+func NewListShadowMCPAccessRulesNotFound(body *ListShadowMCPAccessRulesNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListShadowMCPAccessRulesConflict builds a access service
+// listShadowMCPAccessRules endpoint conflict error.
+func NewListShadowMCPAccessRulesConflict(body *ListShadowMCPAccessRulesConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListShadowMCPAccessRulesUnsupportedMedia builds a access service
+// listShadowMCPAccessRules endpoint unsupported_media error.
+func NewListShadowMCPAccessRulesUnsupportedMedia(body *ListShadowMCPAccessRulesUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListShadowMCPAccessRulesInvalid builds a access service
+// listShadowMCPAccessRules endpoint invalid error.
+func NewListShadowMCPAccessRulesInvalid(body *ListShadowMCPAccessRulesInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListShadowMCPAccessRulesInvariantViolation builds a access service
+// listShadowMCPAccessRules endpoint invariant_violation error.
+func NewListShadowMCPAccessRulesInvariantViolation(body *ListShadowMCPAccessRulesInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListShadowMCPAccessRulesUnexpected builds a access service
+// listShadowMCPAccessRules endpoint unexpected error.
+func NewListShadowMCPAccessRulesUnexpected(body *ListShadowMCPAccessRulesUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListShadowMCPAccessRulesGatewayError builds a access service
+// listShadowMCPAccessRules endpoint gateway_error error.
+func NewListShadowMCPAccessRulesGatewayError(body *ListShadowMCPAccessRulesGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateShadowMCPAccessRuleShadowMCPAccessRuleCreated builds a "access"
+// service "createShadowMCPAccessRule" endpoint result from a HTTP "Created"
+// response.
+func NewCreateShadowMCPAccessRuleShadowMCPAccessRuleCreated(body *CreateShadowMCPAccessRuleResponseBody) *access.ShadowMCPAccessRule {
+	v := &access.ShadowMCPAccessRule{
+		ID:                     *body.ID,
+		OrganizationID:         *body.OrganizationID,
+		Disposition:            *body.Disposition,
+		MatchBreadth:           *body.MatchBreadth,
+		MatchValue:             *body.MatchValue,
+		DisplayName:            *body.DisplayName,
+		ObservedFullURL:        body.ObservedFullURL,
+		ObservedURLHost:        body.ObservedURLHost,
+		ObservedServerIdentity: body.ObservedServerIdentity,
+		SourceRequestID:        body.SourceRequestID,
+		CreatedBy:              body.CreatedBy,
+		UpdatedBy:              body.UpdatedBy,
+		Reason:                 body.Reason,
+		CreatedAt:              *body.CreatedAt,
+		UpdatedAt:              *body.UpdatedAt,
+	}
+	v.RoleIds = make([]string, len(body.RoleIds))
+	for i, val := range body.RoleIds {
+		v.RoleIds[i] = val
+	}
+
+	return v
+}
+
+// NewCreateShadowMCPAccessRuleUnauthorized builds a access service
+// createShadowMCPAccessRule endpoint unauthorized error.
+func NewCreateShadowMCPAccessRuleUnauthorized(body *CreateShadowMCPAccessRuleUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateShadowMCPAccessRuleForbidden builds a access service
+// createShadowMCPAccessRule endpoint forbidden error.
+func NewCreateShadowMCPAccessRuleForbidden(body *CreateShadowMCPAccessRuleForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateShadowMCPAccessRuleBadRequest builds a access service
+// createShadowMCPAccessRule endpoint bad_request error.
+func NewCreateShadowMCPAccessRuleBadRequest(body *CreateShadowMCPAccessRuleBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateShadowMCPAccessRuleNotFound builds a access service
+// createShadowMCPAccessRule endpoint not_found error.
+func NewCreateShadowMCPAccessRuleNotFound(body *CreateShadowMCPAccessRuleNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateShadowMCPAccessRuleConflict builds a access service
+// createShadowMCPAccessRule endpoint conflict error.
+func NewCreateShadowMCPAccessRuleConflict(body *CreateShadowMCPAccessRuleConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateShadowMCPAccessRuleUnsupportedMedia builds a access service
+// createShadowMCPAccessRule endpoint unsupported_media error.
+func NewCreateShadowMCPAccessRuleUnsupportedMedia(body *CreateShadowMCPAccessRuleUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateShadowMCPAccessRuleInvalid builds a access service
+// createShadowMCPAccessRule endpoint invalid error.
+func NewCreateShadowMCPAccessRuleInvalid(body *CreateShadowMCPAccessRuleInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateShadowMCPAccessRuleInvariantViolation builds a access service
+// createShadowMCPAccessRule endpoint invariant_violation error.
+func NewCreateShadowMCPAccessRuleInvariantViolation(body *CreateShadowMCPAccessRuleInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateShadowMCPAccessRuleUnexpected builds a access service
+// createShadowMCPAccessRule endpoint unexpected error.
+func NewCreateShadowMCPAccessRuleUnexpected(body *CreateShadowMCPAccessRuleUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateShadowMCPAccessRuleGatewayError builds a access service
+// createShadowMCPAccessRule endpoint gateway_error error.
+func NewCreateShadowMCPAccessRuleGatewayError(body *CreateShadowMCPAccessRuleGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateShadowMCPAccessRuleShadowMCPAccessRuleOK builds a "access" service
+// "updateShadowMCPAccessRule" endpoint result from a HTTP "OK" response.
+func NewUpdateShadowMCPAccessRuleShadowMCPAccessRuleOK(body *UpdateShadowMCPAccessRuleResponseBody) *access.ShadowMCPAccessRule {
+	v := &access.ShadowMCPAccessRule{
+		ID:                     *body.ID,
+		OrganizationID:         *body.OrganizationID,
+		Disposition:            *body.Disposition,
+		MatchBreadth:           *body.MatchBreadth,
+		MatchValue:             *body.MatchValue,
+		DisplayName:            *body.DisplayName,
+		ObservedFullURL:        body.ObservedFullURL,
+		ObservedURLHost:        body.ObservedURLHost,
+		ObservedServerIdentity: body.ObservedServerIdentity,
+		SourceRequestID:        body.SourceRequestID,
+		CreatedBy:              body.CreatedBy,
+		UpdatedBy:              body.UpdatedBy,
+		Reason:                 body.Reason,
+		CreatedAt:              *body.CreatedAt,
+		UpdatedAt:              *body.UpdatedAt,
+	}
+	v.RoleIds = make([]string, len(body.RoleIds))
+	for i, val := range body.RoleIds {
+		v.RoleIds[i] = val
+	}
+
+	return v
+}
+
+// NewUpdateShadowMCPAccessRuleUnauthorized builds a access service
+// updateShadowMCPAccessRule endpoint unauthorized error.
+func NewUpdateShadowMCPAccessRuleUnauthorized(body *UpdateShadowMCPAccessRuleUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateShadowMCPAccessRuleForbidden builds a access service
+// updateShadowMCPAccessRule endpoint forbidden error.
+func NewUpdateShadowMCPAccessRuleForbidden(body *UpdateShadowMCPAccessRuleForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateShadowMCPAccessRuleBadRequest builds a access service
+// updateShadowMCPAccessRule endpoint bad_request error.
+func NewUpdateShadowMCPAccessRuleBadRequest(body *UpdateShadowMCPAccessRuleBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateShadowMCPAccessRuleNotFound builds a access service
+// updateShadowMCPAccessRule endpoint not_found error.
+func NewUpdateShadowMCPAccessRuleNotFound(body *UpdateShadowMCPAccessRuleNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateShadowMCPAccessRuleConflict builds a access service
+// updateShadowMCPAccessRule endpoint conflict error.
+func NewUpdateShadowMCPAccessRuleConflict(body *UpdateShadowMCPAccessRuleConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateShadowMCPAccessRuleUnsupportedMedia builds a access service
+// updateShadowMCPAccessRule endpoint unsupported_media error.
+func NewUpdateShadowMCPAccessRuleUnsupportedMedia(body *UpdateShadowMCPAccessRuleUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateShadowMCPAccessRuleInvalid builds a access service
+// updateShadowMCPAccessRule endpoint invalid error.
+func NewUpdateShadowMCPAccessRuleInvalid(body *UpdateShadowMCPAccessRuleInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateShadowMCPAccessRuleInvariantViolation builds a access service
+// updateShadowMCPAccessRule endpoint invariant_violation error.
+func NewUpdateShadowMCPAccessRuleInvariantViolation(body *UpdateShadowMCPAccessRuleInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateShadowMCPAccessRuleUnexpected builds a access service
+// updateShadowMCPAccessRule endpoint unexpected error.
+func NewUpdateShadowMCPAccessRuleUnexpected(body *UpdateShadowMCPAccessRuleUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateShadowMCPAccessRuleGatewayError builds a access service
+// updateShadowMCPAccessRule endpoint gateway_error error.
+func NewUpdateShadowMCPAccessRuleGatewayError(body *UpdateShadowMCPAccessRuleGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDeleteShadowMCPAccessRuleUnauthorized builds a access service
+// deleteShadowMCPAccessRule endpoint unauthorized error.
+func NewDeleteShadowMCPAccessRuleUnauthorized(body *DeleteShadowMCPAccessRuleUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDeleteShadowMCPAccessRuleForbidden builds a access service
+// deleteShadowMCPAccessRule endpoint forbidden error.
+func NewDeleteShadowMCPAccessRuleForbidden(body *DeleteShadowMCPAccessRuleForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDeleteShadowMCPAccessRuleBadRequest builds a access service
+// deleteShadowMCPAccessRule endpoint bad_request error.
+func NewDeleteShadowMCPAccessRuleBadRequest(body *DeleteShadowMCPAccessRuleBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDeleteShadowMCPAccessRuleNotFound builds a access service
+// deleteShadowMCPAccessRule endpoint not_found error.
+func NewDeleteShadowMCPAccessRuleNotFound(body *DeleteShadowMCPAccessRuleNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDeleteShadowMCPAccessRuleConflict builds a access service
+// deleteShadowMCPAccessRule endpoint conflict error.
+func NewDeleteShadowMCPAccessRuleConflict(body *DeleteShadowMCPAccessRuleConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDeleteShadowMCPAccessRuleUnsupportedMedia builds a access service
+// deleteShadowMCPAccessRule endpoint unsupported_media error.
+func NewDeleteShadowMCPAccessRuleUnsupportedMedia(body *DeleteShadowMCPAccessRuleUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDeleteShadowMCPAccessRuleInvalid builds a access service
+// deleteShadowMCPAccessRule endpoint invalid error.
+func NewDeleteShadowMCPAccessRuleInvalid(body *DeleteShadowMCPAccessRuleInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDeleteShadowMCPAccessRuleInvariantViolation builds a access service
+// deleteShadowMCPAccessRule endpoint invariant_violation error.
+func NewDeleteShadowMCPAccessRuleInvariantViolation(body *DeleteShadowMCPAccessRuleInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDeleteShadowMCPAccessRuleUnexpected builds a access service
+// deleteShadowMCPAccessRule endpoint unexpected error.
+func NewDeleteShadowMCPAccessRuleUnexpected(body *DeleteShadowMCPAccessRuleUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDeleteShadowMCPAccessRuleGatewayError builds a access service
+// deleteShadowMCPAccessRule endpoint gateway_error error.
+func NewDeleteShadowMCPAccessRuleGatewayError(body *DeleteShadowMCPAccessRuleGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewGetRBACStatusRBACStatusOK builds a "access" service "getRBACStatus"
 // endpoint result from a HTTP "OK" response.
 func NewGetRBACStatusRBACStatusOK(body *GetRBACStatusResponseBody) *access.RBACStatus {
@@ -5895,6 +9101,257 @@ func ValidateUpdateMemberRoleResponseBody(body *UpdateMemberRoleResponseBody) (e
 	}
 	if body.JoinedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.joined_at", *body.JoinedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateListShadowMCPApprovalRequestsResponseBody runs the validations
+// defined on ListShadowMCPApprovalRequestsResponseBody
+func ValidateListShadowMCPApprovalRequestsResponseBody(body *ListShadowMCPApprovalRequestsResponseBody) (err error) {
+	if body.Requests == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("requests", "body"))
+	}
+	if body.Total == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("total", "body"))
+	}
+	for _, e := range body.Requests {
+		if e != nil {
+			if err2 := ValidateShadowMCPApprovalRequestResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateCreateShadowMCPApprovalRequestResponseBody runs the validations
+// defined on CreateShadowMCPApprovalRequestResponseBody
+func ValidateCreateShadowMCPApprovalRequestResponseBody(body *CreateShadowMCPApprovalRequestResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.ProjectID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
+	}
+	if body.Status == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
+	}
+	if body.BlockedCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("blocked_count", "body"))
+	}
+	if body.RequestedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("requested_at", "body"))
+	}
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.UpdatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.ProjectID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
+	}
+	if body.Status != nil {
+		if !(*body.Status == "requested" || *body.Status == "approved" || *body.Status == "denied") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"requested", "approved", "denied"}))
+		}
+	}
+	if body.RiskPolicyID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.risk_policy_id", *body.RiskPolicyID, goa.FormatUUID))
+	}
+	if body.RiskResultID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.risk_result_id", *body.RiskResultID, goa.FormatUUID))
+	}
+	if body.FirstBlockedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.first_blocked_at", *body.FirstBlockedAt, goa.FormatDateTime))
+	}
+	if body.LastBlockedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_blocked_at", *body.LastBlockedAt, goa.FormatDateTime))
+	}
+	if body.RequestedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.requested_at", *body.RequestedAt, goa.FormatDateTime))
+	}
+	if body.DecidedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.decided_at", *body.DecidedAt, goa.FormatDateTime))
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.UpdatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateApproveShadowMCPApprovalRequestResponseBody runs the validations
+// defined on ApproveShadowMCPApprovalRequestResponseBody
+func ValidateApproveShadowMCPApprovalRequestResponseBody(body *ApproveShadowMCPApprovalRequestResponseBody) (err error) {
+	if body.Request == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("request", "body"))
+	}
+	if body.Request != nil {
+		if err2 := ValidateShadowMCPApprovalRequestResponseBody(body.Request); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.Rule != nil {
+		if err2 := ValidateShadowMCPAccessRuleResponseBody(body.Rule); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	return
+}
+
+// ValidateDenyShadowMCPApprovalRequestResponseBody runs the validations
+// defined on DenyShadowMCPApprovalRequestResponseBody
+func ValidateDenyShadowMCPApprovalRequestResponseBody(body *DenyShadowMCPApprovalRequestResponseBody) (err error) {
+	if body.Request == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("request", "body"))
+	}
+	if body.Request != nil {
+		if err2 := ValidateShadowMCPApprovalRequestResponseBody(body.Request); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.Rule != nil {
+		if err2 := ValidateShadowMCPAccessRuleResponseBody(body.Rule); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	return
+}
+
+// ValidateListShadowMCPAccessRulesResponseBody runs the validations defined on
+// ListShadowMCPAccessRulesResponseBody
+func ValidateListShadowMCPAccessRulesResponseBody(body *ListShadowMCPAccessRulesResponseBody) (err error) {
+	if body.Rules == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("rules", "body"))
+	}
+	if body.Total == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("total", "body"))
+	}
+	for _, e := range body.Rules {
+		if e != nil {
+			if err2 := ValidateShadowMCPAccessRuleResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateCreateShadowMCPAccessRuleResponseBody runs the validations defined
+// on CreateShadowMCPAccessRuleResponseBody
+func ValidateCreateShadowMCPAccessRuleResponseBody(body *CreateShadowMCPAccessRuleResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.Disposition == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("disposition", "body"))
+	}
+	if body.MatchBreadth == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("match_breadth", "body"))
+	}
+	if body.MatchValue == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("match_value", "body"))
+	}
+	if body.DisplayName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("display_name", "body"))
+	}
+	if body.RoleIds == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("role_ids", "body"))
+	}
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.UpdatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.Disposition != nil {
+		if !(*body.Disposition == "allowed" || *body.Disposition == "denied") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.disposition", *body.Disposition, []any{"allowed", "denied"}))
+		}
+	}
+	if body.MatchBreadth != nil {
+		if !(*body.MatchBreadth == "full_url" || *body.MatchBreadth == "url_host" || *body.MatchBreadth == "server_identity") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.match_breadth", *body.MatchBreadth, []any{"full_url", "url_host", "server_identity"}))
+		}
+	}
+	if body.SourceRequestID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.source_request_id", *body.SourceRequestID, goa.FormatUUID))
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.UpdatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateUpdateShadowMCPAccessRuleResponseBody runs the validations defined
+// on UpdateShadowMCPAccessRuleResponseBody
+func ValidateUpdateShadowMCPAccessRuleResponseBody(body *UpdateShadowMCPAccessRuleResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.Disposition == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("disposition", "body"))
+	}
+	if body.MatchBreadth == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("match_breadth", "body"))
+	}
+	if body.MatchValue == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("match_value", "body"))
+	}
+	if body.DisplayName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("display_name", "body"))
+	}
+	if body.RoleIds == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("role_ids", "body"))
+	}
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.UpdatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.Disposition != nil {
+		if !(*body.Disposition == "allowed" || *body.Disposition == "denied") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.disposition", *body.Disposition, []any{"allowed", "denied"}))
+		}
+	}
+	if body.MatchBreadth != nil {
+		if !(*body.MatchBreadth == "full_url" || *body.MatchBreadth == "url_host" || *body.MatchBreadth == "server_identity") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.match_breadth", *body.MatchBreadth, []any{"full_url", "url_host", "server_identity"}))
+		}
+	}
+	if body.SourceRequestID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.source_request_id", *body.SourceRequestID, goa.FormatUUID))
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.UpdatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
 	}
 	return
 }
@@ -8122,6 +11579,1957 @@ func ValidateUpdateMemberRoleGatewayErrorResponseBody(body *UpdateMemberRoleGate
 	return
 }
 
+// ValidateListShadowMCPApprovalRequestsUnauthorizedResponseBody runs the
+// validations defined on
+// listShadowMCPApprovalRequests_unauthorized_response_body
+func ValidateListShadowMCPApprovalRequestsUnauthorizedResponseBody(body *ListShadowMCPApprovalRequestsUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListShadowMCPApprovalRequestsForbiddenResponseBody runs the
+// validations defined on listShadowMCPApprovalRequests_forbidden_response_body
+func ValidateListShadowMCPApprovalRequestsForbiddenResponseBody(body *ListShadowMCPApprovalRequestsForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListShadowMCPApprovalRequestsBadRequestResponseBody runs the
+// validations defined on
+// listShadowMCPApprovalRequests_bad_request_response_body
+func ValidateListShadowMCPApprovalRequestsBadRequestResponseBody(body *ListShadowMCPApprovalRequestsBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListShadowMCPApprovalRequestsNotFoundResponseBody runs the
+// validations defined on listShadowMCPApprovalRequests_not_found_response_body
+func ValidateListShadowMCPApprovalRequestsNotFoundResponseBody(body *ListShadowMCPApprovalRequestsNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListShadowMCPApprovalRequestsConflictResponseBody runs the
+// validations defined on listShadowMCPApprovalRequests_conflict_response_body
+func ValidateListShadowMCPApprovalRequestsConflictResponseBody(body *ListShadowMCPApprovalRequestsConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListShadowMCPApprovalRequestsUnsupportedMediaResponseBody runs the
+// validations defined on
+// listShadowMCPApprovalRequests_unsupported_media_response_body
+func ValidateListShadowMCPApprovalRequestsUnsupportedMediaResponseBody(body *ListShadowMCPApprovalRequestsUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListShadowMCPApprovalRequestsInvalidResponseBody runs the
+// validations defined on listShadowMCPApprovalRequests_invalid_response_body
+func ValidateListShadowMCPApprovalRequestsInvalidResponseBody(body *ListShadowMCPApprovalRequestsInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListShadowMCPApprovalRequestsInvariantViolationResponseBody runs the
+// validations defined on
+// listShadowMCPApprovalRequests_invariant_violation_response_body
+func ValidateListShadowMCPApprovalRequestsInvariantViolationResponseBody(body *ListShadowMCPApprovalRequestsInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListShadowMCPApprovalRequestsUnexpectedResponseBody runs the
+// validations defined on listShadowMCPApprovalRequests_unexpected_response_body
+func ValidateListShadowMCPApprovalRequestsUnexpectedResponseBody(body *ListShadowMCPApprovalRequestsUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListShadowMCPApprovalRequestsGatewayErrorResponseBody runs the
+// validations defined on
+// listShadowMCPApprovalRequests_gateway_error_response_body
+func ValidateListShadowMCPApprovalRequestsGatewayErrorResponseBody(body *ListShadowMCPApprovalRequestsGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateShadowMCPApprovalRequestUnauthorizedResponseBody runs the
+// validations defined on
+// createShadowMCPApprovalRequest_unauthorized_response_body
+func ValidateCreateShadowMCPApprovalRequestUnauthorizedResponseBody(body *CreateShadowMCPApprovalRequestUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateShadowMCPApprovalRequestForbiddenResponseBody runs the
+// validations defined on createShadowMCPApprovalRequest_forbidden_response_body
+func ValidateCreateShadowMCPApprovalRequestForbiddenResponseBody(body *CreateShadowMCPApprovalRequestForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateShadowMCPApprovalRequestBadRequestResponseBody runs the
+// validations defined on
+// createShadowMCPApprovalRequest_bad_request_response_body
+func ValidateCreateShadowMCPApprovalRequestBadRequestResponseBody(body *CreateShadowMCPApprovalRequestBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateShadowMCPApprovalRequestNotFoundResponseBody runs the
+// validations defined on createShadowMCPApprovalRequest_not_found_response_body
+func ValidateCreateShadowMCPApprovalRequestNotFoundResponseBody(body *CreateShadowMCPApprovalRequestNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateShadowMCPApprovalRequestConflictResponseBody runs the
+// validations defined on createShadowMCPApprovalRequest_conflict_response_body
+func ValidateCreateShadowMCPApprovalRequestConflictResponseBody(body *CreateShadowMCPApprovalRequestConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateShadowMCPApprovalRequestUnsupportedMediaResponseBody runs the
+// validations defined on
+// createShadowMCPApprovalRequest_unsupported_media_response_body
+func ValidateCreateShadowMCPApprovalRequestUnsupportedMediaResponseBody(body *CreateShadowMCPApprovalRequestUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateShadowMCPApprovalRequestInvalidResponseBody runs the
+// validations defined on createShadowMCPApprovalRequest_invalid_response_body
+func ValidateCreateShadowMCPApprovalRequestInvalidResponseBody(body *CreateShadowMCPApprovalRequestInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateShadowMCPApprovalRequestInvariantViolationResponseBody runs
+// the validations defined on
+// createShadowMCPApprovalRequest_invariant_violation_response_body
+func ValidateCreateShadowMCPApprovalRequestInvariantViolationResponseBody(body *CreateShadowMCPApprovalRequestInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateShadowMCPApprovalRequestUnexpectedResponseBody runs the
+// validations defined on
+// createShadowMCPApprovalRequest_unexpected_response_body
+func ValidateCreateShadowMCPApprovalRequestUnexpectedResponseBody(body *CreateShadowMCPApprovalRequestUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateShadowMCPApprovalRequestGatewayErrorResponseBody runs the
+// validations defined on
+// createShadowMCPApprovalRequest_gateway_error_response_body
+func ValidateCreateShadowMCPApprovalRequestGatewayErrorResponseBody(body *CreateShadowMCPApprovalRequestGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateApproveShadowMCPApprovalRequestUnauthorizedResponseBody runs the
+// validations defined on
+// approveShadowMCPApprovalRequest_unauthorized_response_body
+func ValidateApproveShadowMCPApprovalRequestUnauthorizedResponseBody(body *ApproveShadowMCPApprovalRequestUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateApproveShadowMCPApprovalRequestForbiddenResponseBody runs the
+// validations defined on
+// approveShadowMCPApprovalRequest_forbidden_response_body
+func ValidateApproveShadowMCPApprovalRequestForbiddenResponseBody(body *ApproveShadowMCPApprovalRequestForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateApproveShadowMCPApprovalRequestBadRequestResponseBody runs the
+// validations defined on
+// approveShadowMCPApprovalRequest_bad_request_response_body
+func ValidateApproveShadowMCPApprovalRequestBadRequestResponseBody(body *ApproveShadowMCPApprovalRequestBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateApproveShadowMCPApprovalRequestNotFoundResponseBody runs the
+// validations defined on
+// approveShadowMCPApprovalRequest_not_found_response_body
+func ValidateApproveShadowMCPApprovalRequestNotFoundResponseBody(body *ApproveShadowMCPApprovalRequestNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateApproveShadowMCPApprovalRequestConflictResponseBody runs the
+// validations defined on approveShadowMCPApprovalRequest_conflict_response_body
+func ValidateApproveShadowMCPApprovalRequestConflictResponseBody(body *ApproveShadowMCPApprovalRequestConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateApproveShadowMCPApprovalRequestUnsupportedMediaResponseBody runs the
+// validations defined on
+// approveShadowMCPApprovalRequest_unsupported_media_response_body
+func ValidateApproveShadowMCPApprovalRequestUnsupportedMediaResponseBody(body *ApproveShadowMCPApprovalRequestUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateApproveShadowMCPApprovalRequestInvalidResponseBody runs the
+// validations defined on approveShadowMCPApprovalRequest_invalid_response_body
+func ValidateApproveShadowMCPApprovalRequestInvalidResponseBody(body *ApproveShadowMCPApprovalRequestInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateApproveShadowMCPApprovalRequestInvariantViolationResponseBody runs
+// the validations defined on
+// approveShadowMCPApprovalRequest_invariant_violation_response_body
+func ValidateApproveShadowMCPApprovalRequestInvariantViolationResponseBody(body *ApproveShadowMCPApprovalRequestInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateApproveShadowMCPApprovalRequestUnexpectedResponseBody runs the
+// validations defined on
+// approveShadowMCPApprovalRequest_unexpected_response_body
+func ValidateApproveShadowMCPApprovalRequestUnexpectedResponseBody(body *ApproveShadowMCPApprovalRequestUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateApproveShadowMCPApprovalRequestGatewayErrorResponseBody runs the
+// validations defined on
+// approveShadowMCPApprovalRequest_gateway_error_response_body
+func ValidateApproveShadowMCPApprovalRequestGatewayErrorResponseBody(body *ApproveShadowMCPApprovalRequestGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDenyShadowMCPApprovalRequestUnauthorizedResponseBody runs the
+// validations defined on
+// denyShadowMCPApprovalRequest_unauthorized_response_body
+func ValidateDenyShadowMCPApprovalRequestUnauthorizedResponseBody(body *DenyShadowMCPApprovalRequestUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDenyShadowMCPApprovalRequestForbiddenResponseBody runs the
+// validations defined on denyShadowMCPApprovalRequest_forbidden_response_body
+func ValidateDenyShadowMCPApprovalRequestForbiddenResponseBody(body *DenyShadowMCPApprovalRequestForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDenyShadowMCPApprovalRequestBadRequestResponseBody runs the
+// validations defined on denyShadowMCPApprovalRequest_bad_request_response_body
+func ValidateDenyShadowMCPApprovalRequestBadRequestResponseBody(body *DenyShadowMCPApprovalRequestBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDenyShadowMCPApprovalRequestNotFoundResponseBody runs the
+// validations defined on denyShadowMCPApprovalRequest_not_found_response_body
+func ValidateDenyShadowMCPApprovalRequestNotFoundResponseBody(body *DenyShadowMCPApprovalRequestNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDenyShadowMCPApprovalRequestConflictResponseBody runs the
+// validations defined on denyShadowMCPApprovalRequest_conflict_response_body
+func ValidateDenyShadowMCPApprovalRequestConflictResponseBody(body *DenyShadowMCPApprovalRequestConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDenyShadowMCPApprovalRequestUnsupportedMediaResponseBody runs the
+// validations defined on
+// denyShadowMCPApprovalRequest_unsupported_media_response_body
+func ValidateDenyShadowMCPApprovalRequestUnsupportedMediaResponseBody(body *DenyShadowMCPApprovalRequestUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDenyShadowMCPApprovalRequestInvalidResponseBody runs the validations
+// defined on denyShadowMCPApprovalRequest_invalid_response_body
+func ValidateDenyShadowMCPApprovalRequestInvalidResponseBody(body *DenyShadowMCPApprovalRequestInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDenyShadowMCPApprovalRequestInvariantViolationResponseBody runs the
+// validations defined on
+// denyShadowMCPApprovalRequest_invariant_violation_response_body
+func ValidateDenyShadowMCPApprovalRequestInvariantViolationResponseBody(body *DenyShadowMCPApprovalRequestInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDenyShadowMCPApprovalRequestUnexpectedResponseBody runs the
+// validations defined on denyShadowMCPApprovalRequest_unexpected_response_body
+func ValidateDenyShadowMCPApprovalRequestUnexpectedResponseBody(body *DenyShadowMCPApprovalRequestUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDenyShadowMCPApprovalRequestGatewayErrorResponseBody runs the
+// validations defined on
+// denyShadowMCPApprovalRequest_gateway_error_response_body
+func ValidateDenyShadowMCPApprovalRequestGatewayErrorResponseBody(body *DenyShadowMCPApprovalRequestGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListShadowMCPAccessRulesUnauthorizedResponseBody runs the
+// validations defined on listShadowMCPAccessRules_unauthorized_response_body
+func ValidateListShadowMCPAccessRulesUnauthorizedResponseBody(body *ListShadowMCPAccessRulesUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListShadowMCPAccessRulesForbiddenResponseBody runs the validations
+// defined on listShadowMCPAccessRules_forbidden_response_body
+func ValidateListShadowMCPAccessRulesForbiddenResponseBody(body *ListShadowMCPAccessRulesForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListShadowMCPAccessRulesBadRequestResponseBody runs the validations
+// defined on listShadowMCPAccessRules_bad_request_response_body
+func ValidateListShadowMCPAccessRulesBadRequestResponseBody(body *ListShadowMCPAccessRulesBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListShadowMCPAccessRulesNotFoundResponseBody runs the validations
+// defined on listShadowMCPAccessRules_not_found_response_body
+func ValidateListShadowMCPAccessRulesNotFoundResponseBody(body *ListShadowMCPAccessRulesNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListShadowMCPAccessRulesConflictResponseBody runs the validations
+// defined on listShadowMCPAccessRules_conflict_response_body
+func ValidateListShadowMCPAccessRulesConflictResponseBody(body *ListShadowMCPAccessRulesConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListShadowMCPAccessRulesUnsupportedMediaResponseBody runs the
+// validations defined on
+// listShadowMCPAccessRules_unsupported_media_response_body
+func ValidateListShadowMCPAccessRulesUnsupportedMediaResponseBody(body *ListShadowMCPAccessRulesUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListShadowMCPAccessRulesInvalidResponseBody runs the validations
+// defined on listShadowMCPAccessRules_invalid_response_body
+func ValidateListShadowMCPAccessRulesInvalidResponseBody(body *ListShadowMCPAccessRulesInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListShadowMCPAccessRulesInvariantViolationResponseBody runs the
+// validations defined on
+// listShadowMCPAccessRules_invariant_violation_response_body
+func ValidateListShadowMCPAccessRulesInvariantViolationResponseBody(body *ListShadowMCPAccessRulesInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListShadowMCPAccessRulesUnexpectedResponseBody runs the validations
+// defined on listShadowMCPAccessRules_unexpected_response_body
+func ValidateListShadowMCPAccessRulesUnexpectedResponseBody(body *ListShadowMCPAccessRulesUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListShadowMCPAccessRulesGatewayErrorResponseBody runs the
+// validations defined on listShadowMCPAccessRules_gateway_error_response_body
+func ValidateListShadowMCPAccessRulesGatewayErrorResponseBody(body *ListShadowMCPAccessRulesGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateShadowMCPAccessRuleUnauthorizedResponseBody runs the
+// validations defined on createShadowMCPAccessRule_unauthorized_response_body
+func ValidateCreateShadowMCPAccessRuleUnauthorizedResponseBody(body *CreateShadowMCPAccessRuleUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateShadowMCPAccessRuleForbiddenResponseBody runs the validations
+// defined on createShadowMCPAccessRule_forbidden_response_body
+func ValidateCreateShadowMCPAccessRuleForbiddenResponseBody(body *CreateShadowMCPAccessRuleForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateShadowMCPAccessRuleBadRequestResponseBody runs the validations
+// defined on createShadowMCPAccessRule_bad_request_response_body
+func ValidateCreateShadowMCPAccessRuleBadRequestResponseBody(body *CreateShadowMCPAccessRuleBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateShadowMCPAccessRuleNotFoundResponseBody runs the validations
+// defined on createShadowMCPAccessRule_not_found_response_body
+func ValidateCreateShadowMCPAccessRuleNotFoundResponseBody(body *CreateShadowMCPAccessRuleNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateShadowMCPAccessRuleConflictResponseBody runs the validations
+// defined on createShadowMCPAccessRule_conflict_response_body
+func ValidateCreateShadowMCPAccessRuleConflictResponseBody(body *CreateShadowMCPAccessRuleConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateShadowMCPAccessRuleUnsupportedMediaResponseBody runs the
+// validations defined on
+// createShadowMCPAccessRule_unsupported_media_response_body
+func ValidateCreateShadowMCPAccessRuleUnsupportedMediaResponseBody(body *CreateShadowMCPAccessRuleUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateShadowMCPAccessRuleInvalidResponseBody runs the validations
+// defined on createShadowMCPAccessRule_invalid_response_body
+func ValidateCreateShadowMCPAccessRuleInvalidResponseBody(body *CreateShadowMCPAccessRuleInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateShadowMCPAccessRuleInvariantViolationResponseBody runs the
+// validations defined on
+// createShadowMCPAccessRule_invariant_violation_response_body
+func ValidateCreateShadowMCPAccessRuleInvariantViolationResponseBody(body *CreateShadowMCPAccessRuleInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateShadowMCPAccessRuleUnexpectedResponseBody runs the validations
+// defined on createShadowMCPAccessRule_unexpected_response_body
+func ValidateCreateShadowMCPAccessRuleUnexpectedResponseBody(body *CreateShadowMCPAccessRuleUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateShadowMCPAccessRuleGatewayErrorResponseBody runs the
+// validations defined on createShadowMCPAccessRule_gateway_error_response_body
+func ValidateCreateShadowMCPAccessRuleGatewayErrorResponseBody(body *CreateShadowMCPAccessRuleGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateShadowMCPAccessRuleUnauthorizedResponseBody runs the
+// validations defined on updateShadowMCPAccessRule_unauthorized_response_body
+func ValidateUpdateShadowMCPAccessRuleUnauthorizedResponseBody(body *UpdateShadowMCPAccessRuleUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateShadowMCPAccessRuleForbiddenResponseBody runs the validations
+// defined on updateShadowMCPAccessRule_forbidden_response_body
+func ValidateUpdateShadowMCPAccessRuleForbiddenResponseBody(body *UpdateShadowMCPAccessRuleForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateShadowMCPAccessRuleBadRequestResponseBody runs the validations
+// defined on updateShadowMCPAccessRule_bad_request_response_body
+func ValidateUpdateShadowMCPAccessRuleBadRequestResponseBody(body *UpdateShadowMCPAccessRuleBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateShadowMCPAccessRuleNotFoundResponseBody runs the validations
+// defined on updateShadowMCPAccessRule_not_found_response_body
+func ValidateUpdateShadowMCPAccessRuleNotFoundResponseBody(body *UpdateShadowMCPAccessRuleNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateShadowMCPAccessRuleConflictResponseBody runs the validations
+// defined on updateShadowMCPAccessRule_conflict_response_body
+func ValidateUpdateShadowMCPAccessRuleConflictResponseBody(body *UpdateShadowMCPAccessRuleConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateShadowMCPAccessRuleUnsupportedMediaResponseBody runs the
+// validations defined on
+// updateShadowMCPAccessRule_unsupported_media_response_body
+func ValidateUpdateShadowMCPAccessRuleUnsupportedMediaResponseBody(body *UpdateShadowMCPAccessRuleUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateShadowMCPAccessRuleInvalidResponseBody runs the validations
+// defined on updateShadowMCPAccessRule_invalid_response_body
+func ValidateUpdateShadowMCPAccessRuleInvalidResponseBody(body *UpdateShadowMCPAccessRuleInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateShadowMCPAccessRuleInvariantViolationResponseBody runs the
+// validations defined on
+// updateShadowMCPAccessRule_invariant_violation_response_body
+func ValidateUpdateShadowMCPAccessRuleInvariantViolationResponseBody(body *UpdateShadowMCPAccessRuleInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateShadowMCPAccessRuleUnexpectedResponseBody runs the validations
+// defined on updateShadowMCPAccessRule_unexpected_response_body
+func ValidateUpdateShadowMCPAccessRuleUnexpectedResponseBody(body *UpdateShadowMCPAccessRuleUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateShadowMCPAccessRuleGatewayErrorResponseBody runs the
+// validations defined on updateShadowMCPAccessRule_gateway_error_response_body
+func ValidateUpdateShadowMCPAccessRuleGatewayErrorResponseBody(body *UpdateShadowMCPAccessRuleGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDeleteShadowMCPAccessRuleUnauthorizedResponseBody runs the
+// validations defined on deleteShadowMCPAccessRule_unauthorized_response_body
+func ValidateDeleteShadowMCPAccessRuleUnauthorizedResponseBody(body *DeleteShadowMCPAccessRuleUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDeleteShadowMCPAccessRuleForbiddenResponseBody runs the validations
+// defined on deleteShadowMCPAccessRule_forbidden_response_body
+func ValidateDeleteShadowMCPAccessRuleForbiddenResponseBody(body *DeleteShadowMCPAccessRuleForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDeleteShadowMCPAccessRuleBadRequestResponseBody runs the validations
+// defined on deleteShadowMCPAccessRule_bad_request_response_body
+func ValidateDeleteShadowMCPAccessRuleBadRequestResponseBody(body *DeleteShadowMCPAccessRuleBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDeleteShadowMCPAccessRuleNotFoundResponseBody runs the validations
+// defined on deleteShadowMCPAccessRule_not_found_response_body
+func ValidateDeleteShadowMCPAccessRuleNotFoundResponseBody(body *DeleteShadowMCPAccessRuleNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDeleteShadowMCPAccessRuleConflictResponseBody runs the validations
+// defined on deleteShadowMCPAccessRule_conflict_response_body
+func ValidateDeleteShadowMCPAccessRuleConflictResponseBody(body *DeleteShadowMCPAccessRuleConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDeleteShadowMCPAccessRuleUnsupportedMediaResponseBody runs the
+// validations defined on
+// deleteShadowMCPAccessRule_unsupported_media_response_body
+func ValidateDeleteShadowMCPAccessRuleUnsupportedMediaResponseBody(body *DeleteShadowMCPAccessRuleUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDeleteShadowMCPAccessRuleInvalidResponseBody runs the validations
+// defined on deleteShadowMCPAccessRule_invalid_response_body
+func ValidateDeleteShadowMCPAccessRuleInvalidResponseBody(body *DeleteShadowMCPAccessRuleInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDeleteShadowMCPAccessRuleInvariantViolationResponseBody runs the
+// validations defined on
+// deleteShadowMCPAccessRule_invariant_violation_response_body
+func ValidateDeleteShadowMCPAccessRuleInvariantViolationResponseBody(body *DeleteShadowMCPAccessRuleInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDeleteShadowMCPAccessRuleUnexpectedResponseBody runs the validations
+// defined on deleteShadowMCPAccessRule_unexpected_response_body
+func ValidateDeleteShadowMCPAccessRuleUnexpectedResponseBody(body *DeleteShadowMCPAccessRuleUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDeleteShadowMCPAccessRuleGatewayErrorResponseBody runs the
+// validations defined on deleteShadowMCPAccessRule_gateway_error_response_body
+func ValidateDeleteShadowMCPAccessRuleGatewayErrorResponseBody(body *DeleteShadowMCPAccessRuleGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateGetRBACStatusUnauthorizedResponseBody runs the validations defined
 // on getRBACStatus_unauthorized_response_body
 func ValidateGetRBACStatusUnauthorizedResponseBody(body *GetRBACStatusUnauthorizedResponseBody) (err error) {
@@ -9748,6 +15156,126 @@ func ValidateListRoleGrantResponseBody(body *ListRoleGrantResponseBody) (err err
 				err = goa.MergeErrors(err, err2)
 			}
 		}
+	}
+	return
+}
+
+// ValidateShadowMCPApprovalRequestResponseBody runs the validations defined on
+// ShadowMCPApprovalRequestResponseBody
+func ValidateShadowMCPApprovalRequestResponseBody(body *ShadowMCPApprovalRequestResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.ProjectID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
+	}
+	if body.Status == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
+	}
+	if body.BlockedCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("blocked_count", "body"))
+	}
+	if body.RequestedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("requested_at", "body"))
+	}
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.UpdatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.ProjectID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
+	}
+	if body.Status != nil {
+		if !(*body.Status == "requested" || *body.Status == "approved" || *body.Status == "denied") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"requested", "approved", "denied"}))
+		}
+	}
+	if body.RiskPolicyID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.risk_policy_id", *body.RiskPolicyID, goa.FormatUUID))
+	}
+	if body.RiskResultID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.risk_result_id", *body.RiskResultID, goa.FormatUUID))
+	}
+	if body.FirstBlockedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.first_blocked_at", *body.FirstBlockedAt, goa.FormatDateTime))
+	}
+	if body.LastBlockedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_blocked_at", *body.LastBlockedAt, goa.FormatDateTime))
+	}
+	if body.RequestedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.requested_at", *body.RequestedAt, goa.FormatDateTime))
+	}
+	if body.DecidedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.decided_at", *body.DecidedAt, goa.FormatDateTime))
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.UpdatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateShadowMCPAccessRuleResponseBody runs the validations defined on
+// ShadowMCPAccessRuleResponseBody
+func ValidateShadowMCPAccessRuleResponseBody(body *ShadowMCPAccessRuleResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.Disposition == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("disposition", "body"))
+	}
+	if body.MatchBreadth == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("match_breadth", "body"))
+	}
+	if body.MatchValue == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("match_value", "body"))
+	}
+	if body.DisplayName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("display_name", "body"))
+	}
+	if body.RoleIds == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("role_ids", "body"))
+	}
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.UpdatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.Disposition != nil {
+		if !(*body.Disposition == "allowed" || *body.Disposition == "denied") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.disposition", *body.Disposition, []any{"allowed", "denied"}))
+		}
+	}
+	if body.MatchBreadth != nil {
+		if !(*body.MatchBreadth == "full_url" || *body.MatchBreadth == "url_host" || *body.MatchBreadth == "server_identity") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.match_breadth", *body.MatchBreadth, []any{"full_url", "url_host", "server_identity"}))
+		}
+	}
+	if body.SourceRequestID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.source_request_id", *body.SourceRequestID, goa.FormatUUID))
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.UpdatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
 	}
 	return
 }

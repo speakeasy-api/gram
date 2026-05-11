@@ -61,3 +61,56 @@ type OrganizationRole struct {
 	DeletedAt         pgtype.Timestamptz
 	Deleted           bool
 }
+
+type ShadowMcpAccessRule struct {
+	ID                     uuid.UUID
+	OrganizationID         string
+	ProjectID              uuid.NullUUID
+	AccessScope            string
+	Disposition            string
+	MatchBreadth           string
+	MatchValue             string
+	DisplayName            string
+	ObservedFullUrl        pgtype.Text
+	ObservedUrlHost        pgtype.Text
+	ObservedServerIdentity pgtype.Text
+	SourceRequestID        uuid.NullUUID
+	CreatedBy              pgtype.Text
+	UpdatedBy              pgtype.Text
+	Reason                 pgtype.Text
+	CreatedAt              pgtype.Timestamptz
+	UpdatedAt              pgtype.Timestamptz
+	DeletedAt              pgtype.Timestamptz
+	Deleted                bool
+}
+
+type ShadowMcpApprovalRequest struct {
+	ID                     uuid.UUID
+	OrganizationID         string
+	ProjectID              uuid.UUID
+	RequesterUserID        pgtype.Text
+	RequesterEmail         pgtype.Text
+	RequesterDisplayName   pgtype.Text
+	Status                 string
+	RiskPolicyID           uuid.NullUUID
+	RiskResultID           uuid.NullUUID
+	ObservedName           pgtype.Text
+	ObservedFullUrl        pgtype.Text
+	ObservedUrlHost        pgtype.Text
+	ObservedServerIdentity pgtype.Text
+	RequestFingerprint     pgtype.Text
+	ToolName               pgtype.Text
+	ToolCall               pgtype.Text
+	BlockReason            pgtype.Text
+	BlockedCount           int32
+	FirstBlockedAt         pgtype.Timestamptz
+	LastBlockedAt          pgtype.Timestamptz
+	RequestedAt            pgtype.Timestamptz
+	DecidedAt              pgtype.Timestamptz
+	DecidedBy              pgtype.Text
+	DecisionNote           pgtype.Text
+	CreatedAt              pgtype.Timestamptz
+	UpdatedAt              pgtype.Timestamptz
+	DeletedAt              pgtype.Timestamptz
+	Deleted                bool
+}

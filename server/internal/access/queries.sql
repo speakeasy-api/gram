@@ -161,3 +161,205 @@ SET workos_deleted_at = @workos_deleted_at,
 WHERE organization_id = @organization_id
   AND workos_slug = @workos_slug
   AND deleted_at IS NULL;
+
+-- Queries for Shadow MCP approval requests and managed access rules.
+
+-- name: ListShadowMCPApprovalRequests :many
+SELECT *
+FROM shadow_mcp_approval_requests
+WHERE organization_id = @organization_id
+  AND deleted IS FALSE
+  AND (@status::text = '' OR status = @status)
+  AND (@project_id::text = '' OR project_id::text = @project_id)
+ORDER BY requested_at DESC, id DESC
+LIMIT @limit_count
+OFFSET @offset_count;
+
+-- name: CountShadowMCPApprovalRequests :one
+SELECT COUNT(*)
+FROM shadow_mcp_approval_requests
+WHERE organization_id = @organization_id
+  AND deleted IS FALSE
+  AND (@status::text = '' OR status = @status)
+  AND (@project_id::text = '' OR project_id::text = @project_id);
+
+-- name: GetShadowMCPApprovalRequest :one
+SELECT *
+FROM shadow_mcp_approval_requests
+WHERE organization_id = @organization_id
+  AND id = @id
+  AND deleted IS FALSE;
+
+-- name: GetActiveShadowMCPApprovalRequestByFingerprint :one
+SELECT *
+FROM shadow_mcp_approval_requests
+WHERE organization_id = @organization_id
+  AND project_id = @project_id
+  AND requester_user_id = @requester_user_id
+  AND status = 'requested'
+  AND deleted IS FALSE
+  AND (
+    (@observed_full_url::text <> '' AND observed_full_url = @observed_full_url)
+    OR (@observed_url_host::text <> '' AND observed_url_host = @observed_url_host)
+    OR (@observed_server_identity::text <> '' AND observed_server_identity = @observed_server_identity)
+  )
+ORDER BY requested_at DESC
+LIMIT 1;
+
+-- name: CreateShadowMCPApprovalRequest :one
+INSERT INTO shadow_mcp_approval_requests (
+  organization_id,
+  project_id,
+  requester_user_id,
+  requester_email,
+  requester_display_name,
+  status,
+  risk_policy_id,
+  risk_result_id,
+  observed_name,
+  observed_full_url,
+  observed_url_host,
+  observed_server_identity,
+  tool_name,
+  tool_call,
+  block_reason,
+  first_blocked_at,
+  last_blocked_at
+) VALUES (
+  @organization_id,
+  @project_id,
+  @requester_user_id,
+  @requester_email,
+  @requester_display_name,
+  'requested',
+  @risk_policy_id,
+  @risk_result_id,
+  @observed_name,
+  @observed_full_url,
+  @observed_url_host,
+  @observed_server_identity,
+  @tool_name,
+  @tool_call,
+  @block_reason,
+  clock_timestamp(),
+  clock_timestamp()
+)
+RETURNING *;
+
+-- name: DecideShadowMCPApprovalRequest :one
+UPDATE shadow_mcp_approval_requests
+SET status = @status,
+    decided_at = clock_timestamp(),
+    decided_by = @decided_by,
+    decision_note = @decision_note,
+    updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND id = @id
+  AND deleted IS FALSE
+RETURNING *;
+
+-- name: ListShadowMCPAccessRules :many
+SELECT *
+FROM shadow_mcp_access_rules
+WHERE organization_id = @organization_id
+  AND deleted IS FALSE
+  AND (@disposition::text = '' OR disposition = @disposition)
+ORDER BY created_at DESC, id DESC
+LIMIT @limit_count
+OFFSET @offset_count;
+
+-- name: CountShadowMCPAccessRules :one
+SELECT COUNT(*)
+FROM shadow_mcp_access_rules
+WHERE organization_id = @organization_id
+  AND deleted IS FALSE
+  AND (@disposition::text = '' OR disposition = @disposition);
+
+-- name: GetShadowMCPAccessRule :one
+SELECT *
+FROM shadow_mcp_access_rules
+WHERE organization_id = @organization_id
+  AND id = @id
+  AND deleted IS FALSE;
+
+-- name: GetShadowMCPAccessRuleByMatch :one
+SELECT *
+FROM shadow_mcp_access_rules
+WHERE organization_id = @organization_id
+  AND match_breadth = @match_breadth
+  AND match_value = @match_value
+  AND deleted IS FALSE;
+
+-- name: CreateShadowMCPAccessRule :one
+INSERT INTO shadow_mcp_access_rules (
+  organization_id,
+  disposition,
+  match_breadth,
+  match_value,
+  display_name,
+  observed_full_url,
+  observed_url_host,
+  observed_server_identity,
+  source_request_id,
+  created_by,
+  updated_by,
+  reason
+) VALUES (
+  @organization_id,
+  @disposition,
+  @match_breadth,
+  @match_value,
+  @display_name,
+  @observed_full_url,
+  @observed_url_host,
+  @observed_server_identity,
+  @source_request_id,
+  @created_by,
+  @updated_by,
+  @reason
+)
+RETURNING *;
+
+-- name: UpdateShadowMCPAccessRule :one
+UPDATE shadow_mcp_access_rules
+SET disposition = @disposition,
+    match_breadth = @match_breadth,
+    match_value = @match_value,
+    display_name = @display_name,
+    observed_full_url = @observed_full_url,
+    observed_url_host = @observed_url_host,
+    observed_server_identity = @observed_server_identity,
+    updated_by = @updated_by,
+    reason = @reason,
+    updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND id = @id
+  AND deleted IS FALSE
+RETURNING *;
+
+-- name: DeleteShadowMCPAccessRule :one
+UPDATE shadow_mcp_access_rules
+SET deleted_at = clock_timestamp(),
+    updated_by = @updated_by,
+    updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND id = @id
+  AND deleted IS FALSE
+RETURNING *;
+
+-- name: ListShadowMCPAccessRuleRoleGrants :many
+SELECT principal_urn, (selectors->>'resource_id')::text AS rule_id
+FROM principal_grants
+WHERE organization_id = @organization_id
+  AND principal_type = 'role'
+  AND scope = 'mcp:connect'
+  AND selectors->>'resource_kind' = 'mcp'
+  AND selectors->>'resource_id' = ANY(@rule_ids::text[]);
+
+-- name: DeleteShadowMCPAccessRuleRoleGrants :execrows
+DELETE FROM principal_grants
+WHERE organization_id = @organization_id
+  AND principal_type = 'role'
+  AND scope = 'mcp:connect'
+  AND selectors->>'resource_kind' = 'mcp'
+  AND selectors->>'resource_id' = @rule_id::text;
