@@ -27,6 +27,8 @@ import { unwrapAsync } from "@gram/client/types/fp";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, Info, Sparkles } from "lucide-react";
 import { useMemo, useState } from "react";
+import { Link } from "react-router";
+import { useSlugs } from "@/contexts/Sdk";
 
 type EmployeeStatus = "compliant" | "not_compliant";
 
@@ -56,6 +58,7 @@ const statusMeta: Record<EmployeeStatus, { label: string; className: string }> =
 
 export function InsightsEmployeesContent() {
   const client = useGramContext();
+  const { orgSlug, projectSlug } = useSlugs();
   const {
     isExpanded: isInsightsOpen,
     sendPrompt,
@@ -118,6 +121,7 @@ export function InsightsEmployeesContent() {
     (sum, item) => sum + item.tokenCount,
     0,
   );
+  const agentsHref = `/${orgSlug}/projects/${projectSlug}/insights/agents`;
   const coverage =
     totalEmployees > 0 ? (compliantEmployees / totalEmployees) * 100 : 0;
   const prompt =
@@ -242,7 +246,7 @@ export function InsightsEmployeesContent() {
                 />
               </section>
 
-              <EmployeeTable employees={employees} />
+              <EmployeeTable employees={employees} agentsHref={agentsHref} />
             </>
           )}
         </div>
@@ -253,7 +257,13 @@ export function InsightsEmployeesContent() {
 
 const PAGE_SIZE = 25;
 
-function EmployeeTable({ employees }: { employees: Employee[] }) {
+function EmployeeTable({
+  employees,
+  agentsHref,
+}: {
+  employees: Employee[];
+  agentsHref: string;
+}) {
   const [page, setPage] = useState(0);
   const totalPages = Math.ceil(employees.length / PAGE_SIZE);
   const pageEmployees = employees.slice(
@@ -278,6 +288,7 @@ function EmployeeTable({ employees }: { employees: Employee[] }) {
             <TableHead>Compliance</TableHead>
             <TableHead>Token Count</TableHead>
             <TableHead>Last Activity</TableHead>
+            <TableHead>Analytics</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -311,12 +322,20 @@ function EmployeeTable({ employees }: { employees: Employee[] }) {
                 <TableCell className="text-muted-foreground text-sm">
                   {item.lastActivity}
                 </TableCell>
+                <TableCell>
+                  <Link
+                    to={`${agentsHref}?user=${encodeURIComponent(item.email)}`}
+                    className="text-primary text-sm font-medium no-underline hover:underline"
+                  >
+                    View usage
+                  </Link>
+                </TableCell>
               </TableRow>
             ))
           ) : (
             <TableRow>
               <TableCell
-                colSpan={5}
+                colSpan={6}
                 className="text-muted-foreground py-10 text-center text-sm"
               >
                 No organization members found.
