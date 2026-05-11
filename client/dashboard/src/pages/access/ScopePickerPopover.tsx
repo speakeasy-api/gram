@@ -182,14 +182,26 @@ export function ScopePickerPopover({
   // selectors have content, so clearing it eagerly only causes the UI to
   // jump back to "servers" when the user deselects all items.
 
-  const projectList = useMemo(
-    () =>
-      organization.projects.map((p) => ({
-        id: p.id,
-        name: p.name,
-      })),
-    [organization.projects],
-  );
+  const projectList = useMemo(() => {
+    const seen = new Set<string>();
+    const projects: { id: string; name: string }[] = [];
+    // Include projects from org context
+    for (const p of organization.projects) {
+      if (!seen.has(p.id)) {
+        seen.add(p.id);
+        projects.push({ id: p.id, name: p.name });
+      }
+    }
+    // For MCP scopes, also include projects discovered via server groups
+    // (ensures project list matches what's visible in the server picker)
+    for (const group of mcpServers) {
+      if (!seen.has(group.projectId)) {
+        seen.add(group.projectId);
+        projects.push({ id: group.projectId, name: group.projectName });
+      }
+    }
+    return projects;
+  }, [organization.projects, mcpServers]);
 
   const resourceKind = resourceType === "project" ? "project" : "mcp";
 
@@ -248,6 +260,22 @@ export function ScopePickerPopover({
   const isResourceSelected = (id: string) =>
     selectors?.some((s) => s.resourceId === id) ?? false;
 
+  const toggleProject = (projectId: string) => {
+    if (selectors === null) return;
+    const has = selectors.some((s) => s.projectId === projectId);
+    if (has) {
+      onChangeSelectors(selectors.filter((s) => s.projectId !== projectId));
+    } else {
+      onChangeSelectors([
+        ...selectors,
+        { resourceKind: "mcp", resourceId: "*", projectId },
+      ]);
+    }
+  };
+
+  const isProjectSelected = (projectId: string) =>
+    selectors?.some((s) => s.projectId === projectId) ?? false;
+
   const switchPanel = (panel: ActivePanel) => {
     setPanelOverride(panel);
     setResourceSearch("");
@@ -272,6 +300,13 @@ export function ScopePickerPopover({
         selected={activePanel === "all"}
         onClick={() => switchPanel("all")}
       />
+      {resourceType === "mcp" && (
+        <ScopeOption
+          label="Specific projects"
+          selected={activePanel === "projects"}
+          onClick={() => switchPanel("projects")}
+        />
+      )}
       <ScopeOption
         label={
           resourceType === "project" ? "Specific projects" : "Specific servers"
@@ -369,6 +404,54 @@ export function ScopePickerPopover({
                 />
               ))}
             </div>
+          ))
+        )}
+      </div>
+    </>
+  );
+
+  const projectPickerList = activePanel === "projects" && (
+    <>
+      <div className="bg-border mt-1 h-px" />
+      <div className="flex items-center gap-2 px-3 py-2">
+        <input
+          type="text"
+          placeholder="Search projects…"
+          value={resourceSearch}
+          onChange={(e) => setResourceSearch(e.target.value)}
+          className="placeholder:text-muted-foreground flex-1 bg-transparent text-sm outline-none"
+        />
+        {resourceSearch && (
+          <button
+            type="button"
+            onClick={() => setResourceSearch("")}
+            className="text-muted-foreground hover:text-foreground shrink-0"
+          >
+            <X className="h-3 w-3" />
+          </button>
+        )}
+      </div>
+      <div className="bg-border h-px" />
+      <div
+        ref={resourceListRef}
+        onWheel={handleResourceWheel}
+        className="h-[250px] overflow-y-auto"
+      >
+        {filteredProjectList.length === 0 ? (
+          <div className="text-muted-foreground px-3 py-3 text-sm">
+            {projectList.length === 0
+              ? "No projects found"
+              : "No matching projects"}
+          </div>
+        ) : (
+          filteredProjectList.map((project) => (
+            <ResourceCheckbox
+              key={project.id}
+              id={project.id}
+              name={project.name}
+              checked={isProjectSelected(project.id)}
+              onToggle={toggleProject}
+            />
           ))
         )}
       </div>
@@ -519,7 +602,7 @@ export function ScopePickerPopover({
               ? "w-[680px]"
               : activePanel === "collection"
                 ? "w-[360px]"
-                : activePanel === "servers"
+                : activePanel === "servers" || activePanel === "projects"
                   ? "w-96"
                   : "w-64",
           )}
@@ -529,6 +612,7 @@ export function ScopePickerPopover({
         >
           {renderScopeOptions({ includeCollection: true })}
           {resourceList}
+          {projectPickerList}
           {activePanel === "tools" && (
             <div className="-mx-1.5 -mb-1.5 flex max-h-[min(420px,60vh)] flex-col">
               {customTabs("max-h-[min(340px,50vh)]")}

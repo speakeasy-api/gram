@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 0766c9e75cff956370f1bc6a54eefcfe
+  docChecksum: 1c520ecc4e14be9c660f4b81a6170645
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -735,7 +735,7 @@ trackedFiles:
   docs/models/components/securityvariable.md:
     last_write_checksum: sha1:c9440e44db862ae2ab790d1f490d7a145a23cd9d
   docs/models/components/selector.md:
-    last_write_checksum: sha1:10a19568442887d9624a8862dec7b9b2ad6a27e8
+    last_write_checksum: sha1:c8d3fdbdb79801acc981d10b05dc72494794f9d0
   docs/models/components/sendinviterequestbody.md:
     last_write_checksum: sha1:0e198484928f538a25089e08a8082cced7ed28fc
   docs/models/components/serveimageform.md:
@@ -4021,7 +4021,7 @@ trackedFiles:
     last_write_checksum: sha1:b6435b1d385bc4ce89a1a172f494119f689414cb
     pristine_git_object: 3f1430d434bf71f00ca1101ef800ddac5e4d1a59
   src/models/components/selector.ts:
-    last_write_checksum: sha1:6d10f434c2e0ee1c597a2525f054821389226d56
+    last_write_checksum: sha1:6121febd6ff326d1b1431cb8f8fbeb6c690212ef
   src/models/components/sendinviterequestbody.ts:
     last_write_checksum: sha1:7f8b96e7dbb98bd5d702627bb6ee08d3e4df36c3
   src/models/components/serveimageform.ts:

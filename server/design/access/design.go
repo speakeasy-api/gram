@@ -465,6 +465,9 @@ var SelectorModel = Type("Selector", func() {
 	Attribute("tool", String, func() {
 		Description("Specific tool name filter (MCP scopes only).")
 	})
+	Attribute("project_id", String, func() {
+		Description("Project filter (MCP scopes only). When set with resource_id='*', grants access to all servers in the project.")
+	})
 })
 
 var RoleGrantModel = Type("RoleGrant", func() {

@@ -3597,6 +3597,7 @@ func unmarshalSelectorResponseBodyToAccessSelector(v *SelectorResponseBody) *acc
 		ResourceID:   *v.ResourceID,
 		Disposition:  v.Disposition,
 		Tool:         v.Tool,
+		ProjectID:    v.ProjectID,
 	}
 
 	return res
@@ -3633,6 +3634,7 @@ func marshalAccessSelectorToSelectorRequestBody(v *access.Selector) *SelectorReq
 		ResourceID:   v.ResourceID,
 		Disposition:  v.Disposition,
 		Tool:         v.Tool,
+		ProjectID:    v.ProjectID,
 	}
 
 	return res
@@ -3669,6 +3671,7 @@ func marshalSelectorRequestBodyToAccessSelector(v *SelectorRequestBody) *access.
 		ResourceID:   v.ResourceID,
 		Disposition:  v.Disposition,
 		Tool:         v.Tool,
+		ProjectID:    v.ProjectID,
 	}
 
 	return res

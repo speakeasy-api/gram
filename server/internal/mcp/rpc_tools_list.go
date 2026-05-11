@@ -110,6 +110,7 @@ func handleToolsList(
 			if err := authzEngine.Require(ctx, authz.MCPToolCallCheck(toolset.ID, authz.MCPToolCallDimensions{
 				Tool:        t.Name,
 				Disposition: disposition,
+				ProjectID:   payload.projectID.String(),
 			})); err != nil {
 				var oopsErr *oops.ShareableError
 				if errors.As(err, &oopsErr) && oopsErr.Code == oops.CodeForbidden {
