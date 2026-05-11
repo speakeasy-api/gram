@@ -10,13 +10,13 @@ import { remap as remap$ } from "../../lib/primitives.js";
  */
 export type GetUserMetricsSummaryPayload = {
   /**
-   * External user ID to get metrics for (mutually exclusive with user_id)
-   */
-  externalUserId?: string | undefined;
-  /**
    * Optional event source filter (e.g. 'hook')
    */
   eventSource?: string | undefined;
+  /**
+   * External user ID to get metrics for (mutually exclusive with user_id)
+   */
+  externalUserId?: string | undefined;
   /**
    * Start time in ISO 8601 format
    */
@@ -37,8 +37,8 @@ export type GetUserMetricsSummaryPayload = {
 
 /** @internal */
 export type GetUserMetricsSummaryPayload$Outbound = {
-  external_user_id?: string | undefined;
   event_source?: string | undefined;
+  external_user_id?: string | undefined;
   from: string;
   hook_source?: string | undefined;
   to: string;
@@ -51,8 +51,8 @@ export const GetUserMetricsSummaryPayload$outboundSchema: z.ZodMiniType<
   GetUserMetricsSummaryPayload
 > = z.pipe(
   z.object({
-    externalUserId: z.optional(z.string()),
     eventSource: z.optional(z.string()),
+    externalUserId: z.optional(z.string()),
     from: z.pipe(z.date(), z.transform(v => v.toISOString())),
     hookSource: z.optional(z.string()),
     to: z.pipe(z.date(), z.transform(v => v.toISOString())),
@@ -60,8 +60,8 @@ export const GetUserMetricsSummaryPayload$outboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
-      externalUserId: "external_user_id",
       eventSource: "event_source",
+      externalUserId: "external_user_id",
       hookSource: "hook_source",
       userId: "user_id",
     });

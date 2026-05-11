@@ -14,13 +14,13 @@ export type GetObservabilityOverviewPayload = {
    */
   apiKeyId?: string | undefined;
   /**
-   * Optional external user ID filter
-   */
-  externalUserId?: string | undefined;
-  /**
    * Optional event source filter (e.g. 'hook')
    */
   eventSource?: string | undefined;
+  /**
+   * Optional external user ID filter
+   */
+  externalUserId?: string | undefined;
   /**
    * Start time in ISO 8601 format
    */
@@ -50,8 +50,8 @@ export type GetObservabilityOverviewPayload = {
 /** @internal */
 export type GetObservabilityOverviewPayload$Outbound = {
   api_key_id?: string | undefined;
-  external_user_id?: string | undefined;
   event_source?: string | undefined;
+  external_user_id?: string | undefined;
   from: string;
   hook_source?: string | undefined;
   include_time_series: boolean;
@@ -67,8 +67,8 @@ export const GetObservabilityOverviewPayload$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     apiKeyId: z.optional(z.string()),
-    externalUserId: z.optional(z.string()),
     eventSource: z.optional(z.string()),
+    externalUserId: z.optional(z.string()),
     from: z.pipe(z.date(), z.transform(v => v.toISOString())),
     hookSource: z.optional(z.string()),
     includeTimeSeries: z._default(z.boolean(), true),
@@ -79,8 +79,8 @@ export const GetObservabilityOverviewPayload$outboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       apiKeyId: "api_key_id",
-      externalUserId: "external_user_id",
       eventSource: "event_source",
+      externalUserId: "external_user_id",
       hookSource: "hook_source",
       includeTimeSeries: "include_time_series",
       toolsetSlug: "toolset_slug",
