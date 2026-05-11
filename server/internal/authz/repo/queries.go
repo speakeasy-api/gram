@@ -229,7 +229,7 @@ func scanChallengeSummary(rows interface{ Scan(dest ...any) error }) (ChallengeS
 		&r.EvaluatedGrantCount,
 		&r.MatchedGrantCount,
 	); err != nil {
-		return r, err
+		return r, fmt.Errorf("scanning challenge summary: %w", err)
 	}
 	return r, nil
 }
