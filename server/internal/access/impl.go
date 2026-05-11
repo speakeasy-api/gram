@@ -966,6 +966,7 @@ func authzSelectorToGen(sel authz.Selector) *gen.Selector {
 		ResourceID:   sel["resource_id"],
 		Disposition:  nil,
 		Tool:         nil,
+		ProjectID:    nil,
 	}
 	if v, ok := sel["disposition"]; ok {
 		s.Disposition = &v
