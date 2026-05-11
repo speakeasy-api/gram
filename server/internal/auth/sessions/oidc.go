@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/workos/workos-go/v6/pkg/usermanagement"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -62,16 +63,26 @@ func (s *Manager) ExchangeCodeForTokens(ctx context.Context, code string) (_ *ID
 
 // UpsertUserFromIDP upserts a user record from OIDC identity claims and
 // returns the user ID. Captures a PostHog event for first-time signups.
+//
+// The IDP (WorkOS) returns its own user ID (e.g. "user_01ABC..."), but Gram's
+// users table may already contain a row for the same email with a UUID-format
+// primary key (from the legacy Speakeasy IDP). To avoid a unique-constraint
+// violation on the email column, we look up by email first and reuse the
+// existing Gram user ID when one exists.
 func (s *Manager) UpsertUserFromIDP(ctx context.Context, idpUser *IDPUserInfo) (string, error) {
-	// Preserve admin status for existing users — admin is now managed in Gram's
-	// DB rather than being sourced from the IDP on every login.
+	// Determine the Gram user ID to use for the upsert. If a user with this
+	// email already exists, reuse their existing ID so the ON CONFLICT (id)
+	// clause matches and we UPDATE rather than trying a fresh INSERT that
+	// would violate the email unique constraint.
+	gramUserID := idpUser.Sub
 	admin := false
-	if existing, err := s.userRepo.GetUser(ctx, idpUser.Sub); err == nil {
+	if existing, err := s.userRepo.GetUserByEmail(ctx, idpUser.Email); err == nil {
+		gramUserID = existing.ID
 		admin = existing.Admin
 	}
 
 	user, err := s.userRepo.UpsertUser(ctx, userRepo.UpsertUserParams{
-		ID:          idpUser.Sub,
+		ID:          gramUserID,
 		Email:       idpUser.Email,
 		DisplayName: idpUser.Name,
 		PhotoUrl:    conv.PtrToPGText(idpUser.Picture),
@@ -79,6 +90,16 @@ func (s *Manager) UpsertUserFromIDP(ctx context.Context, idpUser *IDPUserInfo) (
 	})
 	if err != nil {
 		return "", fmt.Errorf("upsert user: %w", err)
+	}
+
+	// Store the WorkOS user ID so downstream code (e.g. webhook sync) can
+	// correlate Gram users with WorkOS identities. SetUserWorkosID is a no-op
+	// when the column is already populated, so this is safe to call every login.
+	if err := s.userRepo.SetUserWorkosID(ctx, userRepo.SetUserWorkosIDParams{
+		ID:       gramUserID,
+		WorkosID: pgtype.Text{String: idpUser.Sub, Valid: true},
+	}); err != nil {
+		s.logger.ErrorContext(ctx, "failed to set workos_id on user", attr.SlogError(err))
 	}
 
 	if user.WasCreated {
