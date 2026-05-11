@@ -27,47 +27,40 @@ function parseHookTypesParam(raw: string | null): TypesToInclude[] {
   return unique.length > 0 ? unique : [...DEFAULT_HOOK_TYPES];
 }
 
+function parseFilterParam(raw: string | null, path: string): FilterChip | null {
+  if (!raw) return null;
+
+  const values = raw
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  if (values.length === 0) return null;
+
+  return {
+    display: values.join(", "),
+    filters: values,
+    path,
+  };
+}
+
+function buildActiveFilters(searchParams: URLSearchParams): FilterChip[] {
+  return [
+    parseFilterParam(searchParams.get("server"), SERVER_FILTER_PATH),
+    parseFilterParam(searchParams.get("user"), USER_EMAIL_FILTER_PATH),
+  ].filter((filter): filter is FilterChip => filter !== null);
+}
+
 export function useObserveFilters() {
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const [activeFilters, setActiveFilters] = useState<FilterChip[]>(() => {
-    const filters: FilterChip[] = [];
-
-    const initialServer = searchParams.get("server");
-    if (initialServer) {
-      const values = initialServer
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean);
-      if (values.length > 0) {
-        filters.push({
-          display: values.join(", "),
-          filters: values,
-          path: SERVER_FILTER_PATH,
-        });
-      }
-    }
-
-    const initialUserEmail = searchParams.get("user");
-    if (initialUserEmail) {
-      const values = initialUserEmail
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean);
-      if (values.length > 0) {
-        filters.push({
-          display: values.join(", "),
-          filters: values,
-          path: USER_EMAIL_FILTER_PATH,
-        });
-      }
-    }
-
-    return filters;
-  });
-
-  const [selectedHookTypes, setSelectedHookTypes] = useState<TypesToInclude[]>(
+  const activeFilters = useMemo(
+    () => buildActiveFilters(searchParams),
+    [searchParams],
+  );
+  const selectedHookTypes = useMemo(
     () => parseHookTypesParam(searchParams.get("hookTypes")),
+    [searchParams],
   );
   const [knownServers, setKnownServers] = useState<string[]>([]);
   const [knownUserEmails, setKnownUserEmails] = useState<string[]>([]);
@@ -180,20 +173,6 @@ export function useObserveFilters() {
 
   const handleUserEmailSelectionChange = useCallback(
     (values: string[]) => {
-      setActiveFilters((prev) => {
-        const nonEmail = prev.filter((f) => f.path !== USER_EMAIL_FILTER_PATH);
-        const emailFilters: FilterChip[] =
-          values.length > 0
-            ? [
-                {
-                  display: values.join(", "),
-                  filters: values,
-                  path: USER_EMAIL_FILTER_PATH,
-                },
-              ]
-            : [];
-        return [...nonEmail, ...emailFilters];
-      });
       setSearchParams(
         (urlPrev) => {
           const next = new URLSearchParams(urlPrev);
@@ -212,20 +191,6 @@ export function useObserveFilters() {
 
   const handleServerSelectionChange = useCallback(
     (values: string[]) => {
-      setActiveFilters((prev) => {
-        const nonServer = prev.filter((f) => f.path !== SERVER_FILTER_PATH);
-        const serverFilters: FilterChip[] =
-          values.length > 0
-            ? [
-                {
-                  display: values.join(", "),
-                  filters: values,
-                  path: SERVER_FILTER_PATH,
-                },
-              ]
-            : [];
-        return [...nonServer, ...serverFilters];
-      });
       setSearchParams(
         (urlPrev) => {
           const next = new URLSearchParams(urlPrev);
@@ -244,25 +209,21 @@ export function useObserveFilters() {
 
   const addFilter = useCallback(
     (chip: FilterChip) => {
-      setActiveFilters((prev) => {
-        const { filters: newFilters, merged } = mergeFilterChip(prev, chip);
-        if (!merged) return prev;
+      setSearchParams(
+        (urlPrev) => {
+          const { merged } = mergeFilterChip(buildActiveFilters(urlPrev), chip);
+          if (!merged) return urlPrev;
 
-        setSearchParams(
-          (urlPrev) => {
-            const next = new URLSearchParams(urlPrev);
-            if (chip.path === SERVER_FILTER_PATH) {
-              next.set("server", merged.filters.join(","));
-            } else if (chip.path === USER_EMAIL_FILTER_PATH) {
-              next.set("user", merged.filters.join(","));
-            }
-            return next;
-          },
-          { replace: true },
-        );
-
-        return newFilters;
-      });
+          const next = new URLSearchParams(urlPrev);
+          if (chip.path === SERVER_FILTER_PATH) {
+            next.set("server", merged.filters.join(","));
+          } else if (chip.path === USER_EMAIL_FILTER_PATH) {
+            next.set("user", merged.filters.join(","));
+          }
+          return next;
+        },
+        { replace: true },
+      );
     },
     [setSearchParams],
   );
@@ -283,7 +244,6 @@ export function useObserveFilters() {
         resolved.length === DEFAULT_HOOK_TYPES.length &&
         DEFAULT_HOOK_TYPES.every((t) => resolved.includes(t));
 
-      setSelectedHookTypes(resolved);
       setSearchParams(
         (prev) => {
           const next = new URLSearchParams(prev);
