@@ -273,16 +273,17 @@ type WakeCanceller interface {
 }
 
 type ServiceCore struct {
-	logger          *slog.Logger
-	tracer          trace.Tracer
-	db              *pgxpool.Pool
-	runtime         RuntimeBackend
-	slackClient     *slackclient.SlackClient
-	assistantTokens *assistanttokens.Manager
-	serverURL       *url.URL
-	telemetryLogger *telemetry.Logger
-	contextWindow   *openrouter.ContextWindowResolver
-	wakeCanceller   WakeCanceller
+	logger           *slog.Logger
+	tracer           trace.Tracer
+	db               *pgxpool.Pool
+	runtime          RuntimeBackend
+	slackClient      *slackclient.SlackClient
+	assistantTokens  *assistanttokens.Manager
+	serverURL        *url.URL
+	telemetryLogger  *telemetry.Logger
+	contextWindow    *openrouter.ContextWindowResolver
+	wakeCanceller    WakeCanceller
+	platformToolsets []platformtools.Toolset
 }
 
 func NewServiceCore(
@@ -295,18 +296,20 @@ func NewServiceCore(
 	serverURL *url.URL,
 	telemetryLogger *telemetry.Logger,
 	contextWindow *openrouter.ContextWindowResolver,
+	platformToolsets []platformtools.Toolset,
 ) *ServiceCore {
 	return &ServiceCore{
-		logger:          logger,
-		tracer:          tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/assistants"),
-		db:              db,
-		runtime:         newTelemetryRuntimeBackend(runtime, telemetryLogger),
-		slackClient:     slackClient,
-		assistantTokens: assistantTokens,
-		serverURL:       serverURL,
-		telemetryLogger: telemetryLogger,
-		contextWindow:   contextWindow,
-		wakeCanceller:   nil,
+		logger:           logger,
+		tracer:           tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/assistants"),
+		db:               db,
+		runtime:          newTelemetryRuntimeBackend(runtime, telemetryLogger),
+		slackClient:      slackClient,
+		assistantTokens:  assistantTokens,
+		serverURL:        serverURL,
+		telemetryLogger:  telemetryLogger,
+		contextWindow:    contextWindow,
+		wakeCanceller:    nil,
+		platformToolsets: platformToolsets,
 	}
 }
 
@@ -1677,7 +1680,7 @@ func (s *ServiceCore) buildRuntimeStartupConfig(
 		return runtimeStartupConfig{}, fmt.Errorf("resolve assistant runtime server URL: %w", err)
 	}
 
-	mcpServers, err := resolveAssistantMCPServers(runtimeServerURL, assistant.Toolsets)
+	mcpServers, err := resolveAssistantMCPServers(runtimeServerURL, assistant.Toolsets, s.platformToolsets)
 	if err != nil {
 		return runtimeStartupConfig{}, err
 	}
@@ -1763,10 +1766,8 @@ func composeInstructions(base string, thread assistantThreadRecord) (string, err
 	return strings.Join(parts, "\n\n"), nil
 }
 
-const assistantPlatformMCPServerID = "_platform-assistants"
-
-func resolveAssistantMCPServers(serverURL *url.URL, toolsets []assistantToolsetRow) ([]runtimeMCPServer, error) {
-	servers := make([]runtimeMCPServer, 0, len(toolsets)+1)
+func resolveAssistantMCPServers(serverURL *url.URL, toolsets []assistantToolsetRow, platformToolsets []platformtools.Toolset) ([]runtimeMCPServer, error) {
+	servers := make([]runtimeMCPServer, 0, len(toolsets)+len(platformToolsets))
 	for _, t := range toolsets {
 		if !t.McpEnabled {
 			return nil, fmt.Errorf("toolset %q does not have MCP enabled", t.ToolsetSlug)
@@ -1793,14 +1794,16 @@ func resolveAssistantMCPServers(serverURL *url.URL, toolsets []assistantToolsetR
 		})
 	}
 
-	// Implicit platform toolset granted to every assistant runtime; not
-	// surfaced as a user-managed toolset and not persisted in
-	// assistant_toolsets so users can't detach it.
-	servers = append(servers, runtimeMCPServer{
-		ID:      assistantPlatformMCPServerID,
-		URL:     platformtools.PlatformToolsetURL(serverURL, platformtools.AssistantsPlatformToolsetSlug),
-		Headers: map[string]string{},
-	})
+	// Implicit platform toolsets granted to every assistant runtime; not
+	// surfaced as user-managed toolsets and not persisted in
+	// assistant_toolsets so users can't detach them.
+	for _, pt := range platformToolsets {
+		servers = append(servers, runtimeMCPServer{
+			ID:      "_platform-" + pt.Slug,
+			URL:     platformtools.PlatformToolsetURL(serverURL, pt.Slug),
+			Headers: map[string]string{},
+		})
+	}
 
 	return servers, nil
 }
