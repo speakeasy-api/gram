@@ -688,6 +688,7 @@ func writeAssistantToolsets(
 		return nil
 	}
 	rows := make([]assistantrepo.AddAssistantToolsetsParams, 0, len(resolved))
+	toolsetIDs := make([]uuid.UUID, 0, len(resolved))
 	for _, r := range resolved {
 		rows = append(rows, assistantrepo.AddAssistantToolsetsParams{
 			AssistantID:   assistantID,
@@ -695,9 +696,20 @@ func writeAssistantToolsets(
 			EnvironmentID: r.EnvironmentID,
 			ProjectID:     projectID,
 		})
+		toolsetIDs = append(toolsetIDs, r.ToolsetID)
 	}
 	if _, err := queries.AddAssistantToolsets(ctx, rows); err != nil {
 		return fmt.Errorf("insert assistant toolsets: %w", err)
+	}
+	// The runtime startup config requires every assistant-attached toolset
+	// to be MCP-reachable; assistants address tools via the MCP server.
+	// Auto-enable on attach so the user doesn't have to toggle it
+	// separately on each toolset.
+	if err := queries.EnableMCPForToolsets(ctx, assistantrepo.EnableMCPForToolsetsParams{
+		ToolsetIds: toolsetIDs,
+		ProjectID:  projectID,
+	}); err != nil {
+		return fmt.Errorf("enable mcp for assistant toolsets: %w", err)
 	}
 	return nil
 }
