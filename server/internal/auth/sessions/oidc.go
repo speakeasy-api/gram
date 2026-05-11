@@ -254,6 +254,12 @@ func (s *Manager) InvalidateUserInfoCache(ctx context.Context, userID string) er
 	return nil
 }
 
+// workosAuthorizeEndpoint is the WorkOS API authorize endpoint. AuthKit hosted
+// domains expose OIDC discovery, token, and userinfo endpoints but the authorize
+// flow must go through the WorkOS API. The API redirects to the correct AuthKit
+// hosted UI automatically.
+const workosAuthorizeEndpoint = "https://api.workos.com/user_management/authorize"
+
 // BuildAuthorizationURL constructs the OIDC authorization URL that the
 // browser should be redirected to.
 func (s *Manager) BuildAuthorizationURL(ctx context.Context, params AuthURLParams) (*url.URL, error) {
@@ -265,7 +271,15 @@ func (s *Manager) BuildAuthorizationURL(ctx context.Context, params AuthURLParam
 	q.Set("scope", "openid email profile")
 	q.Set("provider", "authkit")
 
-	authURL, err := url.Parse(fmt.Sprintf("%s/authorize?%s", s.idpBaseURL, q.Encode()))
+	// WorkOS client IDs start with "client_". When detected, route authorize
+	// through the WorkOS API (AuthKit hosted domains don't serve authorize).
+	// Local dev-idp uses a non-prefixed client ID and handles /authorize directly.
+	authorizeBase := s.idpBaseURL + "/authorize"
+	if strings.HasPrefix(s.idpClientID, "client_") {
+		authorizeBase = workosAuthorizeEndpoint
+	}
+
+	authURL, err := url.Parse(fmt.Sprintf("%s?%s", authorizeBase, q.Encode()))
 	if err != nil {
 		s.logger.ErrorContext(ctx, "failed to parse OIDC authorization URL", attr.SlogError(err))
 		return nil, fmt.Errorf("parse OIDC authorization URL: %w", err)
