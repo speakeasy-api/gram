@@ -37,6 +37,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -215,6 +216,23 @@ type oauthAuthorizationServerMetadata struct {
 	CodeChallengeMethodsSupported     []string `json:"code_challenge_methods_supported"`
 }
 
+// requireUserSessionIssuer verifies the toolset's user_session_issuer_id FK
+// still resolves to a live row. Returns CodeNotFound when the issuer was
+// deleted out from under the toolset, CodeUnexpected on lookup failure.
+// Callers are responsible for first checking toolset.UserSessionIssuerID.Valid.
+func (s *Service) requireUserSessionIssuer(ctx context.Context, toolset *toolsets_repo.Toolset) error {
+	if _, err := usersessions_repo.New(s.db).GetUserSessionIssuerByID(ctx, usersessions_repo.GetUserSessionIssuerByIDParams{
+		ID:        toolset.UserSessionIssuerID.UUID,
+		ProjectID: toolset.ProjectID,
+	}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return oops.E(oops.CodeNotFound, err, "user_session_issuer not found")
+		}
+		return oops.E(oops.CodeUnexpected, err, "load user_session_issuer").Log(ctx, s.logger)
+	}
+	return nil
+}
+
 // HandleGetProtectedResource serves RFC 9728 protected-resource metadata at
 // the canonical RFC path `/.well-known/oauth-protected-resource/mcp/{mcpSlug}`
 // — the only path a spec-compliant client constructs from a resource URL of
@@ -251,6 +269,9 @@ func (s *Service) HandleGetProtectedResource(w http.ResponseWriter, r *http.Requ
 	}
 
 	if toolset.UserSessionIssuerID.Valid {
+		if err := s.requireUserSessionIssuer(ctx, toolset); err != nil {
+			return err
+		}
 		resource := baseURL + "/mcp/" + mcpSlug
 		return writeJSONMetadata(ctx, w, s.logger, oauthProtectedResourceMetadata{
 			Resource:               resource,
@@ -300,14 +321,8 @@ func (s *Service) HandleGetAuthorizationServer(w http.ResponseWriter, r *http.Re
 	}
 
 	if toolset.UserSessionIssuerID.Valid {
-		if _, err := usersessions_repo.New(s.db).GetUserSessionIssuerByID(ctx, usersessions_repo.GetUserSessionIssuerByIDParams{
-			ID:        toolset.UserSessionIssuerID.UUID,
-			ProjectID: toolset.ProjectID,
-		}); err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				return oops.E(oops.CodeNotFound, err, "user_session_issuer not found")
-			}
-			return oops.E(oops.CodeUnexpected, err, "load user_session_issuer").Log(ctx, s.logger)
+		if err := s.requireUserSessionIssuer(ctx, toolset); err != nil {
+			return err
 		}
 
 		root := baseURL + "/mcp/" + mcpSlug
@@ -400,6 +415,9 @@ func (s *Service) HandleRegister(w http.ResponseWriter, r *http.Request) error {
 
 	if !toolset.UserSessionIssuerID.Valid {
 		return oops.E(oops.CodeNotFound, nil, "not found")
+	}
+	if err := s.requireUserSessionIssuer(ctx, toolset); err != nil {
+		return err
 	}
 
 	logger := s.logger.With(
